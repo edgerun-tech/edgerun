@@ -160,12 +160,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
-
-[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1335,6 +1329,10 @@ dependencies = [
 [[package]]
 name = "edgerun-dhcp"
 version = "0.1.0"
+dependencies = [
+ "edgerun-log",
+ "edgerun-rt",
+]
 
 [[package]]
 name = "edgerun-dhcpv6"
@@ -1494,14 +1492,6 @@ dependencies = [
 [[package]]
 name = "edgerun-flexbox"
 version = "0.1.0"
-
-[[package]]
-name = "edgerun-fuzz"
-version = "0.1.0"
-dependencies = [
- "edgerun-rasterizer",
- "libfuzzer-sys",
-]
 
 [[package]]
 name = "edgerun-goodix-fingerprint"
@@ -2052,7 +2042,6 @@ version = "0.1.0"
 dependencies = [
  "edgerun-log",
  "libc",
- "parking_lot",
 ]
 
 [[package]]
@@ -2078,6 +2067,19 @@ dependencies = [
 [[package]]
 name = "edgerun-selectors"
 version = "0.1.0"
+
+[[package]]
+name = "edgerun-server"
+version = "0.1.0"
+dependencies = [
+ "edgerun-dhcp",
+ "edgerun-dns",
+ "edgerun-http",
+ "edgerun-log",
+ "edgerun-rt",
+ "edgerun-tftp",
+ "edgerun-tls",
+]
 
 [[package]]
 name = "edgerun-service-workers"
@@ -2111,6 +2113,7 @@ dependencies = [
  "edgerun-hardware-signing",
  "edgerun-log",
  "edgerun-proto",
+ "edgerun-rt",
  "libc",
  "prost",
  "prost-types",
@@ -2129,6 +2132,10 @@ dependencies = [
 [[package]]
 name = "edgerun-tftp"
 version = "0.1.0"
+dependencies = [
+ "edgerun-log",
+ "edgerun-rt",
+]
 
 [[package]]
 name = "edgerun-tls"
@@ -2974,16 +2981,6 @@ name = "libc"
 version = "0.2.184"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48f5d2a454e16a5ea0f4ced81bd44e4cfc7bd3a507b61887c99fd3538b28e4af"
-
-[[package]]
-name = "libfuzzer-sys"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f12a681b7dd8ce12bff52488013ba614b869148d54dd79836ab85aafdd53f08d"
-dependencies = [
- "arbitrary",
- "cc",
-]
 
 [[package]]
 name = "libloading"

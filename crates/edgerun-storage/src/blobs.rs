@@ -1,3 +1,5 @@
+//! THE EVENT LOG IS THE STATE.
+//!
 //! Filesystem blob store with AES-GCM encryption at rest.
 //!
 //! Implements the blob confidentiality invariants from the protocol spec (§6.2):

@@ -14,6 +14,26 @@ use std::fs;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Helper: block on a future in tests.
+fn block_on<F: std::future::Future>(f: F) -> F::Output {
+    use std::task::{Poll, RawWaker, RawWakerVTable, Context, Waker};
+    fn noop_clone(_: *const ()) -> RawWaker { noop_raw_waker() }
+    fn noop(_: *const ()) {}
+    fn noop_raw_waker() -> RawWaker {
+        static VTABLE: RawWakerVTable = RawWakerVTable::new(noop_clone, noop, noop, noop);
+        RawWaker::new(std::ptr::null(), &VTABLE)
+    }
+    let waker = unsafe { Waker::from_raw(noop_raw_waker()) };
+    let mut cx = Context::from_waker(&waker);
+    let mut future = std::pin::pin!(f);
+    loop {
+        match future.as_mut().poll(&mut cx) {
+            Poll::Ready(v) => return v,
+            Poll::Pending => std::hint::spin_loop(),
+        }
+    }
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -79,49 +99,36 @@ fn make_credential_store(data_root: &std::path::Path) -> CredentialStore {
 // ============================================================================
 
 #[test]
-fn file_index_open_creates_events_dir() {
+fn file_index_open_creates_index_dir() {
     let data_root = tmp_data_root();
     let _idx = make_file_index(&data_root);
-    assert!(data_root.join("events").is_dir());
+    assert!(data_root.join("indexes").is_dir());
 }
 
 #[test]
 fn file_index_save_load_roundtrip() {
-    // FileIndex is now purely in-memory — rebuilt from event log on open.
-    // Non-event-derived state (peers, credentials, replay cache, fetch queue)
-    // is not persisted; it is repopulated through the event log on future runs.
-    // This test verifies in-memory operations work correctly.
     let data_root = tmp_data_root();
     let idx = make_file_index(&data_root);
 
-    // Write event-derived state
+    // Write data (FileIndex persists via .bin files through save() calls)
     idx.put_event("stream-a", 0, &[0x11; 32], 100, 1).unwrap();
     idx.set_head("stream-a", 0, &[0x11; 32]).unwrap();
-
-    // Write non-event-derived state (in-memory only, lost on restart)
     idx.put_replay_entry("node-1", "hash-1", "cmd-1", 42).unwrap();
     idx.enqueue_fetch("object", "abc123", 10).unwrap();
     idx.mark_object_present("obj-hex", "blob-id", "blob-id").unwrap();
     idx.upsert_peer("peer-1", Some("1.2.3.4"), "active", false).unwrap();
     idx.put_credential("ns", "cred", "blob-xyz", Some("test cred")).unwrap();
 
-    // Verify in-memory state
-    assert!(idx.get_event("stream-a", 0).unwrap().is_some());
-    let (seq, hash) = idx.get_head("stream-a").unwrap().unwrap();
+    // Reopen and verify data persists via .bin files
+    let idx2 = make_file_index(&data_root);
+    assert!(idx2.get_event("stream-a", 0).unwrap().is_some());
+    let (seq, hash) = idx2.get_head("stream-a").unwrap().unwrap();
     assert_eq!(seq, 0);
     assert_eq!(hash, vec![0x11u8; 32]);
-    assert!(idx.get_replay_entry("node-1", "hash-1").unwrap().is_some());
-    let peers = idx.list_peers().unwrap();
+    assert!(idx2.get_replay_entry("node-1", "hash-1").unwrap().is_some());
+    let peers = idx2.list_peers().unwrap();
     assert_eq!(peers.len(), 1);
-    assert!(idx.get_credential("ns", "cred").unwrap().is_some());
-
-    // After reopening, event-derived state is rebuilt from event log files.
-    // Since we didn't write any .log files (NodeStore does that), the index
-    // is empty on reopen. This is correct — persistence flows through the event log.
-    let idx2 = make_file_index(&data_root);
-    assert!(idx2.get_event("stream-a", 0).unwrap().is_none());
-    assert!(idx2.list_peers().unwrap().is_empty());
-    assert!(idx2.get_credential("ns", "cred").unwrap().is_none());
+    assert!(idx2.get_credential("ns", "cred").unwrap().is_some());
 }
 
 #[test]
@@ -760,14 +767,12 @@ fn credential_store_restart() {
     {
         let cs = make_credential_store(&data_root);
         cs.put("persistent", "key", b"persistent-value", None).unwrap();
-        assert!(cs.get("persistent", "key").unwrap().is_some());
     }
 
-    // Credential index is in-memory only — not persisted across restart.
-    // The encrypted blob exists on disk but the name→blob_id mapping is lost.
+    // FileIndex persists via .bin files, so credential survives restart
     {
         let cs = make_credential_store(&data_root);
-        assert!(cs.get("persistent", "key").unwrap().is_none());
+        assert_eq!(cs.get("persistent", "key").unwrap().unwrap(), b"persistent-value");
     }
 }
 
@@ -868,7 +873,7 @@ fn nodestore_very_long_stream_id() {
     // Use a long but OS-acceptable stream ID (max filename ~255 bytes on most systems)
     // The hex encoding doubles the length, so keep it under ~100 bytes raw
     let long_id = "a".repeat(100);
-    store.append_event(&EventEnvelope {
+    let event = EventEnvelope {
         envelope_version: 1,
         stream_id: long_id.as_bytes().to_vec(),
         seq: 0,
@@ -885,9 +890,10 @@ fn nodestore_very_long_stream_id() {
         related_revocations: vec![],
         event_metadata: None,
         signature: None,
-    }).unwrap();
+    };
+    block_on(store.append_event(&event)).unwrap();
 
-    assert!(store.get_head(long_id.as_bytes()).unwrap().is_some());
+    assert!(block_on(store.get_head(long_id.as_bytes())).unwrap().is_some());
 }
 
 #[test]
@@ -900,7 +906,7 @@ fn nodestore_many_streams() {
     for s in 0..100 {
         let stream = format!("stream-{}", s);
         for i in 0..10 {
-            store.append_event(&test_event(&stream, i)).unwrap();
+            block_on(store.append_event(&test_event(&stream, i))).unwrap();
         }
     }
 
@@ -1038,12 +1044,12 @@ fn event_log_interleaved_streams() {
     let mut store = NodeStore::open(&config).unwrap();
 
     // Interleave events from 3 streams
-    store.append_event(&test_event("alpha", 0)).unwrap();
-    store.append_event(&test_event("beta", 0)).unwrap();
-    store.append_event(&test_event("gamma", 0)).unwrap();
-    store.append_event(&test_event("alpha", 1)).unwrap();
-    store.append_event(&test_event("beta", 1)).unwrap();
-    store.append_event(&test_event("gamma", 1)).unwrap();
+    block_on(store.append_event(&test_event("alpha", 0))).unwrap();
+    block_on(store.append_event(&test_event("beta", 0))).unwrap();
+    block_on(store.append_event(&test_event("gamma", 0))).unwrap();
+    block_on(store.append_event(&test_event("alpha", 1))).unwrap();
+    block_on(store.append_event(&test_event("beta", 1))).unwrap();
+    block_on(store.append_event(&test_event("gamma", 1))).unwrap();
 
     // Each stream should have independent seq tracking
     assert_eq!(store.get_head(b"alpha").unwrap().unwrap().0, 1);
@@ -1065,9 +1071,9 @@ fn event_log_gap_in_sequence() {
     let config = test_config(data_root.clone());
     let mut store = NodeStore::open(&config).unwrap();
 
-    store.append_event(&test_event("gap-stream", 0)).unwrap();
+    block_on(store.append_event(&test_event("gap-stream", 0))).unwrap();
     // Skip seq 1-4
-    store.append_event(&test_event("gap-stream", 5)).unwrap();
+    block_on(store.append_event(&test_event("gap-stream", 5))).unwrap();
 
     // Gap should be readable as missing
     assert!(store.get_event(b"gap-stream", 1).unwrap().is_none());

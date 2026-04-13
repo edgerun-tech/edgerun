@@ -4,7 +4,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Dependency-free DHCPv4 server and client using only std"
+description = "Async DHCPv4 server and client"
 
 [lints]
 workspace = true
+
+[dependencies]
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }

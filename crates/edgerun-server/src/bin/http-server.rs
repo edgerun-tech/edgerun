@@ -12,7 +12,7 @@
 
 use std::process;
 
-use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
+use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_tls::certificate_gen::generate_self_signed;
 use std::future::Future;
 use std::pin::Pin;
@@ -39,7 +39,8 @@ fn main() {
         i += 1;
     }
 
-    let mut server = HttpServer::new(EchoHandler);
+    let mut server = edgerun_server::Server::new()
+        .with_http(EchoHandler, format!("127.0.0.1:{port}"));
 
     if tls {
         let cert = generate_self_signed(&["127.0.0.1", "localhost"])
@@ -62,9 +63,10 @@ fn main() {
 
     let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {
-        match server.bind(format!("127.0.0.1:{port}")).await {
-            Ok(bound) => {
-                if let Err(e) = bound.serve().await {
+        let shutdown = edgerun_rt::CancellationToken::new();
+        match server.build().await {
+            Ok(mut bound) => {
+                if let Err(e) = bound.run(shutdown).await {
                     eprintln!("Server error: {e}");
                     process::exit(1);
                 }

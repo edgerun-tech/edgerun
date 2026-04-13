@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
 edgerun-proto = { path = "../edgerun-proto" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", default-features = false }
 edgerun-crypto.workspace = true
 prost.workspace = true

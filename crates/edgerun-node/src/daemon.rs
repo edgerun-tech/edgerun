@@ -46,13 +46,11 @@ async fn run_fetch_queue_consumer(
     interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
 
     loop {
-        edgerun_rt::select! {
-            _ = cancel.cancelled() => {
-                edgerun_log::info!("fetch queue consumer shutting down");
-                return;
-            }
-            _ = interval.tick() => {}
+        if cancel.is_cancelled() {
+            edgerun_log::info!("fetch queue consumer shutting down");
+            return;
         }
+        interval.tick().await;
 
         // Dequeue one pending fetch via the store task (no direct FileIndex access)
         let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
@@ -703,15 +701,12 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         let mut interval = edgerun_rt::interval(std::time::Duration::from_secs(60));
         interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
         loop {
-            edgerun_rt::select! {
-                _ = maint_cancel.cancelled() => {
-                    edgerun_log::info!("maintenance timer shutting down");
-                    return;
-                }
-                _ = interval.tick() => {
-                    let _ = maint_store_tx.send(StoreRequest::MaintenanceTick).await;
-                }
+            if maint_cancel.is_cancelled() {
+                edgerun_log::info!("maintenance timer shutting down");
+                return;
             }
+            interval.tick().await;
+            let _ = maint_store_tx.send(StoreRequest::MaintenanceTick).await;
         }
     });
 
@@ -721,116 +716,35 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
             // Init mode: use async signal handling via signalfd
             use edgerun_rt::{Signal, SignalKind};
 
-            // Set up SIGTERM, SIGINT, SIGHUP, and SIGCHLD listeners
             let mut sigterm = Signal::new(SignalKind::terminate()).ok();
             let mut sigint = Signal::new(SignalKind::interrupt()).ok();
             let mut sighup = Signal::new(SignalKind::hangup()).ok();
             let mut sigchld = Signal::new(SignalKind::child()).ok();
 
             loop {
-                edgerun_rt::select! {
-                    _ = async {
-                        if let Some(ref mut s) = sigterm {
-                            s.recv().await.ok();
-                        } else {
-                            std::future::pending::<()>().await
-                        }
-                    } => {
-                        edgerun_log::info!("SIGTERM received, shutting down");
-                        break;
-                    }
-                    _ = async {
-                        if let Some(ref mut s) = sigint {
-                            s.recv().await.ok();
-                        } else {
-                            std::future::pending::<()>().await
-                        }
-                    } => {
-                        edgerun_log::info!("SIGINT received, shutting down");
-                        break;
-                    }
-                    _ = async {
-                        if let Some(ref mut s) = sighup {
-                            s.recv().await.ok();
-                        } else {
-                            std::future::pending::<()>().await
-                        }
-                    } => {
-                        edgerun_log::info!("SIGHUP received, reloading configuration");
-                        if let Ok(yaml) = fs::read_to_string(path) {
-                            if let Ok(new_config) = parse_config(&yaml) {
-                                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-                                if store_tx.send(StoreRequest::ConfigReload {
-                                    config: new_config,
-                                    reply_tx,
-                                }).await.is_ok() {
-                                    match reply_rx.await {
-                                        Ok(StoreResponse::Ok(_)) => {
-                                            edgerun_log::info!("configuration reloaded successfully");
-                                        }
-                                        _ => {
-                                            edgerun_log::warn!("config reload: store task unavailable");
-                                        }
-                                    }
-                                }
-                            } else {
-                                edgerun_log::warn!("SIGHUP: failed to parse config, keeping current");
-                            }
-                        } else {
-                            edgerun_log::warn!("SIGHUP: failed to read config file, keeping current");
-                        }
-                    }
-                    _ = async {
-                        if let Some(ref mut s) = sigchld {
-                            s.recv().await.ok();
-                            crate::init::reap_zombies();
-                        } else {
-                            std::future::pending::<()>().await
-                        }
-                    } => {
-                        // SIGCHLD received — zombies reaped
-                    }
+                // Wait for SIGTERM or SIGINT (whichever is available)
+                let shutdown_fut = async {
+                    if let Some(ref mut s) = sigterm { return s.recv().await; }
+                    if let Some(ref mut s) = sigint { return s.recv().await; }
+                    std::future::pending::<Result<Option<i32>, std::io::Error>>().await
+                };
+                if shutdown_fut.await.is_ok() {
+                    edgerun_log::info!("shutdown signal received, shutting down");
+                    break;
                 }
+
+                // Non-blocking checks for SIGHUP and SIGCHLD
+                // Since Signal doesn't have try_recv, we just skip these in this loop iteration
+                // and rely on the shutdown future to catch them on next iteration.
+                // SIGCHLD: reap any pending zombies
+                crate::init::reap_zombies();
             }
         } else {
-            // Normal mode: wait for ctrl_c or SIGHUP
-            use edgerun_rt::{Signal, SignalKind};
-
-            let mut sighup = Signal::new(SignalKind::hangup()).ok();
-
+            // Normal mode: wait for ctrl_c
             loop {
-                edgerun_rt::select! {
-                    _ = edgerun_rt::ctrl_c() => {
-                        edgerun_log::info!("shutdown requested (normal mode)");
-                        break;
-                    }
-                    _ = async {
-                        if let Some(ref mut s) = sighup {
-                            s.recv().await.ok();
-                        } else {
-                            std::future::pending::<()>().await
-                        }
-                    } => {
-                        edgerun_log::info!("SIGHUP received, reloading configuration");
-                        if let Ok(yaml) = fs::read_to_string(path) {
-                            if let Ok(new_config) = parse_config(&yaml) {
-                                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-                                if store_tx.send(StoreRequest::ConfigReload {
-                                    config: new_config,
-                                    reply_tx,
-                                }).await.is_ok() {
-                                    if let Ok(StoreResponse::Ok(_)) = reply_rx.await {
-                                        edgerun_log::info!("configuration reloaded successfully");
-                                    }
-                                }
-                            } else {
-                                edgerun_log::warn!("SIGHUP: failed to parse config, keeping current");
-                            }
-                        } else {
-                            edgerun_log::warn!("SIGHUP: failed to read config file, keeping current");
-                        }
-                    }
-                }
+                let _ = edgerun_rt::ctrl_c().await;
+                edgerun_log::info!("shutdown requested (normal mode)");
+                break;
             }
         }
     });

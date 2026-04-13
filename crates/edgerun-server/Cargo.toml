@@ -1,0 +1,18 @@
+[package]
+name = "edgerun-server"
+version = "0.1.0"
+edition = "2024"
+description = "Unified multi-protocol server: HTTP/1.1, HTTP/2, HTTP/3, DNS, DHCP, TFTP"
+
+[[bin]]
+name = "http-server"
+path = "src/bin/http-server.rs"
+
+[dependencies]
+edgerun-http = { path = "../edgerun-http", features = ["tls"] }
+edgerun-dns = { path = "../edgerun-dns" }
+edgerun-dhcp = { path = "../edgerun-dhcp" }
+edgerun-tftp = { path = "../edgerun-tftp" }
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-tls = { path = "../edgerun-tls" }
+edgerun-log = { path = "../edgerun-log" }

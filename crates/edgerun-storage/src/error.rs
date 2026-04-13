@@ -1,3 +1,5 @@
+//! THE EVENT LOG IS THE STATE.
+//!
 //! Storage errors.
 
 use std::fmt;

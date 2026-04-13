@@ -35,25 +35,22 @@ pub async fn run_tcp_listener(
     let ctx = SessionContext { node_id, signer };
 
     loop {
-        edgerun_rt::select! {
-            _ = cancel.cancelled() => {
-                edgerun_log::info!("TCP listener shutting down");
-                return;
+        if cancel.is_cancelled() {
+            edgerun_log::info!("TCP listener shutting down");
+            return;
+        }
+        let result = listener.accept().await;
+        match result {
+            Ok((stream, _peer_addr)) => {
+                let conn_store_tx = store_tx.clone();
+                let ctx = ctx.clone();
+                edgerun_rt::spawn(async move {
+                    edgerun_log::debug!("TCP connection accepted");
+                    handle_tcp_connection(stream, conn_store_tx, &ctx, None).await;
+                });
             }
-            result = listener.accept() => {
-                match result {
-                    Ok((stream, _peer_addr)) => {
-                        let conn_store_tx = store_tx.clone();
-                        let ctx = ctx.clone();
-                        edgerun_rt::spawn(async move {
-                            edgerun_log::debug!("TCP connection accepted");
-                            handle_tcp_connection(stream, conn_store_tx, &ctx, None).await;
-                        });
-                    }
-                    Err(e) => {
-                        edgerun_log::warn!("TCP accept error: {}", e);
-                    }
-                }
+            Err(e) => {
+                edgerun_log::warn!("TCP accept error: {e}");
             }
         }
     }

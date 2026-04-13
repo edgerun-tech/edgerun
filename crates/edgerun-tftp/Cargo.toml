@@ -4,7 +4,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Dependency-free TFTP server (RFC 1350) with RFC 2347/2348 option extensions"
+description = "Async TFTP server (RFC 1350) with RFC 2347/2348 option extensions"
 
 [lints]
 workspace = true
+
+[dependencies]
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }

@@ -1,3 +1,5 @@
+//! THE EVENT LOG IS THE STATE.
+//!
 //! Named credential store — stores and retrieves secrets by namespace/name.
 //!
 //! Builds on top of the encrypted `BlobStore` to provide a high-level API
@@ -276,25 +278,20 @@ mod tests {
     // -- Persistence across of restart --
 
     #[test]
-    fn credential_index_is_in_memory_only() {
-        // The credential index (namespace/name → blob_id) is purely in-memory.
-        // Per the protocol spec, all authoritative state flows through the event log.
-        // The encrypted blobs persist on disk, but the name→blob_id mapping is rebuilt
-        // on restart (by replaying credential events, which aren't yet implemented).
+    fn secret_survives_store_restart() {
         let root = tmp_data_root();
 
         // First session: store
         {
             let store = make_store(root.clone());
             store.put("persistent", "key", b"persistent-value", None).unwrap();
-            assert!(store.get("persistent", "key").unwrap().is_some());
         }
 
-        // Second session: index is empty (credential not found by name)
-        // The encrypted blob still exists on disk but is orphaned.
+        // Second session: retrieve (FileIndex persists via .bin files)
         {
             let store = make_store(root.clone());
-            assert!(store.get("persistent", "key").unwrap().is_none());
+            let secret = store.get("persistent", "key").unwrap();
+            assert_eq!(secret, Some(b"persistent-value".to_vec()));
         }
     }
 

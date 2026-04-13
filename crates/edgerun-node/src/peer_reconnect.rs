@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_rt::{AsyncReadExt, AsyncWriteExt, CancellationToken};
+use prost::Message;
 
 use crate::session::{self, SessionState};
 use crate::tcp_server::{encode_tcp_frame, SessionContext, TCP_MAX_FRAME_SIZE};
@@ -27,7 +28,7 @@ pub async fn run_peer_reconnection(
 
     // Initialize with known unreachable peers
     for (node_id_hex, addr) in initial_unreachable {
-        backoff.insert(node_id_hex, (0, std::time::Instant::now()));
+        backoff.insert(node_id_hex.clone(), (0, std::time::Instant::now()));
         let _ = store_tx
             .send(StoreRequest::PeerStatusUpdate {
                 node_id_hex: node_id_hex.clone(),
@@ -40,13 +41,11 @@ pub async fn run_peer_reconnection(
     interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
 
     loop {
-        edgerun_rt::select! {
-            _ = cancel.cancelled() => {
-                edgerun_log::info!("peer reconnection shutting down");
-                return;
-            }
-            _ = interval.tick() => {}
+        if cancel.is_cancelled() {
+            edgerun_log::info!("peer reconnection shutting down");
+            return;
         }
+        interval.tick().await;
 
         let now = std::time::Instant::now();
         let mut to_remove = Vec::new();

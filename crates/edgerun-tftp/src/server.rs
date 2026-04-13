@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 use std::io;
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::Arc;
 use std::time::Duration;
+
+use edgerun_rt::{AsyncUdpSocket, Mutex};
 
 use super::message::{TftpError, TftpMessage, TftpOptions};
 
@@ -12,11 +15,6 @@ use super::message::{TftpError, TftpMessage, TftpOptions};
 // ---------------------------------------------------------------------------
 
 /// Trait for a TFTP file backend.
-///
-/// Implement this to serve TFTP files from any source:
-/// - Filesystem
-/// - Encrypted blob store
-/// - In-memory cache
 pub trait FileProvider: Send + Sync {
     /// Get the total size of a file (for tsize option).
     fn file_size(&self, filename: &str) -> Option<u64>;
@@ -64,31 +62,22 @@ impl Default for TftpServerConfig {
 
 /// TFTP server — serves files via the TFTP protocol.
 ///
-/// # Example
-/// ```no_run
-/// use edgerun_tftp::server::{TftpServer, TftpServerConfig, FileProvider};
-///
-/// // Implement FileProvider for your backend, then:
-/// // let provider = MyProvider;
-/// // let config = TftpServerConfig::default();
-/// // let mut server = TftpServer::new(config, provider).unwrap();
-/// // server.run();
-/// ```
+/// Now fully async using `edgerun_rt::AsyncUdpSocket`.
 pub struct TftpServer {
-    socket: UdpSocket,
+    socket: Arc<AsyncUdpSocket>,
     provider: Box<dyn FileProvider>,
     timeout: Duration,
     /// Active transfers, keyed by (client_addr, filename).
-    transfers: HashMap<(SocketAddr, String), TftpTransfer>,
+    transfers: Mutex<HashMap<(SocketAddr, String), TftpTransfer>>,
     /// Next ephemeral port for new transfers.
-    next_port: u16,
+    next_port: Mutex<u16>,
 }
 
 impl TftpServer {
     /// Create a new TFTP server.
     pub fn new(config: TftpServerConfig, provider: impl FileProvider + 'static) -> Result<Self, io::Error> {
-        let socket = UdpSocket::bind(&config.bind_addr)?;
-        socket.set_read_timeout(Some(Duration::from_millis(100)))?;
+        let std_socket = UdpSocket::bind(&config.bind_addr)?;
+        let socket = Arc::new(AsyncUdpSocket::from_std(std_socket)?);
 
         let timeout = Duration::from_secs(config.timeout_secs as u64);
 
@@ -96,35 +85,35 @@ impl TftpServer {
             socket,
             provider: Box::new(provider),
             timeout,
-            transfers: HashMap::new(),
-            next_port: 10000,
+            transfers: Mutex::new(HashMap::new()),
+            next_port: Mutex::new(10000),
         })
     }
 
-    /// Run the server event loop (blocking).
-    pub fn run(&mut self) -> Result<(), io::Error> {
-        eprintln!(
+    /// Run the server event loop until shutdown is requested.
+    pub async fn run(&self, shutdown: edgerun_rt::CancellationToken) {
+        edgerun_log::info!(
             "edgerun-tftp: server listening on {}",
             self.socket.local_addr().unwrap()
         );
 
-        loop {
-            match self.tick() {
+        while !shutdown.is_cancelled() {
+            match self.tick().await {
                 Ok(()) => {}
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
-                Err(e) if e.kind() == io::ErrorKind::TimedOut => continue,
                 Err(e) => {
-                    eprintln!("edgerun-tftp: server error: {}", e);
-                    return Err(e);
+                    edgerun_log::warn!("edgerun-tftp: server error: {}", e);
+                    edgerun_rt::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
+
+        edgerun_log::info!("edgerun-tftp: server shut down");
     }
 
-    /// Process one incoming packet. Call from your own event loop.
-    pub fn tick(&mut self) -> Result<(), io::Error> {
+    /// Process one incoming packet.
+    pub async fn tick(&self) -> Result<(), io::Error> {
         let mut buf = [0u8; 65536]; // Max UDP
-        let (n, src) = match self.socket.recv_from(&mut buf) {
+        let (n, src) = match self.socket.recv_from(&mut buf).await {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
@@ -132,7 +121,7 @@ impl TftpServer {
         let msg = match TftpMessage::from_wire(&buf[..n]) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("edgerun-tftp: parse error from {}: {}", src, e);
+                edgerun_log::warn!("edgerun-tftp: parse error from {}: {}", src, e);
                 return Ok(());
             }
         };
@@ -144,38 +133,35 @@ impl TftpServer {
                         TftpError::IllegalOperation,
                         "Only octet mode is supported",
                     );
-                    let _ = self.socket.send_to(&err.to_wire(), src);
+                    let _ = self.socket.send_to(&err.to_wire(), src).await;
                     return Ok(());
                 }
-                self.handle_rrq(src, filename, options)?;
+                self.handle_rrq(src, filename, options).await?;
             }
 
             TftpMessage::WRQ { filename, .. } => {
-                // TFTP writes not supported
                 let err = TftpMessage::error(
                     TftpError::AccessViolation,
                     &format!("Write access denied: {}", filename),
                 );
-                let _ = self.socket.send_to(&err.to_wire(), src);
+                let _ = self.socket.send_to(&err.to_wire(), src).await;
             }
 
             TftpMessage::ACK { block } => {
-                self.handle_ack(src, block)?;
+                self.handle_ack(src, block).await?;
             }
 
             TftpMessage::DATA { .. } | TftpMessage::OACK { .. } => {
-                // Client shouldn't send these unsolicited
                 let err = TftpMessage::error(
                     TftpError::IllegalOperation,
                     "Unexpected message",
                 );
-                let _ = self.socket.send_to(&err.to_wire(), src);
+                let _ = self.socket.send_to(&err.to_wire(), src).await;
             }
 
             TftpMessage::ERROR { code, message } => {
-                eprintln!("edgerun-tftp: ERROR from {}: {:?} - {}", src, code, message);
-                // Clean up transfer
-                self.transfers.retain(|(addr, _), _| *addr != src);
+                edgerun_log::warn!("edgerun-tftp: ERROR from {}: {:?} - {}", src, code, message);
+                self.transfers.lock().await.retain(|(addr, _), _| *addr != src);
             }
         }
 
@@ -184,13 +170,13 @@ impl TftpServer {
 
     // --- Transfer handling ---
 
-    fn handle_rrq(
-        &mut self,
+    async fn handle_rrq(
+        &self,
         client_addr: SocketAddr,
         filename: String,
         client_options: TftpOptions,
     ) -> Result<(), io::Error> {
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-tftp: RRQ '{}' from {} (blksize={})",
             filename,
             client_addr,
@@ -201,12 +187,12 @@ impl TftpServer {
         let total_size = match self.provider.file_size(&filename) {
             Some(size) => size,
             None => {
-                eprintln!("edgerun-tftp: file not found: {}", filename);
+                edgerun_log::warn!("edgerun-tftp: file not found: {}", filename);
                 let err = TftpMessage::error(
                     TftpError::FileNotFound,
                     &format!("File not found: {}", filename),
                 );
-                let _ = self.socket.send_to(&err.to_wire(), client_addr);
+                let _ = self.socket.send_to(&err.to_wire(), client_addr).await;
                 return Ok(());
             }
         };
@@ -222,7 +208,7 @@ impl TftpServer {
 
         // Create transfer state
         let key = (client_addr, filename.clone());
-        self.transfers.insert(
+        self.transfers.lock().await.insert(
             key,
             TftpTransfer {
                 filename,
@@ -243,41 +229,41 @@ impl TftpServer {
                 options: negotiated.clone(),
             };
             let wire = oack.to_wire();
-            let _ = self.socket.send_to(&wire, client_addr);
-            eprintln!("edgerun-tftp: OACK sent to {} (blksize={}, tsize={})",
-                client_addr, negotiated.blksize, total_size);
+            let _ = self.socket.send_to(&wire, client_addr).await;
+            edgerun_log::info!(
+                "edgerun-tftp: OACK sent to {} (blksize={}, tsize={})",
+                client_addr, negotiated.blksize, total_size
+            );
         } else {
             // No options to negotiate, start sending data
-            self.send_next_block(&client_addr)?;
+            self.send_next_block(&client_addr).await?;
         }
 
         Ok(())
     }
 
-    fn handle_ack(&mut self, client_addr: SocketAddr, block: u16) -> Result<(), io::Error> {
-        // Find the transfer for this client
-        let key = self.transfers
-            .keys()
-            .find(|(addr, _)| *addr == client_addr)
-            .cloned();
+    async fn handle_ack(&self, client_addr: SocketAddr, block: u16) -> Result<(), io::Error> {
+        let transfer_info = {
+            let transfers = self.transfers.lock().await;
+            transfers
+                .iter()
+                .find(|(k, _)| k.0 == client_addr)
+                .map(|(key, t)| {
+                    (key.clone(), t.current_block, t.offset, t.total_size, t.blksize)
+                })
+        };
 
-        if let Some(key) = key {
-            let transfer = &self.transfers[&key];
-
-            // Only process ACK for the current block
-            if block == transfer.current_block || (block == 0 && transfer.current_block == 0) {
-                // block 0 is ACK for OACK
-                if transfer.offset >= transfer.total_size as usize {
-                    // Transfer complete
-                    eprintln!(
-                        "edgerun-tftp: transfer complete '{}' to {} ({} bytes)",
-                        transfer.filename,
+        if let Some((key, current_block, offset, total_size, blksize)) = transfer_info {
+            if block == current_block || (block == 0 && current_block == 0) {
+                if offset >= total_size as usize {
+                    edgerun_log::info!(
+                        "edgerun-tftp: transfer complete to {} ({} bytes)",
                         client_addr,
-                        transfer.offset
+                        offset
                     );
-                    self.transfers.remove(&key);
+                    self.transfers.lock().await.remove(&key);
                 } else {
-                    self.send_next_block(&client_addr)?;
+                    self.send_next_block_data(&client_addr, blksize).await?;
                 }
             }
         }
@@ -285,33 +271,41 @@ impl TftpServer {
         Ok(())
     }
 
-    fn send_next_block(&mut self, client_addr: &SocketAddr) -> Result<(), io::Error> {
-        let key = self.transfers
-            .keys()
-            .find(|(addr, _)| addr == client_addr)
-            .cloned();
+    async fn send_next_block(&self, client_addr: &SocketAddr) -> Result<(), io::Error> {
+        // Find the transfer for this client and extract the info we need
+        let transfer_info = {
+            let transfers = self.transfers.lock().await;
+            transfers
+                .iter()
+                .find(|(addr, _)| addr.0 == *client_addr)
+                .map(|(key, t)| {
+                    (key.clone(), t.filename.clone(), t.offset, t.blksize as usize, t.current_block)
+                })
+        };
 
-        if let Some(key) = key {
-            let transfer = self.transfers.get_mut(&key).unwrap();
-            let blksize = transfer.blksize as usize;
-
+        if let Some((key, filename, offset, blksize, current_block)) = transfer_info {
             // Read the next block
-            match self.provider.read_block(&transfer.filename, transfer.offset, blksize) {
+            match self.provider.read_block(&filename, offset, blksize) {
                 Some(data) => {
                     let is_last = data.len() < blksize;
-                    transfer.current_block = transfer.current_block.wrapping_add(1);
+                    let new_block = current_block.wrapping_add(1);
+                    let data_len = data.len();
 
-                    let data_msg = TftpMessage::data(transfer.current_block, data);
+                    let data_msg = TftpMessage::data(new_block, data);
                     let wire = data_msg.to_wire();
-                    let _ = self.socket.send_to(&wire, *client_addr);
+                    let _ = self.socket.send_to(&wire, *client_addr).await;
 
-                    transfer.offset += data_msg_data_len(&data_msg);
+                    // Update transfer state
+                    let mut transfers = self.transfers.lock().await;
+                    if let Some(t) = transfers.get_mut(&key) {
+                        t.current_block = new_block;
+                        t.offset += data_len;
+                    }
 
                     if is_last {
-                        eprintln!(
-                            "edgerun-tftp: final block {} for '{}' to {}",
-                            transfer.current_block,
-                            transfer.filename,
+                        edgerun_log::info!(
+                            "edgerun-tftp: final block {} to {}",
+                            new_block,
                             client_addr
                         );
                     }
@@ -321,8 +315,8 @@ impl TftpServer {
                         TftpError::NotDefined,
                         "Failed to read file block",
                     );
-                    let _ = self.socket.send_to(&err.to_wire(), *client_addr);
-                    self.transfers.remove(&key);
+                    let _ = self.socket.send_to(&err.to_wire(), *client_addr).await;
+                    self.transfers.lock().await.remove(&key);
                 }
             }
         }
@@ -330,15 +324,33 @@ impl TftpServer {
         Ok(())
     }
 
+    /// Internal: send next block given we already know the transfer details.
+    async fn send_next_block_data(&self, client_addr: &SocketAddr, _blksize: u16) -> Result<(), io::Error> {
+        self.send_next_block(client_addr).await
+    }
+
     /// Get the number of active transfers.
-    pub fn active_transfers(&self) -> usize {
-        self.transfers.len()
+    pub async fn active_transfers(&self) -> usize {
+        self.transfers.lock().await.len()
     }
 }
 
-fn data_msg_data_len(msg: &TftpMessage) -> usize {
-    match msg {
-        TftpMessage::DATA { data, .. } => data.len(),
-        _ => 0,
+// Blanket impl: Arc<dyn FileProvider> is itself a FileProvider
+impl FileProvider for std::sync::Arc<dyn FileProvider> {
+    fn file_size(&self, filename: &str) -> Option<u64> {
+        (**self).file_size(filename)
+    }
+    fn read_block(&self, filename: &str, offset: usize, max_size: usize) -> Option<Vec<u8>> {
+        (**self).read_block(filename, offset, max_size)
+    }
+}
+
+// Blanket impl: Box<dyn FileProvider> is itself a FileProvider
+impl FileProvider for Box<dyn FileProvider> {
+    fn file_size(&self, filename: &str) -> Option<u64> {
+        (**self).file_size(filename)
+    }
+    fn read_block(&self, filename: &str, offset: usize, max_size: usize) -> Option<Vec<u8>> {
+        (**self).read_block(filename, offset, max_size)
     }
 }

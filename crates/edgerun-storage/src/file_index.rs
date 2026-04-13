@@ -1,5 +1,7 @@
+//! THE EVENT LOG IS THE STATE.
+//!
 #![allow(dead_code)]
-//! File-based index — replaces SQLite.
+//! File-based index — materialized view rebuilt from the event log.
 //!
 //! The index stores data as in-memory HashMaps, persisted to disk as
 //! append-only binary logs. All indexes are rebuildable from the event log.
@@ -20,6 +22,8 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicI64, Ordering};
+use edgerun_rt::sync::RwLock;
 
 // ===========================================================================
 // Simple binary serialization helpers
@@ -198,43 +202,43 @@ pub struct WorkAccountingRecord {
 // ===========================================================================
 
 pub struct FileIndex {
-    stream_heads: std::cell::RefCell<HashMap<String, StreamHead>>,
-    events: std::cell::RefCell<HashMap<(String, i64), EventRecord>>,
-    replay_cache: std::cell::RefCell<HashMap<(String, String), ReplayEntry>>,
-    fetch_queue: std::cell::RefCell<Vec<FetchEntry>>,
-    next_fetch_id: std::cell::Cell<i64>,
-    object_presence: std::cell::RefCell<HashMap<String, (String, String, String)>>,
-    peers: std::cell::RefCell<HashMap<String, PeerRecord>>,
-    snapshots: std::cell::RefCell<HashMap<String, SnapshotRecord>>,
-    controller_changes: std::cell::RefCell<Vec<ControllerChange>>,
-    delegations: std::cell::RefCell<HashMap<String, DelegationRecord>>,
-    revocations: std::cell::RefCell<HashMap<String, RevocationRecord>>,
-    credentials: std::cell::RefCell<HashMap<String, CredentialRecord>>,
-    work_accounting: std::cell::RefCell<Vec<WorkAccountingRecord>>,
+    stream_heads: RwLock<HashMap<String, StreamHead>>,
+    events: RwLock<HashMap<(String, i64), EventRecord>>,
+    replay_cache: RwLock<HashMap<(String, String), ReplayEntry>>,
+    fetch_queue: RwLock<Vec<FetchEntry>>,
+    next_fetch_id: AtomicI64,
+    object_presence: RwLock<HashMap<String, (String, String, String)>>,
+    peers: RwLock<HashMap<String, PeerRecord>>,
+    snapshots: RwLock<HashMap<String, SnapshotRecord>>,
+    controller_changes: RwLock<Vec<ControllerChange>>,
+    delegations: RwLock<HashMap<String, DelegationRecord>>,
+    revocations: RwLock<HashMap<String, RevocationRecord>>,
+    credentials: RwLock<HashMap<String, CredentialRecord>>,
+    work_accounting: RwLock<Vec<WorkAccountingRecord>>,
     data_root: PathBuf,
 }
 
 impl FileIndex {
-    // Note: all methods take &self because interior mutability is via RefCell
+    // Note: all methods take &self because interior mutability is via RwLock.
 
     pub fn open(data_root: &PathBuf) -> io::Result<Self> {
         let idx_dir = data_root.join("indexes");
         fs::create_dir_all(&idx_dir)?;
 
         let index = Self {
-            stream_heads: std::cell::RefCell::new(HashMap::new()),
-            events: std::cell::RefCell::new(HashMap::new()),
-            replay_cache: std::cell::RefCell::new(HashMap::new()),
-            fetch_queue: std::cell::RefCell::new(Vec::new()),
-            next_fetch_id: std::cell::Cell::new(1),
-            object_presence: std::cell::RefCell::new(HashMap::new()),
-            peers: std::cell::RefCell::new(HashMap::new()),
-            snapshots: std::cell::RefCell::new(HashMap::new()),
-            controller_changes: std::cell::RefCell::new(Vec::new()),
-            delegations: std::cell::RefCell::new(HashMap::new()),
-            revocations: std::cell::RefCell::new(HashMap::new()),
-            credentials: std::cell::RefCell::new(HashMap::new()),
-            work_accounting: std::cell::RefCell::new(Vec::new()),
+            stream_heads: RwLock::new(HashMap::new()),
+            events: RwLock::new(HashMap::new()),
+            replay_cache: RwLock::new(HashMap::new()),
+            fetch_queue: RwLock::new(Vec::new()),
+            next_fetch_id: AtomicI64::new(1),
+            object_presence: RwLock::new(HashMap::new()),
+            peers: RwLock::new(HashMap::new()),
+            snapshots: RwLock::new(HashMap::new()),
+            controller_changes: RwLock::new(Vec::new()),
+            delegations: RwLock::new(HashMap::new()),
+            revocations: RwLock::new(HashMap::new()),
+            credentials: RwLock::new(HashMap::new()),
+            work_accounting: RwLock::new(Vec::new()),
             data_root: data_root.clone(),
         };
 
@@ -257,7 +261,7 @@ impl FileIndex {
                 let hash_len = read_u64(&mut r)? as usize;
                 let mut hash = vec![0u8; hash_len];
                 r.read_exact(&mut hash)?;
-                self.stream_heads.borrow_mut().insert(key, StreamHead { seq, hash });
+                self.stream_heads.write().insert(key, StreamHead { seq, hash });
             }
         }
 
@@ -275,7 +279,7 @@ impl FileIndex {
                 };
                 let first_seen = read_u64(&mut r)? as i64;
                 let is_bootstrap = { let mut t = [0u8; 1]; r.read_exact(&mut t)?; t[0] != 0 };
-                self.peers.borrow_mut().insert(key, PeerRecord { addr, status, last_seen, first_seen, is_bootstrap });
+                self.peers.write().insert(key, PeerRecord { addr, status, last_seen, first_seen, is_bootstrap });
             }
         }
 
@@ -292,7 +296,7 @@ impl FileIndex {
                 let completeness = read_u64(&mut r)? as i32;
                 let base_heads = read_str(&mut r)?;
                 let stored_at = read_u64(&mut r)? as i64;
-                self.snapshots.borrow_mut().insert(key, SnapshotRecord {
+                self.snapshots.write().insert(key, SnapshotRecord {
                     object_id_hex, view_type, producer_hex, produced_at,
                     completeness, base_heads, stored_at,
                 });
@@ -314,7 +318,7 @@ impl FileIndex {
                 };
                 let is_revoked = { let mut t = [0u8; 1]; r.read_exact(&mut t)?; t[0] != 0 };
                 let stored_at = read_u64(&mut r)? as i64;
-                self.delegations.borrow_mut().insert(key, DelegationRecord {
+                self.delegations.write().insert(key, DelegationRecord {
                     issuer_hex, recipient_hex, capability_hex, expires_at, is_revoked, stored_at,
                 });
             }
@@ -334,7 +338,7 @@ impl FileIndex {
                     if tag == 1 { Some(read_u64(&mut r)? as i64) } else { None }
                 };
                 let stored_at = read_u64(&mut r)? as i64;
-                self.revocations.borrow_mut().insert(key, RevocationRecord {
+                self.revocations.write().insert(key, RevocationRecord {
                     issuer_hex, target_type, target_hex, effective_at, stored_at,
                 });
             }
@@ -349,7 +353,7 @@ impl FileIndex {
                 let rep_id = read_str(&mut r)?;
                 let blob_id = read_str(&mut r)?;
                 let status = read_str(&mut r)?;
-                self.object_presence.borrow_mut().insert(key, (rep_id, blob_id, status));
+                self.object_presence.write().insert(key, (rep_id, blob_id, status));
             }
         }
 
@@ -362,7 +366,7 @@ impl FileIndex {
                 let cmd_hash = read_str(&mut r)?;
                 let cmd_id = read_str(&mut r)?;
                 let seq = read_u64(&mut r)? as i64;
-                self.replay_cache.borrow_mut().insert((node, cmd_hash), ReplayEntry { command_id: cmd_id, decision_event_seq: seq });
+                self.replay_cache.write().insert((node, cmd_hash), ReplayEntry { command_id: cmd_id, decision_event_seq: seq });
             }
         }
 
@@ -374,7 +378,7 @@ impl FileIndex {
                 let controller_hex = read_str(&mut r)?;
                 let change_type = read_str(&mut r)?;
                 let event_seq = read_u64(&mut r)? as i64;
-                self.controller_changes.borrow_mut().push(ControllerChange { controller_hex, change_type, event_seq });
+                self.controller_changes.write().push(ControllerChange { controller_hex, change_type, event_seq });
             }
         }
 
@@ -389,9 +393,9 @@ impl FileIndex {
                 let priority = read_u64(&mut r)? as i64;
                 let created_at = read_u64(&mut r)? as i64;
                 let status = read_str(&mut r)?;
-                self.fetch_queue.borrow_mut().push(FetchEntry { id, target_type, target_id, priority, created_at, status });
-                if id >= self.next_fetch_id.get() {
-                    self.next_fetch_id.set(id + 1);
+                self.fetch_queue.write().push(FetchEntry { id, target_type, target_id, priority, created_at, status });
+                if id >= self.next_fetch_id.load(Ordering::Relaxed) {
+                    self.next_fetch_id.store(id + 1, Ordering::Relaxed);
                 }
             }
         }
@@ -411,7 +415,7 @@ impl FileIndex {
                 let status = read_str(&mut r)?;
                 let started_at_us = read_u64(&mut r)?;
                 let billable_rc_us = read_u64(&mut r)?;
-                self.work_accounting.borrow_mut().push(WorkAccountingRecord {
+                self.work_accounting.write().push(WorkAccountingRecord {
                     data, record_hash, requester_hex, provider_hex,
                     workload_class, status, started_at_us, billable_rc_us,
                 });
@@ -427,7 +431,7 @@ impl FileIndex {
                 let blob_id = read_str(&mut r)?;
                 let description = read_option_str(&mut r)?;
                 let stored_at = read_u64(&mut r)? as i64;
-                self.credentials.borrow_mut().insert(key, CredentialRecord {
+                self.credentials.write().insert(key, CredentialRecord {
                     blob_id, description, stored_at,
                 });
             }
@@ -448,7 +452,7 @@ impl FileIndex {
     pub fn save(&self) -> io::Result<()> {
         // Save stream_heads
         self.persist("stream_heads.bin", |w| {
-            for (k, v) in self.stream_heads.borrow().iter() {
+            for (k, v) in self.stream_heads.read().iter() {
                 write_str(w, k)?;
                 write_u64(w, v.seq as u64)?;
                 write_u64(w, v.hash.len() as u64)?;
@@ -459,7 +463,7 @@ impl FileIndex {
 
         // Save peers
         self.persist("peers.bin", |w| {
-            for (k, v) in self.peers.borrow().iter() {
+            for (k, v) in self.peers.read().iter() {
                 write_str(w, k)?;
                 write_option_str(w, v.addr.as_deref())?;
                 write_str(w, &v.status)?;
@@ -475,7 +479,7 @@ impl FileIndex {
 
         // Save snapshots
         self.persist("snapshots.bin", |w| {
-            for (k, v) in self.snapshots.borrow().iter() {
+            for (k, v) in self.snapshots.read().iter() {
                 write_str(w, k)?;
                 write_str(w, &v.object_id_hex)?;
                 write_str(w, &v.view_type)?;
@@ -490,7 +494,7 @@ impl FileIndex {
 
         // Save delegations
         self.persist("delegations.bin", |w| {
-            for (k, v) in self.delegations.borrow().iter() {
+            for (k, v) in self.delegations.read().iter() {
                 write_str(w, k)?;
                 write_str(w, &v.issuer_hex)?;
                 write_str(w, &v.recipient_hex)?;
@@ -507,7 +511,7 @@ impl FileIndex {
 
         // Save revocations
         self.persist("revocations.bin", |w| {
-            for (k, v) in self.revocations.borrow().iter() {
+            for (k, v) in self.revocations.read().iter() {
                 write_str(w, k)?;
                 write_str(w, &v.issuer_hex)?;
                 write_str(w, &v.target_type)?;
@@ -523,7 +527,7 @@ impl FileIndex {
 
         // Save object_presence
         self.persist("object_presence.bin", |w| {
-            for (k, (rep, blob, status)) in self.object_presence.borrow().iter() {
+            for (k, (rep, blob, status)) in self.object_presence.read().iter() {
                 write_str(w, k)?;
                 write_str(w, rep)?;
                 write_str(w, blob)?;
@@ -534,7 +538,7 @@ impl FileIndex {
 
         // Save replay_cache
         self.persist("replay_cache.bin", |w| {
-            for ((node, cmd_hash), entry) in self.replay_cache.borrow().iter() {
+            for ((node, cmd_hash), entry) in self.replay_cache.read().iter() {
                 write_str(w, node)?;
                 write_str(w, cmd_hash)?;
                 write_str(w, &entry.command_id)?;
@@ -545,7 +549,7 @@ impl FileIndex {
 
         // Save controller_changes
         self.persist("controller_changes.bin", |w| {
-            for v in self.controller_changes.borrow().iter() {
+            for v in self.controller_changes.read().iter() {
                 write_str(w, &v.controller_hex)?;
                 write_str(w, &v.change_type)?;
                 write_u64(w, v.event_seq as u64)?;
@@ -555,7 +559,7 @@ impl FileIndex {
 
         // Save fetch_queue
         self.persist("fetch_queue.bin", |w| {
-            for v in self.fetch_queue.borrow().iter() {
+            for v in self.fetch_queue.read().iter() {
                 write_u64(w, v.id as u64)?;
                 write_str(w, &v.target_type)?;
                 write_str(w, &v.target_id)?;
@@ -568,7 +572,7 @@ impl FileIndex {
 
         // Save work_accounting
         self.persist("work_accounting.bin", |w| {
-            for v in self.work_accounting.borrow().iter() {
+            for v in self.work_accounting.read().iter() {
                 write_u64(w, v.data.len() as u64)?;
                 w.write_all(&v.data)?;
                 write_str(w, &v.record_hash)?;
@@ -584,7 +588,7 @@ impl FileIndex {
 
         // Save credentials
         self.persist("credentials.bin", |w| {
-            for (k, v) in self.credentials.borrow().iter() {
+            for (k, v) in self.credentials.read().iter() {
                 write_str(w, k)?;
                 write_str(w, &v.blob_id)?;
                 write_option_str(w, v.description.as_deref())?;
@@ -643,16 +647,16 @@ impl FileIndex {
     }
 
     pub fn set_head(&self, stream_id: &str, seq: i64, hash: &[u8]) -> io::Result<()> {
-        self.stream_heads.borrow_mut().insert(stream_id.to_string(), StreamHead { seq, hash: hash.to_vec() });
+        self.stream_heads.write().insert(stream_id.to_string(), StreamHead { seq, hash: hash.to_vec() });
         self.save()
     }
 
     pub fn get_head(&self, stream_id: &str) -> io::Result<Option<(i64, Vec<u8>)>> {
-        Ok(self.stream_heads.borrow().get(stream_id).map(|h| (h.seq, h.hash.clone())))
+        Ok(self.stream_heads.read().get(stream_id).map(|h| (h.seq, h.hash.clone())))
     }
 
     pub fn put_replay_entry(&self, target_node: &str, command_hash: &str, command_id: &str, decision_event_seq: i64) -> io::Result<()> {
-        self.replay_cache.borrow_mut().insert(
+        self.replay_cache.write().insert(
             (target_node.to_string(), command_hash.to_string()),
             ReplayEntry { command_id: command_id.to_string(), decision_event_seq },
         );
@@ -660,15 +664,15 @@ impl FileIndex {
     }
 
     pub fn get_replay_entry(&self, target_node: &str, command_hash: &str) -> io::Result<Option<ReplayEntry>> {
-        Ok(self.replay_cache.borrow().get(&(target_node.to_string(), command_hash.to_string())).cloned())
+        Ok(self.replay_cache.read().get(&(target_node.to_string(), command_hash.to_string())).cloned())
     }
 
     pub fn enqueue_fetch(&self, target_type: &str, target_id: &str, priority: i64) -> io::Result<()> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        let id = self.next_fetch_id.get();
-        self.next_fetch_id.set(self.next_fetch_id.get() + 1);
-        self.fetch_queue.borrow_mut().push(FetchEntry {
+        let id = self.next_fetch_id.load(Ordering::Relaxed);
+        self.next_fetch_id.store(id + 1, Ordering::Relaxed);
+        self.fetch_queue.write().push(FetchEntry {
             id, target_type: target_type.to_string(), target_id: target_id.to_string(),
             priority, created_at: now, status: "pending".to_string(),
         });
@@ -677,7 +681,7 @@ impl FileIndex {
 
     pub fn dequeue_fetch(&self) -> io::Result<Option<FetchEntry>> {
         // Find first pending entry
-        for entry in self.fetch_queue.borrow().iter() {
+        for entry in self.fetch_queue.read().iter() {
             if entry.status == "pending" {
                 let result = entry.clone();
                 return Ok(Some(result));
@@ -687,21 +691,21 @@ impl FileIndex {
     }
 
     pub fn mark_fetch_done(&self, fetch_id: i64) -> io::Result<()> {
-        for entry in self.fetch_queue.borrow_mut().iter_mut() {
+        for entry in self.fetch_queue.write().iter_mut() {
             if entry.id == fetch_id { entry.status = "done".to_string(); }
         }
         self.save()
     }
 
     pub fn mark_fetch_failed(&self, fetch_id: i64) -> io::Result<()> {
-        for entry in self.fetch_queue.borrow_mut().iter_mut() {
+        for entry in self.fetch_queue.write().iter_mut() {
             if entry.id == fetch_id { entry.status = "failed".to_string(); }
         }
         self.save()
     }
 
     pub fn mark_object_present(&self, object_id: &str, representation_id: &str, blob_id: &str) -> io::Result<()> {
-        self.object_presence.borrow_mut().insert(
+        self.object_presence.write().insert(
             object_id.to_string(),
             (representation_id.to_string(), blob_id.to_string(), "present".to_string()),
         );
@@ -709,11 +713,11 @@ impl FileIndex {
     }
 
     pub fn is_object_present(&self, object_id: &str) -> io::Result<bool> {
-        Ok(self.object_presence.borrow().get(object_id).map(|(_, _, s)| s == "present").unwrap_or(false))
+        Ok(self.object_presence.read().get(object_id).map(|(_, _, s)| s == "present").unwrap_or(false))
     }
 
     pub fn list_stream_heads(&self) -> io::Result<Vec<(String, i64, Vec<u8>)>> {
-        Ok(self.stream_heads.borrow().iter().map(|(k, v)| (k.clone(), v.seq, v.hash.clone())).collect())
+        Ok(self.stream_heads.read().iter().map(|(k, v)| (k.clone(), v.seq, v.hash.clone())).collect())
     }
 
     pub fn list_event_range(&self, stream_id: &str, from_seq: i64, to_seq: i64) -> io::Result<Vec<(i64, Vec<u8>, i64)>> {
@@ -740,7 +744,7 @@ impl FileIndex {
     }
 
     pub fn list_stream_ids(&self) -> io::Result<Vec<String>> {
-        let mut ids: Vec<String> = self.stream_heads.borrow().keys().cloned().collect();
+        let mut ids: Vec<String> = self.stream_heads.read().keys().cloned().collect();
         ids.sort();
         Ok(ids)
     }
@@ -748,7 +752,7 @@ impl FileIndex {
     pub fn lookup_objects(&self, object_ids: &[String]) -> io::Result<Vec<(String, Option<String>, Option<String>, String)>> {
         let mut result = Vec::new();
         for oid in object_ids {
-            if let Some((rep, blob, status)) = self.object_presence.borrow().get(oid) {
+            if let Some((rep, blob, status)) = self.object_presence.read().get(oid) {
                 result.push((oid.clone(), Some(rep.clone()), Some(blob.clone()), status.clone()));
             }
         }
@@ -758,15 +762,15 @@ impl FileIndex {
     pub fn upsert_peer(&self, node_id_hex: &str, addr: Option<&str>, status: &str, is_bootstrap: bool) -> io::Result<()> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        let exists = self.peers.borrow().contains_key(node_id_hex);
+        let exists = self.peers.read().contains_key(node_id_hex);
         if exists {
             if let Some(a) = addr {
-                self.peers.borrow_mut().get_mut(node_id_hex).unwrap().addr = Some(a.to_string());
+                self.peers.write().get_mut(node_id_hex).unwrap().addr = Some(a.to_string());
             }
-            self.peers.borrow_mut().get_mut(node_id_hex).unwrap().status = status.to_string();
-            self.peers.borrow_mut().get_mut(node_id_hex).unwrap().last_seen = Some(now);
+            self.peers.write().get_mut(node_id_hex).unwrap().status = status.to_string();
+            self.peers.write().get_mut(node_id_hex).unwrap().last_seen = Some(now);
         } else {
-            self.peers.borrow_mut().insert(node_id_hex.to_string(), PeerRecord {
+            self.peers.write().insert(node_id_hex.to_string(), PeerRecord {
                 addr: addr.map(|s| s.to_string()),
                 status: status.to_string(),
                 last_seen: Some(now),
@@ -780,7 +784,7 @@ impl FileIndex {
     pub fn update_peer_status(&self, node_id_hex: &str, status: &str) -> io::Result<()> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        if let Some(peer) = self.peers.borrow_mut().get_mut(node_id_hex) {
+        if let Some(peer) = self.peers.write().get_mut(node_id_hex) {
             peer.status = status.to_string();
             peer.last_seen = Some(now);
         }
@@ -788,7 +792,7 @@ impl FileIndex {
     }
 
     pub fn list_peers(&self) -> io::Result<Vec<(String, Option<String>, String, Option<i64>, bool)>> {
-        let mut peers: Vec<_> = self.peers.borrow().iter().map(|(k, v)| {
+        let mut peers: Vec<_> = self.peers.read().iter().map(|(k, v)| {
             (k.clone(), v.addr.clone(), v.status.clone(), v.last_seen, v.is_bootstrap)
         }).collect();
         peers.sort_by(|a, b| b.3.cmp(&a.3));
@@ -796,7 +800,7 @@ impl FileIndex {
     }
 
     pub fn list_unreachable_peers_with_addr(&self) -> io::Result<Vec<(String, String)>> {
-        Ok(self.peers.borrow().iter()
+        Ok(self.peers.read().iter()
             .filter(|(_, v)| v.status == "unreachable" && v.addr.is_some())
             .map(|(k, v)| (k.clone(), v.addr.clone().unwrap()))
             .collect())
@@ -806,7 +810,7 @@ impl FileIndex {
         producer_hex: &str, produced_at: i64, completeness: i32, base_heads: &str) -> io::Result<()> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        self.snapshots.borrow_mut().insert(snapshot_id.to_string(), SnapshotRecord {
+        self.snapshots.write().insert(snapshot_id.to_string(), SnapshotRecord {
             object_id_hex: object_id_hex.to_string(),
             view_type: view_type.to_string(),
             producer_hex: producer_hex.to_string(),
@@ -816,7 +820,7 @@ impl FileIndex {
     }
 
     pub fn list_snapshots(&self) -> io::Result<Vec<(String, String, String, String, i64, i32, String)>> {
-        let mut snaps: Vec<_> = self.snapshots.borrow().iter().map(|(k, v)| {
+        let mut snaps: Vec<_> = self.snapshots.read().iter().map(|(k, v)| {
             (k.clone(), v.object_id_hex.clone(), v.view_type.clone(), v.producer_hex.clone(),
              v.produced_at, v.completeness, v.base_heads.clone())
         }).collect();
@@ -825,14 +829,14 @@ impl FileIndex {
     }
 
     pub fn get_snapshot(&self, snapshot_id: &str) -> io::Result<Option<(String, String, String, String, i64, i32, String)>> {
-        Ok(self.snapshots.borrow().get(snapshot_id).map(|v| {
+        Ok(self.snapshots.read().get(snapshot_id).map(|v| {
             (snapshot_id.to_string(), v.object_id_hex.clone(), v.view_type.clone(),
              v.producer_hex.clone(), v.produced_at, v.completeness, v.base_heads.clone())
         }))
     }
 
     pub fn record_controller_change(&self, controller_hex: &str, change_type: &str, event_seq: i64) -> io::Result<()> {
-        self.controller_changes.borrow_mut().push(ControllerChange {
+        self.controller_changes.write().push(ControllerChange {
             controller_hex: controller_hex.to_string(),
             change_type: change_type.to_string(),
             event_seq,
@@ -841,7 +845,7 @@ impl FileIndex {
     }
 
     pub fn list_controller_changes(&self, up_to_seq: i64) -> io::Result<Vec<(String, String)>> {
-        Ok(self.controller_changes.borrow().iter()
+        Ok(self.controller_changes.read().iter()
             .filter(|c| c.event_seq <= up_to_seq)
             .map(|c| (c.controller_hex.clone(), c.change_type.clone()))
             .collect())
@@ -851,7 +855,7 @@ impl FileIndex {
         recipient_hex: &str, capability_hex: &str, expires_at: Option<i64>) -> io::Result<()> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        self.delegations.borrow_mut().insert(delegation_id.to_string(), DelegationRecord {
+        self.delegations.write().insert(delegation_id.to_string(), DelegationRecord {
             issuer_hex: issuer_hex.to_string(),
             recipient_hex: recipient_hex.to_string(),
             capability_hex: capability_hex.to_string(),
@@ -863,14 +867,14 @@ impl FileIndex {
     }
 
     pub fn revoke_delegation(&self, delegation_id: &str) -> io::Result<()> {
-        if let Some(d) = self.delegations.borrow_mut().get_mut(delegation_id) {
+        if let Some(d) = self.delegations.write().get_mut(delegation_id) {
             d.is_revoked = true;
         }
         self.save()
     }
 
     pub fn list_active_delegations(&self, issuer_hex: &str) -> io::Result<Vec<String>> {
-        let mut ids: Vec<_> = self.delegations.borrow().iter()
+        let mut ids: Vec<_> = self.delegations.read().iter()
             .filter(|(_, v)| v.issuer_hex == issuer_hex && !v.is_revoked)
             .map(|(k, _)| k.clone())
             .collect();
@@ -882,7 +886,7 @@ impl FileIndex {
         target_type: &str, target_hex: &str, effective_at: Option<i64>) -> io::Result<()> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        self.revocations.borrow_mut().insert(revocation_id.to_string(), RevocationRecord {
+        self.revocations.write().insert(revocation_id.to_string(), RevocationRecord {
             issuer_hex: issuer_hex.to_string(),
             target_type: target_type.to_string(),
             target_hex: target_hex.to_string(),
@@ -893,7 +897,7 @@ impl FileIndex {
     }
 
     pub fn list_active_revocations(&self) -> io::Result<Vec<(String, String)>> {
-        Ok(self.revocations.borrow().iter()
+        Ok(self.revocations.read().iter()
             .map(|(_, v)| (v.target_type.clone(), v.target_hex.clone()))
             .collect())
     }
@@ -904,13 +908,13 @@ impl FileIndex {
 
     /// Record a completed work unit.
     pub fn record_work_accounting(&self, record: WorkAccountingRecord) -> io::Result<()> {
-        self.work_accounting.borrow_mut().push(record);
+        self.work_accounting.write().push(record);
         self.save()
     }
 
     /// Get total billable RC-µs for a requester (buyer).
     pub fn total_billable_for_requester(&self, requester_hex: &str) -> io::Result<u64> {
-        Ok(self.work_accounting.borrow().iter()
+        Ok(self.work_accounting.read().iter()
             .filter(|r| r.requester_hex == requester_hex && r.status == "completed")
             .map(|r| r.billable_rc_us)
             .sum())
@@ -918,7 +922,7 @@ impl FileIndex {
 
     /// Get total billable RC-µs for a provider (seller).
     pub fn total_billable_for_provider(&self, provider_hex: &str) -> io::Result<u64> {
-        Ok(self.work_accounting.borrow().iter()
+        Ok(self.work_accounting.read().iter()
             .filter(|r| r.provider_hex == provider_hex && r.status == "completed")
             .map(|r| r.billable_rc_us)
             .sum())
@@ -926,7 +930,7 @@ impl FileIndex {
 
     /// Get all work records in a time window.
     pub fn work_in_time_range(&self, from_us: u64, to_us: u64) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self.work_accounting.borrow().iter()
+        Ok(self.work_accounting.read().iter()
             .filter(|r| r.started_at_us >= from_us && r.started_at_us <= to_us)
             .cloned()
             .collect())
@@ -934,7 +938,7 @@ impl FileIndex {
 
     /// Get all work records for a specific workload class.
     pub fn work_by_class(&self, class: &str) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self.work_accounting.borrow().iter()
+        Ok(self.work_accounting.read().iter()
             .filter(|r| r.workload_class == class)
             .cloned()
             .collect())
@@ -942,7 +946,7 @@ impl FileIndex {
 
     /// Get all work records with a specific status.
     pub fn work_by_status(&self, status: &str) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self.work_accounting.borrow().iter()
+        Ok(self.work_accounting.read().iter()
             .filter(|r| r.status == status)
             .cloned()
             .collect())
@@ -950,7 +954,7 @@ impl FileIndex {
 
     /// Get all work records.
     pub fn list_all_work(&self) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self.work_accounting.borrow().iter().cloned().collect())
+        Ok(self.work_accounting.read().iter().cloned().collect())
     }
 
     // ===========================================================================
@@ -965,7 +969,7 @@ impl FileIndex {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
         let key = format!("{}/{}", namespace, name);
-        self.credentials.borrow_mut().insert(key, CredentialRecord {
+        self.credentials.write().insert(key, CredentialRecord {
             blob_id: blob_id.to_string(),
             description: description.map(|s| s.to_string()),
             stored_at: now,
@@ -976,7 +980,7 @@ impl FileIndex {
     /// Look up the blob_id for a named credential.
     pub fn get_credential(&self, namespace: &str, name: &str) -> io::Result<Option<CredentialRecord>> {
         let key = format!("{}/{}", namespace, name);
-        Ok(self.credentials.borrow().get(&key).cloned())
+        Ok(self.credentials.read().get(&key).cloned())
     }
 
     /// Delete a credential from the index. Returns `true` if it existed.
@@ -985,7 +989,7 @@ impl FileIndex {
     /// disk is left in place (content-addressed, can be garbage collected later).
     pub fn delete_credential(&self, namespace: &str, name: &str) -> io::Result<bool> {
         let key = format!("{}/{}", namespace, name);
-        let existed = self.credentials.borrow_mut().remove(&key).is_some();
+        let existed = self.credentials.write().remove(&key).is_some();
         if existed {
             self.save()?;
         }
@@ -995,7 +999,7 @@ impl FileIndex {
     /// List all credential names in a namespace.
     pub fn list_credentials(&self, namespace: &str) -> io::Result<Vec<(String, Option<String>, i64)>> {
         let prefix = format!("{}/", namespace);
-        let mut results: Vec<_> = self.credentials.borrow().iter()
+        let mut results: Vec<_> = self.credentials.read().iter()
             .filter(|(k, _)| k.starts_with(&prefix))
             .map(|(k, v)| {
                 let name = k.strip_prefix(&prefix).unwrap_or(k).to_string();
@@ -1008,7 +1012,7 @@ impl FileIndex {
 
     /// List all namespaces that have stored credentials.
     pub fn list_credential_namespaces(&self) -> io::Result<Vec<String>> {
-        let mut namespaces: Vec<_> = self.credentials.borrow().keys()
+        let mut namespaces: Vec<_> = self.credentials.read().keys()
             .filter_map(|k| k.split_once('/').map(|(ns, _)| ns.to_string()))
             .collect();
         namespaces.sort();
@@ -1017,18 +1021,18 @@ impl FileIndex {
     }
 
     pub fn clear(&self) -> io::Result<()> {
-        self.stream_heads.borrow_mut().clear();
-        self.events.borrow_mut().clear();
-        self.replay_cache.borrow_mut().clear();
-        self.fetch_queue.borrow_mut().clear();
-        self.object_presence.borrow_mut().clear();
-        self.peers.borrow_mut().clear();
-        self.snapshots.borrow_mut().clear();
-        self.controller_changes.borrow_mut().clear();
-        self.delegations.borrow_mut().clear();
-        self.revocations.borrow_mut().clear();
-        self.credentials.borrow_mut().clear();
-        self.work_accounting.borrow_mut().clear();
+        self.stream_heads.write().clear();
+        self.events.write().clear();
+        self.replay_cache.write().clear();
+        self.fetch_queue.write().clear();
+        self.object_presence.write().clear();
+        self.peers.write().clear();
+        self.snapshots.write().clear();
+        self.controller_changes.write().clear();
+        self.delegations.write().clear();
+        self.revocations.write().clear();
+        self.credentials.write().clear();
+        self.work_accounting.write().clear();
         // Clear files
         for file in &["stream_heads.bin", "events.bin", "replay_cache.bin", "fetch_queue.bin",
                       "object_presence.bin", "peers.bin", "snapshots.bin",

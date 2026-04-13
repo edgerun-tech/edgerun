@@ -284,14 +284,13 @@ pub fn run_store_task(
                 let initial_controllers = config_controllers_from_signer(signer);
                 if let Ok(head) = store.get_head(stream_id) {
                     let up_to_seq = head.map(|(seq, _)| seq).unwrap_or(0);
-                    if let Ok(new_controllers) = command_dispatch::project_controller_set(
+                    let new_controllers = command_dispatch::project_controller_set(
                         &store, stream_id, initial_controllers,
-                    ) {
-                        let old_count = controllers.to_vec().len();
-                        controllers = new_controllers;
-                        edgerun_log::info!("config reload: controllers updated ({} -> {})",
-                            old_count, controllers.to_vec().len());
-                    }
+                    );
+                    let old_count = controllers.to_vec().len();
+                    controllers = new_controllers;
+                    edgerun_log::info!("config reload: controllers updated ({} -> {})",
+                        old_count, controllers.to_vec().len());
                 }
 
                 let _ = reply_tx.send(StoreResponse::Ok(b"ok".to_vec()));

@@ -12,8 +12,11 @@ use prost::Message;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::blobs::{BlobStore, BlobKeySource};
+use crate::credentials::CredentialStore;
+use crate::event_loop::{EventLoopBuilder, EventWriter, FetchHandler, PeerDiscoveryHandler};
 use crate::file_index::FileIndex;
 use crate::error::StorageError;
 use std::collections::HashSet;
@@ -68,14 +71,18 @@ pub struct NodeStoreConfig {
     pub blob_key_source: std::sync::Arc<BlobKeySource>,
 }
 
-/// Unified storage for a edgerun node.
+/// THE EVENT LOG IS THE STATE.
 ///
-/// Provides atomic append of signed events, encrypted blob storage,
-/// and fast index lookups — all rebuildable from the event log.
+/// All mutations go through the EventWriter. The event log is the authoritative
+/// record; FileIndex is a materialized view rebuilt from events.
 pub struct NodeStore {
     config: NodeStoreConfig,
-    index: FileIndex,
-    blobs: BlobStore,
+    index: Arc<FileIndex>,
+    blobs: Arc<BlobStore>,
+    credentials: CredentialStore,
+    writer: EventWriter,
+    #[allow(dead_code)]
+    writer_thread: std::thread::JoinHandle<()>,
 }
 
 /// Result of retrieving a logical object.
@@ -90,22 +97,15 @@ pub struct ObjectResult {
 
 impl NodeStore {
     /// Opens or initializes storage at the given data root.
-    ///
-    /// Creates directories and the SQLite schema on first run.
-    /// Subsequent opens reuse existing data.
     pub fn open(config: &NodeStoreConfig) -> Result<Self, StorageError> {
-        // Create directory structure
         let events_dir = config.data_root.join("events");
         let blobs_dir = config.data_root.join("blobs");
-        let _index_path = config.data_root.join("index.bin");
 
         fs::create_dir_all(&events_dir)?;
         fs::create_dir_all(&blobs_dir)?;
 
-        // Open or create file-based index
-        let index = FileIndex::open(&config.data_root)?;
+        let index = Arc::new(FileIndex::open(&config.data_root)?);
 
-        // Open blob store
         let blob_config = crate::blobs::BlobStoreConfig {
             blob_dir: blobs_dir,
         };
@@ -120,72 +120,41 @@ impl NodeStore {
                 }
             }
         };
-        let blobs = BlobStore::open(&blob_config, key_source)?;
+        let blobs = Arc::new(BlobStore::open(&blob_config, key_source)?);
+        let credentials = CredentialStore::new(Arc::clone(&blobs), Arc::clone(&index));
+
+        // Build the event loop — all mutations flow through this
+        let mut builder = EventLoopBuilder::new(events_dir, Arc::clone(&index), Arc::clone(&blobs));
+        builder.register_handler(Box::new(FetchHandler));
+        builder.register_handler(Box::new(PeerDiscoveryHandler));
+        let (writer, writer_thread) = builder.build();
 
         Ok(Self {
             config: config.clone(),
             index,
             blobs,
+            credentials,
+            writer,
+            writer_thread,
         })
+    }
+
+    /// Returns a reference to the credential store.
+    pub fn credentials(&self) -> &CredentialStore {
+        &self.credentials
     }
 
     // -----------------------------------------------------------------------
     // Event log — append-only, atomic with head update
     // -----------------------------------------------------------------------
 
-    /// Appends an event to the stream's event log file and updates the head index.
-    ///
-    /// The event is serialized to protobuf and appended to `{data_root}/events/{stream_id}.log`
-    /// as `[varint length][protobuf bytes]`. The head is updated atomically in SQLite.
-    ///
-    /// Returns the byte offset where the event was written.
-    pub fn append_event(&mut self, event: &EventEnvelope) -> Result<u64, StorageError> {
-        // Best-effort disk space check. The actual write will fail with an I/O
-        // error if the disk fills between this check and the write.
+    /// Appends an event to the stream's event log.
+    /// Routes through the EventWriter — the log is the source of truth.
+    pub async fn append_event(&self, event: &EventEnvelope) -> Result<u64, StorageError> {
         if let Err(available) = self.check_disk_space() {
-            edgerun_log::warn!("low disk space: {} bytes available", available);
+            edgerun_log::warn!("low disk space: {available} bytes available");
         }
-
-        let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
-        let log_path = self.config.data_root.join("events").join(format!("{}.log", stream_id_hex));
-
-        // Encode to protobuf
-        let proto: proto_stream::EventEnvelope = event.clone();
-        let mut event_bytes = Vec::new();
-        proto_stream::EventEnvelope::encode(&proto, &mut event_bytes)
-            .map_err(|e| StorageError::Encode(format!("event protobuf encode failed: {}", e)))?;
-
-        // Length-prefixed append
-        let len_prefix = encode_varint(event_bytes.len() as u64);
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)?;
-
-        let offset = file.metadata()?.len();
-        file.write_all(&len_prefix)?;
-        file.write_all(&event_bytes)?;
-        file.sync_all()?;
-
-        // Compute hash for the index (using SHA-256 of the protobuf bytes)
-                let event_hash = edgerun_core::crypto::sha256(&event_bytes).to_vec();
-
-        // Update SQLite index atomically
-        self.index.put_event(
-            &stream_id_hex,
-            event.seq as i64,
-            &event_hash,
-            offset,
-            event.envelope_version as i64,
-        )?;
-
-        self.index.set_head(
-            &stream_id_hex,
-            event.seq as i64,
-            &event_hash,
-        )?;
-
-        Ok(offset)
+        self.writer.write_event(event.clone()).await
     }
 
     /// Retrieves an event from the event log by stream ID and sequence number.
@@ -269,7 +238,7 @@ impl NodeStore {
     ///
     /// Returns the blob's content-derived identifier.
     pub fn put_blob(
-        &mut self,
+        &self,
         plaintext: &[u8],
         recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
@@ -301,7 +270,7 @@ impl NodeStore {
     ///
     /// Returns the ObjectRef that can be embedded in events.
     pub fn put_object(
-        &mut self,
+        &self,
         content: &[u8],
         object_kind: i32,
         recipients: &[Vec<u8>],
@@ -472,7 +441,7 @@ impl NodeStore {
     /// For 'snapshot' targets: checks local presence.
     ///
     /// Returns the number of successfully resolved items.
-    pub fn process_fetch_queue(&mut self) -> Result<usize, StorageError> {
+    pub fn process_fetch_queue(&self) -> Result<usize, StorageError> {
         let mut resolved = 0;
         loop {
             let Some(entry) = self.index.dequeue_fetch()? else {
@@ -691,7 +660,7 @@ impl NodeStore {
     ///
     /// Returns the signed `SnapshotDescriptor`.
     pub fn produce_snapshot(
-        &mut self,
+        &self,
         signer: &dyn MeshSigner,
         view_type: &str,
         completeness: i32,
@@ -789,7 +758,7 @@ impl NodeStore {
     ///
     /// Returns the acceptance class: "accepted_trusted", "accepted_stale", or error.
     pub fn consume_snapshot(
-        &mut self,
+        &self,
         descriptor: &edgerun_proto::edgerun::v0::access::SnapshotDescriptor,
         trusted_producers: &[Vec<u8>],
     ) -> Result<String, StorageError> {
@@ -879,7 +848,7 @@ impl NodeStore {
     /// `command_id` is stored as an idempotency hint only.
     /// - Same `command_hash` => DUPLICATE
     pub fn record_command_outcome(
-        &mut self,
+        &self,
         target_node: &[u8],
         command_id: &[u8],
         command_hash: &[u8],
@@ -916,7 +885,7 @@ impl NodeStore {
     ///
     /// This scans all `.log` files in the events directory, replays every event,
     /// and repopulates the seq→offset mapping, stream heads, and event presence index.
-    pub fn rebuild_indexes(&mut self) -> Result<usize, StorageError> {
+    pub fn rebuild_indexes(&self) -> Result<usize, StorageError> {
         let events_dir = self.config.data_root.join("events");
 
         // Clear existing index data (heads, events, replay)
@@ -1019,7 +988,7 @@ impl NodeStore {
     /// from the event log if corruption is detected.
     ///
     /// Returns the number of events rebuilt, or `Ok(0)` if the database is healthy.
-    pub fn integrity_check_and_rebuild(&mut self) -> Result<usize, StorageError> {
+    pub fn integrity_check_and_rebuild(&self) -> Result<usize, StorageError> {
         let healthy = self.integrity_check()?;
         if healthy {
             return Ok(0);

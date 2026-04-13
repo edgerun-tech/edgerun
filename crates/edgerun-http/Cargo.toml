@@ -36,8 +36,3 @@ futures = "0.3"
 
 [lints]
 workspace = true
-
-[[bin]]
-name = "http-server"
-path = "src/bin/http-server.rs"
-required-features = ["tls"]

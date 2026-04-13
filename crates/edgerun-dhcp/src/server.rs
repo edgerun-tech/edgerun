@@ -2,7 +2,10 @@
 
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::sync::Arc;
 use std::time::Duration;
+
+use edgerun_rt::{AsyncUdpSocket, Mutex};
 
 use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 use super::lease::LeasePool;
@@ -30,35 +33,13 @@ pub struct DhcpServerConfig {
 
 /// DHCPv4 server — listens for client requests and hands out leases.
 ///
-/// # Example
-/// ```ignore
-/// use edgerun_dhcp::server::{DhcpServer, DhcpServerConfig};
-/// use std::net::Ipv4Addr;
-/// use std::time::Duration;
-///
-/// let config = DhcpServerConfig {
-///     server_ip: Ipv4Addr::new(192, 168, 1, 1),
-///     subnet_mask: Ipv4Addr::new(255, 255, 255, 0),
-///     router: Ipv4Addr::new(192, 168, 1, 1),
-///     dns_servers: vec![Ipv4Addr::new(8, 8, 8, 8)],
-///     lease_time: 86400,
-///     tftp_server: Some(Ipv4Addr::new(192, 168, 1, 1)),
-///     default_bootfile: Some("pxelinux.0".to_string()),
-///     bootfile_by_arch: std::collections::HashMap::new(),
-/// };
-///
-/// let mut server = DhcpServer::new(config,
-///     Ipv4Addr::new(192, 168, 1, 100),
-///     Ipv4Addr::new(192, 168, 1, 200),
-/// ).unwrap();
-///
-/// // Run the server event loop
-/// server.run();
-/// ```
+/// Now fully async using `edgerun_rt::AsyncUdpSocket`.
+/// The pool is protected by an async `Mutex` so it can be
+/// shared across async tasks.
 pub struct DhcpServer {
-    socket: UdpSocket,
+    socket: Arc<AsyncUdpSocket>,
     config: DhcpServerConfig,
-    pool: LeasePool,
+    pool: Mutex<LeasePool>,
     /// Interface name for binding.
     interface: Option<String>,
 }
@@ -72,9 +53,9 @@ impl DhcpServer {
         pool_start: Ipv4Addr,
         pool_end: Ipv4Addr,
     ) -> Result<Self, io::Error> {
-        let socket = UdpSocket::bind(("0.0.0.0", DHCP_SERVER_PORT))?;
-        socket.set_broadcast(true)?;
-        socket.set_read_timeout(Some(Duration::from_millis(200)))?;
+        let std_socket = UdpSocket::bind(("0.0.0.0", DHCP_SERVER_PORT))?;
+        std_socket.set_broadcast(true)?;
+        let socket = Arc::new(AsyncUdpSocket::from_std(std_socket)?);
 
         let mut pool = LeasePool::new(pool_start, pool_end);
 
@@ -92,7 +73,7 @@ impl DhcpServer {
         Ok(Self {
             socket,
             config,
-            pool,
+            pool: Mutex::new(pool),
             interface: None,
         })
     }
@@ -102,38 +83,40 @@ impl DhcpServer {
         self.interface = Some(iface);
     }
 
-    /// Run the server event loop (blocking). Runs until the socket errors.
-    pub fn run(&mut self) -> Result<(), io::Error> {
-        eprintln!(
+    /// Run the server event loop until shutdown is requested.
+    pub async fn run(&self, shutdown: edgerun_rt::CancellationToken) {
+        edgerun_log::info!(
             "edgerun-dhcp: server listening on 0.0.0.0:{}",
             DHCP_SERVER_PORT
         );
-        eprintln!(
+        let pool = self.pool.lock().await;
+        edgerun_log::info!(
             "  pool: {} - {}",
-            self.pool.pool_start, self.pool.pool_end
+            pool.pool_start, pool.pool_end
         );
-        eprintln!(
+        edgerun_log::info!(
             "  server: {}, router: {}, dns: {:?}",
             self.config.server_ip, self.config.router, self.config.dns_servers
         );
+        drop(pool);
 
-        loop {
-            match self.tick() {
+        while !shutdown.is_cancelled() {
+            match self.tick().await {
                 Ok(()) => {}
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
-                Err(e) if e.kind() == io::ErrorKind::TimedOut => continue,
                 Err(e) => {
-                    eprintln!("edgerun-dhcp: server error: {}", e);
-                    return Err(e);
+                    edgerun_log::warn!("edgerun-dhcp: server error: {}", e);
+                    edgerun_rt::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
+
+        edgerun_log::info!("edgerun-dhcp: server shut down");
     }
 
-    /// Process one incoming packet. Call this from your own event loop.
-    pub fn tick(&mut self) -> Result<(), io::Error> {
+    /// Process one incoming packet.
+    pub async fn tick(&self) -> Result<(), io::Error> {
         let mut buf = [0u8; 1500];
-        let (n, src) = match self.socket.recv_from(&mut buf) {
+        let (n, src) = match self.socket.recv_from(&mut buf).await {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
@@ -141,59 +124,57 @@ impl DhcpServer {
         let msg = match DhcpMessage::from_wire(&buf[..n]) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("edgerun-dhcp: failed to parse message from {}: {}", src, e);
+                edgerun_log::warn!("edgerun-dhcp: failed to parse message from {}: {}", src, e);
                 return Ok(());
             }
         };
 
-        self.handle_message(&msg, src)?;
+        self.handle_message(&msg, src).await?;
         Ok(())
     }
 
-    fn handle_message(&mut self, msg: &DhcpMessage, src: SocketAddr) -> Result<(), io::Error> {
+    async fn handle_message(&self, msg: &DhcpMessage, src: SocketAddr) -> Result<(), io::Error> {
         let mt = match msg.options.message_type {
             Some(mt) => mt,
             None => {
-                eprintln!("edgerun-dhcp: message from {} has no message type", src);
+                edgerun_log::warn!("edgerun-dhcp: message from {} has no message type", src);
                 return Ok(());
             }
         };
 
         match mt {
-            DhcpMessageType::Discover => self.handle_discover(msg),
-            DhcpMessageType::Request => self.handle_request(msg),
-            DhcpMessageType::Release => self.handle_release(msg),
-            DhcpMessageType::Decline => self.handle_decline(msg),
-            DhcpMessageType::Inform => self.handle_inform(msg),
+            DhcpMessageType::Discover => self.handle_discover(msg).await,
+            DhcpMessageType::Request => self.handle_request(msg).await,
+            DhcpMessageType::Release => self.handle_release(msg).await,
+            DhcpMessageType::Decline => self.handle_decline(msg).await,
+            DhcpMessageType::Inform => self.handle_inform(msg).await,
             DhcpMessageType::Offer | DhcpMessageType::Ack | DhcpMessageType::Nak => {
-                // Server doesn't process these
                 Ok(())
             }
         }
     }
 
-    fn handle_discover(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
+    async fn handle_discover(&self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-dhcp: DISCOVER from {} (xid=0x{:08x})",
             format_mac(mac),
             msg.xid
         );
 
-        // Try to allocate an IP
-        let ip = match self.pool.allocate(
-            mac,
-            self.config.lease_time,
-            msg.xid,
-        ) {
+        let ip = {
+            let mut pool = self.pool.lock().await;
+            pool.allocate(mac, self.config.lease_time, msg.xid)
+        };
+        let ip = match ip {
             Some(ip) => ip,
             None => {
-                eprintln!("edgerun-dhcp: pool exhausted, sending NAK");
-                return self.send_nak(msg.xid);
+                edgerun_log::warn!("edgerun-dhcp: pool exhausted, sending NAK");
+                return self.send_nak(msg.xid).await;
             }
         };
 
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-dhcp: sending OFFER {} to {}",
             ip,
             format_mac(mac)
@@ -214,15 +195,15 @@ impl DhcpServer {
             bootfile,
         );
 
-        self.send_reply(&offer, msg)
+        self.send_reply(&offer, msg).await
     }
 
-    fn handle_request(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
+    async fn handle_request(&self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
         let requested_ip = msg.options.requested_ip;
         let server_id = msg.options.server_id;
 
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-dhcp: REQUEST from {} (xid=0x{:08x}) req={:?} server={:?}",
             format_mac(mac),
             msg.xid,
@@ -232,27 +213,27 @@ impl DhcpServer {
 
         // If client is renewing (ciaddr is set, no requested_ip)
         if !msg.ciaddr.is_unspecified() && requested_ip.is_none() {
-            // Renewal — check lease
-            if let Some(lease) = self.pool.find_lease_by_ip(msg.ciaddr) {
+            let mut pool = self.pool.lock().await;
+            if let Some(lease) = pool.find_lease_by_ip(msg.ciaddr) {
                 if lease.mac == mac && !lease.is_expired() {
-                    // Renew it
-                    eprintln!(
+                    edgerun_log::info!(
                         "edgerun-dhcp: renewing {} for {}",
                         msg.ciaddr,
                         format_mac(mac)
                     );
-                    return self.send_ack(msg, msg.ciaddr);
+                    drop(pool);
+                    return self.send_ack(msg, msg.ciaddr).await;
                 }
             }
-            eprintln!("edgerun-dhcp: renewal denied for {}", msg.ciaddr);
-            return self.send_nak(msg.xid);
+            edgerun_log::warn!("edgerun-dhcp: renewal denied for {}", msg.ciaddr);
+            drop(pool);
+            return self.send_nak(msg.xid).await;
         }
 
         // New request — check server_id matches us
         if let Some(sid) = server_id {
             if sid != self.config.server_ip {
-                // Client is requesting another server — ignore
-                eprintln!(
+                edgerun_log::info!(
                     "edgerun-dhcp: REQUEST for server {} (we are {}) — ignoring",
                     sid, self.config.server_ip
                 );
@@ -264,79 +245,71 @@ impl DhcpServer {
         let ip = match requested_ip {
             Some(ip) => ip,
             None => {
-                eprintln!("edgerun-dhcp: REQUEST missing requested_ip");
-                return self.send_nak(msg.xid);
+                edgerun_log::warn!("edgerun-dhcp: REQUEST missing requested_ip");
+                return self.send_nak(msg.xid).await;
             }
         };
 
         // Check if this IP is actually available for this client
-        if let Some(existing) = self.pool.find_lease_by_ip(ip) {
-            if existing.mac != mac || existing.is_expired() {
-                // IP is assigned to someone else — release old, allocate new
-                self.pool.release(existing.mac);
-                // Try re-allocate
-                match self.pool.allocate(mac, self.config.lease_time, msg.xid) {
-                    Some(new_ip) if new_ip == ip => {
-                        // Good, re-allocated same IP
-                    }
-                    Some(_) => {
-                        // Got a different IP — shouldn't happen after release
-                        return self.send_nak(msg.xid);
-                    }
-                    None => {
-                        return self.send_nak(msg.xid);
+        {
+            let mut pool = self.pool.lock().await;
+            if let Some(existing) = pool.find_lease_by_ip(ip) {
+                if existing.mac != mac || existing.is_expired() {
+                    let existing_mac = existing.mac;
+                    pool.release(existing_mac);
+                    match pool.allocate(mac, self.config.lease_time, msg.xid) {
+                        Some(new_ip) if new_ip == ip => {}
+                        Some(_) => { drop(pool); return self.send_nak(msg.xid).await; }
+                        None => { drop(pool); return self.send_nak(msg.xid).await; }
                     }
                 }
+            } else {
+                edgerun_log::warn!(
+                    "edgerun-dhcp: REQUEST for {} not in our pool — NAK",
+                    ip
+                );
+                drop(pool);
+                return self.send_nak(msg.xid).await;
             }
-            // Same MAC, same IP — just ACK
-        } else {
-            // Not in pool at all — maybe client is requesting an IP we never offered
-            eprintln!(
-                "edgerun-dhcp: REQUEST for {} not in our pool — NAK",
-                ip
-            );
-            return self.send_nak(msg.xid);
         }
 
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-dhcp: sending ACK {} to {}",
             ip,
             format_mac(mac)
         );
-        self.send_ack(msg, ip)
+        self.send_ack(msg, ip).await
     }
 
-    fn handle_release(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
+    async fn handle_release(&self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-dhcp: RELEASE from {} (xid=0x{:08x})",
             format_mac(mac),
             msg.xid
         );
-        self.pool.release(mac);
+        self.pool.lock().await.release(mac);
         Ok(())
     }
 
-    fn handle_decline(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
+    async fn handle_decline(&self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
         let requested = msg.options.requested_ip;
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-dhcp: DECLINE from {} for {:?}",
             format_mac(mac),
             requested
         );
         if let Some(ip) = requested {
-            self.pool.release(mac);
-            // Mark as reserved temporarily so we don't re-assign immediately
-            self.pool.reserve(ip);
+            self.pool.lock().await.release(mac);
+            self.pool.lock().await.reserve(ip);
         }
         Ok(())
     }
 
-    fn handle_inform(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
-        // INFORM: client has IP already, wants config info
+    async fn handle_inform(&self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-dhcp: INFORM from {} (xid=0x{:08x})",
             format_mac(mac),
             msg.xid
@@ -350,17 +323,17 @@ impl DhcpServer {
             self.config.subnet_mask,
             self.config.router,
             self.config.dns_servers.clone(),
-            0, // No lease — client already has IP
-            None, // No PXE for INFORM
+            0,
+            None,
             None,
         );
 
-        self.send_reply(&ack, msg)
+        self.send_reply(&ack, msg).await
     }
 
     // --- Reply helpers ---
 
-    fn send_ack(&mut self, msg: &DhcpMessage, ip: Ipv4Addr) -> Result<(), io::Error> {
+    async fn send_ack(&self, msg: &DhcpMessage, ip: Ipv4Addr) -> Result<(), io::Error> {
         let mac = msg.client_mac();
         let (tftp, bootfile) = self.pxe_boot_params(msg);
         let ack = DhcpMessage::ack(
@@ -375,14 +348,13 @@ impl DhcpServer {
             tftp,
             bootfile,
         );
-        self.send_reply(&ack, msg)
+        self.send_reply(&ack, msg).await
     }
 
     /// Determine PXE TFTP server and bootfile for this client.
     fn pxe_boot_params(&self, msg: &DhcpMessage) -> (Option<String>, Option<String>) {
         let tftp = self.config.tftp_server.map(|ip| ip.to_string());
         let bootfile = if let Some(arch) = msg.options.client_arch {
-            // Try arch-specific bootfile, then default
             let arch_key = arch.as_str().replace(' ', "-").to_lowercase();
             self.config
                 .bootfile_by_arch
@@ -390,7 +362,6 @@ impl DhcpServer {
                 .cloned()
                 .or_else(|| self.config.default_bootfile.clone())
                 .or_else(|| {
-                    // Fallback: use the architecture's default
                     Some(arch.default_bootfile().to_string())
                 })
         } else {
@@ -399,45 +370,44 @@ impl DhcpServer {
         (tftp, bootfile)
     }
 
-    fn send_nak(&mut self, xid: u32) -> Result<(), io::Error> {
+    async fn send_nak(&self, xid: u32) -> Result<(), io::Error> {
         let nak = DhcpMessage::nak(xid, self.config.server_ip);
         let wire = nak.to_wire();
         let broadcast = SocketAddr::new(
             std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
             DHCP_CLIENT_PORT,
         );
-        let _ = self.socket.send_to(&wire, broadcast);
+        let _ = self.socket.send_to(&wire, broadcast).await;
         Ok(())
     }
 
-    fn send_reply(&mut self, msg: &DhcpMessage, original: &DhcpMessage) -> Result<(), io::Error> {
+    async fn send_reply(&self, msg: &DhcpMessage, original: &DhcpMessage) -> Result<(), io::Error> {
         let wire = msg.to_wire();
 
-        // If client had an IP and broadcast flag is not set, send unicast
         if !original.ciaddr.is_unspecified() && !original.broadcast {
             let addr = SocketAddr::new(
                 std::net::IpAddr::V4(original.ciaddr),
                 DHCP_CLIENT_PORT,
             );
-            self.socket.send_to(&wire, addr)?;
+            self.socket.send_to(&wire, addr).await?;
         } else {
-            // Broadcast to client
             let broadcast = SocketAddr::new(
                 std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
                 DHCP_CLIENT_PORT,
             );
-            self.socket.send_to(&wire, broadcast)?;
+            self.socket.send_to(&wire, broadcast).await?;
         }
         Ok(())
     }
 
     /// Get current pool stats.
-    pub fn stats(&self) -> String {
+    pub async fn stats(&self) -> String {
+        let pool = self.pool.lock().await;
         format!(
             "active={}, available={}, pool_size={}",
-            self.pool.active_count(),
-            self.pool.available_count(),
-            self.pool.pool_size()
+            pool.active_count(),
+            pool.available_count(),
+            pool.pool_size()
         )
     }
 }

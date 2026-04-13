@@ -1,3 +1,5 @@
+//! THE EVENT LOG IS THE STATE.
+//!
 //! edgerun storage layer — durable event log, encrypted blobs, and rebuildable indexes.
 //!
 //! Implements the reference storage profile from the protocol spec (§6.1–§6.3, §19.9):
@@ -18,12 +20,14 @@
 pub mod blobs;
 pub mod credentials;
 pub mod error;
+pub mod event_loop;
 pub mod file_index;
 pub mod store;
 
 pub use error::StorageError;
 pub use blobs::{BlobStore, BlobKeySource, BlobEntry, BlobStoreConfig, blob_file_path};
 pub use credentials::CredentialStore;
+pub use event_loop::{EventWriter, EventLoopBuilder, DispatchContext, EventHandler, OpEventType, FetchHandler, PeerDiscoveryHandler, PeerStatusHandler, CredentialHandler, CredentialDeleteHandler};
 pub use file_index::{FileIndex, EventIndexEntry, ReplayEntry, FetchEntry, WorkAccountingRecord};
 pub use store::{NodeStore, NodeStoreConfig, CommandReplayResult, ObjectResult, ControllerSet};
 
@@ -34,6 +38,27 @@ mod tests {
     use crate::{NodeStore, NodeStoreConfig, BlobKeySource, CommandReplayResult, StorageError};
     use std::error::Error;
     use std::fs;
+
+    /// Helper: block on a future in tests (no async runtime needed — single thread).
+    fn block_on<F: std::future::Future>(f: F) -> F::Output {
+        use std::sync::{Arc, Mutex};
+        use std::task::{Poll, RawWaker, RawWakerVTable, Context, Waker};
+        fn noop_clone(_: *const ()) -> RawWaker { noop_raw_waker() }
+        fn noop(_: *const ()) {}
+        fn noop_raw_waker() -> RawWaker {
+            RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        static VTABLE: RawWakerVTable = RawWakerVTable::new(noop_clone, noop, noop, noop);
+        let waker = unsafe { Waker::from_raw(noop_raw_waker()) };
+        let mut cx = Context::from_waker(&waker);
+        let mut future = std::pin::pin!(f);
+        loop {
+            match future.as_mut().poll(&mut cx) {
+                Poll::Ready(v) => return v,
+                Poll::Pending => std::hint::spin_loop(),
+            }
+        }
+    }
     use std::sync::Arc;
 
     fn tmp_data_root() -> std::path::PathBuf {
@@ -102,7 +127,7 @@ mod tests {
         let mut store = NodeStore::open(&config).unwrap();
 
         let event = test_event("test-stream", 0);
-        let offset = store.append_event(&event).unwrap();
+        let offset = block_on(store.append_event(&event)).unwrap();
         assert_eq!(offset, 0);
 
         // Verify the event log file exists and has content
@@ -122,8 +147,8 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("test-stream", 0)).unwrap();
-        store.append_event(&test_event("test-stream", 1)).unwrap();
+        block_on(store.append_event(&test_event("test-stream", 0))).unwrap();
+        block_on(store.append_event(&test_event("test-stream", 1))).unwrap();
 
         assert_eq!(store.get_event(b"test-stream", 0).unwrap().unwrap().seq, 0);
         assert_eq!(store.get_event(b"test-stream", 1).unwrap().unwrap().seq, 1);
@@ -138,10 +163,10 @@ mod tests {
 
         assert!(store.get_head(b"test-stream").unwrap().is_none());
 
-        store.append_event(&test_event("test-stream", 0)).unwrap();
+        block_on(store.append_event(&test_event("test-stream", 0))).unwrap();
         assert_eq!(store.get_head(b"test-stream").unwrap().unwrap().0, 0);
 
-        store.append_event(&test_event("test-stream", 1)).unwrap();
+        block_on(store.append_event(&test_event("test-stream", 1))).unwrap();
         assert_eq!(store.get_head(b"test-stream").unwrap().unwrap().0, 1);
     }
 
@@ -238,7 +263,7 @@ mod tests {
 
         // Write 5 events
         for i in 0..5 {
-            store.append_event(&test_event("rebuild-stream", i)).unwrap();
+            block_on(store.append_event(&test_event("rebuild-stream", i))).unwrap();
         }
 
         // Verify head
@@ -361,7 +386,7 @@ mod tests {
         let obj_ref = store.put_object(content, 6, &[]).unwrap();
 
         let event = test_event_with_payload("test-stream", 0, Some(obj_ref));
-        store.append_event(&event).unwrap();
+        block_on(store.append_event(&event)).unwrap();
 
         // Get event with auto-resolved payload
         let (retrieved, payload) = store.get_event_with_payload(b"test-stream", 0).unwrap().unwrap();
@@ -378,7 +403,7 @@ mod tests {
 
         // Create event without payload
         let event = test_event_with_payload("test-stream", 0, None);
-        store.append_event(&event).unwrap();
+        block_on(store.append_event(&event)).unwrap();
 
         let (retrieved, payload) = store.get_event_with_payload(b"test-stream", 0).unwrap().unwrap();
         assert_eq!(retrieved.seq, 0);
@@ -394,12 +419,12 @@ mod tests {
         // Create events with and without payloads
         let content1 = b"payload 1";
         let obj_ref1 = store.put_object(content1, 6, &[]).unwrap();
-        store.append_event(&test_event_with_payload("test-stream", 0, Some(obj_ref1))).unwrap();
-        store.append_event(&test_event_with_payload("test-stream", 1, None)).unwrap();
+        block_on(store.append_event(&test_event_with_payload("test-stream", 0, Some(obj_ref1)))).unwrap();
+        block_on(store.append_event(&test_event_with_payload("test-stream", 1, None))).unwrap();
 
         let content3 = b"payload 3";
         let obj_ref3 = store.put_object(content3, 6, &[]).unwrap();
-        store.append_event(&test_event_with_payload("test-stream", 2, Some(obj_ref3))).unwrap();
+        block_on(store.append_event(&test_event_with_payload("test-stream", 2, Some(obj_ref3)))).unwrap();
 
         // Batch retrieve with payload resolution
         let results = store.get_events_with_payloads(b"test-stream", 0, 2).unwrap();
@@ -451,7 +476,7 @@ mod tests {
 
         {
             let mut store = NodeStore::open(&config).unwrap();
-            store.append_event(&test_event("reuse", 0)).unwrap();
+            block_on(store.append_event(&test_event("reuse", 0))).unwrap();
         }
 
         // Second open should succeed and see existing data
@@ -475,8 +500,8 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        let offset0 = store.append_event(&test_event("s", 0)).unwrap();
-        let offset1 = store.append_event(&test_event("s", 1)).unwrap();
+        let offset0 = block_on(store.append_event(&test_event("s", 0))).unwrap();
+        let offset1 = block_on(store.append_event(&test_event("s", 1))).unwrap();
         assert!(offset1 > offset0);
     }
 
@@ -486,9 +511,9 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("stream-a", 0)).unwrap();
-        store.append_event(&test_event("stream-b", 0)).unwrap();
-        store.append_event(&test_event("stream-a", 1)).unwrap();
+        block_on(store.append_event(&test_event("stream-a", 0))).unwrap();
+        block_on(store.append_event(&test_event("stream-b", 0))).unwrap();
+        block_on(store.append_event(&test_event("stream-a", 1))).unwrap();
 
         assert_eq!(store.get_event(b"stream-a", 0).unwrap().unwrap().seq, 0);
         assert_eq!(store.get_event(b"stream-a", 1).unwrap().unwrap().seq, 1);
@@ -501,7 +526,7 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("verify-stream", 0)).unwrap();
+        block_on(store.append_event(&test_event("verify-stream", 0))).unwrap();
         let event = store.get_event(b"verify-stream", 0).unwrap().unwrap();
         assert_eq!(event.stream_id, b"verify-stream");
         assert_eq!(event.seq, 0);
@@ -523,7 +548,7 @@ mod tests {
         let mut store = NodeStore::open(&config).unwrap();
 
         for i in 0..5 {
-            store.append_event(&test_event("head-stream", i)).unwrap();
+            block_on(store.append_event(&test_event("head-stream", i))).unwrap();
             let (seq, _) = store.get_head(b"head-stream").unwrap().unwrap();
             assert_eq!(seq, i as i64);
         }
@@ -535,7 +560,7 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("partial", 0)).unwrap();
+        block_on(store.append_event(&test_event("partial", 0))).unwrap();
         assert!(store.get_event(b"partial", 1).unwrap().is_none());
         assert!(store.get_event(b"partial", 100).unwrap().is_none());
     }
@@ -546,8 +571,8 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("alpha", 0)).unwrap();
-        store.append_event(&test_event("beta", 0)).unwrap();
+        block_on(store.append_event(&test_event("alpha", 0))).unwrap();
+        block_on(store.append_event(&test_event("beta", 0))).unwrap();
 
         let alpha_hex = edgerun_core::util::bytes_to_hex(b"alpha");
         let beta_hex = edgerun_core::util::bytes_to_hex(b"beta");
@@ -562,8 +587,8 @@ mod tests {
 
         {
             let mut store = NodeStore::open(&config).unwrap();
-            store.append_event(&test_event("persistent", 0)).unwrap();
-            store.append_event(&test_event("persistent", 1)).unwrap();
+            block_on(store.append_event(&test_event("persistent", 0))).unwrap();
+            block_on(store.append_event(&test_event("persistent", 1))).unwrap();
         }
 
         let store = NodeStore::open(&config).unwrap();
@@ -903,7 +928,7 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("fetch-event-stream", 0)).unwrap();
+        block_on(store.append_event(&test_event("fetch-event-stream", 0))).unwrap();
         // process_fetch_queue passes target_id.as_bytes() to get_event,
         // which then hex-encodes it. So use the raw string (not hex-encoded).
         let target = "fetch-event-stream:0";
@@ -969,9 +994,9 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("stream-x", 0)).unwrap();
-        store.append_event(&test_event("stream-x", 1)).unwrap();
-        store.append_event(&test_event("stream-y", 0)).unwrap();
+        block_on(store.append_event(&test_event("stream-x", 0))).unwrap();
+        block_on(store.append_event(&test_event("stream-x", 1))).unwrap();
+        block_on(store.append_event(&test_event("stream-y", 0))).unwrap();
 
         drop(store);
         fs::remove_dir_all(data_root.join("indexes")).unwrap();
@@ -991,7 +1016,7 @@ mod tests {
         let mut store = NodeStore::open(&config).unwrap();
 
         for i in 0..10 {
-            store.append_event(&test_event("rebuild-check", i)).unwrap();
+            block_on(store.append_event(&test_event("rebuild-check", i))).unwrap();
         }
 
         drop(store);
@@ -1056,8 +1081,8 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("sparse", 0)).unwrap();
-        store.append_event(&test_event("sparse", 5)).unwrap();
+        block_on(store.append_event(&test_event("sparse", 0))).unwrap();
+        block_on(store.append_event(&test_event("sparse", 5))).unwrap();
 
         let results = store.get_events_with_payloads(b"sparse", 0, 5).unwrap();
         // Only seq 0 and 5 exist
@@ -1215,9 +1240,9 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("list-a", 0)).unwrap();
-        store.append_event(&test_event("list-b", 0)).unwrap();
-        store.append_event(&test_event("list-a", 1)).unwrap();
+        block_on(store.append_event(&test_event("list-a", 0))).unwrap();
+        block_on(store.append_event(&test_event("list-b", 0))).unwrap();
+        block_on(store.append_event(&test_event("list-a", 1))).unwrap();
 
         let heads = store.list_stream_heads().unwrap();
         assert_eq!(heads.len(), 2);
@@ -1238,8 +1263,8 @@ mod tests {
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
 
-        store.append_event(&test_event("id-stream-1", 0)).unwrap();
-        store.append_event(&test_event("id-stream-2", 0)).unwrap();
+        block_on(store.append_event(&test_event("id-stream-1", 0))).unwrap();
+        block_on(store.append_event(&test_event("id-stream-2", 0))).unwrap();
 
         let ids = store.list_stream_ids().unwrap();
         assert_eq!(ids.len(), 2);
@@ -1252,7 +1277,7 @@ mod tests {
         let data_root = tmp_data_root();
         let config = test_config(data_root.clone());
         let mut store = NodeStore::open(&config).unwrap();
-        store.append_event(&test_event("integrity", 0)).unwrap();
+        block_on(store.append_event(&test_event("integrity", 0))).unwrap();
         let rebuilt = store.integrity_check_and_rebuild().unwrap();
         assert_eq!(rebuilt, 0);
     }
@@ -1266,7 +1291,7 @@ mod tests {
         let mut store = NodeStore::open(&config).unwrap();
 
         for i in 0..5 {
-            store.append_event(&test_event("range-stream", i)).unwrap();
+            block_on(store.append_event(&test_event("range-stream", i))).unwrap();
         }
 
         // list_event_range expects hex-encoded stream_id
@@ -1527,8 +1552,8 @@ mod tests {
         let config = test_config(data_root.clone());
         let store = NodeStore::open(&config).unwrap();
 
-        store.put_credential("api", "github", b"ghp_xxx123", Some("GitHub PAT")).unwrap();
-        let secret = store.get_credential("api", "github").unwrap();
+        store.credentials().put("api", "github", b"ghp_xxx123", Some("GitHub PAT")).unwrap();
+        let secret = store.credentials().get("api", "github").unwrap();
         assert_eq!(secret, Some(b"ghp_xxx123".to_vec()));
     }
 
@@ -1538,7 +1563,7 @@ mod tests {
         let config = test_config(data_root.clone());
         let store = NodeStore::open(&config).unwrap();
 
-        assert!(store.get_credential("api", "nonexistent").unwrap().is_none());
+        assert!(store.credentials().get("api", "nonexistent").unwrap().is_none());
     }
 
     #[test]
@@ -1546,12 +1571,12 @@ mod tests {
         let data_root = tmp_data_root();
         let store = NodeStore::open(&test_config(data_root.clone())).unwrap();
 
-        store.put_credential("db", "postgres", b"pass123", None).unwrap();
-        assert!(store.exists_credential("db", "postgres").unwrap());
+        store.credentials().put("db", "postgres", b"pass123", None).unwrap();
+        assert!(store.credentials().exists("db", "postgres").unwrap());
 
-        let deleted = store.delete_credential("db", "postgres").unwrap();
+        let deleted = store.credentials().delete("db", "postgres").unwrap();
         assert!(deleted);
-        assert!(!store.exists_credential("db", "postgres").unwrap());
+        assert!(!store.credentials().exists("db", "postgres").unwrap());
     }
 
     #[test]
@@ -1559,11 +1584,11 @@ mod tests {
         let data_root = tmp_data_root();
         let store = NodeStore::open(&test_config(data_root.clone())).unwrap();
 
-        store.put_credential("wifi", "home", b"home-pass", None).unwrap();
-        store.put_credential("wifi", "office", b"office-pass", Some("WPA2")).unwrap();
-        store.put_credential("api", "github", b"ghp", None).unwrap();
+        store.credentials().put("wifi", "home", b"home-pass", None).unwrap();
+        store.credentials().put("wifi", "office", b"office-pass", Some("WPA2")).unwrap();
+        store.credentials().put("api", "github", b"ghp", None).unwrap();
 
-        let creds = store.list_credentials("wifi").unwrap();
+        let creds = store.credentials().list("wifi").unwrap();
         assert_eq!(creds.len(), 2);
         assert_eq!(creds[0].0, "home");
         assert_eq!(creds[1].0, "office");
@@ -1577,12 +1602,12 @@ mod tests {
 
         {
             let store = NodeStore::open(&config).unwrap();
-            store.put_credential("persistent", "key", b"persistent-value", None).unwrap();
+            store.credentials().put("persistent", "key", b"persistent-value", None).unwrap();
         }
 
         {
             let store = NodeStore::open(&config).unwrap();
-            let secret = store.get_credential("persistent", "key").unwrap();
+            let secret = store.credentials().get("persistent", "key").unwrap();
             assert_eq!(secret, Some(b"persistent-value".to_vec()));
         }
     }
@@ -1592,10 +1617,10 @@ mod tests {
         let data_root = tmp_data_root();
         let store = NodeStore::open(&test_config(data_root.clone())).unwrap();
 
-        store.put_credential("api", "stripe", b"sk_old", None).unwrap();
-        store.put_credential("api", "stripe", b"sk_new", Some("rotated")).unwrap();
+        store.credentials().put("api", "stripe", b"sk_old", None).unwrap();
+        store.credentials().put("api", "stripe", b"sk_new", Some("rotated")).unwrap();
 
-        let secret = store.get_credential("api", "stripe").unwrap();
+        let secret = store.credentials().get("api", "stripe").unwrap();
         assert_eq!(secret, Some(b"sk_new".to_vec()));
     }
 }
