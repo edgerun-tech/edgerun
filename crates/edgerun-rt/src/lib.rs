@@ -37,6 +37,7 @@ mod cursor;
 mod signal;
 mod once_cell;
 mod latch;
+mod rate_limiter;
 mod io_util;
 pub mod fs;
 pub mod mpsc;
@@ -92,6 +93,9 @@ pub use once_cell::{OnceCell, WaitUntilReady};
 
 // Latch.
 pub use latch::{Latch, WaitLatch};
+
+// Rate limiter.
+pub use rate_limiter::RateLimiter;
 
 // UDP.
 pub use udp::AsyncUdpSocket;
