@@ -136,7 +136,9 @@ pub fn main() {
             env::set_var("RUST_LOG", &log_level);
             edgerun_log::init_from_env();
 
-            // Install init signal handlers if explicitly requested or running as PID 1
+            // Determine if running in init mode (PID 1 signal handling).
+            // Signal handling is done asynchronously in daemon.rs via signalfd,
+            // so we don't install raw libc signal handlers.
             let is_init = init_mode || crate::init::is_pid_one();
             if is_init {
                 if init_mode {
@@ -144,7 +146,7 @@ pub fn main() {
                 } else {
                     eprintln!("edgerund running as PID 1 (init mode)");
                 }
-                crate::init::install_signal_handlers();
+                // PID 1 setup: mounts, hostname, etc. (signal handling is async in daemon.rs)
                 crate::init::init_setup();
             }
 

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use edgerun_rt::CancellationToken;
+
 use crate::types::StoreRequest;
 
 /// Periodically attempts to reconnect to unreachable peers.
@@ -10,6 +12,7 @@ use crate::types::StoreRequest;
 pub async fn run_peer_reconnection(
     initial_unreachable: Vec<(String, String)>,
     _store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    cancel: CancellationToken,
 ) {
     // Track backoff state per peer: (retry_count, next_attempt)
     let mut backoff: HashMap<String, (u32, std::time::Instant)> = HashMap::new();
@@ -25,7 +28,13 @@ pub async fn run_peer_reconnection(
     interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
 
     loop {
-        interval.tick().await;
+        edgerun_rt::select! {
+            _ = cancel.cancelled() => {
+                edgerun_log::info!("peer reconnection shutting down");
+                return;
+            }
+            _ = interval.tick() => {}
+        }
         let now = std::time::Instant::now();
         let mut to_remove = Vec::new();
 

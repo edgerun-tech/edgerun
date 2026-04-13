@@ -43,7 +43,11 @@ pub fn run_mesh_loop(
 
     edgerun_log::info!("mesh loop running");
 
-    let mut discovery_counter: u64 = 0;
+    let mut last_discovery = std::time::Instant::now();
+    let discovery_interval = std::time::Duration::from_secs(5);
+    let mut last_heartbeat = std::time::Instant::now();
+    let heartbeat_interval = std::time::Duration::from_secs(10);
+
     loop {
         if let Err(e) = mesh_link.pump(&mut router) {
             edgerun_log::warn!("mesh pump error: {}", e);
@@ -84,15 +88,23 @@ pub fn run_mesh_loop(
             mesh_link.queue_frame(reply_frame);
         }
 
-        discovery_counter += 1;
-        if discovery_counter.is_multiple_of(500) {
+        let now = std::time::Instant::now();
+
+        // Time-based discovery broadcast (every 5 seconds)
+        if now.duration_since(last_discovery) >= discovery_interval {
             if let Err(e) = mesh_link.broadcast_discovery(&mut router) {
                 edgerun_log::warn!("discovery failed: {}", e);
             }
+            last_discovery = now;
+        }
+
+        // Time-based heartbeat tick (every 10 seconds)
+        if now.duration_since(last_heartbeat) >= heartbeat_interval {
             let dead = router.tick_heartbeat();
             for _d in &dead {
                 edgerun_log::info!("peer dead");
             }
+            last_heartbeat = now;
         }
 
         if let Err(e) = mesh_link.drain_pending_frames(&mut router) {

@@ -6,7 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh_daemon::MeshDaemon;
-use edgerun_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
+use edgerun_rt::CancellationToken;
+use edgerun_storage::{FetchEntry, NodeStore, NodeStoreConfig, BlobKeySource};
 use edgerun_core::util::system_time_to_prost;
 use prost::Message;
 
@@ -27,50 +28,58 @@ use crate::types::{StoreRequest, StoreResponse};
 use crate::workload_policy;
 
 async fn run_fetch_queue_consumer(
-    index_path: std::path::PathBuf,
     peers: Vec<BootstrapPeer>,
     local_node_id: NodeID,
+    store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    cancel: CancellationToken,
 ) {
     use edgerun_proto::edgerun::v0::access::{QueryClass, QueryRequest};
     use edgerun_proto::edgerun::v0::common::IdentityRef;
     use edgerun_proto::edgerun::v0::trust::{ScopeDescriptor, ScopeKind};
-    use edgerun_storage::FileIndex;
 
     if peers.is_empty() {
         edgerun_log::info!("no bootstrap peers configured, fetch queue consumer disabled");
         return;
     }
 
-    // Open a separate SQLite connection for the fetch queue
-    let parent_path = match index_path.parent() {
-        Some(p) => p.to_path_buf(),
-        None => {
-            edgerun_log::error!("index path has no parent directory: {:?}", index_path);
-            return;
-        }
-    };
-    let index = match FileIndex::open(&parent_path) {
-        Ok(idx) => idx,
-        Err(e) => {
-            edgerun_log::error!("failed to open SQLite index for fetch queue: {}", e);
-            return;
-        }
-    };
-
     let mut interval = edgerun_rt::interval(std::time::Duration::from_secs(30));
     interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
 
     loop {
-        interval.tick().await;
-
-        // Dequeue one pending fetch at a time
-        let fetch_entry = match index.dequeue_fetch() {
-            Ok(Some(entry)) => entry,
-            Ok(None) => continue, // Queue is empty
-            Err(e) => {
-                edgerun_log::warn!("failed to dequeue fetch: {}", e);
-                continue;
+        edgerun_rt::select! {
+            _ = cancel.cancelled() => {
+                edgerun_log::info!("fetch queue consumer shutting down");
+                return;
             }
+            _ = interval.tick() => {}
+        }
+
+        // Dequeue one pending fetch via the store task (no direct FileIndex access)
+        let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+        if store_tx.send(StoreRequest::FetchDequeue { reply_tx }).await.is_err() {
+            edgerun_log::info!("store task unavailable, fetch queue consumer exiting");
+            return;
+        }
+        let fetch_entry = match reply_rx.await {
+            Ok(StoreResponse::Ok(data)) if data.is_empty() => continue, // Queue empty
+            Ok(StoreResponse::Ok(data)) => {
+                // Parse "type:id:priority"
+                let parts: Vec<&str> = std::str::from_utf8(&data).unwrap_or("").splitn(3, ':').collect();
+                if parts.len() != 3 {
+                    edgerun_log::warn!("invalid fetch entry format");
+                    continue;
+                }
+                let priority: i64 = parts[2].parse().unwrap_or(0);
+                FetchEntry {
+                    id: 0,
+                    target_type: parts[0].to_string(),
+                    target_id: parts[1].to_string(),
+                    priority,
+                    created_at: 0,
+                    status: String::new(),
+                }
+            }
+            _ => continue,
         };
 
         let fetch_type = fetch_entry.target_type.clone();
@@ -164,8 +173,13 @@ async fn run_fetch_queue_consumer(
                         }
                     }
 
-                    // Mark as done
-                    let _ = index.mark_fetch_done(fetch_entry.id);
+                    // Mark as done via store task
+                    let (done_tx, done_rx) = edgerun_rt::oneshot::channel();
+                    let _ = store_tx.send(StoreRequest::FetchMarkDone {
+                        fetch_id: fetch_entry.id,
+                        reply_tx: done_tx,
+                    }).await;
+                    let _ = done_rx.await;
                     break;
                 }
                 Err(_e) => {
@@ -175,8 +189,15 @@ async fn run_fetch_queue_consumer(
         }
 
         if !fetched {
-            // Re-enqueue with lower priority for retry
-            let _ = index.enqueue_fetch(&fetch_type, &fetch_id, fetch_priority - 1);
+            // Re-enqueue with lower priority for retry via store task
+            let (requeue_tx, requeue_rx) = edgerun_rt::oneshot::channel();
+            let _ = store_tx.send(StoreRequest::FetchRequeue {
+                target_type: fetch_type,
+                target_id: fetch_id,
+                priority: fetch_priority - 1,
+                reply_tx: requeue_tx,
+            }).await;
+            let _ = requeue_rx.await;
         }
     }
 }
@@ -598,6 +619,9 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         }
     });
 
+    // --- CancellationToken for coordinated shutdown ---
+    let cancel = CancellationToken::new();
+
     // --- TCP listener (if configured) ---
     if let Some(addr) = listen_addr {
         let tcp_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> = Arc::clone(&signer);
@@ -618,9 +642,7 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         let bootstrap_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> = Arc::clone(&signer);
         let bootstrap_node_id = node_id;
         for peer in &bootstrap_peers {
-            // Attempt TCP connection
             let peer_addr = peer.addr.clone();
-            let peer_id_hex = peer.node_id_hex.clone();
             let conn_store_tx = store_tx.clone();
             let ctx = SessionContext {
                 node_id: bootstrap_node_id,
@@ -630,7 +652,6 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
                 match edgerun_rt::ConnectFuture::new(&peer_addr).await {
                     Ok(stream) => {
                         edgerun_log::info!("connected to bootstrap peer");
-                        // As initiator, generate nonce and send SessionHello first
                         let nonce = session::generate_nonce();
                         handle_tcp_connection(stream, conn_store_tx, &ctx, Some(nonce)).await;
                     }
@@ -643,36 +664,100 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
     }
 
     // --- Fetch queue consumer: processes pending fetch requests by querying peers ---
-    //
-    // NOTE: This opens a second FileIndex to the same data directory as the store
-    // task. Both instances read/write the same binary index files (fetch_queue.bin).
-    // This is a known data race. The fix is to route fetch queue operations through
-    // the store task via the existing mpsc channel (add FetchDequeue/FetchMarkDone
-    // variants to StoreRequest).
-    let fetch_store_path = data_root.join("index.sqlite3");
+    // All fetch queue operations go through the store task's mpsc channel,
+    // eliminating the previous data race from dual FileIndex access.
     let fetch_peers = bootstrap_peers.clone();
     let fetch_node_id = node_id;
+    let fetch_store_tx = store_tx.clone();
+    let fetch_cancel = cancel.child_token();
     let _fetch_handle = edgerun_rt::spawn(async move {
-        run_fetch_queue_consumer(fetch_store_path, fetch_peers, fetch_node_id).await;
+        run_fetch_queue_consumer(fetch_peers, fetch_node_id, fetch_store_tx, fetch_cancel).await;
     });
 
     // --- Peer reconnection task ---
     let recon_store_tx = store_tx.clone();
     let recon_peers = unreachable_peers;
+    let recon_cancel = cancel.child_token();
     edgerun_rt::spawn(async move {
-        run_peer_reconnection(recon_peers, recon_store_tx).await;
+        run_peer_reconnection(recon_peers, recon_store_tx, recon_cancel).await;
     });
 
-    // Wait for shutdown signal
+    // --- Periodic maintenance timer ---
+    // Sends MaintenanceTick to the store task every 60 seconds, ensuring
+    // WAL checkpoints, integrity checks, and disk space checks run even
+    // during quiet periods with no inbound requests.
+    let maint_store_tx = store_tx.clone();
+    let maint_cancel = cancel.child_token();
+    edgerun_rt::spawn(async move {
+        let mut interval = edgerun_rt::interval(std::time::Duration::from_secs(60));
+        interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
+        loop {
+            edgerun_rt::select! {
+                _ = maint_cancel.cancelled() => {
+                    edgerun_log::info!("maintenance timer shutting down");
+                    return;
+                }
+                _ = interval.tick() => {
+                    let _ = maint_store_tx.send(StoreRequest::MaintenanceTick).await;
+                }
+            }
+        }
+    });
+
+    // --- Shutdown waiter: wait for signal (init mode) or ctrl_c (normal mode) ---
     let shutdown = edgerun_rt::spawn(async move {
         if is_init {
-            // In init mode, poll the shutdown flag (set by signal handler)
+            // Init mode: use async signal handling via signalfd
+            use edgerun_rt::{Signal, SignalKind};
+
+            // Set up SIGTERM, SIGINT, SIGHUP, and SIGCHLD listeners
+            let mut sigterm = Signal::new(SignalKind::terminate()).ok();
+            let mut sigint = Signal::new(SignalKind::interrupt()).ok();
+            let mut sighup = Signal::new(SignalKind::hangup()).ok();
+            let mut sigchld = Signal::new(SignalKind::child()).ok();
+
             loop {
-                if crate::init::SHUTDOWN_REQUESTED.load(std::sync::atomic::Ordering::Relaxed) {
-                    edgerun_log::info!("shutdown requested (init mode)");
-                    break;
+                edgerun_rt::select! {
+                    _ = async {
+                        if let Some(ref mut s) = sigterm {
+                            s.recv().await.ok();
+                        } else {
+                            std::future::pending::<()>().await
+                        }
+                    } => {
+                        edgerun_log::info!("SIGTERM received, shutting down");
+                        break;
+                    }
+                    _ = async {
+                        if let Some(ref mut s) = sigint {
+                            s.recv().await.ok();
+                        } else {
+                            std::future::pending::<()>().await
+                        }
+                    } => {
+                        edgerun_log::info!("SIGINT received, shutting down");
+                        break;
+                    }
+                    _ = async {
+                        if let Some(ref mut s) = sighup {
+                            s.recv().await.ok();
+                        } else {
+                            std::future::pending::<()>().await
+                        }
+                    } => {
+                        edgerun_log::info!("SIGHUP received (reload not yet implemented)");
+                    }
+                    _ = async {
+                        if let Some(ref mut s) = sigchld {
+                            s.recv().await.ok();
+                            crate::init::reap_zombies();
+                        } else {
+                            std::future::pending::<()>().await
+                        }
+                    } => {
+                        // SIGCHLD received — zombies reaped
+                    }
                 }
-                edgerun_rt::sleep(std::time::Duration::from_millis(100)).await;
             }
         } else {
             // Normal mode: wait for ctrl_c
@@ -682,7 +767,9 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
     });
     let _ = shutdown.await;
 
-    // Cleanup
+    // --- Coordinated shutdown: cancel all tasks ---
+    cancel.cancel();
+
     edgerun_log::info!("shutting down");
     drop(store_tx);
     let _ = store_handle.await;

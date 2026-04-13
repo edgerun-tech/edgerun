@@ -487,7 +487,6 @@ impl NodeStore {
                     self.get_object(&obj_ref)?.is_some()
                 }
                 "event" => {
-                    // target_id format: stream_id_hex:seq
                     if let Some((stream_id, seq)) = entry.target_id.split_once(':') {
                         if let Ok(seq_num) = seq.parse::<u64>() {
                             self.get_event(stream_id.as_bytes(), seq_num)?.is_some()
@@ -505,11 +504,25 @@ impl NodeStore {
                 self.index.mark_fetch_done(entry.id)?;
                 resolved += 1;
             } else {
-                // Re-enqueue with lower priority for retry
                 self.index.enqueue_fetch(&entry.target_type, &entry.target_id, entry.priority - 1)?;
             }
         }
         Ok(resolved)
+    }
+
+    /// Dequeue one pending fetch entry for remote peer querying.
+    pub fn dequeue_fetch_for_remote(&self) -> Result<Option<crate::FetchEntry>, StorageError> {
+        Ok(self.index.dequeue_fetch()?)
+    }
+
+    /// Mark a fetch entry done after successful remote retrieval.
+    pub fn mark_fetch_done(&self, fetch_id: i64) -> Result<(), StorageError> {
+        Ok(self.index.mark_fetch_done(fetch_id)?)
+    }
+
+    /// Re-enqueue a fetch entry with lower priority for retry.
+    pub fn requeue_fetch(&self, target_type: &str, target_id: &str, priority: i64) -> Result<(), StorageError> {
+        Ok(self.index.enqueue_fetch(target_type, target_id, priority)?)
     }
 
     /// Enqueues a fetch request for a missing event, object, or snapshot.

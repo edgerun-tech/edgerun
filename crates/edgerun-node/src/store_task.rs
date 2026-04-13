@@ -208,6 +208,36 @@ pub fn run_store_task(
                     }
                 }
             }
+            StoreRequest::FetchDequeue { reply_tx } => {
+                match store.dequeue_fetch_for_remote() {
+                    Ok(Some(entry)) => {
+                        let resp = format!("{}:{}:{}", entry.target_type, entry.target_id, entry.priority);
+                        let _ = reply_tx.send(StoreResponse::Ok(resp.into_bytes()));
+                    }
+                    Ok(None) => {
+                        let _ = reply_tx.send(StoreResponse::Ok(vec![]));
+                    }
+                    Err(e) => {
+                        edgerun_log::error!("fetch dequeue failed: {}", e);
+                        let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                    }
+                }
+            }
+            StoreRequest::FetchMarkDone { fetch_id, reply_tx } => {
+                if let Err(e) = store.mark_fetch_done(fetch_id) {
+                    edgerun_log::error!("fetch mark done failed: {}", e);
+                }
+                let _ = reply_tx.send(StoreResponse::Ok(vec![]));
+            }
+            StoreRequest::FetchRequeue { target_type, target_id, priority, reply_tx } => {
+                if let Err(e) = store.requeue_fetch(&target_type, &target_id, priority) {
+                    edgerun_log::error!("fetch requeue failed: {}", e);
+                }
+                let _ = reply_tx.send(StoreResponse::Ok(vec![]));
+            }
+            StoreRequest::MaintenanceTick => {
+                run_periodic_maintenance(&mut store);
+            }
         }
 
         // Periodically process the fetch queue (every 10 requests)
@@ -219,10 +249,20 @@ pub fn run_store_task(
             }
         }
 
-        // Periodically run integrity check (every 100 requests)
+        // Periodic maintenance on request-volume thresholds (busy periods)
+        if request_counter.is_multiple_of(50) {
+            // WAL checkpoint every 50 requests
+            match store.wal_checkpoint() {
+                Ok(Some(wal_size)) if wal_size > 1024 * 1024 => {
+                    edgerun_log::warn!("WAL file remains large after checkpoint");
+                }
+                _ => {}
+            }
+        }
         if request_counter.is_multiple_of(100) {
+            // Integrity check every 100 requests
             match store.integrity_check_and_rebuild() {
-                Ok(0) => {} // Healthy
+                Ok(0) => {}
                 Ok(_rebuilt) => {
                     edgerun_log::warn!("SQLite corruption detected and indexes rebuilt");
                 }
@@ -231,26 +271,45 @@ pub fn run_store_task(
                 }
             }
         }
-
-        // Periodically checkpoint WAL (every 50 requests)
-        if request_counter.is_multiple_of(50) {
-            match store.wal_checkpoint() {
-                Ok(Some(wal_size)) if wal_size > 1024 * 1024 => {
-                    // WAL > 1MB after checkpoint -- log a warning
-                    edgerun_log::warn!("WAL file remains large after checkpoint");
-                }
-                _ => {}
-            }
-        }
-
-        // Periodically check disk space (every 200 requests)
         if request_counter.is_multiple_of(200) {
+            // Disk space check every 200 requests
             match store.check_disk_space() {
                 Ok(()) => {}
                 Err(_available_bytes) => {
                     edgerun_log::error!("CRITICAL: disk space critically low, writes may fail");
                 }
             }
+        }
+    }
+}
+
+/// Run all periodic maintenance tasks.
+/// Called on maintenance ticks to ensure maintenance runs even during quiet periods.
+fn run_periodic_maintenance(store: &mut NodeStore) {
+    // WAL checkpoint
+    match store.wal_checkpoint() {
+        Ok(Some(wal_size)) if wal_size > 1024 * 1024 => {
+            edgerun_log::warn!("WAL file remains large after checkpoint");
+        }
+        _ => {}
+    }
+
+    // Integrity check
+    match store.integrity_check_and_rebuild() {
+        Ok(0) => {}
+        Ok(_rebuilt) => {
+            edgerun_log::warn!("SQLite corruption detected and indexes rebuilt");
+        }
+        Err(_e) => {
+            edgerun_log::error!("integrity check and rebuild failed");
+        }
+    }
+
+    // Disk space check
+    match store.check_disk_space() {
+        Ok(()) => {}
+        Err(_available_bytes) => {
+            edgerun_log::error!("CRITICAL: disk space critically low, writes may fail");
         }
     }
 }

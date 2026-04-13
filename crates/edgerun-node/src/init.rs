@@ -3,12 +3,14 @@
 //! When run as PID 1, edgerund takes on init responsibilities:
 //! - Signal handling (SIGTERM, SIGINT, SIGHUP)
 //! - Zombie reaping (SIGCHLD)
-//! - Graceful shutdown coordination
+//! - Graceful shutdown coordination via CancellationToken
 //! - Optional basic filesystem mounts
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Global flag set when shutdown is requested.
+/// Used only by the raw signal handler in init mode — the async signal
+/// path in daemon.rs uses CancellationToken directly.
 pub static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// Install signal handlers for init-mode operation.
@@ -56,7 +58,7 @@ pub fn install_signal_handlers() {
 }
 
 /// Reap all zombie child processes.
-fn reap_zombies() {
+pub fn reap_zombies() {
     loop {
         let mut status: libc::c_int = 0;
         let pid = unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) };

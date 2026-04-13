@@ -35,6 +35,25 @@ pub enum StoreRequest {
         command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
         reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
     },
+    /// Dequeue one pending fetch entry from the queue (for remote peer querying).
+    FetchDequeue {
+        reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
+    },
+    /// Mark a fetch entry as done after successful remote retrieval.
+    FetchMarkDone {
+        fetch_id: i64,
+        reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
+    },
+    /// Re-enqueue a fetch entry with lower priority (peer query failed).
+    FetchRequeue {
+        target_type: String,
+        target_id: String,
+        priority: i64,
+        reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
+    },
+    /// Periodic maintenance tick — triggers WAL checkpoint, integrity check, etc.
+    /// Sent by a timer thread to ensure maintenance runs even during quiet periods.
+    MaintenanceTick,
 }
 
 /// Response from the store task back to the TCP handler.
