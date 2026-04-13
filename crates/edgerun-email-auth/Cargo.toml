@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-email-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Email authentication: SPF, DKIM, DMARC evaluation"
+
+[dependencies]
+edgerun-dns = { path = "../edgerun-dns" }
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+edgerun-crypto = { path = "../edgerun-crypto" }
+sha2 = "0.10"
+base64 = "0.22"
+rsa = { version = "0.9", default-features = false, features = ["sha2"] }
+signature = "2"

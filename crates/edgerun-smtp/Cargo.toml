@@ -16,4 +16,6 @@ workspace = true
 [dependencies]
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
+edgerun-dns = { path = "../edgerun-dns" }
+edgerun-email-auth = { path = "../edgerun-email-auth" }
 edgerun-tls = { path = "../edgerun-tls", optional = true }

@@ -1089,6 +1089,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-email-auth"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "edgerun-crypto",
+ "edgerun-dns",
+ "edgerun-log",
+ "edgerun-rt",
+ "rsa",
+ "sha2",
+ "signature 2.2.0",
+]
+
+[[package]]
 name = "edgerun-evdev-input"
 version = "0.1.0"
 dependencies = [
@@ -1610,6 +1624,8 @@ dependencies = [
 name = "edgerun-smtp"
 version = "0.1.0"
 dependencies = [
+ "edgerun-dns",
+ "edgerun-email-auth",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-tls",

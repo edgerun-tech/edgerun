@@ -4,6 +4,7 @@ use std::io;
 
 use crate::server::dsn_generator::DsnBounce;
 use crate::types::MailEnvelope;
+use edgerun_email_auth::AuthenticationResults;
 
 // ===========================================================================
 // Auth Result
@@ -59,6 +60,17 @@ pub trait MailHandler: Send + Sync + 'static {
     fn send_bounce(&self, _bounce: &DsnBounce) -> io::Result<()> {
         edgerun_log::warn!("edgerun-smtp: bounce message generated but no bounce handler configured");
         Ok(())
+    }
+
+    /// Called after a message is accepted, with authentication results.
+    /// The implementation can use this to add `Authentication-Results` headers,
+    /// log results, or apply policy-based filtering.
+    /// Default implementation does nothing.
+    fn on_mail_received(
+        &self,
+        _envelope: &MailEnvelope,
+        _auth_results: &AuthenticationResults,
+    ) {
     }
 }
 

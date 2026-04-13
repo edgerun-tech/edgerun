@@ -19,6 +19,7 @@ use crate::types::response::EnhancedStatusCode;
 use crate::types::{
     MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };
+use edgerun_email_auth::{AuthenticationResults, EmailAuthEvaluator};
 
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
@@ -366,7 +367,8 @@ async fn handle_connection(
             if pending_bdat_bytes == 0 && pending_bdat_last {
                 // Final chunk — deliver the mail
                 command_count += 1;
-                match handler.accept_mail(&envelope) {
+                let peer_ip_str = peer.ip().to_string();
+                let delivery_ok = match handler.accept_mail(&envelope) {
                     Ok(()) => {
                         edgerun_log::info!(
                             "edgerun-smtp: mail accepted from {} to {:?}",
@@ -378,6 +380,7 @@ async fn handle_connection(
                                 .with_enhanced(EnhancedStatusCode::QUEUED),
                         )
                         .await?;
+                        true
                     }
                     Err(e) => {
                         edgerun_log::error!("edgerun-smtp: delivery failed: {}", e);
@@ -387,7 +390,17 @@ async fn handle_connection(
                             &SmtpResponse::transient_failure("Delivery failed"),
                         )
                         .await?;
+                        false
                     }
+                };
+                if delivery_ok {
+                    // Evaluate SPF/DKIM/DMARC in background
+                    let handler_clone = Arc::clone(&handler);
+                    let envelope_clone = envelope.clone();
+                    let config_clone = config.clone();
+                    edgerun_rt::spawn(async move {
+                        evaluate_and_notify_auth(&handler_clone, &envelope_clone, &config_clone, &peer_ip_str).await;
+                    });
                 }
                 envelope.reset();
                 envelope.authenticated_identity = auth_identity.clone();
@@ -442,8 +455,9 @@ async fn handle_connection(
             if line == "." {
                 state = SmtpState::Ready;
                 command_count += 1;
+                let peer_ip_str = peer.ip().to_string();
 
-                match handler.accept_mail(&envelope) {
+                let delivery_ok = match handler.accept_mail(&envelope) {
                     Ok(()) => {
                         edgerun_log::info!(
                             "edgerun-smtp: mail accepted from {} to {:?}",
@@ -455,6 +469,7 @@ async fn handle_connection(
                                 .with_enhanced(EnhancedStatusCode::QUEUED),
                         )
                         .await?;
+                        true
                     }
                     Err(e) => {
                         edgerun_log::error!("edgerun-smtp: delivery failed: {}", e);
@@ -464,7 +479,16 @@ async fn handle_connection(
                             &SmtpResponse::transient_failure("Delivery failed"),
                         )
                         .await?;
+                        false
                     }
+                };
+                if delivery_ok {
+                    let handler_clone = Arc::clone(&handler);
+                    let envelope_clone = envelope.clone();
+                    let config_clone = config.clone();
+                    edgerun_rt::spawn(async move {
+                        evaluate_and_notify_auth(&handler_clone, &envelope_clone, &config_clone, &peer_ip_str).await;
+                    });
                 }
                 envelope.reset();
                 envelope.authenticated_identity = auth_identity.clone();
@@ -1114,5 +1138,50 @@ fn send_dsn_bounce(
 
     if let Err(bounce_err) = handler.send_bounce(&bounce) {
         edgerun_log::error!("edgerun-smtp: bounce delivery failed: {}", bounce_err);
+    }
+}
+
+/// Evaluate SPF/DKIM/DMARC and notify the handler.
+async fn evaluate_and_notify_auth(
+    handler: &Arc<dyn MailHandler>,
+    envelope: &MailEnvelope,
+    config: &SmtpServerConfig,
+    peer_ip: &str,
+) {
+    // Extract header From address
+    let data_str = String::from_utf8_lossy(&envelope.data);
+    let headers_str = if let Some(pos) = data_str.find("\r\n\r\n") {
+        data_str[..pos].as_bytes()
+    } else {
+        data_str.as_bytes()
+    };
+
+    // Parse From: header
+    let header_from = crate::types::headers::get_from_address(headers_str)
+        .unwrap_or_default();
+
+    // Get a DNS client for evaluation
+    let mut dns_client = match edgerun_dns::client::DnsClient::new("8.8.8.8:53") {
+        Ok(c) => c,
+        Err(e) => {
+            edgerun_log::warn!("edgerun-email-auth: failed to create DNS client: {}", e);
+            return;
+        }
+    };
+
+    let mut evaluator = EmailAuthEvaluator::new(&mut dns_client);
+    match evaluator
+        .evaluate(peer_ip, &envelope.from, &header_from, headers_str, &envelope.data)
+        .await
+    {
+        Ok(auth_results) => {
+            // Log the results
+            let header_value = auth_results.to_header_value(&config.domain);
+            edgerun_log::info!("edgerun-smtp: Authentication-Results: {}", header_value);
+            handler.on_mail_received(envelope, &auth_results);
+        }
+        Err(e) => {
+            edgerun_log::warn!("edgerun-email-auth: evaluation failed: {}", e);
+        }
     }
 }

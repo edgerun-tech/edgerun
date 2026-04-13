@@ -175,8 +175,8 @@ fn test_capacity_one() {
     tx.send("b").unwrap(); // overwrites "a"
     tx.send("c").unwrap(); // overwrites "b"
 
-    // Only "c" should be available
-    assert_eq!(rx.try_recv(), Ok("c"));
+    // Receiver fell behind by 2 messages ("a", "b" were dropped).
+    assert_eq!(rx.try_recv(), Err(broadcast::TryRecvError::Lagged(2)));
     println!("  test_capacity_one OK");
 }
 
@@ -187,9 +187,8 @@ fn test_receiver_falls_behind() {
     tx.send(2).unwrap();
     tx.send(3).unwrap(); // buffer full, drops 1
 
-    // Receiver starts at index 0, but 1 was dropped.
-    // It should get the oldest available (2 or 3).
-    let val = rx.try_recv();
-    assert!(val.is_ok(), "should still get a value, got {:?}", val);
+    // Receiver starts at index 0, but message 1 was dropped.
+    // start = produced(3) - buf.len()(2) = 1, so next(0) < start(1) => lagged by 1.
+    assert_eq!(rx.try_recv(), Err(broadcast::TryRecvError::Lagged(1)));
     println!("  test_receiver_falls_behind OK");
 }

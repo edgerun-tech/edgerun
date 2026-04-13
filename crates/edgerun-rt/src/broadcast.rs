@@ -145,7 +145,16 @@ impl<T: Clone> Receiver<T> {
     pub fn blocking_recv(&mut self) -> Result<T, RecvError> {
         let mut inner = self.inner.lock();
         loop {
-            if let Some(val) = self.try_pop(&mut inner) {
+            let start = inner.produced.saturating_sub(inner.buf.len());
+            if self.next < start {
+                // Fell behind — return lag error.
+                let skipped = start - self.next;
+                return Err(RecvError::Lagged(skipped));
+            }
+            let idx = self.next.saturating_sub(start);
+            if idx < inner.buf.len() {
+                let val = inner.buf[idx].clone();
+                self.next += 1;
                 return Ok(val);
             }
             if inner.closed {
@@ -172,7 +181,14 @@ impl<T: Clone> Receiver<T> {
 
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
         let mut inner = self.inner.lock();
-        if let Some(val) = self.try_pop(&mut inner) {
+        let start = inner.produced.saturating_sub(inner.buf.len());
+        if self.next < start {
+            let skipped = start - self.next;
+            return Err(TryRecvError::Lagged(skipped));
+        }
+        let idx = self.next.saturating_sub(start);
+        if idx < inner.buf.len() {
+            let val = inner.buf[idx].clone();
             self.next += 1;
             Ok(val)
         } else if inner.closed {
@@ -199,6 +215,8 @@ pub struct SendError<T>(pub T);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecvError {
     Closed,
+    /// Receiver fell behind; the value is the number of skipped messages.
+    Lagged(usize),
 }
 
 /// Error returned by `try_recv()`.
@@ -206,6 +224,8 @@ pub enum RecvError {
 pub enum TryRecvError {
     Empty,
     Closed,
+    /// Receiver fell behind; the value is the number of skipped messages.
+    Lagged(usize),
 }
 
 pub struct RecvFut<'a, T> {
@@ -224,11 +244,9 @@ impl<T: Clone> Future for RecvFut<'_, T> {
         let idx = (*this.next).saturating_sub(start);
 
         if *this.next < start {
-            // Lagged — return oldest available.
-            if let Some(val) = inner.buf.front().cloned() {
-                *this.next += 1;
-                return Poll::Ready(Ok(val));
-            }
+            // Fell behind — return lag error.
+            let skipped = start - *this.next;
+            return Poll::Ready(Err(RecvError::Lagged(skipped)));
         } else if idx < inner.buf.len() {
             let val = inner.buf[idx].clone();
             *this.next += 1;
