@@ -5,93 +5,34 @@ members = [
   "crates/edgerun-alsa-microphone",
   "crates/edgerun-alsa-speaker",
   "crates/edgerun-amd-xdna",
-  "crates/edgerun-android-hardware",
   "crates/edgerun-android-keystore",
   "crates/edgerun-audio-calibration",
   "crates/edgerun-audio-liveliness",
-  "crates/edgerun-bench-correctness",
-  "crates/edgerun-bench",
   "crates/edgerun-biometrics",
+  "crates/edgerun-bench",
   "crates/edgerun-bluetooth",
   "crates/edgerun-camera-biometrics",
   "crates/edgerun-capabilities",
   "crates/edgerun-capability-policy",
   "crates/edgerun-cec",
-  "crates/edgerun-compositor",
-  "crates/edgerun-compositor-tests",
-  "crates/edgerun-core",
-  "crates/edgerun-css-minifier",
-  "crates/edgerun-a11y-analyzer",
-  "crates/edgerun-complexity-analyzer",
-  "crates/edgerun-replay",
-  "crates/edgerun-rule-optimizer",
-  "crates/edgerun-cascade-debugger",
-  "crates/edgerun-conformance",
-  "crates/edgerun-property-graph",
-  "crates/edgerun-spec-watch",
-  "crates/edgerun-render-proof",
-  "crates/edgerun-proto-watch",
-  "crates/edgerun-crypto",
-  "crates/edgerun-browser",
-  "crates/edgerun-css",
-  "crates/edgerun-css-syntax",
-  "crates/edgerun-media-queries",
-  "crates/edgerun-fonts",
-  "crates/edgerun-images",
-  "crates/edgerun-webidl",
-  "crates/edgerun-uievents",
-  "crates/edgerun-dhcp",
-  "crates/edgerun-display",
-  "crates/edgerun-dom-events",
-  "crates/edgerun-xml",
-  "crates/edgerun-css-text",
-  "crates/edgerun-indexeddb",
-  "crates/edgerun-service-workers",
-  "crates/edgerun-trusted-types",
-  "crates/edgerun-css-ui",
-  "crates/edgerun-css-page",
-  "crates/edgerun-css-box",
-  "crates/edgerun-css-sizing",
-  "crates/edgerun-css-display",
-  "crates/edgerun-edit",
-  "crates/edgerun-css-cascade",
-  "crates/edgerun-css-values",
-  "crates/edgerun-css-value-parser",
-  "crates/edgerun-dom",
-  "crates/edgerun-contain",
-  "crates/edgerun-writing-modes",
-  "crates/edgerun-touch",
-  "crates/edgerun-animations",
-  "crates/edgerun-transitions",
-  "crates/edgerun-transforms",
-  "crates/edgerun-flexbox",
-  "crates/edgerun-grid",
-  "crates/edgerun-url",
-  "crates/edgerun-encoding",
-  "crates/edgerun-dhcpv6",
-  "crates/edgerun-net",
   "crates/edgerun-config",
+  "crates/edgerun-core",
+  "crates/edgerun-crypto",
+  "crates/edgerun-dhcp",
+  "crates/edgerun-dhcpv6",
+  "crates/edgerun-dns",
   "crates/edgerun-drm-display",
-  "crates/edgerun-ecmascript",
-  "crates/edgerun-fetch",
-  "crates/edgerun-color",
-  "crates/edgerun-e2e",
   "crates/edgerun-e2e-capability",
+  "crates/edgerun-edit",
   "crates/edgerun-evdev-input",
   "crates/edgerun-face-detection",
   "crates/edgerun-fingerprint",
   "crates/edgerun-goodix-fingerprint",
-  "crates/edgerun-gpu",
-  "crates/edgerun-html",
   "crates/edgerun-hardware-signing",
   "crates/edgerun-http",
-  "crates/edgerun-server",
+  "crates/edgerun-imap",
   "crates/edgerun-input",
   "crates/edgerun-json",
-  "crates/edgerun-rasterizer",
-  "crates/edgerun-render",
-  "crates/edgerun-demo",
-  "crates/edgerun-demo-wgpu",
   "crates/edgerun-linux-cec",
   "crates/edgerun-linux-gpu",
   "crates/edgerun-linux-netif",
@@ -111,21 +52,22 @@ members = [
   "crates/edgerun-mesh-session",
   "crates/edgerun-mgmt-bluetooth",
   "crates/edgerun-microphone",
+  "crates/edgerun-net",
   "crates/edgerun-network-interface",
   "crates/edgerun-nfc",
   "crates/edgerun-node",
   "crates/edgerun-npu",
   "crates/edgerun-oauth",
-  "crates/edgerun-oci-registry",
-  "crates/edgerun-oci-runtime",
+  "crates/edgerun-oci",
   "crates/edgerun-pci",
-  "crates/edgerun-property-graph",
   "crates/edgerun-power",
   "crates/edgerun-proto",
+  "crates/edgerun-qpack",
   "crates/edgerun-remote-capability",
   "crates/edgerun-rt",
   "crates/edgerun-secret-service",
-  "crates/edgerun-selectors",
+  "crates/edgerun-server",
+  "crates/edgerun-smtp",
   "crates/edgerun-speaker",
   "crates/edgerun-storage",
   "crates/edgerun-stream",
@@ -135,7 +77,6 @@ members = [
   "crates/edgerun-usb",
   "crates/edgerun-v4l2-camera",
   "crates/edgerun-virtual-disk",
-  "crates/edgerun-wgpu",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
 ]
@@ -173,10 +114,36 @@ deprecated = "allow"
 function_casts_as_integer = "allow"
 
 [workspace.dependencies]
+# Core edgerun crates
+edgerun-core = { path = "crates/edgerun-core" }
+edgerun-proto = { path = "crates/edgerun-proto" }
+edgerun-storage = { path = "crates/edgerun-storage" }
+edgerun-stream = { path = "crates/edgerun-stream" }
+edgerun-http = { path = "crates/edgerun-http" }
+edgerun-node = { path = "crates/edgerun-node" }
+edgerun-hardware-signing = { path = "crates/edgerun-hardware-signing" }
+edgerun-mesh = { path = "crates/edgerun-mesh" }
+edgerun-mesh-link = { path = "crates/edgerun-mesh-link" }
+edgerun-mesh-session = { path = "crates/edgerun-mesh-session" }
+edgerun-mesh-capability = { path = "crates/edgerun-mesh-capability" }
+edgerun-mesh-daemon = { path = "crates/edgerun-mesh-daemon" }
+edgerun-secret-service = { path = "crates/edgerun-secret-service" }
+edgerun-biometrics = { path = "crates/edgerun-biometrics" }
+edgerun-mgmt-bluetooth = { path = "crates/edgerun-mgmt-bluetooth" }
+edgerun-capability-policy = { path = "crates/edgerun-capability-policy" }
+edgerun-linux-wifi = { path = "crates/edgerun-linux-wifi" }
+edgerun-input = { path = "crates/edgerun-input" }
+edgerun-oci = { path = "crates/edgerun-oci" }
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json
 edgerun-json = { path = "crates/edgerun-json", features = ["serde"] }
+# Cross-workspace browser deps (edgerun-browser reference repo)
+edgerun-display = { path = "../edgerun-browser/crates/edgerun-display" }
+edgerun-gpu = { path = "../edgerun-browser/crates/edgerun-gpu" }
+edgerun-wgpu = { path = "../edgerun-browser/crates/edgerun-wgpu" }
+edgerun-rasterizer = { path = "../edgerun-browser/crates/edgerun-rasterizer" }
+edgerun-css-cascade = { path = "../edgerun-browser/crates/edgerun-css-cascade" }
 # Compression libraries for HTTP content-encoding
 flate2 = "1"
 brotli = "8"

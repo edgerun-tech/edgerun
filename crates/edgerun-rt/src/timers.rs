@@ -50,12 +50,14 @@ pub fn timeout<F>(d: Duration, f: F) -> Timeout<F> {
     Timeout {
         inner: Some(f),
         deadline: Instant::now() + d,
+        registered: false,
     }
 }
 
 pub struct Timeout<F> {
     inner: Option<F>,
     deadline: Instant,
+    registered: bool,
 }
 
 impl<F: Future> Future for Timeout<F> {
@@ -77,9 +79,15 @@ impl<F: Future> Future for Timeout<F> {
         match unsafe { Pin::new_unchecked(fut) }.poll(cx) {
             Poll::Ready(v) => Poll::Ready(Ok(v)),
             Poll::Pending => {
-                current_rt()
-                    .reactor
-                    .register_timer(deadline, cx.waker().clone());
+                // Only register timer once — avoid accumulating duplicate
+                // wakers on the timer heap when the inner future is polled
+                // multiple times (e.g. by multiple wakers).
+                if !this.registered {
+                    current_rt()
+                        .reactor
+                        .register_timer(deadline, cx.waker().clone());
+                    this.registered = true;
+                }
                 Poll::Pending
             }
         }

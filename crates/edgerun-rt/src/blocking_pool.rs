@@ -72,7 +72,13 @@ impl<T> JoinHandle<T> {
     }
 
     pub(crate) fn set_result(&self, result: Result<T, JoinError>) {
-        *self.inner.result.lock() = Some(result);
+        // Use compare_exchange to ensure only one writer sets the result.
+        let mut guard = self.inner.result.lock();
+        if guard.is_some() {
+            // Already has a result — don't overwrite.
+            return;
+        }
+        *guard = Some(result);
         self.inner.completed.store(true, Ordering::Release);
         self.inner.cvar.notify_all();
         if let Some(waker) = self.inner.waker.lock().take() {

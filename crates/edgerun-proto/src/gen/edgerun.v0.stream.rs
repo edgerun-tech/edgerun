@@ -395,11 +395,12 @@ pub enum CommandType {
     Query = 7,
     ExecuteWorkload = 8,
     TerminateWorkload = 9,
-    /// Secret management commands (custom range)
+    CreateDelegation = 10,
+    CreateRevocation = 11,
+    StoreAndForward = 12,
     PutSecret = 1001,
     DeleteSecret = 1002,
     ListSecrets = 1003,
-    Custom = 2000,
 }
 impl CommandType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -418,10 +419,12 @@ impl CommandType {
             Self::Query => "COMMAND_TYPE_QUERY",
             Self::ExecuteWorkload => "COMMAND_TYPE_EXECUTE_WORKLOAD",
             Self::TerminateWorkload => "COMMAND_TYPE_TERMINATE_WORKLOAD",
+            Self::CreateDelegation => "COMMAND_TYPE_CREATE_DELEGATION",
+            Self::CreateRevocation => "COMMAND_TYPE_CREATE_REVOCATION",
+            Self::StoreAndForward => "COMMAND_TYPE_STORE_AND_FORWARD",
             Self::PutSecret => "COMMAND_TYPE_PUT_SECRET",
             Self::DeleteSecret => "COMMAND_TYPE_DELETE_SECRET",
             Self::ListSecrets => "COMMAND_TYPE_LIST_SECRETS",
-            Self::Custom => "COMMAND_TYPE_CUSTOM",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -437,10 +440,12 @@ impl CommandType {
             "COMMAND_TYPE_QUERY" => Some(Self::Query),
             "COMMAND_TYPE_EXECUTE_WORKLOAD" => Some(Self::ExecuteWorkload),
             "COMMAND_TYPE_TERMINATE_WORKLOAD" => Some(Self::TerminateWorkload),
+            "COMMAND_TYPE_CREATE_DELEGATION" => Some(Self::CreateDelegation),
+            "COMMAND_TYPE_CREATE_REVOCATION" => Some(Self::CreateRevocation),
+            "COMMAND_TYPE_STORE_AND_FORWARD" => Some(Self::StoreAndForward),
             "COMMAND_TYPE_PUT_SECRET" => Some(Self::PutSecret),
             "COMMAND_TYPE_DELETE_SECRET" => Some(Self::DeleteSecret),
             "COMMAND_TYPE_LIST_SECRETS" => Some(Self::ListSecrets),
-            "COMMAND_TYPE_CUSTOM" => Some(Self::Custom),
             _ => None,
         }
     }

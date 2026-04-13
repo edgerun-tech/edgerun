@@ -1666,9 +1666,9 @@ const file_edgerun_v0_trust_proto_rawDesc = "" +
 	"\x1eREVOCATION_KIND_IDENTITY_TRUST\x10\x03\x12#\n" +
 	"\x1fREVOCATION_KIND_ASSURANCE_CLAIM\x10\x04\x12\"\n" +
 	"\x1eREVOCATION_KIND_SNAPSHOT_TRUST\x10\x05\x12)\n" +
-	"%REVOCATION_KIND_REPRESENTATION_ACCESS\x10\x06B\xab\x01\n" +
+	"%REVOCATION_KIND_REPRESENTATION_ACCESS\x10\x06B\xb2\x01\n" +
 	"\x14com.edgerun.v0.trustB\n" +
-	"TrustProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVT\xaa\x02\x10Edgerun.V0.Trust\xca\x02\x10Edgerun\\V0\\Trust\xe2\x02\x1cEdgerun\\V0\\Trust\\GPBMetadata\xea\x02\x12Edgerun::V0::Trustb\x06proto3"
+	"TrustProtoP\x01Z,edgerun-codegen/gen/go/edgerun/v0/edgerun/v0\xa2\x02\x03EVT\xaa\x02\x10Edgerun.V0.Trust\xca\x02\x10Edgerun\\V0\\Trust\xe2\x02\x1cEdgerun\\V0\\Trust\\GPBMetadata\xea\x02\x12Edgerun::V0::Trustb\x06proto3"
 
 var (
 	file_edgerun_v0_trust_proto_rawDescOnce sync.Once

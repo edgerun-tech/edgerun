@@ -246,18 +246,98 @@ impl NetServer {
         Ok(Some(ServiceHandle { stop_flag: stop_flag_clone, thread: Some(handle) }))
     }
 
-    fn start_dhcpv6(&self, _config: &ConfigState) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
-        // DHCPv6 support available but not yet wired to config parser
-        Ok(None)
+    fn start_dhcpv6(&self, config: &ConfigState) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
+        // Check if DHCPv6 is configured
+        if config.dhcpv6_servers.is_empty() || config.dhcpv6_pools.is_empty() {
+            edgerun_log::info!("edgerun-net: no DHCPv6 configuration found, skipping DHCPv6");
+            return Ok(None);
+        }
+
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_flag_clone = stop_flag.clone();
+        
+        // Clone config for the thread
+        let config = config.clone();
+
+        let handle = thread::spawn(move || {
+            edgerun_log::info!("edgerun-net: starting DHCPv6 server with {} server(s) and {} pool(s)",
+                config.dhcpv6_servers.len(), config.dhcpv6_pools.len());
+            
+            use edgerun_dhcpv6::server::{Dhcpv6Server, Dhcpv6ServerConfig};
+            use edgerun_dhcpv6::lease::LeasePool;
+            
+            // Start DHCPv6 server(s) - for now, we start the first one
+            if let Some(_server_spec) = config.dhcpv6_servers.first() {
+                // Build scope from config
+                match config.build_dhcpv6_scopes(0) {
+                    Ok(scopes_map) => {
+                        edgerun_log::info!("edgerun-net: built {} DHCPv6 scope(s)", scopes_map.len());
+                        
+                        // Merge all pools into one for now
+                        let mut main_pool = LeasePool::new();
+                        for (_name, scope_pool) in scopes_map {
+                            // Copy addresses from scope to main pool
+                            for addr in &scope_pool.available_addresses {
+                                main_pool.available_addresses.push(*addr);
+                            }
+                            for (prefix, len) in &scope_pool.available_prefixes {
+                                main_pool.available_prefixes.push((*prefix, *len));
+                            }
+                        }
+                        
+                        if main_pool.available_addresses.is_empty() && main_pool.available_prefixes.is_empty() {
+                            edgerun_log::warn!("edgerun-net: DHCPv6 pool has no addresses or prefixes configured");
+                            return;
+                        }
+                        
+                        let server_config = Dhcpv6ServerConfig::default();
+                        
+                        match Dhcpv6Server::new(server_config, main_pool) {
+                            Ok(mut server) => {
+                                edgerun_log::info!("edgerun-net: DHCPv6 server started successfully");
+                                
+                                // Run server tick loop
+                                loop {
+                                    if stop_flag.load(Ordering::Relaxed) {
+                                        edgerun_log::info!("edgerun-net: DHCPv6 server stopped");
+                                        return;
+                                    }
+                                    
+                                    match server.tick() {
+                                        Ok(()) => {}
+                                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                                        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => continue,
+                                        Err(e) => {
+                                            edgerun_log::warn!("edgerun-net: DHCPv6 server error: {}", e);
+                                            std::thread::sleep(Duration::from_secs(1));
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                edgerun_log::warn!("edgerun-net: failed to start DHCPv6 server: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        edgerun_log::warn!("edgerun-net: failed to build DHCPv6 scopes: {}", e);
+                    }
+                }
+            }
+        });
+
+        Ok(Some(ServiceHandle { stop_flag: stop_flag_clone, thread: Some(handle) }))
     }
 
     fn print_summary(&self, config: &ConfigState) {
         edgerun_log::info!("=== edgerun-net startup summary ===");
-        edgerun_log::info!("  DNS zones:    {}", config.dns_zones.len());
-        edgerun_log::info!("  DNS servers:  {}", config.dns_servers.len());
-        edgerun_log::info!("  DHCPv4 pools: {}", config.dhcp_pools.len());
-        edgerun_log::info!("  DHCPv6:       {}", if config.dhcp_servers.is_empty() { "disabled" } else { "available" });
-        edgerun_log::info!("  Hot-reload:   {}", if self.hot_reload { "enabled" } else { "disabled" });
+        edgerun_log::info!("  DNS zones:      {}", config.dns_zones.len());
+        edgerun_log::info!("  DNS servers:    {}", config.dns_servers.len());
+        edgerun_log::info!("  DHCPv4 pools:   {}", config.dhcp_pools.len());
+        edgerun_log::info!("  DHCPv6 servers: {}", config.dhcpv6_servers.len());
+        edgerun_log::info!("  DHCPv6 pools:   {}", config.dhcpv6_pools.len());
+        edgerun_log::info!("  TFTP servers:   {}", config.tftp_servers.len());
+        edgerun_log::info!("  Hot-reload:     {}", if self.hot_reload { "enabled" } else { "disabled" });
         edgerun_log::info!("==================================");
     }
 }

@@ -1491,8 +1491,8 @@ const file_edgerun_v0_common_proto_rawDesc = "" +
 	"\x1cEXECUTION_CLASS_TRUSTED_PEER\x10\x02\x12\x1f\n" +
 	"\x1bEXECUTION_CLASS_TEE_ALLOWED\x10\x03\x12'\n" +
 	"#EXECUTION_CLASS_REDUNDANT_UNTRUSTED\x10\x04\x12\x1a\n" +
-	"\x16EXECUTION_CLASS_PUBLIC\x10\x05B\xb1\x01\n" +
-	"\x15com.edgerun.v0.commonB\vCommonProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVC\xaa\x02\x11Edgerun.V0.Common\xca\x02\x11Edgerun\\V0\\Common\xe2\x02\x1dEdgerun\\V0\\Common\\GPBMetadata\xea\x02\x13Edgerun::V0::Commonb\x06proto3"
+	"\x16EXECUTION_CLASS_PUBLIC\x10\x05B\xb8\x01\n" +
+	"\x15com.edgerun.v0.commonB\vCommonProtoP\x01Z,edgerun-codegen/gen/go/edgerun/v0/edgerun/v0\xa2\x02\x03EVC\xaa\x02\x11Edgerun.V0.Common\xca\x02\x11Edgerun\\V0\\Common\xe2\x02\x1dEdgerun\\V0\\Common\\GPBMetadata\xea\x02\x13Edgerun::V0::Commonb\x06proto3"
 
 var (
 	file_edgerun_v0_common_proto_rawDescOnce sync.Once

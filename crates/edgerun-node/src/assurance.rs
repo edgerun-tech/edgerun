@@ -4,11 +4,16 @@
 //! an `AssuranceClaim` that proves the command was executed at the requested
 //! assurance level (software, hardware-backed, or attested runtime).
 
+use edgerun_proto::edgerun::v0::common::ObjectKind;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
 use edgerun_core::util::system_time_to_prost;
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
+use prost::Message;
 use std::time::SystemTime;
+use edgerun_proto::edgerun::v0::trust::AssuranceClaim;
+
+const KIND_PROOF: i32 = ObjectKind::Proof as i32; // 7
 
 /// Generates and records an AssuranceClaim for the given command execution.
 ///
@@ -74,7 +79,7 @@ pub fn generate_and_record_assurance_claim(
 
     // Store the signed claim as an object
     let claim_bytes = prost::Message::encode_to_vec(&signed_claim);
-    let obj_ref = store.put_object(&claim_bytes, 0, &[stream_id.to_vec()]).ok()?;
+    let obj_ref = store.put_object(&claim_bytes, KIND_PROOF, &[stream_id.to_vec()]).ok()?;
 
     edgerun_log::info!("assurance claim recorded: class={}, object_id={}",
         assurance_class,
@@ -90,10 +95,10 @@ pub fn verify_assurance_claim(
     let Some(ref sig) = claim.signature else {
         return Err("missing_signature");
     };
-    if sig.algorithm != 1 {
+    if sig.algorithm != edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
         return Err("bad_algorithm");
     }
-    if sig.value.len() != 64 {
+    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
         return Err("bad_signature_length");
     }
     let Some(ref attester) = claim.attester else {
@@ -102,7 +107,7 @@ pub fn verify_assurance_claim(
     let Some(ref key_hint) = attester.key_hint else {
         return Err("no_key_hint");
     };
-    if key_hint.len() != 64 {
+    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
         return Err("bad_key_hint");
     }
 

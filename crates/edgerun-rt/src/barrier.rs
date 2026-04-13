@@ -40,7 +40,7 @@ impl Barrier {
     /// Waits at the barrier. If this is the `n`-th call, all waiting
     /// tasks are released. Otherwise, the task pends.
     pub fn wait(&self) -> BarrierWait<'_> {
-        BarrierWait { barrier: self, generation: self.generation.load(Ordering::Acquire) }
+        BarrierWait { barrier: self, generation: self.generation.load(Ordering::Acquire), registered: false }
     }
 
     /// Returns the number of tasks required to trip the barrier.
@@ -51,6 +51,7 @@ impl Barrier {
 pub struct BarrierWait<'a> {
     barrier: &'a Barrier,
     generation: usize,
+    registered: bool,
 }
 
 impl Future for BarrierWait<'_> {
@@ -79,8 +80,10 @@ impl Future for BarrierWait<'_> {
             }
             Poll::Ready(BarrierWaitResult { is_leader: true })
         } else {
-            if inner.waiters.is_empty() || !inner.waiters.iter().any(|w| w.will_wake(cx.waker())) {
+            // Only register once — don't accumulate duplicate wakers.
+            if !this.registered {
                 inner.waiters.push_back(cx.waker().clone());
+                this.registered = true;
             }
             Poll::Pending
         }

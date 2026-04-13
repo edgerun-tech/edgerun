@@ -43,12 +43,57 @@ impl UnixStream {
         }
     }
 
-    /// Connect to a Unix socket path.
+    /// Connect to a Unix socket path asynchronously.
+    ///
+    /// Uses non-blocking connect to avoid blocking worker threads.
     pub fn connect<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let stream = StdUnixStream::connect(path)?;
-        stream.set_nonblocking(true)?;
-        let fd = stream.as_raw_fd();
-        std::mem::forget(stream);
+        let fd = unsafe {
+            libc::socket(libc::AF_UNIX, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0)
+        };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        // Set non-blocking.
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags < 0 {
+            unsafe { libc::close(fd) };
+            return Err(io::Error::last_os_error());
+        }
+        if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            unsafe { libc::close(fd) };
+            return Err(io::Error::last_os_error());
+        }
+
+        // Build sockaddr_un.
+        let path_bytes = path.as_ref().as_os_str().as_encoded_bytes();
+        if path_bytes.len() > 107 {
+            unsafe { libc::close(fd) };
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "path too long"));
+        }
+        let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+        addr.sun_family = libc::AF_UNIX as _;
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                path_bytes.as_ptr(),
+                addr.sun_path.as_mut_ptr() as *mut u8,
+                path_bytes.len(),
+            );
+        }
+        let addrlen = std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
+
+        let res = unsafe { libc::connect(fd, &addr as *const _ as *const _, addrlen) };
+        if res < 0 {
+            let e = io::Error::last_os_error();
+            if e.kind() != io::ErrorKind::WouldBlock
+                && e.raw_os_error() != Some(libc::EINPROGRESS)
+            {
+                unsafe { libc::close(fd) };
+                return Err(e);
+            }
+            // Connect in progress — the caller should poll for write readiness.
+        }
+
         Ok(Self {
             fd,
             read_waker: Mutex::new(None),

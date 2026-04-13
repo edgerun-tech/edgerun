@@ -233,32 +233,39 @@ impl TcpSocket {
 }
 
 /// Wait for a non-blocking connect to complete.
+///
+/// Uses reactor-based async I/O: register for write readiness, then on
+/// wakeup check `SO_ERROR`. Returns when the connect either succeeds
+/// or fails with a concrete error.
 async fn wait_for_connect(fd: RawFd) -> io::Result<()> {
-    use std::time::Duration;
+    use crate::reactor_fd_ready::FdWriteReady;
 
     let rt = current_rt();
     rt.reactor.get_or_register_fd(fd);
 
     loop {
-        // Register for write readiness with the reactor.
-        rt.reactor.wait_write(fd, std::task::Context::from_waker(&noop_waker()).waker().clone());
-
-        // Check via poll(2) if the connect completed.
-        let mut pfd = libc::pollfd { fd, events: libc::POLLOUT as _, revents: 0 };
-        let res = unsafe { libc::poll(&mut pfd, 1, 10) };
-        if res > 0 && (pfd.revents & (libc::POLLOUT | libc::POLLERR)) != 0 {
-            let mut err: libc::c_int = 0;
-            let mut errlen: libc::socklen_t = std::mem::size_of::<libc::c_int>() as _;
-            if unsafe { libc::getsockopt(fd, libc::SOL_SOCKET, libc::SO_ERROR, &mut err as *mut _ as *mut _, &mut errlen) } < 0 {
-                return Err(io::Error::last_os_error());
-            }
-            if err != 0 {
-                return Err(io::Error::from_raw_os_error(err));
-            }
+        let mut err: libc::c_int = 0;
+        let mut errlen: libc::socklen_t = std::mem::size_of::<libc::c_int>() as _;
+        let res = unsafe {
+            libc::getsockopt(
+                fd,
+                libc::SOL_SOCKET,
+                libc::SO_ERROR,
+                &mut err as *mut _ as *mut _,
+                &mut errlen,
+            )
+        };
+        if res < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if err == 0 {
+            // Connect succeeded.
             return Ok(());
         }
-
-        crate::timers::sleep(Duration::from_millis(5)).await;
+        // Connect still in progress or failed — wait for write readiness
+        // before checking again. `FdWriteReady` registers with the reactor
+        // and returns `()` when the fd is write-ready.
+        FdWriteReady::new(fd).await;
     }
 }
 
@@ -288,15 +295,4 @@ fn sockaddr_len(addr: &SocketAddr) -> libc::socklen_t {
         SocketAddr::V4(_) => std::mem::size_of::<libc::sockaddr_in>() as _,
         SocketAddr::V6(_) => std::mem::size_of::<libc::sockaddr_in6>() as _,
     }
-}
-
-fn noop_waker() -> std::task::Waker {
-    static VTABLE: std::task::RawWakerVTable =
-        std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-    const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-        std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-    }
-    const fn wake_noop(_: *const ()) {}
-    const fn drop_noop(_: *const ()) {}
-    unsafe { std::task::Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
 }

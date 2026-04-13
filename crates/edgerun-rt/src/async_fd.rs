@@ -206,17 +206,27 @@ pub fn pipe() -> io::Result<(AsyncFd<OwnedAsyncFd>, AsyncFd<OwnedAsyncFd>)> {
     if res < 0 {
         return Err(io::Error::last_os_error());
     }
-    // Set non-blocking.
-    for &fd in &fds {
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-        if flags < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-            return Err(io::Error::last_os_error());
-        }
+    // Set non-blocking — with cleanup on failure.
+    if let Err(e) = set_nonblocking(fds[0]) {
+        unsafe { libc::close(fds[0]); libc::close(fds[1]); }
+        return Err(e);
+    }
+    if let Err(e) = set_nonblocking(fds[1]) {
+        unsafe { libc::close(fds[0]); libc::close(fds[1]); }
+        return Err(e);
     }
     let read_fd = AsyncFd::new(OwnedAsyncFd::from_raw_fd(fds[0]))?;
     let write_fd = AsyncFd::new(OwnedAsyncFd::from_raw_fd(fds[1]))?;
     Ok((read_fd, write_fd))
+}
+
+fn set_nonblocking(fd: RawFd) -> io::Result<()> {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }

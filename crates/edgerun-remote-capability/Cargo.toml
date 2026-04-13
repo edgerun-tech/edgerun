@@ -15,7 +15,7 @@ edgerun-input = { path = "../edgerun-input" }
 edgerun-microphone = { path = "../edgerun-microphone" }
 edgerun-speaker = { path = "../edgerun-speaker" }
 edgerun-wifi = { path = "../edgerun-wifi" }
-edgerun-display = { path = "../edgerun-display" }
+edgerun-display.workspace = true
 edgerun-npu = { path = "../edgerun-npu" }
 edgerun-fingerprint = { path = "../edgerun-fingerprint" }
 edgerun-proto = { path = "../edgerun-proto" }

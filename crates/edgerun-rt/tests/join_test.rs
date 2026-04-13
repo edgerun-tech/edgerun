@@ -5,24 +5,24 @@ use std::time::Duration;
 fn main() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
-        test_join_one();
-        test_join_two();
-        test_join_three();
-        test_join_four();
-        test_join_concurrent_execution();
-        test_join_with_sleep();
+        test_join_one().await;
+        test_join_two().await;
+        test_join_three().await;
+        test_join_four().await;
+        test_join_concurrent_execution().await;
+        test_join_with_sleep().await;
         println!("All join! tests passed!");
     });
 }
 
-fn test_join_one() {
+async fn test_join_one() {
     println!("  test_join_one...");
     let result = join!(async { 42 });
     assert_eq!(result, 42);
     println!("  test_join_one OK");
 }
 
-fn test_join_two() {
+async fn test_join_two() {
     println!("  test_join_two...");
     let (a, b) = join!(
         async { 1 },
@@ -33,7 +33,7 @@ fn test_join_two() {
     println!("  test_join_two OK");
 }
 
-fn test_join_three() {
+async fn test_join_three() {
     println!("  test_join_three...");
     let (a, b, c) = join!(
         async { "hello" },
@@ -46,7 +46,7 @@ fn test_join_three() {
     println!("  test_join_three OK");
 }
 
-fn test_join_four() {
+async fn test_join_four() {
     println!("  test_join_four...");
     let (a, b, c, d) = join!(
         async { 10 },
@@ -61,10 +61,8 @@ fn test_join_four() {
     println!("  test_join_four OK");
 }
 
-fn test_join_concurrent_execution() {
+async fn test_join_concurrent_execution() {
     println!("  test_join_concurrent_execution...");
-    // If these ran sequentially, it would take 200ms+.
-    // With concurrent join, it should take ~100ms.
     let start = std::time::Instant::now();
     let (a, b) = join!(
         async {
@@ -87,7 +85,7 @@ fn test_join_concurrent_execution() {
     println!("  test_join_concurrent_execution OK (took {:?})", elapsed);
 }
 
-fn test_join_with_sleep() {
+async fn test_join_with_sleep() {
     println!("  test_join_with_sleep...");
     let (a, b, c) = join!(
         async {

@@ -601,7 +601,7 @@ impl FileIndex {
     }
 
     // ===========================================================================
-    // Public API — matches SqliteIndex
+    // Public API
     // ===========================================================================
 
     pub fn put_event(&self, stream_id: &str, seq: i64, event_hash: &[u8], file_offset: u64, envelope_version: i64) -> io::Result<()> {

@@ -5,7 +5,7 @@
 //! Implements the reference storage profile from the protocol spec (§6.1–§6.3, §19.9):
 //!
 //! - **Event log**: append-only protobuf records on the filesystem (authoritative truth)
-//! - **SQLite**: indexes, caches, replay state, fetch queues (rebuildable from event log)
+//! - **File indexes**: binary append-only logs with in-memory HashMaps (rebuildable from event log)
 //! - **Blob store**: AES-GCM encrypted ciphertext on filesystem, content-addressed
 //!
 //! ## Security invariants (§6.2)
@@ -14,7 +14,7 @@
 //! - No plaintext blob persistence path
 //!
 //! ## Rebuildability (§6.3)
-//! The SQLite index can be deleted and rebuilt from the event log + encrypted blobs.
+//! File indexes can be deleted and rebuilt from the event log + encrypted blobs.
 //! Loss of indexes does not invalidate already stored records.
 
 pub mod blobs;

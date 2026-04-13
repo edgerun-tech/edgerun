@@ -337,15 +337,15 @@ For the reference implementation profile, the recommended storage split is:
 
 - **event log and immutable protocol records** as the recoverable source of truth
 - **encrypted blob bytes on the filesystem**
-- **SQLite** only for indexes, caches, replay state, fetch queues, and derived local materializations
+- **file-based binary indexes** for caches, replay state, fetch queues, and derived local materializations
 
 This means:
 
-- the database is **not** the authoritative semantic source of truth
-- the database exists for performance and local queryability
-- the database **SHOULD** be rebuildable from the event log plus locally present encrypted blobs
+- the index is **not** the authoritative semantic source of truth
+- the index exists for performance and local queryability
+- the index **SHOULD** be rebuildable from the event log plus locally present encrypted blobs
 
-The protocol does **not** require SQLite specifically, but a conforming reference profile using SQLite for indexes and filesystem storage for encrypted blob bodies is preferred over more specialized engines unless local requirements clearly justify them.
+The protocol does **not** require any specific indexing engine, but a conforming reference profile using binary append-only file indexes and filesystem storage for encrypted blob bodies is preferred over specialized database engines unless local requirements clearly justify them.
 
 ### 6.2 Blob confidentiality invariants
 
@@ -2180,7 +2180,6 @@ project_view_from_snapshot_and_deltas(snapshot, deltas) -> View
 The core must not know about:
 - BLE
 - QUIC
-- SQLite
 - RocksDB
 - S3
 - filesystem layout
@@ -2240,9 +2239,9 @@ Recommended reference mapping:
 
 - immutable records and event-log material -> durable append-only record store
 - encrypted blob ciphertext -> filesystem blob store
-- local lookup/index state -> SQLite
+- local lookup/index state -> binary append-only file indexes
 
-Recommended SQLite responsibilities:
+Recommended file-index responsibilities:
 
 - stream head index
 - stream seq/hash lookup
@@ -2803,11 +2802,18 @@ enum CommandType {
   COMMAND_TYPE_QUERY = 7;
   COMMAND_TYPE_EXECUTE_WORKLOAD = 8;
   COMMAND_TYPE_TERMINATE_WORKLOAD = 9;
-  // Secret management commands
+  // Core trust commands
+  COMMAND_TYPE_CREATE_DELEGATION = 10;
+  COMMAND_TYPE_CREATE_REVOCATION = 11;
+  COMMAND_TYPE_STORE_AND_FORWARD = 12;
+  // Extension range: implementations MAY add command types starting here.
+  // Unknown extension types MUST be rejected unless local policy explicitly allows them.
+  reserved 13 to 999;
+  reserved "COMMAND_TYPE_CUSTOM";
+  // Implementation-specific extensions start at 1000.
   COMMAND_TYPE_PUT_SECRET = 1001;
   COMMAND_TYPE_DELETE_SECRET = 1002;
   COMMAND_TYPE_LIST_SECRETS = 1003;
-  COMMAND_TYPE_CUSTOM = 2000;
 }
 
 message EventEnvelope {

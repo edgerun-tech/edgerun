@@ -111,6 +111,8 @@ pub enum ConfigResource {
     RateLimit(RateLimitSpec),
     DhcpServer(DhcpServerSpec),
     DhcpPool(DhcpPoolSpec),
+    Dhcpv6Server(Dhcpv6ServerSpec),
+    Dhcpv6Pool(Dhcpv6PoolSpec),
     TftpServer(TftpServerSpec),
 }
 
@@ -126,6 +128,8 @@ impl ConfigResource {
             Self::RateLimit(_) => "unnamed-ratelimit",
             Self::DhcpServer(_) => "unnamed-dhcp",
             Self::DhcpPool(r) => &r.name,
+            Self::Dhcpv6Server(_) => "unnamed-dhcpv6",
+            Self::Dhcpv6Pool(r) => &r.name,
             Self::TftpServer(_) => "unnamed-tftp",
         }
     }
@@ -141,6 +145,8 @@ impl ConfigResource {
             Self::RateLimit(_) => "RateLimit",
             Self::DhcpServer(_) => "DhcpServer",
             Self::DhcpPool(_) => "DhcpPool",
+            Self::Dhcpv6Server(_) => "Dhcpv6Server",
+            Self::Dhcpv6Pool(_) => "Dhcpv6Pool",
             Self::TftpServer(_) => "TftpServer",
         }
     }
@@ -405,6 +411,69 @@ pub struct DhcpReservation {
 }
 
 // ---------------------------------------------------------------------------
+// DHCPv6 Server spec
+// ---------------------------------------------------------------------------
+
+/// DHCPv6 server configuration.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Dhcpv6ServerSpec {
+    /// Network interface to bind to.
+    pub interface: String,
+    /// Pool name references.
+    pub pools: Vec<String>,
+    /// Default preferred lifetime (seconds).
+    #[serde(default = "default_3600")]
+    pub default_preferred_lifetime: u32,
+    /// Default valid lifetime (seconds).
+    #[serde(default = "default_7200")]
+    pub default_valid_lifetime: u32,
+    /// DNS servers to hand out (IPv6 addresses).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dns_servers: Option<Vec<String>>,
+    /// Domain name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_name: Option<String>,
+    /// Static reservations (IPv6).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reservations: Option<Vec<Dhcpv6Reservation>>,
+}
+
+fn default_3600() -> u32 { 3600 }
+fn default_7200() -> u32 { 7200 }
+
+/// DHCPv6 static reservation.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Dhcpv6Reservation {
+    /// DUID (DHCP Unique Identifier) or MAC address.
+    pub duid: String,
+    /// Reserved IPv6 address.
+    pub ip: String,
+    /// Optional hostname.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// DHCPv6 Pool spec
+// ---------------------------------------------------------------------------
+
+/// DHCPv6 pool configuration.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Dhcpv6PoolSpec {
+    /// Pool name.
+    pub name: String,
+    /// Start IPv6 (inclusive).
+    pub range_start: String,
+    /// End IPv6 (inclusive).
+    pub range_end: String,
+    /// Prefix length (e.g., 64).
+    pub prefix_length: u8,
+    /// Excluded IPv6s.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exclude: Option<Vec<String>>,
+}
+
+// ---------------------------------------------------------------------------
 // DHCP Pool spec
 // ---------------------------------------------------------------------------
 
@@ -459,7 +528,6 @@ fn default_serial() -> u32 {
     ((secs / 86400) as u32) * 100 + 1 // YYYYMMDDNN format
 }
 
-fn default_3600() -> u32 { 3600 }
 fn default_900() -> u32 { 900 }
 fn default_604800() -> u32 { 604800 }
 fn default_86400() -> u32 { 86400 }

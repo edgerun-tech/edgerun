@@ -1,48 +1,73 @@
 //! `select!` macro — race multiple futures, take the first to complete.
 //!
-//! # Note
-//! This macro uses `.await` internally and can only be called from within
-//! an async context (e.g. inside `Runtime::block_on(async { ... })`).
+//! This macro polls futures concurrently on the calling task (no spawning),
+//! avoiding the deadlock that occurs when `blocking_recv` ties up worker threads.
 
 /// Race two futures concurrently and return the result of the first
 /// one to complete.
 ///
-/// Both futures must have the same output type. The losing future's
-/// result is discarded.
+/// Both futures must have the same output type. The losing future is
+/// dropped (its result is discarded and any side effects are aborted).
 ///
 /// # Panics
 /// If called outside a runtime.
 #[macro_export]
 macro_rules! select {
     ($fut1:expr, $fut2:expr $(,)?) => {{
-        let (tx, rx) = $crate::oneshot::channel();
-        let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
-
-        // Spawn first future — sends its result via oneshot if first.
-        let tx1 = tx.clone();
-        let _h1 = $crate::spawn(async move {
-            let result = $fut1.await;
-            if let Ok(mut guard) = tx1.lock() {
-                if let Some(tx) = guard.take() {
-                    let _ = tx.send(result);
-                }
-            }
-        });
-
-        // Spawn second future — sends its result via oneshot if first.
-        let tx2 = tx.clone();
-        let _h2 = $crate::spawn(async move {
-            let result = $fut2.await;
-            if let Ok(mut guard) = tx2.lock() {
-                if let Some(tx) = guard.take() {
-                    let _ = tx.send(result);
-                }
-            }
-        });
-
-        // Block until the first result arrives.
-        // This is safe because spawned tasks run on worker threads.
-        rx.blocking_recv()
-            .unwrap_or_else(|_| panic!("select! all futures failed"))
+        let f1 = $fut1;
+        let f2 = $fut2;
+        $crate::select_internal::select2(f1, f2).await
     }};
+}
+
+/// Internal module — do not use directly.
+#[doc(hidden)]
+pub mod select_internal {
+    use std::future::Future;
+    use std::marker::PhantomData;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    struct Select2<F1, F2, O> {
+        f1: Option<F1>,
+        f2: Option<F2>,
+        _output: PhantomData<O>,
+    }
+
+    impl<F1, F2, O> Future for Select2<F1, F2, O>
+    where
+        F1: Future<Output = O>,
+        F2: Future<Output = O>,
+    {
+        type Output = O;
+
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let this = unsafe { self.get_unchecked_mut() };
+
+            if let Some(f) = this.f1.as_mut() {
+                if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
+                    this.f1 = None;
+                    this.f2 = None; // drop the loser
+                    return Poll::Ready(v);
+                }
+            }
+            if let Some(f) = this.f2.as_mut() {
+                if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
+                    this.f2 = None;
+                    this.f1 = None; // drop the loser
+                    return Poll::Ready(v);
+                }
+            }
+
+            Poll::Pending
+        }
+    }
+
+    pub async fn select2<F1, F2, O>(f1: F1, f2: F2) -> O
+    where
+        F1: Future<Output = O>,
+        F2: Future<Output = O>,
+    {
+        Select2 { f1: Some(f1), f2: Some(f2), _output: PhantomData }.await
+    }
 }

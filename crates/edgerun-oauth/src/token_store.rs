@@ -31,7 +31,7 @@ impl TokenStore {
 
     /// Create with an explicit data root for the secret service.
     pub fn with_data_root(data_root: PathBuf) -> std::io::Result<Self> {
-        let backend = Backend::new(data_root)?;
+        let backend = Backend::new(data_root, edgerun_secret_service::no_op_event_recorder())?;
         Ok(Self {
             backend: Mutex::new(backend),
         })

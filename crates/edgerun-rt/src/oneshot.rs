@@ -5,7 +5,8 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
 /// Creates a new oneshot channel.
@@ -14,6 +15,7 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
         val: Mutex::new(None),
         waker: Mutex::new(None),
         sender_dropped: Mutex::new(false),
+        cvar: Condvar::new(),
     });
     (
         Sender { inner: Some(inner.clone()) },
@@ -26,6 +28,7 @@ struct OneInner<T> {
     waker: Mutex<Option<Waker>>,
     /// Tracks whether the sender was dropped without sending.
     sender_dropped: Mutex<bool>,
+    cvar: Condvar,
 }
 
 /// Oneshot sender. Can send at most one value.
@@ -36,18 +39,18 @@ pub struct Sender<T> {
 impl<T> Sender<T> {
     /// Sends a value to the receiver. Can only be called once.
     pub fn send(mut self, val: T) -> Result<(), T> {
-        // Take ownership of inner so Drop doesn't trigger the "sender dropped" flag.
         let inner = std::mem::take(&mut self.inner);
         let inner = match inner {
             Some(i) => i,
             None => return Err(val),
         };
-        let mut guard = inner.val.lock().unwrap();
+        let mut guard = inner.val.lock();
         if guard.is_some() {
             return Err(val);
         }
         *guard = Some(val);
-        if let Some(w) = inner.waker.lock().unwrap().take() {
+        inner.cvar.notify_all();
+        if let Some(w) = inner.waker.lock().take() {
             w.wake();
         }
         Ok(())
@@ -62,8 +65,9 @@ impl<T> Sender<T> {
 impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
         if let Some(inner) = &self.inner {
-            *inner.sender_dropped.lock().unwrap() = true;
-            if let Some(w) = inner.waker.lock().unwrap().take() {
+            *inner.sender_dropped.lock() = true;
+            inner.cvar.notify_all();
+            if let Some(w) = inner.waker.lock().take() {
                 w.wake();
             }
         }
@@ -79,19 +83,18 @@ impl<T> Receiver<T> {
     /// Receives the value. Returns `Err(RecvError)` if the sender
     /// was dropped without sending.
     pub fn blocking_recv(self) -> Result<T, RecvError> {
+        let mut guard = self.inner.val.lock();
         loop {
-            if let Some(v) = self.inner.val.lock().unwrap().take() {
+            if let Some(v) = guard.take() {
                 return Ok(v);
             }
-            if *self.inner.sender_dropped.lock().unwrap() {
-                // Check one more time for the value (race condition).
-                if let Some(v) = self.inner.val.lock().unwrap().take() {
+            if *self.inner.sender_dropped.lock() {
+                if let Some(v) = guard.take() {
                     return Ok(v);
                 }
                 return Err(RecvError);
             }
-            // Park the thread briefly. For use with the blocking pool.
-            std::thread::sleep(std::time::Duration::from_micros(10));
+            self.inner.cvar.wait(&mut guard);
         }
     }
 }
@@ -100,24 +103,23 @@ impl<T> Future for Receiver<T> {
     type Output = Result<T, RecvError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if let Some(v) = self.inner.val.lock().unwrap().take() {
+        if let Some(v) = self.inner.val.lock().take() {
             return Poll::Ready(Ok(v));
         }
-        if *self.inner.sender_dropped.lock().unwrap() {
-            // Check one more time for the value.
-            if let Some(v) = self.inner.val.lock().unwrap().take() {
+        if *self.inner.sender_dropped.lock() {
+            if let Some(v) = self.inner.val.lock().take() {
                 return Poll::Ready(Ok(v));
             }
             return Poll::Ready(Err(RecvError));
         }
-        *self.inner.waker.lock().unwrap() = Some(cx.waker().clone());
+        *self.inner.waker.lock() = Some(cx.waker().clone());
 
         // Double-check after registering waker.
-        if let Some(v) = self.inner.val.lock().unwrap().take() {
+        if let Some(v) = self.inner.val.lock().take() {
             return Poll::Ready(Ok(v));
         }
-        if *self.inner.sender_dropped.lock().unwrap() {
-            if let Some(v) = self.inner.val.lock().unwrap().take() {
+        if *self.inner.sender_dropped.lock() {
+            if let Some(v) = self.inner.val.lock().take() {
                 return Poll::Ready(Ok(v));
             }
             return Poll::Ready(Err(RecvError));

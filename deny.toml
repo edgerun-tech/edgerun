@@ -39,7 +39,7 @@ highlight = "all"
 # trybuild, or as the edgerun-json workspace crate (vendored copy).
 [[bans.deny]]
 name = "serde_json"
-wrappers = ["criterion", "tinytemplate", "trybuild", "generic-array", "either", "edgerun-json"]
+wrappers = ["criterion", "tinytemplate", "edgerun-json"]
 
 [sources]
 unknown-registry = "warn"

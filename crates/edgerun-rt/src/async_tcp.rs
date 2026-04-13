@@ -172,21 +172,25 @@ impl Future for ConnectFuture {
                     let addr = addrs[*idx];
                     *idx += 1;
 
-                    // Create non-blocking socket.
+                    // Create non-blocking socket with appropriate address family
+                    let family = match addr {
+                        SocketAddr::V4(_) => libc::AF_INET,
+                        SocketAddr::V6(_) => libc::AF_INET6,
+                    };
                     let fd = unsafe {
-                        libc::socket(libc::AF_INET, libc::SOCK_STREAM | libc::SOCK_NONBLOCK, 0)
+                        libc::socket(family, libc::SOCK_STREAM | libc::SOCK_NONBLOCK, 0)
                     };
                     if fd < 0 {
                         return Poll::Ready(Err(io::Error::last_os_error()));
                     }
 
-                    // Start connect.
-                    let sock_addr = socket_addr_to_sockaddr_in(&addr);
+                    // Start connect
+                    let sock_addr = socket_addr_to_sockaddr(&addr);
                     let res = unsafe {
                         libc::connect(
                             fd,
-                            &sock_addr as *const _ as *const libc::sockaddr,
-                            std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t,
+                            sock_addr.as_ptr(),
+                            sock_addr.len(),
                         )
                     };
 
@@ -260,25 +264,61 @@ impl Future for ConnectFuture {
     }
 }
 
-fn socket_addr_to_sockaddr_in(addr: &SocketAddr) -> libc::sockaddr_in {
+fn socket_addr_to_sockaddr(addr: &SocketAddr) -> SocketAddrStorage {
     match addr {
-        SocketAddr::V4(v4) => libc::sockaddr_in {
-            sin_family: libc::AF_INET as u16,
-            sin_port: v4.port().to_be(),
-            sin_addr: libc::in_addr {
-                s_addr: u32::from_ne_bytes(v4.ip().octets()),
-            },
-            sin_zero: [0; 8],
-        },
-        SocketAddr::V6(_) => {
-            // Fallback — real impl would use sockaddr_in6.
-            libc::sockaddr_in {
+        SocketAddr::V4(v4) => {
+            let sin = libc::sockaddr_in {
                 sin_family: libc::AF_INET as u16,
-                sin_port: 0,
-                sin_addr: libc::in_addr { s_addr: 0 },
+                sin_port: v4.port().to_be(),
+                sin_addr: libc::in_addr {
+                    s_addr: u32::from_ne_bytes(v4.ip().octets()),
+                },
                 sin_zero: [0; 8],
+            };
+            let mut storage = SocketAddrStorage::new();
+            unsafe {
+                std::ptr::write(storage.0.as_mut_ptr() as *mut libc::sockaddr_in, sin);
+                storage.1 = std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
             }
+            storage
         }
+        SocketAddr::V6(v6) => {
+            let sin6 = libc::sockaddr_in6 {
+                sin6_family: libc::AF_INET6 as u16,
+                sin6_port: v6.port().to_be(),
+                sin6_addr: libc::in6_addr {
+                    s6_addr: v6.ip().octets(),
+                },
+                sin6_flowinfo: v6.flowinfo(),
+                sin6_scope_id: v6.scope_id(),
+            };
+            let mut storage = SocketAddrStorage::new();
+            unsafe {
+                std::ptr::write(storage.0.as_mut_ptr() as *mut libc::sockaddr_in6, sin6);
+                storage.1 = std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t;
+            }
+            storage
+        }
+    }
+}
+
+/// Helper to hold sockaddr storage with length
+struct SocketAddrStorage(
+    std::mem::MaybeUninit<libc::sockaddr_storage>,
+    libc::socklen_t,
+);
+
+impl SocketAddrStorage {
+    fn new() -> Self {
+        (std::mem::MaybeUninit::zeroed(), 0)
+    }
+
+    fn as_ptr(&self) -> *const libc::sockaddr {
+        self.0.as_ptr() as *const libc::sockaddr
+    }
+
+    fn len(&self) -> libc::socklen_t {
+        self.1
     }
 }
 

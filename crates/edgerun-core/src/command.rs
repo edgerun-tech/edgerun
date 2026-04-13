@@ -14,9 +14,15 @@
 //!   same command_id + different hash = REJECT
 //! - Timing: not_before / expires_at bounds must be respected
 //! - Delegation chain: if present, must validate end-to-end
+//!
+//! ## Policy check (spec §18.6: AUTHORITY_CHECK → POLICY_CHECK → DECISION)
+//!
+//! After deterministic core validation, the node applies local policy:
+//! - Is the issuer a recognized controller or does it present a valid delegation?
+//! - Is this command type allowed under local policy?
 
 use crate::protocol::{
-    canonical_bytes, CommandEnvelope, DelegationRecord, Digest, IdentityRef, ProtocolRecord,
+    canonical_bytes, CapabilityDescriptor, CommandEnvelope, DelegationRecord, Digest, IdentityRef, ProtocolRecord,
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
@@ -41,6 +47,69 @@ pub struct CommandValidationContext<'a> {
     /// Local node's assurance capability (ASSURANCE_CLASS_SOFTWARE=1, HARDWARE_BACKED=2, ATTESTED_RUNTIME=3).
     /// If 0, no assurance capability is reported (software-only, no attestation).
     pub local_assurance_class: i32,
+}
+
+// ---------------------------------------------------------------------------
+// Command policy check (spec §18.6: POLICY_CHECK stage)
+// ---------------------------------------------------------------------------
+
+/// Policy context for command evaluation.
+///
+/// Policy checks are **bounded local policy rules** (§18.11): the same
+/// inputs may produce different outcomes on different nodes, but the
+/// decision boundary MUST be exposed as an explicit local policy input.
+pub struct CommandPolicyContext<'a> {
+    /// Issuer identity of the command.
+    pub issuer_identity_id: &'a [u8],
+    /// Command type being evaluated.
+    pub command_type: i32,
+    /// Whether a delegation chain was presented and validated.
+    pub has_valid_delegation: bool,
+    /// Known controller identity IDs. Empty means "accept any validated issuer".
+    pub controller_ids: &'a [Vec<u8>],
+    /// Command-type allow-list. Empty means "all types allowed".
+    pub allowed_command_types: &'a [i32],
+}
+
+/// Evaluates local policy for an already-validated command.
+///
+/// This is the **POLICY_CHECK** stage of the spec §18.6 state machine.
+/// It runs AFTER deterministic core validation (`validate_command`) and
+/// BEFORE the dispatch decision.
+///
+/// Returns ACCEPT if policy passes, or REJECT with `PolicyDenied` if it fails.
+///
+/// Policy rules:
+/// 1. If `allowed_command_types` is non-empty, the command type must be in the set.
+/// 2. If `controller_ids` is non-empty, the issuer must be a controller OR
+///    present a valid delegation chain.
+pub fn validate_command_policy(ctx: &CommandPolicyContext<'_>) -> ValidationResult {
+    // Rule 1: Command-type allow-list
+    if !ctx.allowed_command_types.is_empty()
+        && !ctx.allowed_command_types.contains(&ctx.command_type)
+    {
+        let mut derived = std::collections::BTreeMap::new();
+        derived.insert("command_type".into(), Value::Int(ctx.command_type as i64));
+        return reject(
+            ReasonCode::PolicyDenied,
+            Value::Map(derived),
+            Value::String("command type not allowed by local policy".into()),
+        );
+    }
+
+    // Rule 2: Controller membership OR valid delegation
+    if !ctx.controller_ids.is_empty() {
+        let is_controller = ctx.controller_ids.iter().any(|id| id.as_slice() == ctx.issuer_identity_id);
+        if !is_controller && !ctx.has_valid_delegation {
+            return reject(
+                ReasonCode::PolicyDenied,
+                Value::String("issuer is not a controller and has no valid delegation".into()),
+                empty_map(),
+            );
+        }
+    }
+
+    accept(empty_map(), empty_map())
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +146,37 @@ pub fn validate_command(
     ctx: &CommandValidationContext<'_>,
 ) -> ValidationResult {
     // --- Step 1: Structural validation ---
+
+    // Version checks: unknown envelope or command versions indicate protocol drift
+    if command.envelope_version == 0 {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("envelope_version is 0 (unspecified)".into()),
+            empty_map(),
+        );
+    }
+    if command.command_version == 0 {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("command_version is 0 (unspecified)".into()),
+            empty_map(),
+        );
+    }
+    if command.envelope_version != 1 {
+        return reject(
+            ReasonCode::VersionUnsupported,
+            Value::String(format!("unsupported envelope_version: {}", command.envelope_version)),
+            empty_map(),
+        );
+    }
+    if command.command_version != 1 {
+        return reject(
+            ReasonCode::VersionUnsupported,
+            Value::String(format!("unsupported command_version: {}", command.command_version)),
+            empty_map(),
+        );
+    }
+
     if command.command_id.is_empty() {
         return reject(
             ReasonCode::StructuralInvalid,
@@ -119,7 +219,7 @@ pub fn validate_command(
         );
     };
 
-    if sig.algorithm != 1 {
+    if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as _ {
         // SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 1
         return reject(
             ReasonCode::CryptoInvalid,
@@ -128,7 +228,7 @@ pub fn validate_command(
         );
     }
 
-    if sig.value.len() != 64 {
+    if sig.value.len() != crate::crypto::ECDSA_P256_SIGNATURE_LEN {
         return reject(
             ReasonCode::CryptoInvalid,
             Value::String(format!("signature length {} != 64", sig.value.len())),
@@ -340,35 +440,85 @@ fn validate_delegation_chain(
             }
         }
 
-        // Verify delegation signature
-        // Full verification requires looking up the issuer's public key from
-        // an identity store (adapter-layer concern). Here we validate that
-        // the signature field is structurally present and well-formed.
-        if let Some(ref sig) = delegation.signature {
-            if sig.algorithm != 1 {
-                return Err(reject(
-                    ReasonCode::CryptoInvalid,
-                    Value::String("unsupported delegation signature algorithm".into()),
-                    empty_map(),
-                ));
-            }
-            if sig.value.len() != 64 {
-                return Err(reject(
-                    ReasonCode::CryptoInvalid,
-                    Value::String(format!("delegation signature length {} != 64", sig.value.len())),
-                    empty_map(),
-                ));
-            }
-        } else {
+        // Cryptographically verify delegation signature
+        let Some(ref sig) = delegation.signature else {
             return Err(reject(
                 ReasonCode::CryptoInvalid,
                 Value::String("delegation missing signature".into()),
                 empty_map(),
             ));
+        };
+        if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as _ {
+            return Err(reject(
+                ReasonCode::CryptoInvalid,
+                Value::String("unsupported delegation signature algorithm".into()),
+                empty_map(),
+            ));
+        }
+        if sig.value.len() != crate::crypto::ECDSA_P256_SIGNATURE_LEN {
+            return Err(reject(
+                ReasonCode::CryptoInvalid,
+                Value::String(format!("delegation signature length {} != 64", sig.value.len())),
+                empty_map(),
+            ));
+        }
+
+        // Extract issuer public key from key_hint (64 raw bytes, SEC1 uncompressed without 0x04 prefix)
+        let Some(issuer_ref) = &delegation.issuer else {
+            return Err(reject(
+                ReasonCode::StructuralInvalid,
+                Value::String("delegation missing issuer".into()),
+                empty_map(),
+            ));
+        };
+        let Some(key_hint) = &issuer_ref.key_hint else {
+            return Err(reject(
+                ReasonCode::CryptoInvalid,
+                Value::String("delegation issuer has no key_hint".into()),
+                empty_map(),
+            ));
+        };
+        if key_hint.len() != crate::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
+            return Err(reject(
+                ReasonCode::CryptoInvalid,
+                Value::String(format!("delegation key_hint length {} != 64", key_hint.len())),
+                empty_map(),
+            ));
+        }
+        let mut key_bytes = [0u8; 64];
+        key_bytes.copy_from_slice(key_hint);
+        let Some(verifying_key) = crate::crypto::node_id_to_verifying_key(&key_bytes) else {
+            return Err(reject(
+                ReasonCode::CryptoInvalid,
+                Value::String("invalid delegation public key".into()),
+                empty_map(),
+            ));
+        };
+
+        // Build signable form (signature absent) and canonical encode
+        let mut signable = delegation.clone();
+        signable.signature = None;
+        let canonical = prost::Message::encode_to_vec(&signable);
+
+        if !crate::crypto::verify_canonical_record(
+            &verifying_key,
+            crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,
+            &canonical,
+            &sig.value,
+        ) {
+            return Err(reject(
+                ReasonCode::CryptoInvalid,
+                Value::String(format!(
+                    "delegation signature verification failed for delegation {}",
+                    crate::util::bytes_to_hex(&delegation.delegation_id)
+                )),
+                empty_map(),
+            ));
         }
     }
 
-    // Check attenuation: no child capability may expand parent's actions
+    // Check attenuation: no child capability may expand parent's authority.
+    // A child delegation may only NARROW the parent's scope.
     for i in 1..chain.len() {
         let parent = &chain[i - 1];
         let child = &chain[i];
@@ -386,6 +536,8 @@ fn validate_delegation_chain(
                 empty_map(),
             ));
         };
+
+        // 1. Actions: child must not add new actions
         let parent_actions: std::collections::HashSet<&String> =
             parent_cap.actions.iter().collect();
         for action in &child_cap.actions {
@@ -395,6 +547,322 @@ fn validate_delegation_chain(
                     Value::String(format!(
                         "delegation chain violates attenuation: child adds action '{}'",
                         action
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+
+        // 2. Scope: child scope targets must be subsets of parent scope targets
+        attenuate_scope(parent_cap, child_cap, i)?;
+
+        // 3. Temporal bounds: child validity window must be within parent's
+        attenuate_timing(parent, child, i)?;
+
+        // 4. Constraints: child constraints must tighten, not loosen
+        attenuate_constraints(parent_cap, child_cap, i)?;
+
+        // 5. Assurance: child may require stronger assurance, not weaker
+        attenuate_assurance(parent_cap, child_cap, i)?;
+    }
+
+    // Verify parent_delegation references are consistent with chain order
+    for i in 1..chain.len() {
+        let parent = &chain[i - 1];
+        let child = &chain[i];
+        if let Some(ref parent_ref) = child.parent_delegation {
+            if parent_ref.delegation_id != parent.delegation_id {
+                return Err(reject(
+                    ReasonCode::StructuralInvalid,
+                    Value::String(format!(
+                        "delegation chain: child parent_delegation ({}) does not match actual parent ({})",
+                        crate::util::bytes_to_hex(&parent_ref.delegation_id),
+                        crate::util::bytes_to_hex(&parent.delegation_id)
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+        // If parent_delegation is absent, the chain position alone is authoritative.
+        // This allows for older delegations that didn't set the field.
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Delegation attenuation helpers
+// ---------------------------------------------------------------------------
+
+/// Scope attenuation: every target set in the child must be a subset of the parent's.
+/// An empty target set on either side means "all" (unrestricted) so there is no violation.
+fn attenuate_scope(
+    parent: &CapabilityDescriptor,
+    child: &CapabilityDescriptor,
+    depth: usize,
+) -> Result<(), ValidationResult> {
+    let Some(parent_scope) = &parent.scope else {
+        // Parent has no scope restriction — child can set any scope.
+        return Ok(());
+    };
+    let Some(child_scope) = &child.scope else {
+        // Child has no scope — inherits parent's full scope.
+        return Ok(());
+    };
+
+    // target_nodes: child set must be subset of parent set
+    let parent_nodes: std::collections::HashSet<&[u8]> =
+        parent_scope.target_nodes.iter().map(|n| n.node_id.as_slice()).collect();
+    if !parent_nodes.is_empty() {
+        for target in &child_scope.target_nodes {
+            if !parent_nodes.contains(target.node_id.as_slice()) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "scope attenuation: child adds target_node at depth {}", depth
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+
+    // target_streams: child set must be subset of parent set
+    let parent_streams: std::collections::HashSet<(&[u8],)> =
+        parent_scope.target_streams.iter().map(|s| (s.stream_id.as_slice(),)).collect();
+    if !parent_streams.is_empty() {
+        for target in &child_scope.target_streams {
+            if !parent_streams.contains(&(target.stream_id.as_slice(),)) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "scope attenuation: child adds target_stream at depth {}", depth
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+
+    // target_object_kinds: child set must be subset of parent set
+    let parent_kinds: std::collections::HashSet<i32> =
+        parent_scope.target_object_kinds.iter().cloned().collect();
+    if !parent_kinds.is_empty() {
+        for kind in &child_scope.target_object_kinds {
+            if !parent_kinds.contains(kind) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "scope attenuation: child adds target_object_kind {} at depth {}", kind, depth
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+
+    // target_view_types: child set must be subset of parent set
+    let parent_views: std::collections::HashSet<&String> =
+        parent_scope.target_view_types.iter().collect();
+    if !parent_views.is_empty() {
+        for view in &child_scope.target_view_types {
+            if !parent_views.contains(view) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "scope attenuation: child adds target_view_type '{}' at depth {}", view, depth
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+
+    // target_domains: child set must be subset of parent set
+    let parent_domains: std::collections::HashSet<&String> =
+        parent_scope.target_domains.iter().collect();
+    if !parent_domains.is_empty() {
+        for domain in &child_scope.target_domains {
+            if !parent_domains.contains(domain) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "scope attenuation: child adds target_domain '{}' at depth {}", domain, depth
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Temporal attenuation: child's validity window must be fully within parent's.
+fn attenuate_timing(
+    parent: &DelegationRecord,
+    child: &DelegationRecord,
+    depth: usize,
+) -> Result<(), ValidationResult> {
+    // Child must not start before parent
+    if let (Some(child_not_before), Some(parent_not_before)) = (&child.not_before, &parent.not_before) {
+        if child_not_before.seconds < parent_not_before.seconds
+            || (child_not_before.seconds == parent_not_before.seconds && child_not_before.nanos < parent_not_before.nanos)
+        {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(format!(
+                    "timing attenuation: child not_before before parent at depth {}", depth
+                )),
+                empty_map(),
+            ));
+        }
+    }
+
+    // Child must not expire after parent
+    if let (Some(child_expires), Some(parent_expires)) = (&child.expires_at, &parent.expires_at) {
+        if child_expires.seconds > parent_expires.seconds
+            || (child_expires.seconds == parent_expires.seconds && child_expires.nanos > parent_expires.nanos)
+        {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(format!(
+                    "timing attenuation: child expires_at after parent at depth {}", depth
+                )),
+                empty_map(),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Constraint attenuation: child constraints must be equal or tighter than parent.
+fn attenuate_constraints(
+    parent: &CapabilityDescriptor,
+    child: &CapabilityDescriptor,
+    depth: usize,
+) -> Result<(), ValidationResult> {
+    let Some(parent_constraints) = &parent.constraints else {
+        return Ok(());
+    };
+    let Some(child_constraints) = &child.constraints else {
+        return Ok(());
+    };
+
+    // max_uses: child must not exceed parent
+    if let (Some(child_max), Some(parent_max)) = (child_constraints.max_uses, parent_constraints.max_uses) {
+        if child_max > parent_max {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(format!(
+                    "constraint attenuation: child max_uses {} exceeds parent {} at depth {}",
+                    child_max, parent_max, depth
+                )),
+                empty_map(),
+            ));
+        }
+    }
+
+    // requires_local_session: if parent requires it, child must too
+    if parent_constraints.requires_local_session == Some(true)
+        && child_constraints.requires_local_session != Some(true)
+    {
+        return Err(reject(
+            ReasonCode::AuthorityDenied,
+            Value::String(format!(
+                "constraint attenuation: child drops requires_local_session at depth {}", depth
+            )),
+            empty_map(),
+        ));
+    }
+
+    // requires_user_presence: if parent requires it, child must too
+    if parent_constraints.requires_user_presence == Some(true)
+        && child_constraints.requires_user_presence != Some(true)
+    {
+        return Err(reject(
+            ReasonCode::AuthorityDenied,
+            Value::String(format!(
+                "constraint attenuation: child drops requires_user_presence at depth {}", depth
+            )),
+            empty_map(),
+        ));
+    }
+
+    // execution_class_limits: child set must be subset of parent set
+    let parent_exec: std::collections::HashSet<i32> =
+        parent_constraints.execution_class_limits.iter().cloned().collect();
+    if !parent_exec.is_empty() {
+        for limit in &child_constraints.execution_class_limits {
+            if !parent_exec.contains(limit) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "constraint attenuation: child adds execution_class_limit {} at depth {}", limit, depth
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+
+    // storage_class_limits: child set must be subset of parent set
+    let parent_storage: std::collections::HashSet<i32> =
+        parent_constraints.storage_class_limits.iter().cloned().collect();
+    if !parent_storage.is_empty() {
+        for limit in &child_constraints.storage_class_limits {
+            if !parent_storage.contains(limit) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "constraint attenuation: child adds storage_class_limit {} at depth {}", limit, depth
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Assurance attenuation: child may require stronger assurance, not weaker.
+fn attenuate_assurance(
+    parent: &CapabilityDescriptor,
+    child: &CapabilityDescriptor,
+    depth: usize,
+) -> Result<(), ValidationResult> {
+    let Some(parent_assurance) = &parent.minimum_assurance else {
+        return Ok(());
+    };
+    let Some(child_assurance) = &child.minimum_assurance else {
+        // Child has no assurance requirement — inherits parent's (no expansion).
+        return Ok(());
+    };
+
+    // Higher numeric value = stronger class
+    if child_assurance.required_class < parent_assurance.required_class {
+        return Err(reject(
+            ReasonCode::AssuranceInsufficient,
+            Value::String(format!(
+                "assurance attenuation: child requires class {}, parent requires {} at depth {}",
+                child_assurance.required_class, parent_assurance.required_class, depth
+            )),
+            empty_map(),
+        ));
+    }
+
+    // acceptable_attesters: if parent restricts attesters, child must not broaden beyond that set
+    if !parent_assurance.acceptable_attesters.is_empty() {
+        let parent_attesters: std::collections::HashSet<&[u8]> =
+            parent_assurance.acceptable_attesters.iter().map(|a| a.identity_id.as_slice()).collect();
+        for attester in &child_assurance.acceptable_attesters {
+            if !parent_attesters.contains(attester.identity_id.as_slice()) {
+                return Err(reject(
+                    ReasonCode::AssuranceInsufficient,
+                    Value::String(format!(
+                        "assurance attenuation: child adds non-parent attester at depth {}", depth
                     )),
                     empty_map(),
                 ));
@@ -447,7 +915,7 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
         );
     };
 
-    if sig.algorithm != 1 {
+    if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as _ {
         return reject(
             ReasonCode::CryptoInvalid,
             Value::String(format!("unsupported signature algorithm: {}", sig.algorithm)),
@@ -455,7 +923,7 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
         );
     }
 
-    if sig.value.len() != 64 {
+    if sig.value.len() != crate::crypto::ECDSA_P256_SIGNATURE_LEN {
         return reject(
             ReasonCode::CryptoInvalid,
             Value::String(format!("signature length {} != 64", sig.value.len())),

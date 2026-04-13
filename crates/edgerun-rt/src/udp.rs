@@ -14,6 +14,7 @@ use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use crate::runtime::try_current_rt;
+use crate::reactor_fd_ready::{FdReadReady, FdWriteReady};
 
 // ===========================================================================
 // AsyncUdpSocket
@@ -299,7 +300,7 @@ impl AsyncUdpSocket {
             }
             let e = io::Error::last_os_error();
             if e.kind() == io::ErrorKind::WouldBlock {
-                FdWriteReady { fd: self.fd }.await;
+                FdWriteReady::new(self.fd).await;
                 continue;
             }
             return Err(e);
@@ -329,7 +330,7 @@ impl AsyncUdpSocket {
             }
             let e = io::Error::last_os_error();
             if e.kind() == io::ErrorKind::WouldBlock {
-                FdReadReady { fd: self.fd }.await;
+                FdReadReady::new(self.fd).await;
                 continue;
             }
             return Err(e);
@@ -370,39 +371,6 @@ impl Clone for AsyncUdpSocket {
 }
 
 impl Unpin for AsyncUdpSocket {}
-
-// ===========================================================================
-// Reusable waiter futures
-// ===========================================================================
-
-/// Future that resolves when the fd is readable.
-struct FdReadReady {
-    fd: RawFd,
-}
-
-impl std::future::Future for FdReadReady {
-    type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        if let Some(rt) = try_current_rt() {
-            rt.reactor.wait_read(self.fd, cx.waker().clone());
-        }
-        Poll::Pending
-    }
-}
-
-struct FdWriteReady {
-    fd: RawFd,
-}
-
-impl std::future::Future for FdWriteReady {
-    type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        if let Some(rt) = try_current_rt() {
-            rt.reactor.wait_write(self.fd, cx.waker().clone());
-        }
-        Poll::Pending
-    }
-}
 
 // ===========================================================================
 // Address helpers

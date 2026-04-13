@@ -42,6 +42,9 @@ pub use edgerun_http::{Request, Response, StatusCode};
 #[derive(Debug, Clone)]
 pub struct DnsConfig {
     pub bind_addr: String,
+    /// Optional IPv6 bind address for dual-stack DNS support.
+    /// Set to "[::]:53" to listen on all IPv6 interfaces.
+    pub bind_addr_ipv6: Option<String>,
     pub default_ttl: u32,
     pub rate_limit_qps: u32,
 }
@@ -50,6 +53,7 @@ impl Default for DnsConfig {
     fn default() -> Self {
         Self {
             bind_addr: "127.0.0.1:53".to_string(),
+            bind_addr_ipv6: None,
             default_ttl: 300,
             rate_limit_qps: 100,
         }
@@ -96,12 +100,55 @@ pub struct TftpConfig {
     pub blksize: u16,
 }
 
+/// Configuration for the IMAP server component.
+#[derive(Clone)]
+pub struct ImapConfig {
+    pub bind_addr: String,
+    pub domain_name: String,
+    /// Whether this is an IMAPS server (TLS from start, port 993).
+    pub imaps: bool,
+}
+
+impl Default for ImapConfig {
+    fn default() -> Self {
+        Self {
+            bind_addr: "0.0.0.0:143".to_string(),
+            domain_name: "edgerun.mail".to_string(),
+            imaps: false,
+        }
+    }
+}
+
+/// Configuration for the SMTP server component.
+#[derive(Clone)]
+pub struct SmtpConfig {
+    pub bind_addr: String,
+    pub domain_name: String,
+    /// Maximum message size in bytes (0 = unlimited).
+    pub max_message_size: usize,
+    /// Whether this is an SMTPS server (TLS from start, port 465).
+    pub smtps: bool,
+}
+
+impl Default for SmtpConfig {
+    fn default() -> Self {
+        Self {
+            bind_addr: "0.0.0.0:25".to_string(),
+            domain_name: "edgerun.mail".to_string(),
+            max_message_size: 35_882_577,
+            smtps: false,
+        }
+    }
+}
+
 /// Unified server builder.
 pub struct Server {
     http: Option<HttpBuilder>,
     dns: Option<DnsConfig>,
     dhcp: Option<DhcpConfig>,
     tftp: Option<TftpConfig>,
+    imap: Option<ImapConfig>,
+    smtp: Option<SmtpConfig>,
 }
 
 struct HttpBuilder {
@@ -120,6 +167,8 @@ impl Server {
             dns: None,
             dhcp: None,
             tftp: None,
+            imap: None,
+            smtp: None,
         }
     }
 
@@ -170,6 +219,18 @@ impl Server {
         self
     }
 
+    /// Enable the IMAP server.
+    pub fn with_imap(mut self, config: ImapConfig) -> Self {
+        self.imap = Some(config);
+        self
+    }
+
+    /// Enable the SMTP server.
+    pub fn with_smtp(mut self, config: SmtpConfig) -> Self {
+        self.smtp = Some(config);
+        self
+    }
+
     /// Build and bind all protocol listeners.
     pub async fn build(self) -> std::io::Result<BoundServer> {
         let http_bound = if let Some(h) = self.http {
@@ -192,7 +253,7 @@ impl Server {
                 bind_addr: config.bind_addr,
                 default_ttl: config.default_ttl,
                 rate_limit_qps: config.rate_limit_qps,
-                bind_addr_ipv6: None,
+                bind_addr_ipv6: config.bind_addr_ipv6,
             };
             let srv = edgerun_dns::DnsServer::new(dns_config)?;
             Some(srv)
@@ -229,11 +290,39 @@ impl Server {
             None
         };
 
+        let imap_server = if let Some(config) = self.imap {
+            let imap_config = edgerun_imap::server::ImapServerConfig {
+                bind_addr: config.bind_addr,
+                domain_name: config.domain_name,
+                imaps: config.imaps,
+                ..Default::default()
+            };
+            let srv = edgerun_imap::ImapServer::new(imap_config)?;
+            Some(srv)
+        } else {
+            None
+        };
+
+        let smtp_server = if let Some(config) = self.smtp {
+            let smtp_config = edgerun_smtp::server::SmtpServerConfig {
+                bind_addr: config.bind_addr,
+                domain: config.domain_name,
+                max_message_size: config.max_message_size,
+                smtps: config.smtps,
+            };
+            let srv = edgerun_smtp::SmtpServer::with_memory_store(smtp_config)?;
+            Some(srv)
+        } else {
+            None
+        };
+
         Ok(BoundServer {
             http: http_bound.map(Arc::new),
             dns: dns_server.map(Arc::new),
             dhcp: dhcp_server,
             tftp: tftp_server,
+            imap: imap_server,
+            smtp: smtp_server,
         })
     }
 }
@@ -248,6 +337,8 @@ pub struct BoundServer {
     dns: Option<Arc<edgerun_dns::DnsServer>>,
     dhcp: Option<edgerun_dhcp::DhcpServer>,
     tftp: Option<edgerun_tftp::TftpServer>,
+    imap: Option<edgerun_imap::ImapServer>,
+    smtp: Option<edgerun_smtp::SmtpServer>,
 }
 
 impl BoundServer {
@@ -297,6 +388,22 @@ impl BoundServer {
             tasks.push(edgerun_rt::spawn(async move {
                 tftp.run(token).await;
                 Ok(())
+            }));
+        }
+
+        // IMAP (async TCP server)
+        if let Some(imap) = self.imap.take() {
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                imap.run(token).await
+            }));
+        }
+
+        // SMTP (async TCP server)
+        if let Some(smtp) = self.smtp.take() {
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                smtp.run(token).await
             }));
         }
 

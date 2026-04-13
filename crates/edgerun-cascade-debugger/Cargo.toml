@@ -1,9 +1,0 @@
-[package]
-name = "edgerun-cascade-debugger"
-version.workspace = true
-edition.workspace = true
-publish = false
-description = "Layer 7: Visual CSS cascade debugger — shows full cascade resolution per element"
-
-[lints]
-workspace = true

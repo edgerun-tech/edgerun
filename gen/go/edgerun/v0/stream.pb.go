@@ -225,11 +225,16 @@ const (
 	CommandType_COMMAND_TYPE_QUERY              CommandType = 7
 	CommandType_COMMAND_TYPE_EXECUTE_WORKLOAD   CommandType = 8
 	CommandType_COMMAND_TYPE_TERMINATE_WORKLOAD CommandType = 9
-	// Secret management commands (custom range)
+	// Core trust commands
+	CommandType_COMMAND_TYPE_CREATE_DELEGATION CommandType = 10
+	CommandType_COMMAND_TYPE_CREATE_REVOCATION CommandType = 11
+	CommandType_COMMAND_TYPE_STORE_AND_FORWARD CommandType = 12
+	// Implementation-specific extensions start at 1000.
+	// These are NOT part of the core protocol. Receivers MUST reject unknown
+	// extension types unless local policy explicitly permits them.
 	CommandType_COMMAND_TYPE_PUT_SECRET    CommandType = 1001
 	CommandType_COMMAND_TYPE_DELETE_SECRET CommandType = 1002
 	CommandType_COMMAND_TYPE_LIST_SECRETS  CommandType = 1003
-	CommandType_COMMAND_TYPE_CUSTOM        CommandType = 2000
 )
 
 // Enum value maps for CommandType.
@@ -245,10 +250,12 @@ var (
 		7:    "COMMAND_TYPE_QUERY",
 		8:    "COMMAND_TYPE_EXECUTE_WORKLOAD",
 		9:    "COMMAND_TYPE_TERMINATE_WORKLOAD",
+		10:   "COMMAND_TYPE_CREATE_DELEGATION",
+		11:   "COMMAND_TYPE_CREATE_REVOCATION",
+		12:   "COMMAND_TYPE_STORE_AND_FORWARD",
 		1001: "COMMAND_TYPE_PUT_SECRET",
 		1002: "COMMAND_TYPE_DELETE_SECRET",
 		1003: "COMMAND_TYPE_LIST_SECRETS",
-		2000: "COMMAND_TYPE_CUSTOM",
 	}
 	CommandType_value = map[string]int32{
 		"COMMAND_TYPE_UNSPECIFIED":        0,
@@ -261,10 +268,12 @@ var (
 		"COMMAND_TYPE_QUERY":              7,
 		"COMMAND_TYPE_EXECUTE_WORKLOAD":   8,
 		"COMMAND_TYPE_TERMINATE_WORKLOAD": 9,
+		"COMMAND_TYPE_CREATE_DELEGATION":  10,
+		"COMMAND_TYPE_CREATE_REVOCATION":  11,
+		"COMMAND_TYPE_STORE_AND_FORWARD":  12,
 		"COMMAND_TYPE_PUT_SECRET":         1001,
 		"COMMAND_TYPE_DELETE_SECRET":      1002,
 		"COMMAND_TYPE_LIST_SECRETS":       1003,
-		"COMMAND_TYPE_CUSTOM":             2000,
 	}
 )
 
@@ -1454,7 +1463,7 @@ const file_edgerun_v0_stream_proto_rawDesc = "" +
 	"\x19ACTION_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ACTION_STATUS_STARTED\x10\x01\x12\x1b\n" +
 	"\x17ACTION_STATUS_COMPLETED\x10\x02\x12\x18\n" +
-	"\x14ACTION_STATUS_FAILED\x10\x03*\xcd\x03\n" +
+	"\x14ACTION_STATUS_FAILED\x10\x03*\xbb\x04\n" +
 	"\vCommandType\x12\x1c\n" +
 	"\x18COMMAND_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCOMMAND_TYPE_ADD_CONTROLLER\x10\x01\x12\"\n" +
@@ -1465,12 +1474,15 @@ const file_edgerun_v0_stream_proto_rawDesc = "" +
 	"\x19COMMAND_TYPE_FETCH_OBJECT\x10\x06\x12\x16\n" +
 	"\x12COMMAND_TYPE_QUERY\x10\a\x12!\n" +
 	"\x1dCOMMAND_TYPE_EXECUTE_WORKLOAD\x10\b\x12#\n" +
-	"\x1fCOMMAND_TYPE_TERMINATE_WORKLOAD\x10\t\x12\x1c\n" +
+	"\x1fCOMMAND_TYPE_TERMINATE_WORKLOAD\x10\t\x12\"\n" +
+	"\x1eCOMMAND_TYPE_CREATE_DELEGATION\x10\n" +
+	"\x12\"\n" +
+	"\x1eCOMMAND_TYPE_CREATE_REVOCATION\x10\v\x12\"\n" +
+	"\x1eCOMMAND_TYPE_STORE_AND_FORWARD\x10\f\x12\x1c\n" +
 	"\x17COMMAND_TYPE_PUT_SECRET\x10\xe9\a\x12\x1f\n" +
 	"\x1aCOMMAND_TYPE_DELETE_SECRET\x10\xea\a\x12\x1e\n" +
-	"\x19COMMAND_TYPE_LIST_SECRETS\x10\xeb\a\x12\x18\n" +
-	"\x13COMMAND_TYPE_CUSTOM\x10\xd0\x0fB\xb1\x01\n" +
-	"\x15com.edgerun.v0.streamB\vStreamProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVS\xaa\x02\x11Edgerun.V0.Stream\xca\x02\x11Edgerun\\V0\\Stream\xe2\x02\x1dEdgerun\\V0\\Stream\\GPBMetadata\xea\x02\x13Edgerun::V0::Streamb\x06proto3"
+	"\x19COMMAND_TYPE_LIST_SECRETS\x10\xeb\a\"\x05\b\r\x10\xe7\a*\x13COMMAND_TYPE_CUSTOMB\xb8\x01\n" +
+	"\x15com.edgerun.v0.streamB\vStreamProtoP\x01Z,edgerun-codegen/gen/go/edgerun/v0/edgerun/v0\xa2\x02\x03EVS\xaa\x02\x11Edgerun.V0.Stream\xca\x02\x11Edgerun\\V0\\Stream\xe2\x02\x1dEdgerun\\V0\\Stream\\GPBMetadata\xea\x02\x13Edgerun::V0::Streamb\x06proto3"
 
 var (
 	file_edgerun_v0_stream_proto_rawDescOnce sync.Once

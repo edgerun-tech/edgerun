@@ -1,30 +1,13 @@
-//! TLS 1.3 server-side handshake implementation.
+//! TLS 1.3 server-side support.
 //!
-//! Handles accepting ClientHello, sending ServerHello + encrypted handshake
-//! messages, and completing the TLS 1.3 server handshake.
-//!
-//! # Server Handshake Flow
-//! ```text
-//! Client                                          Server
-//! ------                                          ------
-//! ClientHello (key_share, supported_versions, ...)  →
-//!                                       ←  ServerHello (key_share)
-//!                                       ←  {EncryptedExtensions}
-//!                                       ←  {Certificate}
-//!                                       ←  {CertificateVerify}
-//!                                       ←  {Finished}
-//! {Finished}                          →
-//!
-//! [Application Data]      ↔     [Application Data]
-//! ```
+//! Consumer entry point is `AsyncTlsServerStream` in `async_tls` module.
+//! This module contains internal parsing and message builders.
 
 pub mod client_hello;
 pub mod message_builder;
-pub mod server_handshake;
 
 // Re-export public types
 pub use client_hello::ClientHello;
-pub use server_handshake::TlsServerStream;
 
 // Re-export public builder functions for consumers
 pub use message_builder::{

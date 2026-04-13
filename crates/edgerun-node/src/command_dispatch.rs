@@ -14,7 +14,7 @@ use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
 use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
 use edgerun_proto::edgerun::v0::trust::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
-use edgerun_proto::edgerun::v0::common::CommandRef;
+use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 use prost::Message;
@@ -56,6 +56,10 @@ impl ControllerSet {
         self.controllers.iter()
     }
 
+    pub fn controller_ids(&self) -> Vec<Vec<u8>> {
+        self.controllers.iter().cloned().collect()
+    }
+
     pub fn to_vec(&self) -> Vec<Vec<u8>> {
         self.controllers.iter().cloned().collect()
     }
@@ -84,10 +88,10 @@ fn verify_command_signature(command: &CommandEnvelope) -> Result<(), &'static st
     let Some(sig) = &command.signature else {
         return Err("missing_signature");
     };
-    if sig.algorithm != 1 {
+    if sig.algorithm != edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
         return Err("bad_algorithm");
     }
-    if sig.value.len() != 64 {
+    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
         return Err("bad_signature_length");
     }
     let Some(issuer) = &command.issuer else {
@@ -96,7 +100,7 @@ fn verify_command_signature(command: &CommandEnvelope) -> Result<(), &'static st
     let Some(key_hint) = &issuer.key_hint else {
         return Err("bad_key_hint");
     };
-    if key_hint.len() != 64 {
+    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
         return Err("bad_key_hint");
     }
     let mut vk_sec1 = [0u8; 65];
@@ -134,7 +138,7 @@ fn verify_delegation_signature(delegation: &edgerun_proto::edgerun::v0::trust::D
     let Some(sig) = &delegation.signature else {
         return Err("missing_signature");
     };
-    if sig.algorithm != 1 || sig.value.len() != 64 {
+    if sig.algorithm != edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 || sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
         return Err("bad_signature");
     }
     let Some(issuer) = &delegation.issuer else {
@@ -143,7 +147,7 @@ fn verify_delegation_signature(delegation: &edgerun_proto::edgerun::v0::trust::D
     let Some(key_hint) = &issuer.key_hint else {
         return Err("bad_key_hint");
     };
-    if key_hint.len() != 64 {
+    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
         return Err("bad_key_hint");
     }
     let mut vk_sec1 = [0u8; 65];
@@ -280,11 +284,23 @@ pub fn dispatch_command(
         Verdict::Accept => {}
     }
 
-    // Check if issuer is a controller (or has valid delegation)
+    // --- POLICY_CHECK stage (spec §18.6) ---
+    // After deterministic core validation, apply local policy.
+    // This is a bounded local policy rule: different nodes may configure
+    // different controller sets and command-type allow-lists.
     let issuer_id = command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default();
-    if !controllers.contains(&issuer_id) && command.delegation_chain.is_empty() {
+    let policy_ctx = edgerun_core::command::CommandPolicyContext {
+        issuer_identity_id: &issuer_id,
+        command_type: command.command_type,
+        has_valid_delegation: !command.delegation_chain.is_empty(),
+        controller_ids: &controllers.to_vec(),
+        allowed_command_types: &[], // Empty = all types allowed by local policy
+    };
+    let policy_result = edgerun_core::command::validate_command_policy(&policy_ctx);
+    if policy_result.verdict == Verdict::Reject {
+        let reason = policy_result.reason_code.map(|r| r.as_str().to_string()).unwrap_or_else(|| "policy_denied".into());
         return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "not_a_controller", Vec::new(), None);
+            false, &reason, Vec::new(), None);
     }
 
     // Dispatch by command type
@@ -327,10 +343,6 @@ pub fn dispatch_command(
         x if x == CommandType::TerminateWorkload as i32 => {
             // Preempt/terminate a running workload
             dispatch_terminate_workload(command, store, stream_id, signer, controllers, capacity_tracker, running_workloads)
-        }
-        x if x == CommandType::Custom as i32 => {
-            // Custom commands: try to decode as DelegationRecord or RevocationRecord
-            dispatch_custom_command(command, store, stream_id, signer, controllers)
         }
         _ => {
             // Unknown or custom command — accept but don't execute
@@ -448,7 +460,7 @@ fn dispatch_execute_workload(
     // === EMIT ACTION_STARTED BEFORE ANY WORK BEGINS ===
     record_action_event(store, stream_id, signer, command,
         1, // ACTION_STATUS_STARTED
-        EventType::ActionStarted);
+        EventType::ActionStarted, vec![]);
 
     // Extract workload spec from command payload
     let workload_spec = match &command.payload {
@@ -457,7 +469,7 @@ fn dispatch_execute_workload(
             // Already emitted ActionStarted; emit ActionFailed before returning
             record_action_event(store, stream_id, signer, command,
                 3, // ACTION_STATUS_FAILED
-                EventType::ActionFailed);
+                EventType::ActionFailed, vec![]);
             return record_and_respond(command, store, stream_id, signer, controllers,
                 false, "missing_workload_spec", Vec::new(), None);
         }
@@ -472,17 +484,17 @@ fn dispatch_execute_workload(
         edgerun_log::warn!("workload policy rejected: {} — {}", image_str, reason);
         record_action_event(store, stream_id, signer, command,
             3, // ACTION_STATUS_FAILED
-            EventType::ActionFailed);
+            EventType::ActionFailed, vec![]);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, &format!("policy_violation: {}", reason), Vec::new(), None);
     }
 
-    let image_ref: edgerun_oci_registry::ImageRef = match image_str.parse() {
+    let image_ref: edgerun_oci::ImageRef = match image_str.parse() {
         Ok(img) => img,
         Err(e) => {
             record_action_event(store, stream_id, signer, command,
                 3, // ACTION_STATUS_FAILED
-                EventType::ActionFailed);
+                EventType::ActionFailed, vec![]);
             return record_and_respond(command, store, stream_id, signer, controllers,
                 false, &format!("invalid_image_ref: {}", e), Vec::new(), None);
         }
@@ -494,7 +506,7 @@ fn dispatch_execute_workload(
         edgerun_log::warn!("rate limit exceeded for requester: {}", edgerun_core::util::bytes_to_hex(&requester_id));
         record_action_event(store, stream_id, signer, command,
             3, // ACTION_STATUS_FAILED
-            EventType::ActionFailed);
+            EventType::ActionFailed, vec![]);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, "rate_limit_exceeded", Vec::new(), None);
     }
@@ -616,7 +628,20 @@ fn dispatch_execute_workload(
     );
 
     edgerun_log::info!("pulling: {}", image_str);
-    if let Err(e) = pull_with_metering(&image_ref, bundle_dir, store_dir, &meter) {
+    let meter_for_pull = meter.clone();
+    let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().map_err(|e| e.to_string());
+    let pull_result = match rt {
+        Ok(rt) => {
+            let image_ref2 = image_ref.clone();
+            let bundle_dir2 = bundle_dir.to_path_buf();
+            let store_dir2 = store_dir.to_path_buf();
+            rt.block_on(async move {
+                pull_with_metering(&image_ref2, &bundle_dir2, &store_dir2, &meter_for_pull).await
+            })
+        }
+        Err(e) => Err(e),
+    };
+    if let Err(e) = pull_result {
         edgerun_log::warn!("pull failed: {}", e);
         capacity_tracker.release(allocated_cores, allocated_memory_bytes);
         let acc = meter.finalize(WorkStatus::Failed, None);
@@ -628,11 +653,11 @@ fn dispatch_execute_workload(
     // === PHASE 2: Apply resource limits ===
     let cfg_path = bundle_dir.join("config.json");
     if let Ok(txt) = std::fs::read_to_string(&cfg_path) {
-        if let Ok(mut spec) = edgerun_oci_runtime::json::parse_oci_spec(txt.as_bytes()) {
+        if let Ok(mut spec) = edgerun_oci::json::parse_oci_spec(txt.as_bytes()) {
             let shares = (allocated_cores as u64).saturating_mul(1024);
             if let Some(linux) = spec.linux.as_mut() {
-                linux.resources = Some(edgerun_oci_runtime::OciLinuxResources {
-                    memory: Some(edgerun_oci_runtime::OciLinuxMemory {
+                linux.resources = Some(edgerun_oci::OciLinuxResources {
+                    memory: Some(edgerun_oci::OciLinuxMemory {
                         limit: Some(allocated_memory_bytes as i64),
                         reservation: None,
                         swap: None,
@@ -640,7 +665,7 @@ fn dispatch_execute_workload(
                         kernel_tcp: None,
                         check_before_update: None,
                     }),
-                    cpu: Some(edgerun_oci_runtime::OciLinuxCpu {
+                    cpu: Some(edgerun_oci::OciLinuxCpu {
                         shares: Some(shares),
                         quota: None,
                         period: None,
@@ -651,7 +676,7 @@ fn dispatch_execute_workload(
                         idle: None,
                         burst: None,
                     }),
-                    pids: Some(edgerun_oci_runtime::OciLinuxPids { limit: 256 }),
+                    pids: Some(edgerun_oci::OciLinuxPids { limit: 256 }),
                     block_io: None,
                     devices: None,
                     hugepage_limits: None,
@@ -675,7 +700,7 @@ fn dispatch_execute_workload(
 
     // === PHASE 3: Run container (non-blocking) ===
     edgerun_log::info!("running: {}", image_str);
-    let container = match edgerun_oci_runtime::start_bundle(&bundle_dir) {
+    let container = match edgerun_oci::start_bundle(&bundle_dir) {
         Ok(c) => c,
         Err(e) => {
             edgerun_log::warn!("run failed: {}", e);
@@ -798,7 +823,7 @@ fn dispatch_execute_workload(
 #[cfg(feature = "oci")]
 fn workload_thread_body(
     work_id: [u8; 32],
-    container: edgerun_oci_runtime::RunningContainer,
+    container: edgerun_oci::RunningContainer,
     container_pid: u32,
     running_workloads_bg: Arc<super::running_workloads::RunningWorkloads>,
     capacity_tracker_bg: Arc<super::capacity::ResourceTracker>,
@@ -1029,27 +1054,27 @@ fn parse_workload_spec(spec: &[u8]) -> (String, u32, u64) {
 }
 
 #[cfg(feature = "oci")]
-fn pull_with_metering(
-    image: &edgerun_oci_registry::ImageRef,
+async fn pull_with_metering(
+    image: &edgerun_oci::ImageRef,
     bundle_dir: &std::path::Path,
     store_dir: &std::path::Path,
     meter: &super::metering::WorkMeter,
 ) -> Result<(), String> {
-    let mut client = edgerun_oci_registry::RegistryClient::new();
+    let mut client = edgerun_oci::RegistryClient::new();
 
     // Resolve manifest to know expected layer sizes
-    let manifest = client.resolve_manifest(image).map_err(|e| e.to_string())?;
+    let manifest = client.resolve_manifest(image).await.map_err(|e| e.to_string())?;
     let total_layer_bytes = match &manifest {
-        edgerun_oci_registry::ImageManifest::Single(m) => {
+        edgerun_oci::ImageManifest::Single(m) => {
             m.layers.iter().map(|l| l.size).sum::<u64>()
         }
-        edgerun_oci_registry::ImageManifest::Index(idx) => {
+        edgerun_oci::ImageManifest::Index(idx) => {
             idx.manifests.first().map(|m| m.size).unwrap_or(0)
         }
     };
 
     // Pull the image — download_blob() now tracks real bytes in the client
-    client.pull(image, bundle_dir, store_dir).map_err(|e| e.to_string())?;
+    client.pull(image, bundle_dir, store_dir).await.map_err(|e| e.to_string())?;
 
     // Report actual downloaded bytes (may differ from manifest due to retries, compression)
     let real_bytes = client.bytes_downloaded();
@@ -1266,7 +1291,7 @@ fn dispatch_create_delegation(
 
     record_action_event(store, stream_id, signer, command,
         1, // ACTION_STATUS_STARTED
-        EventType::ActionStarted);
+        EventType::ActionStarted, vec![]);
 
     let _event_seq = append_signed_event(
         store, stream_id, signer,
@@ -1274,11 +1299,12 @@ fn dispatch_create_delegation(
         Some(object_ref),
         vec![command_ref],
         delegations,
+        vec![],
     );
 
     record_action_event(store, stream_id, signer, command,
         2, // ACTION_STATUS_COMPLETED
-        EventType::ActionCompleted);
+        EventType::ActionCompleted, vec![]);
 
     let response = format!("delegation recorded: {}", delegation_id_hex).into_bytes();
     CommandDispatchResult {
@@ -1351,7 +1377,7 @@ fn dispatch_create_revocation(
 
     record_action_event(store, stream_id, signer, command,
         1, // ACTION_STATUS_STARTED
-        EventType::ActionStarted);
+        EventType::ActionStarted, vec![]);
 
     let _event_seq = append_signed_event(
         store, stream_id, signer,
@@ -1359,11 +1385,12 @@ fn dispatch_create_revocation(
         Some(object_ref),
         vec![command_ref],
         delegations,
+        vec![],
     );
 
     record_action_event(store, stream_id, signer, command,
         2, // ACTION_STATUS_COMPLETED
-        EventType::ActionCompleted);
+        EventType::ActionCompleted, vec![]);
 
     let response = format!("revocation recorded: {}", revocation_id_hex).into_bytes();
     CommandDispatchResult {
@@ -1415,6 +1442,9 @@ pub fn create_node_genesis_payload(
 }
 
 /// Appends a signed event to the node's stream and returns the event sequence number.
+///
+/// `related_events` populates the `related_events` field for causal linkage
+/// (e.g. ActionCompleted → ActionStarted for the same command).
 pub(crate) fn append_signed_event(
     store: &mut NodeStore,
     stream_id: &[u8],
@@ -1424,6 +1454,7 @@ pub(crate) fn append_signed_event(
     payload_object: Option<edgerun_proto::edgerun::v0::common::ObjectRef>,
     related_commands: Vec<edgerun_proto::edgerun::v0::common::CommandRef>,
     related_delegations: Vec<edgerun_proto::edgerun::v0::common::DelegationRef>,
+    related_events: Vec<edgerun_proto::edgerun::v0::common::EventRef>,
 ) -> Option<u64> {
     let head_seq = store.get_head(stream_id).ok().flatten().map(|(s, _)| s).unwrap_or(-1);
     let mut event = EventEnvelope {
@@ -1439,7 +1470,7 @@ pub(crate) fn append_signed_event(
         recorded_at: Some(edgerun_core::util::system_time_to_prost(SystemTime::now())),
         effective_at: None,
         payload_object,
-        related_events: vec![],
+        related_events,
         related_commands,
         related_objects: vec![],
         related_delegations,
@@ -1469,7 +1500,7 @@ pub fn record_command_sent_event(
     command: &CommandEnvelope,
 ) {
     use edgerun_proto::edgerun::v0::stream::CommandSentPayload;
-    use edgerun_proto::edgerun::v0::common::CommandRef;
+    use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
 
     let command_ref = command_ref_from(command);
 
@@ -1488,10 +1519,14 @@ pub fn record_command_sent_event(
         Some(object_ref),
         vec![command_ref],
         vec![],
+        vec![],
     );
 }
 
 /// Creates an ActionStarted/Completed/Failed payload and appends the event.
+///
+/// `related_event_refs` populates `related_events` for causal linkage
+/// (e.g. ActionCompleted referencing ActionStarted for the same command).
 pub fn record_action_event(
     store: &mut NodeStore,
     stream_id: &[u8],
@@ -1499,6 +1534,7 @@ pub fn record_action_event(
     command: &CommandEnvelope,
     action_status: i32, // ACTION_STATUS_STARTED=1, COMPLETED=2, FAILED=3
     event_type: EventType,
+    related_event_refs: Vec<edgerun_proto::edgerun::v0::common::EventRef>,
 ) {
     use edgerun_proto::edgerun::v0::stream::ActionLifecyclePayload;
 
@@ -1524,6 +1560,7 @@ pub fn record_action_event(
         Some(object_ref),
         vec![command_ref],
         vec![],
+        related_event_refs,
     );
 }
 
@@ -1547,6 +1584,8 @@ fn extract_identity_from_command(command: &CommandEnvelope) -> Vec<u8> {
 
 /// Records a command result event and returns the response.
 /// Emits the full action lifecycle: ActionStarted → CommandCommitted/Rejected → ActionCompleted/Failed.
+/// ActionCompleted and ActionFailed reference the ActionStarted event via `related_events`
+/// for causal linkage through the event chain.
 /// If `controller_change` is Some, records the controller change in the database.
 /// If the command has `requested_assurance` and is committed, generates an AssuranceClaim.
 fn record_and_respond(
@@ -1578,7 +1617,7 @@ fn record_and_respond(
     if committed {
         record_action_event(store, stream_id, signer, command,
             1, // ACTION_STATUS_STARTED
-            EventType::ActionStarted);
+            EventType::ActionStarted, vec![]);
     }
 
     // 2. Build CommandResultPayload and store as encrypted object
@@ -1608,13 +1647,15 @@ fn record_and_respond(
         Some(object_ref),
         vec![command_ref],
         delegations,
+        vec![],
     );
+
 
     // 4. Emit ActionCompleted or ActionFailed
     if committed {
         record_action_event(store, stream_id, signer, command,
             2, // ACTION_STATUS_COMPLETED
-            EventType::ActionCompleted);
+            EventType::ActionCompleted, vec![]);
 
         // Generate assurance claim if the command requested one
         if let Some(ref req) = command.requested_assurance {
@@ -1629,7 +1670,7 @@ fn record_and_respond(
     } else {
         record_action_event(store, stream_id, signer, command,
             3, // ACTION_STATUS_FAILED
-            EventType::ActionFailed);
+            EventType::ActionFailed, vec![]);
     }
 
     // 5. Record controller change if this was a committed control command
@@ -2607,7 +2648,7 @@ mod tests {
             vec![1, 2, 3],
             node_id.0.to_vec(),
             initial_ctrl.clone(),
-            CommandType::Custom as i32,
+            CommandType::CreateDelegation as i32,
         );
         command.payload = Some(Payload::InlinePayload(delegation_bytes));
 
@@ -2685,7 +2726,7 @@ mod tests {
             vec![1, 2, 3],
             node_id.0.to_vec(),
             initial_ctrl.clone(),
-            CommandType::Custom as i32,
+            CommandType::CreateDelegation as i32,
         );
         command.payload = Some(Payload::InlinePayload(revocation_bytes));
 
@@ -2735,7 +2776,7 @@ mod tests {
             vec![1, 2, 3],
             node_id.0.to_vec(),
             initial_ctrl.clone(),
-            CommandType::Custom as i32,
+            CommandType::CreateDelegation as i32,
         );
         command.payload = Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(vec![0xFF; 10]));
 

@@ -24,7 +24,7 @@
 //!   at `{blob_dir}/.blob_key.sealed`. On first open, a random key is generated
 //!   and sealed with the hardware. On subsequent opens, it is unsealed.
 //!
-//! Recipient metadata is stored in SQLite via the parent storage layer.
+//! Recipient metadata is stored as `.meta` sidecar files alongside each blob.
 
 use std::fs::{self, File};
 use std::io::{Read, Write};

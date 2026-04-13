@@ -145,7 +145,7 @@ pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str
     let Some(ref sig) = hello.signature else {
         return Err("missing_signature");
     };
-    if sig.value.len() != 64 {
+    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
         return Err("bad_signature_length");
     }
     let Some(ref initiator) = hello.initiator else {
@@ -185,7 +185,7 @@ pub fn verify_session_accept(
     let Some(ref sig) = accept.signature else {
         return Err("missing_signature");
     };
-    if sig.value.len() != 64 {
+    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
         return Err("bad_signature_length");
     }
     let Some(ref responder) = accept.responder else {

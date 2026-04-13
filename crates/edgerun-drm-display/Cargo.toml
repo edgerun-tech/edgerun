@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-display = { path = "../edgerun-display" }
+edgerun-display.workspace = true
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 
 [lints]

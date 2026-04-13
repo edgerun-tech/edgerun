@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-imap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Async IMAP server and client (RFC 3501) using edgerun-rt"
+
+[features]
+default = []
+tls = ["dep:edgerun-tls"]
+
+[lints]
+workspace = true
+
+[dependencies]
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+edgerun-tls = { path = "../edgerun-tls", optional = true }

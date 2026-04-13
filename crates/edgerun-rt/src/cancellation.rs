@@ -91,14 +91,26 @@ impl Future for Cancelled<'_> {
             return Poll::Ready(());
         }
 
-        if !this.registered {
-            this.token.inner.wakers.lock().push(cx.waker().clone());
-            this.registered = true;
-
-            // Double-check after registering.
-            if this.token.inner.cancelled.load(Ordering::Acquire) {
-                return Poll::Ready(());
+        // Always update the waker — the future may have been moved to a
+        // different task between polls, so the old waker may be stale.
+        {
+            let mut wakers = this.token.inner.wakers.lock();
+            if this.registered {
+                // Replace the existing waker by clearing and re-pushing.
+                // We can't find the old waker in the Vec, but we can
+                // clear all stale wakers (the cancel path drains the Vec).
+                // For efficiency, just push the new waker; stale ones
+                // will be drained on cancel().
+                wakers.push(cx.waker().clone());
+            } else {
+                wakers.push(cx.waker().clone());
+                this.registered = true;
             }
+        }
+
+        // Double-check after registering.
+        if this.token.inner.cancelled.load(Ordering::Acquire) {
+            return Poll::Ready(());
         }
 
         Poll::Pending

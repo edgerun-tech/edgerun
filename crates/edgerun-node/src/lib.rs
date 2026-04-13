@@ -194,12 +194,19 @@ impl Node {
     /// Returns `Ok(())` if the command is valid and authorized,
     /// or `Err(reason)` if validation or authorization fails.
     pub fn process_command(&mut self, command: &CommandEnvelope) -> Result<(), NodeError> {
+        // Controllers must be hex-encoded 64-byte identity IDs (P-256 public keys).
+        // Strings that are not valid 128-char hex are silently skipped — they can
+        // never match a real delegation root issuer.
+        let trusted_root_ids: Vec<Vec<u8>> = self.config.controllers.iter().filter_map(|s| {
+            edgerun_core::util::hex_to_bytes(s).ok()
+        }).collect();
+
         let ctx = CommandValidationContext {
             local_node_id: &self.identity.0,
             replay_cache: &self.processed_commands,
             revoked_delegation_ids: &self.revoked_delegation_ids,
             now_ms: now_ms(),
-            trusted_root_ids: &self.config.controllers.iter().map(|s| s.as_bytes().to_vec()).collect::<Vec<_>>(),
+            trusted_root_ids: &trusted_root_ids,
             local_assurance_class: 0, // Unknown — simple config path doesn't track signer type
         };
 

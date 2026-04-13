@@ -25,6 +25,35 @@ fn now_us() -> u64 {
         .as_micros() as u64
 }
 
+impl Clone for WorkMeter {
+    fn clone(&self) -> Self {
+        Self {
+            work_id: self.work_id,
+            requester_id: self.requester_id,
+            provider_id: self.provider_id,
+            delegation_hash: self.delegation_hash,
+            start_time: self.start_time.clone(),
+            start_monotonic_us: self.start_monotonic_us,
+            allocated_cores: self.allocated_cores,
+            allocated_memory_bytes: self.allocated_memory_bytes,
+            storage_read_bytes: AtomicU64::new(self.storage_read_bytes.load(std::sync::atomic::Ordering::Relaxed)),
+            storage_written_bytes: AtomicU64::new(self.storage_written_bytes.load(std::sync::atomic::Ordering::Relaxed)),
+            storage_read_ops: AtomicU32::new(self.storage_read_ops.load(std::sync::atomic::Ordering::Relaxed)),
+            storage_write_ops: AtomicU32::new(self.storage_write_ops.load(std::sync::atomic::Ordering::Relaxed)),
+            network_sent_bytes: AtomicU64::new(self.network_sent_bytes.load(std::sync::atomic::Ordering::Relaxed)),
+            network_received_bytes: AtomicU64::new(self.network_received_bytes.load(std::sync::atomic::Ordering::Relaxed)),
+            workload_class: self.workload_class.clone(),
+            priority: self.priority.clone(),
+            provider_cert_digest: self.provider_cert_digest,
+            cpu_multiplier: self.cpu_multiplier,
+            memory_multiplier: self.memory_multiplier,
+            storage_multiplier: self.storage_multiplier,
+            gpu_core_us: self.gpu_core_us,
+            npu_core_us: self.npu_core_us,
+        }
+    }
+}
+
 /// A running meter for a single workload's resource consumption.
 pub struct WorkMeter {
     // === Identity ===

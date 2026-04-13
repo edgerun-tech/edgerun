@@ -5,15 +5,15 @@ use std::time::Duration;
 fn main() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
-        test_select_immediate_futures();
-        test_select_faster_wins();
-        test_select_timing();
-        test_select_with_sleep();
+        test_select_immediate_futures().await;
+        test_select_faster_wins().await;
+        test_select_timing().await;
+        test_select_with_sleep().await;
         println!("All select! tests passed!");
     });
 }
 
-fn test_select_immediate_futures() {
+async fn test_select_immediate_futures() {
     println!("  test_select_immediate_futures...");
     let result = select!(
         async { 42 },
@@ -23,9 +23,8 @@ fn test_select_immediate_futures() {
     println!("  test_select_immediate_futures OK (got {})", result);
 }
 
-fn test_select_faster_wins() {
+async fn test_select_faster_wins() {
     println!("  test_select_faster_wins...");
-    // Fast future wins
     let result = select!(
         async {
             edgerun_rt::sleep(Duration::from_millis(10)).await;
@@ -40,7 +39,7 @@ fn test_select_faster_wins() {
     println!("  test_select_faster_wins OK");
 }
 
-fn test_select_timing() {
+async fn test_select_timing() {
     println!("  test_select_timing...");
     let start = std::time::Instant::now();
     let result = select!(
@@ -59,7 +58,7 @@ fn test_select_timing() {
     println!("  test_select_timing OK ({:?})", elapsed);
 }
 
-fn test_select_with_sleep() {
+async fn test_select_with_sleep() {
     println!("  test_select_with_sleep...");
     let start = std::time::Instant::now();
     let result = select!(

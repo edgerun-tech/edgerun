@@ -17,36 +17,6 @@ pub mod edgerun {
         pub mod common {
             include!("gen/edgerun.v0.common.rs");
         }
-        pub mod html {
-            pub mod elements {
-                include!("gen/edgerun.v0.html.elements.rs");
-            }
-            pub mod attributes {
-                include!("gen/edgerun.v0.html.attributes.rs");
-            }
-        }
-        pub mod css {
-            pub mod properties {
-                include!("gen/edgerun.v0.css.properties.rs");
-            }
-            pub mod value_types {
-                include!("gen/edgerun.v0.css.value_types.rs");
-            }
-            pub mod at_rules {
-                include!("gen/edgerun.v0.css.at_rules.rs");
-            }
-        }
-        pub mod ecmascript {
-            pub mod objects {
-                include!("gen/edgerun.v0.ecmascript.objects.rs");
-            }
-            pub mod abstract_ops {
-                include!("gen/edgerun.v0.ecmascript.abstract_ops.rs");
-            }
-            pub mod globals {
-                include!("gen/edgerun.v0.ecmascript.globals.rs");
-            }
-        }
         pub mod identity {
             include!("gen/edgerun.v0.identity.rs");
         }
@@ -1486,7 +1456,10 @@ mod tests {
         assert_eq!(CommandType::FetchObject as i32, 6);
         assert_eq!(CommandType::Query as i32, 7);
         assert_eq!(CommandType::ExecuteWorkload as i32, 8);
-        assert_eq!(CommandType::Custom as i32, 2000);
+        assert_eq!(CommandType::TerminateWorkload as i32, 9);
+        assert_eq!(CommandType::CreateDelegation as i32, 10);
+        assert_eq!(CommandType::CreateRevocation as i32, 11);
+        assert_eq!(CommandType::StoreAndForward as i32, 12);
     }
 
     #[test]

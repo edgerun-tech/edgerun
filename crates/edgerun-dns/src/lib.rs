@@ -57,6 +57,7 @@ pub mod dot;
 pub mod doh;
 pub mod dhcp;
 pub mod tftp;
+pub mod resolv_conf;
 
 pub use cache::DnsCache;
 pub use resolver::{RecursiveResolver, RootHint, default_root_hints};
@@ -72,6 +73,9 @@ pub use dhcp::{OPT_TFTP_SERVER_NAME, OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLI
 
 // TFTP re-exports
 pub use tftp::{TftpServer, TftpMessage, TftpOpcode, TftpError, TftpOptions, BlobTftpProvider};
+
+// resolv.conf re-exports
+pub use resolv_conf::{ResolvConf, Nameserver};
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};

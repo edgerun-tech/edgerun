@@ -58,6 +58,16 @@ impl DnsClient {
         })
     }
 
+    /// Create a DNS client using system nameservers from `/etc/resolv.conf`.
+    ///
+    /// Returns `None` if resolv.conf is missing/empty and no fallback is available.
+    pub fn system() -> Option<Self> {
+        let conf = crate::resolv_conf::ResolvConf::load();
+        conf.server_addrs()
+            .first()
+            .and_then(|addr| Self::new(addr).ok())
+    }
+
     /// Set the query timeout.
     pub fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = timeout;

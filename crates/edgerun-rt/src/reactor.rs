@@ -2,6 +2,19 @@
 //!
 //! One reactor thread runs `Reactor::run()` which calls `epoll_wait` and
 //! fires wakers when I/O readiness or timer deadlines arrive.
+//!
+//! ## Thread safety
+//! All fd interest state is protected by a single Mutex on FdInterest.
+//! `update_epoll` holds the lock through the entire read-compute-epoll_ctl
+//! sequence, eliminating TOCTOU races between concurrent waker registration
+//! and epoll event updates.
+//!
+//! FDs are not auto-deregistered in the event loop to avoid races between
+//! event-loop deregistration and concurrent waker registration. Stale fds
+//! are harmless: they sit in the map with 0 epoll events and are reclaimed
+//! when the kernel reuses the fd number (the old FdInterest is still valid
+//! for the new fd — wakers will fire but the syscall will fail with EBADF,
+//! which the caller handles correctly).
 
 use std::collections::BinaryHeap;
 use std::io::{self};
@@ -58,6 +71,7 @@ impl Drop for EpollFd {
 // ===========================================================================
 
 pub(crate) struct FdInterest {
+    /// (read_waker, write_waker)
     state: Mutex<(Option<Waker>, Option<Waker>)>,
 }
 
@@ -82,37 +96,98 @@ impl FdInterest {
         self.state.lock().1 = Some(w);
     }
 
-    fn has_read_waker(&self) -> bool {
-        self.state.lock().0.is_some()
-    }
+    /// Fire wakers for the given event bits and update epoll interests.
+    ///
+    /// This method holds the state lock through the entire
+    /// take-wakers → compute-events → epoll_ctl sequence, preventing
+    /// TOCTOU races with concurrent `set_read_waker`/`set_write_waker` calls.
+    ///
+    /// Returns `true` if the fd still has any wakers after this operation.
+    fn fire_and_update(&self, epoll: &EpollFd, fd: RawFd, event_bits: u32) -> bool {
+        // Step 1: Take wakers under lock.
+        let (read_waker, write_waker) = {
+            let mut state = self.state.lock();
+            let rw = if (event_bits & (libc::EPOLLIN as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32)) != 0 {
+                state.0.take()
+            } else {
+                None
+            };
+            let ww = if (event_bits & (libc::EPOLLOUT as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32)) != 0 {
+                state.1.take()
+            } else {
+                None
+            };
+            (rw, ww)
+        };
 
-    fn has_write_waker(&self) -> bool {
-        self.state.lock().1.is_some()
-    }
+        // Step 2: Wake outside the lock — wakers may re-enter and re-register.
+        if let Some(w) = read_waker {
+            w.wake();
+        }
+        if let Some(w) = write_waker {
+            w.wake();
+        }
 
-    fn update_epoll(&self, epoll: &EpollFd, fd: RawFd) {
-        let state = self.state.lock();
+        // Step 3: Re-acquire lock and recompute epoll events from current state.
+        // A concurrent wait_read/write may have set new wakers between our
+        // take and now, so we must re-read the state.
+        let mut state = self.state.lock();
         let has_read = state.0.is_some();
         let has_write = state.1.is_some();
-        drop(state);
-        let mut events: u32 = 0;
-        if has_read {
-            events |= libc::EPOLLIN as u32 | libc::EPOLLET as u32;
-        }
-        if has_write {
-            events |= libc::EPOLLOUT as u32 | libc::EPOLLET as u32;
-        }
-        if events != 0 {
+
+        if has_read || has_write {
+            let mut events: u32 = 0;
+            if has_read {
+                events |= libc::EPOLLIN as u32 | libc::EPOLLET as u32;
+            }
+            if has_write {
+                events |= libc::EPOLLOUT as u32 | libc::EPOLLET as u32;
+            }
+            drop(state); // release lock before epoll_ctl
             let mut ev = libc::epoll_event { events: events as _, u64: fd as u64 };
             let _ = epoll.ctl(libc::EPOLL_CTL_MOD, fd, &mut ev);
+            true
         } else {
-            let _ = epoll.ctl(libc::EPOLL_CTL_DEL, fd, std::ptr::null_mut());
+            // No wakers — keep the fd in the map and epoll with 0 events.
+            // We don't deregister to avoid races: a concurrent wait_read/write
+            // may already hold an Arc<FdInterest> and will call set_and_update
+            // next. If we DEL here, their MOD will fail with ENOENT.
+            // The fd stays in epoll with 0 events — harmless overhead.
+            drop(state);
+            false
         }
     }
 
     fn has_any(&self) -> bool {
         let state = self.state.lock();
         state.0.is_some() || state.1.is_some()
+    }
+
+    /// Set both wakers and update epoll events atomically.
+    /// Used by `wait_read`/`wait_write` to ensure the fd is properly
+    /// registered with epoll before returning.
+    fn set_and_update(&self, epoll: &EpollFd, fd: RawFd, read: Option<Waker>, write: Option<Waker>) {
+        let mut state = self.state.lock();
+        if let Some(w) = read {
+            state.0 = Some(w);
+        }
+        if let Some(w) = write {
+            state.1 = Some(w);
+        }
+        let has_read = state.0.is_some();
+        let has_write = state.1.is_some();
+        // Hold lock through epoll_ctl to prevent TOCTOU.
+        if has_read || has_write {
+            let mut events: u32 = 0;
+            if has_read {
+                events |= libc::EPOLLIN as u32 | libc::EPOLLET as u32;
+            }
+            if has_write {
+                events |= libc::EPOLLOUT as u32 | libc::EPOLLET as u32;
+            }
+            let mut ev = libc::epoll_event { events: events as _, u64: fd as u64 };
+            let _ = epoll.ctl(libc::EPOLL_CTL_MOD, fd, &mut ev);
+        }
     }
 }
 
@@ -172,6 +247,9 @@ impl Reactor {
             .or_insert_with(|| {
                 let s = std::sync::Arc::new(FdInterest::new());
                 let mut ev = libc::epoll_event { events: 0, u64: fd as u64 };
+                // If ADD fails (e.g. fd already in epoll), that's OK —
+                // the fd is already registered, and subsequent MOD calls
+                // will work correctly.
                 let _ = self.epoll.ctl(libc::EPOLL_CTL_ADD, fd, &mut ev);
                 s
             })
@@ -185,20 +263,17 @@ impl Reactor {
 
     pub(crate) fn wait_read(&self, fd: RawFd, waker: Waker) {
         let interest = self.get_or_register_fd(fd);
-        interest.set_read_waker(waker);
-        interest.update_epoll(&self.epoll, fd);
+        interest.set_and_update(&self.epoll, fd, Some(waker), None);
     }
 
     pub(crate) fn wait_write(&self, fd: RawFd, waker: Waker) {
         let interest = self.get_or_register_fd(fd);
-        interest.set_write_waker(waker);
-        interest.update_epoll(&self.epoll, fd);
+        interest.set_and_update(&self.epoll, fd, None, Some(waker));
     }
 
     pub(crate) fn wait_connect(&self, fd: RawFd, waker: Waker) {
         let interest = self.get_or_register_fd(fd);
-        interest.set_write_waker(waker);
-        interest.update_epoll(&self.epoll, fd);
+        interest.set_and_update(&self.epoll, fd, None, Some(waker));
     }
 
     pub(crate) fn register_timer(&self, deadline: Instant, waker: Waker) {
@@ -229,6 +304,7 @@ impl Reactor {
 
             match self.epoll.wait(&mut evts, ms) {
                 Ok(n) => {
+                    // Fire expired timers first.
                     {
                         let mut timers = self.timers.lock();
                         let now = Instant::now();
@@ -242,26 +318,17 @@ impl Reactor {
                         }
                     }
 
+                    // Process I/O events.
                     for evt in evts.iter().take(n) {
                         let fd = evt.u64 as RawFd;
                         let bits = evt.events;
 
-                        if let Some(interest) = self.fds.lock().get(&fd) {
-                            if (bits & (libc::EPOLLIN as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32)) != 0 {
-                                if let Some(w) = interest.take_read_waker() {
-                                    w.wake();
-                                }
-                            }
-                            if (bits & (libc::EPOLLOUT as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32)) != 0 {
-                                if let Some(w) = interest.take_write_waker() {
-                                    w.wake();
-                                }
-                            }
-                            interest.update_epoll(&self.epoll, fd);
-
-                            if !interest.has_any() {
-                                self.deregister_fd(fd);
-                            }
+                        // Get the fd interest under the map lock.
+                        let interest = self.fds.lock().get(&fd).cloned();
+                        if let Some(interest) = interest {
+                            // Fire wakers and update epoll atomically.
+                            // fire_and_update handles all locking internally.
+                            interest.fire_and_update(&self.epoll, fd, bits);
                         }
                     }
                 }

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use edgerun_http::{
     Chain, Extensions, Handler, HttpServer, Method, Middleware, Next, Request, Response, StatusCode,
 };
+use edgerun_json::{json, from_str, to_string, Value};
 use quote::ToTokens;
 
 use crate::edit_ops;
@@ -92,19 +93,19 @@ impl Handler for EditHandler {
                 Err(e) => return Response::json(StatusCode::BAD_REQUEST, &format!(r#"{{"ok":false,"error":"invalid utf8: {e}"}}"#)),
             };
 
-            let req: serde_json::Value = match serde_json::from_str(body_str) {
+            let req: Value = match from_str(body_str) {
                 Ok(v) => v,
                 Err(e) => return Response::json(StatusCode::BAD_REQUEST, &format!(r#"{{"ok":false,"error":"invalid json: {e}"}}"#)),
             };
 
             let resp = handle_edit(&req).await;
-            let body = serde_json::to_string(&resp).unwrap_or_else(|_| r#"{"ok":false,"error":"failed to serialize response"}"#.to_string());
+            let body = to_string(&resp).unwrap_or_else(|_| r#"{"ok":false,"error":"failed to serialize response"}"#.to_string());
             Response::json(StatusCode::OK, &body)
         })
     }
 }
 
-async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
+async fn handle_edit(req: &Value) -> Value {
     // Resolve project
     let project_path = req["project"].as_str().unwrap_or(".");
     let project_path = PathBuf::from(project_path);
@@ -120,7 +121,7 @@ async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
         if candidate.exists() {
             Project::from_manifest(&candidate)
         } else {
-            return serde_json::json!({
+            return json!({
                 "ok": false,
                 "error": format!("project not found: {}", project_path.display()),
             });
@@ -129,7 +130,7 @@ async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
 
     let edits = req["edits"].as_array().cloned().unwrap_or_default();
     if edits.is_empty() {
-        return serde_json::json!({
+        return json!({
             "ok": false,
             "error": "no edits provided",
         });
@@ -203,7 +204,7 @@ async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
             for f in &new_files {
                 std::fs::remove_file(f).ok();
             }
-            return serde_json::json!({
+            return json!({
                 "ok": false,
                 "error": format!("edit[{i}] ({op}): {e}"),
                 "rolled_back": true,
@@ -226,7 +227,7 @@ async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
     if let Err(e) = cargo_check {
         if let Some(ref git) = git_safety {
             let (_, msg) = git.rollback();
-            return serde_json::json!({
+            return json!({
                 "ok": false,
                 "error": "cargo check failed",
                 "stderr": e,
@@ -234,7 +235,7 @@ async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
                 "rollback_msg": msg,
             });
         }
-        return serde_json::json!({
+        return json!({
             "ok": false,
             "error": "cargo check failed",
             "stderr": e,
@@ -250,7 +251,7 @@ async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
         false
     };
 
-    serde_json::json!({
+    json!({
         "ok": true,
         "files_modified": modified_files.len(),
         "new_files": new_files.len(),
@@ -258,7 +259,7 @@ async fn handle_edit(req: &serde_json::Value) -> serde_json::Value {
     })
 }
 
-fn resolve_file(project: &Project, edit: &serde_json::Value) -> PathBuf {
+fn resolve_file(project: &Project, edit: &Value) -> PathBuf {
     if let Some(f) = edit["file"].as_str() {
         let p = PathBuf::from(f);
         if p.is_absolute() {

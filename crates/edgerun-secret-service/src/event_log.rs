@@ -1,14 +1,11 @@
 //! Append-only event log for secret operations.
 //!
-//! Writes protobuf records to the standard event log path
-//! `{data_root}/events/{stream_id_hex}.log`, using the same wire format
-//! as NodeStore: `[varint length][protobuf bytes]`.
+//! **DEPRECATED**: This module writes to a separate event log file.
+//! The canonical approach is to record secret operations as signed events
+//! in the node's main event stream via `SecretPutPayload` / `SecretDeletePayload`.
+//! See `Backend::new()` which accepts a `SecretEventRecorder` callback.
 //!
-//! Unlike the node event stream which uses `EventEnvelope`, the secret
-//! service writes payload messages directly (`SecretPutPayload`,
-//! `SecretDeletePayload`, etc.). The event type is determined by the
-//! message type. The event log is immutable — deletion is recorded
-//! by appending a `SecretDeletePayload` event.
+//! This module is kept for backward compatibility with existing deployments.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};

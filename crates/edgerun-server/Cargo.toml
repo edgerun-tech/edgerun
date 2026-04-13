@@ -10,6 +10,8 @@ path = "src/bin/http-server.rs"
 
 [dependencies]
 edgerun-http = { path = "../edgerun-http", features = ["tls"] }
+edgerun-imap = { path = "../edgerun-imap" }
+edgerun-smtp = { path = "../edgerun-smtp" }
 edgerun-dns = { path = "../edgerun-dns" }
 edgerun-dhcp = { path = "../edgerun-dhcp" }
 edgerun-tftp = { path = "../edgerun-tftp" }

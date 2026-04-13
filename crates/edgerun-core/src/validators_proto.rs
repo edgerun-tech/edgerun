@@ -150,11 +150,11 @@ fn verify_event_signature(event: &EventEnvelope, key: &[u8; 64]) -> bool {
         return false;
     };
 
-    if sig.algorithm != 1 {
+    if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
         return false;
     }
 
-    if sig.value.len() != 64 {
+    if sig.value.len() != crate::crypto::ECDSA_P256_SIGNATURE_LEN {
         return false;
     }
 

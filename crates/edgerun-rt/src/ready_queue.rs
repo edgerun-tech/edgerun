@@ -47,14 +47,9 @@ impl ReadyQueue {
             if self.inner.done.load(Ordering::Acquire) {
                 return None;
             }
-            let notified =
-                self.inner.cvar.wait_for(&mut q, std::time::Duration::from_millis(100));
-            if !notified
-                && self.inner.done.load(Ordering::Acquire)
-                && q.is_empty()
-            {
-                return None;
-            }
+            // Use infinite wait — workers are only woken when there's work
+            // or shutdown is requested. No periodic wake overhead.
+            self.inner.cvar.wait(&mut q);
         }
     }
 

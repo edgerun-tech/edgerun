@@ -467,8 +467,19 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
                 std::process::exit(1);
             }
         };
-        let (_head_seq, _) = head;
-        edgerun_log::info!("loaded stream");
+        let (head_seq, _) = head;
+
+        // Validate stream chain integrity on startup
+        match store.validate_stream_chain(stream_id_bytes) {
+            Ok(event_count) => {
+                edgerun_log::info!("stream chain validated: {} events", event_count);
+            }
+            Err(e) => {
+                edgerun_log::error!("stream chain integrity check failed: {}", e);
+                edgerun_log::error!("DO NOT start this node until the stream is repaired out of band");
+                std::process::exit(1);
+            }
+        }
     }
 
     // --- Unix socket capability server ---

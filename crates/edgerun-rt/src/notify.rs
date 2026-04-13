@@ -46,7 +46,7 @@ impl Notify {
     /// Waits for a notification. Returns immediately if there are pending
     /// notifications from prior `notify()` calls.
     pub fn notified(&self) -> Notified<'_> {
-        Notified { notify: self, registered: false }
+        Notified { notify: self, registered: false, waiter_index: None }
     }
 
     /// Wakes one waiting task. If no task is waiting, increments a counter
@@ -79,6 +79,8 @@ impl Notify {
 pub struct Notified<'a> {
     notify: &'a Notify,
     registered: bool,
+    /// Index in the waiters queue, so we can remove ourselves on drop.
+    waiter_index: Option<usize>,
 }
 
 impl Future for Notified<'_> {
@@ -103,8 +105,14 @@ impl Future for Notified<'_> {
 
         // Register our waker if we haven't already.
         if !this.registered {
+            this.waiter_index = Some(inner.waiters.len());
             inner.waiters.push_back(cx.waker().clone());
             this.registered = true;
+        } else if let Some(idx) = this.waiter_index {
+            // Update the waker in place so we don't accumulate stale entries.
+            if idx < inner.waiters.len() {
+                inner.waiters[idx] = cx.waker().clone();
+            }
         }
 
         Poll::Pending
@@ -113,19 +121,13 @@ impl Future for Notified<'_> {
 
 impl Drop for Notified<'_> {
     fn drop(&mut self) {
-        // If we registered a waker but the future was dropped before completing,
-        // remove ourselves from the waiters list.
         if self.registered {
-            if let Some(_inner) = self.notify.inner.try_lock() {
-                // We can't efficiently remove by pointer, but we don't need to:
-                // the waker will just be woken spuriously and re-register.
-                // For correctness, the waker wakes a task that may have already
-                // been dropped — that's harmless.
-                // However, to prevent unbounded growth, we clean up here.
-                // We can't identify our waker in the VecDeque, so we drain
-                // and re-push — but that's O(n). Instead, we accept that
-                // dropped waiters leave stale entries. The waiters queue is
-                // bounded by the number of concurrent notifiers.
+            if let Some(idx) = self.waiter_index {
+                if let Some(mut inner) = self.notify.inner.try_lock() {
+                    if idx < inner.waiters.len() {
+                        inner.waiters.remove(idx);
+                    }
+                }
             }
         }
     }

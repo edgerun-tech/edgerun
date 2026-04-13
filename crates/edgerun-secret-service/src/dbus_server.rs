@@ -46,7 +46,9 @@ impl Server {
         }
 
         let listener = UnixListener::bind(socket_path)?;
-        let backend = Backend::new(data_root)?;
+        // Standalone daemon doesn't have a node stream — events are no-ops
+        // until integrated with the node's main event recorder.
+        let backend = Backend::new_noop(data_root)?;
 
         // Try to register on the D-Bus session bus
         let bus = BusConnection::connect("org.freedesktop.secrets");
@@ -1305,7 +1307,7 @@ mod tests {
             &[("k".into(), "v".into())],
         ).unwrap();
 
-        server.backend.rebuild_index().unwrap();
+        // No-op rebuild — standalone daemon has no event stream
 
         let (secret, meta) = server.backend.get("/org/freedesktop/secrets/collections/default", &key).unwrap().unwrap();
         assert_eq!(secret, b"secret");

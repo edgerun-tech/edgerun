@@ -72,11 +72,17 @@ impl Latch {
     /// Decrements the count by `n`.
     ///
     /// If the count reaches zero (or goes below), all waiters are woken.
+    /// Calling `count_down_n` when the count is already zero is a no-op.
     pub fn count_down_n(&self, n: usize) {
         if n == 0 {
             return;
         }
-        let prev = self.inner.count.fetch_sub(n, Ordering::AcqRel);
+        // Use saturating_sub to prevent usize underflow.
+        let prev = self.inner.count.fetch_update(
+            Ordering::AcqRel,
+            Ordering::Acquire,
+            |count| Some(count.saturating_sub(n)),
+        ).unwrap_or(0);
         if prev <= n {
             let wakers = self.inner.wakers.lock().drain(..).collect::<Vec<_>>();
             for w in wakers {

@@ -16,7 +16,7 @@ proc-macro2 = "1"
 quote = "1"
 prettyplease = "0.2"
 clap = { version = "4", features = ["derive"] }
-serde_json = "1"
+edgerun-json = { workspace = true }
 
 [lints]
 workspace = true

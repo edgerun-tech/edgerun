@@ -1,5 +1,7 @@
-//! Credential backend — stores secrets via BlobStore (encrypted) + FileIndex (metadata),
-//! and records operations in the append-only event log using protobuf EventEnvelopes.
+//! Credential backend — stores secrets via BlobStore (encrypted) + FileIndex (metadata).
+//! Secret operations are recorded as signed events in the NODE'S main event stream
+//! (NOT a separate log). This ensures all secret mutations are part of the
+//! cryptographically linked, prev_hash-chained event log.
 
 use std::collections::HashMap;
 use std::io;
@@ -7,7 +9,29 @@ use std::path::PathBuf;
 
 use edgerun_storage::{BlobStore, BlobKeySource, BlobStoreConfig, FileIndex};
 
-use crate::event_log::{EventLog, SecretEvent};
+use edgerun_proto::edgerun::v0::stream::{
+    SecretPutPayload, SecretDeletePayload,
+    CollectionCreatedPayload, CollectionDeletedPayload,
+};
+use prost::Message;
+
+// ===========================================================================
+// Event recorder
+// ===========================================================================
+
+/// Callback type for recording a secret event into the node's main stream.
+/// The caller provides the event type discriminator and the payload.
+pub type SecretEventRecorder = Box<dyn Fn(&str, Vec<u8>) -> io::Result<()> + Send + Sync>;
+
+fn no_op_recorder() -> SecretEventRecorder {
+    Box::new(|_event_type: &str, _payload: Vec<u8>| Ok(()))
+}
+
+/// Create a no-op event recorder for use when event-stream integration
+/// is not needed (e.g. simple token storage without audit trail).
+pub fn no_op_event_recorder() -> SecretEventRecorder {
+    no_op_recorder()
+}
 
 // ===========================================================================
 // Metadata
@@ -58,15 +82,16 @@ impl CredentialMeta {
 ///
 /// - `BlobStore` encrypts/decrypts secret payloads (AES-256-GCM, content-addressed)
 /// - `FileIndex` maps (namespace, name) → blob_id with JSON metadata in description
-/// - `EventLog` appends a protobuf EventEnvelope for every mutation
+/// - Secret operations are recorded via `record_event` into the node's main
+///   signed event stream (NOT a separate log).
 pub struct Backend {
     blobs: BlobStore,
     index: FileIndex,
-    event_log: EventLog,
+    record_event: SecretEventRecorder,
 }
 
 impl Backend {
-    pub fn new(data_root: PathBuf) -> io::Result<Self> {
+    pub fn new(data_root: PathBuf, record_event: SecretEventRecorder) -> io::Result<Self> {
         let pk = derive_key_from_path(&data_root);
 
         let blob_cfg = BlobStoreConfig { blob_dir: data_root.join("blobs") };
@@ -75,9 +100,13 @@ impl Backend {
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         let index = FileIndex::open(&data_root)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-        let event_log = EventLog::open(&data_root)?;
 
-        Ok(Self { blobs, index, event_log })
+        Ok(Self { blobs, index, record_event })
+    }
+
+    /// Creates a backend with a no-op event recorder (for tests).
+    pub fn new_noop(data_root: PathBuf) -> io::Result<Self> {
+        Self::new(data_root, no_op_recorder())
     }
 
     /// Map a collection D-Bus path to a credential namespace.
@@ -125,8 +154,16 @@ impl Backend {
         self.index.put_credential(&ns, key, &blob_id, Some(&description))
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-        // Event log — protobuf EventEnvelope with SecretPutPayload
-        self.event_log.record_put(&ns, key, label, attrs, &blob_id)?;
+        // Record event in node's main stream
+        let payload = SecretPutPayload {
+            payload_version: 1,
+            namespace: ns.clone(),
+            key: key.into(),
+            label: label.into(),
+            attributes: attrs.iter().cloned().collect(),
+            secret_blob_id: blob_id,
+        };
+        (self.record_event)("secret_put", prost::Message::encode_to_vec(&payload))?;
 
         Ok(())
     }
@@ -159,7 +196,7 @@ impl Backend {
     pub fn delete(&mut self, coll: &str, key: &str) -> io::Result<bool> {
         let ns = Self::coll_to_ns(coll);
 
-        // Get current state for the event log (before index mutation)
+        // Get current state for the event (before index mutation)
         let (label, existed) = {
             let rec = self.index.get_credential(&ns, key)
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -171,12 +208,19 @@ impl Backend {
             (label, rec.is_some())
         };
 
-        // 1. Record the deletion in the immutable event log FIRST
+        // Record the deletion event in the node's main stream
         if existed {
-            self.event_log.record_delete(&ns, key, &label, None)?;
+            let payload = SecretDeletePayload {
+                payload_version: 1,
+                namespace: ns.clone(),
+                key: key.into(),
+                label: label.clone(),
+                reason: String::new(),
+            };
+            (self.record_event)("secret_delete", prost::Message::encode_to_vec(&payload))?;
         }
 
-        // 2. Then update the mutable index (rebuildable from event log)
+        // Then update the mutable index (rebuildable from events)
         let removed = self.index.delete_credential(&ns, key)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
@@ -221,19 +265,18 @@ impl Backend {
         self.index.list_credential_namespaces().map_or(false, |ns_list| ns_list.contains(&ns))
     }
 
-    /// Rebuilds the credential index by replaying the event log.
+    /// Rebuilds the credential index from secret operation events.
     ///
-    /// The event log is the authoritative history; the FileIndex is a
-    /// mutable cache that can be dropped and rebuilt at any time.
+    /// Events are provided as an iterator of (event_type, payload_bytes) tuples.
+    /// In production, these come from replaying the node's main signed event stream
+    /// and filtering for secret_* event types.
     ///
     /// Process:
     /// 1. Clear the current index
     /// 2. Replay all events in order
-    /// 3. For each `SecretPut` → restore index entry
-    /// 4. For each `SecretDelete` → remove index entry
-    /// 5. For each `CollectionCreated` → no-op (namespace created on first put)
-    /// 6. For each `CollectionDeleted` → remove all items in that namespace
-    pub fn rebuild_index(&mut self) -> io::Result<usize> {
+    /// 3. For each `secret_put` → restore index entry
+    /// 4. For each `secret_delete` → remove index entry
+    pub fn rebuild_index(&mut self, events: impl Iterator<Item = (String, Vec<u8>)>) -> io::Result<usize> {
         // Clear current credential index entries
         let namespaces = self.index.list_credential_namespaces()
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -245,47 +288,82 @@ impl Backend {
             }
         }
 
-        let events = self.event_log.replay()?;
         let mut applied = 0;
-
-        for event in events {
-            match event {
-                SecretEvent::Put(payload) => {
-                    let attrs: Vec<(String, String)> = payload.attributes.iter()
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect();
-                    let meta = CredentialMeta {
-                        label: payload.label.clone(),
-                        attributes: attrs.into_iter().collect(),
-                        created_us: 0,
-                    };
-
-                    self.index.put_credential(
-                        &payload.namespace,
-                        &payload.key,
-                        &payload.secret_blob_id,
-                        Some(&meta.to_json()),
-                    )?;
-                    applied += 1;
-                }
-                SecretEvent::Delete(payload) => {
-                    self.index.delete_credential(&payload.namespace, &payload.key)?;
-                    applied += 1;
-                }
-                SecretEvent::CollectionDeleted(payload) => {
-                    let items = self.index.list_credentials(&payload.collection_name)?;
-                    for (key, _, _) in items {
-                        self.index.delete_credential(&payload.collection_name, &key)?;
+        for (event_type, payload) in events {
+            match event_type.as_str() {
+                "secret_put" => {
+                    if let Ok(payload) = SecretPutPayload::decode(payload.as_slice()) {
+                        let attrs: Vec<(String, String)> = payload.attributes.iter()
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect();
+                        let meta = CredentialMeta {
+                            label: payload.label.clone(),
+                            attributes: attrs.into_iter().collect(),
+                            created_us: 0,
+                        };
+                        self.index.put_credential(
+                            &payload.namespace,
+                            &payload.key,
+                            &payload.secret_blob_id,
+                            Some(&meta.to_json()),
+                        )?;
+                        applied += 1;
                     }
-                    applied += 1;
                 }
-                SecretEvent::CollectionCreated(_) => {
-                    applied += 1;
+                "secret_delete" => {
+                    if let Ok(payload) = SecretDeletePayload::decode(payload.as_slice()) {
+                        self.index.delete_credential(&payload.namespace, &payload.key)?;
+                        applied += 1;
+                    }
                 }
+                "collection_created" => {
+                    applied += 1; // No-op — namespace created on first put
+                }
+                "collection_deleted" => {
+                    if let Ok(payload) = CollectionDeletedPayload::decode(payload.as_slice()) {
+                        let items = self.index.list_credentials(&payload.collection_name)?;
+                        for (key, _, _) in items {
+                            self.index.delete_credential(&payload.collection_name, &key)?;
+                        }
+                        applied += 1;
+                    }
+                }
+                _ => {}
             }
         }
 
         Ok(applied)
+    }
+
+    /// Creates a collection (records the event in the node's stream).
+    pub fn create_collection(&mut self, collection_name: &str, label: &str) -> io::Result<()> {
+        let payload = CollectionCreatedPayload {
+            payload_version: 1,
+            collection_name: collection_name.into(),
+            label: label.into(),
+        };
+        (self.record_event)("collection_created", prost::Message::encode_to_vec(&payload))
+    }
+
+    /// Deletes a collection (records the event and removes items from index).
+    pub fn delete_collection(&mut self, collection_name: &str) -> io::Result<u32> {
+        let items = self.index.list_credentials(collection_name)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        let count = items.len() as u32;
+
+        for (key, _, _) in &items {
+            self.index.delete_credential(collection_name, key)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        }
+
+        let payload = CollectionDeletedPayload {
+            payload_version: 1,
+            collection_name: collection_name.into(),
+            items_removed: count,
+        };
+        (self.record_event)("collection_deleted", prost::Message::encode_to_vec(&payload))?;
+
+        Ok(count)
     }
 }
 
@@ -308,6 +386,7 @@ fn derive_key_from_path(path: &PathBuf) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
 
     fn tmp_root() -> PathBuf {
         static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -316,6 +395,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    /// Creates a backend that captures all events for later replay.
+    fn backend_with_capture(data_root: PathBuf) -> (Backend, Arc<Mutex<Vec<(String, Vec<u8>)>>>) {
+        let events: Arc<Mutex<Vec<(String, Vec<u8>)>>> = Arc::new(Mutex::new(Vec::new()));
+        let captured = events.clone();
+        let recorder: SecretEventRecorder = Box::new(move |event_type, payload| {
+            captured.lock().unwrap().push((event_type.to_string(), payload));
+            Ok(())
+        });
+        let be = Backend::new(data_root, recorder).unwrap();
+        (be, events)
     }
 
     #[test]
@@ -333,7 +424,7 @@ mod tests {
     #[test]
     fn backend_put_get() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "test-key", b"super-secret", "Test Label", &[]).unwrap();
         let (secret, meta) = be.get(coll, "test-key").unwrap().unwrap();
@@ -344,7 +435,7 @@ mod tests {
     #[test]
     fn backend_delete() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "del-key", b"secret", "Del Label", &[]).unwrap();
         assert!(be.delete(coll, "del-key").unwrap());
@@ -355,7 +446,7 @@ mod tests {
     #[test]
     fn backend_list() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"v1", "Label 1", &[]).unwrap();
         be.put(coll, "k2", b"v2", "Label 2", &[]).unwrap();
@@ -366,7 +457,7 @@ mod tests {
     #[test]
     fn backend_search_by_attr() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"v1", "GitHub", &[("server".into(), "github.com".into())]).unwrap();
         be.put(coll, "k2", b"v2", "GitLab", &[("server".into(), "gitlab.com".into())]).unwrap();
@@ -397,9 +488,9 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_index_from_event_log() {
+    fn rebuild_index_from_events() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
         // Put two items
@@ -412,8 +503,8 @@ mod tests {
         assert!(be.get(coll, "k1").unwrap().is_none());
         assert!(be.get(coll, "k2").unwrap().is_some());
 
-        // Rebuild from event log
-        let applied = be.rebuild_index().unwrap();
+        // Rebuild from captured events
+        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
         assert_eq!(applied, 3); // 2 puts + 1 delete
 
         // State should be identical after rebuild
@@ -426,7 +517,7 @@ mod tests {
     #[test]
     fn rebuild_index_multiple_collections() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll_default = "/org/freedesktop/secrets/collections/default";
         let coll_login = "/org/freedesktop/secrets/collections/login";
 
@@ -435,7 +526,7 @@ mod tests {
         be.put(coll_default, "d2", b"v3", "D2", &[]).unwrap();
 
         // Rebuild
-        let applied = be.rebuild_index().unwrap();
+        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
         assert_eq!(applied, 3);
 
         // All items still retrievable
@@ -447,19 +538,17 @@ mod tests {
     #[test]
     fn delete_records_event_before_index_mutation() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
         be.put(coll, "k1", b"secret", "Test", &[]).unwrap();
-
-        // Delete
         be.delete(coll, "k1").unwrap();
 
-        // Event log should have both put and delete (immutable history)
-        let events = be.event_log.replay().unwrap();
-        assert_eq!(events.len(), 2);
-        assert!(matches!(&events[0], SecretEvent::Put(_)));
-        assert!(matches!(&events[1], SecretEvent::Delete(_)));
+        // Captured events should have both put and delete (immutable history)
+        let ev = events.lock().unwrap().clone();
+        assert_eq!(ev.len(), 2);
+        assert_eq!(ev[0].0, "secret_put");
+        assert_eq!(ev[1].0, "secret_delete");
 
         // Index should reflect the delete
         assert!(be.get(coll, "k1").unwrap().is_none());
@@ -468,14 +557,14 @@ mod tests {
     #[test]
     fn rebuild_preserves_search_attributes() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
         be.put(coll, "gh", b"tok1", "GitHub", &[("server".into(), "github.com".into()), ("type".into(), "token".into())]).unwrap();
         be.put(coll, "gl", b"tok2", "GitLab", &[("server".into(), "gitlab.com".into())]).unwrap();
 
         // Rebuild
-        be.rebuild_index().unwrap();
+        be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
 
         // Search still works
         let results = be.search(coll, &[("server".into(), "github.com".into())]).unwrap();
@@ -489,7 +578,7 @@ mod tests {
     #[test]
     fn rebuild_after_multiple_deletes() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
         be.put(coll, "k1", b"v1", "K1", &[]).unwrap();
@@ -499,7 +588,7 @@ mod tests {
         be.delete(coll, "k3").unwrap();
 
         // Rebuild
-        let applied = be.rebuild_index().unwrap();
+        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
         assert_eq!(applied, 5); // 3 puts + 2 deletes
 
         // Only k2 should remain
@@ -511,7 +600,7 @@ mod tests {
     #[test]
     fn list_collections_after_operations() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll_default = "/org/freedesktop/secrets/collections/default";
         let coll_wifi = "/org/freedesktop/secrets/collections/wifi";
 
@@ -524,7 +613,7 @@ mod tests {
         assert!(collections.contains(&"/org/freedesktop/secrets/collections/wifi".into()));
 
         // Rebuild and verify collections still listed
-        be.rebuild_index().unwrap();
+        be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
         let collections_after = be.list_collections().unwrap();
         assert_eq!(collections_after.len(), 2);
     }
@@ -532,13 +621,13 @@ mod tests {
     #[test]
     fn collection_exists_after_rebuild() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
         be.put(coll, "k1", b"v1", "K1", &[]).unwrap();
         assert!(be.collection_exists(coll));
 
-        be.rebuild_index().unwrap();
+        be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
         assert!(be.collection_exists(coll));
     }
 
@@ -570,7 +659,7 @@ mod tests {
     #[test]
     fn empty_secret_roundtrip() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "empty", b"", "Empty Secret", &[]).unwrap();
         let (secret, meta) = be.get(coll, "empty").unwrap().unwrap();
@@ -581,7 +670,7 @@ mod tests {
     #[test]
     fn large_secret_roundtrip() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         let large = vec![0xCCu8; 50_000];
         be.put(coll, "large", &large, "Large Secret", &[]).unwrap();
@@ -592,7 +681,7 @@ mod tests {
     #[test]
     fn secret_rotation_overwrites() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
         be.put(coll, "api-key", b"old-secret", "API Key", &[]).unwrap();
@@ -601,12 +690,12 @@ mod tests {
         let (secret, _) = be.get(coll, "api-key").unwrap().unwrap();
         assert_eq!(secret, b"new-secret");
 
-        let events = be.event_log.replay().unwrap();
-        assert_eq!(events.len(), 2);
-        assert!(matches!(&events[0], SecretEvent::Put(_)));
-        assert!(matches!(&events[1], SecretEvent::Put(_)));
+        let ev = events.lock().unwrap().clone();
+        assert_eq!(ev.len(), 2);
+        assert_eq!(ev[0].0, "secret_put");
+        assert_eq!(ev[1].0, "secret_put");
 
-        be.rebuild_index().unwrap();
+        be.rebuild_index(ev.clone().into_iter()).unwrap();
         let (secret_after, _) = be.get(coll, "api-key").unwrap().unwrap();
         assert_eq!(secret_after, b"new-secret");
     }
@@ -614,7 +703,7 @@ mod tests {
     #[test]
     fn backend_search_no_matches() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"v1", "K1", &[("server".into(), "github.com".into())]).unwrap();
         let results = be.search(coll, &[("server".into(), "bitbucket.org".into())]).unwrap();
@@ -626,7 +715,7 @@ mod tests {
     #[test]
     fn backend_search_multiple_attributes() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"v1", "GitHub", &[("server".into(), "github.com".into()), ("type".into(), "password".into())]).unwrap();
         be.put(coll, "k2", b"v2", "GitHub API", &[("server".into(), "github.com".into()), ("type".into(), "token".into())]).unwrap();
@@ -639,26 +728,26 @@ mod tests {
     #[test]
     fn backend_get_nonexistent_collection() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let be = Backend::new_noop(root).unwrap();
         assert!(be.get("/org/freedesktop/secrets/collections/nonexistent", "any").unwrap().is_none());
     }
 
     #[test]
     fn backend_list_nonexistent_collection() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let be = Backend::new_noop(root).unwrap();
         assert!(be.list("/org/freedesktop/secrets/collections/nonexistent").unwrap().is_empty());
     }
 
     #[test]
     fn backend_rebuild_after_put_delete_put() {
         let root = tmp_root();
-        let mut be = Backend::new(root.clone()).unwrap();
+        let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"first", "First", &[]).unwrap();
         be.delete(coll, "k1").unwrap();
         be.put(coll, "k1", b"second", "Second", &[]).unwrap();
-        let applied = be.rebuild_index().unwrap();
+        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
         assert_eq!(applied, 3);
         let (secret, meta) = be.get(coll, "k1").unwrap().unwrap();
         assert_eq!(secret, b"second");
@@ -668,7 +757,7 @@ mod tests {
     #[test]
     fn backend_list_collections_empty() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let be = Backend::new_noop(root).unwrap();
         assert!(be.list_collections().unwrap().is_empty());
     }
 
@@ -703,17 +792,17 @@ mod tests {
     #[test]
     fn backend_delete_nonexistent() {
         let root = tmp_root();
-        let mut be = Backend::new(root).unwrap();
+        let (mut be, events) = backend_with_capture(root);
         let coll = "/org/freedesktop/secrets/collections/default";
         assert!(!be.delete(coll, "ghost").unwrap());
-        let events = be.event_log.replay().unwrap();
-        assert!(events.is_empty());
+        // No events should be recorded for deleting a nonexistent key
+        assert!(events.lock().unwrap().is_empty());
     }
 
     #[test]
     fn backend_collection_exists_nonexistent() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let be = Backend::new_noop(root).unwrap();
         assert!(!be.collection_exists("/org/freedesktop/secrets/collections/nonexistent"));
     }
 }

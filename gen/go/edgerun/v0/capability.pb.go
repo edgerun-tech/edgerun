@@ -1528,8 +1528,8 @@ const file_edgerun_v0_capability_proto_rawDesc = "" +
 	"#CAPABILITY_CONSTRAINT_KIND_ONE_SHOT\x10\x06\x12+\n" +
 	"'CAPABILITY_CONSTRAINT_KIND_RATE_LIMITED\x10\a\x12(\n" +
 	"$CAPABILITY_CONSTRAINT_KIND_MAX_BYTES\x10\b\x12$\n" +
-	" CAPABILITY_CONSTRAINT_KIND_SCOPE\x10\tB\xc9\x01\n" +
-	"\x19com.edgerun.v0.capabilityB\x0fCapabilityProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVC\xaa\x02\x15Edgerun.V0.Capability\xca\x02\x15Edgerun\\V0\\Capability\xe2\x02!Edgerun\\V0\\Capability\\GPBMetadata\xea\x02\x17Edgerun::V0::Capabilityb\x06proto3"
+	" CAPABILITY_CONSTRAINT_KIND_SCOPE\x10\tB\xd0\x01\n" +
+	"\x19com.edgerun.v0.capabilityB\x0fCapabilityProtoP\x01Z,edgerun-codegen/gen/go/edgerun/v0/edgerun/v0\xa2\x02\x03EVC\xaa\x02\x15Edgerun.V0.Capability\xca\x02\x15Edgerun\\V0\\Capability\xe2\x02!Edgerun\\V0\\Capability\\GPBMetadata\xea\x02\x17Edgerun::V0::Capabilityb\x06proto3"
 
 var (
 	file_edgerun_v0_capability_proto_rawDescOnce sync.Once

@@ -1,4 +1,4 @@
-//! Unified node storage — combines event log, SQLite indexes, and encrypted blobs.
+//! Unified node storage — combines event log, file-based indexes, and encrypted blobs.
 //!
 //! The `NodeStore` is the high-level storage interface used by the node daemon.
 //! It coordinates:
@@ -64,7 +64,7 @@ pub struct NodeStoreConfig {
     /// Creates:
     /// - `{data_root}/events/` — append-only event log files (one per stream)
     /// - `{data_root}/blobs/` — encrypted blob ciphertext files
-    /// - `{data_root}/index.bin` — SQLite index
+    /// - `{data_root}/index.bin` — file-based binary index
     pub data_root: PathBuf,
     /// How to obtain the blob encryption key.
     /// Uses `Arc` internally to allow cloning the config.
@@ -168,11 +168,11 @@ impl NodeStore {
 
     /// Retrieves an event from the event log by stream ID and sequence number.
     ///
-    /// Uses the SQLite index to find the file offset, then reads the protobuf bytes.
+    /// Uses the file index to find the file offset, then reads the protobuf bytes.
     pub fn get_event(&self, stream_id: &[u8], seq: u64) -> Result<Option<EventEnvelope>, StorageError> {
         let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
 
-        // Look up offset in SQLite
+        // Look up offset in file index
         let Some(entry) = self.index.get_event(&stream_id_hex, seq as i64)? else {
             return Ok(None);
         };
@@ -214,6 +214,99 @@ impl NodeStore {
         Ok(self.index.list_stream_heads()?)
     }
 
+    /// Validates the cryptographic integrity of a stream chain.
+    ///
+    /// Walks the stream from genesis to head, checking:
+    /// - Genesis exists at seq 0 with no prev_hash
+    /// - Every non-genesis event has a valid prev_hash matching the previous event
+    /// - Sequence numbers are contiguous with no gaps
+    /// - Every event's signature is structurally present
+    ///
+    /// Returns the number of events validated, or an error describing the break.
+    pub fn validate_stream_chain(&self, stream_id: &[u8]) -> Result<u64, StorageError> {
+        use edgerun_proto::edgerun::v0::stream::EventEnvelope;
+
+        let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+        let head = self.index.get_head(&stream_id_hex)?;
+        let (head_seq, _) = head.ok_or_else(|| {
+            StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "stream has no head — no genesis event",
+            ))
+        })?;
+
+        if head_seq < 0 {
+            return Err(StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "stream head seq is negative",
+            )));
+        }
+
+        let mut prev_hash: Option<Vec<u8>> = None;
+        for seq in 0..=head_seq as u64 {
+            let record = self.index.get_event(&stream_id_hex, seq as i64)?;
+            let record = record.ok_or_else(|| {
+                StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("missing event at seq {} (head is {})", seq, head_seq),
+                ))
+            })?;
+
+            // Read the actual event envelope from the event log file
+            let event: EventEnvelope = match self.get_event(stream_id, seq) {
+                Ok(Some(e)) => e,
+                Ok(None) => {
+                    return Err(StorageError::Io(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("event envelope missing at seq {}", seq),
+                    )));
+                }
+                Err(e) => return Err(e),
+            };
+
+            // Check genesis: seq 0 must have no prev_hash
+            if seq == 0 {
+                if event.prev_event_hash.is_some() {
+                    return Err(StorageError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "genesis event must not have prev_event_hash",
+                    )));
+                }
+            } else {
+                // Non-genesis: prev_hash must match the previous event's hash
+                let expected = prev_hash.as_ref().ok_or_else(|| {
+                    StorageError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("no prev_hash available for seq {} (missing genesis?)", seq),
+                    ))
+                })?;
+                let actual = event.prev_event_hash.as_ref().map(|d| &d.value);
+                if actual != Some(expected) {
+                    return Err(StorageError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("prev_hash mismatch at seq {}: expected {}, got {:?}",
+                            seq,
+                            edgerun_core::util::bytes_to_hex(expected),
+                            actual.map(|v| edgerun_core::util::bytes_to_hex(v))),
+                    )));
+                }
+            }
+
+            // Check signature is present
+            if event.signature.is_none() {
+                return Err(StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("event at seq {} missing signature", seq),
+                )));
+            }
+
+            // Record this event's hash for next iteration
+            prev_hash = Some(record.event_hash.clone());
+        }
+
+        Ok(head_seq as u64 + 1)
+    }
+
     /// Returns events in the given stream and sequence range.
     /// stream_id is passed as raw bytes (hex-encoded for the index lookup).
     pub fn list_event_range(
@@ -243,7 +336,7 @@ impl NodeStore {
     ///
     /// The plaintext is encrypted with AES-GCM using a random nonce.
     /// The ciphertext is stored on the filesystem; the recipient list and nonce
-    /// are stored alongside in SQLite.
+    /// are stored alongside as a `.meta` sidecar file.
     ///
     /// Returns the blob's content-derived identifier.
     pub fn put_blob(
@@ -275,7 +368,7 @@ impl NodeStore {
     /// Stores a logical object with its content as an encrypted blob.
     ///
     /// Creates a LogicalObjectDescriptor with content-derived object ID,
-    /// stores the content as an encrypted blob, and records presence in SQLite.
+    /// stores the content as an encrypted blob, and records presence in the file index.
     ///
     /// Returns the ObjectRef that can be embedded in events.
     pub fn put_object(
@@ -290,9 +383,10 @@ impl NodeStore {
         }
 
         use edgerun_proto::edgerun::v0::common::ObjectRef;
-        
-        // Compute content-derived object ID
-        let object_id = edgerun_core::crypto::sha256(content).to_vec();
+
+        let canonicalization_id = b"raw-bytes-v0";
+        // Spec §17.14: object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || canonical_bytes)
+        let object_id = edgerun_core::crypto::derive_object_id(canonicalization_id, content);
 
         // Create LogicalObjectDescriptor (for future storage/persistence)
         let _descriptor = edgerun_proto::edgerun::v0::object::LogicalObjectDescriptor {
@@ -324,7 +418,7 @@ impl NodeStore {
         // Store the content as an encrypted blob
         let blob_id = self.blobs.store(content, recipients)?;
 
-        // Record object presence in SQLite
+        // Record object presence in file index
         self.index.mark_object_present(
             &edgerun_core::util::bytes_to_hex(&object_id),
             &blob_id,
@@ -887,9 +981,9 @@ impl NodeStore {
     // Rebuildability — rebuild indexes from event logs
     // -----------------------------------------------------------------------
 
-    /// Rebuilds all SQLite indexes from the event log files.
+    /// Rebuilds all file indexes from the event log files.
     ///
-    /// Per the spec (§6.3): the database is NOT the authoritative source of truth
+    /// Per the spec (§6.3): indexes are NOT the authoritative source of truth
     /// and SHOULD be rebuildable from the event log.
     ///
     /// This scans all `.log` files in the events directory, replays every event,

@@ -25,7 +25,13 @@ fn main() {
 fn test_abort_before_poll() {
     println!("  test_abort_before_poll...");
     let rt = Runtime::new_multi_thread().build().unwrap();
-    let handle = rt.spawn(async { 42 });
+    // Use a sleep so the task can't complete immediately — it must
+    // register with the reactor first. This ensures abort happens
+    // before the task is polled to completion.
+    let handle = rt.spawn(async {
+        edgerun_rt::sleep(Duration::from_secs(10)).await;
+        42
+    });
     handle.abort();
     let result = rt.block_on(handle);
     assert!(result.is_err(), "aborted task should return JoinError");

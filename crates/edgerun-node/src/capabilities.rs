@@ -10,6 +10,8 @@
 //! `EventType::CapabilityRevoked` events. On startup, the event log is
 //! replayed to rebuild the grant state.
 
+use edgerun_proto::edgerun::v0::common::ObjectKind;
+
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityProvider,
 };
@@ -20,9 +22,13 @@ use edgerun_remote_capability::{
     FramedRemoteTransport, PolicyWrappedProvider, RemoteCapabilityProvider,
     serve_one,
 };
+use edgerun_hardware_signing::MeshSigner;
+use edgerun_storage::NodeStore;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+
+const KIND_PAYLOAD: i32 = ObjectKind::Payload as i32; // 1
 
 #[cfg(feature = "hardware")]
 use edgerun_evdev_input::EvdevInputBackend;
@@ -108,10 +114,10 @@ pub fn record_capability_grant_event(
     stream_id: &[u8],
     signer: &dyn edgerun_hardware_signing::MeshSigner,
     grant: &edgerun_proto::edgerun::v0::capability::CapabilityGrant,
-) -> Result<Option<u64>, Box<dyn std::error::Error>> {
+) -> Result<u64, Box<dyn std::error::Error>> {
     // Store the grant as an object
     let grant_bytes = grant.encode_to_vec();
-    let object_ref = store.put_object(&grant_bytes, 0, &[])?;
+    let object_ref = store.put_object(&grant_bytes, KIND_PAYLOAD, &[])?;
 
     // Append signed event (using the internal function from command_dispatch)
     let seq = crate::command_dispatch::append_signed_event(
@@ -123,7 +129,8 @@ pub fn record_capability_grant_event(
         Some(object_ref),
         vec![],
         vec![],
-    );
+        vec![],
+    ).ok_or("failed to append capability grant event")?;
 
     Ok(seq)
 }
@@ -134,10 +141,10 @@ pub fn record_capability_revocation_event(
     stream_id: &[u8],
     signer: &dyn edgerun_hardware_signing::MeshSigner,
     revocation: &edgerun_proto::edgerun::v0::capability::CapabilityRevocation,
-) -> Result<Option<u64>, Box<dyn std::error::Error>> {
+) -> Result<u64, Box<dyn std::error::Error>> {
     // Store the revocation as an object
     let rev_bytes = revocation.encode_to_vec();
-    let object_ref = store.put_object(&rev_bytes, 0, &[])?;
+    let object_ref = store.put_object(&rev_bytes, KIND_PAYLOAD, &[])?;
 
     let seq = crate::command_dispatch::append_signed_event(
         store,
@@ -148,7 +155,8 @@ pub fn record_capability_revocation_event(
         Some(object_ref),
         vec![],
         vec![],
-    );
+        vec![],
+    ).ok_or("failed to append capability revocation event")?;
 
     Ok(seq)
 }

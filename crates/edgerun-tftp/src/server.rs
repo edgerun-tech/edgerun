@@ -42,7 +42,7 @@ struct TftpTransfer {
 
 /// TFTP server configuration.
 pub struct TftpServerConfig {
-    /// Bind address (default "0.0.0.0:69").
+    /// Bind address (default "[::]:69" for IPv6 dual-stack, or "0.0.0.0:69" for IPv4-only).
     pub bind_addr: String,
     /// Default block size if client doesn't negotiate (default 512).
     pub default_blksize: u16,
@@ -53,7 +53,8 @@ pub struct TftpServerConfig {
 impl Default for TftpServerConfig {
     fn default() -> Self {
         Self {
-            bind_addr: "0.0.0.0:69".to_string(),
+            // Use IPv6 dual-stack by default to support both IPv4 and IPv6 clients
+            bind_addr: "[::]:69".to_string(),
             default_blksize: 512,
             timeout_secs: 5,
         }

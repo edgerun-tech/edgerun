@@ -10,12 +10,13 @@ use crate::Elapsed;
 
 /// Sleep until the given deadline.
 pub fn sleep_until(deadline: Instant) -> SleepUntil {
-    SleepUntil { deadline }
+    SleepUntil { deadline, registered: false }
 }
 
 /// Future returned by [`sleep_until()`].
 pub struct SleepUntil {
     deadline: Instant,
+    registered: bool,
 }
 
 impl SleepUntil {
@@ -32,9 +33,13 @@ impl Future for SleepUntil {
         if Instant::now() >= self.deadline {
             Poll::Ready(())
         } else {
-            crate::runtime::current_rt()
-                .reactor
-                .register_timer(self.deadline, cx.waker().clone());
+            let this = unsafe { self.get_unchecked_mut() };
+            if !this.registered {
+                crate::runtime::current_rt()
+                    .reactor
+                    .register_timer(this.deadline, cx.waker().clone());
+                this.registered = true;
+            }
             Poll::Pending
         }
     }
@@ -42,13 +47,14 @@ impl Future for SleepUntil {
 
 /// Timeout at a specific [`Instant`] instead of after a [`Duration`].
 pub fn timeout_at<F>(deadline: Instant, f: F) -> TimeoutAt<F> {
-    TimeoutAt { inner: Some(f), deadline }
+    TimeoutAt { inner: Some(f), deadline, registered: false }
 }
 
 /// Future returned by [`timeout_at()`].
 pub struct TimeoutAt<F> {
     inner: Option<F>,
     deadline: Instant,
+    registered: bool,
 }
 
 impl<F: Future> Future for TimeoutAt<F> {
@@ -69,9 +75,13 @@ impl<F: Future> Future for TimeoutAt<F> {
         match unsafe { Pin::new_unchecked(fut) }.poll(cx) {
             Poll::Ready(v) => Poll::Ready(Ok(v)),
             Poll::Pending => {
-                crate::runtime::current_rt()
-                    .reactor
-                    .register_timer(this.deadline, cx.waker().clone());
+                // Only register timer once.
+                if !this.registered {
+                    crate::runtime::current_rt()
+                        .reactor
+                        .register_timer(this.deadline, cx.waker().clone());
+                    this.registered = true;
+                }
                 Poll::Pending
             }
         }

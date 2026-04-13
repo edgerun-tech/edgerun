@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 
-	"edgerunrefcore/cmd/edgerun/gen"
 	"edgerunrefcore/cmd/edgerun/report"
 	"edgerunrefcore/cmd/edgerun/spec"
 	"edgerunrefcore/cmd/edgerun/test"
@@ -14,16 +13,12 @@ import (
 func main() {
 	root := &cobra.Command{
 		Use:   "edgerun",
-		Short: "Edgerun development CLI — spec extraction, code generation, testing, and tooling",
+		Short: "Edgerun development CLI — spec extraction, testing, and tooling",
 	}
 
 	// edgerun spec extract <domain> [flags]
 	specCmd := spec.Cmd()
 	root.AddCommand(specCmd)
-
-	// edgerun gen <target> [flags]
-	genCmd := gen.Cmd()
-	root.AddCommand(genCmd)
 
 	// edgerun test <suite> [flags]
 	testCmd := test.Cmd()

@@ -560,8 +560,8 @@ const file_edgerun_v0_object_proto_rawDesc = "" +
 	"\fChunkingMode\x12\x1d\n" +
 	"\x19CHUNKING_MODE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12CHUNKING_MODE_NONE\x10\x01\x12\x1a\n" +
-	"\x16CHUNKING_MODE_MANIFEST\x10\x02B\xb1\x01\n" +
-	"\x15com.edgerun.v0.objectB\vObjectProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVO\xaa\x02\x11Edgerun.V0.Object\xca\x02\x11Edgerun\\V0\\Object\xe2\x02\x1dEdgerun\\V0\\Object\\GPBMetadata\xea\x02\x13Edgerun::V0::Objectb\x06proto3"
+	"\x16CHUNKING_MODE_MANIFEST\x10\x02B\xb8\x01\n" +
+	"\x15com.edgerun.v0.objectB\vObjectProtoP\x01Z,edgerun-codegen/gen/go/edgerun/v0/edgerun/v0\xa2\x02\x03EVO\xaa\x02\x11Edgerun.V0.Object\xca\x02\x11Edgerun\\V0\\Object\xe2\x02\x1dEdgerun\\V0\\Object\\GPBMetadata\xea\x02\x13Edgerun::V0::Objectb\x06proto3"
 
 var (
 	file_edgerun_v0_object_proto_rawDescOnce sync.Once

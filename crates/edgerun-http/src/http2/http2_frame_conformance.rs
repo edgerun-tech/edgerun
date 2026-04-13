@@ -8,6 +8,8 @@
 
 use std::fs;
 
+use edgerun_json::{Value, Map, from_str};
+
 use crate::http2::{Frame, FrameType};
 use crate::http2::frame::{ContinuationFrame, PriorityFrame, PushPromiseFrame};
 
@@ -46,7 +48,7 @@ struct ExpectedFrame {
     frame_type: u8,
     flags: u8,
     stream_identifier: u32,
-    frame_payload: serde_json::Value,
+    frame_payload: Value,
 }
 
 /// Run frame decoding conformance against all test cases.
@@ -83,7 +85,7 @@ fn run_frame_decode_conformance() {
 
     for test_path in &test_files {
         let raw = fs::read_to_string(test_path).unwrap();
-        let tc: TestCase = serde_json::from_str(&raw).unwrap();
+        let tc: TestCase = from_str(&raw).unwrap();
         total_cases += 1;
 
         let wire = hex_decode(&tc.wire);
@@ -218,7 +220,7 @@ fn check_payload(frame: &Frame, expected: &ExpectedFrame, frame_name: &str) -> b
     }
 }
 
-fn check_data_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_data_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if let Some(data_str) = obj.get("data").and_then(|v| v.as_str()) {
         // DATA frame payload may include padding. The "data" field in the test case
@@ -259,7 +261,7 @@ fn check_data_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Val
     ok
 }
 
-fn check_headers_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_headers_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if let Some(hbf) = obj.get("header_block_fragment").and_then(|v| v.as_str()) {
         let expected_bytes = hbf.as_bytes();
@@ -302,7 +304,7 @@ fn check_headers_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::
     ok
 }
 
-fn check_priority_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_priority_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if frame.payload.len() >= 5 {
         let dep_raw = u32::from_be_bytes([frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]]);
@@ -333,7 +335,7 @@ fn check_priority_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json:
     ok
 }
 
-fn check_rst_stream_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_rst_stream_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if frame.payload.len() >= 4 {
         let ec = u32::from_be_bytes([frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]]);
@@ -347,7 +349,7 @@ fn check_rst_stream_frame(frame: &Frame, obj: &serde_json::Map<String, serde_jso
     ok
 }
 
-fn check_settings_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_settings_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if let Some(settings_arr) = obj.get("settings").and_then(|v| v.as_array()) {
         let expected: Vec<(u16, u32)> = settings_arr
@@ -378,7 +380,7 @@ fn check_settings_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json:
     ok
 }
 
-fn check_push_promise_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_push_promise_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let has_padding = (frame.flags & 0x8) != 0;
     let mut ok = true;
 
@@ -436,7 +438,7 @@ fn check_push_promise_frame(frame: &Frame, obj: &serde_json::Map<String, serde_j
     ok
 }
 
-fn check_ping_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_ping_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if let Some(opaque_str) = obj.get("opaque_data").and_then(|v| v.as_str()) {
         // The test case stores opaque_data as the decoded string value.
@@ -450,7 +452,7 @@ fn check_ping_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Val
     ok
 }
 
-fn check_goaway_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_goaway_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if frame.payload.len() >= 8 {
         let lsi_raw = u32::from_be_bytes([frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]]);
@@ -481,7 +483,7 @@ fn check_goaway_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::V
     ok
 }
 
-fn check_window_update_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_window_update_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if frame.payload.len() >= 4 {
         let inc_raw = u32::from_be_bytes([frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]]);
@@ -497,7 +499,7 @@ fn check_window_update_frame(frame: &Frame, obj: &serde_json::Map<String, serde_
     ok
 }
 
-fn check_continuation_frame(frame: &Frame, obj: &serde_json::Map<String, serde_json::Value>, frame_name: &str) -> bool {
+fn check_continuation_frame(frame: &Frame, obj: &Map<String, Value>, frame_name: &str) -> bool {
     let mut ok = true;
     if let Some(hbf) = obj.get("header_block_fragment").and_then(|v| v.as_str()) {
         if frame.payload != hbf.as_bytes() {

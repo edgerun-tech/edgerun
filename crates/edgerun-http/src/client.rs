@@ -106,6 +106,10 @@ impl HttpClient {
     ///
     /// Delegates to `http1::Client` which handles DNS resolution, TLS,
     /// redirects, chunked encoding, and automatic decompression.
+    ///
+    /// Auto-detects HTTPS from the URI scheme: if the URI uses `https://`,
+    /// the request is routed through `execute_tls()` (requires `tls` feature).
+    /// Plain `http://` URIs use standard TCP via `execute()`.
     async fn execute_http1(&self, request: &Request) -> Result<Response> {
         use crate::http1::compression;
 
@@ -139,8 +143,23 @@ impl HttpClient {
             h1_client = h1_client.no_decompress();
         }
 
-        // Execute via http1::Client
-        let h1_resp = h1_client.execute(&h1_req).await?;
+        // Auto-detect HTTPS from URI scheme and route accordingly
+        let is_https = request.uri().is_https();
+
+        let h1_resp = if is_https {
+            #[cfg(feature = "tls")]
+            {
+                h1_client.execute_tls(&h1_req).await?
+            }
+            #[cfg(not(feature = "tls"))]
+            {
+                return Err(Error::ProtocolError(
+                    "HTTPS requires the `tls` feature on edgerun-http".to_string(),
+                ));
+            }
+        } else {
+            h1_client.execute(&h1_req).await?
+        };
 
         // Convert http1::Response → crate::Response
         let body = if self.auto_decompress {

@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-capabilities = { path = "../../../edgerun_reference_core/crates/edgerun-capabilities" }
 
 [lints]
 workspace = true

@@ -142,17 +142,22 @@ impl AsyncRead for DuplexStream {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         let this = unsafe { self.get_unchecked_mut() };
-        match this.read_inner(buf) {
-            Ok(0) => Poll::Ready(Ok(0)),
-            Ok(n) => Poll::Ready(Ok(n)),
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                match this.poll_read_ready(cx) {
-                    Poll::Ready(Ok(())) => Poll::Ready(Ok(0)),
-                    Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-                    Poll::Pending => Poll::Pending,
+        loop {
+            match this.read_inner(buf) {
+                Ok(0) => return Poll::Ready(Ok(0)),
+                Ok(n) => return Poll::Ready(Ok(n)),
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    match this.poll_read_ready(cx) {
+                        Poll::Ready(Ok(())) => {
+                            // Data may now be available — re-read.
+                            continue;
+                        }
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                        Poll::Pending => return Poll::Pending,
+                    }
                 }
+                Err(e) => return Poll::Ready(Err(e)),
             }
-            Err(e) => Poll::Ready(Err(e)),
         }
     }
 }

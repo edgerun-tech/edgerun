@@ -11,6 +11,8 @@
 
 use std::fs;
 
+use edgerun_json::from_str;
+
 // Path to the cloned test-data repo (relative to workspace root).
 const SPEC_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -79,7 +81,7 @@ fn run_decoder_conformance() {
 
     for story_path in &stories {
         let raw = fs::read_to_string(story_path).unwrap();
-        let story: Story = serde_json::from_str(&raw).unwrap();
+        let story: Story = from_str(&raw).unwrap();
         total_stories += 1;
 
         // Create a fresh decoder for each story.
@@ -213,7 +215,7 @@ fn run_encoder_conformance() {
 
     for story_path in &stories {
         let raw = fs::read_to_string(story_path).unwrap();
-        let story: RawStory = serde_json::from_str(&raw).unwrap();
+        let story: RawStory = from_str(&raw).unwrap();
         total_stories += 1;
 
         // Fresh encoder and decoder for each story.

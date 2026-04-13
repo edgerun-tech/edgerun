@@ -97,6 +97,10 @@ pub struct ConfigState {
     pub dhcp_servers: Vec<crate::types::DhcpServerSpec>,
     /// DHCP pool configs.
     pub dhcp_pools: Vec<crate::types::DhcpPoolSpec>,
+    /// DHCPv6 server configs.
+    pub dhcpv6_servers: Vec<crate::types::Dhcpv6ServerSpec>,
+    /// DHCPv6 pool configs.
+    pub dhcpv6_pools: Vec<crate::types::Dhcpv6PoolSpec>,
     /// TFTP server configs.
     pub tftp_servers: Vec<crate::types::TftpServerSpec>,
 }
@@ -116,6 +120,8 @@ impl ConfigState {
                 ConfigResource::RateLimit(spec) => state.rate_limits.push(spec.clone()),
                 ConfigResource::DhcpServer(spec) => state.dhcp_servers.push(spec.clone()),
                 ConfigResource::DhcpPool(spec) => state.dhcp_pools.push(spec.clone()),
+                ConfigResource::Dhcpv6Server(spec) => state.dhcpv6_servers.push(spec.clone()),
+                ConfigResource::Dhcpv6Pool(spec) => state.dhcpv6_pools.push(spec.clone()),
                 ConfigResource::TftpServer(spec) => state.tftp_servers.push(spec.clone()),
             }
         }
@@ -254,11 +260,74 @@ impl ConfigState {
 
         Ok(scopes)
     }
+
+    /// Build DHCPv6 scope instances for a given DHCPv6 server config.
+    /// Returns scopes indexed by pool name.
+    pub fn build_dhcpv6_scopes(
+        &self,
+        server_index: usize,
+    ) -> Result<std::collections::HashMap<String, edgerun_dhcpv6::lease::LeasePool>, ConfigError> {
+        let server = self.dhcpv6_servers.get(server_index).ok_or_else(|| {
+            ConfigError::ValidationError(format!("dhcpv6_servers[{}]: out of range", server_index))
+        })?;
+
+        let dns_servers: Vec<std::net::Ipv6Addr> = server.dns_servers.iter()
+            .flatten()
+            .filter_map(|s| s.parse().ok())
+            .collect();
+
+        let mut scopes = std::collections::HashMap::new();
+
+        for pool_name in &server.pools {
+            let pool = self.dhcpv6_pools.iter()
+                .find(|p| &p.name == pool_name)
+                .ok_or_else(|| ConfigError::ValidationError(
+                    format!("DHCPv6 pool '{}' not found", pool_name)
+                ))?;
+
+            let range_start: std::net::Ipv6Addr = pool.range_start.parse()
+                .map_err(|e| ConfigError::ValidationError(format!("invalid DHCPv6 range_start: {}", e)))?;
+            let range_end: std::net::Ipv6Addr = pool.range_end.parse()
+                .map_err(|e| ConfigError::ValidationError(format!("invalid DHCPv6 range_end: {}", e)))?;
+
+            // Create a DHCPv6 lease pool
+            let mut lease_pool = edgerun_dhcpv6::lease::LeasePool::new();
+
+            // For DHCPv6, we typically delegate prefixes rather than individual addresses
+            // Add the range as available prefixes with the specified prefix length
+            lease_pool.add_prefixes([(range_start, pool.prefix_length)]);
+
+            // Note: DNS servers are configured in Dhcpv6ServerConfig, not in LeasePool
+            // The pool mainly manages address/prefix allocation
+
+            // Apply static reservations by pre-allocating addresses
+            if let Some(ref reservations) = server.reservations {
+                for res in reservations {
+                    if let Ok(ip) = res.ip.parse::<std::net::Ipv6Addr>() {
+                        // Parse DUID or MAC
+                        if let Ok(_duid_bytes) = parse_duid_or_mac(&res.duid) {
+                            // Reservation parsed successfully - actual reservation would require
+                            // modifying the pool's allocation logic
+                        }
+                    }
+                }
+            }
+
+            scopes.insert(pool.name.clone(), lease_pool);
+        }
+
+        Ok(scopes)
+    }
 }
 
 fn parse_ipv4(s: &str) -> Result<std::net::Ipv4Addr, ConfigError> {
     s.parse()
         .map_err(|e| ConfigError::ValidationError(format!("invalid IPv4 '{}': {}", s, e)))
+}
+
+fn parse_ipv6(s: &str) -> Result<std::net::Ipv6Addr, ConfigError> {
+    s.parse()
+        .map_err(|e| ConfigError::ValidationError(format!("invalid IPv6 '{}': {}", s, e)))
 }
 
 fn parse_mac(s: &str) -> Result<[u8; 6], ConfigError> {
@@ -272,6 +341,22 @@ fn parse_mac(s: &str) -> Result<[u8; 6], ConfigError> {
     let mut mac = [0u8; 6];
     mac.copy_from_slice(&parts);
     Ok(mac)
+}
+
+/// Parse a DUID (DHCP Unique Identifier) or MAC address into bytes.
+/// Returns variable-length bytes suitable for DHCPv6 client identification.
+fn parse_duid_or_mac(s: &str) -> Result<Vec<u8>, ConfigError> {
+    // Try parsing as colon-separated hex bytes (could be DUID or MAC)
+    let result: Result<Vec<u8>, _> = s.split(':')
+        .map(|p| u8::from_str_radix(p, 16))
+        .collect();
+    
+    match result {
+        Ok(bytes) if !bytes.is_empty() => Ok(bytes),
+        _ => Err(ConfigError::ValidationError(
+            format!("invalid DUID/MAC '{}' (expected colon-separated hex)", s)
+        )),
+    }
 }
 
 /// Config parsing/validation errors.

@@ -1,11 +1,8 @@
 version: v2
 managed:
   enabled: true
-  override:
-    - file_option: go_package_prefix
-      value: edgerun-reference-core/gen
 plugins:
-  # Protocol types (edgerun.v0)
+  # Rust protobuf types (prost)
   - local: protoc-gen-prost
     out: crates/edgerun-proto/src/gen
     opt:

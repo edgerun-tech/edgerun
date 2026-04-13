@@ -9,6 +9,31 @@
 //! identity derivation functions.
 
 // ---------------------------------------------------------------------------
+// Protocol algorithm constants (matching protobuf enum wire values)
+// ---------------------------------------------------------------------------
+
+/// Signature algorithm: ECDSA P-256 with SHA-256.
+/// Matches `Signature.Algorithm.SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 1`.
+pub const SIGNATURE_ALGORITHM_ECDSA_P256: u8 = 1;
+
+/// Digest algorithm: SHA-256.
+/// Matches `Digest.Algorithm.DIGEST_ALGORITHM_SHA256 = 1`.
+pub const DIGEST_ALGORITHM_SHA256: u8 = 1;
+
+/// Identity kind: node identity.
+/// Matches `IdentityKind.IDENTITY_KIND_NODE = 2`.
+pub const IDENTITY_KIND_NODE: i32 = 2;
+
+/// SEC1 uncompressed elliptic curve point prefix.
+pub const SEC1_UNCOMPRESSED_PREFIX: u8 = 0x04;
+
+/// ECDSA P-256 signature size in bytes (r=32 + s=32).
+pub const ECDSA_P256_SIGNATURE_LEN: usize = 64;
+
+/// ECDSA P-256 public key size in raw bytes (x=32 + y=32).
+pub const ECDSA_P256_PUBLIC_KEY_LEN: usize = 64;
+
+// ---------------------------------------------------------------------------
 // Re-export raw crypto primitives from the single crypto boundary
 // ---------------------------------------------------------------------------
 pub use edgerun_crypto::digest;

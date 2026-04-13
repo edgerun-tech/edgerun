@@ -361,7 +361,7 @@ pub fn run_store_task(
             match store.integrity_check_and_rebuild() {
                 Ok(0) => {}
                 Ok(_rebuilt) => {
-                    edgerun_log::warn!("SQLite corruption detected and indexes rebuilt");
+                    edgerun_log::warn!("index corruption detected and indexes rebuilt");
                 }
                 Err(_e) => {
                     edgerun_log::error!("integrity check and rebuild failed");
@@ -395,7 +395,7 @@ fn run_periodic_maintenance(store: &mut NodeStore) {
     match store.integrity_check_and_rebuild() {
         Ok(0) => {}
         Ok(_rebuilt) => {
-            edgerun_log::warn!("SQLite corruption detected and indexes rebuilt");
+            edgerun_log::warn!("index corruption detected and indexes rebuilt");
         }
         Err(_e) => {
             edgerun_log::error!("integrity check and rebuild failed");
@@ -423,10 +423,10 @@ fn verify_query_signature(
     query: &edgerun_proto::edgerun::v0::access::QueryRequest,
     sig: &edgerun_proto::edgerun::v0::common::Signature,
 ) -> Result<(), &'static str> {
-    if sig.algorithm != 1 {
+    if sig.algorithm != edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
         return Err("bad_algorithm");
     }
-    if sig.value.len() != 64 {
+    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
         return Err("bad_signature_length");
     }
     let Some(requester) = &query.requester else {
@@ -435,7 +435,7 @@ fn verify_query_signature(
     let Some(key_hint) = &requester.key_hint else {
         return Err("no_key_hint");
     };
-    if key_hint.len() != 64 {
+    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
         return Err("bad_key_hint");
     }
 

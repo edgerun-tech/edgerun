@@ -991,7 +991,7 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
 // Utilities
 // ---------------------------------------------------------------------------
 
-fn generate_random() -> [u8; 32] {
+pub(crate) fn generate_random() -> [u8; 32] {
     let mut buf = [0u8; 32];
     edgerun_crypto::getrandom::fill(&mut buf).expect("getrandom failed");
     buf

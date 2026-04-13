@@ -12,8 +12,7 @@ path = "src/main.rs"
 [features]
 default = ["all-hardware", "oci"]
 oci = [
-    "dep:edgerun-oci-runtime",
-    "dep:edgerun-oci-registry",
+    "dep:edgerun-oci",
 ]
 hardware = [
     "dep:edgerun-evdev-input",
@@ -109,12 +108,13 @@ edgerun-speaker = { path = "../edgerun-speaker", optional = true }
 edgerun-audio-liveliness = { path = "../edgerun-audio-liveliness", optional = true }
 
 # GPU / display
-edgerun-gpu = { path = "../edgerun-gpu", optional = true }
+edgerun-gpu = { workspace = true, optional = true }
 edgerun-linux-gpu = { path = "../edgerun-linux-gpu", optional = true }
-edgerun-display = { path = "../edgerun-display", optional = true }
+edgerun-display = { workspace = true, optional = true }
 edgerun-drm-display = { path = "../edgerun-drm-display", optional = true }
 
 # Input / biometrics
+edgerun-input = { path = "../edgerun-input", optional = true }
 edgerun-fingerprint = { path = "../edgerun-fingerprint", optional = true }
 edgerun-goodix-fingerprint = { path = "../edgerun-goodix-fingerprint", optional = true }
 edgerun-audio-calibration = { path = "../edgerun-audio-calibration", optional = true }
@@ -147,8 +147,7 @@ edgerun-json = { path = "../edgerun-json", optional = true }
 edgerun-machine-report = { path = "../edgerun-machine-report", optional = true }
 
 # OCI container runtime (enable with --features oci)
-edgerun-oci-registry = { path = "../edgerun-oci-registry", optional = true }
-edgerun-oci-runtime = { path = "../edgerun-oci-runtime", optional = true }
+edgerun-oci = { path = "../edgerun-oci", optional = true }
 
 # Android hardware (NDK + JNI)
 edgerun-android-hardware = { path = "../edgerun-android-hardware", optional = true }

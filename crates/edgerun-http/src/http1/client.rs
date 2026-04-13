@@ -11,7 +11,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use edgerun_dns::DnsClient;
 use edgerun_rt::{
     AsyncRead, AsyncWriteExt,
     AsyncTcpStream, AsyncReadHalf,
@@ -27,8 +26,15 @@ use crate::http1::request::Request;
 use crate::http1::response::Response;
 use crate::{Error, HeaderMap, Method, Result, StatusCode};
 
-/// DNS servers to try in order for hostname resolution.
-const DEFAULT_DNS_SERVERS: &[&str] = &["8.8.8.8:53", "1.1.1.1:53"];
+/// Default DNS servers to try in order for hostname resolution.
+/// Used as a fallback if /etc/resolv.conf is empty or missing.
+/// Includes both IPv4 and IPv6 servers for dual-stack support.
+const FALLBACK_DNS_SERVERS: &[&str] = &[
+    "8.8.8.8:53", "8.8.4.4:53",           // Google DNS (IPv4)
+    "2001:4860:4860::8888:53", "2001:4860:4860::8844:53",  // Google DNS (IPv6)
+    "1.1.1.1:53", "1.0.0.1:53",           // Cloudflare DNS (IPv4)
+    "2606:4700:4700::1111:53", "2606:4700:4700::1001:53", // Cloudflare DNS (IPv6)
+];
 
 /// Async HTTP/1.1 client.
 ///
@@ -321,23 +327,89 @@ impl Client {
     /// Resolves the hostname via DNS, connects TCP, performs a TLS 1.3
     /// handshake, sends the request, and reads the full response.
     ///
+    /// If `follow_redirects` is true (default), 3xx responses with a
+    /// `Location` header are followed automatically (up to `max_redirects`).
+    ///
+    /// If `auto_decompress` is true (default), responses with
+    /// `Content-Encoding: gzip/deflate/br` are automatically decompressed.
+    ///
     /// Requires the `tls` feature (enabled by `features = ["tls"]`).
     #[cfg(feature = "tls")]
     pub async fn execute_tls(&self, request: &Request) -> Result<Response> {
-        let uri = request.uri();
-        let is_head = request.method() == &Method::HEAD;
+        use crate::http1::compression;
 
-        let host = uri.host()
-            .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
-        let port = uri.port().unwrap_or(443);
+        let mut current_uri = request.uri().to_string();
+        let mut current_method = request.method().clone();
+        let mut remaining = self.max_redirects;
 
-        let mut tls = self.resolve_and_connect_tls(host, port).await?;
+        loop {
+            let req = Request::builder()
+                .method(current_method.clone())
+                .uri(&current_uri)
+                .body(request.body().map(|b| b.to_vec()).unwrap_or_default())
+                .build()?;
 
-        let request_bytes = request.to_http_bytes();
-        tls.write_all(&request_bytes).await
-            .map_err(Error::Network)?;
+            let uri = req.uri();
+            let is_head = req.method() == &Method::HEAD;
 
-        Self::read_response_tls_full(tls, is_head).await
+            let host = uri.host()
+                .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
+            let port = uri.port().unwrap_or(443);
+
+            let mut tls = self.resolve_and_connect_tls(host, port).await?;
+
+            // Add Accept-Encoding header if auto_decompress is enabled
+            let request_bytes = if self.auto_decompress {
+                let mut req_bytes = req.to_http_bytes();
+                let ae = format!("\r\nAccept-Encoding: {}", compression::accept_encoding_value());
+                if let Some(pos) = req_bytes.windows(4).rposition(|w| w == b"\r\n\r\n") {
+                    let mut new_bytes = Vec::with_capacity(req_bytes.len() + ae.len());
+                    new_bytes.extend_from_slice(&req_bytes[..pos]);
+                    new_bytes.extend_from_slice(ae.as_bytes());
+                    new_bytes.extend_from_slice(&req_bytes[pos..]);
+                    new_bytes
+                } else {
+                    req_bytes
+                }
+            } else {
+                req.to_http_bytes()
+            };
+
+            tls.write_all(&request_bytes).await
+                .map_err(Error::Network)?;
+
+            let response = Self::read_response_tls_full(tls, is_head).await?;
+
+            // Check for redirect (3xx with Location header)
+            if remaining > 0 && self.follow_redirects {
+                let status = response.status().as_u16();
+                if (300..400).contains(&status) {
+                    if let Some(location) = response.headers().get("location") {
+                        let loc = location.as_str();
+                        remaining -= 1;
+                        current_uri = Self::resolve_redirect_url(&current_uri, loc);
+                        if status == 303 && current_method != Method::GET && current_method != Method::HEAD {
+                            current_method = Method::GET;
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            // Decompress response body if auto_decompress is enabled
+            if self.auto_decompress {
+                let body = response.body();
+                if let Some(decompressed) = compression::decompress_body(body, response.headers()) {
+                    return Ok(Response::from_parts(
+                        response.status().clone(),
+                        response.headers().clone(),
+                        decompressed,
+                    ));
+                }
+            }
+
+            return Ok(response);
+        }
     }
 
     /// Execute an HTTPS request with streaming body reader.
@@ -381,26 +453,88 @@ impl Client {
         self.connect(&format!("{}:{}", host, port)).await
     }
 
-    /// Resolve hostname via DNS, trying A then AAAA records.
+    /// Resolve hostname via DNS.
+    ///
+    /// Uses libc `getaddrinfo` via `spawn_blocking` as the primary method,
+    /// preferring IPv6. Falls back to our async `edgerun-dns` client.
     async fn dns_resolve(&self, host: &str) -> Result<IpAddr> {
-        let mut local_dns = DnsClient::new(DEFAULT_DNS_SERVERS[0])
-            .map_err(|e| Error::ProtocolError(format!("DNS client creation failed: {}", e)))?;
-        local_dns.set_timeout(self.dns_timeout);
-
-        let ips = edgerun_rt::timeout(self.dns_timeout, local_dns.query_a(host)).await
-            .map_err(|_| Error::Timeout)?
-            .map_err(|e| Error::ProtocolError(format!("DNS A query failed: {}", e)))?;
-
-        if let Some(ip) = ips.first() {
-            return Ok(IpAddr::V4(*ip));
+        // Primary: system libc getaddrinfo (respects /etc/resolv.conf, nsswitch, etc.)
+        let host_str = host.to_string();
+        if let Ok(result) = edgerun_rt::timeout(
+            self.dns_timeout,
+            edgerun_rt::spawn_blocking(move || {
+                use std::net::ToSocketAddrs;
+                format!("{}:443", host_str).to_socket_addrs()
+            })
+        ).await {
+            if let Ok(Ok(mut addrs)) = result {
+                // Prefer IPv6 over IPv4
+                let mut ipv4_fallback = None;
+                while let Some(addr) = addrs.next() {
+                    match addr.ip() {
+                        IpAddr::V6(ip) => return Ok(IpAddr::V6(ip)),
+                        IpAddr::V4(ip) => {
+                            if ipv4_fallback.is_none() {
+                                ipv4_fallback = Some(IpAddr::V4(ip));
+                            }
+                        }
+                    }
+                }
+                if let Some(ip) = ipv4_fallback {
+                    return Ok(ip);
+                }
+            }
         }
 
-        let ips6 = edgerun_rt::timeout(self.dns_timeout, local_dns.query_aaaa(host)).await
-            .map_err(|_| Error::Timeout)?
-            .map_err(|e| Error::ProtocolError(format!("DNS AAAA query failed: {}", e)))?;
+        // Fallback 1: our async edgerun-dns client reading /etc/resolv.conf
+        // Try AAAA (IPv6) first, then fall back to A (IPv4)
+        if let Some(mut client) = edgerun_dns::DnsClient::system() {
+            client.set_timeout(self.dns_timeout);
+            
+            // Try AAAA record (IPv6) first
+            if let Ok(ips) = edgerun_rt::timeout(self.dns_timeout, client.query_aaaa(host)).await {
+                if let Ok(ips) = ips {
+                    if let Some(ip) = ips.first() {
+                        return Ok(IpAddr::V6(*ip));
+                    }
+                }
+            }
+            
+            // Fall back to A record (IPv4)
+            if let Ok(ips) = edgerun_rt::timeout(self.dns_timeout, client.query_a(host)).await {
+                if let Ok(ips) = ips {
+                    if let Some(ip) = ips.first() {
+                        return Ok(IpAddr::V4(*ip));
+                    }
+                }
+            }
+        }
 
-        if let Some(ip) = ips6.first() {
-            return Ok(IpAddr::V6(*ip));
+        // Fallback 2: hardcoded public resolvers (both IPv4 and IPv6)
+        for &server in FALLBACK_DNS_SERVERS {
+            if let Ok(mut client) = edgerun_dns::DnsClient::new(server) {
+                client.set_timeout(self.dns_timeout);
+                
+                // Try AAAA first for IPv6 DNS servers, A for IPv4 DNS servers
+                let server_is_ipv6 = server.contains(':');
+                if server_is_ipv6 {
+                    if let Ok(ips) = edgerun_rt::timeout(self.dns_timeout, client.query_aaaa(host)).await {
+                        if let Ok(ips) = ips {
+                            if let Some(ip) = ips.first() {
+                                return Ok(IpAddr::V6(*ip));
+                            }
+                        }
+                    }
+                } else {
+                    if let Ok(ips) = edgerun_rt::timeout(self.dns_timeout, client.query_a(host)).await {
+                        if let Ok(ips) = ips {
+                            if let Some(ip) = ips.first() {
+                                return Ok(IpAddr::V4(*ip));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Err(Error::InvalidUri(format!("DNS resolution failed for {}", host)))
