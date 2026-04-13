@@ -94,7 +94,7 @@ pub fn execute_query(
         x if x == QueryClass::EventRange as i32 => {
             match store.list_stream_heads() {
                 Ok(heads) => {
-                    // Determine time_window filter if present
+                    // Parse time_window filter
                     let time_filter = query.time_window.as_ref().map(|tw| {
                         (
                             tw.not_before.as_ref().map(|t| t.seconds),
@@ -108,30 +108,41 @@ pub fn execute_query(
                             break;
                         }
 
-                        // Determine sequence range from time_window
-                        let (from_seq, to_seq) = if let Some((Some(_not_before_secs), Some(_expires_at_secs))) = time_filter {
-                            // In v0 we don't have event timestamps indexed, so we fall back
-                            // to returning the full range and let the client filter.
-                            // This is a known limitation.
-                            (0i64, *head_seq)
+                        // Scan events and filter by time_window if present
+                        if let Some((not_before_secs, expires_at_secs)) = time_filter {
+                            // Filter events by timestamp — scan from recent events backward
+                            // to find the range that matches the time window.
+                            let filtered = filter_events_by_time(
+                                store,
+                                stream_id_hex,
+                                *head_seq,
+                                not_before_secs,
+                                expires_at_secs,
+                                max_results.map(|m| m - event_refs.len()),
+                            );
+                            event_refs.extend(filtered);
+                            if max_results.map_or(false, |m| event_refs.len() >= m) {
+                                completeness = ResultCompleteness::Partial as i32;
+                            }
                         } else {
-                            (0i64, *head_seq)
-                        };
-
-                        if let Ok(events) = store.list_event_range(stream_id_hex, from_seq, to_seq) {
-                            for (seq, hash, _ver) in events {
-                                if max_results.map_or(false, |m| event_refs.len() >= m) {
-                                    completeness = ResultCompleteness::Partial as i32;
-                                    break;
+                            // No time filter — return full range
+                            let from_seq = 0i64;
+                            let to_seq = *head_seq;
+                            if let Ok(events) = store.list_event_range(stream_id_hex, from_seq, to_seq) {
+                                for (seq, hash, _ver) in events {
+                                    if max_results.map_or(false, |m| event_refs.len() >= m) {
+                                        completeness = ResultCompleteness::Partial as i32;
+                                        break;
+                                    }
+                                    event_refs.push(EventRef {
+                                        stream_id: edgerun_core::util::hex_to_bytes(stream_id_hex).unwrap_or_else(|_| stream_id_hex.clone().into_bytes()),
+                                        seq: seq as u64,
+                                        event_hash: Some(edgerun_core::protocol::Digest {
+                                            algorithm: 1,
+                                            value: hash,
+                                        }),
+                                    });
                                 }
-                                event_refs.push(EventRef {
-                                    stream_id: edgerun_core::util::hex_to_bytes(stream_id_hex).unwrap_or_else(|_| stream_id_hex.clone().into_bytes()),
-                                    seq: seq as u64,
-                                    event_hash: Some(edgerun_core::protocol::Digest {
-                                        algorithm: 1,
-                                        value: hash,
-                                    }),
-                                });
                             }
                         }
                     }
@@ -342,6 +353,74 @@ pub fn execute_query(
     }
 
     fragment_bytes
+}
+
+/// Scan events in a stream and return those whose `recorded_at` falls within
+/// `[not_before, expires_at)`. Scans from the head backward for efficiency.
+fn filter_events_by_time(
+    store: &mut NodeStore,
+    stream_id_hex: &str,
+    head_seq: i64,
+    not_before: Option<i64>,
+    expires_at: Option<i64>,
+    max_results: Option<usize>,
+) -> Vec<edgerun_proto::edgerun::v0::common::EventRef> {
+    use edgerun_core::protocol::EventEnvelope;
+    use edgerun_proto::edgerun::v0::common::EventRef;
+    use edgerun_proto::edgerun::v0::stream as proto_stream;
+    use prost::Message;
+
+    let mut result = Vec::new();
+
+    // Get the full event list for this stream
+    let Ok(events) = store.list_event_range(stream_id_hex, 0, head_seq) else {
+        return result;
+    };
+
+    // Build stream_id bytes
+    let stream_id_bytes = edgerun_core::util::hex_to_bytes(stream_id_hex)
+        .unwrap_or_else(|_| stream_id_hex.as_bytes().to_vec());
+
+    // Scan events in order (oldest to newest)
+    for (seq, hash, _ver) in events {
+        if let Some(max) = max_results {
+            if result.len() >= max {
+                break;
+            }
+        }
+
+        // Fetch the event to read its timestamp
+        let Ok(Some(event)) = store.get_event(&stream_id_bytes, seq as u64) else {
+            continue;
+        };
+
+        let recorded_at_secs = event.recorded_at.as_ref().map(|t| t.seconds).unwrap_or(0);
+
+        // Check not_before (inclusive)
+        if let Some(nb) = not_before {
+            if recorded_at_secs < nb {
+                continue;
+            }
+        }
+
+        // Check expires_at (exclusive)
+        if let Some(ea) = expires_at {
+            if recorded_at_secs >= ea {
+                continue;
+            }
+        }
+
+        result.push(EventRef {
+            stream_id: stream_id_bytes.clone(),
+            seq: seq as u64,
+            event_hash: Some(edgerun_core::protocol::Digest {
+                algorithm: 1,
+                value: hash,
+            }),
+        });
+    }
+
+    result
 }
 
 /// Builds a denial QueryResultFragment when cost limits are exceeded.
