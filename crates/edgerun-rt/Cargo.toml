@@ -148,3 +148,7 @@ harness = false
 [[test]]
 name = "once_cell_test"
 harness = false
+
+[[test]]
+name = "latch_test"
+harness = false
