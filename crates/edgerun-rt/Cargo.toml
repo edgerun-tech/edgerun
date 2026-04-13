@@ -156,3 +156,7 @@ harness = false
 [[test]]
 name = "rate_limiter_test"
 harness = false
+
+[[test]]
+name = "mpsc_permit_test"
+harness = false
