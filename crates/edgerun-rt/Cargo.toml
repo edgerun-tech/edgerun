@@ -108,3 +108,7 @@ harness = false
 [[test]]
 name = "async_fd_test"
 harness = false
+
+[[test]]
+name = "io_util_test"
+harness = false

@@ -29,6 +29,7 @@ mod select;
 mod cancellation;
 mod unix;
 mod async_fd;
+mod io_util;
 pub mod fs;
 pub mod mpsc;
 pub mod broadcast;
@@ -60,6 +61,9 @@ pub use unix::{UnixStream, UnixListener, UnixReadHalf, UnixWriteHalf};
 
 // AsyncFd.
 pub use async_fd::{AsyncFd, ReadyFuture, OwnedAsyncFd, async_fd_from_raw, pipe};
+
+// I/O utilities.
+pub use io_util::{copy, copy_bidirectional, empty, sink, repeat, Empty, Sink, Repeat};
 
 // UDP.
 pub use udp::AsyncUdpSocket;
