@@ -747,7 +747,29 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
                             std::future::pending::<()>().await
                         }
                     } => {
-                        edgerun_log::info!("SIGHUP received (reload not yet implemented)");
+                        edgerun_log::info!("SIGHUP received, reloading configuration");
+                        if let Ok(yaml) = fs::read_to_string(path) {
+                            if let Ok(new_config) = parse_config(&yaml) {
+                                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+                                if store_tx.send(StoreRequest::ConfigReload {
+                                    config: new_config,
+                                    reply_tx,
+                                }).await.is_ok() {
+                                    match reply_rx.await {
+                                        Ok(StoreResponse::Ok(_)) => {
+                                            edgerun_log::info!("configuration reloaded successfully");
+                                        }
+                                        _ => {
+                                            edgerun_log::warn!("config reload: store task unavailable");
+                                        }
+                                    }
+                                }
+                            } else {
+                                edgerun_log::warn!("SIGHUP: failed to parse config, keeping current");
+                            }
+                        } else {
+                            edgerun_log::warn!("SIGHUP: failed to read config file, keeping current");
+                        }
                     }
                     _ = async {
                         if let Some(ref mut s) = sigchld {
@@ -762,9 +784,45 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
                 }
             }
         } else {
-            // Normal mode: wait for ctrl_c
-            edgerun_rt::ctrl_c().await.ok();
-            edgerun_log::info!("shutdown requested (normal mode)");
+            // Normal mode: wait for ctrl_c or SIGHUP
+            use edgerun_rt::{Signal, SignalKind};
+
+            let mut sighup = Signal::new(SignalKind::hangup()).ok();
+
+            loop {
+                edgerun_rt::select! {
+                    _ = edgerun_rt::ctrl_c() => {
+                        edgerun_log::info!("shutdown requested (normal mode)");
+                        break;
+                    }
+                    _ = async {
+                        if let Some(ref mut s) = sighup {
+                            s.recv().await.ok();
+                        } else {
+                            std::future::pending::<()>().await
+                        }
+                    } => {
+                        edgerun_log::info!("SIGHUP received, reloading configuration");
+                        if let Ok(yaml) = fs::read_to_string(path) {
+                            if let Ok(new_config) = parse_config(&yaml) {
+                                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+                                if store_tx.send(StoreRequest::ConfigReload {
+                                    config: new_config,
+                                    reply_tx,
+                                }).await.is_ok() {
+                                    if let Ok(StoreResponse::Ok(_)) = reply_rx.await {
+                                        edgerun_log::info!("configuration reloaded successfully");
+                                    }
+                                }
+                            } else {
+                                edgerun_log::warn!("SIGHUP: failed to parse config, keeping current");
+                            }
+                        } else {
+                            edgerun_log::warn!("SIGHUP: failed to read config file, keeping current");
+                        }
+                    }
+                }
+            }
         }
     });
     let _ = shutdown.await;
@@ -773,7 +831,11 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
     cancel.cancel();
 
     edgerun_log::info!("shutting down");
-    drop(store_tx);
+
+    // Signal the store task to gracefully terminate all running workloads
+    let _ = store_tx.send(StoreRequest::Shutdown).await;
+
+    // Wait for store task to finish (workloads terminated, channel drained)
     let _ = store_handle.await;
     let _ = mesh_handle.await;
     edgerun_log::info!("shutdown complete");

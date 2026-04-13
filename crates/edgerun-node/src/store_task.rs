@@ -19,10 +19,10 @@ pub fn run_store_task(
     mut rx: edgerun_rt::mpsc::Receiver<StoreRequest>,
     mut global_rate_limiter: ingress::TokenBucket,
     mut message_hash_cache: ingress::RecentHashCache,
-    allowed_peers: Vec<Vec<u8>>,
+    mut allowed_peers: Vec<Vec<u8>>,
     responder_node_id: NodeID,
     capacity_tracker: std::sync::Arc<capacity::ResourceTracker>,
-    workload_policy: workload_policy::WorkloadPolicy,
+    mut workload_policy: workload_policy::WorkloadPolicy,
     local_assurance_class: i32,
 ) {
     let rate_limiter = workload_policy::RateLimiter::new(
@@ -251,6 +251,50 @@ pub fn run_store_task(
                             .and_then(|(_, addr, _, _, _)| addr.clone())
                     });
                 let _ = reply_tx.send(StoreResponse::Ok(addr.unwrap_or_default().into_bytes()));
+            }
+            StoreRequest::Shutdown => {
+                // Graceful shutdown: terminate all running workloads
+                let terminated = running_workloads.terminate_all();
+                if !terminated.is_empty() {
+                    edgerun_log::info!("signaled {} workloads to terminate", terminated.len());
+                }
+                // Break out of the loop — the task will exit naturally
+                break;
+            }
+            StoreRequest::ConfigReload { config, reply_tx } => {
+                // Reload allowed_peers
+                let new_allowed_peers: Vec<Vec<u8>> = config.allowed_peers.iter()
+                    .map(|s| s.as_bytes().to_vec())
+                    .collect();
+                let old_count = allowed_peers.len();
+                allowed_peers = new_allowed_peers;
+                edgerun_log::info!("config reload: allowed_peers updated ({} -> {})",
+                    old_count, allowed_peers.len());
+
+                // Reload workload policy
+                let policy_path = std::path::Path::new("workload_policy.txt");
+                if let Ok(p) = workload_policy::load_policy_file(policy_path) {
+                    if !p.allowed_registries.is_empty() || !p.blocked_images.is_empty() {
+                        workload_policy = p;
+                        edgerun_log::info!("config reload: workload policy updated");
+                    }
+                }
+
+                // Reload controllers from the event log (replay from persistent change log)
+                let initial_controllers = config_controllers_from_signer(signer);
+                if let Ok(head) = store.get_head(stream_id) {
+                    let up_to_seq = head.map(|(seq, _)| seq).unwrap_or(0);
+                    if let Ok(new_controllers) = command_dispatch::project_controller_set(
+                        &store, stream_id, initial_controllers,
+                    ) {
+                        let old_count = controllers.to_vec().len();
+                        controllers = new_controllers;
+                        edgerun_log::info!("config reload: controllers updated ({} -> {})",
+                            old_count, controllers.to_vec().len());
+                    }
+                }
+
+                let _ = reply_tx.send(StoreResponse::Ok(b"ok".to_vec()));
             }
         }
 

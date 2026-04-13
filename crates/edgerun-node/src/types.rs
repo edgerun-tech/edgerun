@@ -64,6 +64,14 @@ pub enum StoreRequest {
         node_id_hex: String,
         reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
     },
+    /// Signal the store task to shut down gracefully, terminating all workloads.
+    Shutdown,
+    /// Reload configuration from the YAML file — updates allowed_peers,
+    /// bootstrap_peers, controllers, trust_nodes, and workload policy.
+    ConfigReload {
+        config: crate::config::NodeConfig,
+        reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
+    },
 }
 
 /// Response from the store task back to the TCP handler.
