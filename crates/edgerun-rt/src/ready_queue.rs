@@ -3,7 +3,7 @@
 //! Workers call `pop()` to get the next task ID to poll.
 //! Wakers call `push(id)` to schedule a task for polling.
 //!
-//! Uses a `parking_lot::Condvar` for efficient waiting (no spin loops).
+//! Uses our `sync::Condvar` for efficient waiting (no spin loops).
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
