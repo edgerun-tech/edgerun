@@ -61,7 +61,7 @@ pub use udp::AsyncUdpSocket;
 
 // Timers and signals.
 pub use timers::{
-    sleep, timeout, interval, ctrl_c, Sleep, Timeout, Elapsed, Interval,
+    sleep, timeout, interval, interval_at, ctrl_c, Sleep, Timeout, Elapsed, Interval,
     MissedTickBehavior, CtrlC,
 };
 pub use sleep_until::{sleep_until, timeout_at, SleepUntil, TimeoutAt};

@@ -1,6 +1,6 @@
 // Test timers (sleep, timeout, interval, ctrl_c) with the actual runtime.
 use edgerun_rt::{
-    sleep, timeout, interval, ctrl_c, Sleep, Timeout, Interval,
+    sleep, timeout, interval, interval_at, ctrl_c, Sleep, Timeout, Interval,
     MissedTickBehavior, Elapsed,
     Runtime, spawn,
 };
@@ -18,6 +18,7 @@ fn main() {
         test_timeout_wrapped_sleep();
         test_interval_ticks();
         test_interval_skip_missed();
+        test_interval_at_start_time();
         test_sleep_type();
         test_elapsed_error_type();
         test_ctrl_c_type();
@@ -163,6 +164,23 @@ fn test_interval_skip_missed() {
         println!("  test_interval_skip_missed OK");
     });
     std::thread::sleep(Duration::from_millis(200));
+    drop(h);
+}
+
+fn test_interval_at_start_time() {
+    println!("  test_interval_at_start_time...");
+    let h = spawn(async {
+        let start = StdInstant::now() + Duration::from_millis(50);
+        let mut iv = interval_at(start, Duration::from_millis(30));
+
+        let tick_start = StdInstant::now();
+        iv.tick().await;
+        let elapsed = tick_start.elapsed();
+        // First tick should be at ~50ms from now (the start time)
+        assert!(elapsed >= Duration::from_millis(40), "interval_at first tick took {:?}", elapsed);
+        println!("  test_interval_at_start_time OK (first tick in {:?})", elapsed);
+    });
+    std::thread::sleep(Duration::from_millis(500));
     drop(h);
 }
 
