@@ -11,12 +11,13 @@ use edgerun_rt::{
 };
 
 use crate::protocol::read_smtp_line;
+use crate::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::server::rate_limit::RateLimiter;
 use crate::types::command::{extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret};
+use crate::types::response::EnhancedStatusCode;
 use crate::types::{
-    EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode,
-    SmtpState,
+    MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };
 
 #[cfg(feature = "tls")]
@@ -174,6 +175,23 @@ impl SmtpServer {
         })
     }
 
+    /// Create an SMTPS server (implicit TLS on connect, typically port 465).
+    ///
+    /// Requires the `tls` feature and a configured `tls_cert`.
+    #[cfg(feature = "tls")]
+    pub fn new_smtps(
+        config: SmtpServerConfig,
+        handler: Arc<dyn MailHandler>,
+    ) -> io::Result<Self> {
+        if config.tls_cert.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "SMTPS requires tls_cert to be configured",
+            ));
+        }
+        Self::new(config, handler)
+    }
+
     pub fn with_memory_store(config: SmtpServerConfig) -> io::Result<Self> {
         let store = Arc::new(crate::server::handler::MemoryMailStore::new());
         Self::new(config, store)
@@ -272,6 +290,24 @@ async fn handle_connection(
         Err(_) => panic!("handle_connection called with non-exclusive Arc reference"),
     };
 
+    // SMTPS: wrap in TLS immediately (implicit TLS, port 465)
+    #[cfg(feature = "tls")]
+    let mut transport = if config.smtps {
+        if let Some(ref cert) = config.tls_cert {
+            let mut tls_stream = AsyncTlsServerStream::new(stream);
+            tls_stream
+                .handshake(cert)
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
+            SmtpTransport::Tls(tls_stream)
+        } else {
+            SmtpTransport::Plain(stream)
+        }
+    } else {
+        SmtpTransport::Plain(stream)
+    };
+
+    #[cfg(not(feature = "tls"))]
     let mut transport = SmtpTransport::Plain(stream);
 
     let greeting = SmtpResponse::service_ready(&config.domain);
@@ -345,6 +381,7 @@ async fn handle_connection(
                     }
                     Err(e) => {
                         edgerun_log::error!("edgerun-smtp: delivery failed: {}", e);
+                        send_dsn_bounce(&handler, &envelope, &config, &e.to_string());
                         send_response(
                             &mut transport,
                             &SmtpResponse::transient_failure("Delivery failed"),
@@ -421,6 +458,7 @@ async fn handle_connection(
                     }
                     Err(e) => {
                         edgerun_log::error!("edgerun-smtp: delivery failed: {}", e);
+                        send_dsn_bounce(&handler, &envelope, &config, &e.to_string());
                         send_response(
                             &mut transport,
                             &SmtpResponse::transient_failure("Delivery failed"),
@@ -731,6 +769,40 @@ async fn handle_command(
                 }
             }
 
+            // SMTPUTF8 parameter handling — we advertise SMTPUTF8, so accept it.
+            // If a client sends SMTPUTF8 and we don't support it, we'd reject here.
+            // Since we always advertise SMTPUTF8, non-ASCII addresses are accepted.
+            for (key, _value) in &parameters {
+                if key.eq_ignore_ascii_case("SMTPUTF8") {
+                    // Server supports it, no action needed — address is already
+                    // stored as Rust String which validates UTF-8.
+                }
+            }
+
+            // 8BITMIME BODY= parameter negotiation (RFC 6152)
+            // We accept 7bit, 8bitmime, and binarymime — no conversion needed
+            // since we store raw bytes in envelope.data.
+            for (key, value) in &parameters {
+                if key.eq_ignore_ascii_case("BODY") {
+                    if let Some(ref body_type) = value {
+                        let body_lower = body_type.to_lowercase();
+                        if body_lower != "7bit"
+                            && body_lower != "8bitmime"
+                            && body_lower != "binarymime"
+                        {
+                            send_response(
+                                transport,
+                                &SmtpResponse::syntax_error(&format!(
+                                    "Unknown BODY type: {}", body_type
+                                )),
+                            )
+                            .await?;
+                            return Ok(ControlFlow::Continue);
+                        }
+                    }
+                }
+            }
+
             *envelope = MailEnvelope::new(address.clone());
             envelope.from_parameters = parameters;
             envelope.dsn_ret = extract_dsn_ret(&envelope.from_parameters).unwrap_or_default();
@@ -971,4 +1043,52 @@ async fn send_multiline_response(
 ) -> io::Result<()> {
     let response = SmtpResponse::multiline(code, lines);
     send_response(transport, &response).await
+}
+
+/// Generate and send a DSN bounce on delivery failure.
+fn send_dsn_bounce(
+    handler: &Arc<dyn MailHandler>,
+    envelope: &MailEnvelope,
+    config: &SmtpServerConfig,
+    error: &str,
+) {
+    // Don't bounce to null sender or empty
+    if envelope.from.is_empty() {
+        return;
+    }
+    let bounce_sender = format!("postmaster@{}", config.domain);
+    let bounce_recipients: Vec<DeliveryStatus> = envelope
+        .recipients
+        .iter()
+        .enumerate()
+        .map(|(i, addr)| DeliveryStatus {
+            original_recipient: envelope.dsn_orcpt.get(i).and_then(|x| x.clone()),
+            final_recipient: addr.clone(),
+            remote_mta: Some(config.domain.clone()),
+            action: DsnAction::Failed,
+            status: Some(EnhancedStatusCode::new(5, 0, 0)),
+            diagnostic_code: Some(error.to_string()),
+            timestamp: None,
+        })
+        .collect();
+
+    let data_str = String::from_utf8_lossy(&envelope.data);
+    // Extract headers (everything before first blank line)
+    let headers_str = if let Some(pos) = data_str.find("\r\n\r\n") {
+        &data_str[..pos]
+    } else {
+        data_str.as_ref()
+    };
+
+    let bounce = DsnBounce::permanent_failure(
+        &bounce_sender,
+        &envelope.from,
+        bounce_recipients,
+        headers_str,
+        Some(data_str.as_ref()),
+    );
+
+    if let Err(bounce_err) = handler.send_bounce(&bounce) {
+        edgerun_log::error!("edgerun-smtp: bounce delivery failed: {}", bounce_err);
+    }
 }

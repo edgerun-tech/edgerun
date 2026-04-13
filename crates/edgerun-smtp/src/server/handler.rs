@@ -2,6 +2,7 @@
 
 use std::io;
 
+use crate::server::dsn_generator::DsnBounce;
 use crate::types::MailEnvelope;
 
 // ===========================================================================
@@ -48,6 +49,16 @@ pub trait MailHandler: Send + Sync + 'static {
     /// Whether authentication is required before MAIL FROM.
     fn auth_required(&self) -> bool {
         false
+    }
+
+    /// Send a DSN bounce message to the envelope sender.
+    ///
+    /// Called when `accept_mail()` returns `Err` — the implementation
+    /// should deliver the bounce to the return path address.
+    /// Default implementation logs a warning and returns `Ok(())`.
+    fn send_bounce(&self, _bounce: &DsnBounce) -> io::Result<()> {
+        edgerun_log::warn!("edgerun-smtp: bounce message generated but no bounce handler configured");
+        Ok(())
     }
 }
 

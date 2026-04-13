@@ -18,7 +18,6 @@
 //! }
 //! ```
 
-use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -43,8 +42,7 @@ use crate::server::message_builder::{
 };
 use crate::{Result, TlsError};
 
-// Re-export from edgerun-rt
-use edgerun_rt::{AsyncRead, AsyncWrite};
+use edgerun_rt::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
 
 // ---------------------------------------------------------------------------
 // AsyncTlsStream — client-side async TLS stream
@@ -110,17 +108,21 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             version: 0x0303,
             fragment: ch,
         };
-        async_write_all(&mut stream, &record.to_bytes()).await?;
-        async_flush(&mut stream).await?;
+        stream.write_all(&record.to_bytes()).await?;
+        stream.flush().await?;
 
         // 2. Read ServerHello (plaintext)
-        let (ct, _ver, len) = async_read_record_header(&mut stream).await?;
+        let mut hdr = [0u8; 5];
+        stream.read_exact(&mut hdr).await?;
+        let ct = hdr[0];
         if ct != 22 {
             return Err(TlsError::HandshakeFailure(format!(
                 "Expected handshake record, got content_type={ct}",
             )));
         }
-        let fragment = async_read_record_fragment(&mut stream, len).await?;
+        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let mut fragment = vec![0u8; len];
+        stream.read_exact(&mut fragment).await?;
         let sh = ServerHello::parse(&fragment)?;
 
         if sh.supported_version != Some(0x0304) {
@@ -245,32 +247,40 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             fragment: ciphertext,
         };
         let bytes = record.to_bytes();
-        match async_write_all_poll(&mut self.stream, &bytes, cx) {
-            Poll::Ready(Ok(())) => {
-                match async_flush_poll(&mut self.stream, cx) {
-                    Poll::Ready(Ok(())) => Poll::Ready(Ok(buf.len())),
-                    Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-                    Poll::Pending => {
-                        // Flush is pending but we already wrote — this is a partial success.
-                        // In practice flush should complete quickly; we return the written count.
-                        Poll::Ready(Ok(buf.len()))
+
+        // Write all bytes, then flush — inline poll loop
+        let mut pos = 0;
+        while pos < bytes.len() {
+            match Pin::new(&mut self.stream).poll_write(cx, &bytes[pos..]) {
+                Poll::Ready(Ok(n)) => {
+                    if n == 0 {
+                        return Poll::Ready(Err(std::io::Error::new(
+                            std::io::ErrorKind::WriteZero,
+                            "failed to write whole buffer",
+                        )));
                     }
+                    pos += n;
                 }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
         }
+        // Flush
+        match Pin::new(&mut self.stream).poll_flush(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => return Poll::Pending,
+        }
+        Poll::Ready(Ok(buf.len()))
     }
 
     /// Flush the underlying transport.
     pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        async_flush_poll(&mut self.stream, cx)
+        Pin::new(&mut self.stream).poll_flush(cx)
     }
 
     /// Shut down the underlying transport.
     pub fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        // TLS close_notify: send alert then shutdown
-        // For simplicity, just shutdown the underlying stream
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 
@@ -278,42 +288,73 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
 
     fn poll_read_application_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Vec<u8>>> {
         loop {
-            match async_read_record_header_poll(&mut self.stream, cx) {
-                Poll::Ready(Ok((content_type, _version, length))) => {
-                    match async_read_record_fragment_poll(&mut self.stream, length, cx) {
-                        Poll::Ready(Ok(fragment)) => {
-                            if content_type == 23 {
-                                // application_data
-                                match self.read_cipher.decrypt(&fragment) {
-                                    Ok((inner_type, plaintext)) => {
-                                        if inner_type == 23 {
-                                            return Poll::Ready(Ok(plaintext));
-                                        }
-                                        // Post-handshake message (e.g., NewSessionTicket) — ignore
-                                    }
-                                    Err(e) => return Poll::Ready(Err(TlsError::Cipher(e))),
-                                }
-                            } else if content_type == 21 {
-                                // alert
-                                if fragment.len() >= 2 {
-                                    let level = AlertLevel::from_wire(fragment[0])
-                                        .map_err(|e| TlsError::Protocol(e))?;
-                                    let alert = Alert::from_wire(fragment[1])
-                                        .map_err(|e| TlsError::Protocol(e))?;
-                                    if level == AlertLevel::Fatal {
-                                        return Poll::Ready(Err(TlsError::Alert(level, alert)));
-                                    }
-                                }
-                            }
-                            // content_type 22 (handshake post-handshake) or unknown — skip
+            // Read record header (5 bytes)
+            let mut hdr = [0u8; 5];
+            let mut pos = 0;
+            loop {
+                match Pin::new(&mut self.stream).poll_read(cx, &mut hdr[pos..5]) {
+                    Poll::Ready(Ok(n)) => {
+                        if n == 0 {
+                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
+                                std::io::ErrorKind::UnexpectedEof,
+                                "failed to read record header",
+                            ))));
                         }
-                        Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
-                        Poll::Pending => return Poll::Pending,
+                        pos += n;
+                        if pos == 5 { break; }
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+            let content_type = hdr[0];
+            let _version = u16::from_be_bytes([hdr[1], hdr[2]]);
+            let length = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+
+            // Read record fragment
+            let mut fragment = vec![0u8; length];
+            let mut pos = 0;
+            loop {
+                match Pin::new(&mut self.stream).poll_read(cx, &mut fragment[pos..length]) {
+                    Poll::Ready(Ok(n)) => {
+                        if n == 0 {
+                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
+                                std::io::ErrorKind::UnexpectedEof,
+                                "failed to read record fragment",
+                            ))));
+                        }
+                        pos += n;
+                        if pos == length { break; }
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+
+            if content_type == 23 {
+                // application_data
+                match self.read_cipher.decrypt(&fragment) {
+                    Ok((inner_type, plaintext)) => {
+                        if inner_type == 23 {
+                            return Poll::Ready(Ok(plaintext));
+                        }
+                        // Post-handshake message (e.g., NewSessionTicket) — ignore
+                    }
+                    Err(e) => return Poll::Ready(Err(TlsError::Cipher(e))),
+                }
+            } else if content_type == 21 {
+                // alert
+                if fragment.len() >= 2 {
+                    let level = AlertLevel::from_wire(fragment[0])
+                        .map_err(|e| TlsError::Protocol(e))?;
+                    let alert = Alert::from_wire(fragment[1])
+                        .map_err(|e| TlsError::Protocol(e))?;
+                    if level == AlertLevel::Fatal {
+                        return Poll::Ready(Err(TlsError::Alert(level, alert)));
                     }
                 }
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
-                Poll::Pending => return Poll::Pending,
             }
+            // content_type 22 (handshake post-handshake) or unknown — skip
         }
     }
 }
@@ -394,23 +435,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     /// // ... continue reading encrypted SMTP commands ...
     /// ```
     pub async fn handshake(&mut self, cert_and_key: &CertificateAndKey) -> Result<()> {
-        // The handshake logic is identical to accept(), but operates on self.stream
-        // instead of taking ownership. We use std::mem::take to temporarily
-        // replace self.stream with a placeholder, run the handshake, then
-        // put the result back.
-        //
-        // For simplicity, we just call accept() via a helper that takes &mut stream.
-        // But accept() takes ownership, so we need to inline the handshake logic here.
-        //
-        // Instead, we'll use a simpler approach: use Pin::new_unchecked to get
-        // mutable access to the stream field and run the same accept() steps inline.
-        //
-        // The cleanest approach: factor out the accept logic into a shared async fn
-        // that takes &mut S. But that would require refactoring accept() itself.
-        //
-        // For now, we take the pragmatic route: since S: AsyncRead + AsyncWrite + Unpin,
-        // we can call Pin::new on the stream and use the existing helper functions.
-
         server_handshake_impl(&mut self.stream, cert_and_key)
             .await
             .map(|(write_cipher, read_cipher, cipher_suite)| {
@@ -475,22 +499,36 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             fragment: ciphertext,
         };
         let bytes = record.to_bytes();
-        match async_write_all_poll(&mut self.stream, &bytes, cx) {
-            Poll::Ready(Ok(())) => {
-                match async_flush_poll(&mut self.stream, cx) {
-                    Poll::Ready(Ok(())) => Poll::Ready(Ok(buf.len())),
-                    Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-                    Poll::Pending => Poll::Ready(Ok(buf.len())),
+
+        // Write all bytes, then flush — inline poll loop
+        let mut pos = 0;
+        while pos < bytes.len() {
+            match Pin::new(&mut self.stream).poll_write(cx, &bytes[pos..]) {
+                Poll::Ready(Ok(n)) => {
+                    if n == 0 {
+                        return Poll::Ready(Err(std::io::Error::new(
+                            std::io::ErrorKind::WriteZero,
+                            "failed to write whole buffer",
+                        )));
+                    }
+                    pos += n;
                 }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
         }
+        // Flush
+        match Pin::new(&mut self.stream).poll_flush(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => return Poll::Pending,
+        }
+        Poll::Ready(Ok(buf.len()))
     }
 
     /// Flush the underlying transport.
     pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        async_flush_poll(&mut self.stream, cx)
+        Pin::new(&mut self.stream).poll_flush(cx)
     }
 
     /// Shut down the underlying transport.
@@ -500,228 +538,75 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
 
     fn poll_read_application_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Vec<u8>>> {
         loop {
-            match async_read_record_header_poll(&mut self.stream, cx) {
-                Poll::Ready(Ok((content_type, _version, length))) => {
-                    match async_read_record_fragment_poll(&mut self.stream, length, cx) {
-                        Poll::Ready(Ok(fragment)) => {
-                            if content_type == 23 {
-                                // application_data
-                                match self.read_cipher.decrypt(&fragment) {
-                                    Ok((inner_type, plaintext)) => {
-                                        if inner_type == 23 {
-                                            return Poll::Ready(Ok(plaintext));
-                                        }
-                                        // Post-handshake message — ignore
-                                    }
-                                    Err(e) => return Poll::Ready(Err(TlsError::Cipher(e))),
-                                }
-                            } else if content_type == 21 {
-                                // alert
-                                if fragment.len() >= 2 {
-                                    let level = AlertLevel::from_wire(fragment[0])
-                                        .map_err(|e| TlsError::Protocol(e))?;
-                                    let alert = Alert::from_wire(fragment[1])
-                                        .map_err(|e| TlsError::Protocol(e))?;
-                                    if level == AlertLevel::Fatal {
-                                        return Poll::Ready(Err(TlsError::Alert(level, alert)));
-                                    }
-                                }
-                            }
-                            // content_type 22 (handshake) or unknown — skip
+            // Read record header (5 bytes)
+            let mut hdr = [0u8; 5];
+            let mut pos = 0;
+            loop {
+                match Pin::new(&mut self.stream).poll_read(cx, &mut hdr[pos..5]) {
+                    Poll::Ready(Ok(n)) => {
+                        if n == 0 {
+                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
+                                std::io::ErrorKind::UnexpectedEof,
+                                "failed to read record header",
+                            ))));
                         }
-                        Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
-                        Poll::Pending => return Poll::Pending,
+                        pos += n;
+                        if pos == 5 { break; }
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+            let content_type = hdr[0];
+            let _version = u16::from_be_bytes([hdr[1], hdr[2]]);
+            let length = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+
+            // Read record fragment
+            let mut fragment = vec![0u8; length];
+            let mut pos = 0;
+            loop {
+                match Pin::new(&mut self.stream).poll_read(cx, &mut fragment[pos..length]) {
+                    Poll::Ready(Ok(n)) => {
+                        if n == 0 {
+                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
+                                std::io::ErrorKind::UnexpectedEof,
+                                "failed to read record fragment",
+                            ))));
+                        }
+                        pos += n;
+                        if pos == length { break; }
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+
+            if content_type == 23 {
+                // application_data
+                match self.read_cipher.decrypt(&fragment) {
+                    Ok((inner_type, plaintext)) => {
+                        if inner_type == 23 {
+                            return Poll::Ready(Ok(plaintext));
+                        }
+                        // Post-handshake message — ignore
+                    }
+                    Err(e) => return Poll::Ready(Err(TlsError::Cipher(e))),
+                }
+            } else if content_type == 21 {
+                // alert
+                if fragment.len() >= 2 {
+                    let level = AlertLevel::from_wire(fragment[0])
+                        .map_err(|e| TlsError::Protocol(e))?;
+                    let alert = Alert::from_wire(fragment[1])
+                        .map_err(|e| TlsError::Protocol(e))?;
+                    if level == AlertLevel::Fatal {
+                        return Poll::Ready(Err(TlsError::Alert(level, alert)));
                     }
                 }
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
-                Poll::Pending => return Poll::Pending,
             }
+            // content_type 22 (handshake) or unknown — skip
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Async I/O helpers — thin async wrappers of the sync record reading
-// ---------------------------------------------------------------------------
-
-/// Read exactly `n` bytes from an async stream.
-async fn async_read_exact<S: AsyncRead + Unpin>(stream: &mut S, buf: &mut [u8]) -> std::io::Result<()> {
-    let mut pos = 0;
-    while pos < buf.len() {
-        let n = async_read_once(stream, &mut buf[pos..]).await?;
-        if n == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill buffer",
-            ));
-        }
-        pos += n;
-    }
-    Ok(())
-}
-
-/// Future for a single async read.
-struct ReadOnceFut<'a, S> { stream: &'a mut S, buf: &'a mut [u8] }
-impl<'a, S: AsyncRead + Unpin> Future for ReadOnceFut<'a, S> {
-    type Output = std::io::Result<usize>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        Pin::new(&mut *this.stream).poll_read(cx, this.buf)
-    }
-}
-
-fn async_read_once<'a, S: AsyncRead + Unpin>(stream: &'a mut S, buf: &'a mut [u8]) -> ReadOnceFut<'a, S> {
-    ReadOnceFut { stream, buf }
-}
-
-async fn async_read_record_header<S: AsyncRead + Unpin>(stream: &mut S) -> std::io::Result<(u8, u16, usize)> {
-    let mut hdr = [0u8; 5];
-    async_read_exact(stream, &mut hdr).await?;
-    let content_type = hdr[0];
-    let version = u16::from_be_bytes([hdr[1], hdr[2]]);
-    let length = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
-    Ok((content_type, version, length))
-}
-
-fn async_read_record_header_poll<S: AsyncRead + Unpin>(
-    stream: &mut S, cx: &mut Context<'_>,
-) -> Poll<std::io::Result<(u8, u16, usize)>> {
-    // We need a small state machine for reading exactly 5 bytes.
-    // Use a heap-allocated buffer for simplicity.
-    const HDR_LEN: usize = 5;
-    thread_local! {
-        static HDR_BUF: std::cell::RefCell<[u8; HDR_LEN]> = std::cell::RefCell::new([0u8; HDR_LEN]);
-    }
-    HDR_BUF.with(|cell| {
-        let mut buf = cell.borrow_mut();
-        let mut pos = 0;
-        loop {
-            let n = match Pin::new(&mut *stream).poll_read(cx, &mut buf[pos..HDR_LEN]) {
-                Poll::Ready(Ok(n)) => n,
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Pending => return Poll::Pending,
-            };
-            if n == 0 {
-                return Poll::Ready(Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "failed to read record header",
-                )));
-            }
-            pos += n;
-            if pos == HDR_LEN {
-                let content_type = buf[0];
-                let version = u16::from_be_bytes([buf[1], buf[2]]);
-                let length = u16::from_be_bytes([buf[3], buf[4]]) as usize;
-                return Poll::Ready(Ok((content_type, version, length)));
-            }
-        }
-    })
-}
-
-async fn async_read_record_fragment<S: AsyncRead + Unpin>(stream: &mut S, length: usize) -> std::io::Result<Vec<u8>> {
-    let mut buf = vec![0u8; length];
-    async_read_exact(stream, &mut buf).await?;
-    Ok(buf)
-}
-
-fn async_read_record_fragment_poll<S: AsyncRead + Unpin>(
-    stream: &mut S, length: usize, cx: &mut Context<'_>,
-) -> Poll<std::io::Result<Vec<u8>>> {
-    let mut buf = vec![0u8; length];
-    let mut pos = 0;
-    loop {
-        let n = match Pin::new(&mut *stream).poll_read(cx, &mut buf[pos..length]) {
-            Poll::Ready(Ok(n)) => n,
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-            Poll::Pending => return Poll::Pending,
-        };
-        if n == 0 {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to read record fragment",
-            )));
-        }
-        pos += n;
-        if pos == length {
-            return Poll::Ready(Ok(buf));
-        }
-    }
-}
-
-/// Async write — writes all bytes or errors.
-async fn async_write_all<S: AsyncWrite + Unpin>(stream: &mut S, buf: &[u8]) -> std::io::Result<()> {
-    let mut pos = 0;
-    while pos < buf.len() {
-        let n = async_write_once(stream, &buf[pos..]).await?;
-        if n == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::WriteZero,
-                "failed to write whole buffer",
-            ));
-        }
-        pos += n;
-    }
-    Ok(())
-}
-
-/// Single poll_write call wrapped in a Future.
-fn async_write_once<'a, S: AsyncWrite + Unpin>(stream: &'a mut S, buf: &'a [u8]) -> WriteOnceFut<'a, S> {
-    WriteOnceFut { stream, buf }
-}
-
-struct WriteOnceFut<'a, S> { stream: &'a mut S, buf: &'a [u8] }
-impl<'a, S: AsyncWrite + Unpin> Future for WriteOnceFut<'a, S> {
-    type Output = std::io::Result<usize>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        Pin::new(&mut *this.stream).poll_write(cx, this.buf)
-    }
-}
-
-fn async_write_all_poll<S: AsyncWrite + Unpin>(
-    stream: &mut S, buf: &[u8], cx: &mut Context<'_>,
-) -> Poll<std::io::Result<()>> {
-    let mut pos = 0;
-    while pos < buf.len() {
-        match Pin::new(&mut *stream).poll_write(cx, &buf[pos..]) {
-            Poll::Ready(Ok(n)) => {
-                if n == 0 {
-                    return Poll::Ready(Err(std::io::Error::new(
-                        std::io::ErrorKind::WriteZero,
-                        "failed to write whole buffer",
-                    )));
-                }
-                pos += n;
-            }
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-            Poll::Pending => return Poll::Pending,
-        }
-    }
-    Poll::Ready(Ok(()))
-}
-
-/// Single poll_flush call wrapped in a Future.
-fn async_flush_once<'a, S: AsyncWrite + Unpin>(stream: &'a mut S) -> FlushOnceFut<'a, S> {
-    FlushOnceFut { stream }
-}
-
-struct FlushOnceFut<'a, S> { stream: &'a mut S }
-impl<'a, S: AsyncWrite + Unpin> Future for FlushOnceFut<'a, S> {
-    type Output = std::io::Result<()>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        Pin::new(&mut *this.stream).poll_flush(cx)
-    }
-}
-
-async fn async_flush<S: AsyncWrite + Unpin>(stream: &mut S) -> std::io::Result<()> {
-    async_flush_once(stream).await
-}
-
-fn async_flush_poll<S: AsyncWrite + Unpin>(
-    stream: &mut S, cx: &mut Context<'_>,
-) -> Poll<std::io::Result<()>> {
-    Pin::new(&mut *stream).poll_flush(cx)
 }
 
 // ---------------------------------------------------------------------------
@@ -738,8 +623,11 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
     server_name: &str,
 ) -> Result<()> {
     loop {
-        let (_ct, _ver, len) = async_read_record_header(stream).await?;
-        let fragment = async_read_record_fragment(stream, len).await?;
+        let mut hdr = [0u8; 5];
+        stream.read_exact(&mut hdr).await?;
+        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let mut fragment = vec![0u8; len];
+        stream.read_exact(&mut fragment).await?;
         let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
         let hs_type = if !plaintext.is_empty() { plaintext[0] } else { inner_type };
 
@@ -847,8 +735,8 @@ async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
         version: 0x0303,
         fragment: finished_ct,
     };
-    async_write_all(stream, &record.to_bytes()).await?;
-    async_flush(stream).await?;
+    stream.write_all(&record.to_bytes()).await?;
+    stream.flush().await?;
     Ok(())
 }
 
@@ -871,19 +759,19 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
     let ee_msg = build_encrypted_extensions(alpn_protocol);
     transcript.extend_from_slice(&ee_msg);
     let ee_ct = write_cipher.encrypt(22, &ee_msg);
-    async_write_all(stream, &crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: ee_ct }.to_bytes()).await?;
+    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: ee_ct }.to_bytes()).await?;
 
     // Certificate
     let cert_msg = build_certificate_message(cert_der);
     transcript.extend_from_slice(&cert_msg);
     let cert_ct = write_cipher.encrypt(22, &cert_msg);
-    async_write_all(stream, &crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: cert_ct }.to_bytes()).await?;
+    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: cert_ct }.to_bytes()).await?;
 
     // CertificateVerify
     let cv_msg = build_certificate_verify(transcript, signing_key, hash)?;
     transcript.extend_from_slice(&cv_msg);
     let cv_ct = write_cipher.encrypt(22, &cv_msg);
-    async_write_all(stream, &crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: cv_ct }.to_bytes()).await?;
+    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: cv_ct }.to_bytes()).await?;
 
     // Finished
     let transcript_hash_before_finished = hash.hash(transcript);
@@ -892,8 +780,8 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
     let finished_msg = build_finished_message(&verify_data);
     transcript.extend_from_slice(&finished_msg);
     let finished_ct = write_cipher.encrypt(22, &finished_msg);
-    async_write_all(stream, &crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: finished_ct }.to_bytes()).await?;
-    async_flush(stream).await?;
+    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: finished_ct }.to_bytes()).await?;
+    stream.flush().await?;
 
     Ok(())
 }
@@ -907,10 +795,17 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
     handshake_transcript_hash: &[u8],
 ) -> Result<()> {
     loop {
-        let (ct, _ver, len) = async_read_record_header(stream).await?;
+        let mut hdr = [0u8; 5];
+        stream.read_exact(&mut hdr).await?;
+        let ct = hdr[0];
+        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
         if ct == 20 {
             // ChangeCipherSpec — skip
-            let _fragment = async_read_record_fragment(stream, len).await?;
+            let _fragment = {
+                let mut buf = vec![0u8; len];
+                stream.read_exact(&mut buf).await?;
+                buf
+            };
             continue;
         }
         if ct != 23 {
@@ -918,7 +813,8 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
                 "Expected encrypted record for client Finished, got content_type={ct}",
             )));
         }
-        let fragment = async_read_record_fragment(stream, len).await?;
+        let mut fragment = vec![0u8; len];
+        stream.read_exact(&mut fragment).await?;
         let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
         let hs_type = if !plaintext.is_empty() { plaintext[0] } else { inner_type };
         if hs_type != 20 {
@@ -949,13 +845,17 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     cert_and_key: &CertificateAndKey,
 ) -> Result<(RecordCipher, RecordCipher, CipherSuite)> {
     // 1. Read ClientHello
-    let (ct, _ver, len) = async_read_record_header(stream).await?;
+    let mut hdr = [0u8; 5];
+    stream.read_exact(&mut hdr).await?;
+    let ct = hdr[0];
     if ct != 22 {
         return Err(TlsError::HandshakeFailure(format!(
             "Expected handshake record, got content_type={ct}",
         )));
     }
-    let fragment = async_read_record_fragment(stream, len).await?;
+    let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+    let mut fragment = vec![0u8; len];
+    stream.read_exact(&mut fragment).await?;
     let ch = ClientHello::parse(&fragment)?;
 
     if !ch.supported_versions.iter().any(|&v| v == 0x0304) {
@@ -1025,8 +925,8 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
         version: 0x0303,
         fragment: sh_msg,
     };
-    async_write_all(stream, &record.to_bytes()).await?;
-    async_flush(stream).await?;
+    stream.write_all(&record.to_bytes()).await?;
+    stream.flush().await?;
 
     // 3. Derive handshake keys
     let shared_secret = key_pair.exchange(&client_key_share)?;
