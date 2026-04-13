@@ -532,6 +532,9 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
     let bridge_for_daemon = mesh_command_bridge.clone();
     let mesh_handler = make_mesh_command_handler(store_tx.clone());
 
+    // Shared stop signal so we can cleanly stop the mesh daemon from the async side
+    let mesh_stop_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     let store_handle = edgerun_rt::spawn_blocking(move || {
         run_store_task(store, &stream_id_vec, &*store_signer, store_rx,
                        global_rate_limiter, message_hash_cache, allowed_peers, node_id,
@@ -540,6 +543,7 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
 
     // Create the MeshDaemon on a separate blocking thread
     let mesh_daemon_node_id = node_id;
+    let mesh_stop = mesh_stop_signal.clone();
     let mesh_handle = edgerun_rt::spawn_blocking(move || {
         use edgerun_capabilities::capability_descriptor;
         use edgerun_capabilities::{CapabilityModality, CapabilityOperation, CapabilityRole};
@@ -607,13 +611,16 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         // Wire up the command handler: decrypted non-capability frames → store task
         daemon = daemon.with_command_handler(mesh_handler);
 
+        // Wire up the shared stop signal
+        daemon = daemon.with_stop_signal(mesh_stop);
+
         // Expose the outbound queue for the store task to send commands over mesh
         let outbound = daemon.outbound_queue();
         *bridge_for_daemon.lock().unwrap() = Some(MeshCommandBridge::new(outbound));
 
         edgerun_log::info!("mesh daemon running with encrypted sessions and command dispatch");
 
-        // Run the daemon's event loop (blocks until shutdown)
+        // Run the daemon's event loop (blocks until stop signal is set)
         if let Err(e) = daemon.run() {
             edgerun_log::error!("mesh daemon error: {}", e);
         }
@@ -831,6 +838,9 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
     cancel.cancel();
 
     edgerun_log::info!("shutting down");
+
+    // Signal the mesh daemon to exit its event loop
+    mesh_stop_signal.store(true, std::sync::atomic::Ordering::Release);
 
     // Signal the store task to gracefully terminate all running workloads
     let _ = store_tx.send(StoreRequest::Shutdown).await;

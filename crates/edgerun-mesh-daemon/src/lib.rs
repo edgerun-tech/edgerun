@@ -21,6 +21,7 @@ use prost::Message;
 use libc::{c_int, pollfd, POLLIN};
 use std::collections::{HashMap, VecDeque};
 use std::io;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -80,6 +81,8 @@ pub struct MeshDaemon<P: RemoteCapabilityProvider> {
     /// Optional callback for decrypted frames that are not capability envelopes.
     /// Used by the node to receive CommandEnvelope payloads over mesh.
     command_handler: Option<CommandHandler>,
+    /// Shared stop flag — allows stopping the daemon from another thread.
+    stop_signal: Arc<AtomicBool>,
 }
 
 impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
@@ -102,7 +105,21 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             outbound: Arc::new(Mutex::new(VecDeque::new())),
             pending_handshakes: HashMap::new(),
             command_handler: None,
+            stop_signal: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Returns a shared stop flag that can be used to stop the daemon from
+    /// another thread. Set it to `true` to signal the daemon to exit.
+    pub fn stop_signal(&self) -> Arc<AtomicBool> {
+        self.stop_signal.clone()
+    }
+
+    /// Replace the stop signal with a shared one, returning the previous one.
+    /// Useful for sharing shutdown control with external code.
+    pub fn with_stop_signal(mut self, stop_signal: Arc<AtomicBool>) -> Self {
+        self.stop_signal = stop_signal;
+        self
     }
 
     /// Sets a callback for decrypted frames that are not capability envelopes.
@@ -281,10 +298,11 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     // Event loop
     // -----------------------------------------------------------------------
 
-    /// Runs the daemon's event loop until `stop()` is called.
+    /// Runs the daemon's event loop until `stop()` is called or the shared
+    /// stop signal is set to `true`.
     pub fn run(&mut self) -> Result<(), io::Error> {
         self.running = true;
-        while self.running {
+        while self.running && !self.stop_signal.load(Ordering::Relaxed) {
             if !self.run_once(Duration::from_millis(100))? {
                 // Timeout expired with no events — check heartbeat
                 let now = Instant::now();
