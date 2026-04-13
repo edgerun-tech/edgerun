@@ -92,3 +92,7 @@ harness = false
 [[test]]
 name = "fs_test"
 harness = false
+
+[[test]]
+name = "broadcast_test"
+harness = false

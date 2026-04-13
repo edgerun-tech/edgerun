@@ -30,6 +30,7 @@ mod cancellation;
 mod unix;
 pub mod fs;
 pub mod mpsc;
+pub mod broadcast;
 pub mod oneshot;
 pub mod unbounded;
 mod watch;
