@@ -101,42 +101,32 @@ fn try_newuidmap(pid: i32, host_uid: u32, subuids: &[(u32, u32)]) -> bool {
     true
 }
 
-/// Write uid_map/gid_map directly to /proc/<pid>/ files.
+/// Write uid_map directly to /proc/<pid>/uid_map.
 ///
-/// Podman Strategy C: Direct write fallback when no newuidmap helpers.
-/// Maps container 0 to host UID, then subuid ranges starting at container 1.
-fn write_uid_map_for_pid(pid: i32, host_uid: u32, subuids: &[(u32, u32)]) -> std::io::Result<()> {
+/// The kernel ONLY allows writing the caller's own UID via direct /proc write.
+/// Subuid ranges require newuidmap (setuid helper with CAP_SETUID).
+/// When newuidmap fails, we fall back to a single mapping of the user's own UID.
+fn write_uid_map_for_pid(pid: i32, host_uid: u32) -> std::io::Result<()> {
     let uid_map_path = format!("/proc/{}/uid_map", pid);
     let setgroups_path = format!("/proc/{}/setgroups", pid);
 
-    // Deny setgroups first (required before writing gid_map with only 1 mapping,
-    // but we do it for uid_map too for consistency)
+    // Deny setgroups (required before writing gid_map)
     let _ = std::fs::write(&setgroups_path, "deny\n");
 
-    // Build the mapping: container 0 -> host_uid (size 1), then subuid ranges
-    let mut map = format!("0 {} 1\n", host_uid);
-    for (start, count) in subuids {
-        // Container IDs start at 1 (0 is reserved for the user's own UID)
-        map.push_str(&format!("1 {} {}\n", start, count));
-    }
-
+    // Only the caller's own UID can be written directly
+    let map = format!("0 {} 1\n", host_uid);
     std::fs::write(&uid_map_path, &map).map_err(|e| {
         std::io::Error::new(std::io::ErrorKind::PermissionDenied,
-            format!("uid_map write failed: {} (map: {})", e, map.trim()))
+            format!("uid_map write failed: {}", e))
     })
 }
 
-fn write_gid_map_for_pid(pid: i32, host_gid: u32, subgids: &[(u32, u32)]) -> std::io::Result<()> {
+fn write_gid_map_for_pid(pid: i32, host_gid: u32) -> std::io::Result<()> {
     let gid_map_path = format!("/proc/{}/gid_map", pid);
-
-    let mut map = format!("0 {} 1\n", host_gid);
-    for (start, count) in subgids {
-        map.push_str(&format!("1 {} {}\n", start, count));
-    }
-
+    let map = format!("0 {} 1\n", host_gid);
     std::fs::write(&gid_map_path, &map).map_err(|e| {
         std::io::Error::new(std::io::ErrorKind::PermissionDenied,
-            format!("gid_map write failed: {} (map: {})", e, map.trim()))
+            format!("gid_map write failed: {}", e))
     })
 }
 
@@ -229,15 +219,15 @@ fn become_rootless() -> Option<i32> {
             false
         };
 
-        // Strategy C: Direct write fallback
+        // Strategy C: Direct write fallback (only own UID, not subuid ranges)
         if !used_newuidmap {
-            if let Err(e) = write_uid_map_for_pid(child_pid, host_uid, &subuids) {
+            if let Err(e) = write_uid_map_for_pid(child_pid, host_uid) {
                 eprintln!("ert: {}", e);
                 unsafe { libc::close(pipe_w) };
                 return Some(1);
             }
-            if let Err(e) = write_gid_map_for_pid(child_pid, host_gid, &subgids) {
-                eprintln!("ert: gid_map write failed: {}", e);
+            if let Err(e) = write_gid_map_for_pid(child_pid, host_gid) {
+                eprintln!("ert: {}", e);
                 unsafe { libc::close(pipe_w) };
                 return Some(1);
             }
