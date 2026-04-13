@@ -113,7 +113,7 @@ impl Request {
         let is_chunked = transfer_encoding.as_deref().map_or(false, |v| v.contains("chunked"));
 
         let body = if is_chunked {
-            Self::parse_chunked_body(remaining)?
+            super::chunked::parse_chunked_body(remaining)?
         } else if let Some(cl) = headers.get("content-length") {
             let len = cl.as_str()
                 .parse::<usize>()
@@ -126,48 +126,6 @@ impl Request {
         };
 
         Ok((headers, body))
-    }
-
-    /// Parse a chunked transfer-encoded body (RFC 9112 §7.1).
-    fn parse_chunked_body(mut data: &[u8]) -> Result<Vec<u8>> {
-        let mut body = Vec::new();
-
-        loop {
-            let crlf = Self::find_crlf(data, 0).ok_or_else(|| {
-                crate::Error::InvalidRequest("Incomplete chunked body".to_string())
-            })?;
-
-            let size_hex = std::str::from_utf8(&data[..crlf])
-                .map_err(|_| crate::Error::InvalidRequest("Invalid chunk size".to_string()))?;
-
-            let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
-            let chunk_size = usize::from_str_radix(size_str, 16)
-                .map_err(|_| crate::Error::InvalidRequest("Invalid chunk size".to_string()))?;
-
-            data = &data[crlf + 2..];
-
-            if chunk_size == 0 {
-                break;
-            }
-
-            if data.len() < chunk_size {
-                return Err(crate::Error::InvalidRequest(
-                    "Incomplete chunked body".to_string(),
-                ));
-            }
-
-            body.extend_from_slice(&data[..chunk_size]);
-            data = &data[chunk_size..];
-
-            if data.len() < 2 || data[0] != b'\r' || data[1] != b'\n' {
-                return Err(crate::Error::InvalidRequest(
-                    "Missing CRLF after chunk".to_string(),
-                ));
-            }
-            data = &data[2..];
-        }
-
-        Ok(body)
     }
 
     /// Find CRLF starting at position `pos`.

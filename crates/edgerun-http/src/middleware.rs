@@ -105,19 +105,21 @@ impl Extensions {
     }
 
     /// Get a reference to a value by type.
-    pub fn get<T: 'static>(&self) -> Option<&T> {
+    pub fn get<T: Clone + 'static>(&self) -> Option<T> {
         self.inner
             .lock()
             .get(&TypeId::of::<T>())
             .and_then(|boxed| boxed.downcast_ref::<T>())
+            .cloned()
     }
 
-    /// Get a mutable reference to a value by type.
-    pub fn get_mut<T: 'static>(&self) -> Option<&mut T> {
+    /// Insert and return the old value of the same type, if any.
+    pub fn replace<T: Send + 'static>(&self, value: T) -> Option<T> {
         self.inner
             .lock()
-            .get_mut(&TypeId::of::<T>())
-            .and_then(|boxed| boxed.downcast_mut::<T>())
+            .insert(TypeId::of::<T>(), Box::new(value))
+            .and_then(|boxed| boxed.downcast::<T>().ok())
+            .map(|b| *b)
     }
 
     /// Remove and return a value by type.

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![allow(unused_must_use)]
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
@@ -1511,7 +1510,7 @@ fn make_iwreq(name: &str) -> Iwreq {
 }
 
 fn query_essid(name: &str) -> Result<Option<String>, CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut buf = [0u8; 64];
     let mut req = make_iwreq(name);
     req.u = IwreqData {
@@ -1548,7 +1547,7 @@ fn query_essid(name: &str) -> Result<Option<String>, CapabilityError> {
 }
 
 fn set_essid(name: &str, ssid: &str) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut buf = [0u8; 34];
     let ssid_bytes = ssid.as_bytes();
     if ssid_bytes.len() > 32 {
@@ -1578,7 +1577,7 @@ fn set_essid(name: &str, ssid: &str) -> Result<(), CapabilityError> {
 }
 
 fn query_bssid(name: &str) -> Result<Option<String>, CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut req = make_iwreq(name);
     let rc = unsafe { ioctl_call(fd, SIOCGIWAP, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
@@ -1603,7 +1602,7 @@ fn query_bssid(name: &str) -> Result<Option<String>, CapabilityError> {
 }
 
 fn query_frequency_mhz(name: &str) -> Result<Option<u32>, CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut req = make_iwreq(name);
     let rc = unsafe { ioctl_call(fd, SIOCGIWFREQ, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
@@ -1625,7 +1624,7 @@ fn query_frequency_mhz(name: &str) -> Result<Option<u32>, CapabilityError> {
 }
 
 fn set_frequency_mhz(name: &str, frequency_mhz: u32) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut req = make_iwreq(name);
     req.u = IwreqData {
         freq: IwFreq {
@@ -1667,7 +1666,7 @@ fn wifi_mode_from_u32(mode: u32) -> WifiInterfaceMode {
 }
 
 fn query_mode(name: &str) -> Result<WifiInterfaceMode, CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut req = make_iwreq(name);
     let rc = unsafe { ioctl_call(fd, SIOCGIWMODE, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
@@ -1684,7 +1683,7 @@ fn query_mode(name: &str) -> Result<WifiInterfaceMode, CapabilityError> {
 }
 
 fn set_mode(name: &str, mode: WifiInterfaceMode) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut req = make_iwreq(name);
     req.u = IwreqData {
         mode: wifi_mode_to_u32(mode),

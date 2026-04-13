@@ -294,7 +294,7 @@ impl Client {
     pub async fn execute_streaming(
         &self,
         request: &Request,
-    ) -> Result<(Response, AsyncBodyReader<AsyncReadHalf>)> {
+    ) -> Result<(Response, AsyncBodyReader<BufReader<AsyncReadHalf>>)> {
         let uri = request.uri();
         let is_head = request.method() == &Method::HEAD;
 
@@ -345,7 +345,7 @@ impl Client {
     pub async fn execute_tls_streaming(
         &self,
         request: &Request,
-    ) -> Result<(Response, AsyncBodyReader<AsyncTlsStream<Arc<AsyncTcpStream>>>)> {
+    ) -> Result<(Response, AsyncBodyReader<BufReader<AsyncTlsStream<Arc<AsyncTcpStream>>>>)> {
         let uri = request.uri();
         let is_head = request.method() == &Method::HEAD;
 
@@ -451,7 +451,7 @@ impl Client {
     async fn read_response_tls(
         tls: AsyncTlsStream<Arc<AsyncTcpStream>>,
         is_head: bool,
-    ) -> Result<(Response, AsyncBodyReader<AsyncTlsStream<Arc<AsyncTcpStream>>>)> {
+    ) -> Result<(Response, AsyncBodyReader<BufReader<AsyncTlsStream<Arc<AsyncTcpStream>>>>)> {
         Self::read_response_headers_impl(tls, is_head).await
     }
 
@@ -468,7 +468,7 @@ impl Client {
     async fn read_response_headers_impl<R: AsyncRead + Unpin>(
         transport: R,
         is_head: bool,
-    ) -> Result<(Response, AsyncBodyReader<R>)> {
+    ) -> Result<(Response, AsyncBodyReader<BufReader<R>>)> {
         let mut buf_reader = BufReader::new(transport);
 
         let status_line = buf_reader.read_line().await
@@ -504,7 +504,7 @@ impl Client {
         let status_code_val = status.as_u16();
         if is_head || status_code_val < 200 || status_code_val == 204 || status_code_val == 304 {
             let resp = Response::from_parts(status, headers, Vec::new());
-            let body_reader = AsyncBodyReader::with_length(buf_reader.into_inner(), 0);
+            let body_reader = AsyncBodyReader::with_length(buf_reader, 0);
             return Ok((resp, body_reader));
         }
 
@@ -515,13 +515,12 @@ impl Client {
         let content_length = headers.get("content-length")
             .and_then(|v| v.as_str().parse::<u64>().ok());
 
-        let inner = buf_reader.into_inner();
         let body_reader = if is_chunked {
-            AsyncBodyReader::chunked(inner)
+            AsyncBodyReader::chunked(buf_reader)
         } else if let Some(len) = content_length {
-            AsyncBodyReader::with_length(inner, len)
+            AsyncBodyReader::with_length(buf_reader, len)
         } else {
-            AsyncBodyReader::until_eof(inner)
+            AsyncBodyReader::until_eof(buf_reader)
         };
 
         let resp = Response::from_parts(status, headers, Vec::new());

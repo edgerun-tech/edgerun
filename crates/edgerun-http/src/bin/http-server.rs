@@ -1,8 +1,9 @@
-//! Standalone HTTP server binary with optional TLS.
+//! Standalone HTTP server binary supporting HTTP/1.1, HTTP/2, and HTTP/3.
 //!
 //! Usage:
-//!   http-server --port 8080                    # plain HTTP
-//!   http-server --port 8443 --tls              # TLS with self-signed cert
+//!   http-server --port 8080                       # HTTP/1.1 + HTTP/2
+//!   http-server --port 8443 --tls                 # HTTP/1.1 + HTTP/2 + TLS
+//!   http-server --port 8443 --tls --http3         # HTTP/1.1 + HTTP/2 + HTTP/3 + TLS
 //!
 //! Then test with:
 //!   curl http://127.0.0.1:8080/test
@@ -20,6 +21,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut port = 8080u16;
     let mut tls = false;
+    let mut http3 = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -31,20 +33,32 @@ fn main() {
                 }
             }
             "--tls" => { tls = true; }
+            "--http3" | "--h3" => { http3 = true; }
             _ => {}
         }
         i += 1;
     }
 
-    let server = HttpServer::new(EchoHandler);
-    let server = if tls {
-        let cert = generate_self_signed(&["127.0.0.1", "localhost"]);
-        server.with_tls(cert)
-    } else {
-        server
-    };
+    let mut server = HttpServer::new(EchoHandler);
 
-    println!("HTTP server listening on 127.0.0.1:{port}{}", if tls { " (TLS)" } else { "" });
+    if tls {
+        let cert = generate_self_signed(&["127.0.0.1", "localhost"])
+            .expect("self-signed cert generation should not fail");
+        server = server.with_tls(cert);
+    }
+
+    if http3 {
+        if !tls {
+            eprintln!("HTTP/3 requires TLS (--tls). Enabling TLS automatically.");
+            let cert = generate_self_signed(&["127.0.0.1", "localhost"])
+                .expect("self-signed cert generation should not fail");
+            server = server.with_tls(cert);
+        }
+        server = server.with_http3();
+    }
+
+    let protocols = if http3 { "HTTP/1.1 + HTTP/2 + HTTP/3" } else if tls { "HTTP/1.1 + HTTP/2 + TLS" } else { "HTTP/1.1 + HTTP/2" };
+    println!("HTTP server listening on 127.0.0.1:{port} ({protocols})");
 
     let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {

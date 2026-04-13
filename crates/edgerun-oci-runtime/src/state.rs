@@ -20,12 +20,21 @@ pub fn is_root() -> bool {
     unsafe { libc::getuid() == 0 }
 }
 
+/// Check if we are running in a rootless user namespace.
+///
+/// This is set by the re-exec in `main()` when a non-root user starts `ert`.
+/// The `_ERT_ROOTLESS_CHILD` env var is set after `clone3(CLONE_NEWUSER|CLONE_NEWNS)`
+/// and `setresuid(0)`, so even though `geteuid()` returns 0, we're still rootless.
+pub fn is_rootless() -> bool {
+    std::env::var("_ERT_ROOTLESS_CHILD").is_ok()
+}
+
 /// Resolve the default state directory based on whether we're rootless.
 ///
 /// Root: `/run/edgerun-oci`
 /// Rootless: `$XDG_RUNTIME_DIR/edgerun-oci` or `$HOME/.local/state/edgerun-oci`
 fn default_state_dir() -> String {
-    if is_root() {
+    if is_root() && !is_rootless() {
         return STATE_DIR.into();
     }
     // Rootless: prefer XDG_RUNTIME_DIR, fall back to HOME/.local/state

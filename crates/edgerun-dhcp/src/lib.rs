@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![allow(missing_docs)]
 //! Dependency-free DHCPv4 server and client using only `std`.
 //!

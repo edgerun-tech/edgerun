@@ -1,5 +1,4 @@
 //! Conformance test harness — loads corpus/vectors-v0.1 and runs validators.
-#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -16,207 +15,53 @@ use crate::validators::{
 };
 
 // ===========================================================================
-// YAML parsing (minimal, no serde dependency)
+// YAML parsing via serde_yaml
 // ===========================================================================
 
-fn parse_yaml_value(s: &str) -> Value {
-    let s = s.trim();
-    if s == "null" || s == "~" {
-        return Value::Null;
-    }
-    if s == "true" {
-        return Value::Bool(true);
-    }
-    if s == "false" {
-        return Value::Bool(false);
-    }
-    // Inline empty map
-    if s == "{}" {
-        return Value::Map(BTreeMap::new());
-    }
-    // Inline empty list
-    if s == "[]" {
-        return Value::Seq(vec![]);
-    }
-    if s.starts_with("0x") || s.starts_with("0X") {
-        return Value::String(s.to_string());
-    }
-    if let Ok(n) = s.parse::<i64>() {
-        return Value::Int(n);
-    }
-    // Strip quotes
-    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
-        return Value::String(s[1..s.len() - 1].to_string());
-    }
-    Value::String(s.to_string())
-}
-
-fn parse_yaml_full(text: &str) -> BTreeMap<String, Value> {
-    let lines: Vec<&str> = text.lines().collect();
-    parse_yaml_lines(&lines, 0, 0).0
-}
-
-fn unquote_key(s: &str) -> String {
-    let s = s.trim();
-    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
-        s[1..s.len() - 1].to_string()
-    } else {
-        s.to_string()
-    }
-}
-
-fn find_colon_for_key(line: &str) -> Option<usize> {
-    // Find the colon position, respecting quoted keys
-    let trimmed = line.trim();
-    if trimmed.starts_with('"') {
-        // Double-quoted key — find closing quote then colon
-        if let Some(end_quote) = trimmed[1..].find('"') {
-            let key_end = end_quote + 2; // +1 for skip past opening quote, +1 for the quote itself
-            if key_end < trimmed.len() && trimmed[key_end..].starts_with(':') {
-                let colon_offset = line.find(&trimmed[..key_end+1]).unwrap_or(0) + key_end;
-                return Some(colon_offset);
-            }
-        }
-    } else if trimmed.starts_with('\'') {
-        // Single-quoted key — find closing quote then colon
-        if let Some(end_quote) = trimmed[1..].find('\'') {
-            let key_end = end_quote + 2;
-            if key_end < trimmed.len() && trimmed[key_end..].starts_with(':') {
-                let colon_offset = line.find(&trimmed[..key_end+1]).unwrap_or(0) + key_end;
-                return Some(colon_offset);
-            }
-        }
-    }
-    // Unquoted key — find first colon
-    line.find(':')
-}
-
-fn parse_yaml_lines(lines: &[&str], start: usize, base_indent: usize) -> (BTreeMap<String, Value>, usize) {
-    let mut result = BTreeMap::new();
-    let mut i = start;
-
-    while i < lines.len() {
-        let line = lines[i];
-        let trimmed = line.trim();
-
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            i += 1;
-            continue;
-        }
-
-        let indent = line.len() - line.trim_start().len();
-        if indent < base_indent {
-            break;
-        }
-        if trimmed.starts_with("- ") {
-            break;
-        }
-
-        if let Some(colon_pos) = find_colon_for_key(trimmed) {
-            let key = unquote_key(&trimmed[..colon_pos]);
-            let rest = trimmed[colon_pos + 1..].trim();
-            i += 1;
-
-            if rest.is_empty() {
-                // Look for the next non-empty line to determine structure
-                if i < lines.len() {
-                    // Skip empty/comment lines to find next real line
-                    let mut j = i;
-                    while j < lines.len() && (lines[j].trim().is_empty() || lines[j].trim().starts_with('#')) {
-                        j += 1;
-                    }
-                    if j < lines.len() {
-                        let next_line = lines[j];
-                        let next_trimmed = next_line.trim();
-                        let next_indent = next_line.len() - next_line.trim_start().len();
-
-                        if next_trimmed.starts_with("- ") && next_indent >= indent {
-                            // It's a list — list items can be at same indent as key
-                            let (list, end) = parse_yaml_list(lines, j, next_indent);
-                            result.insert(key, Value::Seq(list));
-                            i = end;
-                        } else if next_indent > indent {
-                            // Nested map
-                            let (map, end) = parse_yaml_lines(lines, j, next_indent);
-                            result.insert(key, Value::Map(map));
-                            i = end;
-                        } else {
-                            result.insert(key, Value::Null);
-                        }
-                    } else {
-                        result.insert(key, Value::Null);
-                    }
-                } else {
-                    result.insert(key, Value::Null);
-                }
+/// Convert a `serde_yaml::Value` into the internal `Value` type.
+fn yaml_value_to_value(v: serde_yaml::Value) -> Value {
+    match v {
+        serde_yaml::Value::Null => Value::Null,
+        serde_yaml::Value::Bool(b) => Value::Bool(b),
+        serde_yaml::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Value::Int(i)
             } else {
-                result.insert(key, parse_yaml_value(rest));
+                Value::String(n.to_string())
             }
-        } else {
-            i += 1;
         }
+        serde_yaml::Value::String(s) => Value::String(s),
+        serde_yaml::Value::Sequence(seq) => {
+            Value::Seq(seq.into_iter().map(yaml_value_to_value).collect())
+        }
+        serde_yaml::Value::Mapping(map) => {
+            let mut result = BTreeMap::new();
+            for (k, v) in map {
+                if let Some(key) = k.as_str() {
+                    result.insert(key.to_string(), yaml_value_to_value(v));
+                }
+            }
+            Value::Map(result)
+        }
+        serde_yaml::Value::Tagged(tagged) => yaml_value_to_value(tagged.value),
     }
-
-    (result, i)
 }
 
-fn parse_yaml_list(lines: &[&str], start: usize, base_indent: usize) -> (Vec<Value>, usize) {
-    let mut result = Vec::new();
-    let mut i = start;
-
-    while i < lines.len() {
-        let line = lines[i];
-        let trimmed = line.trim();
-
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            i += 1;
-            continue;
-        }
-
-        let indent = line.len() - line.trim_start().len();
-        if indent < base_indent || !trimmed.starts_with("- ") {
-            break;
-        }
-
-        let item_text = trimmed[2..].trim();
-        i += 1;
-
-        if let Some(colon_pos) = find_colon_for_key(item_text) {
-            let item_key = unquote_key(&item_text[..colon_pos]);
-            let item_rest = item_text[colon_pos + 1..].trim();
-
-            if !item_key.is_empty() {
-                let mut map = BTreeMap::new();
-                if item_rest.is_empty() {
-                    if i < lines.len() {
-                        let ni = lines[i].len() - lines[i].trim_start().len();
-                        if ni > indent + 2 {
-                            let (nested, end) = parse_yaml_lines(lines, i, ni);
-                            map.insert(item_key.to_string(), Value::Map(nested));
-                            i = end;
-                        } else {
-                            map.insert(item_key.to_string(), Value::Null);
-                        }
-                    }
-                } else {
-                    map.insert(item_key.to_string(), parse_yaml_value(item_rest));
+/// Parse a YAML string into a `BTreeMap<String, Value>`.
+fn parse_yaml_full(text: &str) -> BTreeMap<String, Value> {
+    match serde_yaml::from_str::<serde_yaml::Value>(text) {
+        Ok(serde_yaml::Value::Mapping(map)) => {
+            let mut result = BTreeMap::new();
+            for (k, v) in map {
+                if let Some(key) = k.as_str() {
+                    result.insert(key.to_string(), yaml_value_to_value(v));
                 }
-
-                let child_indent = indent + 2;
-                let (more, end) = parse_yaml_lines(lines, i, child_indent);
-                for (k, v) in more {
-                    map.insert(k, v);
-                }
-                i = end;
-                result.push(Value::Map(map));
-                continue;
             }
+            result
         }
-
-        result.push(parse_yaml_value(item_text));
+        Ok(_) => BTreeMap::new(),
+        Err(_) => BTreeMap::new(),
     }
-
-    (result, i)
 }
 
 // ===========================================================================

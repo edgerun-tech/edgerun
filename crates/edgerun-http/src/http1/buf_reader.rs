@@ -92,8 +92,18 @@ impl<R: AsyncRead + Unpin> BufReader<R> {
     ///
     /// Returns the line WITHOUT the line terminator.
     /// Returns `Ok(None)` on EOF with no data.
+    /// Returns `Err` if the line exceeds `max_size` bytes.
     pub fn read_line(&mut self) -> ReadLineFut<'_, R> {
-        ReadLineFut { reader: self }
+        ReadLineFut { reader: self, max_size: usize::MAX, line: Vec::new() }
+    }
+
+    /// Read a line with a maximum size limit.
+    ///
+    /// If the line exceeds `max_size` bytes, returns an error with
+    /// `ErrorKind::InvalidData`. This prevents unbounded memory allocation
+    /// from malicious peers sending lines without terminators.
+    pub fn read_line_max(&mut self, max_size: usize) -> ReadLineFut<'_, R> {
+        ReadLineFut { reader: self, max_size, line: Vec::new() }
     }
 
     /// Read exactly `n` bytes.
@@ -111,63 +121,70 @@ impl<R: AsyncRead + Unpin> BufReader<R> {
 /// Future for [`BufReader::read_line`].
 pub struct ReadLineFut<'a, R> {
     reader: &'a mut BufReader<R>,
+    max_size: usize,
+    line: Vec<u8>,
 }
 
 impl<R: AsyncRead + Unpin> Future for ReadLineFut<'_, R> {
     type Output = std::io::Result<Option<String>>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        let mut line = Vec::new();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let max_size = self.max_size;
 
         loop {
-            let poll_buf = this.reader.fill_buf(cx)?;
-            let available = match poll_buf {
-                Poll::Ready(buf) => buf,
-                Poll::Pending => {
-                    if !line.is_empty() {
-                        return Poll::Ready(Ok(Some(
-                            String::from_utf8(line).map_err(|_| std::io::Error::new(
+            // Extract line_len before borrowing reader
+            let line_len = self.line.len();
+
+            // First, check available data and decide what to do
+            match self.reader.fill_buf(cx) {
+                Poll::Ready(Ok(available)) => {
+                    if available.is_empty() {
+                        return Poll::Ready(if line_len == 0 {
+                            Ok(None)
+                        } else {
+                            let line = std::mem::take(&mut self.line);
+                            Ok(Some(String::from_utf8(line).map_err(|_| std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
                                 "invalid UTF-8 in request line",
-                            ))?,
+                            ))?))
+                        });
+                    }
+
+                    // Check for newline — copy the index out
+                    if let Some(newline_pos) = available.iter().position(|&b| b == b'\n') {
+                        let consumed = newline_pos + 1;
+                        // Copy data before consuming (to avoid borrow overlap)
+                        let has_cr = newline_pos > 0 && available[newline_pos - 1] == b'\r';
+                        let line_end = if has_cr { newline_pos - 1 } else { newline_pos };
+                        let line_data: Vec<u8> = available[..line_end].to_vec();
+                        self.reader.consume(consumed);
+                        self.line.extend_from_slice(&line_data);
+                        let line = std::mem::take(&mut self.line);
+                        return Poll::Ready(Ok(Some(String::from_utf8(line).map_err(|_| std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "invalid UTF-8 in request line",
+                        ))?)));
+                    }
+
+                    // No newline — check size limit
+                    let avail_len = available.len();
+                    if line_len + avail_len > max_size {
+                        return Poll::Ready(Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "line too long",
                         )));
                     }
+
+                    // Copy data and consume
+                    let data: Vec<u8> = available.to_vec();
+                    self.reader.consume(avail_len);
+                    self.line.extend_from_slice(&data);
+                }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => {
                     return Poll::Pending;
                 }
-            };
-
-            if available.is_empty() {
-                return Poll::Ready(if line.is_empty() {
-                    Ok(None)
-                } else {
-                    Ok(Some(String::from_utf8(line).map_err(|_| std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "invalid UTF-8 in request line",
-                    ))?))
-                });
             }
-
-            // Look for \n in available data
-            if let Some(newline_pos) = available.iter().position(|&b| b == b'\n') {
-                let consumed = newline_pos + 1;
-                let line_end = if newline_pos > 0 && available[newline_pos - 1] == b'\r' {
-                    newline_pos - 1
-                } else {
-                    newline_pos
-                };
-                line.extend_from_slice(&available[..line_end]);
-                this.reader.consume(consumed);
-                return Poll::Ready(Ok(Some(String::from_utf8(line).map_err(|_| std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "invalid UTF-8 in request line",
-                ))?)));
-            }
-
-            // No newline yet — consume all available data and continue
-            line.extend_from_slice(available);
-            let avail_len = available.len();
-            this.reader.consume(avail_len);
         }
     }
 }
@@ -245,6 +262,35 @@ impl<R: AsyncRead + Unpin> Future for ReadFromBufFut<'_, '_, R> {
 }
 
 // ---------------------------------------------------------------------------
+// AsyncRead impl — reads from buffer first, then inner
+// ---------------------------------------------------------------------------
+
+impl<R: AsyncRead + Unpin> AsyncRead for BufReader<R> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
+        // First, try to serve from buffer
+        if self.pos < self.len {
+            let available = &self.buf[self.pos..self.len];
+            let to_copy = available.len().min(buf.len());
+            buf[..to_copy].copy_from_slice(&available[..to_copy]);
+            self.pos += to_copy;
+            return Poll::Ready(Ok(to_copy));
+        }
+
+        // Buffer empty — read from inner
+        let pinned = Pin::new(&mut self.inner);
+        match pinned.poll_read(cx, buf) {
+            Poll::Ready(Ok(n)) => Poll::Ready(Ok(n)),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AsyncWrite impl — forwards to inner writer
 // ---------------------------------------------------------------------------
 
@@ -272,20 +318,17 @@ impl<R: AsyncRead + AsyncWrite + Unpin> AsyncWrite for BufReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_rt::Runtime;
-    use std::io::Cursor;
+    use edgerun_rt::{Cursor, Runtime};
 
     #[test]
     fn test_read_line_crlf() {
         let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
         let data = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
 
-        // Wrap in a simple AsyncRead wrapper around a Cursor
         let cursor = Cursor::new(data.to_vec());
-        let cursor_reader = CursorAsyncRead(cursor);
 
         let result = rt.block_on(async {
-            let mut reader = BufReader::new(cursor_reader);
+            let mut reader = BufReader::new(cursor);
             let line1 = reader.read_line().await.unwrap();
             let line2 = reader.read_line().await.unwrap();
             let line3 = reader.read_line().await.unwrap();
@@ -297,24 +340,6 @@ mod tests {
         assert_eq!(result.2, Some("".to_string()));
     }
 
-    /// AsyncRead wrapper around std::io::Cursor for testing.
-    struct CursorAsyncRead(Cursor<Vec<u8>>);
-
-    impl AsyncRead for CursorAsyncRead {
-        fn poll_read(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-            buf: &mut [u8],
-        ) -> Poll<std::io::Result<usize>> {
-            let this = self.get_mut();
-            let available = &this.0.get_ref()[this.0.position() as usize..];
-            let to_read = buf.len().min(available.len());
-            buf[..to_read].copy_from_slice(&available[..to_read]);
-            this.0.set_position(this.0.position() + to_read as u64);
-            Poll::Ready(Ok(to_read))
-        }
-    }
-
     #[test]
     fn test_read_line_rejects_invalid_utf8() {
         let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
@@ -322,10 +347,9 @@ mod tests {
         let data = b"GET /path\x80 HTTP/1.1\r\n";
 
         let cursor = Cursor::new(data.to_vec());
-        let cursor_reader = CursorAsyncRead(cursor);
 
         let result = rt.block_on(async {
-            let mut reader = BufReader::new(cursor_reader);
+            let mut reader = BufReader::new(cursor);
             reader.read_line().await
         });
 

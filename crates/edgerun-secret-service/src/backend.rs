@@ -601,15 +601,119 @@ mod tests {
         let (secret, _) = be.get(coll, "api-key").unwrap().unwrap();
         assert_eq!(secret, b"new-secret");
 
-        // Event log should show two put events
         let events = be.event_log.replay().unwrap();
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], SecretEvent::Put(_)));
         assert!(matches!(&events[1], SecretEvent::Put(_)));
 
-        // Rebuild should preserve latest state (last put wins)
         be.rebuild_index().unwrap();
         let (secret_after, _) = be.get(coll, "api-key").unwrap().unwrap();
         assert_eq!(secret_after, b"new-secret");
+    }
+
+    #[test]
+    fn backend_search_no_matches() {
+        let root = tmp_root();
+        let mut be = Backend::new(root).unwrap();
+        let coll = "/org/freedesktop/secrets/collections/default";
+        be.put(coll, "k1", b"v1", "K1", &[("server".into(), "github.com".into())]).unwrap();
+        let results = be.search(coll, &[("server".into(), "bitbucket.org".into())]).unwrap();
+        assert!(results.is_empty());
+        let results = be.search(coll, &[("nonexistent".into(), "value".into())]).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn backend_search_multiple_attributes() {
+        let root = tmp_root();
+        let mut be = Backend::new(root).unwrap();
+        let coll = "/org/freedesktop/secrets/collections/default";
+        be.put(coll, "k1", b"v1", "GitHub", &[("server".into(), "github.com".into()), ("type".into(), "password".into())]).unwrap();
+        be.put(coll, "k2", b"v2", "GitHub API", &[("server".into(), "github.com".into()), ("type".into(), "token".into())]).unwrap();
+        be.put(coll, "k3", b"v3", "GitLab", &[("server".into(), "gitlab.com".into()), ("type".into(), "token".into())]).unwrap();
+        let results = be.search(coll, &[("server".into(), "github.com".into()), ("type".into(), "password".into())]).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].1.label, "GitHub");
+    }
+
+    #[test]
+    fn backend_get_nonexistent_collection() {
+        let root = tmp_root();
+        let be = Backend::new(root).unwrap();
+        assert!(be.get("/org/freedesktop/secrets/collections/nonexistent", "any").unwrap().is_none());
+    }
+
+    #[test]
+    fn backend_list_nonexistent_collection() {
+        let root = tmp_root();
+        let be = Backend::new(root).unwrap();
+        assert!(be.list("/org/freedesktop/secrets/collections/nonexistent").unwrap().is_empty());
+    }
+
+    #[test]
+    fn backend_rebuild_after_put_delete_put() {
+        let root = tmp_root();
+        let mut be = Backend::new(root.clone()).unwrap();
+        let coll = "/org/freedesktop/secrets/collections/default";
+        be.put(coll, "k1", b"first", "First", &[]).unwrap();
+        be.delete(coll, "k1").unwrap();
+        be.put(coll, "k1", b"second", "Second", &[]).unwrap();
+        let applied = be.rebuild_index().unwrap();
+        assert_eq!(applied, 3);
+        let (secret, meta) = be.get(coll, "k1").unwrap().unwrap();
+        assert_eq!(secret, b"second");
+        assert_eq!(meta.label, "Second");
+    }
+
+    #[test]
+    fn backend_list_collections_empty() {
+        let root = tmp_root();
+        let be = Backend::new(root).unwrap();
+        assert!(be.list_collections().unwrap().is_empty());
+    }
+
+    #[test]
+    fn backend_meta_from_json_missing_fields() {
+        let meta = CredentialMeta::from_json(r#"{"created_us": 999}"#).unwrap();
+        assert_eq!(meta.label, "");
+        assert_eq!(meta.created_us, 999);
+        assert!(meta.attributes.is_empty());
+        let meta = CredentialMeta::from_json(r#"{"label": "Test"}"#).unwrap();
+        assert_eq!(meta.label, "Test");
+        assert_eq!(meta.created_us, 0);
+        assert!(CredentialMeta::from_json("not json").is_none());
+        assert!(CredentialMeta::from_json("").is_none());
+    }
+
+    #[test]
+    fn backend_item_key_edge_cases() {
+        let k1 = Backend::item_key("", &[]);
+        let k2 = Backend::item_key("", &[]);
+        assert_eq!(k1, k2);
+        assert_eq!(k1.len(), 64);
+        let k3 = Backend::item_key("just-label", &[]);
+        assert_ne!(k1, k3);
+        let k4 = Backend::item_key("Unicode: 🔐", &[]);
+        assert_eq!(k4.len(), 64);
+        let attrs: Vec<(String, String)> = (0..100).map(|i| (format!("k{}", i), format!("v{}", i))).collect();
+        let k5 = Backend::item_key("many-attrs", &attrs);
+        assert_eq!(k5.len(), 64);
+    }
+
+    #[test]
+    fn backend_delete_nonexistent() {
+        let root = tmp_root();
+        let mut be = Backend::new(root).unwrap();
+        let coll = "/org/freedesktop/secrets/collections/default";
+        assert!(!be.delete(coll, "ghost").unwrap());
+        let events = be.event_log.replay().unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn backend_collection_exists_nonexistent() {
+        let root = tmp_root();
+        let be = Backend::new(root).unwrap();
+        assert!(!be.collection_exists("/org/freedesktop/secrets/collections/nonexistent"));
     }
 }

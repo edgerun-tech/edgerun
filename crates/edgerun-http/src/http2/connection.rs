@@ -349,10 +349,11 @@ impl<S: Read + Write> Connection<S> {
             }
         }
 
-        // Send WINDOW_UPDATE to replenish window
-        let wu_frame = WindowUpdateFrame::new(data_frame.stream_id, data_len);
-        let frame_bytes = wu_frame.to_frame().to_bytes();
-        self.stream.write_all(&frame_bytes)?;
+        // Send WINDOW_UPDATE to replenish both connection and stream windows
+        let conn_wu = WindowUpdateFrame::new(0, data_len);
+        self.stream.write_all(&conn_wu.to_frame().to_bytes())?;
+        let stream_wu = WindowUpdateFrame::new(data_frame.stream_id, data_len);
+        self.stream.write_all(&stream_wu.to_frame().to_bytes())?;
 
         Ok(())
     }

@@ -14,16 +14,25 @@
 
 // TSS2 ESAPI module removed — we now use raw TPM commands via /dev/tpmrm0
 
-pub mod constants;
-pub mod types;
-pub mod traits;
-pub mod wire;
-pub mod device;
-pub mod signing;
+mod constants;
+mod types;
+mod traits;
+mod wire;
+mod device;
+mod signing;
 
-// Re-export the primary public API at the crate root for convenience.
-pub use constants::*;
-pub use types::*;
+// Explicit public API — no glob re-exports
+pub use constants::{
+    TPM_RC_SUCCESS, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
+    TPM_RH_NULL, TPM_ALG_ECC, TPM_ALG_SHA256, TPM_ALG_NULL, TPM_ECC_NIST_P256,
+    TPM_CC_SIGN, TPM_RS_PW,
+};
+pub use types::{
+    TpmHandle, TpmSignCommandParams, TpmSignatureScheme, TpmNameAlgorithm,
+    TpmSignatureAlgorithm, TpmPublicAreaInfo, TpmPublicObjectType, TpmEccCurve,
+    TpmHashParams, TpmReadPublicInfo, TpmAuthCommand, TpmPasswordAuthSession,
+    TpmPolicySession, TpmParsedSignature, TpmKeyInfo, TpmError, TpmAssuranceLevel,
+};
 pub use traits::{TpmSigningKey, TpmTransport};
 pub use device::{TpmDevice, LinuxTpmDevice};
 pub use signing::{

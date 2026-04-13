@@ -209,8 +209,8 @@ mod tests {
         let mask = caps_to_bitmask(&caps).unwrap();
         assert!(mask != 0);
         // Each should set a different bit
-        let chown = caps_to_bitmask(&vec!["CAP_CHOWN".to_string()]).unwrap();
-        let kill = caps_to_bitmask(&vec!["CAP_KILL".to_string()]).unwrap();
+        let chown = caps_to_bitmask(&["CAP_CHOWN".to_string()]).unwrap();
+        let kill = caps_to_bitmask(&["CAP_KILL".to_string()]).unwrap();
         assert_eq!(mask, chown | kill);
     }
 

@@ -84,7 +84,7 @@ impl ClientConfig {
     /// Create a device-flow config with sensible defaults.
     pub fn device_flow(base_url: &str, client_id: &str) -> Self {
         Self {
-            base_url: base_url.rstrip('/').to_string(),
+            base_url: base_url.trim_end_matches('/').to_string(),
             client_id: client_id.to_string(),
             client_secret: None,
             scopes: vec![Scope::openid(), Scope::profile(), Scope::email()],
@@ -98,7 +98,7 @@ impl ClientConfig {
     /// Create an authorization-code-flow config with sensible defaults.
     pub fn authorization_code(base_url: &str, client_id: &str, redirect_uri: &str) -> Self {
         Self {
-            base_url: base_url.rstrip('/').to_string(),
+            base_url: base_url.trim_end_matches('/').to_string(),
             client_id: client_id.to_string(),
             client_secret: None,
             scopes: vec![Scope::openid(), Scope::profile(), Scope::email()],
@@ -407,4 +407,198 @@ fn percent_encode(s: &str) -> String {
         }
     }
     result
+}
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scope_parse_list() {
+        let scopes = Scope::parse_list("openid profile email offline_access");
+        assert_eq!(scopes.len(), 4);
+        assert_eq!(scopes[0].0, "openid");
+        assert_eq!(scopes[3].0, "offline_access");
+    }
+
+    #[test]
+    fn test_scope_format_list() {
+        let scopes = vec![Scope::openid(), Scope::profile()];
+        assert_eq!(Scope::format_list(&scopes), "openid profile");
+    }
+
+    #[test]
+    fn test_scope_presets() {
+        assert_eq!(Scope::openid().0, "openid");
+        assert_eq!(Scope::email().0, "email");
+        assert_eq!(Scope::profile().0, "profile");
+        assert_eq!(Scope::offline_access().0, "offline_access");
+    }
+
+    #[test]
+    fn test_credentials_validity() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let valid = Credentials {
+            access_token: Some("tok".into()),
+            refresh_token: Some("ref".into()),
+            id_token: None,
+            token_type: Some("Bearer".into()),
+            expiry_date: Some(now + 3600),
+            scope: None,
+        };
+        assert!(valid.is_valid());
+        assert!(!valid.is_expired(0));
+        assert_eq!(valid.bearer_token(), Some("tok"));
+    }
+
+    #[test]
+    fn test_credentials_expired() {
+        let expired = Credentials {
+            access_token: Some("tok".into()),
+            refresh_token: None,
+            id_token: None,
+            token_type: None,
+            expiry_date: Some(100),
+            scope: None,
+        };
+        assert!(!expired.is_valid());
+        assert!(expired.is_expired(0));
+    }
+
+    #[test]
+    fn test_credentials_no_access_token() {
+        let no_token = Credentials {
+            access_token: None,
+            refresh_token: Some("ref".into()),
+            id_token: None,
+            token_type: None,
+            expiry_date: Some(9999999999),
+            scope: None,
+        };
+        assert!(!no_token.is_valid());
+    }
+
+    #[test]
+    fn test_token_response_parse() {
+        let json = r#"{"access_token":"abc","token_type":"Bearer","expires_in":3600,"refresh_token":"xyz"}"#;
+        let resp = TokenResponse::from_json(json).unwrap();
+        assert_eq!(resp.access_token, Some("abc".into()));
+        assert_eq!(resp.token_type, Some("Bearer".into()));
+        assert_eq!(resp.expires_in, Some(3600));
+        assert_eq!(resp.refresh_token, Some("xyz".into()));
+        assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn test_token_response_error() {
+        let json = r#"{"error":"invalid_grant","error_description":"bad code"}"#;
+        let resp = TokenResponse::from_json(json).unwrap();
+        assert_eq!(resp.error, Some("invalid_grant".into()));
+        assert_eq!(resp.error_description, Some("bad code".into()));
+    }
+
+    #[test]
+    fn test_token_response_roundtrip() {
+        let resp = TokenResponse {
+            access_token: Some("tok".into()),
+            token_type: Some("Bearer".into()),
+            expires_in: Some(3600),
+            refresh_token: Some("ref".into()),
+            id_token: Some("jwt".into()),
+            scope: Some("openid".into()),
+            error: None,
+            error_description: None,
+        };
+        let json = resp.to_json();
+        let parsed = TokenResponse::from_json(&json).unwrap();
+        assert_eq!(parsed.access_token, resp.access_token);
+        assert_eq!(parsed.refresh_token, resp.refresh_token);
+    }
+
+    #[test]
+    fn test_device_response_parse() {
+        let json = r#"{"device_code":"dc","user_code":"XKCD-ABCD","verification_uri":"https://auth.example.com/verify","verification_uri_complete":"https://auth.example.com/verify?user_code=XKCD-ABCD","expires_in":600,"interval":5}"#;
+        let resp = DeviceAuthorizationResponse::from_json(json).unwrap();
+        assert_eq!(resp.device_code, "dc");
+        assert_eq!(resp.user_code, "XKCD-ABCD");
+        assert_eq!(resp.expires_in, 600);
+        assert_eq!(resp.interval, 5);
+    }
+
+    #[test]
+    fn test_device_response_defaults() {
+        let json = r#"{"device_code":"dc","user_code":"UC","verification_uri":"https://a","verification_uri_complete":"https://b"}"#;
+        let resp = DeviceAuthorizationResponse::from_json(json).unwrap();
+        assert_eq!(resp.expires_in, 600);
+        assert_eq!(resp.interval, 5);
+    }
+
+    #[test]
+    fn test_token_request_form_body() {
+        let req = TokenRequest {
+            grant_type: "authorization_code".into(),
+            client_id: "my-client".into(),
+            client_secret: Some("secret".into()),
+            device_code: None,
+            code: Some("code123".into()),
+            redirect_uri: Some("https://app.example.com/callback".into()),
+            code_verifier: Some("verifier123".into()),
+            refresh_token: None,
+            scope: None,
+        };
+        let body = req.to_form_body();
+        assert!(body.contains("grant_type=authorization_code"));
+        assert!(body.contains("client_id=my-client"));
+        assert!(body.contains("client_secret=secret"));
+        assert!(body.contains("code=code123"));
+        assert!(body.contains("code_verifier=verifier123"));
+    }
+
+    #[test]
+    fn test_device_request_form_body() {
+        let req = DeviceAuthorizationRequest {
+            client_id: "my-client".into(),
+            scope: "openid profile".into(),
+            code_challenge: "challenge123".into(),
+            code_challenge_method: "S256".into(),
+        };
+        let body = req.to_form_body();
+        assert!(body.contains("client_id=my-client"));
+        // Scope is percent-encoded: spaces become + or %20
+        assert!(body.contains("scope=openid+profile") || body.contains("scope=openid%20profile"));
+        assert!(body.contains("code_challenge=challenge123"));
+        assert!(body.contains("code_challenge_method=S256"));
+    }
+
+    #[test]
+    fn test_url_encoding() {
+        assert_eq!(percent_encode("hello world"), "hello%20world");
+        assert_eq!(percent_encode("a=b&c=d"), "a%3Db%26c%3Dd");
+        assert_eq!(percent_encode("safe-._~"), "safe-._~");
+    }
+
+    #[test]
+    fn test_oauth_request_to_url() {
+        let req = OAuthRequest {
+            client_id: "my-client".into(),
+            redirect_uri: "https://app.example.com/callback".into(),
+            scope: "openid profile".into(),
+            state: "xyz".into(),
+            code_challenge: "abc123".into(),
+        };
+        let url = req.to_authorization_url("https://auth.example.com/oauth2/authorize");
+        assert!(url.starts_with("https://auth.example.com/oauth2/authorize?"));
+        assert!(url.contains("response_type=code"));
+        assert!(url.contains("client_id=my-client"));
+        assert!(url.contains("code_challenge_method=S256"));
+        assert!(url.contains("state=xyz"));
+    }
 }

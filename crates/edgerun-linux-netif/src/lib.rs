@@ -58,7 +58,7 @@ fn make_ifreq(name: &str) -> Ifreq {
 }
 
 pub fn interface_flags(name: &str) -> Result<c_short, CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut ifr = make_ifreq(name);
     let rc = unsafe { ioctl_call(fd, SIOCGIFFLAGS, &mut ifr as *mut Ifreq as *mut _) };
     let err = io::Error::last_os_error();
@@ -72,7 +72,7 @@ pub fn interface_flags(name: &str) -> Result<c_short, CapabilityError> {
 }
 
 pub fn set_interface_up(name: &str, enabled: bool) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
+    let fd = open_ioctl_socket().map_err(|e| CapabilityError::Provider(e.to_string()))?;
     let mut ifr = make_ifreq(name);
     let get_rc = unsafe { ioctl_call(fd, SIOCGIFFLAGS, &mut ifr as *mut Ifreq as *mut _) };
     if get_rc < 0 {

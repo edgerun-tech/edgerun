@@ -24,12 +24,20 @@
 //! - CoreDNS `Corefile` → `DnsServer` + `ForwardingRule` YAML
 //! - BIND zone files → `DnsZone` YAML
 
-pub mod types;
-pub mod parser;
-pub mod projector;
-pub mod importers;
+mod types;
+mod parser;
+mod projector;
+mod importers;
 
-pub use types::*;
-pub use parser::*;
-pub use projector::*;
-pub use importers::*;
+// Explicit public API — no glob re-exports
+pub use types::{
+    API_VERSION, ResourceMetadata, Resource, ConfigResource,
+    DnsServerSpec, DnsZoneSpec, SoaRecord, ZoneRecord, DnssecConfig,
+    DnsForwarderSpec, ForwardingRuleSpec, TlsConfigSpec, RateLimitSpec,
+    DhcpServerSpec, DhcpReservation, DhcpPoolSpec, TftpServerSpec,
+};
+pub use parser::{parse_config_file, parse_and_validate, to_yaml_all, ConfigState, ConfigError};
+pub use projector::{ConfigEvent, ConfigOp, ConfigProjector};
+pub use importers::{
+    import_dnsmasq, import_corefile, ImportError,
+};

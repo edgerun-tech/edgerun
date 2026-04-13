@@ -88,7 +88,64 @@ delete  →  (poststop + cgroup cleanup)                                     →
 | **`time_namespace_accepted_by_validator`** | "time" in KNOWN_NAMESPACES — validates spec with time namespace |
 | **`cgroup_weight_device_per_device_written`** | weightDevice global weight written to cgroup (per-device needs BFQ scheduler) |
 
+<<<<<<< Updated upstream
 Run integration tests with: `sudo cargo test -p edgerun-oci-runtime --test conformance -- --test-threads=1`
+=======
+## OCI Spec Compliance
+
+### Target Version: v1.0.2
+
+| Category | Types | Applied | Status |
+|----------|-------|---------|--------|
+| Top-level spec | 8/8 | 7/8 | ✅ |
+| `process` fields | 14/15 | 14/15 | ✅ (missing `consoleSize`) |
+| `root` fields | 2/2 | 2/2 | ✅ |
+| `mounts` fields | 5/7 | 5/7 | ⚠️ (missing `recursive`, idmapped) |
+| `linux` fields | 13/14 | 12/14 | ⚠️ (missing `personality`, Intel RDT best-effort) |
+| Namespaces | 7/8 | 7/8 | ⚠️ (missing `time` namespace) |
+| Cgroup v2 resources | 21/27 | 18/27 | ⚠️ (missing RDMA, `weightDevice`, leaf weights) |
+| Seccomp fields | 7/7 | 6/7 | ⚠️ (`listenerMetadata` unused) |
+| Hook types | 6/6 | 6/6 | ✅ |
+| Linux devices | 7/7 | 5/7 | ⚠️ (`uid`/`gid` not applied) |
+| Device cgroup rules (eBPF) | 4/4 | 4/4 | ✅ |
+| OCI 1.1 features | 2/6 | 1/6 | ❌ (only `umask`) |
+| OCI 1.2 features | 0/3 | 0/3 | ❌ |
+
+### Compliance Gaps — Fix Plan
+
+#### Priority 1: Functional Gaps (parsed but not applied)
+
+| # | Gap | Field | Fix |
+|---|-----|-------|-----|
+| 1 | Device uid/gid not applied | `linux.devices[].uid`, `.gid` | Add `chown()` after `mknod()` in `create_spec_device()` |
+| 2 | BlockIO weightDevice never written | `blockIO.weightDevice` | Write `major:minor weight` to `io.bfq.weight` / `io.weight` |
+| 3 | Seccomp listenerMetadata ignored | `seccomp.listenerMetadata` | Pass metadata via environment variable to listener processes |
+
+#### Priority 2: Missing Type Definitions
+
+| # | Gap | OCI Version | Impact |
+|---|-----|-------------|--------|
+| 4 | `process.consoleSize` | 1.0.2 | Terminal box dimensions (low priority) |
+| 5 | `linux.time` namespace | 1.1/1.2 | Time namespace support (kernel 5.6+) |
+| 6 | `resources.rdma` | 1.0.2 | RDMA resource limits |
+| 7 | `linux.personality` | 1.2 | Execution domain/ABI selection |
+| 8 | `mount.recursive` | 1.1 | Recursive mount attribute changes |
+| 9 | `mount.uidMappings`/`gidMappings` | 1.1/1.2 | Idmapped mounts |
+
+#### Previously Fixed
+
+- ~~Terminal/PTY~~ — PTY with SCM_RIGHTS + I/O relay
+- ~~Seccomp NOTIFY~~ — `SECCOMP_FILTER_FLAG_NEW_LISTENER`
+- ~~Cgroup namespace~~ — in `default_namespaces()`
+- ~~Platform validation~~ — enforced on create
+- ~~exec PID namespace~~ — double-fork
+- ~~Seccomp >255 rules~~ — `bpf_long_skip()`
+- ~~`--root` override~~ — `state::set_state_dir()`
+- ~~State bundle path~~ — uses `--bundle` from CLI
+- ~~Poststop error logging~~ — stderr + kmsg fallback
+
+## Identified Gaps
+>>>>>>> Stashed changes
 
 ## OCI Spec Compliance
 

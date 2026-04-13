@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use edgerun_fingerprint::{
     validate_enroll_request, FingerprintCapture, FingerprintCapturePurpose,
     FingerprintEnrollProgress, FingerprintEnrollRequest, FingerprintEnrollmentSession,

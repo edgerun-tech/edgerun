@@ -38,7 +38,7 @@
 //!
 //! ## Server Quick Start
 //! ```no_run
-//! use edgerun_oauth::{OAuthServer, ServerConfig, Issuer};
+//! use edgerun_oauth::{OAuthServer, ServerConfig};
 //!
 //! # edgerun_rt::block_on(async {
 //! let config = ServerConfig::new("https://auth.example.com", "my-issuer");
@@ -56,30 +56,44 @@
 //! # });
 //! ```
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-
 mod base64url;
 mod client;
 mod device_state;
 mod discovery;
 mod errors;
 mod jwt;
+mod oauth_client;
 mod pkce;
 mod server;
 mod token_store;
 mod types;
 
 pub use base64url::{base64url_encode, base64url_decode, base64url_nopad_encode};
-pub use client::{OAuthClient, DeviceFlowCallback};
+pub use client::{OAuthClient as LegacyOAuthClient, DeviceFlowCallback};
 pub use discovery::{OidcDiscoveryDocument, JwksDocument, Jwk};
-pub use errors::{OAuthError, OAuthResult, DeviceError};
-pub use jwt::{IdToken, JwtHeader, JwtPayload, JwtVerifier};
+pub use errors::{OAuthError, DeviceError};
+pub use jwt::{IdToken, JwtHeader, JwtPayload, JwtVerifier, verifier_from_jwk};
+pub use oauth_client::{
+    OAuthClient,
+    OAuthClientBuilder,
+    BearerTokenMiddleware,
+    AutoRefreshMiddleware,
+};
 pub use pkce::PkcePair;
-pub use server::{OAuthServer, ServerConfig, ClientRegistration, PendingDeviceGrant};
+pub use server::{OAuthServer, ServerConfig, ClientRegistration, Claims, BearerAuthMiddleware};
 pub use token_store::{TokenStore, default_token_path};
+
+// Re-export edgerun-http middleware types for convenience
+pub use edgerun_http::client_middleware::{
+    Chain as ClientChain,
+    Client,
+    ClientRequest,
+    ClientExtensions,
+    ClientMiddleware,
+    ClientNext,
+    ClientTransport,
+    client_middleware_fn,
+};
 pub use types::{
     ClientConfig,
     Credentials,

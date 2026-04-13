@@ -130,8 +130,7 @@ pub fn resolve_cgroup_delegation_path() -> io::Result<String> {
 
     // On cgroup v2, the line is "0::<path>"
     for line in cgroup_content.lines() {
-        if line.starts_with("0::") {
-            let path = &line[3..];
+        if let Some(path) = line.strip_prefix("0::") {
             if !path.is_empty() {
                 return Ok(path.trim_start_matches('/').to_string());
             }

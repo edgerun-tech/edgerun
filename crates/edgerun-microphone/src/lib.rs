@@ -4,8 +4,9 @@ use edgerun_capabilities::{
     CapabilityProvider, CapabilityRole,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum MicrophoneSampleFormat {
+    #[default]
     PcmS16Le,
     PcmS24Le,
     PcmS32Le,
@@ -25,7 +26,7 @@ pub struct MicrophoneInfo {
     pub hardware_noise_suppression: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct AudioCaptureRequest {
     pub duration_ms: u32,
     pub sample_rate_hz: u32,

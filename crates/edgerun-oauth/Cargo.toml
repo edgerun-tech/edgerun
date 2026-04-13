@@ -10,6 +10,7 @@ edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-rt = { path = "../edgerun-rt" }
+edgerun-secret-service = { path = "../edgerun-secret-service" }
 
 [lints]
 workspace = true

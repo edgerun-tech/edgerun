@@ -1059,4 +1059,256 @@ mod tests {
             assert!(xml.contains("OpenSession"));
         } else { panic!("expected XML string"); }
     }
+
+    #[test]
+    fn delete_item() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let key = Backend::item_key("Test", &[]);
+        server.backend.put(
+            "/org/freedesktop/secrets/collections/default",
+            &key, b"secret", "Test", &[],
+        ).unwrap();
+        let item_path = Backend::item_path("/org/freedesktop/secrets/collections/default", &key);
+
+        let msg = Msg::call(&item_path, "org.freedesktop.Secret.Item", "Delete", ":1.1");
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Return);
+        assert!(server.backend.get("/org/freedesktop/secrets/collections/default", &key).unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_nonexistent_item_returns_error() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let msg = Msg::call(
+            "/org/freedesktop/secrets/collections/default/ghost",
+            "org.freedesktop.Secret.Item", "Delete", ":1.1",
+        );
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Err);
+    }
+
+    #[test]
+    fn delete_collection_removes_all_items() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        for i in 0..3 {
+            let key = Backend::item_key(&format!("Item {}", i), &[]);
+            server.backend.put(
+                "/org/freedesktop/secrets/collections/default",
+                &key, format!("secret-{}", i).as_bytes(), &format!("Item {}", i), &[],
+            ).unwrap();
+        }
+        assert_eq!(server.backend.list("/org/freedesktop/secrets/collections/default").unwrap().len(), 3);
+
+        let msg = Msg::call(
+            "/org/freedesktop/secrets/collections/default",
+            "org.freedesktop.Secret.Collection", "Delete", ":1.1",
+        );
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Return);
+        assert!(server.backend.list("/org/freedesktop/secrets/collections/default").unwrap().is_empty());
+    }
+
+    #[test]
+    fn unknown_method_returns_error() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "NonExistent", ":1.1");
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Err);
+    }
+
+    #[test]
+    fn unknown_interface_returns_error() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let msg = Msg::call("/org/freedesktop/secrets", "org.Unknown.Interface", "Method", ":1.1");
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Err);
+    }
+
+    #[test]
+    fn close_session_then_get_secrets_fails() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
+            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_reply = server.handle_message(":1.1", &open_msg);
+        let session_path = match &open_reply.body[1] { Val::O(p) => p.clone(), _ => panic!("expected path") };
+
+        let close_msg = Msg::call(&session_path, "org.freedesktop.Secret.Session", "Close", ":1.1");
+        server.handle_message(":1.1", &close_msg);
+
+        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
+            .body(vec![Val::Arr(vec![]), Val::O(session_path.clone())], "ao");
+        let reply = server.handle_message(":1.1", &get_msg);
+        assert_eq!(reply.mt, MType::Err);
+    }
+
+    #[test]
+    fn full_flow_put_unlock_get_lock_get_fails() {
+        use crate::session::BiometricVerifier;
+        use edgerun_biometrics::BiometricState;
+
+        struct MockVerifier;
+        impl BiometricVerifier for MockVerifier {
+            fn verify(&self) -> BiometricState {
+                let mut s = BiometricState::default();
+                s.verified = true;
+                s
+            }
+            fn is_available(&self) -> bool { true }
+        }
+
+        let root = tmp_root();
+        let mut server = Server::bind_with_verifier(
+            &root.join("test.sock"), root.clone(), Box::new(MockVerifier),
+        ).unwrap();
+
+        // Open session
+        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
+            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_reply = server.handle_message(":1.1", &open_msg);
+        let session_path = match &open_reply.body[1] { Val::O(p) => p.clone(), _ => panic!("expected path") };
+
+        // Put a secret
+        let key = Backend::item_key("My Password", &[("service".into(), "example.com".into())]);
+        server.backend.put(
+            "/org/freedesktop/secrets/collections/default", &key,
+            b"my-super-secret-password", "My Password",
+            &[("service".into(), "example.com".into())],
+        ).unwrap();
+        let item_path = Backend::item_path("/org/freedesktop/secrets/collections/default", &key);
+
+        // Unlock
+        let unlock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
+            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        let unlock_reply = server.handle_message(":1.1", &unlock_msg);
+        assert_eq!(unlock_reply.mt, MType::Return);
+
+        // Get secrets → should succeed
+        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
+            .body(vec![Val::Arr(vec![Val::O(item_path.clone())]), Val::O(session_path.clone())], "ao");
+        let get_reply = server.handle_message(":1.1", &get_msg);
+        assert_eq!(get_reply.mt, MType::Return);
+        if let Val::Dict(secrets) = &get_reply.body[0] {
+            assert_eq!(secrets.len(), 1);
+        } else { panic!("expected dict"); }
+
+        // Lock
+        let lock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Lock", ":1.1")
+            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        server.handle_message(":1.1", &lock_msg);
+
+        // Get secrets → should fail
+        let get_msg2 = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
+            .body(vec![Val::Arr(vec![Val::O(item_path.clone())]), Val::O(session_path.clone())], "ao");
+        let get_reply2 = server.handle_message(":1.1", &get_msg2);
+        assert_eq!(get_reply2.mt, MType::Err);
+    }
+
+    #[test]
+    fn search_across_multiple_collections() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let key1 = Backend::item_key("GH", &[("server".into(), "github.com".into())]);
+        let key2 = Backend::item_key("GL", &[("server".into(), "gitlab.com".into())]);
+        let key3 = Backend::item_key("GH2", &[("server".into(), "github.com".into())]);
+        server.backend.put("/org/freedesktop/secrets/collections/default", &key1, b"gh1", "GH", &[("server".into(), "github.com".into())]).unwrap();
+        server.backend.put("/org/freedesktop/secrets/collections/login", &key2, b"gl1", "GL", &[("server".into(), "gitlab.com".into())]).unwrap();
+        server.backend.put("/org/freedesktop/secrets/collections/default", &key3, b"gh2", "GH2", &[("server".into(), "github.com".into())]).unwrap();
+
+        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "SearchItems", ":1.1")
+            .body(vec![Val::Dict(vec![(Val::S("server".into()), Val::S("github.com".into()))])], "a{ss}");
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Return);
+        if let Val::Arr(unlocked) = &reply.body[0] {
+            assert_eq!(unlocked.len(), 2);
+        } else { panic!("expected array"); }
+    }
+
+    #[test]
+    fn read_alias_nonexistent() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "ReadAlias", ":1.1")
+            .body(vec![Val::S("nonexistent".into())], "s");
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Return);
+        if let Val::O(c) = &reply.body[0] {
+            assert_eq!(c, "/");
+        } else { panic!("expected ObjectPath"); }
+    }
+
+    #[test]
+    fn properties_get_all() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.DBus.Properties", "GetAll", ":1.1")
+            .body(vec![Val::S("org.freedesktop.Secret.Service".into())], "s");
+        let reply = server.handle_message(":1.1", &msg);
+        assert_eq!(reply.mt, MType::Return);
+        if let Val::Dict(d) = &reply.body[0] {
+            assert!(d.is_empty());
+        } else { panic!("expected dict"); }
+    }
+
+    #[test]
+    fn rebuild_preserves_server_access() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        let key = Backend::item_key("Test", &[("k".into(), "v".into())]);
+        server.backend.put(
+            "/org/freedesktop/secrets/collections/default", &key, b"secret", "Test",
+            &[("k".into(), "v".into())],
+        ).unwrap();
+
+        server.backend.rebuild_index().unwrap();
+
+        let (secret, meta) = server.backend.get("/org/freedesktop/secrets/collections/default", &key).unwrap().unwrap();
+        assert_eq!(secret, b"secret");
+        assert_eq!(meta.label, "Test");
+    }
 }

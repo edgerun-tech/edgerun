@@ -5,7 +5,6 @@
 // Protocol and FFI modules generate many doc/name warnings — suppress them
 #![allow(missing_docs)]
 #![allow(non_snake_case)]
-#![allow(dead_code)]
 #![allow(unused_comparisons)]
 
 pub mod wire;

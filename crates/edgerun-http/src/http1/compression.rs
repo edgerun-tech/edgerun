@@ -50,38 +50,9 @@ impl ContentEncoding {
     }
 }
 
-/// Negotiate best encoding from Accept-Encoding header
-pub fn negotiate_encoding(accept_header: Option<&str>) -> ContentEncoding {
-    match accept_header {
-        Some(header) => {
-            // Simple negotiation: prefer brotli > gzip > deflate > identity
-            if header.to_lowercase().contains("br") {
-                ContentEncoding::Brotli
-            } else if header.to_lowercase().contains("gzip") {
-                ContentEncoding::Gzip
-            } else if header.to_lowercase().contains("deflate") {
-                ContentEncoding::Deflate
-            } else {
-                ContentEncoding::Identity
-            }
-        }
-        None => ContentEncoding::Identity,
-    }
-}
-
 /// Build Accept-Encoding header value
 pub fn accept_encoding_value() -> &'static str {
     "br, gzip, deflate"
-}
-
-/// Compress response body
-pub fn compress_body(body: &[u8], encoding: ContentEncoding) -> Vec<u8> {
-    match encoding {
-        ContentEncoding::Gzip => compress_gzip(body),
-        ContentEncoding::Deflate => compress_deflate(body),
-        ContentEncoding::Brotli => compress_brotli(body),
-        ContentEncoding::Identity | ContentEncoding::Unknown => body.to_vec(),
-    }
 }
 
 /// Decompress response body based on Content-Encoding header
@@ -227,14 +198,6 @@ mod tests {
 
         let decompressed = decompress_brotli(&compressed).expect("brotli decompress failed");
         assert_eq!(decompressed, original);
-    }
-
-    #[test]
-    fn test_negotiate_encoding() {
-        assert_eq!(negotiate_encoding(Some("br, gzip, deflate")), ContentEncoding::Brotli);
-        assert_eq!(negotiate_encoding(Some("gzip, deflate")), ContentEncoding::Gzip);
-        assert_eq!(negotiate_encoding(Some("deflate")), ContentEncoding::Deflate);
-        assert_eq!(negotiate_encoding(None), ContentEncoding::Identity);
     }
 
     #[test]

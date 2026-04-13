@@ -4,7 +4,7 @@ use edgerun_capabilities::{
     CapabilityProvider, CapabilityRole,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum GpuVendor {
     Amd,
     Intel,
@@ -16,6 +16,7 @@ pub enum GpuVendor {
     Aspeed,
     Virtio,
     Microsoft,
+    #[default]
     Unknown,
 }
 
@@ -37,7 +38,7 @@ pub struct GpuConnectorInfo {
     pub cec_adapter: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct GpuInfo {
     pub provider: String,
     pub instance_id: String,

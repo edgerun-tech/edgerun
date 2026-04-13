@@ -76,8 +76,9 @@ pub fn base64url_decode(input: &str) -> Result<Vec<u8>, &'static str> {
         }
     }
 
-    // Trim any zero bytes added by incomplete final chunk
-    output.truncate(output.len() - (4 - len % 4) % 4);
+    // Calculate actual output length
+    let actual_len = stripped.len() * 3 / 4;
+    output.truncate(actual_len);
     Ok(output)
 }
 
@@ -99,5 +100,48 @@ mod tests {
     fn test_padding() {
         assert_eq!(base64url_encode(b"hello"), "aGVsbG8=");
         assert_eq!(base64url_nopad_encode(b"hello"), "aGVsbG8");
+    }
+
+    #[test]
+    fn test_rfc4648_test_vectors() {
+        assert_eq!(base64url_nopad_encode(b""), "");
+        assert_eq!(base64url_nopad_encode(b"f"), "Zg");
+        assert_eq!(base64url_nopad_encode(b"fo"), "Zm8");
+        assert_eq!(base64url_nopad_encode(b"foo"), "Zm9v");
+        assert_eq!(base64url_nopad_encode(b"foob"), "Zm9vYg");
+        assert_eq!(base64url_nopad_encode(b"fooba"), "Zm9vYmE");
+        assert_eq!(base64url_nopad_encode(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn test_url_safe_alphabet() {
+        let input = [0xfb, 0xff, 0xbf];
+        let encoded = base64url_nopad_encode(&input);
+        assert!(!encoded.contains('+'));
+        assert!(!encoded.contains('/'));
+    }
+
+    #[test]
+    fn test_decode_with_padding() {
+        assert_eq!(base64url_decode("aGVsbG8").unwrap(), b"hello");
+        assert_eq!(base64url_decode("aGVsbG8=").unwrap(), b"hello");
+    }
+
+    #[test]
+    fn test_decode_empty() {
+        assert_eq!(base64url_decode("").unwrap(), b"");
+    }
+
+    #[test]
+    fn test_decode_invalid_char() {
+        assert!(base64url_decode("aGV!bG8").is_err());
+    }
+
+    #[test]
+    fn test_large_input() {
+        let data: Vec<u8> = (0..=255).collect();
+        let encoded = base64url_nopad_encode(&data);
+        let decoded = base64url_decode(&encoded).unwrap();
+        assert_eq!(decoded, data);
     }
 }

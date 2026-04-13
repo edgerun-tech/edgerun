@@ -52,6 +52,13 @@ impl FlowController {
 
     /// Increment window size (when receiving WINDOW_UPDATE)
     pub fn increment(&mut self, increment: u32) -> Result<()> {
+        // RFC 7540 §6.9: A receiver MUST treat a WINDOW_UPDATE frame
+        // with an increment of 0 as a stream error (connection error if stream_id=0).
+        if increment == 0 {
+            return Err(Http2Error::FlowControl(
+                "WINDOW_UPDATE with increment of 0".into(),
+            ));
+        }
         let new_size = self.window_size + increment as i64;
         if new_size > self.max_window_size {
             return Err(Http2Error::FlowControl(format!(

@@ -96,18 +96,20 @@ impl ClientExtensions {
         self.inner.lock().insert(TypeId::of::<T>(), Box::new(value));
     }
 
-    pub fn get<T: 'static>(&self) -> Option<&T> {
+    pub fn get<T: Clone + 'static>(&self) -> Option<T> {
         self.inner
             .lock()
             .get(&TypeId::of::<T>())
             .and_then(|boxed| boxed.downcast_ref::<T>())
+            .cloned()
     }
 
-    pub fn get_mut<T: 'static>(&self) -> Option<&mut T> {
+    pub fn replace<T: Send + 'static>(&self, value: T) -> Option<T> {
         self.inner
             .lock()
-            .get_mut(&TypeId::of::<T>())
-            .and_then(|boxed| boxed.downcast_mut::<T>())
+            .insert(TypeId::of::<T>(), Box::new(value))
+            .and_then(|boxed| boxed.downcast::<T>().ok())
+            .map(|b| *b)
     }
 
     pub fn remove<T: 'static>(&self) -> Option<T> {
@@ -292,8 +294,8 @@ impl ClientTransport for ClientTransportAdapter {
         req: &ClientRequest,
     ) -> Pin<Box<dyn Future<Output = Result<Response>> + Send + '_>> {
         let client = &self.0;
-        let req_ref = req.request();
-        Box::pin(async move { client.execute(req_ref).await })
+        let req = req.request().clone();
+        Box::pin(async move { client.execute(&req).await })
     }
 }
 

@@ -3,6 +3,7 @@
 //! Generates a `code_verifier` and derives the `code_challenge` via SHA-256.
 
 use crate::base64url::base64url_nopad_encode;
+use edgerun_crypto::getrandom;
 use edgerun_crypto::sha256;
 
 /// A PKCE code-verifier / code-challenge pair.
@@ -55,5 +56,33 @@ mod tests {
         let expected_hash = sha256(pkce.code_verifier.as_bytes());
         let expected_challenge = base64url_nopad_encode(&expected_hash);
         assert_eq!(pkce.code_challenge, expected_challenge);
+    }
+
+    #[test]
+    fn test_uniqueness() {
+        let pkce1 = PkcePair::generate().unwrap();
+        let pkce2 = PkcePair::generate().unwrap();
+        assert_ne!(pkce1.code_verifier, pkce2.code_verifier);
+        assert_ne!(pkce1.code_challenge, pkce2.code_challenge);
+    }
+
+    #[test]
+    fn test_rfc7636_length_requirement() {
+        // RFC 7636: code_verifier must be 43-128 characters
+        for _ in 0..10 {
+            let pkce = PkcePair::generate().unwrap();
+            assert!(pkce.code_verifier.len() >= 43);
+            assert!(pkce.code_verifier.len() <= 128);
+        }
+    }
+
+    #[test]
+    fn test_only_unreserved_chars() {
+        // RFC 7636: ALPHA / DIGIT / "-" / "." / "_" / "~"
+        let pkce = PkcePair::generate().unwrap();
+        for c in pkce.code_verifier.chars() {
+            assert!(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~',
+                "code_verifier contains invalid char: {c}");
+        }
     }
 }

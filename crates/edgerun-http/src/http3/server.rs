@@ -29,11 +29,17 @@
 //! });
 //! ```
 
+use crate::handler::Handler;
+use crate::header::HeaderMap;
+use crate::method::Method;
+use crate::request::Request;
+use crate::response::Response;
+use crate::uri::Uri;
+use edgerun_rt::AsyncUdpSocket;
+use edgerun_rt::CancellationToken;
+use edgerun_tls::certificate_gen::CertificateAndKey;
 use std::net::SocketAddr;
 use std::sync::Arc;
-
-use edgerun_rt::AsyncUdpSocket;
-use edgerun_tls::certificate_gen::CertificateAndKey;
 
 use super::connection::Http3Connection;
 use super::quic::QuicTlsServerHandshaker;
@@ -153,16 +159,21 @@ impl Http3Server {
     /// Returns the established connection and the client's address.
     pub async fn accept(&self) -> Result<(Http3Connection, SocketAddr), String> {
         loop {
-            // First check if we have pending data
-            {
+            // First check if we have pending data — extract without holding lock across await
+            let pending_item = {
                 let mut pending = self.pending.lock().unwrap();
-                if !pending.is_empty() {
-                    let (data, client_addr) = pending.remove(0);
-                    if let Ok(conn) = self.handle_initial_packet(&data, client_addr).await {
-                        return Ok(conn);
-                    }
-                    // If handshake failed, try next pending
+                pending.first().cloned()
+            };
+            if let Some((data, client_addr)) = pending_item {
+                // Remove from pending before processing
+                {
+                    let mut pending = self.pending.lock().unwrap();
+                    if !pending.is_empty() { pending.remove(0); }
                 }
+                if let Ok(conn) = self.handle_initial_packet(&data, client_addr).await {
+                    return Ok(conn);
+                }
+                // If handshake failed, try next packet
             }
 
             // Receive next packet
@@ -568,5 +579,90 @@ impl Http3Server {
             _ => unreachable!(),
         };
         Ok((value, len))
+    }
+
+    /// Run the HTTP/3 server, dispatching incoming requests to the given handler.
+    ///
+    /// This method loops indefinitely, accepting connections and spawning
+    /// a task for each one. The task processes all requests on the connection
+    /// through the provided [`Handler`].
+    ///
+    /// The server shuts down when the `shutdown` token is cancelled.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use edgerun_http::http3::Http3Server;
+    /// use edgerun_http::{Handler, Request, Response, StatusCode, into_handler};
+    /// use edgerun_tls::certificate_gen::generate_self_signed;
+    /// use edgerun_rt::Runtime;
+    /// use std::sync::Arc;
+    ///
+    /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
+    /// rt.block_on(async {
+    ///     let cert = generate_self_signed(&["localhost"]);
+    ///     let server = Http3Server::bind("127.0.0.1:4433", cert).await.unwrap();
+    ///     let handler = into_handler(|_req| {
+    ///         Response::text(StatusCode::new(200).unwrap(), "Hello!")
+    ///     });
+    ///     let shutdown = edgerun_rt::CancellationToken::new();
+    ///     server.serve(Arc::new(handler), shutdown).await.unwrap();
+    /// });
+    /// ```
+    pub async fn serve(
+        &self,
+        handler: Arc<dyn Handler>,
+        shutdown: CancellationToken,
+    ) -> std::io::Result<()> {
+        edgerun_log::info!("HTTP/3 server listening on {} (h3)", self.local_addr()?);
+        loop {
+            if shutdown.is_cancelled() {
+                edgerun_log::info!("HTTP/3 server shutting down");
+                return Ok(());
+            }
+
+            match self.accept().await {
+                Ok((mut conn, client_addr)) => {
+                    let handler = Arc::clone(&handler);
+                    edgerun_rt::spawn(async move {
+                        if let Err(e) = Self::handle_connection(&mut conn, handler, client_addr).await {
+                            edgerun_log::warn!("HTTP/3 connection error from {}: {}", client_addr, e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    edgerun_log::warn!("HTTP/3 accept error: {}", e);
+                    edgerun_rt::sleep(std::time::Duration::from_millis(100)).await;
+                }
+            }
+        }
+    }
+
+    /// Handle a single HTTP/3 connection, dispatching requests to the handler.
+    async fn handle_connection(
+        conn: &mut Http3Connection,
+        handler: Arc<dyn Handler>,
+        _client_addr: SocketAddr,
+    ) -> Result<(), String> {
+        loop {
+            let (stream_id, method, uri, headers) = match conn.accept_request().await {
+                Ok(Some(result)) => result,
+                Ok(None) => continue,
+                Err(e) => return Err(format!("accept_request: {:?}", e)),
+            };
+
+            let body = conn.recv_request_body(stream_id).await
+                .unwrap_or(None).unwrap_or_default();
+
+            let request = Request::new(method, uri, headers, Some(body));
+            let response = handler.handle(request).await;
+
+            let status = response.status();
+            let resp_headers = response.headers().clone();
+            let body = response.body().to_vec();
+
+            if let Err(e) = conn.send_response(stream_id, status, &resp_headers, Some(body)).await {
+                return Err(format!("send_response: {:?}", e));
+            }
+        }
     }
 }

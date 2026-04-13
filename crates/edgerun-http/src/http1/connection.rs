@@ -60,15 +60,6 @@ fn parse_connection_value(value: &str) -> ConnectionState {
     }
 }
 
-/// Format a ConnectionState as a Connection header value
-pub fn connection_header_value(state: &ConnectionState) -> &'static str {
-    match state {
-        ConnectionState::Close => "close",
-        ConnectionState::KeepAlive => "keep-alive",
-        ConnectionState::Upgrade => "upgrade",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,12 +117,5 @@ mod tests {
         assert!(ConnectionState::Upgrade.is_upgrade());
         assert!(!ConnectionState::KeepAlive.is_upgrade());
         assert!(!ConnectionState::Close.is_upgrade());
-    }
-
-    #[test]
-    fn test_connection_header_value() {
-        assert_eq!(connection_header_value(&ConnectionState::Close), "close");
-        assert_eq!(connection_header_value(&ConnectionState::KeepAlive), "keep-alive");
-        assert_eq!(connection_header_value(&ConnectionState::Upgrade), "upgrade");
     }
 }

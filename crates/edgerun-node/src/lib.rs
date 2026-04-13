@@ -22,9 +22,42 @@ use edgerun_hardware_signing::NodeID;
 // Simple YAML config parser (no serde dependency)
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::fmt;
+
+/// Node error types.
+#[derive(Debug)]
+pub enum NodeError {
+    /// Missing required configuration field.
+    MissingField(String),
+    /// Command was rejected.
+    CommandRejected(String),
+    /// Command was deferred.
+    CommandDeferred(String),
+    /// Stream error.
+    Stream(edgerun_stream::StreamError),
+}
+
+impl fmt::Display for NodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NodeError::MissingField(field) => write!(f, "missing required field: {field}"),
+            NodeError::CommandRejected(reason) => write!(f, "command rejected: {reason}"),
+            NodeError::CommandDeferred(reason) => write!(f, "command deferred: {reason}"),
+            NodeError::Stream(e) => write!(f, "stream error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for NodeError {}
+
+impl From<edgerun_stream::StreamError> for NodeError {
+    fn from(e: edgerun_stream::StreamError) -> Self {
+        NodeError::Stream(e)
+    }
+}
 
 /// Node configuration — loaded from YAML and embedded in the genesis event.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct NodeConfig {
     /// The node's stream identifier.
     pub stream_id: String,
@@ -38,7 +71,7 @@ pub struct NodeConfig {
 
 impl NodeConfig {
     /// Loads a node configuration from a YAML string.
-    pub fn from_yaml(yaml: &str) -> Result<Self, String> {
+    pub fn from_yaml(yaml: &str) -> Result<Self, NodeError> {
         let mut config = NodeConfig {
             stream_id: String::new(),
             name: None,
@@ -85,7 +118,7 @@ impl NodeConfig {
             }
         }
         if config.stream_id.is_empty() {
-            return Err("missing required field: stream_id".into());
+            return Err(NodeError::MissingField("stream_id".into()));
         }
         Ok(config)
     }
@@ -160,7 +193,7 @@ impl Node {
     ///
     /// Returns `Ok(())` if the command is valid and authorized,
     /// or `Err(reason)` if validation or authorization fails.
-    pub fn process_command(&mut self, command: &CommandEnvelope) -> Result<(), String> {
+    pub fn process_command(&mut self, command: &CommandEnvelope) -> Result<(), NodeError> {
         let ctx = CommandValidationContext {
             local_node_id: &self.identity.0,
             replay_cache: &self.processed_commands,
@@ -174,12 +207,7 @@ impl Node {
 
         match result.verdict {
             Verdict::Accept => {
-                // Step 2: Check grant authorization (allow all for now)
-                // In production, this would check the policy engine
-
-                // Step 3: Record commitment in stream
                 self.record_commitment(command);
-                // Track in replay cache — keyed by command_hash
                 if let Some(Value::String(cmd_id)) = result.derived.as_map().and_then(|m| m.get("command_id")) {
                     if let Some(Value::String(cmd_hash)) = result.derived.as_map().and_then(|m| m.get("command_hash")) {
                         self.processed_commands.insert(
@@ -191,18 +219,17 @@ impl Node {
                 Ok(())
             }
             Verdict::Duplicate => {
-                // Already processed — return prior result
                 Ok(())
             }
             Verdict::Defer => {
                 let reason = result.reason_code.map(|r| r.as_str().to_string()).unwrap_or_else(|| "deferred".into());
                 self.record_rejection(command, &reason);
-                Err(format!("command deferred: {}", reason))
+                Err(NodeError::CommandDeferred(reason))
             }
             Verdict::Reject => {
                 let reason = result.reason_code.map(|r| r.as_str().to_string()).unwrap_or_else(|| "invalid".into());
                 self.record_rejection(command, &reason);
-                Err(format!("command rejected: {}", reason))
+                Err(NodeError::CommandRejected(reason))
             }
         }
     }

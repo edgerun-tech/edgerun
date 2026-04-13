@@ -1,11 +1,13 @@
-//! Unified HTTP server supporting HTTP/1.1 and HTTP/2, with optional TLS 1.3.
+//! Unified HTTP server supporting HTTP/1.1, HTTP/2, and HTTP/3, with optional TLS 1.3.
 //!
-//! Auto-detects protocol on each connection:
+//! Auto-detects protocol on each TCP connection:
 //! - HTTP/2 prior knowledge: starts with `PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`
 //! - HTTP/1.x: starts with a request line like `GET / HTTP/1.1`
 //!
 //! When TLS is enabled, performs a TLS 1.3 handshake first, then runs the
 //! same protocol detection on the decrypted stream.
+//!
+//! HTTP/3 (QUIC) runs on UDP with built-in TLS 1.3 — enabled via `.with_http3()`.
 
 use crate::handler::Handler;
 use crate::header::HeaderMap;
@@ -18,7 +20,7 @@ use crate::http2::ErrorCode;
 use crate::method::Method;
 use crate::uri::Uri;
 use crate::{Request, Response, StatusCode};
-use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncWrite, AsyncWriteExt, sleep, spawn, timeout};
+use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncWrite, AsyncWriteExt, sleep, spawn, timeout, CancellationToken};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,14 +37,24 @@ pub struct HttpServer {
     keep_alive: Option<Duration>,
     max_request_size: usize,
     tls_cert: Option<Arc<TlsCertificate>>,
+    http2_idle_timeout: Duration,
+    http3_enabled: bool,
 }
 
 impl HttpServer {
     pub fn new<H: Handler>(handler: H) -> Self {
-        Self { handler: Arc::new(handler), keep_alive: Some(Duration::from_secs(5)), max_request_size: 10 * 1024 * 1024, tls_cert: None }
+        Self {
+            handler: Arc::new(handler),
+            keep_alive: Some(Duration::from_secs(5)),
+            max_request_size: 10 * 1024 * 1024,
+            tls_cert: None,
+            http2_idle_timeout: Duration::from_secs(30),
+            http3_enabled: false,
+        }
     }
     pub fn keep_alive(mut self, t: Option<Duration>) -> Self { self.keep_alive = t; self }
     pub fn max_request_size(mut self, s: usize) -> Self { self.max_request_size = s; self }
+    pub fn http2_idle_timeout(mut self, t: Duration) -> Self { self.http2_idle_timeout = t; self }
 
     /// Enable TLS 1.3 with the given certificate.
     pub fn with_tls(mut self, cert: TlsCertificate) -> Self {
@@ -50,10 +62,37 @@ impl HttpServer {
         self
     }
 
+    /// Enable HTTP/3 (QUIC) on the same port as the TCP listener.
+    /// Requires TLS to be configured (HTTP/3 embeds TLS 1.3 in QUIC).
+    pub fn with_http3(mut self) -> Self {
+        self.http3_enabled = true;
+        self
+    }
+
     pub async fn bind(self, addr: impl std::net::ToSocketAddrs) -> std::io::Result<BoundHttpServer> {
-        let listener = AsyncTcpListener::bind(addr)?;
+        let listener = AsyncTcpListener::bind(&addr)?;
         let local_addr = listener.local_addr()?;
-        Ok(BoundHttpServer { listener, handler: self.handler, keep_alive: self.keep_alive, max_request_size: self.max_request_size, local_addr, tls_cert: self.tls_cert })
+
+        let http3_server = if self.http3_enabled && self.tls_cert.is_some() {
+            let cert = self.tls_cert.as_ref().unwrap().as_ref().clone();
+            let h3 = crate::http3::Http3Server::bind(local_addr, cert)
+                .await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            Some(Arc::new(h3))
+        } else {
+            None
+        };
+
+        Ok(BoundHttpServer {
+            listener,
+            handler: self.handler,
+            keep_alive: self.keep_alive,
+            max_request_size: self.max_request_size,
+            local_addr,
+            tls_cert: self.tls_cert,
+            http2_idle_timeout: self.http2_idle_timeout,
+            http3_server,
+        })
     }
 }
 
@@ -64,41 +103,94 @@ pub struct BoundHttpServer {
     max_request_size: usize,
     local_addr: SocketAddr,
     tls_cert: Option<Arc<TlsCertificate>>,
+    http2_idle_timeout: Duration,
+    http3_server: Option<Arc<crate::http3::Http3Server>>,
 }
 
 impl BoundHttpServer {
     pub fn local_addr(&self) -> SocketAddr { self.local_addr }
 
+    /// Serve HTTP requests indefinitely on both TCP (HTTP/1.1 + HTTP/2) and UDP (HTTP/3).
     pub async fn serve(&self) -> std::io::Result<()> {
+        let shutdown = CancellationToken::new();
+        self.serve_with_shutdown(shutdown).await
+    }
+
+    /// Serve HTTP requests until the shutdown token is cancelled.
+    ///
+    /// Runs both the TCP accept loop (HTTP/1.1 + HTTP/2) and the HTTP/3
+    /// server (if enabled) concurrently. Cancels when `shutdown` fires.
+    pub async fn serve_with_shutdown(&self, shutdown: CancellationToken) -> std::io::Result<()> {
         let tls = self.tls_cert.is_some();
-        edgerun_log::info!("HTTP server listening on {} (HTTP/1.1 + HTTP/2{})", self.local_addr, if tls { " + TLS" } else { "" });
+        let h3 = self.http3_server.is_some();
+        edgerun_log::info!(
+            "HTTP server listening on {} (HTTP/1.1 + HTTP/2{}{})",
+            self.local_addr,
+            if tls { " + TLS" } else { "" },
+            if h3 { " + HTTP/3" } else { "" }
+        );
+
+        let handler = Arc::clone(&self.handler);
+        let keep_alive = self.keep_alive;
+        let max_size = self.max_request_size;
+        let tls_cert = self.tls_cert.clone();
+        let http2_idle_timeout = self.http2_idle_timeout;
+        let tcp_shutdown = shutdown.clone();
+
+        // Spawn HTTP/3 accept loop if enabled
+        let h3_handle = if let Some(ref h3_server) = self.http3_server {
+            let h3_handler = Arc::clone(&self.handler);
+            let h3_shutdown = shutdown.clone();
+            let h3_server = Arc::clone(h3_server);
+            Some(spawn(async move {
+                h3_server.serve(h3_handler, h3_shutdown).await
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            }))
+        } else {
+            None
+        };
+
+        // Run TCP accept loop on this task (not spawned — borrows self)
         loop {
+            if tcp_shutdown.is_cancelled() { break; }
             match self.listener.accept().await {
                 Ok((stream, peer_addr)) => {
-                    let handler = Arc::clone(&self.handler);
-                    let keep_alive = self.keep_alive;
-                    let max_size = self.max_request_size;
-                    let tls_cert = self.tls_cert.clone();
+                    let h = Arc::clone(&handler);
+                    let ka = keep_alive;
+                    let ms = max_size;
+                    let tc = tls_cert.clone();
+                    let h2 = http2_idle_timeout;
                     spawn(async move {
-                        if let Err(e) = handle_connection(stream, handler, keep_alive, max_size, tls_cert).await {
+                        if let Err(e) = handle_connection(stream, h, ka, ms, tc, h2).await {
                             edgerun_log::warn!("Connection error from {}: {}", peer_addr, e);
                         }
                     });
                 }
-                Err(e) => { edgerun_log::error!("Accept error: {}", e); sleep(Duration::from_millis(100)).await; }
+                Err(e) => {
+                    edgerun_log::error!("Accept error: {}", e);
+                    sleep(Duration::from_millis(100)).await;
+                }
             }
         }
+
+        // Cancel HTTP/3 server if it's running
+        shutdown.cancel();
+        if let Some(h) = h3_handle {
+            let _ = h.await;
+        }
+
+        Ok(())
     }
 
     pub async fn accept_one(&self) -> std::io::Result<()> {
         let (stream, _) = self.listener.accept().await?;
         let handler = Arc::clone(&self.handler);
-        handle_connection(stream, handler, self.keep_alive, self.max_request_size, self.tls_cert.clone()).await
+        handle_connection(stream, handler, self.keep_alive, self.max_request_size, self.tls_cert.clone(), self.http2_idle_timeout).await
     }
 }
 
 /// Handle a single connection — optionally does TLS handshake, then auto-detects HTTP/1.1 vs HTTP/2.
-async fn handle_connection<S>(stream: S, handler: Arc<dyn Handler>, keep_alive: Option<Duration>, max_request_size: usize, tls_cert: Option<Arc<TlsCertificate>>) -> std::io::Result<()>
+async fn handle_connection<S>(stream: S, handler: Arc<dyn Handler>, keep_alive: Option<Duration>, max_request_size: usize, tls_cert: Option<Arc<TlsCertificate>>, http2_idle_timeout: Duration) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -107,14 +199,14 @@ where
         let tls_stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("TLS handshake failed: {e}")))?;
-        handle_connection_inner(tls_stream, handler, keep_alive, max_request_size).await
+        handle_connection_inner(tls_stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
     } else {
-        handle_connection_inner(stream, handler, keep_alive, max_request_size).await
+        handle_connection_inner(stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
     }
 }
 
 /// Inner connection handler — reads first line to detect HTTP/1.1 vs HTTP/2.
-async fn handle_connection_inner<S>(stream: S, handler: Arc<dyn Handler>, keep_alive: Option<Duration>, max_request_size: usize) -> std::io::Result<()>
+async fn handle_connection_inner<S>(stream: S, handler: Arc<dyn Handler>, keep_alive: Option<Duration>, max_request_size: usize, http2_idle_timeout: Duration) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -125,7 +217,7 @@ where
     };
 
     if first_line.as_bytes().starts_with(H2_PREFACE) {
-        handle_http2(reader.into_inner(), handler).await
+        handle_http2(reader.into_inner(), handler, http2_idle_timeout, max_request_size).await
     } else {
         handle_http1_line(reader, first_line, handler, keep_alive, max_request_size).await
     }
@@ -152,7 +244,7 @@ where
 
         let mut headers = HeaderMap::new();
         loop {
-            let hline_opt = reader.read_line().await.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            let hline_opt = reader.read_line_max(max_request_size).await.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
             let hline = match hline_opt { Some(s) => s, None => break };
             if hline.is_empty() { break; }
             if let Some(colon) = hline.find(':') {
@@ -187,13 +279,13 @@ where
         let skip_body = is_head || response.status().as_u16() == 204 || response.status().as_u16() == 304 || response.status().is_informational();
         if !skip_body && !response.body().is_empty() { reader.get_mut().write_all(response.body()).await?; }
 
-        current_line = match timeout(ka_timeout, reader.read_line()).await { Ok(Ok(Some(line))) => line, _ => break };
+        current_line = match timeout(ka_timeout, reader.read_line_max(max_request_size)).await { Ok(Ok(Some(line))) => line, _ => break };
     }
     Ok(())
 }
 
 /// Handle an HTTP/2 connection with the unified Handler trait.
-async fn handle_http2<S>(stream: S, handler: Arc<dyn Handler>) -> std::io::Result<()>
+async fn handle_http2<S>(stream: S, handler: Arc<dyn Handler>, idle_timeout: Duration, max_header_size: usize) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -201,10 +293,29 @@ where
     let mut encoder = Encoder::new();
     let mut decoder = Decoder::new();
     let mut server = Http2Server::new();
-    let mut expecting_continuation: Option<(u32, Vec<u8>)> = None;
+    let mut expecting_continuation: Option<(u32, Vec<u8>, bool)> = None;
+    let mut pending_body_data: std::collections::HashMap<u32, Vec<u8>> = std::collections::HashMap::new();
+    let mut frame_count: u64 = 0;
 
     loop {
-        let frame = match read_frame(&mut rdwr).await { Ok(f) => f, Err(_) => break };
+        frame_count += 1;
+        // Periodically clean up closed streams (every 100 frames)
+        if frame_count % 100 == 0 {
+            server.cleanup_closed_streams();
+        }
+
+        let frame = match timeout(idle_timeout, read_frame(&mut rdwr, server.max_frame_size)).await {
+            Ok(Ok(Ok(f))) => f,
+            Ok(Ok(Err((stream_id, error_code)))) => {
+                write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, b"Frame too large").await;
+                break;
+            }
+            Ok(Err(_)) => break,
+            Err(_) => {
+                edgerun_log::debug!("HTTP/2 connection idle timeout reached");
+                break;
+            }
+        };
 
         if frame.frame_type == FrameType::Settings {
             let settings_frame = match crate::http2::frame::SettingsFrame::from_frame(&frame) {
@@ -222,13 +333,18 @@ where
             continue;
         }
 
-        if frame.payload.len() as u32 > server.max_frame_size { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Frame too large").await; break; }
         if let Err(ec) = frame.validate_semantics() { write_goaway(&mut rdwr, server.last_processed_stream_id, ec, b"Semantic violation").await; break; }
 
         let action = match frame.frame_type {
             FrameType::Ping => server.handle_ping(&frame),
             FrameType::WindowUpdate => server.handle_window_update(&frame),
-            FrameType::RstStream => server.handle_rst_stream(&frame),
+            FrameType::RstStream => {
+                server.handle_rst_stream(&frame);
+                // Clean up any pending headers/body for this stream
+                pending_body_data.remove(&frame.stream_id);
+                server.pending_headers.remove(&frame.stream_id);
+                FrameAction::None
+            }
             FrameType::Priority => {
                 let pf = if frame.payload.len() >= 5 {
                     let dep_raw = u32::from_be_bytes([frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]]);
@@ -240,7 +356,30 @@ where
             }
             FrameType::Goaway => { server.handle_goaway(); break; }
             FrameType::PushPromise => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"No push").await; break; }
-            FrameType::Data => FrameAction::None,
+            FrameType::Data => {
+                let end_stream = frame.flags & flags::DATA_END_STREAM != 0;
+                let sid = frame.stream_id;
+                let body_entry = pending_body_data.entry(sid).or_default();
+                if body_entry.len() + frame.payload.len() > 100 * 1024 * 1024 {
+                    pending_body_data.remove(&sid);
+                    write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Body too large").await;
+                    break;
+                }
+                body_entry.extend_from_slice(&frame.payload);
+
+                if end_stream {
+                    // We have the complete body — check if we also have pending headers
+                    if let Some(headers) = server.pending_headers.remove(&sid) {
+                        let body = pending_body_data.remove(&sid).unwrap_or_default();
+                        server.update_last_stream(sid);
+                        process_request_with_body(sid, &headers, body, &mut decoder, &mut encoder, &mut server, &handler).await;
+                    } else {
+                        // DATA arrived with END_STREAM but no headers — discard body
+                        pending_body_data.remove(&sid);
+                    }
+                }
+                FrameAction::None
+            }
             FrameType::Headers => {
                 let hf = match crate::http2::frame::HeadersFrame::from_frame(&frame) {
                     Ok(hf) => hf,
@@ -264,22 +403,58 @@ where
                     else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
                     else { server.pending_headers.insert(hf.stream_id, headers); FrameAction::None }
                 } else if !end_headers {
-                    expecting_continuation = Some((hf.stream_id, hf.header_block.clone()));
+                    if hf.header_block.len() > max_header_size {
+                        write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
+                        break;
+                    }
+                    expecting_continuation = Some((hf.stream_id, hf.header_block.clone(), hf.end_stream));
                     FrameAction::None
                 } else { FrameAction::None }
             }
             FrameType::Continuation => {
-                if let Some((stream_id, ref mut block)) = expecting_continuation {
+                if let Some((stream_id, ref mut block, headers_end_stream)) = expecting_continuation {
+                    if block.len() + frame.payload.len() > max_header_size {
+                        write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
+                        break;
+                    }
                     block.extend_from_slice(&frame.payload);
                     let end_headers = frame.flags & flags::HEADERS_END_HEADERS != 0;
                     if end_headers {
                         let block = block.clone();
+                        let end_stream = headers_end_stream;
                         expecting_continuation = None;
-                        process_request(stream_id, &block, &mut decoder, &mut encoder, &mut server, &handler).await
+                        if end_stream {
+                            // HEADERS + CONTINUATION with END_STREAM — process immediately
+                            process_request(stream_id, &block, &mut decoder, &mut encoder, &mut server, &handler).await
+                        } else {
+                            // Headers complete but need body — store as pending
+                            let headers = match decoder.decode(&block) {
+                                Ok(h) => h,
+                                Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                            };
+                            if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut rdwr, stream_id, ec).await; FrameAction::None }
+                            else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, stream_id, ec).await; FrameAction::None }
+                            else { server.pending_headers.insert(stream_id, headers); FrameAction::None }
+                        }
                     } else { FrameAction::None }
                 } else { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Unexpected CONTINUATION").await; break; }
             }
-            _ => FrameAction::None,
+            _ => {
+                // RFC 7540 §6.10: During a CONTINUATION sequence, only HEADERS,
+                // PRIORITY, RST_STREAM, and CONTINUATION may be received.
+                // WINDOW_UPDATE, DATA, SETTINGS, PING, GOAWAY, PUSH_PROMISE are forbidden.
+                if expecting_continuation.is_some() {
+                    match frame.frame_type {
+                        FrameType::Data | FrameType::PushPromise | FrameType::Goaway
+                        | FrameType::Ping | FrameType::Settings | FrameType::WindowUpdate => {
+                            write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Frame during CONTINUATION").await;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                FrameAction::None
+            }
         };
 
         match action {
@@ -293,6 +468,7 @@ where
 }
 
 /// Decode HPACK headers, call Handler, encode response as HTTP/2 HEADERS + DATA.
+/// Used when HEADERS and END_STREAM arrive together (no body).
 async fn process_request(
     stream_id: u32,
     header_block: &[u8],
@@ -303,8 +479,28 @@ async fn process_request(
 ) -> FrameAction {
     let headers = match decoder.decode(header_block) {
         Ok(h) => h,
-        Err(_) => return FrameAction::None,
+        Err(_) => {
+            // RFC 9113 §4.3: HPACK decode error is a connection error (GOAWAY).
+            return FrameAction::Goaway {
+                last_stream_id: server.last_processed_stream_id,
+                error_code: ErrorCode::COMPRESSION_ERROR.to_u32(),
+                debug_data: b"HPACK decode error in process_request".to_vec(),
+            };
+        }
     };
+    process_request_with_body(stream_id, &headers, Vec::new(), decoder, encoder, server, handler).await
+}
+
+/// Process a complete HTTP/2 request with pre-decoded headers and accumulated body.
+async fn process_request_with_body(
+    stream_id: u32,
+    headers: &[(Vec<u8>, Vec<u8>)],
+    body: Vec<u8>,
+    decoder: &mut Decoder<'_>,
+    encoder: &mut Encoder<'_>,
+    server: &mut Http2Server,
+    handler: &dyn Handler,
+) -> FrameAction {
     if let Err((ec, _)) = validate_request_headers(&headers) {
         return FrameAction::WriteFrames(vec![crate::http2::frame::RstStreamFrame::new(stream_id, ec).to_frame()]);
     }
@@ -319,7 +515,7 @@ async fn process_request(
     let uri = Uri::parse(&format!("{}://{}{}", scheme, authority, path)).unwrap_or_else(|_| Uri::parse("http://localhost/").unwrap());
 
     let mut req_headers = HeaderMap::new();
-    for (k, v) in &headers {
+    for (k, v) in headers {
         if !k.starts_with(b":") {
             if let (Ok(kk), Ok(vv)) = (std::str::from_utf8(k), std::str::from_utf8(v)) { let _ = req_headers.insert(kk, vv); }
         }
@@ -328,7 +524,7 @@ async fn process_request(
     let content_length = headers.iter().find(|(k, _)| k == b"content-length").and_then(|(_, v)| std::str::from_utf8(v).ok()?.parse::<usize>().ok());
     if let Some(s) = server.stream_manager.get_stream_mut(stream_id) { s.content_length = content_length.map(|x| x as u64); }
 
-    let request = Request::new(method, uri, req_headers, None);
+    let request = Request::new(method, uri, req_headers, Some(body));
     let response = handler.handle(request).await;
 
     let mut resp_frames = Vec::new();
@@ -342,7 +538,7 @@ async fn process_request(
     FrameAction::WriteFrames(resp_frames)
 }
 
-async fn read_frame<S>(stream: &mut S) -> std::io::Result<Frame>
+async fn read_frame<S>(stream: &mut S, max_frame_size: u32) -> std::io::Result<Result<Frame, (u32, u32)>>
 where S: AsyncRead + Unpin,
 {
     let mut hdr = [0u8; 9];
@@ -351,9 +547,23 @@ where S: AsyncRead + Unpin,
     let raw_type = hdr[3];
     let flags_byte = hdr[4];
     let stream_id = u32::from_be_bytes([hdr[5], hdr[6], hdr[7], hdr[8]]) & 0x7FFFFFFF;
+
+    // Validate frame size BEFORE allocating payload buffer (prevent DoS)
+    if length > max_frame_size {
+        // Discard the oversized payload in chunks
+        let mut discard = [0u8; 4096];
+        let mut remaining = length as usize;
+        while remaining > 0 {
+            let to_read = remaining.min(discard.len());
+            stream.read_exact(&mut discard[..to_read]).await?;
+            remaining -= to_read;
+        }
+        return Ok(Err((stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32())));
+    }
+
     let mut payload = vec![0u8; length as usize];
     if length > 0 { stream.read_exact(&mut payload).await?; }
-    Ok(Frame { frame_type: FrameType::from_u8(raw_type).unwrap_or(FrameType::Data), flags: flags_byte, stream_id, payload })
+    Ok(Ok(Frame { frame_type: FrameType::from_u8(raw_type).unwrap_or(FrameType::Data), flags: flags_byte, stream_id, payload }))
 }
 
 async fn write_frame<S>(stream: &mut S, frame: &Frame) -> std::io::Result<()>

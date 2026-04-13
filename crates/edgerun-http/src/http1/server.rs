@@ -408,7 +408,7 @@ where
 
         // For upgrade requests, don't drain the body — let handler deal with it
         if !is_upgrade {
-            drain_body(&mut buf_reader, &request).await?;
+            drain_body(&mut buf_reader, &request, max_request_size).await?;
         }
 
         // Call handler
@@ -438,6 +438,7 @@ where
 async fn drain_body<R: AsyncRead + AsyncWrite + Unpin>(
     buf_reader: &mut BufReader<R>,
     request: &Request,
+    max_body_size: usize,
 ) -> std::io::Result<()> {
     let content_length = request.headers().get("content-length")
         .and_then(|v| v.as_str().parse::<u64>().ok());
@@ -447,8 +448,14 @@ async fn drain_body<R: AsyncRead + AsyncWrite + Unpin>(
 
     if is_chunked {
         // Drain chunked body: read chunk-size lines and data until 0-length chunk
-        drain_chunked_body(buf_reader).await
+        drain_chunked_body(buf_reader, max_body_size).await
     } else if let Some(len) = content_length {
+        if len as usize > max_body_size {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("request body too large: {} bytes (max {})", len, max_body_size),
+            ));
+        }
         // Drain exactly `len` bytes
         drain_exact(buf_reader, len).await
     } else {
@@ -475,8 +482,10 @@ async fn drain_exact<R: AsyncRead + Unpin>(
 /// Drain a chunked transfer-encoded body.
 async fn drain_chunked_body<R: AsyncRead + Unpin>(
     buf_reader: &mut BufReader<R>,
+    max_body_size: usize,
 ) -> std::io::Result<()> {
     let mut line_buf = Vec::with_capacity(32);
+    let mut total_drained: usize = 0;
     loop {
         // Read chunk-size line
         line_buf.clear();
@@ -503,7 +512,15 @@ async fn drain_chunked_body<R: AsyncRead + Unpin>(
 
         if chunk_size == 0 {
             // Last chunk — drain trailer headers until blank line
-            return drain_trailers(buf_reader).await;
+            return drain_trailers(buf_reader, max_body_size).await;
+        }
+
+        total_drained += chunk_size;
+        if total_drained > max_body_size {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("chunked body too large: {} bytes (max {})", total_drained, max_body_size),
+            ));
         }
 
         // Drain chunk data
@@ -521,21 +538,18 @@ async fn drain_chunked_body<R: AsyncRead + Unpin>(
     }
 }
 
-/// Drain trailer headers (until blank line).
+/// Drain trailer headers (until blank line), with a size limit.
 async fn drain_trailers<R: AsyncRead + Unpin>(
     buf_reader: &mut BufReader<R>,
+    max_trailer_size: usize,
 ) -> std::io::Result<()> {
-    let mut buf = [0u8; 8192];
-    // Read until we find \r\n\r\n (or connection closes)
-    let mut saw_cr = false;
+    // Use read_line_max to enforce size limit while scanning for blank line
     loop {
-        let n = buf_reader.read(&mut buf[..1]).await?;
-        if n == 0 { return Ok(()); }
-        match buf[0] {
-            b'\r' => saw_cr = true,
-            b'\n' if saw_cr => return Ok(()),
-            b'\n' => saw_cr = true,
-            _ => saw_cr = false,
+        let line = buf_reader.read_line_max(max_trailer_size).await?;
+        match line {
+            Some(l) if l.is_empty() => return Ok(()),
+            Some(_) => continue,
+            None => return Ok(()), // EOF
         }
     }
 }
@@ -548,18 +562,11 @@ async fn read_request<R: AsyncRead + Unpin>(
     buf_reader: &mut BufReader<R>,
     max_request_size: usize,
 ) -> std::io::Result<Option<Request>> {
-    // Read status line
-    let status_line = match buf_reader.read_line().await? {
+    // Read status line (enforce max size during read, not after)
+    let status_line = match buf_reader.read_line_max(max_request_size).await? {
         Some(line) => line,
         None => return Ok(None), // Clean EOF
     };
-
-    if status_line.len() > max_request_size {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "request line too long",
-        ));
-    }
 
     // Parse: METHOD SP REQUEST-TARGET SP HTTP-VERSION
     let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
@@ -580,10 +587,10 @@ async fn read_request<R: AsyncRead + Unpin>(
     let version = HttpVersion::from_str(version_str)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
-    // Read headers
+    // Read headers (enforce max size during read)
     let mut headers = HeaderMap::new();
     loop {
-        let line = buf_reader.read_line().await?
+        let line = buf_reader.read_line_max(max_request_size).await?
             .ok_or_else(|| std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "unexpected EOF reading headers",
@@ -591,13 +598,6 @@ async fn read_request<R: AsyncRead + Unpin>(
 
         if line.is_empty() {
             break;
-        }
-
-        if line.len() > max_request_size {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "header too long",
-            ));
         }
 
         if let Some(colon) = line.find(':') {
@@ -692,8 +692,6 @@ async fn write_response<W: AsyncWrite + Unpin>(
 mod tests {
     use super::*;
     use edgerun_rt::Runtime;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
 
     #[test]
     fn test_write_response() {
@@ -703,10 +701,9 @@ mod tests {
         resp.set_body(b"hello".to_vec());
 
         let output = rt.block_on(async move {
-            let mut buf = Vec::new();
-            let mut writer = VecWriter(&mut buf);
-            write_response(&mut writer, &resp, false, HttpVersion::Http11).await.unwrap();
-            buf
+            let mut cursor = edgerun_rt::Cursor::new(Vec::new());
+            write_response(&mut cursor, &resp, false, HttpVersion::Http11).await.unwrap();
+            cursor.into_inner()
         });
 
         let output_str = String::from_utf8_lossy(&output);
@@ -723,10 +720,9 @@ mod tests {
         resp.set_body(b"hello".to_vec());
 
         let output = rt.block_on(async move {
-            let mut buf = Vec::new();
-            let mut writer = VecWriter(&mut buf);
-            write_response(&mut writer, &resp, true, HttpVersion::Http11).await.unwrap();
-            buf
+            let mut cursor = edgerun_rt::Cursor::new(Vec::new());
+            write_response(&mut cursor, &resp, true, HttpVersion::Http11).await.unwrap();
+            cursor.into_inner()
         });
 
         let output_str = String::from_utf8_lossy(&output);
@@ -745,10 +741,9 @@ mod tests {
         resp.set_body(b"hello".to_vec());
 
         let output = rt.block_on(async move {
-            let mut buf = Vec::new();
-            let mut writer = VecWriter(&mut buf);
-            write_response(&mut writer, &resp, false, HttpVersion::Http10).await.unwrap();
-            buf
+            let mut cursor = edgerun_rt::Cursor::new(Vec::new());
+            write_response(&mut cursor, &resp, false, HttpVersion::Http10).await.unwrap();
+            cursor.into_inner()
         });
 
         let output_str = String::from_utf8_lossy(&output);
@@ -769,28 +764,4 @@ mod tests {
         let unknown = StatusCode::new(418).unwrap();
         assert_eq!(unknown.reason(), "I'm a teapot");
     }
-
-    struct VecWriter<'a>(&'a mut Vec<u8>);
-
-    impl AsyncWrite for VecWriter<'_> {
-        fn poll_write(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-            buf: &[u8],
-        ) -> Poll<std::io::Result<usize>> {
-            let this = self.get_mut();
-            this.0.extend_from_slice(buf);
-            Poll::Ready(Ok(buf.len()))
-        }
-
-        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-            Poll::Ready(Ok(()))
-        }
-
-        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-            Poll::Ready(Ok(()))
-        }
-    }
-
-    impl Unpin for VecWriter<'_> {}
 }

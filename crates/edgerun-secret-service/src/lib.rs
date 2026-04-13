@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Secret service library.
 //!
 //! Provides a backend for storing and retrieving secrets via encrypted

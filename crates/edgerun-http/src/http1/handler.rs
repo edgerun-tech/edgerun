@@ -158,69 +158,6 @@ impl Handler for std::sync::Arc<dyn Handler> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Response builder helpers for use in handlers
-// ---------------------------------------------------------------------------
-
-/// Convenience type for a handler that returns text responses.
-pub fn text_response(status: crate::StatusCode, body: &str) -> Response {
-    let mut resp = Response::new(status);
-    let _ = resp.headers_mut().insert("Content-Type", "text/plain; charset=utf-8");
-    let _ = resp.headers_mut().insert(
-        "Content-Length",
-        &body.len().to_string(),
-    );
-    resp.set_body(body.as_bytes().to_vec());
-    resp
-}
-
-/// Convenience type for a handler that returns JSON responses.
-pub fn json_response(status: crate::StatusCode, body: &str) -> Response {
-    let mut resp = Response::new(status);
-    let _ = resp.headers_mut().insert("Content-Type", "application/json");
-    let _ = resp.headers_mut().insert(
-        "Content-Length",
-        &body.len().to_string(),
-    );
-    resp.set_body(body.as_bytes().to_vec());
-    resp
-}
-
-/// Convenience type for a handler that returns HTML responses.
-pub fn html_response(status: crate::StatusCode, body: &str) -> Response {
-    let mut resp = Response::new(status);
-    let _ = resp.headers_mut().insert("Content-Type", "text/html; charset=utf-8");
-    let _ = resp.headers_mut().insert(
-        "Content-Length",
-        &body.len().to_string(),
-    );
-    resp.set_body(body.as_bytes().to_vec());
-    resp
-}
-
-/// 404 Not Found response.
-pub fn not_found() -> Response {
-    text_response(crate::StatusCode::new(404).unwrap(), "404 Not Found")
-}
-
-/// 500 Internal Server Error response.
-pub fn internal_error() -> Response {
-    text_response(crate::StatusCode::new(500).unwrap(), "500 Internal Server Error")
-}
-
-/// 405 Method Not Allowed response.
-pub fn method_not_allowed() -> Response {
-    text_response(crate::StatusCode::new(405).unwrap(), "405 Method Not Allowed")
-}
-
-/// 101 Switching Protocols response with upgrade headers.
-///
-/// Use this to accept an HTTP upgrade. Add the appropriate upgrade-specific
-/// headers (e.g., WebSocket accept headers) to the returned response.
-pub fn switching_protocols_response() -> Response {
-    Response::switching_protocols()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,19 +198,5 @@ mod tests {
             handler.handle(request).await
         });
         assert!(response.is_success());
-    }
-
-    #[test]
-    fn test_text_response() {
-        let resp = text_response(StatusCode::new(200).unwrap(), "hello");
-        assert!(resp.is_success());
-        assert_eq!(resp.body_as_string().unwrap(), "hello");
-    }
-
-    #[test]
-    fn test_json_response() {
-        let resp = json_response(StatusCode::new(200).unwrap(), r#"{"key":"value"}"#);
-        assert!(resp.is_success());
-        assert_eq!(resp.body_as_string().unwrap(), r#"{"key":"value"}"#);
     }
 }

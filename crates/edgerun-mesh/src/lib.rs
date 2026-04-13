@@ -8,13 +8,15 @@
 pub mod benchmark;
 pub mod discovery;
 pub mod router;
-pub mod router_tests;
 pub mod router_benchmark;
 
 mod frame_types;
 mod frame;
 mod routing;
 mod node;
+
+#[cfg(test)]
+mod router_tests;
 
 pub use edgerun_hardware_signing::NodeID;
 pub use frame_types::FrameType;

@@ -122,13 +122,10 @@ const AF_INET: c_int = 2;
 const SOCK_DGRAM: c_int = 2;
 
 /// Open a UDP datagram socket suitable for ioctl calls.
-pub fn open_ioctl_socket() -> Result<c_int, String> {
+pub fn open_ioctl_socket() -> Result<c_int, std::io::Error> {
     let fd = unsafe { socket(AF_INET, SOCK_DGRAM, 0) };
     if fd < 0 {
-        return Err(format!(
-            "failed to open ioctl socket: {}",
-            io::Error::last_os_error()
-        ));
+        return Err(io::Error::last_os_error());
     }
     Ok(fd)
 }

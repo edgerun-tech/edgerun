@@ -10,6 +10,7 @@ edgerun-proto = { path = "../edgerun-proto" }
 edgerun-crypto.workspace = true
 prost.workspace = true
 prost-types.workspace = true
+serde_yaml = "0.9"
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

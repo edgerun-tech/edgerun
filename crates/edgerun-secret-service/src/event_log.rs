@@ -352,4 +352,69 @@ mod tests {
             assert_eq!(v, decoded);
         }
     }
+
+    #[test]
+    fn event_log_attributes_roundtrip() {
+        let root = tmp_root();
+        let mut log = EventLog::open(&root).unwrap();
+        log.record_put("default", "k1", "Key 1", &[
+            ("server".into(), "github.com".into()),
+            ("type".into(), "password".into()),
+        ], "blob123").unwrap();
+        let events = log.replay().unwrap();
+        assert_eq!(events.len(), 1);
+        if let SecretEvent::Put(p) = &events[0] {
+            assert_eq!(p.attributes.len(), 2);
+            assert_eq!(p.attributes["server"], "github.com");
+        } else { panic!("expected Put"); }
+    }
+
+    #[test]
+    fn event_log_secret_type_byte_values() {
+        assert_eq!(SecretEventType::SecretPut.as_byte(), 0x01);
+        assert_eq!(SecretEventType::SecretDelete.as_byte(), 0x02);
+        assert_eq!(SecretEventType::CollectionCreated.as_byte(), 0x03);
+        assert_eq!(SecretEventType::CollectionDeleted.as_byte(), 0x04);
+        assert!(SecretEventType::from_byte(0x00).is_none());
+        assert!(SecretEventType::from_byte(0x05).is_none());
+        assert!(SecretEventType::from_byte(0xFF).is_none());
+    }
+
+    #[test]
+    fn event_log_record_delete_with_reason() {
+        let root = tmp_root();
+        let mut log = EventLog::open(&root).unwrap();
+        log.record_delete("default", "k1", "Key 1", Some("user requested")).unwrap();
+        let events = log.replay().unwrap();
+        if let SecretEvent::Delete(p) = &events[0] {
+            assert_eq!(p.reason, "user requested");
+        } else { panic!("expected Delete"); }
+    }
+
+    #[test]
+    fn event_log_record_delete_without_reason() {
+        let root = tmp_root();
+        let mut log = EventLog::open(&root).unwrap();
+        log.record_delete("default", "k1", "Key 1", None).unwrap();
+        let events = log.replay().unwrap();
+        if let SecretEvent::Delete(p) = &events[0] {
+            assert_eq!(p.reason, "");
+        } else { panic!("expected Delete"); }
+    }
+
+    #[test]
+    fn event_log_mixed_operations() {
+        let root = tmp_root();
+        let mut log = EventLog::open(&root).unwrap();
+        log.record_collection_created("default", "Default").unwrap();
+        log.record_put("default", "k1", "K1", &[("s".into(), "v".into())], "b1").unwrap();
+        log.record_delete("default", "k1", "K1", None).unwrap();
+        log.record_collection_deleted("default", 0).unwrap();
+        let events = log.replay().unwrap();
+        assert_eq!(events.len(), 4);
+        assert!(matches!(&events[0], SecretEvent::CollectionCreated(_)));
+        assert!(matches!(&events[1], SecretEvent::Put(_)));
+        assert!(matches!(&events[2], SecretEvent::Delete(_)));
+        assert!(matches!(&events[3], SecretEvent::CollectionDeleted(_)));
+    }
 }

@@ -330,10 +330,10 @@ impl StreamManager {
 
     /// Update initial window size for all streams
     pub fn update_initial_window_size(&mut self, new_size: u32) {
+        let delta = new_size as i64 - self.initial_window_size as i64;
         self.initial_window_size = new_size;
         for stream in self.streams.values_mut() {
-            let delta = new_size as i64 - stream.local_window as i64;
-            stream.local_window = new_size as i64;
+            stream.local_window += delta;
             stream.remote_window += delta;
         }
     }

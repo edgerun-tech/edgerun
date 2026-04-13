@@ -16,6 +16,7 @@ pub mod upgrade;
 pub mod compression;
 pub mod multipart;
 pub mod range;
+pub mod chunked;
 
 pub use client::Client;
 pub use server::{Server, BoundServer};
@@ -32,7 +33,7 @@ pub use upgrade::{
     UpgradeProtocol, UpgradeHandler, parse_upgrade_request, is_websocket_upgrade,
     build_upgrade_response, build_websocket_accept_headers,
 };
-pub use compression::{ContentEncoding, negotiate_encoding, decompress_body, compress_body};
+pub use compression::{ContentEncoding, decompress_body, accept_encoding_value};
 pub use multipart::{MultipartField, parse_multipart, extract_boundary, is_multipart};
 pub use range::{
     RangeSpecifier, ByteRange, ContentRange, parse_range_header, resolve_byte_range,

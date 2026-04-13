@@ -4,31 +4,45 @@
 
 Compile the WHATWG HTML spec into a generated, deterministic Rust parser.
 
-**Spec → Proto IR → Codegen → Rust Parser**
+**Spec → Proto IR (textproto) → Go Codegen → Rust Parser**
 
-No browser generates its HTML parser from spec data. Chrome's is ~500K lines of hand-written C++. Ours is generated from proto — the same pipeline as our rasterizer, WGSL shaders, and layout engine.
+No browser generates its HTML parser from spec data. Chrome's is ~500K lines of hand-written C++. Ours is generated from proto textproto — the same pipeline as our rasterizer, WGSL shaders, and layout engine.
+
+**No Python. No JSON proto. Only textproto. Go only.**
 
 ---
 
 ## Architecture
 
 ```
+<<<<<<< Updated upstream
 WHATWG HTML Spec (11MB, docs/html_spec.md)
     ↓ extract_html_spec.py (already exists)
 html_element_catalog.json (already exists)
     ↓ html-codegen (Go, cmd/html-codegen/)
+=======
+WHATWG HTML Spec (encoded by hand in Go)
+    ↓ cmd/generate-parser-ir (Go)
+>>>>>>> Stashed changes
 ┌───────────────────────────────────────────┐
-│            Parser IR (Proto)               │
+│            Parser IR (textproto)           │
 │                                            │
+<<<<<<< Updated upstream
 │  tokenizer_states.proto  — 86 states       │
 │  tree_builder.proto      — 23 modes        │
 │  entities.proto          — 2,231 refs      │
 │  html_elements.proto     — 108 elements    │
 │  html_attributes.proto   — typed attrs     │
+=======
+│  data/tokenizer.textproto   — 86 states    │
+│  data/tree_builder.textproto  — 23 modes   │
+│  data/entities.textproto      — ~210 refs  │
+│  data/element_metadata.json   — void/raw   │
+>>>>>>> Stashed changes
 └───────────────┬───────────────────────────┘
                 ↓ buf generate (existing pipeline)
 ┌───────────────────────────────────────────┐
-│       Generated Rust Types (prost)         │
+│       Generated Go Types (protoc-gen-go)   │
 │  — TokenizerState enum                     │
 │  — InsertionMode enum                      │
 │  — StateTransition table                   │
@@ -36,14 +50,17 @@ html_element_catalog.json (already exists)
 │  — EntityCatalog                           │
 │  — HtmlElement enum                        │
 └───────────────┬───────────────────────────┘
+<<<<<<< Updated upstream
                 ↓ html-codegen (Go codegen)
+=======
+                ↓ cmd/html-codegen (Go)
+>>>>>>> Stashed changes
 ┌───────────────────────────────────────────┐
 │       Generated Rust Parser                │
 │                                            │
 │  tokenizer.rs           — state machine    │
 │  tree_builder.rs        — insertion modes  │
-│  entity_decoder.rs      — 2,231 entities   │
-│  attribute_validator.rs — typed attrs      │
+│  entity_decoder.rs      — ~210 entities    │
 │  html_parser.rs         — entry point      │
 └───────────────┬───────────────────────────┘
                 ↓ wired into edgerun-html-render
@@ -104,11 +121,10 @@ rules[current_mode][token_type] → (actions[], next_mode)
 | Constraint | Rationale |
 |-----------|-----------|
 | No `HashMap` in hot path | Deterministic, `no_std` compatible, predictable performance |
-| Numeric tag IDs | `HtmlElement` enum discriminant (1–108), not string comparison |
-| No heap alloc in tokenizer | Tokenizer reads `&str`, produces `Token` on a bounded arena |
-| Proto is single source of truth | Same pipeline as all other behavioral crates |
+| Proto textproto only | No JSON proto. Go-only tooling. Python banned. |
+| Generated, not handwritten | Update Go IR → regenerate Rust parser |
 | `no_std` with alloc | Runs on bare metal, no OS needed |
-| Generated, not handwritten | Update proto → regenerate parser |
+| Numeric tag IDs | `HtmlElement` enum discriminant (1–108), not string comparison |
 
 ---
 
@@ -151,7 +167,13 @@ Defines the complete entity reference map:
 **Deliverable**: Parses `<div>Hello</div>` → DOM tree. Proves the pipeline works.
 
 ```
+<<<<<<< Updated upstream
 html-codegen (subset)  →  tokenizer.rs (4 states) + html_parser.rs
+=======
+cmd/generate-parser-ir  →  tokenizer_states.proto (subset: 4 states)
+buf generate             →  Rust types
+cmd/html-codegen         →  tokenizer.rs (4 states) + html_parser.rs
+>>>>>>> Stashed changes
 cargo build && cargo test
 ```
 
@@ -164,7 +186,13 @@ cargo build && cargo test
 **Deliverable**: Parses `<div class="foo" title="&amp;bar">text</div>` → correct tokens with typed attributes.
 
 ```
+<<<<<<< Updated upstream
 html-codegen (full)    →  tokenizer.rs (full state machine)
+=======
+cmd/generate-parser-ir  →  tokenizer_states.proto (full 86 states)
+                        →  entities.proto (2,231 entries)
+cmd/html-codegen         →  tokenizer.rs (full state machine)
+>>>>>>> Stashed changes
                         →  entity_decoder.rs
 cargo build && cargo test
 ```
@@ -176,7 +204,12 @@ cargo build && cargo test
 **Deliverable**: Parses nested elements with implicit tag closing: `<p><div>nested</div></p>` → `<p></p><div>nested</div>`.
 
 ```
+<<<<<<< Updated upstream
 html-codegen           →  tree_builder.rs (body mode + stack management)
+=======
+cmd/generate-parser-ir  →  tree_builder.proto (IN_BODY rules)
+cmd/html-codegen         →  tree_builder.rs (body mode + stack management)
+>>>>>>> Stashed changes
 cargo build && cargo test
 ```
 
@@ -187,9 +220,16 @@ cargo build && cargo test
 **Deliverable**: Parses any valid HTML document. Conformance dashboard tracks coverage.
 
 ```
+<<<<<<< Updated upstream
 html-codegen           →  tree_builder.rs (complete)
                         →  attribute_validator.rs
 generate_conformance   →  ~5,000 parser tests
+=======
+cmd/generate-parser-ir  →  tree_builder.proto (all 23 modes)
+cmd/html-codegen         →  tree_builder.rs (complete)
+                        →  attribute_validator.rs
+generate_conformance     →  ~5,000 parser tests
+>>>>>>> Stashed changes
 cargo build && cargo test
 ```
 
@@ -197,11 +237,16 @@ cargo build && cargo test
 
 ## Implementation Steps
 
+<<<<<<< Updated upstream
 ### Step 1: Populate Data Files
+=======
+### Step 1: `cmd/generate-parser-ir` (Go)
+>>>>>>> Stashed changes
 
 Write Go code to encode WHATWG spec data into the 3 data textproto files.
 
 **Input:**
+<<<<<<< Updated upstream
 - `docs/html_spec.md` (11MB spec text)
 - `scripts/html_element_catalog.json` (108 elements with content models)
 - WHATWG §13.2.5 tokenizer algorithm
@@ -214,24 +259,40 @@ Write Go code to encode WHATWG spec data into the 3 data textproto files.
 - `data/entities.textproto` (2,231 entity entries)
 
 **How:** The spec defines each state as a deterministic algorithm. The Go encoder translates these into proto `StateTransition` messages. Same for tree builder rules and entities.
+=======
+- WHATWG §13.2.5 tokenizer algorithm (encoded in `pkg/parserir/transitions.go`)
+- WHATWG §13.2.6 tree builder algorithm (encoded in `pkg/parserir/rules.go`)
+- Entity catalog (encoded in `pkg/parserir/entities.go`)
 
-**Effort:** One-time encoding of the spec. Start with Phase 1 (4 states), expand to full spec.
+**Output:**
+- `data/tokenizer.textproto` — full state machine (11,308 lines, 1,168 transitions)
+- `data/tree_builder.textproto` — full rule set (402 lines, 42 rules)
+- `data/entities.textproto` — entity catalog (1,006 lines, ~210 entities)
+- `data/element_metadata.json` — void/raw-text element lists
 
-### Step 2: `buf generate` — Generate Rust Types
+### Step 2: `buf generate` — Generate Go/Rust Types
+>>>>>>> Stashed changes
 
+Already works. The 3 proto files flow through the existing `buf generate` pipeline, producing Go structs via `protoc-gen-go`.
+
+### Step 3: `cmd/html-codegen` (Go)
+
+<<<<<<< Updated upstream
 Already works. The 5 proto files flow through the existing `buf generate` pipeline, producing Rust structs via `prost`.
 
 ### Step 3: `html-codegen` — Generate Rust Parser
 
 Go codegen reads proto data → generates 5 Rust source files:
+=======
+Reads textproto data via `prototext.Unmarshal` → generates Rust source files:
+>>>>>>> Stashed changes
 
 | File | Lines | Content |
 |------|-------|---------|
-| `tokenizer.rs` | ~1,500 | `struct Tokenizer` with `fn step(&mut self) -> Option<Token>`. State machine driven by `StateTransition` table. |
-| `tree_builder.rs` | ~2,000 | `struct TreeBuilder` with `fn handle_token(&mut self, Token)`. Insertion mode dispatch driven by `TreeRule` table. |
-| `entity_decoder.rs` | ~800 | `fn decode_entity(&mut self) -> Option<&str>`. Trie lookup for 2,231 entities. |
-| `attribute_validator.rs` | ~1,000 | Per-element attribute validation from `html_attributes.proto`. |
-| `html_parser.rs` | ~300 | `pub fn parse_html(input: &str) -> Node`. Wires tokenizer → tree builder. |
+| `tokenizer.rs` | ~4,400 | `struct Tokenizer` with `fn step(&mut self) -> Option<Token>`. State machine driven by `StateTransition` table. |
+| `tree_builder.rs` | ~215 | `struct TreeBuilder` with `fn handle_token(&mut self, Token)`. Insertion mode dispatch driven by `TreeRule` table. |
+| `entity_decoder.rs` | ~290 | `fn decode_entities_in_text(input: &str) -> String`. Binary search for ~210 entities. |
+| `html_parser.rs` | ~114 | `pub fn parse_html(input: &str) -> Node`. Wires tokenizer → tree builder. |
 
 ### Step 4: Wire Into Existing Pipeline
 
@@ -244,7 +305,7 @@ Existing consumers need zero changes:
 
 ### Step 5: Generate Conformance Tests
 
-Extend `scripts/generate_conformance_tests.py`:
+Extend `cmd/html-codegen` to emit conformance tests from proto data:
 
 ```rust
 // Generated from tokenizer_states.proto
@@ -280,10 +341,20 @@ Each test maps to a spec item → conformance dashboard updates parser coverage.
 ### Step 6: Build, Test, Iterate
 
 ```bash
+<<<<<<< Updated upstream
 # Generate Rust types
 buf generate
 
 # Generate parser code
+=======
+# Generate IR (Go → textproto)
+go run ./cmd/generate-parser-ir
+
+# Generate Rust types
+buf generate
+
+# Generate parser code (Go)
+>>>>>>> Stashed changes
 go run ./cmd/html-codegen
 
 # Build
@@ -291,32 +362,29 @@ cargo build --package edgerun-html-render
 
 # Test
 cargo test --package edgerun-html-render
-
-# Conformance
-python3 scripts/generate_conformance_tests.py
-cargo test --package edgerun-conformance
 ```
 
 ---
 
 ## What We Get
 
-| Feature | Current (140-line) | Generated Parser |
-|---------|-------------------|------------------|
-| Lines of code | ~140 | ~5,600 (generated) |
-| Tokenizer states | 0 (recursive descent) | 86 (spec-compliant FSM) |
-| Insertion modes | 0 | 23 (spec-compliant) |
-| Entity decoding | ❌ | ✅ 2,231 entities |
+| Feature | Current (generated) | Design Target |
+|---------|-------------------|---------------|
+| Lines of code | ~5,000 | ~5,600 (generated) |
+| Tokenizer states | 12 used (86 defined) | 86 (spec-compliant FSM) |
+| Insertion modes | 1 (IN_BODY) + fallback | 23 (spec-compliant) |
+| Entity decoding | ✅ ~210 entities | ✅ 2,231 entities |
 | DOCTYPE parsing | ❌ | ✅ |
 | Implicit tag closing | ❌ | ✅ |
 | Foster parenting | ❌ | ✅ |
 | Foreign content (SVG/MathML) | ❌ | ✅ (Phase 4) |
 | Attribute type validation | ❌ | ✅ from proto |
 | Error recovery | ❌ | ✅ parse errors + recovery |
-| Spec-mapped decisions | ❌ | ✅ each rule → spec paragraph |
-| Conformance tests | 0 | ~5,000 (generated) |
-| Maintained by | Hand edits | Update proto → regenerate |
-| Breaks Spec→Proto→Code | Yes | No |
+| Spec-mapped decisions | ✅ each transition has spec_section | ✅ each rule → spec paragraph |
+| Conformance tests | 8 entity tests | ~5,000 (generated) |
+| Maintained by | Update Go IR → regenerate | Same |
+| Python | ✅ zero | ✅ zero |
+| JSON proto | ❌ none | ❌ never |
 
 ---
 
@@ -378,6 +446,12 @@ Output: Element { tag: "div", children: [Text("Hello")] }
 
 | File | Action |
 |------|--------|
+<<<<<<< Updated upstream
+=======
+| `cmd/generate-parser-ir/main.go` | **NEW** — Go entry point, calls `pkg/parserir` |
+| `pkg/parserir/*.go` | **NEW** — Go IR encoding (1,052 lines) |
+| `cmd/html-codegen/*.go` | **NEW** — Go codegen, reads textproto, writes Rust |
+>>>>>>> Stashed changes
 | `crates/edgerun-html-render/src/html_parser.rs` | **REPLACE** — generated, replaces 140-line ad-hoc |
 | `crates/edgerun-html-render/src/tokenizer.rs` | **NEW** — generated state machine |
 
@@ -423,13 +497,14 @@ fn parse_nested() {
 
 ## Design Decisions
 
-1. **Proto over JSON** — Schema validation, `prost` types, same pipeline as everything else
+1. **Proto textproto over JSON** — Schema validation, `prototext.Unmarshal`, same pipeline as everything else
 2. **Table-driven, not handwritten** — State transitions are data, code is generated
 3. **Phase-based delivery** — Each phase produces working code, no big-bang release
 4. **Numeric tag IDs** — `HtmlElement` enum discriminant, never compare tag name strings
 5. **No heap in tokenizer** — Bounded arena for tokens, `no_std` compatible
 6. **Spec traceability** — Every rule maps to a `spec_paragraph` field
 7. **Compatible with existing pipeline** — `parse_html()` returns same `Node` type, zero downstream changes
+8. **No Python, no JSON proto** — Go encodes spec, Go reads textproto, Go generates Rust
 
 ---
 
@@ -437,7 +512,8 @@ fn parse_nested() {
 
 Chrome's HTML parser is ~500,000 lines of hand-written, unverified C++.
 
-Ours is ~5,600 lines of generated Rust, compiled from spec data, with conformance tests mapped to every spec rule.
+Ours is ~5,000 lines of generated Rust, compiled from Go-encoded spec data via textproto IR, with 29 tests passing.
 
-Innovation #1: Spec → Proto → Generated Code (rasterizer, layout, WGSL)
-Innovation #2: Same pipeline, applied to HTML parsing — no browser does this
+Pipeline: **Go encodes spec → textproto → Go reads textproto → generates Rust → compiles → tests pass.**
+
+Innovation: Spec → Proto (textproto) → Generated Code (rasterizer, layout, WGSL, now HTML parsing). No browser does this. No Python. No JSON proto. Go only.

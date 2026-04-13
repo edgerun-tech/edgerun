@@ -56,6 +56,7 @@ impl DotServer {
         let cert_and_key = config.cert_and_key.unwrap_or_else(|| {
             edgerun_log::warn!("edgerun-dns: no TLS cert/key provided, using self-signed for localhost");
             edgerun_tls::generate_self_signed(&["localhost"])
+                .expect("self-signed cert generation should not fail")
         });
 
         edgerun_log::info!("edgerun-dns: DoT server bound to {} (port 853)", local);

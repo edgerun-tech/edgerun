@@ -215,6 +215,8 @@ pub struct AsyncBodyReader<R> {
     chunk_remaining: usize,
     /// Where we are in chunked parsing.
     state: ChunkState,
+    /// State for trailer line detection across poll calls.
+    trailer_empty_line: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -241,6 +243,7 @@ impl<R: AsyncRead + Unpin> AsyncBodyReader<R> {
             chunk_buf: Vec::new(),
             chunk_remaining: 0,
             state: ChunkState::ChunkData,
+            trailer_empty_line: true,
         }
     }
 
@@ -253,6 +256,7 @@ impl<R: AsyncRead + Unpin> AsyncBodyReader<R> {
             chunk_buf: Vec::new(),
             chunk_remaining: 0,
             state: ChunkState::ChunkSize,
+            trailer_empty_line: true,
         }
     }
 
@@ -265,6 +269,7 @@ impl<R: AsyncRead + Unpin> AsyncBodyReader<R> {
             chunk_buf: Vec::new(),
             chunk_remaining: 0,
             state: ChunkState::ChunkData,
+            trailer_empty_line: true,
         }
     }
 
@@ -442,7 +447,6 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                     // Read trailer headers until a blank line.
                     // Trailer headers are discarded (not exposed to application).
                     // RFC 9112: trailers are terminated by a blank line.
-                    let mut empty_line = true;
                     loop {
                         let mut byte = [0u8; 1];
                         let n = {
@@ -450,10 +454,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
                                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                                Poll::Pending => {
-                                    self.reader.state = ChunkState::Done;
-                                    return Poll::Ready(Ok(0));
-                                }
+                                Poll::Pending => return Poll::Pending,
                             }
                         };
                         if n == 0 {
@@ -461,13 +462,13 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             return Poll::Ready(Ok(0));
                         }
                         match byte[0] {
-                            b'\n' if empty_line => {
+                            b'\n' if self.reader.trailer_empty_line => {
                                 self.reader.state = ChunkState::Done;
                                 return Poll::Ready(Ok(0));
                             }
-                            b'\n' => { empty_line = true; }
+                            b'\n' => { self.reader.trailer_empty_line = true; }
                             b'\r' => {}
-                            _ => { empty_line = false; }
+                            _ => { self.reader.trailer_empty_line = false; }
                         }
                     }
                 }
@@ -498,10 +499,7 @@ impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
                 match pinned.poll_read(cx, &mut this.read_buf) {
                     Poll::Ready(Ok(n)) => n,
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                    Poll::Pending => {
-                        let data = std::mem::take(&mut this.data);
-                        return Poll::Ready(Ok(data));
-                    }
+                    Poll::Pending => return Poll::Pending,
                 }
             };
 

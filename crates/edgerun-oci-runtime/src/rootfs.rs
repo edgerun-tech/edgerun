@@ -447,7 +447,7 @@ fn create_spec_device(device: &OciLinuxDevice) -> io::Result<()> {
         return Err(io::Error::last_os_error());
     }
 
-    // Set ownership if uid/gid specified in the OCI spec
+    // Apply uid/gid ownership if specified (OCI spec compliance)
     if device.uid.is_some() || device.gid.is_some() {
         let uid = device.uid.unwrap_or(u32::MAX);
         let gid = device.gid.unwrap_or(u32::MAX);

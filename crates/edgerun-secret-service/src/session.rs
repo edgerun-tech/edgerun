@@ -328,4 +328,118 @@ mod tests {
         let state = v.verify();
         assert!(!state.verified);
     }
+
+    #[test]
+    fn session_manager_lock_client_all_sessions_locked() {
+        let mut mgr = SessionManager::new(DEFAULT_IDLE_TIMEOUT_US);
+        let p1 = mgr.create_session(":1.42");
+        let p2 = mgr.create_session(":1.42");
+        let p3 = mgr.create_session(":1.42");
+        {
+            let mut state = BiometricState::default();
+            state.verified = true;
+            mgr.verify_client(":1.42", state.clone(), now_us());
+        }
+        assert!(mgr.get(&p1).unwrap().is_verified(now_us()));
+        assert!(mgr.get(&p2).unwrap().is_verified(now_us()));
+        assert!(mgr.get(&p3).unwrap().is_verified(now_us()));
+        mgr.lock_client(":1.42");
+        assert!(!mgr.get(&p1).unwrap().is_verified(now_us()));
+        assert!(!mgr.get(&p2).unwrap().is_verified(now_us()));
+        assert!(!mgr.get(&p3).unwrap().is_verified(now_us()));
+    }
+
+    #[test]
+    fn session_manager_lock_client_other_clients_unchanged() {
+        let mut mgr = SessionManager::new(DEFAULT_IDLE_TIMEOUT_US);
+        let p1 = mgr.create_session(":1.42");
+        let p2 = mgr.create_session(":1.99");
+        {
+            let mut state = BiometricState::default();
+            state.verified = true;
+            mgr.verify_client(":1.42", state.clone(), now_us());
+            mgr.verify_client(":1.99", state.clone(), now_us());
+        }
+        mgr.lock_client(":1.42");
+        assert!(!mgr.get(&p1).unwrap().is_verified(now_us()));
+        assert!(mgr.get(&p2).unwrap().is_verified(now_us()));
+    }
+
+    #[test]
+    fn session_manager_verify_client_multiple_sessions() {
+        let mut mgr = SessionManager::new(DEFAULT_IDLE_TIMEOUT_US);
+        let p1 = mgr.create_session(":1.42");
+        let p2 = mgr.create_session(":1.42");
+        let mut state = BiometricState::default();
+        state.verified = true;
+        state.hardware_protected = true;
+        mgr.verify_client(":1.42", state, now_us());
+        assert!(mgr.get(&p1).unwrap().is_verified(now_us()));
+        assert!(mgr.get(&p2).unwrap().is_verified(now_us()));
+        assert_eq!(mgr.get(&p1).unwrap().assurance_strength(), BiometricAssuranceStrength::HardwareProtectedBiometric);
+    }
+
+    #[test]
+    fn session_manager_auto_lock_idle_returns_count() {
+        let mut mgr = SessionManager::new(50_000);
+        let _p1 = mgr.create_session(":1.1");
+        let _p2 = mgr.create_session(":1.1");
+        let _p3 = mgr.create_session(":1.1");
+        {
+            let mut state = BiometricState::default();
+            state.verified = true;
+            mgr.verify_client(":1.1", state, now_us());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        let count = mgr.auto_lock_idle();
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn session_manager_auto_lock_idle_mixed_states() {
+        let mut mgr = SessionManager::new(50_000);
+        let p1 = mgr.create_session(":1.1");
+        let p2 = mgr.create_session(":1.1");
+        {
+            let mut state = BiometricState::default();
+            state.verified = true;
+            mgr.verify_client(":1.1", state, now_us());
+        }
+        if let Some(s) = mgr.get_mut(&p2) { s.lock(); }
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        let count = mgr.auto_lock_idle();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn session_manager_gc_removes_closed_only() {
+        let mut mgr = SessionManager::new(DEFAULT_IDLE_TIMEOUT_US);
+        let p1 = mgr.create_session(":1.1");
+        let p2 = mgr.create_session(":1.2");
+        let p3 = mgr.create_session(":1.3");
+        mgr.close(&p1);
+        mgr.close(&p3);
+        mgr.gc();
+        assert!(mgr.get(&p1).is_none());
+        assert!(mgr.get(&p2).is_some());
+        assert!(mgr.get(&p3).is_none());
+    }
+
+    #[test]
+    fn session_manager_counter_increments() {
+        let mut mgr = SessionManager::new(DEFAULT_IDLE_TIMEOUT_US);
+        let p1 = mgr.create_session(":1.1");
+        let p2 = mgr.create_session(":1.1");
+        let p3 = mgr.create_session(":1.1");
+        assert_eq!(p1, "/org/freedesktop/secrets/session/s1");
+        assert_eq!(p2, "/org/freedesktop/secrets/session/s2");
+        assert_eq!(p3, "/org/freedesktop/secrets/session/s3");
+    }
+
+    #[test]
+    fn session_maybe_auto_lock_not_verified() {
+        let mut mgr = SessionManager::new(0);
+        let path = mgr.create_session(":1.1");
+        assert!(!mgr.get_mut(&path).unwrap().maybe_auto_lock(now_us()));
+    }
 }

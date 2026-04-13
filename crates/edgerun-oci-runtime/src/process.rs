@@ -335,6 +335,10 @@ fn format_mapping(mappings: Option<&[OciIdMapping]>) -> String {
 /// Uses subuid/subgid ranges from /etc/subuid and /etc/subgid.
 /// The kernel only allows uid_map entries within the caller's configured subuid range.
 /// When running as root, maps container root to host nobody.
+///
+/// Follows the Podman mapping pattern:
+/// - Container UID 0 → host's real UID (size 1)
+/// - Container UID 1..N → subuid ranges
 fn default_rootless_mapping() -> String {
     let uid = unsafe { libc::getuid() };
     if uid == 0 {
@@ -346,12 +350,12 @@ fn default_rootless_mapping() -> String {
     // host UIDs to be within the caller's configured subuid range.
     match crate::rootless::get_current_user_subuids() {
         Ok(subuids) if !subuids.is_empty() => {
-            // Map container uid 0 to the start of the subuid range
-            let mut map = String::new();
-            let mut container_start: u32 = 0;
+            // Map container uid 0 to the host user's own UID,
+            // then container 1..N to the subuid ranges
+            let mut map = format!("0 {} 1\n", uid);
             for range in &subuids {
-                map.push_str(&format!("{} {} {}\n", container_start, range.start, range.count));
-                container_start += range.count;
+                // Container IDs start at 1 (0 is reserved for the user's own UID)
+                map.push_str(&format!("1 {} {}\n", range.start, range.count));
             }
             map
         }
@@ -752,9 +756,17 @@ fn write_uid_map(content: &str) -> io::Result<()> {
 fn write_setgroups_deny() -> io::Result<()> {
     // Must be written BEFORE gid_map in a user namespace.
     // The kernel requires this to prevent privilege escalation via group mapping.
+    // In rootless re-exec mode, the parent already wrote setgroups deny to the
+    // child's /proc/<pid>/setgroups before the re-exec, so this is a no-op.
     if let Ok(ns) = fs::read_link("/proc/self/ns/user") {
         if let Ok(init_ns) = fs::read_link("/proc/1/ns/user") {
             if ns != init_ns {
+                // Check if setgroups is already "deny" (rootless re-exec case)
+                if let Ok(current) = fs::read_to_string("/proc/self/setgroups") {
+                    if current.trim() == "deny" {
+                        return Ok(()); // Already denied by parent
+                    }
+                }
                 let _ = fs::write("/proc/self/setgroups", "deny");
             }
         }
@@ -820,8 +832,8 @@ fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
 pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
     use crate::syscalls::ns;
 
-    // 1. Unshare remaining namespaces (exclude user namespace)
-    let remaining_flags = cfg.ns_flags & !(ns::NEWUSER);
+    // 1. Unshare remaining namespaces (exclude user and mount — clone already created these)
+    let remaining_flags = cfg.ns_flags & !(ns::NEWUSER | ns::NEWNS);
     if remaining_flags != 0 {
         do_unshare(remaining_flags)?;
     }

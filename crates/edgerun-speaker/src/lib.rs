@@ -3,8 +3,9 @@ use edgerun_capabilities::{
     CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SpeakerSampleFormat {
+    #[default]
     PcmS16Le,
     PcmS24Le,
     PcmFloat32Le,
@@ -29,7 +30,7 @@ pub struct SpeakerOutputLevel {
     pub muted: Option<bool>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct AudioPlaybackRequest {
     pub duration_ms: u32,
     pub sample_rate_hz: u32,
