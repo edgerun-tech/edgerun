@@ -15,6 +15,7 @@ mod blocking_pool;
 mod runtime;
 mod io_traits;
 mod tcp;
+mod tcp_socket;
 mod udp;
 mod timers;
 mod notify;
@@ -28,6 +29,7 @@ mod join;
 mod select;
 mod cancellation;
 mod unix;
+mod unix_dgram;
 mod async_fd;
 mod io_util;
 pub mod fs;
@@ -55,9 +57,11 @@ pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
 pub use tcp::{
     AsyncTcpStream, AsyncTcpListener, ConnectFuture, AsyncReadHalf, AsyncWriteHalf,
 };
+pub use tcp_socket::TcpSocket;
 
 // Unix domain sockets.
 pub use unix::{UnixStream, UnixListener, UnixReadHalf, UnixWriteHalf};
+pub use unix_dgram::UnixDatagram;
 
 // AsyncFd.
 pub use async_fd::{AsyncFd, ReadyFuture, OwnedAsyncFd, async_fd_from_raw, pipe};

@@ -112,3 +112,11 @@ harness = false
 [[test]]
 name = "io_util_test"
 harness = false
+
+[[test]]
+name = "unix_dgram_test"
+harness = false
+
+[[test]]
+name = "tcp_socket_test"
+harness = false
