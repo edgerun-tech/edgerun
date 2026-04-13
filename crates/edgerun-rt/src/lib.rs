@@ -34,6 +34,7 @@ mod async_fd;
 mod duplex;
 mod buf;
 mod cursor;
+mod signal;
 mod io_util;
 pub mod fs;
 pub mod mpsc;
@@ -80,6 +81,9 @@ pub use buf::{BufReader, BufWriter};
 
 // Cursor.
 pub use cursor::Cursor;
+
+// Unix signal handling.
+pub use signal::{Signal, SignalKind, signal, Recv, SignalStream};
 
 // UDP.
 pub use udp::AsyncUdpSocket;

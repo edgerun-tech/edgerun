@@ -136,3 +136,7 @@ harness = false
 [[test]]
 name = "lines_test"
 harness = false
+
+[[test]]
+name = "signal_test"
+harness = false
