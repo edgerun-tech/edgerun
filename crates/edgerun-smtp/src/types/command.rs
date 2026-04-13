@@ -35,6 +35,12 @@ pub enum SmtpCommand {
     /// `size` is the exact number of data bytes in this chunk.
     /// `last` marks this as the final chunk (equivalent to DATA's `.`).
     Bdat { size: usize, last: bool },
+    /// Role reversal (RFC 5321 §3.3.6).
+    /// Server becomes client, client becomes server.
+    Turn,
+    /// Remote mail queue processing (RFC 2476).
+    /// Tells the server to start processing its mail queue for the given domain.
+    Etrn(String),
 }
 
 impl SmtpCommand {
@@ -135,6 +141,13 @@ impl SmtpCommand {
                 }
             }
             "STARTTLS" => Ok(Self::Starttls),
+            "TURN" => Ok(Self::Turn),
+            "ETRN" => {
+                if args.is_empty() {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "ETRN requires a domain"));
+                }
+                Ok(Self::Etrn(args.to_string()))
+            }
             "AUTH" => {
                 let auth_parts: Vec<&str> = args.splitn(2, |c: char| c.is_whitespace()).collect();
                 if auth_parts.is_empty() || auth_parts[0].is_empty() {
@@ -272,6 +285,21 @@ mod tests {
     #[test]
     fn test_parse_unknown_command() {
         assert!(SmtpCommand::parse("FOOBAR").is_err());
+    }
+
+    #[test]
+    fn test_parse_turn_etrn() {
+        match SmtpCommand::parse("TURN").unwrap() {
+            SmtpCommand::Turn => {}
+            other => panic!("expected Turn, got {:?}", other),
+        }
+
+        match SmtpCommand::parse("ETRN example.com").unwrap() {
+            SmtpCommand::Etrn(domain) => assert_eq!(domain, "example.com"),
+            other => panic!("expected Etrn, got {:?}", other),
+        }
+
+        assert!(SmtpCommand::parse("ETRN").is_err());
     }
 
     #[test]

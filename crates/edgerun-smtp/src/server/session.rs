@@ -891,6 +891,30 @@ async fn handle_command(
             send_response(transport, &SmtpResponse::ok("OK")).await?;
         }
 
+        SmtpCommand::Turn => {
+            // RFC 5321 §3.3.6 — Role reversal.
+            // In practice, most servers don't implement actual role reversal
+            // because it's rarely used and complex to handle.
+            // We respond with 502 (command not implemented) as a safe default.
+            send_response(
+                transport,
+                &SmtpResponse::command_not_implemented("TURN"),
+            )
+            .await?;
+        }
+
+        SmtpCommand::Etrn(domain) => {
+            // RFC 2476 — Remote mail queue processing.
+            // We don't have a mail queue in this implementation, so we
+            // acknowledge the request but note there's nothing to process.
+            edgerun_log::info!("edgerun-smtp: ETRN {} received (no queue to process)", domain);
+            send_response(
+                transport,
+                &SmtpResponse::ok(&format!("No mail for {}", domain)),
+            )
+            .await?;
+        }
+
         SmtpCommand::Quit => {
             *state = SmtpState::Quit;
             send_response(transport, &SmtpResponse::closing()).await?;
