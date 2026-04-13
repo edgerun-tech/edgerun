@@ -51,11 +51,20 @@ enum CommandType {
   COMMAND_TYPE_QUERY = 7;
   COMMAND_TYPE_EXECUTE_WORKLOAD = 8;
   COMMAND_TYPE_TERMINATE_WORKLOAD = 9;
-  // Secret management commands (custom range)
+  // Core trust commands
+  COMMAND_TYPE_CREATE_DELEGATION = 10;
+  COMMAND_TYPE_CREATE_REVOCATION = 11;
+  COMMAND_TYPE_STORE_AND_FORWARD = 12;
+  // Extension range: implementations MAY add command types starting here.
+  // Unknown extension types MUST be rejected unless local policy explicitly allows them.
+  reserved 13 to 999;
+  reserved "COMMAND_TYPE_CUSTOM";
+  // Implementation-specific extensions start at 1000.
+  // These are NOT part of the core protocol. Receivers MUST reject unknown
+  // extension types unless local policy explicitly permits them.
   COMMAND_TYPE_PUT_SECRET = 1001;
   COMMAND_TYPE_DELETE_SECRET = 1002;
   COMMAND_TYPE_LIST_SECRETS = 1003;
-  COMMAND_TYPE_CUSTOM = 2000;
 }
 
 message EventEnvelope {

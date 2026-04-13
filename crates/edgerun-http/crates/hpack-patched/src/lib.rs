@@ -171,16 +171,6 @@ impl DynamicTable {
         self.table.len()
     }
 
-    /// Converts the current state of the table to a `Vec`
-    fn to_vec(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
-        let mut ret: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
-        for elem in self.table.iter() {
-            ret.push(elem.clone());
-        }
-
-        ret
-    }
-
     /// Returns a reference to the header at the given index, if found in the
     /// dynamic table.
     fn get(&self, index: usize) -> Option<&(Vec<u8>, Vec<u8>)> {

@@ -450,10 +450,10 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
             edgerun_log::error!("failed to sign genesis event: {}", e);
             std::process::exit(1);
         });
-        store.append_event(&genesis).unwrap_or_else(|e| {
+        if let Err(e) = store.append_event(genesis).await {
             edgerun_log::error!("failed to write genesis event: {}", e);
             std::process::exit(1);
-        });
+        }
         edgerun_log::info!("genesis event created (seq=0)");
     } else {
         let head = match store.get_head(stream_id_bytes) {

@@ -61,14 +61,15 @@ fn main() {
 
     // GPU Layout Compute
     let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+    let rt = edgerun_rt::Builder::new_multi_thread().build().unwrap();
+    let adapter = rt.block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::LowPower,
         force_fallback_adapter: false,
         compatible_surface: None,
     }))
     .expect("Failed to find GPU adapter");
 
-    let (device, queue) = pollster::block_on(adapter.request_device(
+    let (device, queue) = rt.block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
             label: Some("edgerun-wgpu-device"),
             required_features: wgpu::Features::empty(),

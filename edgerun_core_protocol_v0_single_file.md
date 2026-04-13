@@ -914,7 +914,7 @@ Closed symbolic set for a given schema family version.
 
 #### ObjectRef
 - `object_id` — required
-- `object_type` — optional
+- `object_kind` — optional
 
 #### RepresentationRef
 - `representation_id` — required
@@ -958,7 +958,7 @@ Fields:
 - `public_key` — required
 - `created_at` — optional
 - `supersedes_identity` — optional IdentityRef
-- `assurance_claim_refs` — repeated optional
+- `assurance_claim_objects` — repeated optional
 - `metadata_object` — optional ObjectRef
 - `signature` — optional
 
@@ -981,7 +981,7 @@ Fields:
 - `scope_kind` — required
 - `target_nodes` — repeated optional
 - `target_streams` — repeated optional
-- `target_object_types` — repeated optional
+- `target_object_kinds` — repeated optional
 - `target_view_types` — repeated optional
 - `target_domains` — repeated optional
 - `time_bounds` — optional TimeWindow
@@ -997,11 +997,11 @@ Fields:
 - `rate_limit` — optional RateLimit
 - `requires_local_session` — optional Bool
 - `requires_user_presence` — optional Bool
-- `requires_transport_class` — repeated optional
-- `requires_location_class` — repeated optional
+- `requires_transport_classes` — repeated optional
+- `requires_location_classes` — repeated optional
 - `export_policy` — optional
-- `execution_class_limit` — repeated optional
-- `storage_class_limit` — repeated optional
+- `execution_class_limits` — repeated optional
+- `storage_class_limits` — repeated optional
 - `constraint_metadata` — optional ObjectRef
 
 ### 14.8 AssuranceRequirement
@@ -1181,11 +1181,10 @@ Fields:
 Fields:
 - `descriptor_version` — required
 - `object_id` — required
-- `object_type` — required
+- `object_kind` — required
 - `object_schema_version` — required
 - `canonicalization_id` — required
-- `canonical_digest_algorithm` — required
-- `canonical_digest` — required
+- `canonical_digest` — required Digest
 - `canonical_size` — required
 - `created_at` — optional Timestamp
 - `producer` — optional IdentityRef
@@ -1198,8 +1197,7 @@ Fields:
 - `header_version` — required
 - `representation_id` — required
 - `object` — required ObjectRef
-- `representation_digest_algorithm` — required
-- `representation_digest` — required
+- `representation_digest` — required Digest
 - `plaintext_size` — optional
 - `stored_size` — required
 - `encryption_scheme` — optional

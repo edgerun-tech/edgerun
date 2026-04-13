@@ -82,14 +82,30 @@ pub fn run_store_task(
             StoreRequest::Query { raw_bytes, .. } => raw_bytes.clone(),
             StoreRequest::ProduceSnapshot { .. } |
             StoreRequest::FetchObject { .. } |
-            StoreRequest::SendCommand { .. } => Vec::new(),
+            StoreRequest::SendCommand { .. } |
+            StoreRequest::FetchDequeue { .. } |
+            StoreRequest::FetchMarkDone { .. } |
+            StoreRequest::FetchRequeue { .. } |
+            StoreRequest::MaintenanceTick |
+            StoreRequest::PeerStatusUpdate { .. } |
+            StoreRequest::PeerLookup { .. } |
+            StoreRequest::Shutdown |
+            StoreRequest::ConfigReload { .. } => Vec::new(),
         };
         let peer_id: Option<Vec<u8>> = match &req {
             StoreRequest::Command { peer_id, .. } |
             StoreRequest::Query { peer_id, .. } => peer_id.clone(),
             StoreRequest::ProduceSnapshot { .. } |
             StoreRequest::FetchObject { .. } |
-            StoreRequest::SendCommand { .. } => None,
+            StoreRequest::SendCommand { .. } |
+            StoreRequest::FetchDequeue { .. } |
+            StoreRequest::FetchMarkDone { .. } |
+            StoreRequest::FetchRequeue { .. } |
+            StoreRequest::MaintenanceTick |
+            StoreRequest::PeerStatusUpdate { .. } |
+            StoreRequest::PeerLookup { .. } |
+            StoreRequest::Shutdown |
+            StoreRequest::ConfigReload { .. } => None,
         };
 
         // ---- Ingress screening (cheap -> expensive) ----
@@ -105,6 +121,14 @@ pub fn run_store_task(
                     StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
                     StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
                     StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
+                    StoreRequest::FetchDequeue { reply_tx } => reply_tx,
+                    StoreRequest::FetchMarkDone { reply_tx, .. } => reply_tx,
+                    StoreRequest::FetchRequeue { reply_tx, .. } => reply_tx,
+                    StoreRequest::PeerLookup { reply_tx, .. } => reply_tx,
+                    StoreRequest::ConfigReload { reply_tx, .. } => reply_tx,
+                    StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {
+                        continue;
+                    }
                 };
                 let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::Duplicate));
                 continue;
@@ -118,6 +142,14 @@ pub fn run_store_task(
                     StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
                     StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
                     StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
+                    StoreRequest::FetchDequeue { reply_tx } => reply_tx,
+                    StoreRequest::FetchMarkDone { reply_tx, .. } => reply_tx,
+                    StoreRequest::FetchRequeue { reply_tx, .. } => reply_tx,
+                    StoreRequest::PeerLookup { reply_tx, .. } => reply_tx,
+                    StoreRequest::ConfigReload { reply_tx, .. } => reply_tx,
+                    StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {
+                        continue;
+                    }
                 };
                 let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                 continue;
@@ -132,6 +164,14 @@ pub fn run_store_task(
                         StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
                         StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
                         StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
+                        StoreRequest::FetchDequeue { reply_tx } => reply_tx,
+                        StoreRequest::FetchMarkDone { reply_tx, .. } => reply_tx,
+                        StoreRequest::FetchRequeue { reply_tx, .. } => reply_tx,
+                        StoreRequest::PeerLookup { reply_tx, .. } => reply_tx,
+                        StoreRequest::ConfigReload { reply_tx, .. } => reply_tx,
+                        StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {
+                            continue;
+                        }
                     };
                     let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::PeerNotAllowed));
                     continue;

@@ -157,6 +157,15 @@ impl NodeStore {
         self.writer.write_event(event).await
     }
 
+    /// Synchronous version of `append_event` — for use from blocking threads.
+    /// Blocks the current thread until the write completes.
+    pub fn append_event_blocking(&self, event: EventEnvelope) -> Result<u64, StorageError> {
+        if let Err(available) = self.check_disk_space() {
+            edgerun_log::warn!("low disk space: {available} bytes available");
+        }
+        self.writer.write_event_blocking(event)
+    }
+
     /// Retrieves an event from the event log by stream ID and sequence number.
     ///
     /// Uses the SQLite index to find the file offset, then reads the protobuf bytes.

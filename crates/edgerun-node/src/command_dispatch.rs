@@ -1452,11 +1452,12 @@ pub(crate) fn append_signed_event(
         edgerun_log::warn!("failed to sign event: {}", e);
         return None;
     }
-    if let Err(e) = store.append_event(&event) {
+    let seq = event.seq;
+    if let Err(e) = store.append_event_blocking(event) {
         edgerun_log::warn!("failed to append event: {}", e);
         return None;
     }
-    Some(event.seq)
+    Some(seq)
 }
 
 /// Creates a CommandSent payload and appends the event to the local stream.

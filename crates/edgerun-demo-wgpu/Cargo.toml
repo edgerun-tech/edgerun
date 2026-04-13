@@ -10,8 +10,8 @@ edgerun-wgpu = { path = "../edgerun-wgpu" }
 edgerun-render = { path = "../edgerun-render" }
 edgerun-css-cascade = { path = "../edgerun-css-cascade" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
+edgerun-rt = { path = "../edgerun-rt" }
 wgpu = "29"
-pollster = "0.4"
 png = "0.18"
 
 [lints]

@@ -131,6 +131,28 @@ impl EventWriter {
         .await
         .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
+
+    /// Synchronous version — blocks the current thread until the write completes.
+    pub fn write_event_blocking(&self, event: EventEnvelope) -> Result<u64, StorageError> {
+        let (result_tx, result_rx) = mpsc::sync_channel(1);
+        let request = WriteRequest { event, result_tx };
+
+        let tx = self.tx.lock().unwrap();
+        tx.send(request).map_err(|e| {
+            StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("event writer channel closed: {e}"),
+            ))
+        })?;
+        drop(tx);
+
+        result_rx.recv().map_err(|e| {
+            StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("event writer result channel closed: {e}"),
+            ))
+        })?
+    }
 }
 
 // ---------------------------------------------------------------------------
