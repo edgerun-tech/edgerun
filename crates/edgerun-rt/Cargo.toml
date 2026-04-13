@@ -128,3 +128,7 @@ harness = false
 [[test]]
 name = "buf_test"
 harness = false
+
+[[test]]
+name = "cursor_test"
+harness = false

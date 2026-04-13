@@ -33,6 +33,7 @@ mod unix_dgram;
 mod async_fd;
 mod duplex;
 mod buf;
+mod cursor;
 mod io_util;
 pub mod fs;
 pub mod mpsc;
@@ -76,6 +77,9 @@ pub use duplex::DuplexStream;
 
 // Buffered I/O.
 pub use buf::{BufReader, BufWriter};
+
+// Cursor.
+pub use cursor::Cursor;
 
 // UDP.
 pub use udp::AsyncUdpSocket;
