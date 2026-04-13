@@ -55,7 +55,7 @@ pub use std::time::Instant;
 pub use runtime::{Builder, Runtime, RuntimeHandle, spawn, spawn_blocking};
 
 // I/O traits and extensions.
-pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
+pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt, Take, poll_fn, PollFn, Lines, ReadLineFut};
 
 // TCP.
 pub use tcp::{

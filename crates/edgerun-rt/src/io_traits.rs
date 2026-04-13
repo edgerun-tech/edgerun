@@ -336,6 +336,10 @@ impl<R> Take<R> {
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
+    /// Returns `true` if the limit has been reached.
+    pub fn is_limit_reached(&self) -> bool {
+        self.remaining == 0
+    }
 }
 
 // ===========================================================================
@@ -457,3 +461,45 @@ impl<R: AsyncRead + Unpin> Lines<R> {
         self.reader
     }
 }
+
+// ===========================================================================
+// poll_fn — create a Future from a closure
+// ===========================================================================
+
+/// Creates a new future from a closure that takes a `Context` and returns `Poll`.
+///
+/// This is useful for creating one-off futures without defining a separate
+/// struct. The closure is called each time the future is polled.
+///
+/// # Example
+/// ```ignore
+/// use edgerun_rt::poll_fn;
+/// let val = poll_fn(|cx| {
+///     // do some work
+///     std::task::Poll::Ready(42)
+/// }).await;
+/// ```
+pub fn poll_fn<T, F>(f: F) -> PollFn<F>
+where
+    F: FnMut(&mut Context<'_>) -> Poll<T>,
+{
+    PollFn { f }
+}
+
+pub struct PollFn<F> {
+    f: F,
+}
+
+impl<T, F> Future for PollFn<F>
+where
+    F: FnMut(&mut Context<'_>) -> Poll<T>,
+{
+    type Output = T;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
+        let this = unsafe { self.get_unchecked_mut() };
+        (this.f)(cx)
+    }
+}
+
+impl<F> Unpin for PollFn<F> {}

@@ -140,3 +140,7 @@ harness = false
 [[test]]
 name = "signal_test"
 harness = false
+
+[[test]]
+name = "take_pollfn_test"
+harness = false
