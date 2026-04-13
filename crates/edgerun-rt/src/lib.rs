@@ -12,6 +12,7 @@ mod waker;
 mod reactor;
 mod task_map;
 mod metrics;
+mod trace;
 mod blocking_pool;
 mod runtime;
 mod io_traits;
@@ -60,6 +61,9 @@ pub use runtime::{Builder, JoinError, JoinHandle, Runtime, RuntimeHandle, spawn,
 
 // Metrics.
 pub use metrics::RuntimeMetrics;
+
+// Tracing.
+pub use trace::{Span, EnterGuard};
 
 // I/O traits and extensions.
 pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt, Take, poll_fn, PollFn, Lines, ReadLineFut};

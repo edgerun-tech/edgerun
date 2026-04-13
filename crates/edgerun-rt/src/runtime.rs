@@ -15,6 +15,7 @@ use parking_lot::Mutex;
 use crate::blocking_pool::BlockingPool;
 pub use crate::blocking_pool::{JoinError, JoinHandle};
 use crate::metrics::{Metrics, RuntimeMetrics};
+use crate::trace;
 use crate::ready_queue::ReadyQueue;
 use crate::reactor::Reactor;
 use crate::task_map::TaskMap;
@@ -69,17 +70,25 @@ impl RuntimeInner {
         let mut fut = Box::pin(f);
         let metrics_clone = Arc::clone(&self.metrics);
 
+        // Create root span for this task.
+        let task_span = trace::task_spawned(task_id, "task");
+
         self.tasks.insert_with_id(task_id, Box::new(move |cx| {
+            // Check abort flag before polling.
             if handle2.is_aborted() {
                 metrics_clone.total_aborted.fetch_add(1, Ordering::Relaxed);
                 handle2.set_result(Err(JoinError));
                 metrics_clone.total_completed.fetch_add(1, Ordering::Relaxed);
+                trace::task_aborted(task_id);
                 return false;
             }
+            // Enter the task span for this poll.
+            let _enter = task_span.enter();
             match fut.as_mut().poll(cx) {
                 std::task::Poll::Ready(v) => {
                     handle2.set_result(Ok(v));
                     metrics_clone.total_completed.fetch_add(1, Ordering::Relaxed);
+                    trace::task_finished(task_id);
                     false
                 }
                 std::task::Poll::Pending => true,

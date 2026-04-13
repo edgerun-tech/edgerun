@@ -1,0 +1,64 @@
+//! Task storage — maps task IDs to poll functions.
+//!
+//! Workers `take_for_poll(id)` → poll → `reinsert(id)` if pending,
+//! or drop if complete.
+
+use std::collections::HashMap;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use parking_lot::Mutex;
+use std::task::Context;
+
+type PollFn = Box<dyn FnMut(&mut Context<'_>) -> bool + Send>;
+
+struct TaskMapInner {
+    map: HashMap<usize, PollFn>,
+}
+
+pub(crate) struct TaskMap {
+    inner: Mutex<TaskMapInner>,
+    next: AtomicUsize,
+}
+
+impl TaskMap {
+    pub(crate) fn new() -> Self {
+        Self {
+            inner: Mutex::new(TaskMapInner {
+                map: HashMap::new(),
+            }),
+            next: AtomicUsize::new(1),
+        }
+    }
+
+    /// Reserve the next available task ID.
+    /// The caller must use this ID with `insert_with_id` to insert the task.
+    pub(crate) fn next_id(&self) -> usize {
+        self.next.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Insert a task with a pre-reserved ID (from `next_id`).
+    pub(crate) fn insert_with_id(&self, id: usize, f: PollFn) {
+        self.inner.lock().map.insert(id, f);
+    }
+
+    pub(crate) fn insert(&self, f: PollFn) -> usize {
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        self.inner.lock().map.insert(id, f);
+        id
+    }
+
+    /// Take the poll function out for polling (lock not held during poll).
+    /// Caller must `reinsert` if the task is still pending.
+    pub(crate) fn take_for_poll(&self, id: usize) -> Option<PollFn> {
+        self.inner.lock().map.remove(&id)
+    }
+
+    pub(crate) fn reinsert(&self, id: usize, f: PollFn) {
+        self.inner.lock().map.insert(id, f);
+    }
+
+    /// Number of tasks currently stored in the map.
+    pub(crate) fn len(&self) -> usize {
+        self.inner.lock().map.len()
+    }
+}
