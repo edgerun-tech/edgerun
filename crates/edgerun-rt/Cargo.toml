@@ -96,3 +96,7 @@ harness = false
 [[test]]
 name = "broadcast_test"
 harness = false
+
+[[test]]
+name = "join_set_test"
+harness = false

@@ -31,6 +31,7 @@ mod unix;
 pub mod fs;
 pub mod mpsc;
 pub mod broadcast;
+pub mod join_set;
 pub mod oneshot;
 pub mod unbounded;
 mod watch;
@@ -68,6 +69,9 @@ pub use yield_now::{yield_now, YieldNow};
 
 // Cancellation.
 pub use cancellation::{CancellationToken, Cancelled};
+
+// JoinSet.
+pub use join_set::{JoinSet, JoinNext};
 
 // Sync primitives.
 pub use notify::{Notify, Notified};
