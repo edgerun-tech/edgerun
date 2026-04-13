@@ -585,7 +585,8 @@ fn parse_search_keys(args: &[String]) -> Vec<SearchKey> {
             "SUBJECT" => {
                 if i + 1 < args.len() {
                     i += 1;
-                    SearchKey::Subject(args[i].clone())
+                    let val = args[i].trim_matches('"').to_string();
+                    SearchKey::Subject(val)
                 } else {
                     i += 1;
                     continue;
@@ -594,7 +595,8 @@ fn parse_search_keys(args: &[String]) -> Vec<SearchKey> {
             "FROM" => {
                 if i + 1 < args.len() {
                     i += 1;
-                    SearchKey::From(args[i].clone())
+                    let val = args[i].trim_matches('"').to_string();
+                    SearchKey::From(val)
                 } else {
                     i += 1;
                     continue;
@@ -603,7 +605,8 @@ fn parse_search_keys(args: &[String]) -> Vec<SearchKey> {
             "TO" => {
                 if i + 1 < args.len() {
                     i += 1;
-                    SearchKey::To(args[i].clone())
+                    let val = args[i].trim_matches('"').to_string();
+                    SearchKey::To(val)
                 } else {
                     i += 1;
                     continue;
@@ -612,7 +615,8 @@ fn parse_search_keys(args: &[String]) -> Vec<SearchKey> {
             "BODY" => {
                 if i + 1 < args.len() {
                     i += 1;
-                    SearchKey::Body(args[i].clone())
+                    let val = args[i].trim_matches('"').to_string();
+                    SearchKey::Body(val)
                 } else {
                     i += 1;
                     continue;

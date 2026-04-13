@@ -616,7 +616,7 @@ fn parse_imap_date(s: &str) -> Result<SystemTime, ()> {
 fn parse_envelope_from_rfc822(data: &[u8]) -> Envelope {
     let mut env = Envelope::default();
     let headers = String::from_utf8_lossy(data);
-    
+
     for line in headers.lines() {
         if let Some((key, value)) = line.split_once(':') {
             let value = value.trim();
@@ -1378,7 +1378,7 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
         }
 
         ImapCommand::Create { mailbox } => {
-            if *state != ImapState::Authenticated {
+            if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
 

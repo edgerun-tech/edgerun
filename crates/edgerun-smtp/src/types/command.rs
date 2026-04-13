@@ -129,21 +129,13 @@ impl SmtpCommand {
                 };
                 Ok(Self::Auth { mechanism, initial_response })
             }
-            // During AUTH exchange, every non-command line is a base64 response
-            _ => {
-                // Check if it looks like base64 (AUTH response continuation)
-                // Only treat as Auth response if all chars are valid base64
-                if trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
-                    && !trimmed.is_empty()
-                    && trimmed.len() % 4 == 0
-                {
-                    return Ok(Self::AuthResponse(trimmed.to_string()));
-                }
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Unknown command: {}", cmd),
-                ))
-            }
+            // Any unrecognized command — return a syntax error, NOT an AuthResponse.
+            // Auth responses during AUTH exchanges are handled by the state machine
+            // in session.rs (handle_auth_response), NOT by command parsing.
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Unknown command: {}", trimmed),
+            )),
         }
     }
 }

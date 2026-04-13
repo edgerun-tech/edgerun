@@ -865,9 +865,10 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
     handshake_transcript_hash: &[u8],
     cert_der: &[u8],
     signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
+    alpn_protocol: Option<&[u8]>,
 ) -> Result<()> {
     // EncryptedExtensions
-    let ee_msg = build_encrypted_extensions(None);
+    let ee_msg = build_encrypted_extensions(alpn_protocol);
     transcript.extend_from_slice(&ee_msg);
     let ee_ct = write_cipher.encrypt(22, &ee_msg);
     async_write_all(stream, &crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: ee_ct }.to_bytes()).await?;
@@ -968,6 +969,19 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
         .cloned()
         .ok_or_else(|| TlsError::HandshakeFailure("No common cipher suite".into()))?;
 
+    // Negotiate ALPN: prefer "h2" for HTTP/2, fallback to "http/1.1"
+    let alpn_protocol = if !ch.alpn_protocols.is_empty() {
+        if ch.alpn_protocols.iter().any(|p| p == b"h2") {
+            Some(b"h2".to_vec())
+        } else if ch.alpn_protocols.iter().any(|p| p == b"http/1.1") {
+            Some(b"http/1.1".to_vec())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let server_random = generate_random();
 
     let (selected_group, client_key_share) = if let Some((group, key)) = ch.all_key_shares.first() {
@@ -1037,6 +1051,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     async_server_send_encrypted_handshake(
         stream, &mut write_cipher, &mut ks, &mut transcript, &hash,
         &handshake_transcript_hash, &cert_and_key.cert_der, &*cert_and_key.signing_key,
+        alpn_protocol.as_deref(),
     ).await?;
 
     let app_transcript_hash = hash.hash(&transcript);

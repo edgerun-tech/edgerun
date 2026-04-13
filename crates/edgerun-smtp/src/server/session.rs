@@ -213,6 +213,18 @@ enum ControlFlow {
     StartTls,
 }
 
+/// State machine for SASL AUTH challenge/response exchanges.
+enum AuthExchangeState {
+    /// Not in an AUTH exchange.
+    Idle,
+    /// PLAIN: waiting for the initial base64 response (or empty challenge sent).
+    Plain,
+    /// LOGIN: challenge "Username:" sent, expecting base64 username next.
+    LoginUsername,
+    /// LOGIN: username received, "Password:" challenge sent, expecting password next.
+    LoginPassword { username: String },
+}
+
 async fn handle_connection(
     stream: Arc<AsyncTcpStream>,
     peer: SocketAddr,
@@ -241,7 +253,7 @@ async fn handle_connection(
     // ── Auth state ────────────────────────────────────────────────────
     let mut authenticated: bool = false;
     let mut auth_identity: Option<String> = None;
-    let mut in_auth_exchange: bool = false;
+    let mut auth_exchange: AuthExchangeState = AuthExchangeState::Idle;
 
     loop {
         // Idle timeout
@@ -287,18 +299,16 @@ async fn handle_connection(
         }
 
         // ── AUTH challenge/response exchange ────────────────────────
-        if in_auth_exchange {
-            in_auth_exchange = handle_auth_response(
+        if !matches!(auth_exchange, AuthExchangeState::Idle) {
+            auth_exchange = handle_auth_response(
                 &line,
                 &handler,
                 &mut transport,
                 &mut authenticated,
                 &mut auth_identity,
+                auth_exchange,
             )
             .await?;
-            if in_auth_exchange {
-                continue;
-            }
             continue;
         }
 
@@ -369,7 +379,7 @@ async fn handle_connection(
             &mut state,
             &mut envelope,
             &mut ehlo_domain,
-            &mut in_auth_exchange,
+            &mut auth_exchange,
             &mut authenticated,
             &mut auth_identity,
             &handler,
@@ -416,16 +426,74 @@ async fn handle_auth_response(
     transport: &mut SmtpTransport,
     authenticated: &mut bool,
     auth_identity: &mut Option<String>,
-) -> io::Result<bool> {
-    match base64_decode(line) {
-        Ok(credentials) => {
-            match handler.authenticate("PLAIN", &credentials) {
+    state: AuthExchangeState,
+) -> io::Result<AuthExchangeState> {
+    match state {
+        AuthExchangeState::Plain => {
+            match base64_decode(line) {
+                Ok(credentials) => {
+                    match handler.authenticate("PLAIN", &credentials) {
+                        AuthResult::Authenticated(identity) => {
+                            *authenticated = true;
+                            *auth_identity = Some(identity.clone());
+                            edgerun_log::info!("edgerun-smtp: authenticated as {}", identity);
+                            send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
+                            Ok(AuthExchangeState::Idle)
+                        }
+                        AuthResult::Failed => {
+                            send_response(
+                                transport,
+                                &SmtpResponse::new(
+                                    SmtpResponseCode::AUTHENTICATION_FAILED,
+                                    "Authentication failed",
+                                ),
+                            )
+                            .await?;
+                            Ok(AuthExchangeState::Idle)
+                        }
+                        AuthResult::Unsupported => {
+                            send_response(transport, &SmtpResponse::auth_required()).await?;
+                            Ok(AuthExchangeState::Idle)
+                        }
+                    }
+                }
+                Err(e) => {
+                    send_response(
+                        transport,
+                        &SmtpResponse::syntax_error(&format!("Invalid AUTH response: {}", e)),
+                    )
+                    .await?;
+                    Ok(AuthExchangeState::Idle)
+                }
+            }
+        }
+        AuthExchangeState::LoginUsername => {
+            let username = base64_decode_raw(line)
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok())
+                .unwrap_or_default();
+            send_response(
+                transport,
+                &SmtpResponse::auth_continue("UGFzc3dvcmQ6"),
+            )
+            .await?;
+            Ok(AuthExchangeState::LoginPassword { username })
+        }
+        AuthExchangeState::LoginPassword { username } => {
+            let password = base64_decode_raw(line)
+                .ok()
+                .map(|b| String::from_utf8_lossy(&b).to_string())
+                .unwrap_or_default();
+            let cred_bytes: Vec<u8> = [b"\0".as_slice(), username.as_bytes(), b"\0", password.as_bytes()]
+                .concat();
+            let creds = AuthCredentials::from_plain(&cred_bytes)?;
+            match handler.authenticate("PLAIN", &creds) {
                 AuthResult::Authenticated(identity) => {
                     *authenticated = true;
                     *auth_identity = Some(identity.clone());
                     edgerun_log::info!("edgerun-smtp: authenticated as {}", identity);
                     send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
-                    Ok(false)
+                    Ok(AuthExchangeState::Idle)
                 }
                 AuthResult::Failed => {
                     send_response(
@@ -436,22 +504,15 @@ async fn handle_auth_response(
                         ),
                     )
                     .await?;
-                    Ok(false)
+                    Ok(AuthExchangeState::Idle)
                 }
                 AuthResult::Unsupported => {
                     send_response(transport, &SmtpResponse::auth_required()).await?;
-                    Ok(false)
+                    Ok(AuthExchangeState::Idle)
                 }
             }
         }
-        Err(e) => {
-            send_response(
-                transport,
-                &SmtpResponse::syntax_error(&format!("Invalid AUTH response: {}", e)),
-            )
-            .await?;
-            Ok(false)
-        }
+        AuthExchangeState::Idle => Ok(AuthExchangeState::Idle),
     }
 }
 
@@ -459,6 +520,11 @@ fn base64_decode(encoded: &str) -> io::Result<AuthCredentials> {
     let decoded = decode_base64(encoded)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid base64"))?;
     AuthCredentials::from_plain(&decoded)
+}
+
+fn base64_decode_raw(encoded: &str) -> io::Result<Vec<u8>> {
+    decode_base64(encoded)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid base64"))
 }
 
 fn decode_base64(input: &str) -> Option<Vec<u8>> {
@@ -499,7 +565,7 @@ async fn handle_command(
     state: &mut SmtpState,
     envelope: &mut MailEnvelope,
     ehlo_domain: &mut Option<String>,
-    in_auth_exchange: &mut bool,
+    auth_exchange: &mut AuthExchangeState,
     authenticated: &mut bool,
     auth_identity: &mut Option<String>,
     handler: &Arc<dyn MailHandler>,
@@ -722,13 +788,15 @@ async fn handle_command(
                             }
                         }
                     } else {
+                        // Multi-step: send empty challenge, wait for PLAIN response
                         send_response(transport, &SmtpResponse::auth_continue("")).await?;
-                        *in_auth_exchange = true;
+                        *auth_exchange = AuthExchangeState::Plain;
                     }
                 }
                 "LOGIN" => {
+                    // Two-step challenge: "Username:" then "Password:"
                     send_response(transport, &SmtpResponse::auth_continue("VXNlcm5hbWU6")).await?;
-                    *in_auth_exchange = true;
+                    *auth_exchange = AuthExchangeState::LoginUsername;
                 }
                 _ => {
                     send_response(transport, &SmtpResponse::auth_mechanism_unknown(&mechanism)).await?;
@@ -736,38 +804,15 @@ async fn handle_command(
             }
         }
 
-        SmtpCommand::AuthResponse(response_b64) => {
-            match base64_decode(&response_b64) {
-                Ok(credentials) => {
-                    match handler.authenticate("PLAIN", &credentials) {
-                        AuthResult::Authenticated(identity) => {
-                            *authenticated = true;
-                            *auth_identity = Some(identity.clone());
-                            send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
-                        }
-                        AuthResult::Failed => {
-                            send_response(
-                                transport,
-                                &SmtpResponse::new(
-                                    SmtpResponseCode::AUTHENTICATION_FAILED,
-                                    "Authentication failed",
-                                ),
-                            )
-                            .await?;
-                        }
-                        AuthResult::Unsupported => {
-                            send_response(transport, &SmtpResponse::auth_required()).await?;
-                        }
-                    }
-                }
-                Err(_) => {
-                    send_response(
-                        transport,
-                        &SmtpResponse::syntax_error("Invalid base64 in AUTH response"),
-                    )
-                    .await?;
-                }
-            }
+        // AuthResponse should only arrive during an AUTH exchange,
+        // which is now handled by the state machine in handle_auth_response.
+        // If we get here outside an exchange, it's a syntax error.
+        SmtpCommand::AuthResponse(_) => {
+            send_response(
+                transport,
+                &SmtpResponse::syntax_error("Unexpected AUTH response outside AUTH exchange"),
+            )
+            .await?;
         }
     }
 

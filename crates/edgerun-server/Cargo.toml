@@ -10,11 +10,19 @@ path = "src/bin/http-server.rs"
 
 [dependencies]
 edgerun-http = { path = "../edgerun-http", features = ["tls"] }
-edgerun-imap = { path = "../edgerun-imap" }
-edgerun-smtp = { path = "../edgerun-smtp" }
-edgerun-dns = { path = "../edgerun-dns" }
-edgerun-dhcp = { path = "../edgerun-dhcp" }
-edgerun-tftp = { path = "../edgerun-tftp" }
+edgerun-imap = { path = "../edgerun-imap", optional = true }
+edgerun-smtp = { path = "../edgerun-smtp", optional = true }
+edgerun-dns = { path = "../edgerun-dns", optional = true }
+edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
+edgerun-tftp = { path = "../edgerun-tftp", optional = true }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-log = { path = "../edgerun-log" }
+
+[features]
+default = ["imap", "smtp", "dns", "dhcp", "tftp"]
+imap = ["dep:edgerun-imap"]
+smtp = ["dep:edgerun-smtp"]
+dns = ["dep:edgerun-dns"]
+dhcp = ["dep:edgerun-dhcp"]
+tftp = ["dep:edgerun-tftp"]

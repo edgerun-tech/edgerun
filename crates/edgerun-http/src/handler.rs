@@ -102,7 +102,7 @@ where
 
 impl Handler for Arc<dyn Handler> {
     fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
-        let handler = Arc::clone(self);
-        Box::pin(async move { handler.handle(request).await })
+        let handler: &dyn Handler = self.as_ref();
+        handler.handle(request)
     }
 }

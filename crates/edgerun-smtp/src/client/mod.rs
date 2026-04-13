@@ -7,11 +7,116 @@ pub use builder::{EmailBuilder, MimePart};
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use edgerun_rt::{AsyncReadExt, AsyncWriteExt, AsyncTcpStream, ConnectFuture};
+use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture};
 
-use crate::protocol::SmtpReader;
+use crate::protocol::read_smtp_line;
 use crate::types::{SmtpResponse, SmtpResponseCode};
+
+#[cfg(feature = "tls")]
+use edgerun_tls::AsyncTlsStream;
+
+// ===========================================================================
+// ClientTransport
+// ===========================================================================
+
+enum ClientTransport {
+    Plain(AsyncTcpStream),
+    #[cfg(feature = "tls")]
+    Tls(AsyncTlsStream<AsyncTcpStream>),
+}
+
+impl ClientTransport {
+    /// Create a placeholder transport. Only used during TLS upgrade
+    /// to temporarily replace the real transport.
+    fn placeholder() -> Self {
+        // fd=-1 will fail on any I/O — intentional, since this is a
+        // short-lived placeholder during TLS handshake.
+        ClientTransport::Plain(AsyncTcpStream::from_fd(-1))
+    }
+
+    fn is_tls(&self) -> bool {
+        match self {
+            ClientTransport::Plain(_) => false,
+            #[cfg(feature = "tls")]
+            ClientTransport::Tls(_) => true,
+        }
+    }
+
+    #[cfg(feature = "tls")]
+    async fn upgrade_tls(
+        self,
+        server_name: &str,
+    ) -> io::Result<ClientTransport> {
+        match self {
+            ClientTransport::Tls(_) => {
+                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+            }
+            ClientTransport::Plain(stream) => {
+                let tls = AsyncTlsStream::client(stream, server_name)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
+                Ok(ClientTransport::Tls(tls))
+            }
+        }
+    }
+
+    /// Extract the host from the peer address for SNI.
+    fn server_name(&self) -> io::Result<String> {
+        // We don't have direct access to the address here,
+        // the caller must provide it.
+        Err(io::Error::new(io::ErrorKind::Other, "server_name required for TLS upgrade"))
+    }
+}
+
+impl AsyncRead for ClientTransport {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        match &mut *self {
+            ClientTransport::Plain(s) => Pin::new(s).poll_read(cx, buf),
+            #[cfg(feature = "tls")]
+            ClientTransport::Tls(s) => Pin::new(s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for ClientTransport {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match &mut *self {
+            ClientTransport::Plain(s) => Pin::new(s).poll_write(cx, buf),
+            #[cfg(feature = "tls")]
+            ClientTransport::Tls(s) => Pin::new(s).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match &mut *self {
+            ClientTransport::Plain(s) => Pin::new(s).poll_flush(cx),
+            #[cfg(feature = "tls")]
+            ClientTransport::Tls(s) => Pin::new(s).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match &mut *self {
+            ClientTransport::Plain(s) => Pin::new(s).poll_shutdown(cx),
+            #[cfg(feature = "tls")]
+            ClientTransport::Tls(s) => Pin::new(s).poll_shutdown(cx),
+        }
+    }
+}
+
+impl Unpin for ClientTransport {}
 
 // ===========================================================================
 // SmtpClient
@@ -19,30 +124,25 @@ use crate::types::{SmtpResponse, SmtpResponseCode};
 
 /// Async SMTP client.
 pub struct SmtpClient {
-    stream: std::sync::Arc<AsyncTcpStream>,
-    reader: SmtpReader<edgerun_rt::AsyncReadHalf>,
-    writer: std::sync::Arc<edgerun_rt::Mutex<edgerun_rt::AsyncWriteHalf>>,
+    transport: ClientTransport,
     pub capabilities: Vec<String>,
     pub capabilities_map: HashMap<String, Option<String>>,
-    tls_active: bool,
+    server_name: String,
 }
 
 impl SmtpClient {
     /// Connect to an SMTP server.
     pub async fn connect(addr: &str) -> io::Result<Self> {
+        let server_name = Self::extract_host(addr);
         let stream = Self::connect_tcp(addr).await?;
-        let stream = std::sync::Arc::new(stream);
-        let (read_half, write_half) = stream.split();
-        let reader = SmtpReader::new(read_half);
-        let writer = std::sync::Arc::new(edgerun_rt::Mutex::new(write_half));
+
+        let transport = ClientTransport::Plain(stream);
 
         let mut client = Self {
-            stream,
-            reader,
-            writer,
+            transport,
             capabilities: Vec::new(),
             capabilities_map: HashMap::new(),
-            tls_active: false,
+            server_name,
         };
 
         let greeting = client.read_response().await?;
@@ -56,13 +156,23 @@ impl SmtpClient {
         Ok(client)
     }
 
+    fn extract_host(addr: &str) -> String {
+        if let Ok(sock_addr) = addr.parse::<SocketAddr>() {
+            return sock_addr.ip().to_string();
+        }
+        if let Some(idx) = addr.rfind(':') {
+            return addr[..idx].to_string();
+        }
+        addr.to_string()
+    }
+
     // ── Connection ──────────────────────────────────────────────────────
 
     async fn connect_tcp(addr: &str) -> io::Result<AsyncTcpStream> {
         if let Ok(sock_addr) = addr.parse::<SocketAddr>() {
             let fut = ConnectFuture::new(sock_addr);
             match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
-                Ok(Ok(stream)) => return Ok((*stream).clone()),
+                Ok(Ok(stream)) => return Ok(Arc::try_unwrap(stream).ok().unwrap()),
                 Ok(Err(e)) => return Err(e),
                 Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
             }
@@ -79,7 +189,7 @@ impl SmtpClient {
         let resolved = Self::dns_resolve(host, port).await?;
         let fut = ConnectFuture::new(resolved);
         match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
-            Ok(Ok(stream)) => Ok((*stream).clone()),
+            Ok(Ok(stream)) => Ok(Arc::try_unwrap(stream).ok().unwrap()),
             Ok(Err(e)) => Err(e),
             Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
         }
@@ -109,7 +219,7 @@ impl SmtpClient {
 
     /// Read a response (handles multiline).
     async fn read_response(&mut self) -> io::Result<SmtpResponse> {
-        let line = self.reader.read_line().await?;
+        let line = read_smtp_line(&mut self.transport).await?;
         let line = match line {
             Some(l) => l,
             None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
@@ -135,7 +245,7 @@ impl SmtpClient {
         if is_multiline {
             let mut all_lines = vec![message.clone()];
             loop {
-                let next_line = self.reader.read_line().await?;
+                let next_line = read_smtp_line(&mut self.transport).await?;
                 let next_line = match next_line {
                     Some(l) => l,
                     None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
@@ -154,10 +264,10 @@ impl SmtpClient {
 
     /// Send a command and read the response.
     async fn send_command(&mut self, command: &str) -> io::Result<SmtpResponse> {
-        let mut w = self.writer.lock().await;
-        w.write_all(format!("{}\r\n", command).as_bytes()).await?;
-        w.flush().await?;
-        drop(w);
+        self.transport
+            .write_all(format!("{}\r\n", command).as_bytes())
+            .await?;
+        self.transport.flush().await?;
         self.read_response().await
     }
 
@@ -220,11 +330,8 @@ impl SmtpClient {
             return Err(io::Error::new(io::ErrorKind::Other, format!("DATA rejected: {}", response.message)));
         }
 
-        {
-            let mut w = self.writer.lock().await;
-            w.write_all(message).await?;
-            w.flush().await?;
-        }
+        self.transport.write_all(message).await?;
+        self.transport.flush().await?;
 
         let response = self.read_response().await?;
         if !response.code.is_success() {
@@ -268,18 +375,86 @@ impl SmtpClient {
     }
 
     /// Start TLS (if server supports STARTTLS).
+    ///
+    /// Sends the STARTTLS command and performs the TLS handshake.
+    /// After this, all communication is encrypted.
     #[cfg(feature = "tls")]
     pub async fn starttls(&mut self) -> io::Result<()> {
         if !self.capabilities_map.contains_key("STARTTLS") {
             return Err(io::Error::new(io::ErrorKind::Other, "Server does not support STARTTLS"));
         }
+
         let response = self.send_command("STARTTLS").await?;
         if !response.code.is_success() {
             return Err(io::Error::new(io::ErrorKind::Other, format!("STARTTLS rejected: {}", response.message)));
         }
-        self.tls_active = true;
-        edgerun_log::info!("edgerun-smtp-client: STARTTLS acknowledged");
+
+        // Extract the transport and upgrade.
+        let current = match std::mem::replace(&mut self.transport, ClientTransport::placeholder()) {
+            ClientTransport::Plain(s) => s,
+            ClientTransport::Tls(_) => {
+                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+            }
+        };
+        let server_name = self.server_name.clone();
+        let tls = AsyncTlsStream::client(current, &server_name)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
+        self.transport = ClientTransport::Tls(tls);
+
+        edgerun_log::info!("edgerun-smtp-client: STARTTLS handshake complete");
         Ok(())
+    }
+
+    /// Check if the client is currently using TLS.
+    pub fn is_tls_active(&self) -> bool {
+        self.transport.is_tls()
+    }
+
+    /// Authenticate with the server (SASL).
+    ///
+    /// Sends `AUTH PLAIN <credentials>`. The credentials string should be
+    /// formatted as `\0<authcid>\0<passwd>` (RFC 4616).
+    pub async fn auth_plain(&mut self, credentials: &str) -> io::Result<()> {
+        // Encode credentials as base64.
+        let encoded = self.base64_encode(credentials.as_bytes());
+        let response = self.send_command(&format!("AUTH PLAIN {}", encoded)).await?;
+        if !response.code.is_success() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("AUTH PLAIN rejected: {}", response.message),
+            ));
+        }
+        edgerun_log::info!("edgerun-smtp-client: AUTH PLAIN successful");
+        Ok(())
+    }
+
+    /// Minimal base64 encoder (RFC 4648).
+    fn base64_encode(&self, input: &[u8]) -> String {
+        const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut result = String::new();
+        let mut i = 0;
+        while i < input.len() {
+            let b0 = input[i] as u32;
+            let b1 = if i + 1 < input.len() { input[i + 1] as u32 } else { 0 };
+            let b2 = if i + 2 < input.len() { input[i + 2] as u32 } else { 0 };
+            let triple = (b0 << 16) | (b1 << 8) | b2;
+
+            result.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
+            result.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
+            if i + 1 < input.len() {
+                result.push(TABLE[((triple >> 6) & 0x3F) as usize] as char);
+            } else {
+                result.push('=');
+            }
+            if i + 2 < input.len() {
+                result.push(TABLE[(triple & 0x3F) as usize] as char);
+            } else {
+                result.push('=');
+            }
+            i += 3;
+        }
+        result
     }
 
     /// Check if the server supports a specific ESMTP extension.

@@ -70,16 +70,25 @@ pub fn build_encrypted_extensions(alpn_protocol: Option<&[u8]>) -> Vec<u8> {
     // ALPN extension (ext 16) — if a protocol was selected
     if let Some(proto) = alpn_protocol {
         msg.extend_from_slice(&16u16.to_be_bytes()); // ALPN extension type
-        // Protocol list: length(2) + proto_len(1) + proto
-        let proto_data_len = 3 + proto.len();
-        msg.extend_from_slice(&(proto_data_len as u16).to_be_bytes());
-        msg.extend_from_slice(&((proto_data_len - 2) as u16).to_be_bytes()); // protocol list length
-        msg.push(proto.len() as u8);
-        msg.extend_from_slice(proto);
+
+        // Build the ALPN extension data: protocol_name_list
+        let mut proto_list = Vec::new();
+        proto_list.push(proto.len() as u8);
+        proto_list.extend_from_slice(proto);
+
+        // extension_data_length = 2 (list length field) + proto_list
+        let ext_data_len = 2 + proto_list.len();
+        msg.extend_from_slice(&(ext_data_len as u16).to_be_bytes());
+
+        // protocol_name_list_length
+        msg.extend_from_slice(&(proto_list.len() as u16).to_be_bytes());
+
+        // protocol_name_list
+        msg.extend_from_slice(&proto_list);
     }
 
-    let ext_len = (msg.len() - ext_start) as u16;
-    msg[ext_start - 2..ext_start].copy_from_slice(&ext_len.to_be_bytes());
+    let ext_len = (msg.len() - ext_start - 2) as u16;
+    msg[ext_start..ext_start + 2].copy_from_slice(&ext_len.to_be_bytes());
 
     // Fill message length
     let msg_len = (msg.len() - 4) as u32;

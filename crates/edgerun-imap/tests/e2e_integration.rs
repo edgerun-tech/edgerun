@@ -160,7 +160,7 @@ fn test_e2e_full_message_flow() {
 
     // Append a message
     let msg = "From: alice@test.com\r\nSubject: Hello World\r\n\r\nThis is the body text";
-    conn.send(&format!("A005 APPEND INBOX {}", msg.len()));
+    conn.send(&format!("A005 APPEND INBOX {{{}}}", msg.len()));
     conn.read_continuation();
     conn.send(msg);
     conn.cmd("A006", "NOOP");
@@ -171,7 +171,6 @@ fn test_e2e_full_message_flow() {
 
     // Fetch
     let resp = conn.cmd("A008", "FETCH 1 (UID FLAGS RFC822.SIZE)");
-    eprintln!("FETCH response: {:?}", resp);
     assert!(resp.contains("* 1 FETCH"));
     assert!(resp.contains("UID"));
     assert!(resp.contains("FLAGS"));
@@ -179,11 +178,9 @@ fn test_e2e_full_message_flow() {
 
     // Search
     let resp = conn.cmd("A009", "SEARCH ALL");
-    eprintln!("SEARCH ALL response: {:?}", resp);
     assert!(resp.contains("* SEARCH 1"));
 
     let resp = conn.cmd("A010", "SEARCH SUBJECT \"Hello\"");
-    eprintln!("SEARCH SUBJECT response: {:?}", resp);
     assert!(resp.contains("* SEARCH 1"));
 
     // Mark as seen
@@ -214,7 +211,7 @@ fn test_e2e_copy_messages() {
     conn.cmd("A003", "SELECT INBOX");
 
     let msg = "From: test@test.com\r\nSubject: Copy Me\r\n\r\nBody";
-    conn.send(&format!("A004 APPEND INBOX {}", msg.len()));
+    conn.send(&format!("A004 APPEND INBOX {{{}}}", msg.len()));
     conn.read_continuation();
     conn.send(msg);
     conn.cmd("A005", "NOOP");
@@ -238,7 +235,7 @@ fn test_e2e_expunge() {
 
     for i in 1..=3 {
         let msg = format!("From: a@b.com\r\nSubject: Msg {}\r\n\r\nBody {}", i, i);
-        conn.send(&format!("A{:02} APPEND INBOX {}", i * 10, msg.len()));
+        conn.send(&format!("A{:02} APPEND INBOX {{{}}}", i * 10, msg.len()));
         conn.read_continuation();
         conn.send(&msg);
         conn.cmd(&format!("A{:02}", i * 10 + 1), "NOOP");
@@ -269,7 +266,7 @@ fn test_e2e_search_flags() {
 
     for i in 1..=3 {
         let msg = format!("From: user{}@test.com\r\nSubject: Test {}\r\n\r\nContent {}", i, i, i);
-        conn.send(&format!("A{:02} APPEND INBOX {}", (i + 1) * 10, msg.len()));
+        conn.send(&format!("A{:02} APPEND INBOX {{{}}}", (i + 1) * 10, msg.len()));
         conn.read_continuation();
         conn.send(&msg);
         conn.cmd(&format!("A{:02}", (i + 1) * 10 + 1), "NOOP");
@@ -307,7 +304,7 @@ fn test_e2e_search_subject_and_from() {
 
     for (i, (from, subject, body)) in msgs.iter().enumerate() {
         let msg = format!("From: {}\r\nSubject: {}\r\n\r\n{}", from, subject, body);
-        conn.send(&format!("A{:02} APPEND INBOX {}", (i + 1) * 10, msg.len()));
+        conn.send(&format!("A{:02} APPEND INBOX {{{}}}", (i + 1) * 10, msg.len()));
         conn.read_continuation();
         conn.send(&msg);
         conn.cmd(&format!("A{:02}", (i + 1) * 10 + 1), "NOOP");
@@ -370,7 +367,7 @@ fn test_e2e_fetch_body_sections() {
     conn.cmd("A002", "SELECT INBOX");
 
     let msg = "From: sender@test.com\r\nSubject: Body Test\r\n\r\nThis is the message body text";
-    conn.send(&format!("A003 APPEND INBOX {}", msg.len()));
+    conn.send(&format!("A003 APPEND INBOX {{{}}}", msg.len()));
     conn.read_continuation();
     conn.send(msg);
     conn.cmd("A004", "NOOP");
@@ -401,7 +398,7 @@ fn test_e2e_uid_operations() {
 
     for i in 1..=3 {
         let msg = format!("From: a@b.com\r\nSubject: UID Test {}\r\n\r\nBody {}", i, i);
-        conn.send(&format!("A{:02} APPEND INBOX {}", i * 10, msg.len()));
+        conn.send(&format!("A{:02} APPEND INBOX {{{}}}", i * 10, msg.len()));
         conn.read_continuation();
         conn.send(&msg);
         conn.cmd(&format!("A{:02}", i * 10 + 1), "NOOP");
@@ -414,7 +411,7 @@ fn test_e2e_uid_operations() {
 
     conn.cmd("A041", "UID SEARCH 1:2");
 
-    conn.cmd("A042", "CREATE Dest");
+    let resp = conn.cmd("A042", "CREATE Dest");
     let resp = conn.cmd("A043", "UID COPY 1 Dest");
     assert!(resp.contains("A043 OK"));
 
@@ -459,7 +456,7 @@ fn test_e2e_close_and_unselect() {
     conn.cmd("A002", "SELECT INBOX");
 
     let msg = "From: a@b.com\r\nSubject: Delete Me\r\n\r\nBye";
-    conn.send(&format!("A003 APPEND INBOX {}", msg.len()));
+    conn.send(&format!("A003 APPEND INBOX {{{}}}", msg.len()));
     conn.read_continuation();
     conn.send(msg);
     conn.cmd("A004", "NOOP");
@@ -471,6 +468,8 @@ fn test_e2e_close_and_unselect() {
     let resp = conn.cmd("A007", "STATUS INBOX (MESSAGES)");
     assert!(resp.contains("MESSAGES 0"));
 
+    // CLOSE transitions to Authenticated state, so we need SELECT again before UNSELECT
+    conn.cmd("A007b", "SELECT INBOX");
     let resp = conn.cmd("A008", "UNSELECT");
     assert!(resp.contains("A008 OK"));
 

@@ -28,7 +28,6 @@
 //! ```
 
 use edgerun_rt::CancellationToken;
-use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -38,116 +37,155 @@ pub use edgerun_http::middleware::{Chain, Extensions, Middleware, Next, middlewa
 pub use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
 pub use edgerun_http::{Request, Response, StatusCode};
 
-/// Configuration for the DNS server component.
-#[derive(Debug, Clone)]
-pub struct DnsConfig {
-    pub bind_addr: String,
-    /// Optional IPv6 bind address for dual-stack DNS support.
-    /// Set to "[::]:53" to listen on all IPv6 interfaces.
-    pub bind_addr_ipv6: Option<String>,
-    pub default_ttl: u32,
-    pub rate_limit_qps: u32,
-}
+// ---------------------------------------------------------------------------
+// Optional protocol configs (gated by feature flags)
+// ---------------------------------------------------------------------------
 
-impl Default for DnsConfig {
-    fn default() -> Self {
-        Self {
-            bind_addr: "127.0.0.1:53".to_string(),
-            bind_addr_ipv6: None,
-            default_ttl: 300,
-            rate_limit_qps: 100,
+#[cfg(feature = "dns")]
+mod dns_config {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    pub struct DnsConfig {
+        pub bind_addr: String,
+        pub bind_addr_ipv6: Option<String>,
+        pub default_ttl: u32,
+        pub rate_limit_qps: u32,
+    }
+
+    impl Default for DnsConfig {
+        fn default() -> Self {
+            Self {
+                bind_addr: "127.0.0.1:53".to_string(),
+                bind_addr_ipv6: None,
+                default_ttl: 300,
+                rate_limit_qps: 100,
+            }
         }
     }
 }
+#[cfg(feature = "dns")]
+pub use dns_config::DnsConfig;
 
-/// Configuration for the DHCP server component.
-#[derive(Debug, Clone)]
-pub struct DhcpConfig {
-    pub server_ip: Ipv4Addr,
-    pub subnet_mask: Ipv4Addr,
-    pub router: Ipv4Addr,
-    pub dns_servers: Vec<Ipv4Addr>,
-    pub lease_time: u32,
-    pub pool_start: Ipv4Addr,
-    pub pool_end: Ipv4Addr,
-}
+#[cfg(feature = "dhcp")]
+mod dhcp_config {
+    use super::*;
+    use std::net::Ipv4Addr;
 
-impl DhcpConfig {
-    pub fn new(
-        server_ip: Ipv4Addr,
-        subnet_mask: Ipv4Addr,
-        router: Ipv4Addr,
-        pool_start: Ipv4Addr,
-        pool_end: Ipv4Addr,
-    ) -> Self {
-        Self {
-            server_ip,
-            subnet_mask,
-            router,
-            dns_servers: vec![server_ip],
-            lease_time: 3600,
-            pool_start,
-            pool_end,
+    #[derive(Debug, Clone)]
+    pub struct DhcpConfig {
+        pub server_ip: Ipv4Addr,
+        pub subnet_mask: Ipv4Addr,
+        pub router: Ipv4Addr,
+        pub dns_servers: Vec<Ipv4Addr>,
+        pub lease_time: u32,
+        pub pool_start: Ipv4Addr,
+        pub pool_end: Ipv4Addr,
+    }
+
+    impl DhcpConfig {
+        pub fn new(
+            server_ip: Ipv4Addr,
+            subnet_mask: Ipv4Addr,
+            router: Ipv4Addr,
+            pool_start: Ipv4Addr,
+            pool_end: Ipv4Addr,
+        ) -> Self {
+            Self {
+                server_ip,
+                subnet_mask,
+                router,
+                dns_servers: vec![server_ip],
+                lease_time: 3600,
+                pool_start,
+                pool_end,
+            }
         }
     }
 }
+#[cfg(feature = "dhcp")]
+pub use dhcp_config::DhcpConfig;
 
-/// Configuration for the TFTP server component.
-#[derive(Clone)]
-pub struct TftpConfig {
-    pub bind_addr: String,
-    pub provider: Arc<dyn edgerun_tftp::server::FileProvider>,
-    pub blksize: u16,
+#[cfg(feature = "tftp")]
+mod tftp_config {
+    use super::*;
+
+    #[derive(Clone)]
+    pub struct TftpConfig {
+        pub bind_addr: String,
+        pub provider: Arc<dyn edgerun_tftp::server::FileProvider>,
+        pub blksize: u16,
+    }
 }
+#[cfg(feature = "tftp")]
+pub use tftp_config::TftpConfig;
 
-/// Configuration for the IMAP server component.
-#[derive(Clone)]
-pub struct ImapConfig {
-    pub bind_addr: String,
-    pub domain_name: String,
-    /// Whether this is an IMAPS server (TLS from start, port 993).
-    pub imaps: bool,
-}
+#[cfg(feature = "imap")]
+mod imap_config {
+    use super::*;
 
-impl Default for ImapConfig {
-    fn default() -> Self {
-        Self {
-            bind_addr: "0.0.0.0:143".to_string(),
-            domain_name: "edgerun.mail".to_string(),
-            imaps: false,
+    #[derive(Clone)]
+    pub struct ImapConfig {
+        pub bind_addr: String,
+        pub domain_name: String,
+        pub imaps: bool,
+    }
+
+    impl Default for ImapConfig {
+        fn default() -> Self {
+            Self {
+                bind_addr: "0.0.0.0:143".to_string(),
+                domain_name: "edgerun.mail".to_string(),
+                imaps: false,
+            }
         }
     }
 }
+#[cfg(feature = "imap")]
+pub use imap_config::ImapConfig;
 
-/// Configuration for the SMTP server component.
-#[derive(Clone)]
-pub struct SmtpConfig {
-    pub bind_addr: String,
-    pub domain_name: String,
-    /// Maximum message size in bytes (0 = unlimited).
-    pub max_message_size: usize,
-    /// Whether this is an SMTPS server (TLS from start, port 465).
-    pub smtps: bool,
-}
+#[cfg(feature = "smtp")]
+mod smtp_config {
+    use super::*;
 
-impl Default for SmtpConfig {
-    fn default() -> Self {
-        Self {
-            bind_addr: "0.0.0.0:25".to_string(),
-            domain_name: "edgerun.mail".to_string(),
-            max_message_size: 35_882_577,
-            smtps: false,
+    #[derive(Clone)]
+    pub struct SmtpConfig {
+        pub bind_addr: String,
+        pub domain_name: String,
+        pub max_message_size: usize,
+        pub smtps: bool,
+    }
+
+    impl Default for SmtpConfig {
+        fn default() -> Self {
+            Self {
+                bind_addr: "0.0.0.0:25".to_string(),
+                domain_name: "edgerun.mail".to_string(),
+                max_message_size: 35_882_577,
+                smtps: false,
+            }
         }
     }
 }
+#[cfg(feature = "smtp")]
+pub use smtp_config::SmtpConfig;
+
+// ---------------------------------------------------------------------------
+// Server
+// ---------------------------------------------------------------------------
 
 /// Unified server builder.
 pub struct Server {
     http: Option<HttpBuilder>,
+    #[cfg(feature = "dns")]
     dns: Option<DnsConfig>,
+    #[cfg(feature = "dhcp")]
     dhcp: Option<DhcpConfig>,
+    #[cfg(feature = "tftp")]
     tftp: Option<TftpConfig>,
+    #[cfg(feature = "imap")]
     imap: Option<ImapConfig>,
+    #[cfg(feature = "smtp")]
     smtp: Option<SmtpConfig>,
 }
 
@@ -164,10 +202,15 @@ impl Server {
     pub fn new() -> Self {
         Self {
             http: None,
+            #[cfg(feature = "dns")]
             dns: None,
+            #[cfg(feature = "dhcp")]
             dhcp: None,
+            #[cfg(feature = "tftp")]
             tftp: None,
+            #[cfg(feature = "imap")]
             imap: None,
+            #[cfg(feature = "smtp")]
             smtp: None,
         }
     }
@@ -202,30 +245,35 @@ impl Server {
     }
 
     /// Enable the DNS server.
+    #[cfg(feature = "dns")]
     pub fn with_dns(mut self, config: DnsConfig) -> Self {
         self.dns = Some(config);
         self
     }
 
     /// Enable the DHCP server.
+    #[cfg(feature = "dhcp")]
     pub fn with_dhcp(mut self, config: DhcpConfig) -> Self {
         self.dhcp = Some(config);
         self
     }
 
     /// Enable the TFTP server.
+    #[cfg(feature = "tftp")]
     pub fn with_tftp(mut self, config: TftpConfig) -> Self {
         self.tftp = Some(config);
         self
     }
 
     /// Enable the IMAP server.
+    #[cfg(feature = "imap")]
     pub fn with_imap(mut self, config: ImapConfig) -> Self {
         self.imap = Some(config);
         self
     }
 
     /// Enable the SMTP server.
+    #[cfg(feature = "smtp")]
     pub fn with_smtp(mut self, config: SmtpConfig) -> Self {
         self.smtp = Some(config);
         self
@@ -248,6 +296,7 @@ impl Server {
             None
         };
 
+        #[cfg(feature = "dns")]
         let dns_server = if let Some(config) = self.dns {
             let dns_config = edgerun_dns::DnsServerConfig {
                 bind_addr: config.bind_addr,
@@ -261,6 +310,7 @@ impl Server {
             None
         };
 
+        #[cfg(feature = "dhcp")]
         let dhcp_server = if let Some(config) = self.dhcp {
             let dhcp_config = edgerun_dhcp::server::DhcpServerConfig {
                 server_ip: config.server_ip,
@@ -278,6 +328,7 @@ impl Server {
             None
         };
 
+        #[cfg(feature = "tftp")]
         let tftp_server = if let Some(config) = self.tftp {
             let tftp_config = edgerun_tftp::server::TftpServerConfig {
                 bind_addr: config.bind_addr,
@@ -290,6 +341,7 @@ impl Server {
             None
         };
 
+        #[cfg(feature = "imap")]
         let imap_server = if let Some(config) = self.imap {
             let imap_config = edgerun_imap::server::ImapServerConfig {
                 bind_addr: config.bind_addr,
@@ -303,6 +355,7 @@ impl Server {
             None
         };
 
+        #[cfg(feature = "smtp")]
         let smtp_server = if let Some(config) = self.smtp {
             let smtp_config = edgerun_smtp::server::SmtpServerConfig {
                 bind_addr: config.bind_addr,
@@ -322,10 +375,15 @@ impl Server {
 
         Ok(BoundServer {
             http: http_bound.map(Arc::new),
+            #[cfg(feature = "dns")]
             dns: dns_server.map(Arc::new),
+            #[cfg(feature = "dhcp")]
             dhcp: dhcp_server,
+            #[cfg(feature = "tftp")]
             tftp: tftp_server,
+            #[cfg(feature = "imap")]
             imap: imap_server,
+            #[cfg(feature = "smtp")]
             smtp: smtp_server,
         })
     }
@@ -338,10 +396,15 @@ impl Default for Server {
 /// A fully bound server with all protocol listeners ready.
 pub struct BoundServer {
     http: Option<Arc<BoundHttpServer>>,
+    #[cfg(feature = "dns")]
     dns: Option<Arc<edgerun_dns::DnsServer>>,
+    #[cfg(feature = "dhcp")]
     dhcp: Option<edgerun_dhcp::DhcpServer>,
+    #[cfg(feature = "tftp")]
     tftp: Option<edgerun_tftp::TftpServer>,
+    #[cfg(feature = "imap")]
     imap: Option<edgerun_imap::ImapServer>,
+    #[cfg(feature = "smtp")]
     smtp: Option<edgerun_smtp::SmtpServer>,
 }
 
@@ -360,6 +423,7 @@ impl BoundServer {
         }
 
         // DNS
+        #[cfg(feature = "dns")]
         if let Some(ref dns) = self.dns {
             let dns_run = Arc::clone(dns);
             tasks.push(edgerun_rt::spawn(async move {
@@ -377,7 +441,8 @@ impl BoundServer {
             }));
         }
 
-        // DHCP (now async!)
+        // DHCP
+        #[cfg(feature = "dhcp")]
         if let Some(dhcp) = self.dhcp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
@@ -386,7 +451,8 @@ impl BoundServer {
             }));
         }
 
-        // TFTP (now async!)
+        // TFTP
+        #[cfg(feature = "tftp")]
         if let Some(tftp) = self.tftp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
@@ -395,7 +461,8 @@ impl BoundServer {
             }));
         }
 
-        // IMAP (async TCP server)
+        // IMAP
+        #[cfg(feature = "imap")]
         if let Some(imap) = self.imap.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
@@ -403,7 +470,8 @@ impl BoundServer {
             }));
         }
 
-        // SMTP (async TCP server)
+        // SMTP
+        #[cfg(feature = "smtp")]
         if let Some(smtp) = self.smtp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
