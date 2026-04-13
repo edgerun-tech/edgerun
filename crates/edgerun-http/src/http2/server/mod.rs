@@ -164,7 +164,6 @@ impl Http2Server {
         }
 
         FrameAction::WriteFrames(vec![
-            SettingsFrame::new(self.server_settings.to_entries()).to_frame(),
             SettingsFrame::ack().to_frame(),
         ])
     }

@@ -211,6 +211,11 @@ enum ControlFlow {
     Continue,
     Quit,
     StartTls,
+    /// A BDAT chunk was read. The caller should read `remaining` more bytes
+    /// then continue the command loop.
+    BdatContinue { remaining: usize },
+    /// The final BDAT chunk was read. Deliver the mail.
+    BdatDone,
 }
 
 /// State machine for SASL AUTH challenge/response exchanges.
@@ -254,6 +259,10 @@ async fn handle_connection(
     let mut authenticated: bool = false;
     let mut auth_identity: Option<String> = None;
     let mut auth_exchange: AuthExchangeState = AuthExchangeState::Idle;
+    // Remaining bytes to read for the current BDAT chunk. Zero means no pending BDAT.
+    let mut pending_bdat_bytes: usize = 0;
+    // Whether the current BDAT sequence is complete (LAST flag was set).
+    let mut pending_bdat_last: bool = false;
 
     loop {
         // Idle timeout
@@ -269,6 +278,57 @@ async fn handle_connection(
             )
             .await?;
             break;
+        }
+
+        // ── BDAT chunk reading ───────────────────────────────────────
+        if pending_bdat_bytes > 0 {
+            let to_read = pending_bdat_bytes.min(4096);
+            let mut buf = vec![0u8; to_read];
+            transport.read_exact(&mut buf).await?;
+            envelope.data.extend_from_slice(&buf);
+            pending_bdat_bytes -= to_read;
+
+            if config.limits.max_message_size > 0
+                && envelope.data.len() > config.limits.max_message_size
+            {
+                send_response(&mut transport, &SmtpResponse::message_too_large()).await?;
+                state = SmtpState::Ready;
+                envelope.reset();
+                envelope.authenticated_identity = auth_identity.clone();
+                pending_bdat_bytes = 0;
+                continue;
+            }
+
+            if pending_bdat_bytes == 0 && pending_bdat_last {
+                // Final chunk — deliver the mail
+                command_count += 1;
+                match handler.accept_mail(&envelope) {
+                    Ok(()) => {
+                        edgerun_log::info!(
+                            "edgerun-smtp: mail accepted from {} to {:?}",
+                            envelope.from, envelope.recipients,
+                        );
+                        send_response(
+                            &mut transport,
+                            &SmtpResponse::ok("OK: queued")
+                                .with_enhanced(EnhancedStatusCode::QUEUED),
+                        )
+                        .await?;
+                    }
+                    Err(e) => {
+                        edgerun_log::error!("edgerun-smtp: delivery failed: {}", e);
+                        send_response(
+                            &mut transport,
+                            &SmtpResponse::transient_failure("Delivery failed"),
+                        )
+                        .await?;
+                    }
+                }
+                envelope.reset();
+                envelope.authenticated_identity = auth_identity.clone();
+                state = SmtpState::Ready;
+            }
+            continue;
         }
 
         // Command count limit
@@ -382,6 +442,8 @@ async fn handle_connection(
             &mut auth_exchange,
             &mut authenticated,
             &mut auth_identity,
+            &mut pending_bdat_bytes,
+            &mut pending_bdat_last,
             &handler,
             &config,
             &mut transport,
@@ -390,6 +452,12 @@ async fn handle_connection(
         {
             Ok(ControlFlow::Quit) => break,
             Ok(ControlFlow::Continue) => {}
+            Ok(ControlFlow::BdatContinue { remaining }) => {
+                pending_bdat_bytes = remaining;
+            }
+            Ok(ControlFlow::BdatDone) => {
+                // Handled inline by the BDAT reader above
+            }
             Ok(ControlFlow::StartTls) => {
                 #[cfg(feature = "tls")]
                 {
@@ -568,6 +636,8 @@ async fn handle_command(
     auth_exchange: &mut AuthExchangeState,
     authenticated: &mut bool,
     auth_identity: &mut Option<String>,
+    pending_bdat_bytes: &mut usize,
+    pending_bdat_last: &mut bool,
     handler: &Arc<dyn MailHandler>,
     config: &SmtpServerConfig,
     transport: &mut SmtpTransport,
@@ -687,9 +757,32 @@ async fn handle_command(
             send_response(transport, &SmtpResponse::start_mail_input()).await?;
         }
 
+        SmtpCommand::Bdat { size, last } => {
+            if *state != SmtpState::RcptSet && *state != SmtpState::Data {
+                send_response(transport, &SmtpResponse::bad_sequence("BDAT requires RCPT TO first")).await?;
+                return Ok(ControlFlow::Continue);
+            }
+
+            // Check size limit
+            if config.limits.max_message_size > 0
+                && envelope.data.len() + size > config.limits.max_message_size
+            {
+                send_response(transport, &SmtpResponse::message_too_large()).await?;
+                return Ok(ControlFlow::Continue);
+            }
+
+            *state = SmtpState::Data;
+            *pending_bdat_bytes = size;
+            *pending_bdat_last = last;
+            send_response(transport, &SmtpResponse::ok("OK")).await?;
+            return Ok(ControlFlow::BdatContinue { remaining: size });
+        }
+
         SmtpCommand::Rset => {
             envelope.reset();
             envelope.authenticated_identity = auth_identity.clone();
+            *pending_bdat_bytes = 0;
+            *pending_bdat_last = false;
             *state = SmtpState::Ready;
             send_response(transport, &SmtpResponse::ok("OK")).await?;
         }

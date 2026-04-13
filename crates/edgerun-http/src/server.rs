@@ -297,6 +297,11 @@ where
     let mut pending_body_data: std::collections::HashMap<u32, Vec<u8>> = std::collections::HashMap::new();
     let mut frame_count: u64 = 0;
 
+    // RFC 9113 §3.4: Server MUST send initial SETTINGS frame immediately
+    let entries = server.server_settings.to_entries();
+    let settings_frame = crate::http2::frame::SettingsFrame::new(entries);
+    write_frame(&mut rdwr, &settings_frame.to_frame()).await?;
+
     loop {
         frame_count += 1;
         // Periodically clean up closed streams (every 100 frames)

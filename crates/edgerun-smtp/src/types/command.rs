@@ -31,6 +31,10 @@ pub enum SmtpCommand {
     },
     /// Base64-encoded response during multi-step SASL exchange.
     AuthResponse(String),
+    /// BDAT chunked data transfer (RFC 3030).
+    /// `size` is the exact number of data bytes in this chunk.
+    /// `last` marks this as the final chunk (equivalent to DATA's `.`).
+    Bdat { size: usize, last: bool },
 }
 
 impl SmtpCommand {
@@ -103,6 +107,21 @@ impl SmtpCommand {
                 Ok(Self::RcptTo { address, parameters })
             }
             "DATA" => Ok(Self::Data),
+            "BDAT" => {
+                // BDAT <size> [LAST]
+                let parts: Vec<&str> = args.splitn(2, |c: char| c.is_whitespace()).collect();
+                if parts.is_empty() || parts[0].is_empty() {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "BDAT requires a size"));
+                }
+                let size: usize = parts[0].parse()
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "BDAT size must be a number"))?;
+                let last = if parts.len() > 1 {
+                    parts[1].trim().eq_ignore_ascii_case("LAST")
+                } else {
+                    false
+                };
+                Ok(Self::Bdat { size, last })
+            }
             "RSET" => Ok(Self::Rset),
             "NOOP" => Ok(Self::Noop),
             "QUIT" => Ok(Self::Quit),

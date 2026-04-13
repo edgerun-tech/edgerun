@@ -14,6 +14,7 @@ pub const ESMTP_EXTENSIONS: &[&str] = &[
     "8BITMIME",
     "ENHANCEDSTATUSCODES",
     "SMTPUTF8",
+    "CHUNKING",
 ];
 
 /// Reads a single SMTP line (until `\r\n`) from an async reader.
