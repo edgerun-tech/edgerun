@@ -12,6 +12,7 @@ use edgerun_rt::{
 
 use crate::protocol::read_smtp_line;
 use crate::server::handler::{AuthCredentials, AuthResult, MailHandler};
+use crate::server::rate_limit::RateLimiter;
 use crate::types::command::{extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret};
 use crate::types::{
     EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode,
@@ -35,6 +36,8 @@ pub struct SmtpServerConfig {
     pub auth_mechanisms: Vec<String>,
     #[cfg(feature = "tls")]
     pub tls_cert: Option<CertificateAndKey>,
+    /// Per-IP rate limiter. If None, no rate limiting is applied.
+    pub rate_limiter: Option<std::sync::Arc<RateLimiter>>,
 }
 
 impl Default for SmtpServerConfig {
@@ -47,6 +50,7 @@ impl Default for SmtpServerConfig {
             auth_mechanisms: vec!["PLAIN".to_string(), "LOGIN".to_string()],
             #[cfg(feature = "tls")]
             tls_cert: None,
+            rate_limiter: None,
         }
     }
 }
@@ -179,15 +183,39 @@ impl SmtpServer {
         while !shutdown.is_cancelled() {
             match self.listener.accept().await {
                 Ok((stream, peer)) => {
+                    // Rate limit check
+                    if let Some(ref limiter) = self.config.rate_limiter {
+                        if !limiter.is_allowed(peer.ip()).await {
+                            edgerun_log::warn!(
+                                "edgerun-smtp: rate limit exceeded for {}", peer
+                            );
+                            // Reject with 421
+                            let config = self.config.clone();
+                            edgerun_rt::spawn(async move {
+                                let greeting = SmtpResponse::new(
+                                    SmtpResponseCode::SERVICE_UNAVAILABLE,
+                                    "Too many connections from this IP",
+                                );
+                                let _ = send_response_direct(&stream, &greeting).await;
+                            });
+                            continue;
+                        }
+                    }
+
                     let handler = Arc::clone(&self.handler);
                     let config = self.config.clone();
                     let shutdown = shutdown.clone();
+                    let peer_ip = peer.ip();
+                    let rate_limiter = config.rate_limiter.clone();
 
                     edgerun_log::info!("edgerun-smtp: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        if let Err(e) = handle_connection(stream, peer, handler, config, shutdown)
-                            .await
-                        {
+                        let result = handle_connection(stream, peer, handler, config, shutdown).await;
+                        // Release rate limit slot on disconnect
+                        if let Some(ref limiter) = rate_limiter {
+                            limiter.release(peer_ip).await;
+                        }
+                        if let Err(e) = result {
                             edgerun_log::error!("edgerun-smtp: connection error: {}", e);
                         }
                     });
@@ -915,6 +943,19 @@ async fn handle_command(
 // ===========================================================================
 // Response Helpers
 // ===========================================================================
+
+/// Send a response directly to an Arc<AsyncTcpStream> (before transport is set up).
+async fn send_response_direct(
+    stream: &Arc<AsyncTcpStream>,
+    response: &SmtpResponse,
+) -> io::Result<()> {
+    use edgerun_rt::AsyncWriteExt;
+    let formatted = response.format();
+    let mut s = Arc::clone(stream);
+    s.write_all(formatted.as_bytes()).await?;
+    s.flush().await?;
+    Ok(())
+}
 
 async fn send_response(transport: &mut SmtpTransport, response: &SmtpResponse) -> io::Result<()> {
     let formatted = response.format();
