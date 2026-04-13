@@ -28,6 +28,7 @@ fn main() {
         test_connect_send_recv();
         test_async_read_write();
         test_raw_fd();
+        test_local_addr();
         println!("All UnixDatagram tests passed!");
     });
 }
@@ -168,6 +169,16 @@ fn test_raw_fd() {
     let fd = socket.as_raw_fd();
     assert!(fd > 0);
     println!("  test_raw_fd OK (fd={})", fd);
+}
+
+fn test_local_addr() {
+    println!("  test_local_addr...");
+    let path = make_temp_socket_path();
+    let _cleanup = Cleanup(&path.clone());
+    let socket = UnixDatagram::bind(&path).expect("bind failed");
+    let addr = socket.local_addr().expect("local_addr failed");
+    assert!(addr.as_pathname().is_some(), "should have a pathname");
+    println!("  test_local_addr OK (addr={:?})", addr.as_pathname());
 }
 
 fn noop_waker() -> std::task::Waker {

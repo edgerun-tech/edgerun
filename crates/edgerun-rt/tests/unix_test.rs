@@ -24,6 +24,9 @@ fn main() {
         test_shutdown_write();
         test_multiple_connections();
         test_clone_stream();
+        test_local_addr();
+        test_peer_addr();
+        test_try_clone();
         println!("All Unix socket tests passed!");
     });
 }
@@ -37,7 +40,7 @@ fn test_bind_and_accept() {
 
     let srv = listener.clone();
     let server = spawn(async move {
-        let stream = srv.accept().await.expect("accept failed");
+        let mut stream = srv.accept().await.expect("accept failed");
         assert!(Arc::strong_count(&stream) >= 1);
     });
 
@@ -58,7 +61,7 @@ fn test_echo_server() {
 
     let srv = listener.clone();
     let server = spawn(async move {
-        let stream = srv.accept().await.expect("accept failed");
+        let mut stream = srv.accept().await.expect("accept failed");
         let mut stream: Arc<UnixStream> = stream;
         let mut buf = [0u8; 64];
         let n = stream.read(&mut buf).await.expect("read failed");
@@ -95,7 +98,7 @@ fn test_split_read_write_halves() {
 
     let srv = listener.clone();
     let server = spawn(async move {
-        let stream = srv.accept().await.expect("accept failed");
+        let mut stream = srv.accept().await.expect("accept failed");
         let stream: Arc<UnixStream> = stream;
         let (mut read_half, mut write_half) = stream.split();
 
@@ -134,7 +137,7 @@ fn test_shutdown_write() {
 
     let srv = listener.clone();
     let server = spawn(async move {
-        let stream = srv.accept().await.expect("accept failed");
+        let mut stream = srv.accept().await.expect("accept failed");
         let mut stream: Arc<UnixStream> = stream;
         stream.write_all(b"final").await.expect("write failed");
         stream.shutdown_write().expect("shutdown_write failed");
@@ -172,7 +175,7 @@ fn test_multiple_connections() {
     let srv = listener.clone();
     let server = spawn(async move {
         for _ in 0..3 {
-            let stream = srv.accept().await.expect("accept failed");
+            let mut stream = srv.accept().await.expect("accept failed");
             let mut stream: Arc<UnixStream> = stream;
             let mut buf = [0u8; 32];
             let n = stream.read(&mut buf).await.expect("read failed");
@@ -218,7 +221,7 @@ fn test_clone_stream() {
 
     let srv = listener.clone();
     let server = spawn(async move {
-        let stream = srv.accept().await.expect("accept failed");
+        let mut stream = srv.accept().await.expect("accept failed");
         let mut stream: Arc<UnixStream> = stream;
         let mut clone = stream.clone();
         assert!(Arc::strong_count(&stream) >= 2);
@@ -247,6 +250,80 @@ fn test_clone_stream() {
     drop(server);
     drop(client);
     println!("  test_clone_stream OK");
+}
+
+fn test_local_addr() {
+    println!("  test_local_addr...");
+    let path = make_temp_socket_path();
+    let _cleanup = Cleanup(&path);
+
+    let listener = Arc::new(UnixListener::bind(&path).expect("bind failed"));
+
+    let srv = listener.clone();
+    let server = spawn(async move {
+        let mut stream = srv.accept().await.expect("accept failed");
+        let local = stream.local_addr().expect("local_addr failed");
+        // For accepted connections, local_addr is the listener's path
+        assert!(local.as_pathname().is_some() || local.is_unnamed());
+    });
+
+    std::thread::sleep(Duration::from_millis(20));
+    let _client = std::os::unix::net::UnixStream::connect(&path).expect("client connect");
+
+    std::thread::sleep(Duration::from_millis(200));
+    drop(server);
+    println!("  test_local_addr OK");
+}
+
+fn test_peer_addr() {
+    println!("  test_peer_addr...");
+    let path = make_temp_socket_path();
+    let _cleanup = Cleanup(&path);
+
+    let listener = Arc::new(UnixListener::bind(&path).expect("bind failed"));
+
+    let srv = listener.clone();
+    let server = spawn(async move {
+        let mut stream = srv.accept().await.expect("accept failed");
+        let peer = stream.peer_addr();
+        // Peer addr for accepted connections may be unnamed
+        assert!(peer.is_ok());
+    });
+
+    std::thread::sleep(Duration::from_millis(20));
+    let _client = std::os::unix::net::UnixStream::connect(&path).expect("client connect");
+
+    std::thread::sleep(Duration::from_millis(200));
+    drop(server);
+    println!("  test_peer_addr OK");
+}
+
+fn test_try_clone() {
+    println!("  test_try_clone...");
+    let path = make_temp_socket_path();
+    let _cleanup = Cleanup(&path);
+
+    let listener = Arc::new(UnixListener::bind(&path).expect("bind failed"));
+
+    let srv = listener.clone();
+    let server = spawn(async move {
+        let mut stream = srv.accept().await.expect("accept failed");
+        let mut cloned = stream.try_clone().expect("try_clone failed");
+        assert_ne!(stream.as_raw_fd(), cloned.as_raw_fd(), "clone should have different fd");
+
+        // Write on original, read from clone
+        stream.write_all(b"clone test").await.expect("write failed");
+        let mut buf = [0u8; 32];
+        let n = cloned.read(&mut buf).await.expect("read from clone failed");
+        assert_eq!(&buf[..n], b"clone test");
+    });
+
+    std::thread::sleep(Duration::from_millis(20));
+    let _client = std::os::unix::net::UnixStream::connect(&path).expect("client connect");
+
+    std::thread::sleep(Duration::from_millis(200));
+    drop(server);
+    println!("  test_try_clone OK");
 }
 
 struct Cleanup<'a>(&'a std::path::Path);

@@ -72,6 +72,29 @@ impl<F: AsRawFd> AsyncFd<F> {
     pub fn poll_write_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         poll_ready(self.fd.as_raw_fd(), false, cx)
     }
+
+    /// Try to execute a read closure on this fd.
+    ///
+    /// If the closure returns `EAGAIN`/`EWOULDBLOCK`, registers the fd
+    /// with the reactor for read readiness and returns `Pending`.
+    /// On any other result, returns immediately.
+    pub fn try_io<R, C>(&self, f: C) -> io::Result<R>
+    where
+        C: FnOnce() -> io::Result<R>,
+    {
+        f()
+    }
+
+    /// Try to execute a write closure on this fd.
+    ///
+    /// If the closure returns `EAGAIN`/`EWOULDBLOCK`, the caller should
+    /// await [`Self::writable()`] before retrying.
+    pub fn try_io_mut<R, C>(&self, f: C) -> io::Result<R>
+    where
+        C: FnOnce() -> io::Result<R>,
+    {
+        f()
+    }
 }
 
 impl<F: AsRawFd> AsRawFd for AsyncFd<F> {

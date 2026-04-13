@@ -178,6 +178,30 @@ impl UnixDatagram {
     pub fn as_raw_fd(&self) -> RawFd {
         self.fd
     }
+
+    /// Returns the local socket address.
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        unsafe {
+            let mut addr: libc::sockaddr_storage = std::mem::zeroed();
+            let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_storage>() as _;
+            let res = libc::getsockname(
+                self.fd,
+                &mut addr as *mut _ as *mut libc::sockaddr,
+                &mut addrlen,
+            );
+            if res < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if addr.ss_family as libc::c_int != libc::AF_UNIX {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a unix socket"));
+            }
+            let unix_addr = &addr as *const _ as *const libc::sockaddr_un;
+            let path = std::ffi::CStr::from_ptr((*unix_addr).sun_path.as_ptr())
+                .to_string_lossy()
+                .into_owned();
+            SocketAddr::from_pathname(&path)
+        }
+    }
 }
 
 impl Drop for UnixDatagram {

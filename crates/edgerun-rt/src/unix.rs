@@ -79,6 +79,84 @@ impl UnixStream {
         self.fd
     }
 
+    /// Returns the local socket address.
+    pub fn local_addr(&self) -> io::Result<std::os::unix::net::SocketAddr> {
+        // Use std's UnixStream to get the address.
+        // We can't reconstruct a std::UnixStream from a raw fd safely
+        // (double-close risk). Use libc directly.
+        unsafe {
+            let mut addr: libc::sockaddr_storage = std::mem::zeroed();
+            let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_storage>() as _;
+            let res = libc::getsockname(
+                self.fd,
+                &mut addr as *mut _ as *mut libc::sockaddr,
+                &mut addrlen,
+            );
+            if res < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if addr.ss_family as libc::c_int != libc::AF_UNIX {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a unix socket"));
+            }
+            let unix_addr = &addr as *const _ as *const libc::sockaddr_un;
+            let path = std::ffi::CStr::from_ptr((*unix_addr).sun_path.as_ptr())
+                .to_string_lossy()
+                .into_owned();
+            std::os::unix::net::SocketAddr::from_pathname(&path)
+        }
+    }
+
+    /// Returns the peer socket address.
+    pub fn peer_addr(&self) -> io::Result<std::os::unix::net::SocketAddr> {
+        unsafe {
+            let mut addr: libc::sockaddr_storage = std::mem::zeroed();
+            let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_storage>() as _;
+            let res = libc::getpeername(
+                self.fd,
+                &mut addr as *mut _ as *mut libc::sockaddr,
+                &mut addrlen,
+            );
+            if res < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if addr.ss_family as libc::c_int != libc::AF_UNIX {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a unix socket"));
+            }
+            let unix_addr = &addr as *const _ as *const libc::sockaddr_un;
+            let path = std::ffi::CStr::from_ptr((*unix_addr).sun_path.as_ptr())
+                .to_string_lossy()
+                .into_owned();
+            std::os::unix::net::SocketAddr::from_pathname(&path)
+        }
+    }
+
+    /// Creates a new independently owned handle to the underlying socket.
+    pub fn try_clone(&self) -> io::Result<Self> {
+        let new_fd = unsafe { libc::dup(self.fd) };
+        if new_fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // Set non-blocking on the new fd.
+        let flags = unsafe { libc::fcntl(new_fd, libc::F_GETFL) };
+        if flags < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if unsafe { libc::fcntl(new_fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // Don't register with reactor again — the new fd is a different
+        // kernel fd number, so it needs its own reactor entry.
+        if let Some(rt) = try_current_rt() {
+            rt.reactor.get_or_register_fd(new_fd);
+        }
+        Ok(Self {
+            fd: new_fd,
+            read_waker: Mutex::new(None),
+            write_waker: Mutex::new(None),
+            refs: Arc::new(AtomicUsize::new(1)),
+        })
+    }
+
     fn reactor_wait_read(&self, waker: Waker) {
         if let Some(rt) = try_current_rt() {
             rt.reactor.wait_read(self.fd, waker);
