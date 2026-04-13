@@ -100,3 +100,7 @@ harness = false
 [[test]]
 name = "join_set_test"
 harness = false
+
+[[test]]
+name = "process_test"
+harness = false

@@ -34,6 +34,7 @@ pub mod broadcast;
 pub mod join_set;
 pub mod oneshot;
 pub mod unbounded;
+pub mod process;
 mod watch;
 
 // ===========================================================================
