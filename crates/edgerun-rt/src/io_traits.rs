@@ -75,6 +75,29 @@ pub trait AsyncReadExt: AsyncRead + Unpin {
     {
         Chain { first: self, second: other, done_first: false }
     }
+
+    /// Read all bytes until a newline (`\n`) is reached, appending to `buf`.
+    ///
+    /// The newline character is included in the buffer.
+    /// Returns the number of bytes read (including the newline).
+    ///
+    /// # Performance
+    /// This reads byte-by-byte. For efficient line reading, wrap your reader
+    /// in a [`BufReader`](crate::BufReader) first.
+    fn read_line<'a>(&'a mut self, buf: &'a mut String) -> ReadLineFut<'a, Self>
+    where
+        Self: Sized,
+    {
+        ReadLineFut { s: self, buf }
+    }
+
+    /// Returns a stream over the lines of this reader.
+    fn lines(self) -> Lines<Self>
+    where
+        Self: Sized,
+    {
+        Lines { reader: self, buf: String::new() }
+    }
 }
 impl<R: AsyncRead + Unpin> AsyncReadExt for R {}
 
@@ -343,5 +366,94 @@ impl<R1: AsyncRead + Unpin, R2: AsyncRead + Unpin> AsyncRead for Chain<R1, R2> {
             }
         }
         Pin::new(&mut this.second).poll_read(cx, buf)
+    }
+}
+
+// ===========================================================================
+// read_line
+// ===========================================================================
+
+pub struct ReadLineFut<'a, R: Unpin> {
+    s: &'a mut R,
+    buf: &'a mut String,
+}
+
+impl<R: AsyncRead + Unpin> Future for ReadLineFut<'_, R> {
+    type Output = io::Result<usize>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+
+        // Check if we already have a newline in the buffer.
+        if let Some(pos) = this.buf.as_bytes().iter().position(|&b| b == b'\n') {
+            let len = pos + 1;
+            return Poll::Ready(Ok(len));
+        }
+
+        let start_len = this.buf.len();
+        let mut byte_buf = [0u8; 1];
+        match Pin::new(&mut *this.s).poll_read(cx, &mut byte_buf) {
+            Poll::Ready(Ok(0)) => {
+                // EOF — return what we have.
+                if this.buf.len() > start_len {
+                    return Poll::Ready(Ok(this.buf.len() - start_len));
+                }
+                Poll::Ready(Ok(0))
+            }
+            Poll::Ready(Ok(1)) => {
+                this.buf.push(byte_buf[0] as char);
+                if byte_buf[0] == b'\n' {
+                    return Poll::Ready(Ok(this.buf.len() - start_len));
+                }
+                // No newline — return Pending so we get woken for more data.
+                Poll::Pending
+            }
+            Poll::Ready(Ok(_)) => unreachable!("read of 1-byte buffer returned > 1"),
+            Poll::Ready(Err(e)) => {
+                if this.buf.len() > start_len {
+                    return Poll::Ready(Ok(this.buf.len() - start_len));
+                }
+                Poll::Ready(Err(e))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+// ===========================================================================
+// Lines
+// ===========================================================================
+
+/// An async iterator over the lines of an `AsyncRead`.
+pub struct Lines<R> {
+    reader: R,
+    buf: String,
+}
+
+impl<R: AsyncRead + Unpin> Lines<R> {
+    /// Read the next line.
+    pub async fn next_line(&mut self) -> io::Result<Option<String>> {
+        self.buf.clear();
+        let n = self.reader.read_line(&mut self.buf).await?;
+        if n == 0 {
+            Ok(None)
+        } else {
+            // Strip trailing \n or \r\n.
+            let line = if self.buf.ends_with('\n') {
+                self.buf.pop();
+                if self.buf.ends_with('\r') {
+                    self.buf.pop();
+                }
+                std::mem::take(&mut self.buf)
+            } else {
+                std::mem::take(&mut self.buf)
+            };
+            Ok(Some(line))
+        }
+    }
+
+    /// Consumes the `Lines` and returns the underlying reader.
+    pub fn into_reader(self) -> R {
+        self.reader
     }
 }

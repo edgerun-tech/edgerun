@@ -132,3 +132,7 @@ harness = false
 [[test]]
 name = "cursor_test"
 harness = false
+
+[[test]]
+name = "lines_test"
+harness = false
