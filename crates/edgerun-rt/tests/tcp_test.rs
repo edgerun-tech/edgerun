@@ -3,6 +3,7 @@ use edgerun_rt::{
     AsyncTcpListener, AsyncTcpStream, AsyncReadExt, AsyncWriteExt,
     Runtime, spawn,
 };
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,6 +20,8 @@ fn main() {
         test_listener_local_addr();
         test_large_data_transfer();
         test_write_after_shutdown();
+        test_nodelay_option();
+        test_ttl_option();
         println!("All TCP tests passed!");
     });
 }
@@ -346,6 +349,50 @@ fn test_write_after_shutdown() {
     drop(server);
     drop(client);
     println!("  test_write_after_shutdown OK");
+}
+
+fn test_nodelay_option() {
+    println!("  test_nodelay_option...");
+    let port = find_free_port();
+    let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+
+    #[allow(clippy::needless_borrows_for_generic_args)]
+    let listener = Arc::new(AsyncTcpListener::bind(&addr).expect("bind failed"));
+    let srv = listener.clone();
+    let server = spawn(async move {
+        let (stream, _) = srv.accept().await.expect("accept failed");
+        stream.set_nodelay(true).expect("nodelay set failed");
+        let after = stream.nodelay().expect("nodelay get after failed");
+        assert!(after, "nodelay should be true after setting");
+    });
+
+    std::thread::sleep(Duration::from_millis(20));
+    let _client = std::net::TcpStream::connect(addr).expect("client connect");
+    std::thread::sleep(Duration::from_millis(200));
+    drop(server);
+    println!("  test_nodelay_option OK");
+}
+
+fn test_ttl_option() {
+    println!("  test_ttl_option...");
+    let port = find_free_port();
+    let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+
+    #[allow(clippy::needless_borrows_for_generic_args)]
+    let listener = Arc::new(AsyncTcpListener::bind(&addr).expect("bind failed"));
+    let srv = listener.clone();
+    let server = spawn(async move {
+        let (stream, _) = srv.accept().await.expect("accept failed");
+        stream.set_ttl(128).expect("ttl set failed");
+        let after = stream.ttl().expect("ttl get after failed");
+        assert_eq!(after, 128, "ttl should be 128 after setting");
+    });
+
+    std::thread::sleep(Duration::from_millis(20));
+    let _client = std::net::TcpStream::connect(addr).expect("client connect");
+    std::thread::sleep(Duration::from_millis(200));
+    drop(server);
+    println!("  test_ttl_option OK");
 }
 
 fn find_free_port() -> u16 {

@@ -107,6 +107,84 @@ impl AsyncTcpStream {
         }
     }
 
+    /// Returns the value of the `TCP_NODELAY` option on this socket.
+    pub fn nodelay(&self) -> io::Result<bool> {
+        let mut opt: libc::c_int = 0;
+        let mut optlen: libc::socklen_t = std::mem::size_of::<libc::c_int>() as _;
+        let res = unsafe {
+            libc::getsockopt(
+                self.fd,
+                libc::IPPROTO_TCP,
+                libc::TCP_NODELAY,
+                &mut opt as *mut _ as *mut _,
+                &mut optlen,
+            )
+        };
+        if res < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(opt != 0)
+        }
+    }
+
+    /// Sets the value of the `TCP_NODELAY` option on this socket.
+    pub fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
+        let opt: libc::c_int = if nodelay { 1 } else { 0 };
+        let res = unsafe {
+            libc::setsockopt(
+                self.fd,
+                libc::IPPROTO_TCP,
+                libc::TCP_NODELAY,
+                &opt as *const _ as *const _,
+                std::mem::size_of_val(&opt) as libc::socklen_t,
+            )
+        };
+        if res < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Returns the value of the `IP_TTL` option on this socket.
+    pub fn ttl(&self) -> io::Result<u32> {
+        let mut opt: libc::c_int = 0;
+        let mut optlen: libc::socklen_t = std::mem::size_of::<libc::c_int>() as _;
+        let res = unsafe {
+            libc::getsockopt(
+                self.fd,
+                libc::IPPROTO_IP,
+                libc::IP_TTL,
+                &mut opt as *mut _ as *mut _,
+                &mut optlen,
+            )
+        };
+        if res < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(opt as u32)
+        }
+    }
+
+    /// Sets the value of the `IP_TTL` option on this socket.
+    pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
+        let opt = ttl as libc::c_int;
+        let res = unsafe {
+            libc::setsockopt(
+                self.fd,
+                libc::IPPROTO_IP,
+                libc::IP_TTL,
+                &opt as *const _ as *const _,
+                std::mem::size_of_val(&opt) as libc::socklen_t,
+            )
+        };
+        if res < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
     /// Raw fd — do not close it manually.
     pub fn as_raw_fd(&self) -> RawFd {
         self.fd
@@ -611,6 +689,44 @@ impl Future for AcceptFuture<'_> {
 // ===========================================================================
 // Address conversion helper
 // ===========================================================================
+
+fn fd_local_addr(fd: RawFd) -> io::Result<SocketAddr> {
+    unsafe {
+        let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
+            std::mem::MaybeUninit::zeroed();
+        let mut len =
+            std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+        let res = libc::getsockname(
+            fd,
+            storage.as_mut_ptr() as *mut libc::sockaddr,
+            &mut len,
+        );
+        if res < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let storage = storage.assume_init();
+        sockaddr_to_addr(&storage, len)
+    }
+}
+
+fn fd_peer_addr(fd: RawFd) -> io::Result<SocketAddr> {
+    unsafe {
+        let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
+            std::mem::MaybeUninit::zeroed();
+        let mut len =
+            std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+        let res = libc::getpeername(
+            fd,
+            storage.as_mut_ptr() as *mut libc::sockaddr,
+            &mut len,
+        );
+        if res < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let storage = storage.assume_init();
+        sockaddr_to_addr(&storage, len)
+    }
+}
 
 fn sockaddr_to_addr(
     storage: &libc::sockaddr_storage,

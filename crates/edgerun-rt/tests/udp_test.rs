@@ -13,6 +13,7 @@ fn main() {
         test_clone_shares_fd();
         test_large_datagram();
         test_connected_send_recv();
+        test_socket_options();
         println!("All UDP tests passed!");
     });
 }
@@ -214,4 +215,35 @@ fn test_connected_send_recv() {
     drop(sender);
     drop(receiver);
     println!("  test_connected_send_recv OK");
+}
+
+fn test_socket_options() {
+    println!("  test_socket_options...");
+    let port = find_free_port();
+    let addr = format!("127.0.0.1:{}", port);
+    let socket = AsyncUdpSocket::bind(&addr).expect("bind failed");
+
+    // Test broadcast
+    let broadcast = socket.broadcast().expect("broadcast get failed");
+    assert!(!broadcast, "broadcast should be false by default");
+    socket.set_broadcast(true).expect("broadcast set failed");
+    let broadcast = socket.broadcast().expect("broadcast get after failed");
+    assert!(broadcast, "broadcast should be true after setting");
+
+    // Test TTL
+    let ttl = socket.ttl().expect("ttl get failed");
+    assert!(ttl > 0, "ttl should be > 0, got {}", ttl);
+    socket.set_ttl(128).expect("ttl set failed");
+    let ttl = socket.ttl().expect("ttl get after failed");
+    assert_eq!(ttl, 128, "ttl should be 128 after setting");
+
+    // Test peer_addr on unconnected socket
+    let peer = socket.peer_addr();
+    assert!(peer.is_err(), "peer_addr should fail on unconnected socket");
+
+    // Test local_addr
+    let local = socket.local_addr().expect("local_addr failed");
+    assert_eq!(local.port(), port);
+
+    println!("  test_socket_options OK");
 }
