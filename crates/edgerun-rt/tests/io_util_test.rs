@@ -13,6 +13,11 @@ fn main() {
         test_copy_empty_to_sink();
         test_copy_bidirectional_basic();
         test_sink_flush();
+        test_read_to_end_from_empty();
+        test_read_to_string_from_empty();
+        test_take_limited_read();
+        test_chain_two_readers();
+        test_take_methods();
         println!("All io_util tests passed!");
     });
 }
@@ -160,6 +165,85 @@ fn test_sink_flush() {
     std::thread::sleep(Duration::from_millis(50));
     drop(h);
     println!("  test_sink_flush OK");
+}
+
+fn test_read_to_end_from_empty() {
+    println!("  test_read_to_end_from_empty...");
+    let h = edgerun_rt::spawn(async {
+        let mut e = empty();
+        let mut buf = Vec::new();
+        let n = e.read_to_end(&mut buf).await.expect("read_to_end failed");
+        assert_eq!(n, 0);
+        assert!(buf.is_empty());
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    drop(h);
+    println!("  test_read_to_end_from_empty OK");
+}
+
+fn test_read_to_string_from_empty() {
+    println!("  test_read_to_string_from_empty...");
+    let h = edgerun_rt::spawn(async {
+        let mut e = empty();
+        let s = e.read_to_string().await.expect("read_to_string failed");
+        assert_eq!(s, "");
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    drop(h);
+    println!("  test_read_to_string_from_empty OK");
+}
+
+fn test_take_limited_read() {
+    println!("  test_take_limited_read...");
+    let h = edgerun_rt::spawn(async {
+        let mut r = repeat(0x55).take(5);
+        let mut buf = [0u8; 10];
+        let n = r.read(&mut buf).await.expect("read failed");
+        assert_eq!(n, 5);
+        assert_eq!(&buf[..5], &[0x55; 5]);
+        assert_eq!(r.remaining(), 0);
+
+        let n = r.read(&mut buf).await.expect("read failed");
+        assert_eq!(n, 0);
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    drop(h);
+    println!("  test_take_limited_read OK");
+}
+
+fn test_chain_two_readers() {
+    println!("  test_chain_two_readers...");
+    let h = edgerun_rt::spawn(async {
+        let first = repeat(0xAA).take(3);
+        let second = repeat(0xBB).take(2);
+        let mut chained = first.chain(second);
+        let mut buf = [0u8; 10];
+        let mut total = 0;
+        loop {
+            let n = chained.read(&mut buf[total..]).await.expect("read failed");
+            if n == 0 { break; }
+            total += n;
+        }
+        assert_eq!(total, 5);
+        assert_eq!(&buf[..3], &[0xAA; 3]);
+        assert_eq!(&buf[3..5], &[0xBB; 2]);
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    drop(h);
+    println!("  test_chain_two_readers OK");
+}
+
+fn test_take_methods() {
+    println!("  test_take_methods...");
+    let h = edgerun_rt::spawn(async {
+        let t = repeat(0x00).take(42);
+        assert_eq!(t.limit(), 42);
+        assert_eq!(t.remaining(), 42);
+        let _ = t.into_inner();
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    drop(h);
+    println!("  test_take_methods OK");
 }
 
 fn noop_waker() -> std::task::Waker {
