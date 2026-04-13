@@ -678,8 +678,10 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
     let recon_store_tx = store_tx.clone();
     let recon_peers = unreachable_peers;
     let recon_cancel = cancel.child_token();
+    let recon_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> = Arc::clone(&signer);
+    let recon_node_id = node_id;
     edgerun_rt::spawn(async move {
-        run_peer_reconnection(recon_peers, recon_store_tx, recon_cancel).await;
+        run_peer_reconnection(recon_peers, recon_store_tx, recon_cancel, recon_signer, recon_node_id).await;
     });
 
     // --- Periodic maintenance timer ---

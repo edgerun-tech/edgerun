@@ -238,6 +238,20 @@ pub fn run_store_task(
             StoreRequest::MaintenanceTick => {
                 run_periodic_maintenance(&mut store);
             }
+            StoreRequest::PeerStatusUpdate { node_id_hex, status } => {
+                if let Err(e) = store.update_peer_status(&node_id_hex, &status) {
+                    edgerun_log::warn!("failed to update peer status: {}", e);
+                }
+            }
+            StoreRequest::PeerLookup { node_id_hex, reply_tx } => {
+                let addr = store.list_peers().ok()
+                    .and_then(|peers| {
+                        peers.iter()
+                            .find(|(nid, _, _, _, _)| nid == &node_id_hex)
+                            .and_then(|(_, addr, _, _, _)| addr.clone())
+                    });
+                let _ = reply_tx.send(StoreResponse::Ok(addr.unwrap_or_default().into_bytes()));
+            }
         }
 
         // Periodically process the fetch queue (every 10 requests)
