@@ -35,6 +35,7 @@ mod duplex;
 mod buf;
 mod cursor;
 mod signal;
+mod once_cell;
 mod io_util;
 pub mod fs;
 pub mod mpsc;
@@ -84,6 +85,9 @@ pub use cursor::Cursor;
 
 // Unix signal handling.
 pub use signal::{Signal, SignalKind, signal, Recv, SignalStream};
+
+// OnceCell.
+pub use once_cell::{OnceCell, WaitUntilReady};
 
 // UDP.
 pub use udp::AsyncUdpSocket;
