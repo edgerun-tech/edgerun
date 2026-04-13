@@ -124,6 +124,36 @@ pub trait AsyncWriteExt: AsyncWrite + Unpin {
 impl<W: AsyncWrite + Unpin> AsyncWriteExt for W {}
 
 // ===========================================================================
+// Blanket impls for &mut references
+// ===========================================================================
+
+impl<R: AsyncRead + Unpin> AsyncRead for &mut R {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut **self.get_mut()).poll_read(cx, buf)
+    }
+}
+
+impl<W: AsyncWrite + Unpin> AsyncWrite for &mut W {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut **self.get_mut()).poll_write(cx, buf)
+    }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut **self.get_mut()).poll_flush(cx)
+    }
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut **self.get_mut()).poll_shutdown(cx)
+    }
+}
+
+// ===========================================================================
 // Future types
 // ===========================================================================
 

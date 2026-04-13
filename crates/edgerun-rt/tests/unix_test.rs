@@ -308,21 +308,39 @@ fn test_try_clone() {
     let srv = listener.clone();
     let server = spawn(async move {
         let mut stream = srv.accept().await.expect("accept failed");
+        // try_clone creates a new FD (different number) that shares the same
+        // underlying socket. Both FDs can read/write the same connection.
         let mut cloned = stream.try_clone().expect("try_clone failed");
-        assert_ne!(stream.as_raw_fd(), cloned.as_raw_fd(), "clone should have different fd");
+        // Different FD numbers are expected — dup() allocates a new descriptor.
+        assert_ne!(stream.as_raw_fd(), cloned.as_raw_fd(), "try_clone should return a new fd");
 
-        // Write on original, read from clone
-        stream.write_all(b"clone test").await.expect("write failed");
+        // Read from original (client sends data)
         let mut buf = [0u8; 32];
-        let n = cloned.read(&mut buf).await.expect("read from clone failed");
+        let n = stream.read(&mut buf).await.expect("read from original failed");
         assert_eq!(&buf[..n], b"clone test");
+
+        // Write back via cloned handle — proves both FDs share the same socket
+        cloned.write_all(b"cloned echo").await.expect("write via clone failed");
     });
 
     std::thread::sleep(Duration::from_millis(20));
-    let _client = std::os::unix::net::UnixStream::connect(&path).expect("client connect");
+
+    let client_path = path.clone();
+    let client = spawn(async move {
+        let std_stream = std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
+        std_stream.set_nonblocking(true).unwrap();
+        let fd = unsafe { libc::dup(std_stream.as_raw_fd()) };
+        std::mem::forget(std_stream);
+        let mut stream = UnixStream::from_fd(fd);
+        stream.write_all(b"clone test").await.expect("write failed");
+        let mut buf = [0u8; 32];
+        let n = stream.read(&mut buf).await.expect("read failed");
+        assert_eq!(&buf[..n], b"cloned echo");
+    });
 
     std::thread::sleep(Duration::from_millis(200));
     drop(server);
+    drop(client);
     println!("  test_try_clone OK");
 }
 

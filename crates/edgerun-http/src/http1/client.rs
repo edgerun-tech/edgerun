@@ -14,14 +14,13 @@ use std::time::Duration;
 use edgerun_rt::{
     AsyncRead, AsyncWriteExt,
     AsyncTcpStream, AsyncReadHalf,
-    ConnectFuture,
+    ConnectFuture, BufReader,
 };
 
 #[cfg(feature = "tls")]
 use edgerun_tls::async_tls::AsyncTlsStream;
 
 use crate::http1::body::AsyncBodyReader;
-use crate::http1::buf_reader::BufReader;
 use crate::http1::request::Request;
 use crate::http1::response::Response;
 use crate::{Error, HeaderMap, Method, Result, StatusCode};

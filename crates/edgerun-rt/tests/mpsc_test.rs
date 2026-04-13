@@ -93,16 +93,22 @@ fn test_async_send_with_backpressure() {
     // Drop the original sender so only the clones remain
     drop(tx);
 
-    // Drain items one at a time
+    // Drain items one at a time — order is non-deterministic with concurrent senders,
+    // so we collect all values and verify the set matches.
     let rx_handle = spawn(async move {
-        for expected in 1..=3 {
+        let mut received = Vec::new();
+        for _ in 1..=3 {
             let val = rx.recv().await.unwrap();
-            assert_eq!(val, expected);
+            received.push(val);
             println!("    received {}", val);
         }
         // After all sends, channel should close
         let val = rx.recv().await;
         assert_eq!(val, None, "channel should be closed after all senders dropped");
+
+        // Verify we got exactly {1, 2, 3} regardless of order
+        received.sort();
+        assert_eq!(received, vec![1, 2, 3], "should receive all sent values");
     });
 
     std::thread::sleep(Duration::from_millis(300));

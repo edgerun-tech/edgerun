@@ -1,12 +1,16 @@
-//! Per-connection session handling — command loop, state machine, SASL AUTH, enforcement.
+//! Per-connection session handling — command loop, state machine, SASL AUTH, STARTTLS upgrade.
 
 use std::io;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use edgerun_rt::{AsyncTcpStream, AsyncWriteExt, CancellationToken, Mutex};
+use edgerun_rt::{
+    AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, CancellationToken,
+};
 
-use crate::protocol::SmtpReader;
+use crate::protocol::read_smtp_line;
 use crate::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::types::command::{extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret};
 use crate::types::{
@@ -15,7 +19,7 @@ use crate::types::{
 };
 
 #[cfg(feature = "tls")]
-use edgerun_tls::CertificateAndKey;
+use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
 
 // ===========================================================================
 // Server Configuration
@@ -46,6 +50,104 @@ impl Default for SmtpServerConfig {
         }
     }
 }
+
+// ===========================================================================
+// Transport enum — unified wrapper for plain TCP and TLS
+// ===========================================================================
+
+/// Wraps either a plain TCP connection or a TLS stream so the SMTP
+/// session loop can read/write transparently and upgrade mid-session.
+pub enum SmtpTransport {
+    Plain(AsyncTcpStream),
+    #[cfg(feature = "tls")]
+    Tls(AsyncTlsServerStream<AsyncTcpStream>),
+}
+
+impl SmtpTransport {
+    /// Check whether this transport is already using TLS.
+    pub fn is_tls(&self) -> bool {
+        match self {
+            SmtpTransport::Plain(_) => false,
+            #[cfg(feature = "tls")]
+            SmtpTransport::Tls(_) => true,
+        }
+    }
+
+    /// Upgrade a plain transport to TLS in place.
+    ///
+    /// Consumes `self` and returns a new `SmtpTransport::Tls` after the
+    /// handshake completes.
+    #[cfg(feature = "tls")]
+    pub async fn upgrade_tls(
+        self,
+        cert_and_key: &CertificateAndKey,
+    ) -> io::Result<SmtpTransport> {
+        match self {
+            SmtpTransport::Tls(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "already using TLS",
+                ));
+            }
+            SmtpTransport::Plain(stream) => {
+                let fd = stream.into_fd();
+                let tcp = AsyncTcpStream::from_raw(fd);
+                let mut tls_stream = AsyncTlsServerStream::new(tcp);
+                tls_stream
+                    .handshake(cert_and_key)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
+                Ok(SmtpTransport::Tls(tls_stream))
+            }
+        }
+    }
+}
+
+impl AsyncRead for SmtpTransport {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        match &mut *self {
+            SmtpTransport::Plain(s) => Pin::new(s).poll_read(cx, buf),
+            #[cfg(feature = "tls")]
+            SmtpTransport::Tls(s) => Pin::new(s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for SmtpTransport {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match &mut *self {
+            SmtpTransport::Plain(s) => Pin::new(s).poll_write(cx, buf),
+            #[cfg(feature = "tls")]
+            SmtpTransport::Tls(s) => Pin::new(s).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match &mut *self {
+            SmtpTransport::Plain(s) => Pin::new(s).poll_flush(cx),
+            #[cfg(feature = "tls")]
+            SmtpTransport::Tls(s) => Pin::new(s).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match &mut *self {
+            SmtpTransport::Plain(s) => Pin::new(s).poll_shutdown(cx),
+            #[cfg(feature = "tls")]
+            SmtpTransport::Tls(s) => Pin::new(s).poll_shutdown(cx),
+        }
+    }
+}
+
+impl Unpin for SmtpTransport {}
 
 // ===========================================================================
 // SMTP Server
@@ -108,6 +210,7 @@ impl SmtpServer {
 enum ControlFlow {
     Continue,
     Quit,
+    StartTls,
 }
 
 async fn handle_connection(
@@ -117,18 +220,21 @@ async fn handle_connection(
     config: SmtpServerConfig,
     _shutdown: CancellationToken,
 ) -> io::Result<()> {
-    let (reader_raw, writer_raw) = stream.split();
-    let writer = Arc::new(Mutex::new(writer_raw));
+    // Unwrap the Arc — we need the owned AsyncTcpStream for the transport.
+    // The accept loop only has one reference here, so this succeeds.
+    let stream = match Arc::try_unwrap(stream) {
+        Ok(s) => s,
+        Err(_) => panic!("handle_connection called with non-exclusive Arc reference"),
+    };
+
+    let mut transport = SmtpTransport::Plain(stream);
 
     let greeting = SmtpResponse::service_ready(&config.domain);
-    send_response(&writer, &greeting).await?;
-
-    let mut buf_reader = SmtpReader::new(reader_raw);
+    send_response(&mut transport, &greeting).await?;
 
     let mut state = SmtpState::Connected;
     let mut envelope = MailEnvelope::new(String::new());
     let mut ehlo_domain: Option<String> = None;
-    let mut tls_active = false;
     let mut command_count: usize = 0;
     let mut last_activity = std::time::Instant::now();
 
@@ -146,7 +252,7 @@ async fn handle_connection(
                 peer, elapsed, config.limits.idle_timeout_secs
             );
             send_response(
-                &writer,
+                &mut transport,
                 &SmtpResponse::new(SmtpResponseCode::CLOSING, "Idle timeout"),
             )
             .await?;
@@ -156,11 +262,11 @@ async fn handle_connection(
         // Command count limit
         if command_count >= config.limits.max_commands {
             edgerun_log::info!("edgerun-smtp: {} exceeded max commands", peer);
-            send_response(&writer, &SmtpResponse::bad_sequence("Too many commands")).await?;
+            send_response(&mut transport, &SmtpResponse::bad_sequence("Too many commands")).await?;
             break;
         }
 
-        let line = match buf_reader.read_line().await? {
+        let line = match read_smtp_line(&mut transport).await? {
             Some(l) => l,
             None => {
                 edgerun_log::info!("edgerun-smtp: {} disconnected", peer);
@@ -173,7 +279,7 @@ async fn handle_connection(
         // Line length enforcement
         if line.len() > config.limits.max_line_length {
             send_response(
-                &writer,
+                &mut transport,
                 &SmtpResponse::line_too_long(line.len(), config.limits.max_line_length),
             )
             .await?;
@@ -185,17 +291,14 @@ async fn handle_connection(
             in_auth_exchange = handle_auth_response(
                 &line,
                 &handler,
-                &writer,
+                &mut transport,
                 &mut authenticated,
                 &mut auth_identity,
             )
             .await?;
             if in_auth_exchange {
-                // Still in exchange — don't parse as command
                 continue;
             }
-            // Auth done — fall through to normal command processing
-            // but skip this line (it was the final response)
             continue;
         }
 
@@ -212,7 +315,7 @@ async fn handle_connection(
                             envelope.from, envelope.recipients,
                         );
                         send_response(
-                            &writer,
+                            &mut transport,
                             &SmtpResponse::ok("OK: queued")
                                 .with_enhanced(EnhancedStatusCode::QUEUED),
                         )
@@ -221,14 +324,13 @@ async fn handle_connection(
                     Err(e) => {
                         edgerun_log::error!("edgerun-smtp: delivery failed: {}", e);
                         send_response(
-                            &writer,
+                            &mut transport,
                             &SmtpResponse::transient_failure("Delivery failed"),
                         )
                         .await?;
                     }
                 }
                 envelope.reset();
-                // Preserve auth identity across reset
                 envelope.authenticated_identity = auth_identity.clone();
             } else {
                 let data_line = if line.starts_with("..") {
@@ -242,7 +344,7 @@ async fn handle_connection(
                 if config.limits.max_message_size > 0
                     && envelope.data.len() > config.limits.max_message_size
                 {
-                    send_response(&writer, &SmtpResponse::message_too_large()).await?;
+                    send_response(&mut transport, &SmtpResponse::message_too_large()).await?;
                     state = SmtpState::Ready;
                     envelope.reset();
                     envelope.authenticated_identity = auth_identity.clone();
@@ -257,7 +359,7 @@ async fn handle_connection(
         let cmd = match SmtpCommand::parse(&line) {
             Ok(c) => c,
             Err(e) => {
-                send_response(&writer, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                send_response(&mut transport, &SmtpResponse::syntax_error(&e.to_string())).await?;
                 continue;
             }
         };
@@ -267,20 +369,36 @@ async fn handle_connection(
             &mut state,
             &mut envelope,
             &mut ehlo_domain,
-            &mut tls_active,
             &mut in_auth_exchange,
             &mut authenticated,
             &mut auth_identity,
             &handler,
             &config,
-            &writer,
+            &mut transport,
         )
         .await
         {
             Ok(ControlFlow::Quit) => break,
             Ok(ControlFlow::Continue) => {}
+            Ok(ControlFlow::StartTls) => {
+                #[cfg(feature = "tls")]
+                {
+                    if let Some(cert) = &config.tls_cert {
+                        match transport.upgrade_tls(cert).await {
+                            Ok(new_transport) => {
+                                transport = new_transport;
+                                edgerun_log::info!("edgerun-smtp: STARTTLS handshake complete");
+                            }
+                            Err(e) => {
+                                edgerun_log::error!("edgerun-smtp: STARTTLS handshake failed: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
             Err(e) => {
-                send_response(&writer, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                send_response(&mut transport, &SmtpResponse::syntax_error(&e.to_string())).await?;
             }
         }
     }
@@ -295,12 +413,10 @@ async fn handle_connection(
 async fn handle_auth_response(
     line: &str,
     handler: &Arc<dyn MailHandler>,
-    writer: &Arc<Mutex<edgerun_rt::AsyncWriteHalf>>,
+    transport: &mut SmtpTransport,
     authenticated: &mut bool,
     auth_identity: &mut Option<String>,
 ) -> io::Result<bool> {
-    // line is the base64 response from the client
-    // Try to decode and authenticate
     match base64_decode(line) {
         Ok(credentials) => {
             match handler.authenticate("PLAIN", &credentials) {
@@ -308,16 +424,12 @@ async fn handle_auth_response(
                     *authenticated = true;
                     *auth_identity = Some(identity.clone());
                     edgerun_log::info!("edgerun-smtp: authenticated as {}", identity);
-                    send_response(
-                        writer,
-                        &SmtpResponse::auth_success(&identity),
-                    )
-                    .await?;
-                    Ok(false) // exchange complete
+                    send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
+                    Ok(false)
                 }
                 AuthResult::Failed => {
                     send_response(
-                        writer,
+                        transport,
                         &SmtpResponse::new(
                             SmtpResponseCode::AUTHENTICATION_FAILED,
                             "Authentication failed",
@@ -327,14 +439,14 @@ async fn handle_auth_response(
                     Ok(false)
                 }
                 AuthResult::Unsupported => {
-                    send_response(writer, &SmtpResponse::auth_required()).await?;
+                    send_response(transport, &SmtpResponse::auth_required()).await?;
                     Ok(false)
                 }
             }
         }
         Err(e) => {
             send_response(
-                writer,
+                transport,
                 &SmtpResponse::syntax_error(&format!("Invalid AUTH response: {}", e)),
             )
             .await?;
@@ -343,16 +455,12 @@ async fn handle_auth_response(
     }
 }
 
-/// Decode base64 credentials from an AUTH exchange.
 fn base64_decode(encoded: &str) -> io::Result<AuthCredentials> {
-    // Use the standard library's base64-like approach or a simple decoder.
-    // Since we can't add external deps, implement a minimal base64 decoder.
     let decoded = decode_base64(encoded)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid base64"))?;
     AuthCredentials::from_plain(&decoded)
 }
 
-/// Minimal base64 decoder (RFC 4648, standard alphabet).
 fn decode_base64(input: &str) -> Option<Vec<u8>> {
     const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -367,7 +475,7 @@ fn decode_base64(input: &str) -> Option<Vec<u8>> {
 
     for &byte in input.as_bytes() {
         if byte == b'=' {
-            break; // padding
+            break;
         }
         let val = TABLE.iter().position(|&b| b == byte)? as u32;
         buf = (buf << 6) | val;
@@ -386,19 +494,17 @@ fn decode_base64(input: &str) -> Option<Vec<u8>> {
 // Command Dispatcher
 // ===========================================================================
 
-#[allow(clippy::too_many_arguments)]
 async fn handle_command(
     cmd: SmtpCommand,
     state: &mut SmtpState,
     envelope: &mut MailEnvelope,
     ehlo_domain: &mut Option<String>,
-    tls_active: &mut bool,
     in_auth_exchange: &mut bool,
     authenticated: &mut bool,
     auth_identity: &mut Option<String>,
     handler: &Arc<dyn MailHandler>,
     config: &SmtpServerConfig,
-    writer: &Arc<Mutex<edgerun_rt::AsyncWriteHalf>>,
+    transport: &mut SmtpTransport,
 ) -> io::Result<ControlFlow> {
     match cmd {
         SmtpCommand::Ehlo(domain) => {
@@ -410,40 +516,39 @@ async fn handle_command(
                 lines.push(ext.to_string());
             }
 
-            // AUTH extension (only if not already authenticated and mechanisms available)
+            // AUTH extension (only if not already authenticated)
             if !*authenticated && !config.auth_mechanisms.is_empty() {
                 let mech = config.auth_mechanisms.join(" ");
                 lines.push(format!("AUTH {}", mech));
             }
 
             #[cfg(feature = "tls")]
-            if !*tls_active && config.tls_cert.is_some() {
+            if !transport.is_tls() && config.tls_cert.is_some() {
                 lines.push("STARTTLS".to_string());
             }
 
-            send_multiline_response(writer, SmtpResponseCode::OK, lines).await?;
+            send_multiline_response(transport, SmtpResponseCode::OK, lines).await?;
         }
 
         SmtpCommand::Helo(domain) => {
             *ehlo_domain = Some(domain.clone());
             *state = SmtpState::Ready;
-            send_response(writer, &SmtpResponse::ok(&format!("Hello {}", domain))).await?;
+            send_response(transport, &SmtpResponse::ok(&format!("Hello {}", domain))).await?;
         }
 
         SmtpCommand::MailFrom { address, parameters } => {
             if *state != SmtpState::Ready && *state != SmtpState::MailSet {
-                send_response(writer, &SmtpResponse::bad_sequence("MAIL FROM not allowed in current state")).await?;
+                send_response(transport, &SmtpResponse::bad_sequence("MAIL FROM not allowed in current state")).await?;
                 return Ok(ControlFlow::Continue);
             }
 
-            // Require AUTH if configured
             if handler.auth_required() && !*authenticated {
-                send_response(writer, &SmtpResponse::auth_required()).await?;
+                send_response(transport, &SmtpResponse::auth_required()).await?;
                 return Ok(ControlFlow::Continue);
             }
 
             if let Err(_e) = handler.validate_sender(&address) {
-                send_response(writer, &SmtpResponse::mailbox_not_found(&address)).await?;
+                send_response(transport, &SmtpResponse::mailbox_not_found(&address)).await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -453,7 +558,7 @@ async fn handle_command(
                         if let Some(s) = value {
                             if let Ok(size) = s.parse::<usize>() {
                                 if size > config.limits.max_message_size {
-                                    send_response(writer, &SmtpResponse::message_too_large()).await?;
+                                    send_response(transport, &SmtpResponse::message_too_large()).await?;
                                     return Ok(ControlFlow::Continue);
                                 }
                             }
@@ -469,7 +574,7 @@ async fn handle_command(
             envelope.authenticated_identity = auth_identity.clone();
             *state = SmtpState::MailSet;
             send_response(
-                writer,
+                transport,
                 &SmtpResponse::ok("Sender OK").with_enhanced(EnhancedStatusCode::MAIL_FROM_OK),
             )
             .await?;
@@ -477,13 +582,13 @@ async fn handle_command(
 
         SmtpCommand::RcptTo { address, parameters } => {
             if *state != SmtpState::MailSet && *state != SmtpState::RcptSet {
-                send_response(writer, &SmtpResponse::bad_sequence("RCPT TO not allowed in current state")).await?;
+                send_response(transport, &SmtpResponse::bad_sequence("RCPT TO not allowed in current state")).await?;
                 return Ok(ControlFlow::Continue);
             }
 
             if envelope.recipient_count() >= config.limits.max_recipients {
                 send_response(
-                    writer,
+                    transport,
                     &SmtpResponse::too_many_recipients(envelope.recipient_count() + 1),
                 )
                 .await?;
@@ -491,7 +596,7 @@ async fn handle_command(
             }
 
             if let Err(_e) = handler.validate_recipient(&address) {
-                send_response(writer, &SmtpResponse::mailbox_not_found(&address)).await?;
+                send_response(transport, &SmtpResponse::mailbox_not_found(&address)).await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -501,7 +606,7 @@ async fn handle_command(
             envelope.add_recipient(address, parameters, notify, orcpt);
             *state = SmtpState::RcptSet;
             send_response(
-                writer,
+                transport,
                 &SmtpResponse::ok("Recipient OK").with_enhanced(EnhancedStatusCode::RCPT_TO_OK),
             )
             .await?;
@@ -509,83 +614,81 @@ async fn handle_command(
 
         SmtpCommand::Data => {
             if *state != SmtpState::RcptSet {
-                send_response(writer, &SmtpResponse::bad_sequence("No valid recipients")).await?;
+                send_response(transport, &SmtpResponse::bad_sequence("No valid recipients")).await?;
                 return Ok(ControlFlow::Continue);
             }
             *state = SmtpState::Data;
-            send_response(writer, &SmtpResponse::start_mail_input()).await?;
+            send_response(transport, &SmtpResponse::start_mail_input()).await?;
         }
 
         SmtpCommand::Rset => {
             envelope.reset();
             envelope.authenticated_identity = auth_identity.clone();
             *state = SmtpState::Ready;
-            send_response(writer, &SmtpResponse::ok("OK")).await?;
+            send_response(transport, &SmtpResponse::ok("OK")).await?;
         }
 
         SmtpCommand::Noop => {
-            send_response(writer, &SmtpResponse::ok("OK")).await?;
+            send_response(transport, &SmtpResponse::ok("OK")).await?;
         }
 
         SmtpCommand::Quit => {
             *state = SmtpState::Quit;
-            send_response(writer, &SmtpResponse::closing()).await?;
+            send_response(transport, &SmtpResponse::closing()).await?;
             return Ok(ControlFlow::Quit);
         }
 
         SmtpCommand::Starttls => {
             #[cfg(feature = "tls")]
             {
-                if *tls_active {
-                    send_response(writer, &SmtpResponse::bad_sequence("TLS already active")).await?;
+                if transport.is_tls() {
+                    send_response(transport, &SmtpResponse::bad_sequence("TLS already active")).await?;
                     return Ok(ControlFlow::Continue);
                 }
                 if config.tls_cert.is_none() {
-                    send_response(writer, &SmtpResponse::command_not_implemented("STARTTLS")).await?;
+                    send_response(transport, &SmtpResponse::command_not_implemented("STARTTLS")).await?;
                     return Ok(ControlFlow::Continue);
                 }
-                send_response(writer, &SmtpResponse::ok("Ready to start TLS")).await?;
-                *tls_active = true;
-                edgerun_log::info!("edgerun-smtp: STARTTLS acknowledged");
+                send_response(transport, &SmtpResponse::ok("Ready to start TLS")).await?;
+                edgerun_log::info!("edgerun-smtp: STARTTLS acknowledged, upgrading...");
+                return Ok(ControlFlow::StartTls);
             }
             #[cfg(not(feature = "tls"))]
             {
-                send_response(writer, &SmtpResponse::command_not_implemented("STARTTLS")).await?;
+                send_response(transport, &SmtpResponse::command_not_implemented("STARTTLS")).await?;
             }
         }
 
         SmtpCommand::Vrfy(_) => {
-            send_response(writer, &SmtpResponse::vrfy_disabled()).await?;
+            send_response(transport, &SmtpResponse::vrfy_disabled()).await?;
         }
 
         SmtpCommand::Expn(_) => {
-            send_response(writer, &SmtpResponse::expn_disabled()).await?;
+            send_response(transport, &SmtpResponse::expn_disabled()).await?;
         }
 
         SmtpCommand::Help(_topic) => {
-            send_response(writer, &SmtpResponse::help_text(&config.domain)).await?;
+            send_response(transport, &SmtpResponse::help_text(&config.domain)).await?;
         }
 
         SmtpCommand::Auth { mechanism, initial_response } => {
             if *authenticated {
-                send_response(writer, &SmtpResponse::bad_sequence("Already authenticated")).await?;
+                send_response(transport, &SmtpResponse::bad_sequence("Already authenticated")).await?;
                 return Ok(ControlFlow::Continue);
             }
 
-            // Check if mechanism is supported
             let supported = config
                 .auth_mechanisms
                 .iter()
                 .any(|m| m.eq_ignore_ascii_case(&mechanism));
             if !supported {
-                send_response(writer, &SmtpResponse::auth_mechanism_unknown(&mechanism)).await?;
+                send_response(transport, &SmtpResponse::auth_mechanism_unknown(&mechanism)).await?;
                 return Ok(ControlFlow::Continue);
             }
 
             match mechanism.to_uppercase().as_str() {
                 "PLAIN" => {
                     if let Some(response_b64) = initial_response {
-                        // Inline authentication — response provided on same line
                         match base64_decode(&response_b64) {
                             Ok(credentials) => {
                                 match handler.authenticate("PLAIN", &credentials) {
@@ -593,11 +696,11 @@ async fn handle_command(
                                         *authenticated = true;
                                         *auth_identity = Some(identity.clone());
                                         edgerun_log::info!("edgerun-smtp: authenticated as {}", identity);
-                                        send_response(writer, &SmtpResponse::auth_success(&identity)).await?;
+                                        send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
                                     }
                                     AuthResult::Failed => {
                                         send_response(
-                                            writer,
+                                            transport,
                                             &SmtpResponse::new(
                                                 SmtpResponseCode::AUTHENTICATION_FAILED,
                                                 "Authentication failed",
@@ -606,55 +709,45 @@ async fn handle_command(
                                         .await?;
                                     }
                                     AuthResult::Unsupported => {
-                                        send_response(writer, &SmtpResponse::auth_required()).await?;
+                                        send_response(transport, &SmtpResponse::auth_required()).await?;
                                     }
                                 }
                             }
                             Err(e) => {
                                 send_response(
-                                    writer,
+                                    transport,
                                     &SmtpResponse::syntax_error(&format!("Invalid base64: {}", e)),
                                 )
                                 .await?;
                             }
                         }
                     } else {
-                        // Multi-step — send challenge
-                        send_response(writer, &SmtpResponse::auth_continue("")).await?;
+                        send_response(transport, &SmtpResponse::auth_continue("")).await?;
                         *in_auth_exchange = true;
                     }
                 }
                 "LOGIN" => {
-                    if initial_response.is_some() {
-                        // Inline: LOGIN <base64_username> — expect password next
-                        send_response(writer, &SmtpResponse::auth_continue("VXNlcm5hbWU6")).await?; // "Username:"
-                        *in_auth_exchange = true;
-                    } else {
-                        send_response(writer, &SmtpResponse::auth_continue("VXNlcm5hbWU6")).await?; // "Username:"
-                        *in_auth_exchange = true;
-                    }
+                    send_response(transport, &SmtpResponse::auth_continue("VXNlcm5hbWU6")).await?;
+                    *in_auth_exchange = true;
                 }
                 _ => {
-                    send_response(writer, &SmtpResponse::auth_mechanism_unknown(&mechanism)).await?;
+                    send_response(transport, &SmtpResponse::auth_mechanism_unknown(&mechanism)).await?;
                 }
             }
         }
 
         SmtpCommand::AuthResponse(response_b64) => {
-            // Handle during LOGIN username challenge
-            // The handler will process this as a PLAIN credential since we don't
-            // distinguish LOGIN state here
             match base64_decode(&response_b64) {
                 Ok(credentials) => {
                     match handler.authenticate("PLAIN", &credentials) {
                         AuthResult::Authenticated(identity) => {
                             *authenticated = true;
                             *auth_identity = Some(identity.clone());
-                            send_response(writer, &SmtpResponse::auth_success(&identity)).await?;
+                            send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
                         }
                         AuthResult::Failed => {
                             send_response(
-                                writer,
+                                transport,
                                 &SmtpResponse::new(
                                     SmtpResponseCode::AUTHENTICATION_FAILED,
                                     "Authentication failed",
@@ -663,13 +756,13 @@ async fn handle_command(
                             .await?;
                         }
                         AuthResult::Unsupported => {
-                            send_response(writer, &SmtpResponse::auth_required()).await?;
+                            send_response(transport, &SmtpResponse::auth_required()).await?;
                         }
                     }
                 }
                 Err(_) => {
                     send_response(
-                        writer,
+                        transport,
                         &SmtpResponse::syntax_error("Invalid base64 in AUTH response"),
                     )
                     .await?;
@@ -685,22 +778,18 @@ async fn handle_command(
 // Response Helpers
 // ===========================================================================
 
-async fn send_response(
-    writer: &Arc<Mutex<edgerun_rt::AsyncWriteHalf>>,
-    response: &SmtpResponse,
-) -> io::Result<()> {
+async fn send_response(transport: &mut SmtpTransport, response: &SmtpResponse) -> io::Result<()> {
     let formatted = response.format();
-    let mut w = writer.lock().await;
-    w.write_all(formatted.as_bytes()).await?;
-    w.flush().await?;
+    transport.write_all(formatted.as_bytes()).await?;
+    transport.flush().await?;
     Ok(())
 }
 
 async fn send_multiline_response(
-    writer: &Arc<Mutex<edgerun_rt::AsyncWriteHalf>>,
+    transport: &mut SmtpTransport,
     code: SmtpResponseCode,
     lines: Vec<String>,
 ) -> io::Result<()> {
     let response = SmtpResponse::multiline(code, lines);
-    send_response(writer, &response).await
+    send_response(transport, &response).await
 }

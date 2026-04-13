@@ -66,7 +66,6 @@ impl CertRef {
     }
 }
 
-use crate::http1::buf_reader::BufReader;
 use crate::http1::connection::{determine_connection, ConnectionState};
 use crate::http1::handler::Handler;
 use crate::http1::request::Request;
@@ -74,6 +73,7 @@ use crate::http1::response::Response;
 use crate::http1::upgrade::is_websocket_upgrade;
 use crate::http1::version::HttpVersion;
 use crate::{HeaderMap, Method, StatusCode};
+use edgerun_rt::BufReader;
 
 /// An HTTP/1.1 server.
 ///

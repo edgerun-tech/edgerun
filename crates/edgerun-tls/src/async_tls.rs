@@ -75,6 +75,11 @@ impl<S> AsyncTlsStream<S> {
     pub fn is_handshake_complete(&self) -> bool {
         self.handshake_done
     }
+
+    /// Consume the TLS stream and return the underlying transport stream.
+    pub fn into_inner(self) -> S {
+        self.stream
+    }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
@@ -333,130 +338,35 @@ impl<S> AsyncTlsServerStream<S> {
     pub fn is_handshake_complete(&self) -> bool {
         self.handshake_done
     }
+
+    /// Create a TLS server stream wrapper without performing the handshake.
+    /// Use [`Self::handshake()`] to perform the TLS handshake afterwards.
+    ///
+    /// This is needed for STARTTLS where plaintext bytes are read before
+    /// upgrading to TLS on the same connection.
+    pub fn new(stream: S) -> Self {
+        Self {
+            stream,
+            write_cipher: RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap(),
+            read_cipher: RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap(),
+            handshake_done: false,
+            pending_data: Vec::new(),
+            pending_offset: 0,
+            cipher_suite: CipherSuite::TLS_AES_128_GCM_SHA256,
+        }
+    }
+
+    /// Consume the TLS server stream and return the underlying transport stream.
+    pub fn into_inner(self) -> S {
+        self.stream
+    }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     /// Accept an async TLS 1.3 handshake from a connected stream.
     pub async fn accept(mut stream: S, cert_and_key: &CertificateAndKey) -> Result<Self> {
-        let _cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
-        let server_random = generate_random();
-        let _write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
-        let _read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
-
-        // 1. Read ClientHello
-        let (ct, _ver, len) = async_read_record_header(&mut stream).await?;
-        if ct != 22 {
-            return Err(TlsError::HandshakeFailure(format!(
-                "Expected handshake record, got content_type={ct}",
-            )));
-        }
-        let fragment = async_read_record_fragment(&mut stream, len).await?;
-        let ch = ClientHello::parse(&fragment)?;
-
-        if !ch.supported_versions.iter().any(|&v| v == 0x0304) {
-            return Err(TlsError::HandshakeFailure("Client does not support TLS 1.3".into()));
-        }
-
-        let common_suite = ch.cipher_suites.iter()
-            .find(|cs| matches!(cs, CipherSuite::TLS_AES_128_GCM_SHA256))
-            .or_else(|| ch.cipher_suites.iter()
-                .find(|cs| matches!(cs, CipherSuite::TLS_AES_256_GCM_SHA384)))
-            .cloned();
-
-        let negotiated_suite = common_suite.ok_or_else(||
-            TlsError::HandshakeFailure("No common cipher suite".into())
-        )?;
-
-        let _client_random = ch.random;
-
-        let (selected_group, client_key_share) = if let Some((group, key)) = ch.all_key_shares.first() {
-            let keg = match group {
-                crate::cipher::NamedGroup::X25519 => KeyExchangeGroup::X25519,
-                _ => KeyExchangeGroup::SECP256R1,
-            };
-            (keg, key.clone())
-        } else if let Some(ks) = ch.client_key_share {
-            let keg = match ch.client_key_share_group {
-                Some(crate::cipher::NamedGroup::X25519) => KeyExchangeGroup::X25519,
-                _ => KeyExchangeGroup::SECP256R1,
-            };
-            (keg, ks)
-        } else {
-            return Err(TlsError::HandshakeFailure("No key_share in ClientHello".into()));
-        };
-
-        let client_session_id = ch.session_id;
-        let _ch_msg = fragment.clone();
-        let mut transcript = fragment;
-
-        // 2. Send ServerHello
-        let key_pair = EcdhKeyPair::generate(selected_group)
-            .map_err(|e| TlsError::HandshakeFailure(e))?;
-        let public_key = key_pair.public_key_bytes();
-        let named_group = match selected_group {
-            KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
-            KeyExchangeGroup::X25519 => NamedGroup::X25519,
-        };
-        let sh_msg = build_server_hello(
-            server_random,
-            &client_session_id,
-            negotiated_suite,
-            &public_key,
-            named_group,
-        );
-        let _sh_hash = Hasher::Sha256.hash(&sh_msg);
-        transcript.extend_from_slice(&sh_msg);
-
-        let record = crate::record::TlsRecord {
-            content_type: 22,
-            version: 0x0303,
-            fragment: sh_msg,
-        };
-        async_write_all(&mut stream, &record.to_bytes()).await?;
-        async_flush(&mut stream).await?;
-
-        // 3. Derive handshake keys
-        let shared_secret = key_pair.exchange(&client_key_share)?;
-        let hash = Hasher::Sha256;
-        let transcript_hash = hash.hash(&transcript);
-
-        let mut ks = Tls13KeySchedule::new(hash.clone());
-        ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
-
-        let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
-        let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
-
-        let server_hs_keys = server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
-        let client_hs_keys = client_write_keys(&client_hs_secret, negotiated_suite.key_len(), 12, &hash);
-
-        let mut _write_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
-        let mut _read_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
-
-        let handshake_transcript_hash = transcript_hash;
-
-        // 4. Send encrypted handshake messages
-        async_server_send_encrypted_handshake(
-            &mut stream, &mut _write_cipher, &mut ks, &mut transcript, &hash,
-            &handshake_transcript_hash, &cert_and_key.cert_der, &*cert_and_key.signing_key,
-        ).await?;
-
-        let app_transcript_hash = hash.hash(&transcript);
-
-        // 5. Read client Finished
-        async_server_read_client_finished(
-            &mut stream, &mut _read_cipher, &ks, &mut transcript, &hash, &handshake_transcript_hash,
-        ).await?;
-
-        // 6. Derive application keys
-        ks.advance_to_master();
-        let server_app = ks.server_app_traffic_secret(&app_transcript_hash);
-        let client_app = ks.client_app_traffic_secret(&app_transcript_hash);
-
-        let server_app_keys = server_app_write_keys(&server_app, negotiated_suite.key_len(), 12, &hash);
-        let client_app_keys = client_app_write_keys(&client_app, negotiated_suite.key_len(), 12, &hash);
-
-        let write_cipher = RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv)?;
-        let read_cipher = RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
+        let (write_cipher, read_cipher, cipher_suite) =
+            server_handshake_impl(&mut stream, cert_and_key).await?;
 
         Ok(AsyncTlsServerStream {
             stream,
@@ -465,8 +375,50 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             handshake_done: true,
             pending_data: Vec::new(),
             pending_offset: 0,
-            cipher_suite: negotiated_suite,
+            cipher_suite,
         })
+    }
+
+    /// Perform the TLS 1.3 server handshake on the already-wrapped stream.
+    ///
+    /// This enables STARTTLS-style upgrades: read plaintext bytes from a
+    /// TCP connection, negotiate the upgrade, then call this method to
+    /// complete the TLS handshake on the same fd.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut tls_stream = AsyncTlsServerStream::new(tcp_stream);
+    /// // ... read plaintext: EHLO, STARTTLS ...
+    /// // ... send "220 Ready to start TLS" ...
+    /// tls_stream.handshake(&cert).await?;
+    /// // ... continue reading encrypted SMTP commands ...
+    /// ```
+    pub async fn handshake(&mut self, cert_and_key: &CertificateAndKey) -> Result<()> {
+        // The handshake logic is identical to accept(), but operates on self.stream
+        // instead of taking ownership. We use std::mem::take to temporarily
+        // replace self.stream with a placeholder, run the handshake, then
+        // put the result back.
+        //
+        // For simplicity, we just call accept() via a helper that takes &mut stream.
+        // But accept() takes ownership, so we need to inline the handshake logic here.
+        //
+        // Instead, we'll use a simpler approach: use Pin::new_unchecked to get
+        // mutable access to the stream field and run the same accept() steps inline.
+        //
+        // The cleanest approach: factor out the accept logic into a shared async fn
+        // that takes &mut S. But that would require refactoring accept() itself.
+        //
+        // For now, we take the pragmatic route: since S: AsyncRead + AsyncWrite + Unpin,
+        // we can call Pin::new on the stream and use the existing helper functions.
+
+        server_handshake_impl(&mut self.stream, cert_and_key)
+            .await
+            .map(|(write_cipher, read_cipher, cipher_suite)| {
+                self.write_cipher = write_cipher;
+                self.read_cipher = read_cipher;
+                self.handshake_done = true;
+                self.cipher_suite = cipher_suite;
+            })
     }
 
     /// Read decrypted application data.
@@ -985,6 +937,127 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
         break;
     }
     Ok(())
+}
+
+/// Server-side TLS handshake on an existing `&mut S`.
+///
+/// This is the extracted handshake logic from `accept()`, reused by
+/// `AsyncTlsServerStream::handshake()` for STARTTLS upgrades.
+async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+    cert_and_key: &CertificateAndKey,
+) -> Result<(RecordCipher, RecordCipher, CipherSuite)> {
+    // 1. Read ClientHello
+    let (ct, _ver, len) = async_read_record_header(stream).await?;
+    if ct != 22 {
+        return Err(TlsError::HandshakeFailure(format!(
+            "Expected handshake record, got content_type={ct}",
+        )));
+    }
+    let fragment = async_read_record_fragment(stream, len).await?;
+    let ch = ClientHello::parse(&fragment)?;
+
+    if !ch.supported_versions.iter().any(|&v| v == 0x0304) {
+        return Err(TlsError::HandshakeFailure("Client does not support TLS 1.3".into()));
+    }
+
+    let negotiated_suite = ch.cipher_suites.iter()
+        .find(|cs| matches!(cs, CipherSuite::TLS_AES_128_GCM_SHA256))
+        .or_else(|| ch.cipher_suites.iter()
+            .find(|cs| matches!(cs, CipherSuite::TLS_AES_256_GCM_SHA384)))
+        .cloned()
+        .ok_or_else(|| TlsError::HandshakeFailure("No common cipher suite".into()))?;
+
+    let server_random = generate_random();
+
+    let (selected_group, client_key_share) = if let Some((group, key)) = ch.all_key_shares.first() {
+        let keg = match group {
+            crate::cipher::NamedGroup::X25519 => KeyExchangeGroup::X25519,
+            _ => KeyExchangeGroup::SECP256R1,
+        };
+        (keg, key.clone())
+    } else if let Some(ks) = ch.client_key_share {
+        let keg = match ch.client_key_share_group {
+            Some(crate::cipher::NamedGroup::X25519) => KeyExchangeGroup::X25519,
+            _ => KeyExchangeGroup::SECP256R1,
+        };
+        (keg, ks)
+    } else {
+        return Err(TlsError::HandshakeFailure("No key_share in ClientHello".into()));
+    };
+
+    let client_session_id = ch.session_id;
+    let mut transcript = fragment;
+
+    // 2. Send ServerHello
+    let key_pair = EcdhKeyPair::generate(selected_group)
+        .map_err(|e| TlsError::HandshakeFailure(e))?;
+    let public_key = key_pair.public_key_bytes();
+    let named_group = match selected_group {
+        KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
+        KeyExchangeGroup::X25519 => NamedGroup::X25519,
+    };
+    let sh_msg = build_server_hello(
+        server_random,
+        &client_session_id,
+        negotiated_suite,
+        &public_key,
+        named_group,
+    );
+    transcript.extend_from_slice(&sh_msg);
+
+    let record = crate::record::TlsRecord {
+        content_type: 22,
+        version: 0x0303,
+        fragment: sh_msg,
+    };
+    async_write_all(stream, &record.to_bytes()).await?;
+    async_flush(stream).await?;
+
+    // 3. Derive handshake keys
+    let shared_secret = key_pair.exchange(&client_key_share)?;
+    let hash = Hasher::Sha256;
+    let transcript_hash = hash.hash(&transcript);
+
+    let mut ks = Tls13KeySchedule::new(hash.clone());
+    ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
+
+    let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
+    let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
+
+    let server_hs_keys = server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
+    let client_hs_keys = client_write_keys(&client_hs_secret, negotiated_suite.key_len(), 12, &hash);
+
+    let mut write_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
+    let mut read_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
+
+    let handshake_transcript_hash = transcript_hash;
+
+    // 4. Send encrypted handshake messages
+    async_server_send_encrypted_handshake(
+        stream, &mut write_cipher, &mut ks, &mut transcript, &hash,
+        &handshake_transcript_hash, &cert_and_key.cert_der, &*cert_and_key.signing_key,
+    ).await?;
+
+    let app_transcript_hash = hash.hash(&transcript);
+
+    // 5. Read client Finished
+    async_server_read_client_finished(
+        stream, &mut read_cipher, &ks, &mut transcript, &hash, &handshake_transcript_hash,
+    ).await?;
+
+    // 6. Derive application keys
+    ks.advance_to_master();
+    let server_app = ks.server_app_traffic_secret(&app_transcript_hash);
+    let client_app = ks.client_app_traffic_secret(&app_transcript_hash);
+
+    let server_app_keys = server_app_write_keys(&server_app, negotiated_suite.key_len(), 12, &hash);
+    let client_app_keys = client_app_write_keys(&client_app, negotiated_suite.key_len(), 12, &hash);
+
+    let write_cipher = RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv)?;
+    let read_cipher = RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
+
+    Ok((write_cipher, read_cipher, negotiated_suite))
 }
 
 // ---------------------------------------------------------------------------
