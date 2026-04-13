@@ -181,6 +181,33 @@ impl AsyncTcpStream {
         self.fd
     }
 
+    /// Consume the stream and return the raw fd **without** closing it.
+    ///
+    /// After calling this, the `AsyncTcpStream` is consumed (self is moved).
+    /// The caller takes full ownership of the fd and is responsible for
+    /// closing it manually (e.g., via `libc::close`) or wrapping it in a
+    /// new `AsyncTcpStream::from_fd()`.
+    ///
+    /// Use case: upgrading a plaintext TCP connection to TLS via STARTTLS —
+    /// extract the fd, then construct a TLS wrapper around it.
+    pub fn into_fd(self) -> RawFd {
+        let fd = self.fd;
+        // Prevent Drop from closing the fd by zeroing the ref count.
+        self.refs.store(0, Ordering::Relaxed);
+        fd
+    }
+
+    /// Construct an `AsyncTcpStream` from a raw fd that was previously
+    /// extracted via [`into_fd()`].
+    ///
+    /// Takes ownership of the fd. Do not close it manually.
+    pub fn from_raw(fd: RawFd) -> Self {
+        Self {
+            fd,
+            refs: Arc::new(AtomicUsize::new(1)),
+        }
+    }
+
     /// Split into separate read and write halves.
     /// Both halves share the fd via Arc refcount.
     pub fn split(self: &Arc<Self>) -> (AsyncReadHalf, AsyncWriteHalf) {
@@ -189,6 +216,11 @@ impl AsyncTcpStream {
             AsyncReadHalf { inner: Arc::clone(self) },
             AsyncWriteHalf { inner: Arc::clone(self) },
         )
+    }
+
+    /// Check if this is the last reference to the stream.
+    pub fn is_unique(self: &Arc<Self>) -> bool {
+        self.refs.load(Ordering::Relaxed) == 1
     }
 
     // Internal: register with reactor for read.
@@ -445,6 +477,21 @@ impl AsyncWrite for AsyncWriteHalf {
                 Poll::Ready(Ok(()))
             }
         }
+    }
+}
+
+impl AsyncReadHalf {
+    /// Get the shared `Arc<AsyncTcpStream>` backing this read half.
+    /// Useful for recombining with a write half or extracting the raw fd.
+    pub fn inner(&self) -> &Arc<AsyncTcpStream> {
+        &self.inner
+    }
+}
+
+impl AsyncWriteHalf {
+    /// Get the shared `Arc<AsyncTcpStream>` backing this write half.
+    pub fn inner(&self) -> &Arc<AsyncTcpStream> {
+        &self.inner
     }
 }
 

@@ -2,7 +2,7 @@
 
 pub mod builder;
 
-pub use builder::EmailBuilder;
+pub use builder::{EmailBuilder, MimePart};
 
 use std::collections::HashMap;
 use std::io;

@@ -31,6 +31,7 @@ pub mod select_internal {
     struct Select2<F1, F2, O> {
         f1: Option<F1>,
         f2: Option<F2>,
+        start: usize,
         _output: PhantomData<O>,
     }
 
@@ -44,18 +45,40 @@ pub mod select_internal {
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
             let this = unsafe { self.get_unchecked_mut() };
 
-            if let Some(f) = this.f1.as_mut() {
-                if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.f1 = None;
-                    this.f2 = None; // drop the loser
-                    return Poll::Ready(v);
+            // Round-robin: alternate which future we poll first.
+            // This prevents starvation and ensures fairness.
+            let start = this.start;
+            this.start = (this.start + 1) & 1;
+
+            if start == 0 {
+                if let Some(f) = this.f1.as_mut() {
+                    if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
+                        this.f1 = None;
+                        this.f2 = None;
+                        return Poll::Ready(v);
+                    }
                 }
-            }
-            if let Some(f) = this.f2.as_mut() {
-                if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.f2 = None;
-                    this.f1 = None; // drop the loser
-                    return Poll::Ready(v);
+                if let Some(f) = this.f2.as_mut() {
+                    if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
+                        this.f2 = None;
+                        this.f1 = None;
+                        return Poll::Ready(v);
+                    }
+                }
+            } else {
+                if let Some(f) = this.f2.as_mut() {
+                    if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
+                        this.f2 = None;
+                        this.f1 = None;
+                        return Poll::Ready(v);
+                    }
+                }
+                if let Some(f) = this.f1.as_mut() {
+                    if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
+                        this.f1 = None;
+                        this.f2 = None;
+                        return Poll::Ready(v);
+                    }
                 }
             }
 
@@ -68,6 +91,6 @@ pub mod select_internal {
         F1: Future<Output = O>,
         F2: Future<Output = O>,
     {
-        Select2 { f1: Some(f1), f2: Some(f2), _output: PhantomData }.await
+        Select2 { f1: Some(f1), f2: Some(f2), start: 0, _output: PhantomData }.await
     }
 }

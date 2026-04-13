@@ -9,6 +9,7 @@ use crate::types::MailEnvelope;
 // ===========================================================================
 
 /// Result of an authentication attempt.
+#[derive(Debug)]
 pub enum AuthResult {
     /// Authentication succeeded — returns the authenticated identity.
     Authenticated(String),

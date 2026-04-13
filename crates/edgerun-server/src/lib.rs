@@ -312,6 +312,7 @@ impl Server {
                     ..Default::default()
                 },
                 smtps: config.smtps,
+                ..Default::default()
             };
             let srv = edgerun_smtp::SmtpServer::with_memory_store(smtp_config)?;
             Some(srv)

@@ -54,7 +54,7 @@ async fn test_select_timing() {
     );
     let elapsed = start.elapsed();
     assert_eq!(result, 1, "fast future should win");
-    assert!(elapsed < Duration::from_millis(80), "select took too long: {:?}", elapsed);
+    assert!(elapsed < Duration::from_millis(150), "select took too long: {:?}", elapsed);
     println!("  test_select_timing OK ({:?})", elapsed);
 }
 

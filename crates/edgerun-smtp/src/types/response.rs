@@ -86,6 +86,7 @@ impl EnhancedStatusCode {
     pub const BAD_SEQUENCE: Self = Self::new(5, 0, 3);
     pub const AUTH_REQUIRED: Self = Self::new(5, 7, 1);
     pub const AUTH_MECHANISM_UNKNOWN: Self = Self::new(5, 7, 4);
+    pub const AUTH_SUCCESS: Self = Self::new(2, 7, 0);
 
     pub const TRANSIENT_MESSAGE_TOO_LARGE: Self = Self::new(4, 3, 4);
 }

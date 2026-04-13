@@ -132,8 +132,12 @@ impl SmtpCommand {
             // During AUTH exchange, every non-command line is a base64 response
             _ => {
                 // Check if it looks like base64 (AUTH response continuation)
-                if args.is_empty() && !cmd.chars().any(|c| c.is_lowercase()) {
-                    return Ok(Self::AuthResponse(cmd));
+                // Only treat as Auth response if all chars are valid base64
+                if trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+                    && !trimmed.is_empty()
+                    && trimmed.len() % 4 == 0
+                {
+                    return Ok(Self::AuthResponse(trimmed.to_string()));
                 }
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,

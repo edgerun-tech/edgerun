@@ -41,7 +41,7 @@ pub mod protocol;
 pub mod server;
 pub mod types;
 
-pub use client::{EmailBuilder, SmtpClient};
+pub use client::{EmailBuilder, MimePart, SmtpClient};
 pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
 pub use server::handler::{AuthCredentials, AuthResult};
 pub use types::{
