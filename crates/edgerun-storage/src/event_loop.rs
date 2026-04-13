@@ -108,14 +108,16 @@ impl EventWriter {
         let (result_tx, result_rx) = mpsc::sync_channel(1);
         let request = WriteRequest { event, result_tx };
 
-        let tx = self.tx.lock().unwrap();
-        tx.send(request).map_err(|e| {
-            StorageError::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("event writer channel closed: {e}"),
-            ))
-        })?;
-        drop(tx);
+        // Lock, send, drop guard — all before the await
+        {
+            let tx = self.tx.lock().unwrap();
+            tx.send(request).map_err(|e| {
+                StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    format!("event writer channel closed: {e}"),
+                ))
+            })?;
+        }
 
         // Bridge sync channel to async via spawn_blocking
         edgerun_rt::spawn_blocking(move || {

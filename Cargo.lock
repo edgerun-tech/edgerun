@@ -1548,7 +1548,6 @@ dependencies = [
  "hpack-patched",
  "httlib-huffman",
  "num-bigint",
- "parking_lot",
  "serde",
  "serde_json",
  "sha2",

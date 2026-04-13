@@ -285,15 +285,6 @@ impl<'a> Decoder<'a> {
         self.header_table.dynamic_table.set_max_table_size(new_max_size);
     }
 
-    /// Validate dynamic table size against protocol-set maximum.
-    fn validate_table_size(&self, requested_size: usize) -> Result<(), DecoderError> {
-        let current_max = self.header_table.dynamic_table.get_max_table_size();
-        if requested_size > current_max {
-            return Err(DecoderError::InvalidMaxDynamicSize);
-        }
-        Ok(())
-    }
-
     /// Decodes the headers found in the given buffer `buf`. Invokes the callback `cb` for each
     /// decoded header in turn, by providing it the header name and value as `Cow` byte array
     /// slices.

@@ -18,7 +18,6 @@ tls = []
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-rt = { path = "../edgerun-rt" }
-parking_lot = "0.12"
 edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
 hpack-patched = { path = "crates/hpack-patched" }

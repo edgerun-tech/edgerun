@@ -123,11 +123,6 @@ impl DynamicTable {
         self.consolidate_table();
     }
 
-    /// Returns the maximum size of the table in octets.
-    fn get_max_table_size(&self) -> usize {
-        self.max_size
-    }
-
     /// Add a new header to the dynamic table.
     ///
     /// The table automatically gets resized, if necessary.

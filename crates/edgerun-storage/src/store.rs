@@ -150,11 +150,11 @@ impl NodeStore {
 
     /// Appends an event to the stream's event log.
     /// Routes through the EventWriter — the log is the source of truth.
-    pub async fn append_event(&self, event: &EventEnvelope) -> Result<u64, StorageError> {
+    pub async fn append_event(&self, event: EventEnvelope) -> Result<u64, StorageError> {
         if let Err(available) = self.check_disk_space() {
             edgerun_log::warn!("low disk space: {available} bytes available");
         }
-        self.writer.write_event(event.clone()).await
+        self.writer.write_event(event).await
     }
 
     /// Retrieves an event from the event log by stream ID and sequence number.

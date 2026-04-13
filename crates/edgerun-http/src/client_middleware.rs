@@ -72,7 +72,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use parking_lot::Mutex;
+use edgerun_rt::sync::Mutex;
 
 // ===========================================================================
 // ClientExtensions — type-erased data attached to client requests/responses
