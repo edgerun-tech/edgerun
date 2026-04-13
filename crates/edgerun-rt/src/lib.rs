@@ -28,6 +28,7 @@ mod join;
 mod select;
 mod cancellation;
 mod unix;
+mod async_fd;
 pub mod fs;
 pub mod mpsc;
 pub mod broadcast;
@@ -56,6 +57,9 @@ pub use tcp::{
 
 // Unix domain sockets.
 pub use unix::{UnixStream, UnixListener, UnixReadHalf, UnixWriteHalf};
+
+// AsyncFd.
+pub use async_fd::{AsyncFd, ReadyFuture, OwnedAsyncFd, async_fd_from_raw, pipe};
 
 // UDP.
 pub use udp::AsyncUdpSocket;
