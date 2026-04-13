@@ -19,6 +19,7 @@ use std::ffi::CString;
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::process::Command;
 
 use crate::json::{OciLinuxResources, OciSpec, OciHook};
 use crate::cgroups::setup_cgroups;
@@ -28,9 +29,9 @@ use crate::hooks::{
     execute_create_container_hooks, execute_start_container_hooks,
     execute_poststart_hooks, execute_poststop_hooks,
 };
-use crate::process::{ContainerConfig, setup_container_child};
+use crate::process::{ContainerConfig, setup_container_child, setup_container_child_rootless};
 pub use crate::handle::RunningContainer;
-use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as StateContainerState};
+use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as StateContainerState, is_root};
 
 /// Extract hooks from an OCI spec, returning a default-empty set if absent.
 fn get_hooks(spec: &OciSpec) -> crate::json::OciHooks {
@@ -90,12 +91,343 @@ pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Resul
 // Step 3: fork child — runs setup + createContainer + FIFO-wait + startContainer
 // ===========================================================================
 
+/// Common child code AFTER namespace setup: hooks, FIFO wait, PID init, exec.
+fn run_child_post_setup(
+    fifo_fd: i32,
+    create_container_hooks: &Option<Vec<OciHook>>,
+    start_container_hooks: &Option<Vec<OciHook>>,
+    version: &str,
+    container_id: &str,
+    bundle_path: &str,
+    use_pid1_init: bool,
+    env: &[String],
+    cwd: &str,
+    workload_args: &[String],
+) {
+    // 1. createContainer hooks (container namespace)
+    let cc_state = ContainerState {
+        version: version.to_string(),
+        id: container_id.to_string(),
+        status: "creating".into(),
+        pid: 0,
+        bundle: bundle_path.to_string(),
+        annotations: std::collections::HashMap::new(),
+    };
+    if let Some(ref hk) = create_container_hooks {
+        if !hk.is_empty() {
+            if let Err(e) = execute_create_container_hooks(Some(hk), &cc_state) {
+                kmsg(&format!("child: createContainer hook failed: {}", e));
+                unsafe { libc::_exit(1) };
+            }
+        }
+    }
+
+    // 2. Wait on FIFO fd for start signal
+    let mut buf = [0u8; 4];
+    let n = unsafe { libc::read(fifo_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+    unsafe { libc::close(fifo_fd) };
+    if n <= 0 {
+        kmsg("child: FIFO closed before start signal received");
+        unsafe { libc::_exit(1) };
+    }
+
+    // 3. startContainer hooks (container namespace)
+    let sc_state = ContainerState {
+        version: version.to_string(),
+        id: container_id.to_string(),
+        status: "created".into(),
+        pid: 0,
+        bundle: bundle_path.to_string(),
+        annotations: std::collections::HashMap::new(),
+    };
+    if let Some(ref hk) = start_container_hooks {
+        if !hk.is_empty() {
+            if let Err(e) = execute_start_container_hooks(Some(hk), &sc_state) {
+                kmsg(&format!("child: startContainer hook failed: {}", e));
+                unsafe { libc::_exit(1) };
+            }
+        }
+    }
+
+    // 4. If PID namespace: fork so parent becomes PID 1 init, child exec's workload
+    if use_pid1_init {
+        if let Err(e) = crate::init::fork_and_init() {
+            kmsg(&format!("child: fork_and_init failed: {}", e));
+            unsafe { libc::_exit(1) };
+        }
+    }
+
+    // 5. Exec the workload
+    unsafe { libc::clearenv() };
+    for e in env {
+        if let Some((k, v)) = e.split_once('=') {
+            let k_c = CString::new(k.as_bytes()).unwrap();
+            let v_c = CString::new(v.as_bytes()).unwrap();
+            unsafe { libc::setenv(k_c.as_ptr(), v_c.as_ptr(), 1) };
+        }
+    }
+
+    let cwd_c = CString::new(cwd.as_bytes()).unwrap();
+    unsafe { libc::chdir(cwd_c.as_ptr()) };
+
+    let exe_path = if workload_args[0].starts_with('/') {
+        workload_args[0].clone()
+    } else {
+        let exe_name = &workload_args[0];
+        let path_env = env.iter()
+            .find(|e| e.starts_with("PATH="))
+            .map(|e| &e[5..])
+            .unwrap_or("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+        let mut found = None;
+        for dir in path_env.split(':') {
+            let candidate = format!("{}/{}", dir, exe_name);
+            if std::path::Path::new(&candidate).exists() {
+                found = Some(candidate);
+                break;
+            }
+        }
+        found.unwrap_or_else(|| exe_name.clone())
+    };
+
+    {
+        let exe_cstr = CString::new(exe_path.as_bytes()).unwrap();
+        let c_args: Vec<CString> = workload_args.iter()
+            .map(|a| CString::new(a.as_bytes()).unwrap())
+            .collect();
+        let c_ptrs: Vec<*const libc::c_char> = c_args.iter()
+            .map(|s| s.as_ptr())
+            .chain(std::iter::once(std::ptr::null()))
+            .collect();
+        unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr()) };
+    }
+    kmsg(&format!("child: execvp({}) failed: {}", workload_args[0], io::Error::last_os_error()));
+    unsafe { libc::_exit(127) };
+}
+
+/// Root mode fork: single fork, all namespaces at once.
+fn fork_rooted(
+    cfg: &ContainerConfig,
+    fifo_cstr_child: &CString,
+    create_container_hooks: Option<Vec<OciHook>>,
+    start_container_hooks: Option<Vec<OciHook>>,
+    version: String,
+    container_id: String,
+    bundle_path: String,
+    use_pid1_init: bool,
+    env: Vec<String>,
+    cwd: String,
+    workload_args: Vec<String>,
+) -> io::Result<i32> {
+    let child_pid = unsafe { libc::fork() };
+    if child_pid < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    if child_pid == 0 {
+        // Child process — close stdio
+        unsafe { libc::close(libc::STDIN_FILENO) };
+        unsafe { libc::close(libc::STDOUT_FILENO) };
+        unsafe { libc::close(libc::STDERR_FILENO) };
+
+        // Open FIFO
+        let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
+        if fifo_fd < 0 {
+            kmsg(&format!("child: failed to open start FIFO: {}", io::Error::last_os_error()));
+            unsafe { libc::_exit(1) };
+        }
+
+        // Standard container setup (all namespaces at once)
+        if let Err(e) = setup_container_child(cfg) {
+            kmsg(&format!("child: setup_container_child failed: {}", e));
+            unsafe { libc::_exit(1) };
+        }
+
+        // Common post-setup: hooks, FIFO wait, PID init, exec
+        run_child_post_setup(
+            fifo_fd,
+            &create_container_hooks,
+            &start_container_hooks,
+            &version,
+            &container_id,
+            &bundle_path,
+            use_pid1_init,
+            &env,
+            &cwd,
+            &workload_args,
+        );
+        unreachable!();
+    }
+
+    Ok(child_pid)
+}
+
+/// Rootless mode fork: uses `newuidmap`/`newgidmap` (from shadow package, already installed)
+/// to write uid/gid maps. The child creates the user namespace, signals parent via pipe,
+/// parent calls newuidmap/newgidmap, then signals child to continue.
+fn fork_rootless(
+    cfg: &ContainerConfig,
+    fifo_cstr_child: &CString,
+    uid_map: String,
+    gid_map: String,
+    create_container_hooks: Option<Vec<OciHook>>,
+    start_container_hooks: Option<Vec<OciHook>>,
+    version: String,
+    container_id: String,
+    bundle_path: String,
+    use_pid1_init: bool,
+    env: Vec<String>,
+    cwd: String,
+    workload_args: Vec<String>,
+) -> io::Result<i32> {
+    let uid_map_child = uid_map;
+    let gid_map_child = gid_map;
+
+    // Create sync pipe: child writes 1 byte when user ns is ready, parent reads it
+    let mut pipe_fds: [i32; 2] = [0; 2];
+    if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    let child_pid = unsafe { libc::fork() };
+    if child_pid < 0 {
+        unsafe { libc::close(pipe_fds[0]); libc::close(pipe_fds[1]); }
+        return Err(io::Error::last_os_error());
+    }
+
+    if child_pid == 0 {
+        // === CHILD PROCESS ===
+        unsafe { libc::close(libc::STDIN_FILENO) };
+        unsafe { libc::close(libc::STDOUT_FILENO) };
+        unsafe { libc::close(libc::STDERR_FILENO) };
+        unsafe { libc::close(pipe_fds[0]) }; // Close read end
+
+        // Stage 1: Create user namespace
+        if let Err(e) = crate::syscalls::do_unshare(crate::syscalls::ns::NEWUSER) {
+            kmsg(&format!("child: rootless user ns unshare failed: {}", e));
+            unsafe { libc::_exit(1) };
+        }
+
+        // Stage 2: Signal parent that user namespace is ready
+        let _ = unsafe { libc::write(pipe_fds[1], &1u8 as *const u8 as *const libc::c_void, 1) };
+        unsafe { libc::close(pipe_fds[1]) };
+
+        // Stage 3: Wait for parent to apply maps (poll /proc/self/uid_map)
+        for _ in 0..100 {
+            if let Ok(content) = fs::read_to_string("/proc/self/uid_map") {
+                if !content.contains("65534\t65534") && content.lines().count() > 0 {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        // Stage 4: Rootless container setup (unshares remaining namespaces, rootfs, caps, seccomp)
+        if let Err(e) = setup_container_child_rootless(cfg) {
+            kmsg(&format!("child: rootless setup_container_child_rootless failed: {}", e));
+            unsafe { libc::_exit(1) };
+        }
+
+        // Stage 5: Open FIFO as blocking for the actual wait
+        let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
+        if fifo_fd < 0 {
+            kmsg(&format!("child: failed to open start FIFO (blocking): {}", io::Error::last_os_error()));
+            unsafe { libc::_exit(1) };
+        }
+
+        // Stage 6: Common post-setup
+        run_child_post_setup(
+            fifo_fd,
+            &create_container_hooks,
+            &start_container_hooks,
+            &version,
+            &container_id,
+            &bundle_path,
+            use_pid1_init,
+            &env,
+            &cwd,
+            &workload_args,
+        );
+        unreachable!();
+    }
+
+    // === PARENT PROCESS ===
+    unsafe { libc::close(pipe_fds[1]) }; // Close write end
+
+    // Wait for child to signal user namespace is ready
+    let mut buf = [0u8];
+    let _ = unsafe { libc::read(pipe_fds[0], buf.as_mut_ptr() as *mut libc::c_void, 1) };
+    unsafe { libc::close(pipe_fds[0]) };
+
+    // Apply uid/gid maps via newuidmap/newgidmap
+    apply_rootless_maps(child_pid as u32, &uid_map_child, &gid_map_child);
+
+    Ok(child_pid)
+}
+
+/// Apply uid/gid maps using `newuidmap` and `newgidmap` helpers.
+///
+/// These binaries have `cap_setuid=ep` / `cap_setgid=ep` file capabilities
+/// (from the `shadow` package), allowing them to write uid/gid maps for
+/// processes in user namespaces.
+fn apply_rootless_maps(child_pid: u32, uid_map: &str, gid_map: &str) {
+    // Parse uid_map entries
+    let mut uid_args: Vec<String> = vec!["/usr/bin/newuidmap".into(), child_pid.to_string()];
+    for line in uid_map.trim().lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 3 {
+            uid_args.push(parts[0].into());
+            uid_args.push(parts[1].into());
+            uid_args.push(parts[2].into());
+        }
+    }
+
+    if uid_args.len() > 2 {
+        let out = Command::new(&uid_args[0]).args(&uid_args[1..]).output();
+        if let Err(ref e) = out {
+            let _ = fs::write("/dev/kmsg", format!("edgerun: newuidmap failed: {}", e));
+        } else if let Ok(o) = out {
+            if !o.status.success() {
+                let _ = fs::write("/dev/kmsg", format!("edgerun: newuidmap stderr: {}", String::from_utf8_lossy(&o.stderr)));
+            }
+        }
+    }
+
+    // Parse gid_map entries
+    let mut gid_args: Vec<String> = vec!["/usr/bin/newgidmap".into(), child_pid.to_string()];
+    for line in gid_map.trim().lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 3 {
+            gid_args.push(parts[0].into());
+            gid_args.push(parts[1].into());
+            gid_args.push(parts[2].into());
+        }
+    }
+
+    if gid_args.len() > 2 {
+        let out = Command::new(&gid_args[0]).args(&gid_args[1..]).output();
+        if let Err(ref e) = out {
+            let _ = fs::write("/dev/kmsg", format!("edgerun: newgidmap failed: {}", e));
+        } else if let Ok(o) = out {
+            if !o.status.success() {
+                let _ = fs::write("/dev/kmsg", format!("edgerun: newgidmap stderr: {}", String::from_utf8_lossy(&o.stderr)));
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// Step 3: fork child — runs setup + createContainer + FIFO-wait + startContainer
+// ===========================================================================
+
 /// Fork the container child. The child runs:
 /// 1. setup_container_child (namespaces, rootfs, security, etc.)
 /// 2. createContainer hooks
 /// 3. Waits on FIFO for start signal
 /// 4. startContainer hooks
 /// 5. execs the workload
+///
+/// In rootless mode, uses a two-stage fork: user namespace is created first,
+/// parent writes uid/gid maps, then child continues with remaining namespaces.
 ///
 /// Returns the child PID and a reference to the spec-derived config.
 pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<ForkedChild> {
@@ -164,146 +496,34 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
     let cc_id = container_id.to_string();
     let fifo_cstr_child = CString::new(fifo.to_string_lossy().as_bytes()).unwrap();
     let workload_args = args.clone();
+    let env_clone = env.clone();
+    let cwd_clone = cwd.clone();
+    let uid_map = cfg.uid_map.clone();
+    let gid_map = cfg.gid_map.clone();
 
-    // Fork manually to avoid Command::pre_exec issues with unshare
-    let child_pid = unsafe { libc::fork() };
-    if child_pid < 0 {
-        return Err(io::Error::last_os_error());
-    }
+    // Determine if we're running rootless
+    let rootless = !is_root();
+    let has_user_ns = (cfg.ns_flags & crate::syscalls::ns::NEWUSER) != 0;
 
-    if child_pid == 0 {
-        // Child process
-
-        // Close stdin/stdout/stderr BEFORE opening the FIFO.
-        // When the runtime is launched via `Command::output()` (e.g. from tests),
-        // stdio fds are pipes. The forked child inherits them, and if we don't
-        // close them, the parent's `Command::output()` will never see EOF because
-        // the grandchild (after the second fork in PID namespace mode) still holds
-        // the write end. This causes the test harness to hang forever.
-        unsafe { libc::close(libc::STDIN_FILENO) };
-        unsafe { libc::close(libc::STDOUT_FILENO) };
-        unsafe { libc::close(libc::STDERR_FILENO) };
-
-        // Open FIFO for reading BEFORE pivot_root (path becomes invalid after pivot_root)
-        let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
-        if fifo_fd < 0 {
-            kmsg(&format!("child: failed to open start FIFO: {}", io::Error::last_os_error()));
-            unsafe { libc::_exit(1) };
-        }
-
-        // 1. Standard container setup (mount ns, pivot_root, etc.)
-        if let Err(e) = setup_container_child(&cfg) {
-            kmsg(&format!("child: setup_container_child failed: {}", e));
-            unsafe { libc::_exit(1) };
-        }
-
-        // 2. createContainer hooks (container namespace)
-        let cc_state = ContainerState {
-            version: version.clone(),
-            id: cc_id.clone(),
-            status: "creating".into(),
-            pid: 0,
-            bundle: root_path.clone(),
-            annotations: std::collections::HashMap::new(),
-        };
-        if let Some(ref hk) = create_container_hooks {
-            if !hk.is_empty() {
-                if let Err(e) = execute_create_container_hooks(Some(hk), &cc_state) {
-                    kmsg(&format!("child: createContainer hook failed: {}", e));
-                    unsafe { libc::_exit(1) };
-                }
-            }
-        }
-
-        // 3. Wait on FIFO fd for start signal (fd was opened before pivot_root)
-        let mut buf = [0u8; 4];
-        let n = unsafe { libc::read(fifo_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
-        unsafe { libc::close(fifo_fd) };
-        if n <= 0 {
-            kmsg("child: FIFO closed before start signal received");
-            unsafe { libc::_exit(1) };
-        }
-
-        // 4. startContainer hooks (container namespace)
-        let sc_state = ContainerState {
-            version: version.clone(),
-            id: cc_id.clone(),
-            status: "created".into(),
-            pid: 0,
-            bundle: root_path.clone(),
-            annotations: std::collections::HashMap::new(),
-        };
-        if let Some(ref hk) = start_container_hooks {
-            if !hk.is_empty() {
-                if let Err(e) = execute_start_container_hooks(Some(hk), &sc_state) {
-                    kmsg(&format!("child: startContainer hook failed: {}", e));
-                    unsafe { libc::_exit(1) };
-                }
-            }
-        }
-
-        // 5. If PID namespace: fork so parent becomes PID 1 init, child exec's workload
-        if use_pid1_init {
-            if let Err(e) = crate::init::fork_and_init() {
-                kmsg(&format!("child: fork_and_init failed: {}", e));
-                unsafe { libc::_exit(1) };
-            }
-        }
-
-        // 6. Exec the workload
-
-        // Clear the environment
-        unsafe { libc::clearenv() };
-        // Set environment from spec
-        for e in &env {
-            if let Some((k, v)) = e.split_once('=') {
-                let k_c = CString::new(k.as_bytes()).unwrap();
-                let v_c = CString::new(v.as_bytes()).unwrap();
-                unsafe { libc::setenv(k_c.as_ptr(), v_c.as_ptr(), 1) };
-            }
-        }
-
-        // chdir
-        let cwd_c = CString::new(cwd.as_bytes()).unwrap();
-        unsafe { libc::chdir(cwd_c.as_ptr()) };
-
-        // Resolve executable path
-        let exe_path = if workload_args[0].starts_with('/') {
-            workload_args[0].clone()
-        } else {
-            let exe_name = &workload_args[0];
-            let path_env = env.iter()
-                .find(|e| e.starts_with("PATH="))
-                .map(|e| &e[5..])
-                .unwrap_or("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
-            let mut found = None;
-            for dir in path_env.split(':') {
-                let candidate = format!("{}/{}", dir, exe_name);
-                if std::path::Path::new(&candidate).exists() {
-                    found = Some(candidate);
-                    break;
-                }
-            }
-            found.unwrap_or_else(|| exe_name.clone())
-        };
-
-        // execvp — variables are used by execvp which is noreturn
-        #[allow(unused_assignments)]
-        {
-            let exe_cstr = CString::new(exe_path.as_bytes()).unwrap();
-            let c_args: Vec<CString> = workload_args.iter()
-                .map(|a| CString::new(a.as_bytes()).unwrap())
-                .collect();
-            let c_ptrs: Vec<*const libc::c_char> = c_args.iter()
-                .map(|s| s.as_ptr())
-                .chain(std::iter::once(std::ptr::null()))
-                .collect();
-            unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr()) };
-        }
-        // exec failed — write diagnostic before exiting
-        kmsg(&format!("child: execvp({}) failed: {}", exe_path, io::Error::last_os_error()));
-        unsafe { libc::_exit(127) };
-    }
+    let child_pid = if rootless && has_user_ns {
+        // ROOTLESS MODE: Two-stage fork
+        fork_rootless(
+            &cfg, &fifo_cstr_child, uid_map.clone(), gid_map.clone(),
+            create_container_hooks.clone(), start_container_hooks.clone(),
+            version.clone(), cc_id.clone(), root_path.clone(),
+            use_pid1_init, env_clone.clone(), cwd_clone.clone(),
+            workload_args.clone(),
+        )?
+    } else {
+        // ROOT MODE: Single fork, all namespaces at once
+        fork_rooted(
+            &cfg, &fifo_cstr_child,
+            create_container_hooks.clone(), start_container_hooks.clone(),
+            version.clone(), cc_id.clone(), root_path.clone(),
+            use_pid1_init, env_clone.clone(), cwd_clone.clone(),
+            workload_args.clone(),
+        )?
+    };
 
     // Parent returns with child PID
     // Note: We can't use std::process::Child::from_raw (unstable),
@@ -575,8 +795,14 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
     // Cgroup limits MUST be in place before the workload begins executing.
     if let Some(ref res) = resources {
         if let Some(ref linux) = spec.linux {
-            let cgroup_path = linux.cgroups_path.as_deref().unwrap_or("/edgerun");
-            setup_container_cgroups(pid, res, cgroup_path);
+            let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
+            let rootless = !is_root();
+            let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
+                .unwrap_or_else(|e| {
+                    let _ = fs::write("/dev/kmsg", format!("edgerun: cgroup resolution failed: {}", e));
+                    raw_cgroup_path.to_string()
+                });
+            setup_container_cgroups(pid, res, &cgroup_path);
         }
     }
 

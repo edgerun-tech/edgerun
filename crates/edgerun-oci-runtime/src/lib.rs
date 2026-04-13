@@ -31,7 +31,14 @@ mod handle;
 mod lifecycle;
 mod hooks;
 mod init;
-pub mod state;
+mod state;
+mod rootless;
+pub use state::{state_exists, state_file_path, fifo_path, set_state_dir, is_root, STATE_DIR};
+pub use rootless::{
+    generate_uid_map, generate_gid_map, resolve_cgroup_delegation_path,
+    resolve_container_cgroup_path, is_cgroup_v2_available,
+    get_current_user_subuids, get_current_user_subgids,
+};
 pub mod syscalls;
 pub mod cli;
 

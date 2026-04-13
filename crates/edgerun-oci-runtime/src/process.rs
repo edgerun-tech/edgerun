@@ -320,14 +320,46 @@ fn serialize_ns_paths(namespaces: Option<&[crate::json::OciNamespace]>) -> Strin
 
 fn format_mapping(mappings: Option<&[OciIdMapping]>) -> String {
     if let Some(maps) = mappings {
-        if maps.is_empty() {
-            return "0 65534 1\n".to_string();
+        if !maps.is_empty() {
+            return maps.iter()
+                .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
+                .collect();
         }
-        maps.iter()
-            .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
-            .collect()
-    } else {
-        "0 65534 1\n".to_string()
+    }
+    // No explicit mappings — generate rootless defaults
+    default_rootless_mapping()
+}
+
+/// Generate a default uid/gid mapping for rootless mode.
+///
+/// Uses subuid/subgid ranges from /etc/subuid and /etc/subgid.
+/// The kernel only allows uid_map entries within the caller's configured subuid range.
+/// When running as root, maps container root to host nobody.
+fn default_rootless_mapping() -> String {
+    let uid = unsafe { libc::getuid() };
+    if uid == 0 {
+        // Root mode: map container root to host nobody (minimal mapping)
+        return "0 65534 1\n".to_string();
+    }
+
+    // Rootless: use subuid/subgid ranges — the kernel REQUIRES all mapped
+    // host UIDs to be within the caller's configured subuid range.
+    match crate::rootless::get_current_user_subuids() {
+        Ok(subuids) if !subuids.is_empty() => {
+            // Map container uid 0 to the start of the subuid range
+            let mut map = String::new();
+            let mut container_start: u32 = 0;
+            for range in &subuids {
+                map.push_str(&format!("{} {} {}\n", container_start, range.start, range.count));
+                container_start += range.count;
+            }
+            map
+        }
+        _ => {
+            // No subuid ranges — map only the host user's own UID (size 1).
+            // This works because the kernel allows mapping your own uid.
+            format!("0 {} 1\n", uid)
+        }
     }
 }
 
@@ -685,7 +717,7 @@ fn setup_intel_rdt(rdt: &crate::json::OciLinuxIntelRdt) -> io::Result<()> {
     Ok(())
 }
 
-fn join_explicit_namespaces(ns_paths: &str) -> io::Result<()> {
+pub(crate) fn join_explicit_namespaces(ns_paths: &str) -> io::Result<()> {
     if ns_paths.is_empty() { return Ok(()); }
     for entry in ns_paths.split('\n') {
         if let Some((ns_type, path)) = entry.split_once(':') {
@@ -709,7 +741,6 @@ fn write_uid_map(content: &str) -> io::Result<()> {
         if let Ok(init_ns) = fs::read_link("/proc/1/ns/user") {
             if ns != init_ns {
                 fs::write("/proc/self/uid_map", content)?;
-                let _ = fs::write("/proc/self/setgroups", "deny");
                 return Ok(());
             }
         }
@@ -718,11 +749,26 @@ fn write_uid_map(content: &str) -> io::Result<()> {
     Ok(())
 }
 
+fn write_setgroups_deny() -> io::Result<()> {
+    // Must be written BEFORE gid_map in a user namespace.
+    // The kernel requires this to prevent privilege escalation via group mapping.
+    if let Ok(ns) = fs::read_link("/proc/self/ns/user") {
+        if let Ok(init_ns) = fs::read_link("/proc/1/ns/user") {
+            if ns != init_ns {
+                let _ = fs::write("/proc/self/setgroups", "deny");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn write_gid_map(content: &str) -> io::Result<()> {
     // Same as uid_map — only write if in a user namespace
     if let Ok(ns) = fs::read_link("/proc/self/ns/user") {
         if let Ok(init_ns) = fs::read_link("/proc/1/ns/user") {
             if ns != init_ns {
+                // setgroups MUST be denied before writing gid_map
+                write_setgroups_deny()?;
                 fs::write("/proc/self/gid_map", content)?;
                 return Ok(());
             }
@@ -760,6 +806,158 @@ fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
     let ret = unsafe { libc::syscall(31, 1i32 /* PRIO_PROCESS */, 0i32, encoded) as i32 };
 
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+// ===========================================================================
+// Rootless setup — skips user namespace unshare (already created by parent)
+// ===========================================================================
+
+/// Run container setup in rootless mode (user namespace already created by parent).
+///
+/// This is called AFTER the parent has written uid/gid maps for the child.
+/// It unshares remaining namespaces and does all the rootfs/caps/seccomp setup,
+/// but skips uid/gid map writing (the parent already did that).
+pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
+    use crate::syscalls::ns;
+
+    // 1. Unshare remaining namespaces (exclude user namespace)
+    let remaining_flags = cfg.ns_flags & !(ns::NEWUSER);
+    if remaining_flags != 0 {
+        do_unshare(remaining_flags)?;
+    }
+
+    // 2. Join explicit namespace paths (skip user namespace — already joined via parent)
+    join_explicit_namespaces_non_user(&cfg.ns_paths)?;
+
+    // Skip uid/gid map writing — parent already wrote these via /proc/<pid>/
+
+    // 3. Hostname + domainname
+    let _ = do_set_hostname(&cfg.hostname);
+    if let Some(ref domainname) = cfg.domainname {
+        let _ = do_set_domainname(domainname);
+    }
+
+    // 4. Capabilities
+    set_capabilities(
+        cfg.cap_effective.as_deref(),
+        cfg.cap_permitted.as_deref(),
+        cfg.cap_inheritable.as_deref(),
+        cfg.cap_bounding.as_deref(),
+        cfg.cap_ambient.as_deref(),
+    )?;
+
+    // 5. Security: no_new_privs + non-dumpable
+    apply_security_hardening(cfg.no_new_privs)?;
+
+    // 6. Resource limits
+    for rl in &cfg.rlimits {
+        if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
+            let _ = do_setrlimit(resource, rl.soft, rl.hard);
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid RLIMIT type: {}", rl.ns_type),
+            ));
+        }
+    }
+
+    // 6b. Scheduler configuration
+    if let Some(ref sched) = cfg.scheduler {
+        apply_scheduler(sched)?;
+    }
+
+    // 6c. I/O priority
+    if let Some(ref ioprio) = cfg.io_priority {
+        let _ = apply_io_priority(ioprio);
+    }
+
+    // 7. OOM score
+    let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
+
+    // 8. AppArmor
+    if let Some(ref profile) = cfg.apparmor_profile {
+        let _ = fs::write("/proc/self/attr/apparmor/exec", format!("exec {}", profile));
+    }
+
+    // 9. SELinux label
+    if let Some(ref label) = cfg.selinux_label {
+        let _ = fs::write("/proc/self/attr/exec", label.as_bytes());
+    }
+
+    // 10. Umask
+    if let Some(mask) = cfg.umask {
+        do_umask(mask);
+    }
+
+    // 11. Rootfs
+    let devices = deserialize_devices(&cfg.devices_json);
+    let mount_label = cfg.mount_label.as_deref();
+    setup_rootfs(
+        &cfg.root,
+        cfg.mounts.as_deref(),
+        cfg.masked_paths.as_deref(),
+        cfg.readonly_paths.as_deref(),
+        if devices.is_empty() { None } else { Some(&devices) },
+        mount_label,
+    )?;
+
+    // 12. Rootfs propagation
+    set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
+
+    // 13. Sysctl
+    apply_sysctl(cfg.sysctl.as_ref())?;
+
+    // 13b. Terminal / PTY allocation
+    if cfg.terminal {
+        setup_terminal()?;
+    }
+
+    // 14. Supplementary groups
+    if !cfg.additional_gids.is_empty() {
+        set_supplementary_gids(&cfg.additional_gids);
+    }
+
+    // 15. Drop GID then UID
+    do_setgid(cfg.gid)?;
+    do_setuid(cfg.uid)?;
+
+    // 16. Seccomp
+    let _listener_fd = apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
+        )
+    })?;
+
+    // 17. Intel RDT
+    if let Some(ref rdt) = cfg.intel_rdt {
+        let _ = setup_intel_rdt(rdt);
+    }
+
+    Ok(())
+}
+
+/// Join explicit namespace paths, skipping user namespace.
+///
+/// In rootless mode, the user namespace was already created by the parent,
+/// so we skip joining it (and can't join it anyway — setns on user ns is restricted).
+fn join_explicit_namespaces_non_user(ns_paths: &str) -> io::Result<()> {
+    if ns_paths.is_empty() { return Ok(()); }
+    for entry in ns_paths.split('\n') {
+        if let Some((ns_type, path)) = entry.split_once(':') {
+            // Skip user namespace — can't join via setns after creation
+            if ns_type == "user" { continue; }
+            if let Some(flag) = ns_type_to_flag(ns_type) {
+                let fd = fs::File::open(path)
+                    .map_err(|e| io::Error::new(
+                        io::ErrorKind::NotFound,
+                        format!("cannot open namespace {}: {}", path, e)
+                    ))?;
+                do_setns(fd.as_raw_fd(), flag)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 // ===========================================================================

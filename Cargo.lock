@@ -1151,6 +1151,7 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -1192,6 +1193,7 @@ dependencies = [
  "sha2",
  "signature 2.2.0",
  "subtle",
+ "time",
  "typenum",
  "x25519-dalek",
  "x509-cert",
@@ -1446,9 +1448,12 @@ name = "edgerun-edit"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "edgerun-http",
+ "edgerun-rt",
  "prettyplease",
  "proc-macro2",
  "quote",
+ "serde_json",
  "syn",
 ]
 
@@ -1552,6 +1557,7 @@ dependencies = [
  "hpack-patched",
  "httlib-huffman",
  "num-bigint",
+ "parking_lot",
  "serde",
  "serde_json",
  "sha2",
@@ -1907,6 +1913,7 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-rt",
+ "edgerun-secret-service",
 ]
 
 [[package]]
@@ -2268,6 +2275,7 @@ dependencies = [
  "generic-array 0.14.7",
  "group",
  "hkdf",
+ "pem-rfc7468",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
  "sec1 0.7.3",
@@ -3913,6 +3921,7 @@ dependencies = [
  "base16ct 0.2.0",
  "der 0.7.10",
  "generic-array 0.14.7",
+ "pkcs8 0.10.2",
  "subtle",
  "zeroize",
 ]

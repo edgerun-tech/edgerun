@@ -43,8 +43,14 @@ pub fn cmd_start(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
     if let Some(ref spec) = spec {
         if let Some(ref linux) = spec.linux {
             if let Some(ref resources) = linux.resources {
-                let cgroup_path = linux.cgroups_path.as_deref().unwrap_or("/edgerun");
-                setup_container_cgroups(pid, resources, cgroup_path);
+                let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
+                let rootless = !crate::state::is_root();
+                let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
+                    .unwrap_or_else(|e| {
+                        let _ = std::fs::write("/dev/kmsg", format!("edgerun: cgroup resolution failed: {}", e));
+                        raw_cgroup_path.to_string()
+                    });
+                setup_container_cgroups(pid, resources, &cgroup_path);
             }
         }
     }

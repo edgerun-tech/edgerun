@@ -11,6 +11,41 @@ use std::path::Path;
 
 use crate::json::OciLinuxResources;
 
+/// Enable cgroup v2 controllers in a parent's `cgroup.subtree_control`.
+///
+/// For rootless containers, the user's delegated cgroup subtree starts with
+/// no controllers enabled. Before creating child cgroups that use controllers,
+/// the parent must first enable them.
+///
+/// This is a best-effort operation — it may fail if the parent doesn't have
+/// permission to modify subtree_control, or if controllers are already enabled.
+pub fn enable_subtree_controllers(cgroup_path: &str, controllers: &[&str]) {
+    let parent = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+    if !parent.exists() { return; }
+
+    let subtree_file = parent.join("cgroup.subtree_control");
+    let current = match fs::read_to_string(&subtree_file) {
+        Ok(s) => s,
+        Err(_) => return, // Can't read — skip
+    };
+
+    let to_enable: Vec<String> = controllers
+        .iter()
+        .filter(|c| !current.contains(**c))
+        .map(|c| format!("+{}", c))
+        .collect();
+
+    if to_enable.is_empty() { return; }
+
+    let content = to_enable.join(" ");
+    if let Err(e) = fs::write(&subtree_file, &content) {
+        // Best-effort — log to kmsg
+        if let Ok(mut kmsg) = fs::OpenOptions::new().write(true).open("/dev/kmsg") {
+            let _ = writeln!(kmsg, "edgerun: subtree_control enable failed for {}: {}", cgroup_path, e);
+        }
+    }
+}
+
 /// Write to a cgroup file, logging errors to /dev/kmsg (best-effort).
 pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
     if let Err(e) = fs::write(cgroup_root.join(file), content) {
@@ -34,6 +69,18 @@ pub fn setup_container_cgroups_from_file(cgroup_root: &Path, file: &str, content
 
 /// Apply cgroup v2 resource limits by writing to /sys/fs/cgroup.
 pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str) -> io::Result<()> {
+    // Determine which controllers this container will use
+    let mut controllers = Vec::new();
+    if resources.memory.is_some() { controllers.push("memory"); }
+    if resources.cpu.is_some() { controllers.push("cpu"); }
+    if resources.pids.is_some() { controllers.push("pids"); }
+    if resources.block_io.is_some() { controllers.push("io"); }
+
+    // Enable controllers in the parent's subtree_control (for rootless)
+    if !controllers.is_empty() {
+        enable_subtree_controllers(cgroup_path, &controllers);
+    }
+
     let cgroup_root = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
     fs::create_dir_all(&cgroup_root)?;
 
@@ -225,4 +272,89 @@ pub fn shares_to_weight(shares: u64) -> u64 {
     // Use saturating_mul to prevent overflow: (shares - 2) * 9999
     let w = 1 + (shares - 2).saturating_mul(9999) / 262142;
     w.clamp(1, 10000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shares_to_weight_zero_is_one() {
+        assert_eq!(shares_to_weight(0), 1);
+    }
+
+    #[test]
+    fn shares_to_weight_one_is_one() {
+        assert_eq!(shares_to_weight(1), 1);
+    }
+
+    #[test]
+    fn shares_to_weight_two_is_one() {
+        assert_eq!(shares_to_weight(2), 1);
+    }
+
+    #[test]
+    fn shares_to_weight_default_shares() {
+        // Default cpu.shares is 1024 → weight should be ~39
+        let w = shares_to_weight(1024);
+        assert_eq!(w, 39);
+    }
+
+    #[test]
+    fn shares_to_weight_512() {
+        let w = shares_to_weight(512);
+        assert_eq!(w, 20);
+    }
+
+    #[test]
+    fn shares_to_weight_262144_is_max() {
+        // 262144 is the standard max shares → weight should be 10000
+        let w = shares_to_weight(262144);
+        assert_eq!(w, 10000);
+    }
+
+    #[test]
+    fn shares_to_weight_clamps_at_max() {
+        // Very large shares should clamp to 10000
+        let w = shares_to_weight(u64::MAX);
+        assert_eq!(w, 10000);
+    }
+
+    #[test]
+    fn shares_to_weight_monotonic() {
+        // Higher shares should produce >= weight
+        let w1 = shares_to_weight(100);
+        let w2 = shares_to_weight(1000);
+        let w3 = shares_to_weight(10000);
+        assert!(w1 <= w2);
+        assert!(w2 <= w3);
+    }
+
+    #[test]
+    fn shares_to_weight_linear_approx() {
+        // weight ≈ 1 + (shares - 2) * 9999 / 262142
+        // For shares=1024: weight ≈ 1 + 1022 * 9999 / 262142 ≈ 1 + 39 = 40
+        // (Actually 39 due to integer division)
+        let w = shares_to_weight(1024);
+        assert!((38..=40).contains(&w));
+    }
+
+    #[test]
+    fn shares_to_weight_no_overflow() {
+        // Even with max u64, saturating_mul prevents panic
+        let w = shares_to_weight(u64::MAX - 1);
+        assert_eq!(w, 10000);
+    }
+
+    #[test]
+    fn shares_to_weight_edge_large() {
+        let w = shares_to_weight(262145);
+        assert_eq!(w, 10000); // Should clamp
+    }
+
+    #[test]
+    fn enable_subtree_controllers_noop_for_missing_dir() {
+        // Should not panic when directory doesn't exist
+        enable_subtree_controllers("/nonexistent/container", &["memory", "cpu"]);
+    }
 }

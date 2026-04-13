@@ -482,3 +482,173 @@ fn uses_notify_action_false_for_empty_syscalls() {
     };
     assert!(!uses_notify_action(&spec));
 }
+
+// ===========================================================================
+// Additional seccomp edge case tests
+// ===========================================================================
+
+#[test]
+fn arch_to_bpf_values() {
+    assert_eq!(arch_to_bpf("SCMP_ARCH_X86_64"), 0xc000003e);
+    assert_eq!(arch_to_bpf("SCMP_ARCH_X86"), 0x40000003);
+    assert_eq!(arch_to_bpf("SCMP_ARCH_X32"), 0x4000003e);
+    assert_eq!(arch_to_bpf("SCMP_ARCH_AARCH64"), 0xc00000b7);
+    assert_eq!(arch_to_bpf("SCMP_ARCH_ARM"), 0x40000028);
+}
+
+#[test]
+fn arch_to_bpf_unknown_defaults_to_current() {
+    let unknown = arch_to_bpf("SCMP_ARCH_UNKNOWN");
+    assert_ne!(unknown, 0);
+}
+
+#[test]
+fn action_to_bpf_all_variants() {
+    assert_eq!(action_to_bpf(&OciSeccompAction::KillProcess, None), 0x80000000);
+    assert_eq!(action_to_bpf(&OciSeccompAction::KillThread, None), 0x00000000);
+    assert_eq!(action_to_bpf(&OciSeccompAction::Trap, None), 0x00030000);
+    assert_eq!(action_to_bpf(&OciSeccompAction::Trace, None), 0x7ff00000);
+    assert_eq!(action_to_bpf(&OciSeccompAction::Log, None), 0x7ffe0000);
+    assert_eq!(action_to_bpf(&OciSeccompAction::Notify, None), 0x7fc00000);
+    // Errno defaults to errno_ret=1 when None
+    assert_eq!(action_to_bpf(&OciSeccompAction::Errno, None), 0x00050001);
+}
+
+#[test]
+fn bpf_long_skip_exact_255() {
+    let mut insns: Vec<[u8; 8]> = Vec::new();
+    bpf_long_skip(&mut insns, 255);
+    assert_eq!(insns.len(), 1);
+    assert_eq!(insns[0][0], 0x15);
+    assert_eq!(insns[0][2], 0);
+    assert_eq!(insns[0][3], 255);
+    assert_eq!(u32::from_le_bytes([insns[0][4], insns[0][5], insns[0][6], insns[0][7]]), 0xFFFFFFFF);
+}
+
+#[test]
+fn bpf_long_skip_256_splits() {
+    let mut insns: Vec<[u8; 8]> = Vec::new();
+    bpf_long_skip(&mut insns, 256);
+    assert_eq!(insns.len(), 2);
+    assert_eq!(insns[0][3], 255);
+    assert_eq!(insns[1][3], 1);
+}
+
+#[test]
+fn bpf_long_skip_511_needs_three() {
+    let mut insns: Vec<[u8; 8]> = Vec::new();
+    bpf_long_skip(&mut insns, 511);
+    assert_eq!(insns.len(), 3);
+    assert_eq!(insns[0][3], 255);
+    assert_eq!(insns[1][3], 255);
+    assert_eq!(insns[2][3], 1);
+}
+
+#[test]
+fn build_seccomp_prog_with_log_action() {
+    let spec = OciLinuxSeccomp {
+        default_action: Some(OciSeccompAction::Log),
+        ..Default::default()
+    };
+    let (_, prog) = build_seccomp_prog(&spec);
+    let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+    assert!(len >= 4);
+}
+
+#[test]
+fn build_seccomp_prog_with_trace_action() {
+    let spec = OciLinuxSeccomp {
+        default_action: Some(OciSeccompAction::Trace),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["read".into()]),
+            action: Some(OciSeccompAction::Allow),
+            ..Default::default()
+        }]),
+        ..Default::default()
+    };
+    let (_, prog) = build_seccomp_prog(&spec);
+    let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+    assert!(len >= 5);
+}
+
+#[test]
+fn build_seccomp_prog_multiple_syscall_names() {
+    let spec = OciLinuxSeccomp {
+        default_action: Some(OciSeccompAction::Kill),
+        default_errno_ret: None,
+        architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+        listener_path: None,
+        listener_metadata: None,
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["read".into(), "write".into(), "openat".into()]),
+            action: Some(OciSeccompAction::Allow),
+            ..Default::default()
+        }]),
+    };
+    let (_, prog) = build_seccomp_prog(&spec);
+    let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+    assert!(len >= 8, "multiple syscall names should generate multiple rules, got {}", len);
+}
+
+#[test]
+fn seccomp_arg_fields_serialize_correctly() {
+    let arg = crate::json::OciSeccompArg {
+        index: 2,
+        value: 0x123456789ABCDEF0,
+        value_two: 0xFEDCBA9876543210,
+        op: "SCMP_CMP_MASKED_EQ".into(),
+    };
+    let json = edgerun_json::to_string(&arg).unwrap();
+    assert!(json.contains("\"index\":2"));
+    let parsed: crate::json::OciSeccompArg = edgerun_json::from_slice(json.as_bytes()).unwrap();
+    assert_eq!(parsed.index, 2);
+    assert_eq!(parsed.value, 0x123456789ABCDEF0);
+    assert_eq!(parsed.value_two, 0xFEDCBA9876543210);
+    assert_eq!(parsed.op, "SCMP_CMP_MASKED_EQ");
+}
+
+#[test]
+fn seccomp_bpf_prog_has_valid_sock_fprog_format() {
+    // Verify that each call produces a valid sock_fprog struct:
+    // [u16 len][padding][u64 pointer]
+    let (_, prog) = seccomp_bpf_prog();
+    assert_eq!(prog.len(), 16);
+    let len = u16::from_le_bytes([prog[0], prog[1]]);
+    assert!(len > 0);
+    // Pointer should be non-zero
+    let ptr = u64::from_le_bytes(prog[8..16].try_into().unwrap());
+    assert_ne!(ptr, 0);
+}
+
+#[test]
+fn syscall_nr_unknown_returns_none() {
+    assert_eq!(syscall_nr("nonexistent_syscall_xyz"), None);
+}
+
+#[test]
+fn syscall_nr_container_related() {
+    #[cfg(target_arch = "x86_64")]
+    {
+        assert_eq!(syscall_nr("clone"), Some(56));
+        assert_eq!(syscall_nr("unshare"), Some(272));
+        assert_eq!(syscall_nr("setns"), Some(308));
+        assert_eq!(syscall_nr("pivot_root"), Some(155));
+        assert_eq!(syscall_nr("mount"), Some(165));
+        assert_eq!(syscall_nr("umount2"), Some(166));
+        assert_eq!(syscall_nr("prctl"), Some(157));
+        assert_eq!(syscall_nr("seccomp"), Some(317));
+        assert_eq!(syscall_nr("getrandom"), Some(318));
+        assert_eq!(syscall_nr("execve"), Some(59));
+        assert_eq!(syscall_nr("exit_group"), Some(231));
+        assert_eq!(syscall_nr("futex"), Some(202));
+        assert_eq!(syscall_nr("clock_gettime"), Some(228));
+        assert_eq!(syscall_nr("openat"), Some(257));
+        assert_eq!(syscall_nr("close"), Some(3));
+        assert_eq!(syscall_nr("read"), Some(0));
+        assert_eq!(syscall_nr("write"), Some(1));
+        assert_eq!(syscall_nr("mmap"), Some(9));
+        assert_eq!(syscall_nr("brk"), Some(12));
+        assert_eq!(syscall_nr("mprotect"), Some(10));
+        assert_eq!(syscall_nr("munmap"), Some(11));
+    }
+}

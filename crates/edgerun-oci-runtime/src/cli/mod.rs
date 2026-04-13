@@ -140,7 +140,7 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
 }
 
 pub fn print_usage() {
-    eprintln!("Usage: edgerun-oci [global-options] <command> [command-options]");
+    eprintln!("Usage: ert [global-options] <command> [command-options]");
     eprintln!();
     eprintln!("Commands:");
     eprintln!("  create <container-id>     Create a container");
@@ -160,7 +160,9 @@ pub fn print_usage() {
     eprintln!("Global options:");
     eprintln!("  --bundle <path>           Path to bundle directory");
     eprintln!("  --pid-file <path>         Path to write container PID");
-    eprintln!("  --root <path>             Root directory for state files (default: /run/edgerun-oci)");
+    eprintln!("  --root <path>             Root directory for state files");
+    eprintln!("                            (default: /run/edgerun-oci as root,");
+    eprintln!("                             $XDG_RUNTIME_DIR/edgerun-oci rootless)");
 }
 
 /// Extract the first positional argument (container ID) from command args.

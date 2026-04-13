@@ -1,4 +1,4 @@
-.PHONY: check test build release-build docker-build
+.PHONY: check test build release-build docker-build install-ert
 .PHONY: e2e e2e-full e2e-hardware e2e-mesh e2e-conformance e2e-runner
 
 # Default: workspace check
@@ -12,6 +12,13 @@ test:
 # Build all workspace binaries
 build:
 	cargo build --workspace --release
+
+# Build and install ert binary to system PATH
+install-ert:
+	cargo build -p edgerun-oci-runtime --release
+	sudo cp target/x86_64-unknown-linux-musl/release/ert /usr/local/bin/ert
+	sudo chmod 755 /usr/local/bin/ert
+	@echo "Installed ert to /usr/local/bin/ert"
 
 # Cross-compile release binaries
 release-build:

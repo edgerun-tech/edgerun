@@ -96,7 +96,11 @@ fn features_json() -> String {
     f.push_str("    }\n");
     f.push_str("  },\n");
     f.push_str("  \"potentiallyUnsafeConfigAnnotations\": [],\n");
-    f.push_str("  \"annotations\": {}\n");
+    f.push_str("  \"annotations\": {},\n");
+    f.push_str("  \"rootless\": {\n");
+    f.push_str("    \"supported\": true,\n");
+    f.push_str(&format!("    \"uid\": {}\n", unsafe { libc::getuid() }));
+    f.push_str("  }\n");
     f.push('}');
     f
 }

@@ -11,8 +11,8 @@ serde = { version = "1", features = ["derive"] }
 libc = "0.2"
 
 [[bin]]
-name = "edgerun-oci"
-path = "src/bin/edgerun-oci.rs"
+name = "ert"
+path = "src/bin/ert.rs"
 
 
 

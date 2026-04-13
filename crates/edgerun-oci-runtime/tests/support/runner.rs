@@ -167,10 +167,10 @@ fn cleanup(id: &str) {
         .output();
 }
 
-/// Run the edgerun-oci CLI binary.
+/// Run the ert CLI binary.
 fn cli(args: &[&str]) -> io::Result<Output> {
-    let runtime = env!("CARGO_BIN_EXE_edgerun-oci");
-    if is_root() {
+    let runtime = env!("CARGO_BIN_EXE_ert");
+    if edgerun_oci_runtime::is_root() {
         Command::new(runtime).args(args).output()
     } else {
         Command::new("sudo").arg("-n").arg(runtime).args(args).output()
@@ -180,9 +180,9 @@ fn cli(args: &[&str]) -> io::Result<Output> {
 /// Helper for tests that need to call `create` directly with a specific ID and bundle.
 /// Used by the duplicate ID test.
 pub fn cli_create(id: &str, bundle_path: &Path) -> Output {
-    let runtime = env!("CARGO_BIN_EXE_edgerun-oci");
+    let runtime = env!("CARGO_BIN_EXE_ert");
     let bundle_str = bundle_path.to_str().expect("invalid bundle path");
-    if is_root() {
+    if edgerun_oci_runtime::is_root() {
         Command::new(runtime)
             .arg("--bundle").arg(bundle_str)
             .arg("create").arg(id)
