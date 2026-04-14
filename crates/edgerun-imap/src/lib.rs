@@ -30,11 +30,13 @@
 //! ```
 
 pub mod client;
+pub mod maildir_store;
 pub mod message;
 pub mod parser;
 pub mod server;
 pub mod types;
 
+pub use maildir_store::MaildirImapStore;
 pub use message::{ImapCommand, ImapResponse, ImapResult};
 pub use server::{ImapServer, ImapServerConfig, MemoryStore, MailStore, base64_decode};
 pub use types::{
