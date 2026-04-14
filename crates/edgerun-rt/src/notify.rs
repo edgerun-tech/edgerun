@@ -4,32 +4,41 @@
 //! Unlike `Condvar`, this is fully async — no thread blocking.
 //! Multiple `notified()` futures can wait concurrently; a single
 //! `notify()` wakes exactly one waiter (FIFO order).
+//!
+//! ## Thread safety
+//! All state (permit counter + waiters queue) is under a single Mutex,
+//! eliminating races between `notify_one()` and `Notified::poll()`.
 
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
+
+struct NotifyInner {
+    /// Number of unconsumed permits (pre-notifications from `notify_one()`
+    /// before any `Notified` future existed).
+    notified: usize,
+    waiters: VecDeque<Waker>,
+}
 
 /// An async notification primitive. Thread-safe, can be cloned.
 pub struct Notify {
     inner: std::sync::Arc<Mutex<NotifyInner>>,
-    /// Fast-path counter: number of available permits without looking at wakers.
-    notified: AtomicUsize,
 }
 
 impl Clone for Notify {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            notified: AtomicUsize::new(self.notified.load(Ordering::Acquire)),
         }
     }
 }
 
-struct NotifyInner {
-    waiters: VecDeque<Waker>,
+impl Default for Notify {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Notify {
@@ -37,36 +46,37 @@ impl Notify {
     pub fn new() -> Self {
         Self {
             inner: std::sync::Arc::new(Mutex::new(NotifyInner {
+                notified: 0,
                 waiters: VecDeque::new(),
             })),
-            notified: AtomicUsize::new(0),
         }
     }
 
     /// Waits for a notification. Returns immediately if there are pending
     /// notifications from prior `notify()` calls.
     pub fn notified(&self) -> Notified<'_> {
-        Notified { notify: self, registered: false, waiter_index: None }
+        Notified { notify: self }
     }
 
     /// Wakes one waiting task. If no task is waiting, increments a counter
     /// so the next `notified()` call returns immediately.
     pub fn notify_one(&self) {
-        // Fast path: no lock if there are waiting tasks.
-        // Try to claim a waiter.
         let mut inner = self.inner.lock();
+        // Always increment the permit counter. If there's a waiter, the
+        // woken task will find the counter > 0 and consume it. If no waiter,
+        // the counter serves as a pre-notification for the next `notified()`.
+        inner.notified += 1;
         if let Some(waker) = inner.waiters.pop_front() {
             drop(inner);
             waker.wake();
-        } else {
-            // No waiters — record a permit for the next caller.
-            self.notified.fetch_add(1, Ordering::Release);
         }
     }
 
     /// Wakes all waiting tasks.
     pub fn notify_waiters(&self) {
         let mut inner = self.inner.lock();
+        let count = inner.waiters.len();
+        inner.notified += count;
         let waiters = std::mem::take(&mut inner.waiters);
         drop(inner);
         for waker in waiters {
@@ -78,9 +88,6 @@ impl Notify {
 /// A future that resolves when `Notify::notify_one()` is called.
 pub struct Notified<'a> {
     notify: &'a Notify,
-    registered: bool,
-    /// Index in the waiters queue, so we can remove ourselves on drop.
-    waiter_index: Option<usize>,
 }
 
 impl Future for Notified<'_> {
@@ -88,48 +95,20 @@ impl Future for Notified<'_> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-
-        // Fast path: a permit was already recorded.
-        if this.notify.notified.load(Ordering::Acquire) > 0 {
-            this.notify.notified.fetch_sub(1, Ordering::Relaxed);
-            return Poll::Ready(());
-        }
-
         let mut inner = this.notify.inner.lock();
 
-        // Double-check after acquiring the lock (a notify may have raced).
-        if this.notify.notified.load(Ordering::Acquire) > 0 {
-            this.notify.notified.fetch_sub(1, Ordering::Relaxed);
+        // Check for a pre-recorded permit.
+        if inner.notified > 0 {
+            inner.notified -= 1;
             return Poll::Ready(());
         }
 
-        // Register our waker if we haven't already.
-        if !this.registered {
-            this.waiter_index = Some(inner.waiters.len());
-            inner.waiters.push_back(cx.waker().clone());
-            this.registered = true;
-        } else if let Some(idx) = this.waiter_index {
-            // Update the waker in place so we don't accumulate stale entries.
-            if idx < inner.waiters.len() {
-                inner.waiters[idx] = cx.waker().clone();
-            }
-        }
+        // No permit available — register waker. Always re-register because
+        // `notify_one` consumes (pops) the waker to wake us, so on re-poll
+        // our waker is no longer in the queue.
+        inner.waiters.push_back(cx.waker().clone());
 
         Poll::Pending
-    }
-}
-
-impl Drop for Notified<'_> {
-    fn drop(&mut self) {
-        if self.registered {
-            if let Some(idx) = self.waiter_index {
-                if let Some(mut inner) = self.notify.inner.try_lock() {
-                    if idx < inner.waiters.len() {
-                        inner.waiters.remove(idx);
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -181,7 +160,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn notify_wake_waiter() {
         let n = Notify::new();
         let mut fut = n.notified();
@@ -191,7 +169,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn notify_multiple_waiters() {
         let n = Notify::new();
         let mut fut1 = n.notified();

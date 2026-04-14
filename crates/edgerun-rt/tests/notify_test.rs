@@ -118,11 +118,7 @@ fn test_notify_pre_notified() {
 
     // Now create a waiter - should resolve immediately
     for _ in 0..2 {
-        let fut = notify.notified();
-        // These should be Ready immediately since we have 2 permits
-        // But we can't poll without the runtime context, so just verify
-        // that creating and awaiting works
-        drop(fut);
+        let _fut = notify.notified();
     }
     println!("  test_notify_pre_notified OK");
 }

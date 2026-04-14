@@ -196,11 +196,14 @@ pub fn ctrl_c() -> CtrlC {
             libc::signal(libc::SIGINT, handler as *const () as libc::sighandler_t);
         }
     });
-    CtrlC { _p: () }
+    CtrlC { deadline: None }
 }
 
 pub struct CtrlC {
-    _p: (),
+    /// Deadline of the currently registered timer. Only register a new
+    /// timer when this deadline has passed, preventing duplicate timer
+    /// entries on the heap.
+    deadline: Option<Instant>,
 }
 
 impl Future for CtrlC {
@@ -210,12 +213,22 @@ impl Future for CtrlC {
         if GOT_SIGINT.load(Ordering::Acquire) {
             return Poll::Ready(Ok(()));
         }
-        // Use a timer to avoid busy-spining. The reactor will re-schedule
-        // this future after 100ms, at which point we re-check the flag.
-        current_rt().reactor.register_timer(
-            Instant::now() + Duration::from_millis(100),
-            cx.waker().clone(),
-        );
+        let this = unsafe { self.get_unchecked_mut() };
+        let now = Instant::now();
+
+        match this.deadline {
+            Some(d) if now >= d => {
+                let new_deadline = now + Duration::from_millis(100);
+                current_rt().reactor.register_timer(new_deadline, cx.waker().clone());
+                this.deadline = Some(new_deadline);
+            }
+            None => {
+                let d = now + Duration::from_millis(100);
+                current_rt().reactor.register_timer(d, cx.waker().clone());
+                this.deadline = Some(d);
+            }
+            Some(_) => {}
+        }
         Poll::Pending
     }
 }

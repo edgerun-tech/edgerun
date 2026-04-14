@@ -91,18 +91,12 @@ impl Future for Cancelled<'_> {
             return Poll::Ready(());
         }
 
-        // Always update the waker — the future may have been moved to a
-        // different task between polls, so the old waker may be stale.
+        // Register waker on first poll only. The waker is task-scoped,
+        // not thread-scoped — it always wakes the correct task regardless
+        // of which worker thread polls it.
         {
             let mut wakers = this.token.inner.wakers.lock();
-            if this.registered {
-                // Replace the existing waker by clearing and re-pushing.
-                // We can't find the old waker in the Vec, but we can
-                // clear all stale wakers (the cancel path drains the Vec).
-                // For efficiency, just push the new waker; stale ones
-                // will be drained on cancel().
-                wakers.push(cx.waker().clone());
-            } else {
+            if !this.registered {
                 wakers.push(cx.waker().clone());
                 this.registered = true;
             }

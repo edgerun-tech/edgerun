@@ -136,12 +136,15 @@ impl FdInterest {
         let has_write = state.1.is_some();
 
         if has_read || has_write {
+            // Level-triggered mode (no EPOLLET): ensures the kernel fires
+            // again if data is still available after the task re-polls.
+            // Edge-triggered would silently drop events causing hangs.
             let mut events: u32 = 0;
             if has_read {
-                events |= libc::EPOLLIN as u32 | libc::EPOLLET as u32;
+                events |= libc::EPOLLIN as u32;
             }
             if has_write {
-                events |= libc::EPOLLOUT as u32 | libc::EPOLLET as u32;
+                events |= libc::EPOLLOUT as u32;
             }
             drop(state); // release lock before epoll_ctl
             let mut ev = libc::epoll_event { events: events as _, u64: fd as u64 };
@@ -172,13 +175,14 @@ impl FdInterest {
         let has_read = state.0.is_some();
         let has_write = state.1.is_some();
         // Hold lock through epoll_ctl to prevent TOCTOU.
+        // Level-triggered mode (no EPOLLET).
         if has_read || has_write {
             let mut events: u32 = 0;
             if has_read {
-                events |= libc::EPOLLIN as u32 | libc::EPOLLET as u32;
+                events |= libc::EPOLLIN as u32;
             }
             if has_write {
-                events |= libc::EPOLLOUT as u32 | libc::EPOLLET as u32;
+                events |= libc::EPOLLOUT as u32;
             }
             let mut ev = libc::epoll_event { events: events as _, u64: fd as u64 };
             let _ = epoll.ctl(libc::EPOLL_CTL_MOD, fd, &mut ev);

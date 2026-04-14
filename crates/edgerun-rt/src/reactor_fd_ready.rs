@@ -46,7 +46,7 @@ impl Future for FdReadReady {
             revents: 0,
         };
         let res = unsafe { libc::poll(&mut pfd, 1, 0) };
-        if res > 0 && (pfd.revents & libc::POLLIN as i16) != 0 {
+        if res > 0 && (pfd.revents & libc::POLLIN) != 0 {
             self.done = true;
             return Poll::Ready(());
         }
@@ -87,7 +87,7 @@ impl Future for FdWriteReady {
             revents: 0,
         };
         let res = unsafe { libc::poll(&mut pfd, 1, 0) };
-        if res > 0 && (pfd.revents & libc::POLLOUT as i16) != 0 {
+        if res > 0 && (pfd.revents & libc::POLLOUT) != 0 {
             self.done = true;
             return Poll::Ready(());
         }
