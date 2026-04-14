@@ -6,6 +6,10 @@ license = "MIT"
 publish = false
 description = "Consolidated encoding utilities for the edgerun workspace"
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 # No external dependencies — all implementations are self-contained
 

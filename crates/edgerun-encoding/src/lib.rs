@@ -9,6 +9,11 @@
 //! - TLV (Tag-Length-Value) encoding/decoding
 //! - C-string utilities
 //! - Binary string field helpers
+//! - RFC3339 timestamp parsing/formatting
+//! - Varint (LEB128) encoding/decoding
+//! - Quoted-Printable encoding (RFC 2045)
+//! - Base32hex encoding (RFC 4648 extended hex)
+//! - RFC2822 date formatting
 //!
 //! All implementations are self-contained with zero external dependencies.
 
@@ -16,10 +21,18 @@
 
 extern crate alloc;
 
+#[cfg(feature = "std")]
+extern crate std;
+
+pub mod base32hex;
 pub mod base64;
 pub mod cstring;
 pub mod hex;
 pub mod percent;
 pub mod protobuf;
+pub mod quoted_printable;
+pub mod rfc2822;
+pub mod rfc3339;
 pub mod string_field;
 pub mod tlv;
+pub mod varint;

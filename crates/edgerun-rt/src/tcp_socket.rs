@@ -158,6 +158,7 @@ impl TcpSocket {
         let res = unsafe { libc::connect(fd, &sa as *const _ as *const _, addrlen) };
         if res < 0 {
             let e = io::Error::last_os_error();
+            edgerun_log::debug!("connect({:?}) -> -1, error={:?}, kind={:?}", addr, e.raw_os_error(), e.kind());
             // EINPROGRESS and EWOULDBLOCK both mean non-blocking connect started.
             if e.kind() != io::ErrorKind::WouldBlock
                 && e.raw_os_error() != Some(libc::EINPROGRESS)
@@ -168,6 +169,8 @@ impl TcpSocket {
             // Connect in progress — wait for completion.
             // wait_for_connect registers fd with the reactor internally.
             wait_for_connect(fd).await?;
+        } else {
+            edgerun_log::debug!("connect({:?}) -> 0 (immediate success)", addr);
         }
 
         // Register fd with reactor for subsequent I/O (covers both
@@ -263,11 +266,15 @@ async fn wait_for_connect(fd: RawFd) -> io::Result<()> {
         }
         if err == 0 {
             // Connect succeeded.
+            edgerun_log::debug!("wait_for_connect(fd={}) -> SO_ERROR=0 (ok)", fd);
             return Ok(());
         }
-        // Connect still in progress or failed — wait for write readiness
-        // before checking again. `FdWriteReady` registers with the reactor
-        // and returns `()` when the fd is write-ready.
+        if err != libc::EINPROGRESS {
+            // Connection failed — return the error immediately.
+            edgerun_log::debug!("wait_for_connect(fd={}) -> SO_ERROR={} (fail)", fd, err);
+            return Err(io::Error::from_raw_os_error(err));
+        }
+        // Still connecting — wait for write readiness then check again.
         FdWriteReady::new(fd).await;
     }
 }

@@ -469,24 +469,7 @@ pub fn nsec3_hash_owner(name: &str, salt: &[u8], iterations: u16) -> Vec<u8> {
 
 /// Encode the hash as a base32hex string for NSEC3 owner name construction.
 pub fn nsec3_base32hex(hash: &[u8]) -> String {
-    const ALPHABET: &[u8] = b"0123456789abcdefghijklmnopqrstuv";
-    let mut result = String::with_capacity(hash.len() * 8 / 5 + 1);
-    let mut bits = 0u64;
-    let mut bit_len = 0;
-    for &b in hash {
-        bits = (bits << 8) | (b as u64);
-        bit_len += 8;
-        while bit_len >= 5 {
-            bit_len -= 5;
-            let idx = (bits >> bit_len) & 0x1F;
-            result.push(ALPHABET[idx as usize] as char);
-        }
-    }
-    if bit_len > 0 {
-        let idx = (bits << (5 - bit_len)) & 0x1F;
-        result.push(ALPHABET[idx as usize] as char);
-    }
-    result
+    edgerun_encoding::base32hex::encode_base32hex(hash)
 }
 
 /// Build the type bit map for an NSEC3 record from a list of record types.

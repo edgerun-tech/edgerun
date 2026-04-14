@@ -68,34 +68,45 @@ impl RuntimeInner {
     {
         let task_id = self.tasks.next_id();
         let handle = JoinHandle::new_with_task(task_id, Arc::clone(&self.queue));
-        let handle2 = handle.clone();
+        let handle_for_closure = handle.clone();
         let mut fut = Box::pin(f);
         let metrics_clone = Arc::clone(&self.metrics);
 
         // Create root span for this task.
         let task_span = trace::task_spawned(task_id, "task");
 
-        self.tasks.insert_with_id(task_id, Box::new(move |cx| {
-            // Check abort flag before polling.
-            if handle2.is_aborted() {
-                metrics_clone.total_aborted.fetch_add(1, Ordering::Relaxed);
-                handle2.set_result(Err(JoinError));
-                metrics_clone.total_completed.fetch_add(1, Ordering::Relaxed);
-                trace::task_aborted(task_id);
-                return false;
-            }
-            // Enter the task span for this poll.
-            let _enter = task_span.enter();
-            match fut.as_mut().poll(cx) {
-                std::task::Poll::Ready(v) => {
-                    handle2.set_result(Ok(v));
+        // Store a panic notifier that will set the JoinHandle result to Err(JoinError)
+        // when the task panics. This ensures awaiting tasks get resolved even on panic.
+        let handle_for_panic = handle.clone();
+        let panic_fn = Box::new(move || {
+            handle_for_panic.set_result(Err(JoinError));
+        });
+
+        self.tasks.insert_with_panic(
+            task_id,
+            Box::new(move |cx| {
+                // Check abort flag before polling.
+                if handle_for_closure.is_aborted() {
+                    metrics_clone.total_aborted.fetch_add(1, Ordering::Relaxed);
+                    handle_for_closure.set_result(Err(JoinError));
                     metrics_clone.total_completed.fetch_add(1, Ordering::Relaxed);
-                    trace::task_finished(task_id);
-                    false
+                    trace::task_aborted(task_id);
+                    return false;
                 }
-                std::task::Poll::Pending => true,
-            }
-        }));
+                // Enter the task span for this poll.
+                let _enter = task_span.enter();
+                match fut.as_mut().poll(cx) {
+                    std::task::Poll::Ready(v) => {
+                        handle_for_closure.set_result(Ok(v));
+                        metrics_clone.total_completed.fetch_add(1, Ordering::Relaxed);
+                        trace::task_finished(task_id);
+                        false
+                    }
+                    std::task::Poll::Pending => true,
+                }
+            }),
+            panic_fn,
+        );
 
         self.metrics.total_spawned.fetch_add(1, Ordering::Relaxed);
         self.queue.push(task_id);
@@ -241,6 +252,11 @@ impl Builder {
                             // Task completed — dropped (not re-inserted).
                         }
                         Err(panic_info) => {
+                            // Task panicked — resolve the JoinHandle with Err(JoinError)
+                            // so that awaiting code doesn't hang forever.
+                            if let Some(panic_fn) = tasks.take_panic_fn(id) {
+                                panic_fn();
+                            }
                             let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
                                 s.to_string()
                             } else if let Some(s) = panic_info.downcast_ref::<String>() {

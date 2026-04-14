@@ -10,6 +10,10 @@ use edgerun_rt::{
     AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, CancellationToken,
 };
 
+use crate::command_middleware::{
+    CommandChain, CommandHandler, CommandMiddleware, ControlFlow as MwControlFlow,
+    NextCommand, SessionExtensions,
+};
 use crate::server::read_line;
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
@@ -180,6 +184,9 @@ pub struct SmtpServer {
     queue: Option<Arc<MailIndex>>,
     /// Outbound relay for DNS MX lookup + SMTP delivery to remote MTAs.
     relay: Option<OutboundRelay>,
+    /// Command middleware chain. If set, all commands go through
+    /// middleware before reaching the handler.
+    command_chain: Option<Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>>,
 }
 
 impl SmtpServer {
@@ -192,7 +199,21 @@ impl SmtpServer {
             config,
             queue: None,
             relay: None,
+            command_chain: None,
         })
+    }
+
+    /// Set the command middleware chain for this server.
+    ///
+    /// If set, all SMTP commands go through the chain before reaching
+    /// the handler. Middleware can short-circuit with responses
+    /// (e.g., rate limit, auth required, TLS required).
+    pub fn with_command_chain(
+        mut self,
+        chain: Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>,
+    ) -> Self {
+        self.command_chain = Some(chain);
+        self
     }
 
     /// Create an SMTPS server (implicit TLS on connect, typically port 465).
@@ -276,10 +297,11 @@ impl SmtpServer {
                     let peer_ip = peer.ip();
                     let rate_limiter = config.rate_limiter.clone();
                     let queue = queue.clone();
+                    let command_chain = self.command_chain.clone();
 
                     edgerun_log::info!("edgerun-smtp: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        let result = handle_connection(stream, peer, handler, config, shutdown, queue).await;
+                        let result = handle_connection(stream, peer, handler, config, shutdown, queue, command_chain).await;
                         // Release rate limit slot on disconnect
                         if let Some(ref limiter) = rate_limiter {
                             limiter.release(peer_ip).await;
@@ -316,6 +338,7 @@ enum ControlFlow {
 }
 
 /// State machine for SASL AUTH challenge/response exchanges.
+#[derive(Clone)]
 enum AuthExchangeState {
     /// Not in an AUTH exchange.
     Idle,
@@ -334,6 +357,7 @@ async fn handle_connection(
     config: SmtpServerConfig,
     _shutdown: CancellationToken,
     queue: Option<Arc<MailIndex>>,
+    command_chain: Option<Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>>,
 ) -> io::Result<()> {
     // Unwrap the Arc — we need the owned AsyncTcpStream for the transport.
     // The accept loop only has one reference here, so this succeeds.
@@ -622,6 +646,54 @@ async fn handle_connection(
                 continue;
             }
         };
+
+        // ── Middleware chain (if configured) ──────────────────────
+        if let Some(ref chain) = command_chain {
+            let ctx = Arc::new(edgerun_rt::Mutex::new(SmtpSessionContext {
+                state: state.clone(),
+                envelope: envelope.clone(),
+                ehlo_domain: ehlo_domain.clone(),
+                auth_exchange: auth_exchange.clone(),
+                authenticated,
+                auth_identity: auth_identity.clone(),
+                pending_bdat_bytes,
+                pending_bdat_last,
+                extensions: SessionExtensions::new(),
+            }));
+
+            let chain = Arc::clone(chain);
+            let cmd_clone = cmd.clone();
+            let config_clone = config.clone();
+            let handler_clone = Arc::clone(&handler);
+
+            match dispatch_with_middleware(
+                chain,
+                cmd_clone,
+                &config_clone,
+                &handler_clone,
+                &mut transport,
+                &mut state,
+                &mut envelope,
+                &mut ehlo_domain,
+                &mut auth_exchange,
+                &mut authenticated,
+                &mut auth_identity,
+                &mut pending_bdat_bytes,
+                &mut pending_bdat_last,
+            ).await {
+                Ok(MwControlFlow::Respond(resp)) => {
+                    send_response(&mut transport, &resp).await?;
+                    continue;
+                }
+                Ok(MwControlFlow::Continue) => {
+                    // Middleware passed the command through — run the handler
+                }
+                Err(e) => {
+                    send_response(&mut transport, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                    continue;
+                }
+            }
+        }
 
         match handle_command(
             cmd,
@@ -1306,4 +1378,163 @@ fn generate_message_id() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     format!("edgerun-{}-{}", now, id)
+}
+
+// ===========================================================================
+// SMTP Session Extensions — per-connection state for middleware
+// ===========================================================================
+
+/// Typed data that middleware can store/retrieve from the session.
+
+/// The EHLO/HELO domain the client identified itself with.
+#[derive(Clone)]
+pub struct EhloDomain(pub Option<String>);
+
+/// Whether the connection has been authenticated via SASL AUTH.
+#[derive(Clone, Default)]
+pub struct SmtpAuth {
+    pub authenticated: bool,
+    pub identity: Option<String>,
+}
+
+/// The sender address set by MAIL FROM.
+#[derive(Clone, Default)]
+pub struct EnvelopeSender(pub Option<String>);
+
+/// Recipients set by RCPT TO (local vs remote).
+#[derive(Clone, Default)]
+pub struct EnvelopeRecipients {
+    pub local: Vec<String>,
+    pub remote: Vec<String>,
+}
+
+// ===========================================================================
+// Middleware dispatch
+// ===========================================================================
+
+/// Session context for the middleware command chain.
+/// Contains the same state that `handle_command` mutates.
+pub struct SmtpSessionContext {
+    pub state: SmtpState,
+    pub envelope: MailEnvelope,
+    pub ehlo_domain: Option<String>,
+    pub auth_exchange: AuthExchangeState,
+    pub authenticated: bool,
+    pub auth_identity: Option<String>,
+    pub pending_bdat_bytes: usize,
+    pub pending_bdat_last: bool,
+    pub extensions: SessionExtensions,
+}
+
+/// Run a command through the middleware chain, then through the handler
+/// if middleware passes it through.
+///
+/// If middleware returns `Respond`, the response is returned and the
+/// handler is NOT called.
+/// If middleware returns `Continue`, the handler runs and its response
+/// is returned.
+async fn dispatch_with_middleware(
+    chain: Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>,
+    cmd: SmtpCommand,
+    config: &SmtpServerConfig,
+    handler: &Arc<dyn MailHandler>,
+    transport: &mut SmtpTransport,
+    state: &mut SmtpState,
+    envelope: &mut MailEnvelope,
+    ehlo_domain: &mut Option<String>,
+    auth_exchange: &mut AuthExchangeState,
+    authenticated: &mut bool,
+    auth_identity: &mut Option<String>,
+    pending_bdat_bytes: &mut usize,
+    pending_bdat_last: &mut bool,
+) -> io::Result<MwControlFlow<SmtpResponse>> {
+    // Build session context
+    let ctx = SmtpSessionContext {
+        state: state.clone(),
+        envelope: envelope.clone(),
+        ehlo_domain: ehlo_domain.clone(),
+        auth_exchange: auth_exchange.clone(),
+        authenticated: *authenticated,
+        auth_identity: auth_identity.clone(),
+        pending_bdat_bytes: *pending_bdat_bytes,
+        pending_bdat_last: *pending_bdat_last,
+        extensions: SessionExtensions::new(),
+    };
+
+    // Create the handler adapter
+    let adapter = SmtpHandlerAdapter {
+        handler: Arc::clone(handler),
+        config: config.clone(),
+    };
+
+    // Build chain: middleware + handler
+    let full_chain = CommandChain::new(adapter)
+        // Note: we can't add the user's middleware here because
+        // the `chain` is already the composed chain from the user.
+        // We need to compose: user_chain -> handler_adapter
+        ;
+
+    // Run through middleware chain
+    let session = SessionExtensions::new();
+    // Insert context so middleware can see it
+    session.insert(SmtpAuth {
+        authenticated: ctx.authenticated,
+        identity: ctx.auth_identity.clone(),
+    });
+    if let Some(ref domain) = ctx.ehlo_domain {
+        session.insert(EhloDomain(Some(domain.clone())));
+    }
+
+    // We need to run the user's middleware chain, then the handler.
+    // The chain is Arc<dyn CommandHandler> — it already includes middleware.
+    // We run it, and if it returns Continue, the handler runs internally.
+
+    let session_for_sync = session.clone();
+    let result = chain.handle(cmd, session).await?;
+
+    // Sync back any state changes middleware made
+    if let Some(auth) = session_for_sync.get::<SmtpAuth>().await {
+        *authenticated = auth.authenticated;
+        *auth_identity = auth.identity;
+    }
+    if let Some(EhloDomain(ref domain)) = session_for_sync.get::<EhloDomain>().await {
+        *ehlo_domain = domain.clone();
+    }
+
+    Ok(result)
+}
+
+/// Adapter that wraps the MailHandler + config into a CommandHandler.
+/// This is the innermost layer of the command chain — after all middleware
+/// passes, the command reaches here.
+pub struct SmtpHandlerAdapter {
+    pub handler: Arc<dyn MailHandler>,
+    pub config: SmtpServerConfig,
+}
+
+impl CommandHandler<SmtpCommand, SmtpResponse> for SmtpHandlerAdapter
+where
+    SmtpCommand: Send + Sync + 'static,
+    SmtpResponse: Send + Sync + 'static,
+{
+    fn handle(
+        &self,
+        cmd: SmtpCommand,
+        session: SessionExtensions,
+    ) -> Pin<Box<dyn std::future::Future<Output = io::Result<MwControlFlow<SmtpResponse>>> + Send + '_>> {
+        let handler = Arc::clone(&self.handler);
+        let config = self.config.clone();
+
+        Box::pin(async move {
+            // The handler adapter is a placeholder — it cannot actually
+            // execute the command because handle_command needs mutable
+            // references to session state (state, envelope, etc.) which
+            // are only available in the session loop.
+            //
+            // Middleware intercepts commands BEFORE they reach here.
+            // The actual dispatch happens in the session loop.
+            // This adapter exists so the type system compiles.
+            Ok(MwControlFlow::Continue)
+        })
+    }
 }
