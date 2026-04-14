@@ -11,13 +11,15 @@
 //! `OAuthServer` implements `edgerun_http::Handler` so it can be mounted
 //! directly on any `HttpServer`.
 
-use crate::base64url::base64url_nopad_encode;
 use crate::device_state::{DeviceGrantStore, PendingDeviceGrant};
 use crate::discovery::{JwksDocument, Jwk};
 use crate::errors::{DeviceError, OAuthError, OAuthResult};
 use crate::jwt::{JwtVerifier, IdToken};
 use crate::pkce::PkcePair;
 use crate::types::{Credentials, TokenResponse};
+use edgerun_encoding::base64::base64url_nopad_encode;
+use edgerun_encoding::percent::{percent_decode, parse_form_urlencoded as parse_form_btree};
+use std::collections::HashMap;
 use edgerun_crypto::getrandom;
 use edgerun_crypto::sha256;
 use edgerun_crypto::p256::ecdsa::SigningKey;
@@ -25,7 +27,6 @@ use edgerun_crypto::p256::ecdsa::signature::Signer;
 use edgerun_crypto::ecdsa::Signature;
 use edgerun_http::{Handler, Middleware, Next, Request, Response, StatusCode};
 use edgerun_json::{from_str, to_string, JsonValue, JsonNumber, Map};
-use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -1050,36 +1051,9 @@ fn generate_token(len: usize) -> String {
     base64url_nopad_encode(&bytes)
 }
 
+/// Parse form-urlencoded body into a HashMap (wraps BTreeMap-based parser).
 fn parse_form_urlencoded(body: &str) -> HashMap<String, String> {
-    let mut params = HashMap::new();
-    for pair in body.split('&') {
-        if let Some((key, value)) = pair.split_once('=') {
-            let k = percent_decode(key);
-            let v = percent_decode(value);
-            params.insert(k, v);
-        }
-    }
-    params
-}
-
-fn percent_decode(s: &str) -> String {
-    let mut result = Vec::with_capacity(s.len());
-    let mut bytes = s.bytes();
-    while let Some(b) = bytes.next() {
-        if b == b'%' {
-            let h = bytes.next().unwrap_or(b'0');
-            let l = bytes.next().unwrap_or(b'0');
-            let hex = format!("{h}{l}");
-            if let Ok(val) = u8::from_str_radix(&hex, 16) {
-                result.push(val);
-            }
-        } else if b == b'+' {
-            result.push(b' ');
-        } else {
-            result.push(b);
-        }
-    }
-    String::from_utf8_lossy(&result).to_string()
+    parse_form_btree(body).into_iter().collect()
 }
 
 // ===========================================================================

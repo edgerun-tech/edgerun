@@ -10,7 +10,7 @@
 //! - Signature creation (only verification)
 //! - Non-standard algorithms
 
-use crate::base64url::base64url_decode;
+use edgerun_encoding::base64::base64url_decode;
 use crate::errors::{OAuthError, OAuthResult};
 use edgerun_json::{JsonValue, from_str, Map};
 
@@ -159,7 +159,7 @@ impl JwtPayload {
         };
 
         use edgerun_crypto::sha256;
-        use crate::base64url::base64url_nopad_encode;
+        use edgerun_encoding::base64::base64url_nopad_encode;
 
         let hash = sha256(access_token.as_bytes());
         let computed = base64url_nopad_encode(&hash[..16]); // left half
@@ -521,7 +521,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::base64url::base64url_nopad_encode;
+    use edgerun_encoding::base64::base64url_nopad_encode;
 
     // Manually constructed JWT with valid base64url encoding
     const TEST_JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.sig";

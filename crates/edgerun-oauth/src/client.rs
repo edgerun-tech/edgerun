@@ -1,6 +1,6 @@
 //! OAuth 2.0 client — device flow, authorization code flow, token refresh.
 
-use crate::base64url::base64url_nopad_encode;
+use edgerun_encoding::base64::base64url_nopad_encode;
 use crate::discovery::OidcDiscoveryDocument;
 use crate::errors::{DeviceError, OAuthError, OAuthResult};
 use crate::jwt::IdToken;
@@ -191,7 +191,7 @@ impl OAuthClient {
         params.push(("code_challenge_method", "S256"));
 
         let query: String = params.iter()
-            .map(|(k, v)| format!("{}={}", percent_encode(k), percent_encode(v)))
+            .map(|(k, v)| edgerun_encoding::percent::url_encode_pair(k, v))
             .collect::<Vec<_>>()
             .join("&");
 
@@ -362,19 +362,4 @@ impl OAuthClient {
         let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
         Err(OAuthError::ServerError { error, error_description: desc })
     }
-}
-
-fn percent_encode(s: &str) -> String {
-    let mut result = String::with_capacity(s.len() * 3);
-    for byte in s.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(byte as char);
-            }
-            _ => {
-                result.push_str(&format!("%{byte:02X}"));
-            }
-        }
-    }
-    result
 }

@@ -56,7 +56,6 @@
 //! # });
 //! ```
 
-mod base64url;
 mod client;
 mod device_state;
 mod discovery;
@@ -68,7 +67,7 @@ mod server;
 mod token_store;
 mod types;
 
-pub use base64url::{base64url_encode, base64url_decode, base64url_nopad_encode};
+pub use edgerun_encoding::base64::{base64url_encode, base64url_decode, base64url_nopad_encode};
 pub use client::{OAuthClient as LegacyOAuthClient, DeviceFlowCallback};
 pub use discovery::{OidcDiscoveryDocument, JwksDocument, Jwk};
 pub use errors::{OAuthError, DeviceError};

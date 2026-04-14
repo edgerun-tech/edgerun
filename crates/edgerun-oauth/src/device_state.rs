@@ -2,7 +2,7 @@
 
 use edgerun_crypto::getrandom;
 use edgerun_crypto::sha256;
-use crate::base64url::base64url_nopad_encode;
+use edgerun_encoding::base64::base64url_nopad_encode;
 use std::collections::HashMap;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant};

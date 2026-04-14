@@ -23,7 +23,7 @@
 //! # });
 //! ```
 
-use crate::base64url::base64url_nopad_encode;
+use edgerun_encoding::base64::base64url_nopad_encode;
 use crate::client::DeviceFlowCallback;
 use crate::errors::OAuthError;
 use crate::pkce::PkcePair;

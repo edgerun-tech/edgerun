@@ -2,7 +2,7 @@
 //!
 //! Generates a `code_verifier` and derives the `code_challenge` via SHA-256.
 
-use crate::base64url::base64url_nopad_encode;
+use edgerun_encoding::base64::base64url_nopad_encode;
 use edgerun_crypto::getrandom;
 use edgerun_crypto::sha256;
 

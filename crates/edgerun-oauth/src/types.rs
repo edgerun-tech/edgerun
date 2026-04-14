@@ -391,22 +391,7 @@ pub struct OAuthResponse {
 // ---------------------------------------------------------------------------
 
 fn url_encode(key: &str, value: &str) -> String {
-    format!("{}={}", percent_encode(key), percent_encode(value))
-}
-
-fn percent_encode(s: &str) -> String {
-    let mut result = String::with_capacity(s.len() * 3);
-    for byte in s.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(byte as char);
-            }
-            _ => {
-                result.push_str(&format!("%{byte:02X}"));
-            }
-        }
-    }
-    result
+    edgerun_encoding::percent::url_encode_pair(key, value)
 }
 
 // ===========================================================================
