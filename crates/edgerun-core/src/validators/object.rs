@@ -58,6 +58,7 @@ pub fn validate_object_case(
                 return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
             }
             if let Some(header) = header {
+                // Cross-check representation IDs between header and manifest
                 let header_representation_id = string_value(header, "representation_id", "");
                 let manifest_representation_id = get_map(manifest, "representation")
                     .map(|m| string_value(m, "representation_id", ""))
@@ -68,10 +69,19 @@ pub fn validate_object_case(
                 {
                     return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
                 }
+                // Spec §14.17: stored_size is required — proto3 uint64 defaults to 0,
+                // so explicitly reject stored_size == 0 as invalid (empty representation)
                 let stored_size = header
                     .get("stored_size")
                     .and_then(Value::as_i64)
                     .unwrap_or(claimed_total);
+                if stored_size <= 0 {
+                    return reject(
+                        ReasonCode::RepresentationInvalid,
+                        mapping([("reason", ystr("stored_size_zero_or_negative"))]),
+                        empty_map(),
+                    );
+                }
                 if stored_size != claimed_total {
                     return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
                 }
