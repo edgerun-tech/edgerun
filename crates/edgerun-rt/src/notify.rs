@@ -149,7 +149,7 @@ mod tests {
     });
 
     fn cx() -> Context<'static> {
-        Context::from_waker(&*NOOP_WAKER)
+        Context::from_waker(&NOOP_WAKER)
     }
 
     #[test]
