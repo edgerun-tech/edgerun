@@ -201,12 +201,17 @@ where
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("TLS handshake failed: {e}")))?;
 
         // When TLS is established, use the negotiated ALPN protocol to
-        // determine the HTTP version. h2 clients skip the connection preface
-        // (they send HTTP/2 frames immediately after the TLS handshake).
+        // determine the HTTP version.
+        // Per RFC 9113 §3.4, the client connection preface
+        // "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" (24 bytes) is always sent —
+        // even over TLS. We must consume the entire preface before reading frames.
         let negotiated_h2 = tls_stream.alpn_protocol() == Some(b"h2");
         if negotiated_h2 {
-            // Consume the TLS stream directly — no connection preface to skip.
-            let reader = BufReader::new(tls_stream);
+            let mut reader = BufReader::new(tls_stream);
+            // The BufReader is fresh — the full 24-byte preface is still in the stream.
+            let mut discard = [0u8; 24];
+            reader.get_mut().read_exact(&mut discard).await?;
+            // Pass skip_preface=true since we already consumed it above.
             handle_http2(reader, handler, http2_idle_timeout, max_request_size, true).await
         } else {
             handle_connection_inner(tls_stream, handler, keep_alive, max_request_size, http2_idle_timeout).await

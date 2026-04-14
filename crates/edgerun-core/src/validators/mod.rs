@@ -14,6 +14,7 @@ mod stream;
 mod snapshot;
 mod object;
 mod proof;
+mod identity;
 
 pub use canonical::validate_canonical_case;
 pub use crypto::validate_crypto_case;
@@ -26,6 +27,7 @@ pub use network::validate_network_case;
 pub use stream::validate_stream_append_case;
 pub use snapshot::validate_snapshot_case;
 pub use object::validate_object_case;
+pub use identity::validate_identity_record;
 pub use proof::{
     validate_snapshot_set_proof, validate_event_set_proof,
     validate_object_assertion_proof, validate_aggregate_summary_proof,
