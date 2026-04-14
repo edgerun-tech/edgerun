@@ -267,6 +267,11 @@ impl FetchAttr {
             "BODYSTRUCTURE" => Some(Self::BodyStructure),
             "BODY" => Some(Self::BodySection("".to_string())),
             "MSG_SIZE" | "SIZE" => Some(Self::MsgSize),
+            s if s.starts_with("BODY[") && s.ends_with(']') => {
+                // Extract the section from BODY[section]
+                let section = &s[5..s.len() - 1];
+                Some(Self::BodySection(section.to_string()))
+            }
             _ => None,
         }
     }

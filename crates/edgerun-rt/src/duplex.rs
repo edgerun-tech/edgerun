@@ -16,7 +16,7 @@ use crate::io_traits::{AsyncRead, AsyncWrite};
 struct DuplexInner {
     buf: VecDeque<u8>,
     closed: bool,
-    waker: Option<Waker>,
+    wakers: VecDeque<Waker>,
 }
 
 struct DuplexShared {
@@ -40,12 +40,12 @@ impl DuplexStream {
             a_to_b: Mutex::new(DuplexInner {
                 buf: VecDeque::new(),
                 closed: false,
-                waker: None,
+                wakers: VecDeque::new(),
             }),
             b_to_a: Mutex::new(DuplexInner {
                 buf: VecDeque::new(),
                 closed: false,
-                waker: None,
+                wakers: VecDeque::new(),
             }),
         });
         let a = DuplexStream {
@@ -94,8 +94,10 @@ impl DuplexStream {
 
         inner.buf.extend(buf.iter().copied());
         let n = buf.len();
-        if let Some(waker) = inner.waker.take() {
-            waker.wake();
+        let wakers = std::mem::take(&mut inner.wakers);
+        drop(inner);
+        for w in wakers {
+            w.wake();
         }
         n
     }
@@ -110,7 +112,7 @@ impl DuplexStream {
         if !inner.buf.is_empty() || inner.closed {
             Poll::Ready(Ok(()))
         } else {
-            inner.waker = Some(cx.waker().clone());
+            inner.wakers.push_back(cx.waker().clone());
             Poll::Pending
         }
     }
@@ -185,9 +187,11 @@ impl AsyncWrite for DuplexStream {
             this.shared.a_to_b.lock()
         };
         inner.closed = true;
-        // Wake any reader waiting on this side.
-        if let Some(waker) = inner.waker.take() {
-            waker.wake();
+        // Wake all readers waiting on this side.
+        let wakers = std::mem::take(&mut inner.wakers);
+        drop(inner);
+        for w in wakers {
+            w.wake();
         }
         Poll::Ready(Ok(()))
     }

@@ -279,7 +279,7 @@ fn socket_addr_to_sockaddr(addr: &SocketAddr) -> libc::sockaddr_storage {
             let sin = unsafe { &mut *(&mut storage as *mut _ as *mut libc::sockaddr_in) };
             sin.sin_family = libc::AF_INET as _;
             sin.sin_port = v4.port().to_be();
-            sin.sin_addr.s_addr = u32::from_ne_bytes(v4.ip().octets()).to_be();
+            sin.sin_addr.s_addr = u32::from_be_bytes(v4.ip().octets());
         }
         SocketAddr::V6(v6) => {
             let sin6 = unsafe { &mut *(&mut storage as *mut _ as *mut libc::sockaddr_in6) };

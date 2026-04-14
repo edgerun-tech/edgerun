@@ -373,6 +373,7 @@ fn test_e2e_fetch_body_sections() {
     conn.cmd("A004", "NOOP");
 
     let resp = conn.cmd("A005", "FETCH 1 (BODY[HEADER])");
+    eprintln!("FETCH BODY[HEADER]: {:?}", resp);
     assert!(resp.contains("BODY[HEADER]"));
     assert!(resp.contains("From: sender@test.com"));
     assert!(resp.contains("Subject: Body Test"));

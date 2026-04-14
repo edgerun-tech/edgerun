@@ -1045,24 +1045,6 @@ async fn handle_connection(
             }
         };
 
-        // Check for literal: {N}
-        if line.ends_with("}") && line.contains('{') {
-            let size_str = line.trim_start_matches(|c| c != '{').trim_matches(|c| c == '{' || c == '}');
-            if let Ok(literal_size) = size_str.parse::<usize>() {
-                // Send continuation for literal
-                {
-                    let mut w = writer.lock().await;
-                    w.write_all(b"+ Ready for literal data\r\n").await?;
-                    w.flush().await?;
-                }
-                // Read literal data
-                let _data = reader.read_exact_bytes(literal_size).await?;
-                // After literal, expect \r\n
-                reader.read_line().await?;
-                // For now, continue — real impl would re-parse with literal
-            }
-        }
-
         // Parse command
         let (tag, command_name, args) = match parser::parse_command_line(&line) {
             Ok(v) => v,
@@ -1576,6 +1558,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
 
             // Read the literal message data
             let data = reader.read_exact_bytes(*literal_size).await?;
+
+            // Consume trailing \r\n after literal data (it's a blank line)
+            reader.read_line().await?;
 
             // Parse flags if provided
             let msg_flags = flags.as_ref()

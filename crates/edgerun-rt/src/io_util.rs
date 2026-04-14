@@ -41,8 +41,22 @@ where
 
 /// Copy data bidirectionally between two streams.
 ///
+/// Alternates reading from each stream and writing to the other.
+/// Both directions are served in a round-robin fashion within a
+/// single task — no spawning required.
+///
 /// Returns `(a_to_b, b_to_a)` — bytes copied in each direction.
+/// When either stream closes (EOF), copying stops.
+/// Neither end is explicitly closed.
+///
 /// Both streams must implement `AsyncRead` and `AsyncWrite`.
+///
+/// # Note
+/// This implementation serves data from each direction sequentially
+/// (read A→write B, then read B→write A). For protocols where one
+/// side sends a large amount of data before reading, the other
+/// direction may experience latency. For truly concurrent copying,
+/// use two separate tasks with `spawn()`.
 pub async fn copy_bidirectional<A, B>(a: &mut A, b: &mut B) -> io::Result<(u64, u64)>
 where
     A: AsyncRead + AsyncWrite + Unpin,
@@ -53,23 +67,23 @@ where
     let mut a_to_b: u64 = 0;
     let mut b_to_a: u64 = 0;
 
-    // Alternate between reading from each side and writing to the other.
-    // This is a simple round-robin approach — not the most efficient but correct.
     loop {
-        // Read from A, write to B
-        let n = a.read(&mut buf_a).await?;
-        if n == 0 {
-            break; // A closed
-        }
-        b.write_all(&buf_a[..n]).await?;
+        // Read from A, write to B.
+        let n = match a.read(&mut buf_a).await {
+            Ok(0) => break, // A closed
+            Ok(n) => n,
+            Err(_) => break,
+        };
+        if b.write_all(&buf_a[..n]).await.is_err() { break; }
         a_to_b += n as u64;
 
-        // Read from B, write to A
-        let n = b.read(&mut buf_b).await?;
-        if n == 0 {
-            break; // B closed
-        }
-        a.write_all(&buf_b[..n]).await?;
+        // Read from B, write to A.
+        let n = match b.read(&mut buf_b).await {
+            Ok(0) => break, // B closed
+            Ok(n) => n,
+            Err(_) => break,
+        };
+        if a.write_all(&buf_b[..n]).await.is_err() { break; }
         b_to_a += n as u64;
     }
 
