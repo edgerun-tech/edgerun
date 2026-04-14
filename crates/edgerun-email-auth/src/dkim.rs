@@ -109,15 +109,8 @@ fn unfold_headers(headers: &str) -> String {
 
 /// Parse a DKIM tag=value list.
 fn parse_dkim_tag_list(s: &str) -> io::Result<DkimSignature> {
-    let mut tags = HashMap::new();
-    for part in s.split(';') {
-        let part = part.trim();
-        if let Some(eq_pos) = part.find('=') {
-            let tag = part[..eq_pos].trim();
-            let value = part[eq_pos + 1..].trim();
-            tags.insert(tag.to_string(), value.to_string());
-        }
-    }
+    let tags_vec = edgerun_encoding::kv::parse_tag_list_semicolon(s);
+    let tags: HashMap<String, String> = tags_vec.into_iter().collect();
 
     let version = tags.get("v").cloned();
     let algorithm = tags.get("a").cloned();

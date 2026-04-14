@@ -112,6 +112,27 @@ pub fn must_hex_to_bytes(value: &str) -> Vec<u8> {
     hex_to_bytes(value).expect("invalid hex string")
 }
 
+// ---------------------------------------------------------------------------
+// Hex bitmap parsing
+// ---------------------------------------------------------------------------
+
+/// Parse whitespace-separated hex values into a `Vec<u8>`.
+///
+/// Each token is parsed as a byte. Accepts optional `0x` prefix.
+/// Invalid tokens are silently skipped.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::hex::parse_hex_bitmap;
+/// assert_eq!(parse_hex_bitmap("01 02 ab cd"), vec![0x01, 0x02, 0xab, 0xcd]);
+/// assert_eq!(parse_hex_bitmap("0x01 0x02 0xff"), vec![0x01, 0x02, 0xff]);
+/// ```
+pub fn parse_hex_bitmap(s: &str) -> Vec<u8> {
+    s.split_whitespace()
+        .filter_map(|chunk| parse_hex_int::<u8>(chunk))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

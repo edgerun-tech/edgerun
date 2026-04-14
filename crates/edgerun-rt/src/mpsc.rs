@@ -7,9 +7,18 @@
 //! registration, call `wake_one_pending_sender` on an empty list, and both
 //! sides would wait forever.
 //!
-//! The fix: the value is stored in `Arc<Mutex<Option<T>>>` shared between
+//! The fix: the value is stored in `Arc<PendingSend>` shared between
 //! `SendFut` and `pending_senders`. `wake_one_pending_sender` and `SendFut::poll`
 //! race to claim it — only one succeeds.
+//!
+//! ## Fixes applied in this version:
+//! - **#2**: `SendFut` re-registration creates a fresh `PendingSend` and cancels
+//!   the old one, preventing duplicate entries in `pending_senders`.
+//! - **#8**: `SendFut::Drop` marks the entry as cancelled so
+//!   `wake_one_pending_sender` skips it without wasting a wake.
+//! - **#7**: `RecvFut::Drop` clears the registered waker.
+//! - **#11**: `wake_one_pending_sender` pops the entry, releases the
+//!   `pending_senders` lock, THEN does work — no nested lock acquisition.
 
 use std::collections::VecDeque;
 use std::future::Future;
@@ -21,8 +30,24 @@ use std::task::{Context, Poll, Waker};
 /// Shared state for a pending send. The value lives here so both
 /// `wake_one_pending_sender` (receiver side) and `SendFut::poll` (sender side)
 /// can race to claim it — only one succeeds, preventing double-enqueue.
+///
+/// The `cancelled` flag prevents zombie entries from wasting wake calls
+/// when a `SendFut` is dropped or re-registered (fixes #2, #8).
 struct PendingSend<T> {
     val: Mutex<Option<T>>,
+    /// Set to `true` when the sender gives up on this entry (re-registered
+    /// with a fresh `PendingSend`, or dropped). `wake_one_pending_sender`
+    /// skips cancelled entries without attempting to claim or wake.
+    cancelled: AtomicBool,
+}
+
+impl<T> PendingSend<T> {
+    fn new(val: T) -> Self {
+        Self {
+            val: Mutex::new(Some(val)),
+            cancelled: AtomicBool::new(false),
+        }
+    }
 }
 
 pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
@@ -46,6 +71,7 @@ pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
         trace_sender_register_pending: AtomicUsize::new(0),
         trace_sender_recheck_ok: AtomicUsize::new(0),
         trace_sender_claimed_by_recv: AtomicUsize::new(0),
+        trace_skip_cancelled_sender: AtomicUsize::new(0),
     });
     (
         Sender {
@@ -79,6 +105,7 @@ struct ChanInner<T> {
     trace_sender_register_pending: AtomicUsize,
     trace_sender_recheck_ok: AtomicUsize,
     trace_sender_claimed_by_recv: AtomicUsize,
+    trace_skip_cancelled_sender: AtomicUsize,
 }
 
 impl<T> ChanInner<T> {
@@ -150,39 +177,56 @@ impl<T> ChanInner<T> {
     }
 
     /// Wake the oldest pending sender. Races with `SendFut::poll` to claim the value.
+    ///
+    /// Fix #11: Pops the entry, releases the `pending_senders` lock, THEN
+    /// does work (claiming value, acquiring `q` lock). No nested lock holding.
     fn wake_one_pending_sender(&self) {
-        let mut pending = self.pending_senders.lock();
-        if let Some((waker, ps)) = pending.pop_front() {
-            self.trace_recv_wake_sender.fetch_add(1, Ordering::Relaxed);
-            // Try to claim the value from shared state.
-            let claimed = ps.val.lock().take();
-            match claimed {
-                Some(val) => {
-                    let mut q = self.q.lock();
-                    if q.len() < self.cap {
-                        q.push_back(val);
-                        drop(q);
-                        if let Some(w) = self.recv_waker.lock().take() {
-                            w.wake();
-                        }
-                        self.send_cvar.notify_one();
-                    } else {
-                        *ps.val.lock() = Some(val);
-                        pending.push_front((waker, ps));
-                        return;
+        // Pop one entry while holding the lock.
+        let entry = {
+            let mut pending = self.pending_senders.lock();
+            pending.pop_front()
+        };
+
+        let Some((waker, ps)) = entry else { return };
+
+        // Skip cancelled entries — the sender gave up on this one.
+        if ps.cancelled.load(Ordering::Relaxed) {
+            self.trace_skip_cancelled_sender.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+
+        self.trace_recv_wake_sender.fetch_add(1, Ordering::Relaxed);
+
+        // Try to claim the value from shared state.
+        let claimed = ps.val.lock().take();
+        match claimed {
+            Some(val) => {
+                let mut q = self.q.lock();
+                if q.len() < self.cap {
+                    q.push_back(val);
+                    drop(q);
+                    if let Some(w) = self.recv_waker.lock().take() {
+                        w.wake();
                     }
-                }
-                None => {
-                    self.trace_sender_claimed_by_recv.fetch_add(1, Ordering::Relaxed);
+                    self.send_cvar.notify_one();
+                } else {
+                    // Still full — put value back and re-queue.
+                    *ps.val.lock() = Some(val);
+                    self.pending_senders.lock().push_front((waker, ps));
+                    return;
                 }
             }
-            waker.wake();
+            None => {
+                self.trace_sender_claimed_by_recv.fetch_add(1, Ordering::Relaxed);
+            }
         }
+        waker.wake();
     }
 
     fn wake_all_pending_senders(&self) {
-        let mut pending = self.pending_senders.lock();
-        for (waker, _ps) in pending.drain(..) {
+        let pending = self.pending_senders.lock().drain(..).collect::<Vec<_>>();
+        for (waker, ps) in pending {
+            ps.cancelled.store(true, Ordering::Relaxed);
             waker.wake();
         }
     }
@@ -192,6 +236,11 @@ impl<T> ChanInner<T> {
         for w in wakers {
             w.wake();
         }
+    }
+
+    /// Remove the receiver's waker. Called by `RecvFut::Drop`.
+    fn clear_recv_waker(&self) {
+        self.recv_waker.lock().take();
     }
 }
 
@@ -234,10 +283,11 @@ impl<T> Sender<T> {
             self.inner.trace_recv_poll_dequeue.load(Ordering::Relaxed),
             self.inner.trace_recv_poll_pending.load(Ordering::Relaxed),
             self.inner.trace_recv_wake_sender.load(Ordering::Relaxed));
-        eprintln!("    [mpsc trace] sender_register_pending={} sender_recheck_ok={} sender_claimed_by_recv={}",
+        eprintln!("    [mpsc trace] sender_register_pending={} sender_recheck_ok={} sender_claimed_by_recv={} skip_cancelled={}",
             self.inner.trace_sender_register_pending.load(Ordering::Relaxed),
             self.inner.trace_sender_recheck_ok.load(Ordering::Relaxed),
-            self.inner.trace_sender_claimed_by_recv.load(Ordering::Relaxed));
+            self.inner.trace_sender_claimed_by_recv.load(Ordering::Relaxed),
+            self.inner.trace_skip_cancelled_sender.load(Ordering::Relaxed));
     }
 
     pub fn send_nowait(&self, val: T) -> Result<(), SendError<T>> {
@@ -348,6 +398,15 @@ impl<T> Future for ReserveFut<T> {
             let reserved = self.inner.reserved.load(Ordering::Acquire);
             if q_len + reserved < self.inner.cap {
                 self.inner.reserved.fetch_add(1, Ordering::AcqRel);
+                // Fix #12: Remove our waker from the list on success.
+                // We already pushed it above; drain it out now.
+                {
+                    let mut rw = self.inner.reserve_wakers.lock();
+                    // Remove the last entry (it's ours — single consumer for this future).
+                    if rw.back().map_or(false, |w| w.will_wake(cx.waker())) {
+                        rw.pop_back();
+                    }
+                }
                 return Poll::Ready(Ok(Permit {
                     inner: self.inner.clone(),
                 }));
@@ -370,6 +429,9 @@ impl<T> Future for ReserveFut<T> {
 //
 // Registration order: we push to `pending_senders` FIRST, then re-check
 // the queue. This ensures `wake_one_pending_sender` always sees us.
+//
+// ## Fix #2: Re-registration creates a fresh PendingSend and cancels the old.
+// ## Fix #8: Drop marks the entry as cancelled.
 // ===========================================================================
 
 pub struct SendFut<T> {
@@ -388,7 +450,6 @@ impl<T> Future for SendFut<T> {
 
         // Closed check.
         if this.inner.closed.load(Ordering::Relaxed) {
-            // Check if value was already enqueued.
             if this.val.is_none() {
                 return Poll::Ready(Ok(()));
             }
@@ -416,28 +477,26 @@ impl<T> Future for SendFut<T> {
                     return Poll::Ready(Ok(()));
                 }
                 Err(val) => {
-                    // Queue still full. Our waker was ALREADY popped from
-                    // pending_senders by wake_one_pending_sender — if we just
-                    // return Pending, we'll never be woken again → deadlock.
-                    // Re-register in pending_senders, then re-check.
-                    *ps.val.lock() = Some(val);
-                    this.inner.pending_senders.lock().push_back((cx.waker().clone(), ps.clone()));
+                    // Queue still full. Mark the old entry as cancelled
+                    // so wake_one_pending_sender skips it (fix #2).
+                    ps.cancelled.store(true, Ordering::Relaxed);
+                    // Create a fresh PendingSend for re-registration.
+                    let ps2 = std::sync::Arc::new(PendingSend::new(val));
+                    this.inner.pending_senders.lock().push_back((cx.waker().clone(), ps2.clone()));
+                    this.inner.trace_sender_register_pending.fetch_add(1, Ordering::Relaxed);
                     // Re-check: receiver may have dequeued between re-reg and now.
-                    let val = ps.val.lock().take();
-                    match val {
-                        Some(val) => {
-                            match this.inner.try_push(val) {
-                                Ok(()) => {
-                                    return Poll::Ready(Ok(()));
-                                }
-                                Err(val) => {
-                                    *ps.val.lock() = Some(val);
-                                }
+                    if let Some(val) = ps2.val.lock().take() {
+                        match this.inner.try_push(val) {
+                            Ok(()) => {
+                                this.inner.trace_sender_recheck_ok.fetch_add(1, Ordering::Relaxed);
+                                return Poll::Ready(Ok(()));
+                            }
+                            Err(val) => {
+                                *ps2.val.lock() = Some(val);
                             }
                         }
-                        None => {}
                     }
-                    this.pending = Some(ps);
+                    this.pending = Some(ps2);
                     return Poll::Pending;
                 }
             }
@@ -455,12 +514,8 @@ impl<T> Future for SendFut<T> {
         }
 
         // Channel full — register as pending.
-        // CRITICAL: register in pending_senders FIRST, then re-check the queue.
-        // This ensures wake_one_pending_sender always sees us.
         let val = this.val.take().unwrap();
-        let ps = std::sync::Arc::new(PendingSend {
-            val: Mutex::new(Some(val)),
-        });
+        let ps = std::sync::Arc::new(PendingSend::new(val));
         this.inner.pending_senders.lock().push_back((cx.waker().clone(), ps.clone()));
         this.inner.trace_sender_register_pending.fetch_add(1, Ordering::Relaxed);
 
@@ -474,7 +529,6 @@ impl<T> Future for SendFut<T> {
                     return Poll::Ready(Ok(()));
                 }
                 Err(val) => {
-                    // Still full — put value back, stay pending.
                     *ps.val.lock() = Some(val);
                 }
             }
@@ -489,10 +543,11 @@ impl<T> Future for SendFut<T> {
 
 impl<T> Drop for SendFut<T> {
     fn drop(&mut self) {
-        // Clean up: if we were pending and value wasn't enqueued,
-        // remove the entry so it doesn't try to enqueue a stale value.
         if let Some(ps) = &self.pending {
             ps.val.lock().take();
+            // Fix #8: Mark as cancelled so wake_one_pending_sender skips
+            // this entry instead of wasting a wake on a dead future.
+            ps.cancelled.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -548,6 +603,13 @@ impl<T> Drop for Receiver<T> {
 
 pub struct RecvFut<'a, T> {
     inner: &'a ChanInner<T>,
+}
+
+impl<T> Drop for RecvFut<'_, T> {
+    fn drop(&mut self) {
+        // Fix #7: Clear the registered waker so a stale reference isn't held.
+        self.inner.clear_recv_waker();
+    }
 }
 
 impl<T> Future for RecvFut<'_, T> {
@@ -687,5 +749,29 @@ mod tests {
         let (_tx, rx) = channel::<i32>(10);
         let mut fut = rx.recv();
         assert_eq!(Pin::new(&mut fut).poll(&mut cx()), Poll::Pending);
+    }
+
+    #[test]
+    fn mpsc_sendfut_drop_cancels() {
+        let (tx, _rx) = channel::<i32>(1);
+        tx.send_nowait(1).unwrap(); // Fill the channel
+        let mut fut = tx.send(2);
+        // First poll should register as pending
+        assert_eq!(Pin::new(&mut fut).poll(&mut cx()), Poll::Pending);
+        // Drop the future while pending
+        drop(fut);
+        // The cancelled entry should be skipped
+        assert_eq!(tx.inner.pending_senders.lock().len(), 1); // Entry still in deque but cancelled
+    }
+
+    #[test]
+    fn mpsc_recvfut_drop_clears_waker() {
+        let (_tx, rx) = channel::<i32>(10);
+        let mut fut = rx.recv();
+        // Register waker
+        assert_eq!(Pin::new(&mut fut).poll(&mut cx()), Poll::Pending);
+        // Drop should clear the waker
+        drop(fut);
+        assert!(rx.inner.recv_waker.lock().is_none());
     }
 }

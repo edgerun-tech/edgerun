@@ -141,6 +141,29 @@ pub fn format_hex_u32(value: Option<u32>) -> String {
     value.map(|v| alloc::format!("{v:06x}")).unwrap_or_default()
 }
 
+/// Parse semicolon-separated tag=value pairs (DKIM/DMARC style).
+///
+/// Each tag is `key=value`, separated by `;`. Whitespace is trimmed.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::kv::parse_tag_list_semicolon;
+/// let tags = parse_tag_list_semicolon("v=1; a=rsa-sha256; d=example.com");
+/// assert_eq!(tags[0], ("v".into(), "1".into()));
+/// assert_eq!(tags[1], ("a".into(), "rsa-sha256".into()));
+/// ```
+pub fn parse_tag_list_semicolon(s: &str) -> Vec<(String, String)> {
+    s.split(';')
+        .filter_map(|tag| {
+            tag.find('=').map(|i| {
+                let key = tag[..i].trim().to_string();
+                let val = tag[i + 1..].trim().to_string();
+                (key, val)
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

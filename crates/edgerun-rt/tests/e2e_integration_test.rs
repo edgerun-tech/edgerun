@@ -25,13 +25,14 @@ use std::time::{Duration, Instant};
 
 // ---- Test harness: each test gets its own 5-second deadline inside block_on ----
 
-struct Runner { rt: Runtime }
+struct Runner { rt: Arc<Runtime> }
 
 impl Runner {
     fn test(&self, name: &str, f: impl std::future::Future<Output = ()> + Send + 'static) {
         let t0 = Instant::now();
         eprint!("  {:>48} ... ", name);
-        let ok = self.rt.block_on(async {
+        let rt = self.rt.clone();
+        let ok = rt.block_on(async {
             match timeout(Duration::from_secs(5), f).await {
                 Ok(()) => true,
                 Err(_) => false,
@@ -46,7 +47,7 @@ impl Runner {
 
 fn main() {
     let rt = Builder::new_multi_thread().build().unwrap();
-    let r = Runner { rt };
+    let r = Runner { rt: Arc::new(rt) };
 
     // ============ RUNTIME ============
 
@@ -75,6 +76,14 @@ fn main() {
         }
         for h in hs { h.await.unwrap(); }
         assert_eq!(c.load(Ordering::Relaxed), 40);
+    });
+
+    r.test("rt_metrics", {
+        let rt2 = r.rt.clone();
+        async move {
+            let m = rt2.metrics();
+            assert!(m.total_spawned() > 0);
+        }
     });
 
     // ============ MPSC CHANNELS — each isolates one path ============

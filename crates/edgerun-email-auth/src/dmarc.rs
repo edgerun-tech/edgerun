@@ -127,13 +127,11 @@ pub async fn evaluate_dmarc<D: DnsQuery>(
 fn parse_dmarc_record(record: &str) -> io::Result<DmarcPolicy> {
     let mut policy = DmarcPolicy::default();
 
-    for part in record.split(';') {
-        let part = part.trim();
-        if let Some(eq_pos) = part.find('=') {
-            let tag = part[..eq_pos].trim().to_lowercase();
-            let value = part[eq_pos + 1..].trim();
+    for (tag, value) in edgerun_encoding::kv::parse_tag_list_semicolon(record) {
+        let tag = tag.to_lowercase();
+        let value = value.as_str();
 
-            match tag.as_str() {
+        match tag.as_str() {
                 "p" => policy.policy = value.to_lowercase(),
                 "sp" => policy.sp_policy = value.to_lowercase(),
                 "pct" => policy.pct = value.parse().unwrap_or(100),

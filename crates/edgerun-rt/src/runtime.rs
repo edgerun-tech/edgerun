@@ -124,7 +124,7 @@ impl RuntimeInner {
         let handle = JoinHandle::new();
         let handle2 = handle.clone();
         let blocking = Arc::clone(&self.blocking);
-        blocking.spawn(move || {
+        let result = blocking.spawn(move || {
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
             let result = match r {
                 Ok(v) => Ok(v),
@@ -132,6 +132,12 @@ impl RuntimeInner {
             };
             handle2.set_result(result);
         });
+        // If the pool is full or shut down, set an error immediately
+        // so the caller doesn't hang forever on a JoinHandle that will never resolve.
+        if let Err(e) = result {
+            edgerun_log::warn!("spawn_blocking failed: {e}");
+            handle.set_result(Err(JoinError));
+        }
         handle
     }
 

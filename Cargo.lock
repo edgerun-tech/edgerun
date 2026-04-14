@@ -1026,6 +1026,9 @@ dependencies = [
 [[package]]
 name = "edgerun-display"
 version = "0.1.0"
+dependencies = [
+ "edgerun-capabilities",
+]
 
 [[package]]
 name = "edgerun-dns"
@@ -1111,6 +1114,7 @@ dependencies = [
  "base64",
  "edgerun-crypto",
  "edgerun-dns",
+ "edgerun-encoding",
  "edgerun-log",
  "edgerun-rt",
  "rsa",
@@ -1160,6 +1164,9 @@ dependencies = [
 [[package]]
 name = "edgerun-gpu"
 version = "0.1.0"
+dependencies = [
+ "edgerun-capabilities",
+]
 
 [[package]]
 name = "edgerun-hardware-signing"

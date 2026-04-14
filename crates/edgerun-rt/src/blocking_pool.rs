@@ -15,7 +15,6 @@ use std::sync::Arc;
 use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll};
 use std::thread::JoinHandle as StdJoinHandle;
-use std::time::Duration;
 
 // ===========================================================================
 // JoinHandle
@@ -173,9 +172,34 @@ impl std::error::Error for JoinError {}
 // Blocking pool
 // ===========================================================================
 
+/// Default capacity for the blocking job queue.
+/// When full, `spawn()` returns `PoolError::Full` instead of growing unboundedly.
+const POOL_QUEUE_CAPACITY: usize = 1024;
+
+/// Error returned by `BlockingPool::spawn()`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PoolError {
+    /// The pool has been shut down.
+    Shutdown,
+    /// The job queue is full. Wait and retry, or increase pool size.
+    Full,
+}
+
+impl std::fmt::Display for PoolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PoolError::Shutdown => write!(f, "blocking pool has been shut down"),
+            PoolError::Full => write!(f, "blocking job queue is full"),
+        }
+    }
+}
+
+impl std::error::Error for PoolError {}
+
 struct PoolInner {
-    tx: Mutex<std::sync::mpsc::Sender<Box<dyn FnOnce() + Send>>>,
-    shutdown_flag: Arc<AtomicBool>,
+    /// `None` = shut down. Held inside a Mutex so `shutdown()` can take it
+    /// (dropping the sender → `Disconnected` for all workers).
+    tx: Mutex<Option<std::sync::mpsc::SyncSender<Box<dyn FnOnce() + Send>>>>,
     threads: Mutex<Vec<StdJoinHandle<()>>>,
     joined: AtomicBool,
     thread_count: usize,
@@ -183,41 +207,42 @@ struct PoolInner {
 }
 
 /// Bounded blocking thread pool for `spawn_blocking`.
+///
+/// Fix #3: Uses a bounded `sync_channel(POOL_QUEUE_CAPACITY)` instead of an
+/// unbounded `channel()`. Callers get `PoolError::Full` when the queue is full
+/// instead of silently growing memory.
+///
+/// Fix #9: `shutdown()` drops the sender, causing workers to see `Disconnected`
+/// and exit promptly (no more 100ms polling + flag dance).
 pub(crate) struct BlockingPool {
     inner: Arc<PoolInner>,
 }
 
 impl BlockingPool {
     pub(crate) fn new(size: usize) -> Self {
-        let (tx, rx) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>();
-        let rx = Arc::new(Mutex::new(rx));
-        let shutdown_flag = Arc::new(AtomicBool::new(false));
+        let (tx, rx) =
+            std::sync::mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(POOL_QUEUE_CAPACITY);
+        let rx = Arc::new(std::sync::Mutex::new(rx));
 
         let threads: Vec<_> = (0..size)
             .map(|_| {
                 let rx = Arc::clone(&rx);
-                let flag = Arc::clone(&shutdown_flag);
                 std::thread::spawn(move || {
                     loop {
+                        // Blocking recv. Returns Err(Disconnected) when sender is dropped.
                         let job = {
-                            let guard = rx.lock();
-                            guard.recv_timeout(Duration::from_millis(100))
+                            let guard = rx.lock().unwrap();
+                            guard.recv()
                         };
                         match job {
                             Ok(job) => {
                                 job();
                             }
-                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                                if flag.load(Ordering::Relaxed) {
-                                    break;
-                                }
-                                continue;
-                            }
-                            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                            Err(std::sync::mpsc::RecvError) => break,
                         }
                     }
                     // Drain remaining jobs.
-                    let guard = rx.lock();
+                    let guard = rx.lock().unwrap();
                     while let Ok(job) = guard.try_recv() {
                         if let Err(panic_info) =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(job))
@@ -238,8 +263,7 @@ impl BlockingPool {
 
         Self {
             inner: Arc::new(PoolInner {
-                tx: Mutex::new(tx),
-                shutdown_flag,
+                tx: Mutex::new(Some(tx)),
                 threads: Mutex::new(threads),
                 joined: AtomicBool::new(false),
                 thread_count: size,
@@ -248,27 +272,38 @@ impl BlockingPool {
         }
     }
 
-    pub(crate) fn spawn<F>(&self, f: F)
+    /// Submit a job to the blocking pool.
+    ///
+    /// Returns `Err(PoolError::Full)` if the queue is at capacity, or
+    /// `Err(PoolError::Shutdown)` if the pool has been shut down.
+    pub(crate) fn spawn<F>(&self, f: F) -> Result<(), PoolError>
     where
         F: FnOnce() + Send + 'static,
     {
+        let tx_guard = self.inner.tx.lock().unwrap();
+        let tx = tx_guard.as_ref().ok_or(PoolError::Shutdown)?;
+
         let inner = Arc::clone(&self.inner);
-        let _ = self.inner.tx.lock().send(Box::new(move || {
+        tx.send(Box::new(move || {
             inner.active.fetch_add(1, Ordering::Relaxed);
             f();
             inner.active.fetch_sub(1, Ordering::Relaxed);
-        }));
+        }))
+        .map_err(|_| PoolError::Shutdown)
     }
 
+    /// Shut down the pool. Drops the sender so all workers see `Disconnected`
+    /// and exit. No more jobs are accepted after this call.
     pub(crate) fn shutdown(&self) {
-        self.inner.shutdown_flag.store(true, Ordering::Release);
+        // Take and drop the sender → all workers get Disconnected.
+        self.inner.tx.lock().unwrap().take();
     }
 
     pub(crate) fn join(&self) {
         if self.inner.joined.swap(true, Ordering::AcqRel) {
             return;
         }
-        for t in self.inner.threads.lock().drain(..) {
+        for t in self.inner.threads.lock().unwrap().drain(..) {
             let _ = t.join();
         }
     }
