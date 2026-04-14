@@ -202,7 +202,6 @@ impl<T: Clone> Receiver<T> {
         RecvFut {
             inner: &self.inner,
             next: &mut self.next,
-            registered: false,
         }
     }
 }
@@ -231,7 +230,6 @@ pub enum TryRecvError {
 pub struct RecvFut<'a, T> {
     inner: &'a Mutex<BroadcastInner<T>>,
     next: &'a mut usize,
-    registered: bool,
 }
 
 impl<T: Clone> Future for RecvFut<'_, T> {
@@ -257,10 +255,10 @@ impl<T: Clone> Future for RecvFut<'_, T> {
             return Poll::Ready(Err(RecvError::Closed));
         }
 
-        if !this.registered {
-            inner.recv_wakers.push_back((*this.next, cx.waker().clone()));
-            this.registered = true;
-        }
+        // Always re-register: send() drains the waker Vec to wake waiters,
+        // so after being woken our waker is no longer in the queue.
+        // Stale wakers are harmless — they're drained on the next send().
+        inner.recv_wakers.push_back((*this.next, cx.waker().clone()));
 
         Poll::Pending
     }

@@ -251,20 +251,7 @@ impl<R: AsyncRead + Unpin> Future for ReadToEndFut<'_, R> {
     type Output = io::Result<u64>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        let mut tmp = [0u8; 4096];
-        match Pin::new(&mut *this.s).poll_read(cx, &mut tmp) {
-            Poll::Ready(Ok(0)) => Poll::Ready(Ok(0)),
-            Poll::Ready(Ok(n)) => {
-                this.buf.extend_from_slice(&tmp[..n]);
-                // Continue reading.
-                // We need to loop until EOF. Since this is a Future, we
-                // return Pending if we read something and let the caller
-                // poll again. For efficiency, use a loop with pending check.
-                poll_read_to_end(Pin::new(&mut *this.s), this.buf, cx)
-            }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
-        }
+        poll_read_to_end(Pin::new(&mut *this.s), this.buf, cx)
     }
 }
 

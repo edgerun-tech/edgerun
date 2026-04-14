@@ -4,16 +4,14 @@
 //! Mirrors TCP/UDP but uses `AF_UNIX` addresses (paths).
 //! - `UnixStream`: connected byte stream between two local endpoints.
 //! - `UnixListener`: accepts incoming UnixStream connections.
-//! - `UnixDatagram`: connectionless datagram socket.
 
 use std::future::Future;
-use std::io::{self};
+use std::io;
 use std::os::unix::net::UnixListener as StdUnixListener;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
 
@@ -41,59 +39,9 @@ impl UnixStream {
 
     /// Connect to a Unix socket path asynchronously.
     ///
-    /// Uses non-blocking connect to avoid blocking worker threads.
-    pub fn connect<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let fd = unsafe {
-            libc::socket(libc::AF_UNIX, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0)
-        };
-        if fd < 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        // Set non-blocking.
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-        if flags < 0 {
-            unsafe { libc::close(fd) };
-            return Err(io::Error::last_os_error());
-        }
-        if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-            unsafe { libc::close(fd) };
-            return Err(io::Error::last_os_error());
-        }
-
-        // Build sockaddr_un.
-        let path_bytes = path.as_ref().as_os_str().as_encoded_bytes();
-        if path_bytes.len() > 107 {
-            unsafe { libc::close(fd) };
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "path too long"));
-        }
-        let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
-        addr.sun_family = libc::AF_UNIX as _;
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                path_bytes.as_ptr(),
-                addr.sun_path.as_mut_ptr() as *mut u8,
-                path_bytes.len(),
-            );
-        }
-        let addrlen = std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
-
-        let res = unsafe { libc::connect(fd, &addr as *const _ as *const _, addrlen) };
-        if res < 0 {
-            let e = io::Error::last_os_error();
-            if e.kind() != io::ErrorKind::WouldBlock
-                && e.raw_os_error() != Some(libc::EINPROGRESS)
-            {
-                unsafe { libc::close(fd) };
-                return Err(e);
-            }
-            // Connect in progress — the caller should poll for write readiness.
-        }
-
-        Ok(Self {
-            fd,
-            refs: Arc::new(AtomicUsize::new(1)),
-        })
+    /// Returns a [`UnixConnectFuture`] that resolves to a connected stream.
+    pub fn connect<P: AsRef<Path>>(path: P) -> UnixConnectFuture {
+        UnixConnectFuture::new(path.as_ref().to_path_buf())
     }
 
     /// Split into read and write halves.
@@ -120,12 +68,10 @@ impl UnixStream {
 
     /// Returns the local socket address.
     pub fn local_addr(&self) -> io::Result<std::os::unix::net::SocketAddr> {
-        // Use std's UnixStream to get the address.
-        // We can't reconstruct a std::UnixStream from a raw fd safely
-        // (double-close risk). Use libc directly.
         unsafe {
             let mut addr: libc::sockaddr_storage = std::mem::zeroed();
-            let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_storage>() as _;
+            let mut addrlen: libc::socklen_t =
+                std::mem::size_of::<libc::sockaddr_storage>() as _;
             let res = libc::getsockname(
                 self.fd,
                 &mut addr as *mut _ as *mut libc::sockaddr,
@@ -149,7 +95,8 @@ impl UnixStream {
     pub fn peer_addr(&self) -> io::Result<std::os::unix::net::SocketAddr> {
         unsafe {
             let mut addr: libc::sockaddr_storage = std::mem::zeroed();
-            let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_storage>() as _;
+            let mut addrlen: libc::socklen_t =
+                std::mem::size_of::<libc::sockaddr_storage>() as _;
             let res = libc::getpeername(
                 self.fd,
                 &mut addr as *mut _ as *mut libc::sockaddr,
@@ -175,7 +122,6 @@ impl UnixStream {
         if new_fd < 0 {
             return Err(io::Error::last_os_error());
         }
-        // Set non-blocking on the new fd.
         let flags = unsafe { libc::fcntl(new_fd, libc::F_GETFL) };
         if flags < 0 {
             return Err(io::Error::last_os_error());
@@ -183,8 +129,6 @@ impl UnixStream {
         if unsafe { libc::fcntl(new_fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
             return Err(io::Error::last_os_error());
         }
-        // Don't register with reactor again — the new fd is a different
-        // kernel fd number, so it needs its own reactor entry.
         if let Some(rt) = try_current_rt() {
             rt.reactor.get_or_register_fd(new_fd);
         }
@@ -438,6 +382,154 @@ impl AsyncWrite for UnixWriteHalf {
 
 impl Unpin for UnixReadHalf {}
 impl Unpin for UnixWriteHalf {}
+
+// ===========================================================================
+// UnixConnectFuture — async connect
+// ===========================================================================
+
+/// Future returned by [`UnixStream::connect()`].
+pub struct UnixConnectFuture {
+    state: ConnectState,
+}
+
+enum ConnectState {
+    /// Creating socket and initiating connect.
+    Init { path: PathBuf },
+    /// Connect in progress — poll for write readiness.
+    Connecting { fd: RawFd, path: PathBuf },
+    /// Done.
+    Done,
+}
+
+impl UnixConnectFuture {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            state: ConnectState::Init { path },
+        }
+    }
+}
+
+impl Future for UnixConnectFuture {
+    type Output = io::Result<Arc<UnixStream>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+
+        match std::mem::replace(&mut this.state, ConnectState::Done) {
+            ConnectState::Init { path } => {
+                let fd = unsafe {
+                    libc::socket(
+                        libc::AF_UNIX,
+                        libc::SOCK_STREAM | libc::SOCK_CLOEXEC,
+                        0,
+                    )
+                };
+                if fd < 0 {
+                    return Poll::Ready(Err(io::Error::last_os_error()));
+                }
+
+                // Set non-blocking.
+                let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+                if flags < 0 {
+                    unsafe { libc::close(fd) };
+                    return Poll::Ready(Err(io::Error::last_os_error()));
+                }
+                if unsafe {
+                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK)
+                } < 0 {
+                    unsafe { libc::close(fd) };
+                    return Poll::Ready(Err(io::Error::last_os_error()));
+                }
+
+                // Build sockaddr_un.
+                let path_bytes = path.as_os_str().as_encoded_bytes();
+                if path_bytes.len() > 107 {
+                    unsafe { libc::close(fd) };
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "path too long",
+                    )));
+                }
+                let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+                addr.sun_family = libc::AF_UNIX as _;
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        path_bytes.as_ptr(),
+                        addr.sun_path.as_mut_ptr() as *mut u8,
+                        path_bytes.len(),
+                    );
+                }
+                let addrlen =
+                    std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
+
+                let res = unsafe {
+                    libc::connect(
+                        fd,
+                        &addr as *const _ as *const _,
+                        addrlen,
+                    )
+                };
+                if res == 0 {
+                    // Connected immediately (e.g., socket already exists and accepts).
+                    if let Some(rt) = try_current_rt() {
+                        rt.reactor.get_or_register_fd(fd);
+                    }
+                    return Poll::Ready(Ok(Arc::new(UnixStream::from_fd(fd))));
+                }
+
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::WouldBlock
+                    || e.raw_os_error() == Some(libc::EINPROGRESS)
+                {
+                    // Register with reactor for write readiness.
+                    if let Some(rt) = try_current_rt() {
+                        rt.reactor.wait_connect(fd, cx.waker().clone());
+                    }
+                    this.state = ConnectState::Connecting { fd, path };
+                    return Poll::Pending;
+                }
+
+                // Immediate failure.
+                unsafe { libc::close(fd) };
+                Poll::Ready(Err(e))
+            }
+
+            ConnectState::Connecting { fd, path: _ } => {
+                // Check SO_ERROR to see if connect succeeded or failed.
+                let mut error: libc::c_int = 0;
+                let mut len =
+                    std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+                let res = unsafe {
+                    libc::getsockopt(
+                        fd,
+                        libc::SOL_SOCKET,
+                        libc::SO_ERROR,
+                        &mut error as *mut _ as *mut libc::c_void,
+                        &mut len,
+                    )
+                };
+                if res == 0 && error == 0 {
+                    if let Some(rt) = try_current_rt() {
+                        rt.reactor.get_or_register_fd(fd);
+                    }
+                    return Poll::Ready(Ok(Arc::new(UnixStream::from_fd(fd))));
+                }
+
+                unsafe { libc::close(fd) };
+                if res < 0 {
+                    return Poll::Ready(Err(io::Error::last_os_error()));
+                }
+                Poll::Ready(Err(io::Error::from_raw_os_error(error)))
+            }
+
+            ConnectState::Done => {
+                Poll::Ready(Err(io::Error::other(
+                    "connect future polled after completion",
+                )))
+            }
+        }
+    }
+}
 
 // ===========================================================================
 // UnixListener

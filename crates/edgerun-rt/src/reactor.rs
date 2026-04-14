@@ -306,9 +306,10 @@ impl Reactor {
                     // Fire expired timers first.
                     {
                         let mut timers = self.timers.lock();
-                        let now = Instant::now();
                         while let Some(t) = timers.peek() {
-                            if t.deadline <= now {
+                            // Refresh `now` on each iteration to avoid delaying
+                            // timers whose deadlines fall during waker dispatch.
+                            if t.deadline <= Instant::now() {
                                 let t = timers.pop().unwrap();
                                 t.waker.wake();
                             } else {

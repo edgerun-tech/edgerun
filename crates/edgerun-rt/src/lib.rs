@@ -82,7 +82,7 @@ pub use tcp::{
 pub use tcp_socket::TcpSocket;
 
 // Unix domain sockets.
-pub use unix::{UnixStream, UnixListener, UnixReadHalf, UnixWriteHalf};
+pub use unix::{UnixStream, UnixListener, UnixReadHalf, UnixWriteHalf, UnixConnectFuture};
 pub use unix_dgram::UnixDatagram;
 
 // AsyncFd.

@@ -8,6 +8,8 @@ use std::io;
 use std::pin::Pin;
 use std::process::{Command, ExitStatus, Stdio};
 use std::task::{Context, Poll};
+use crate::reactor::Instant;
+use std::time::Duration;
 
 // ===========================================================================
 // output
@@ -76,7 +78,10 @@ impl Child {
 
     /// Wait for the child process to exit, returning its status.
     pub fn wait(self) -> ChildWait {
-        ChildWait { inner: Some(self.child) }
+        ChildWait {
+            inner: Some(self.child),
+            deadline: None,
+        }
     }
 
     /// Get the process ID.
@@ -89,6 +94,10 @@ impl Unpin for Child {}
 
 pub struct ChildWait {
     inner: Option<std::process::Child>,
+    /// Deadline of the currently registered poll timer. Only register
+    /// a new timer when this deadline has passed, preventing duplicate
+    /// timer heap entries on every poll.
+    deadline: Option<Instant>,
 }
 
 impl Future for ChildWait {
@@ -104,10 +113,28 @@ impl Future for ChildWait {
                 Poll::Ready(Ok(status))
             }
             Ok(None) => {
-                let rt = crate::runtime::current_rt();
-                let deadline =
-                    crate::reactor::Instant::now() + std::time::Duration::from_millis(10);
-                rt.reactor.register_timer(deadline, cx.waker().clone());
+                let now = Instant::now();
+                match this.deadline {
+                    Some(d) if now >= d => {
+                        // Timer expired — register new poll timer.
+                        let new_deadline = now + Duration::from_millis(10);
+                        crate::runtime::current_rt()
+                            .reactor
+                            .register_timer(new_deadline, cx.waker().clone());
+                        this.deadline = Some(new_deadline);
+                    }
+                    None => {
+                        // First poll — register initial poll timer.
+                        let d = now + Duration::from_millis(10);
+                        crate::runtime::current_rt()
+                            .reactor
+                            .register_timer(d, cx.waker().clone());
+                        this.deadline = Some(d);
+                    }
+                    Some(_) => {
+                        // Poll timer still active — don't re-register.
+                    }
+                }
                 Poll::Pending
             }
             Err(e) => Poll::Ready(Err(e)),

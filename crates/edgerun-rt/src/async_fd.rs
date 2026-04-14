@@ -73,11 +73,11 @@ impl<F: AsRawFd> AsyncFd<F> {
         poll_ready(self.fd.as_raw_fd(), false, cx)
     }
 
-    /// Try to execute a read closure on this fd.
+    /// Execute a read closure on this fd.
     ///
-    /// If the closure returns `EAGAIN`/`EWOULDBLOCK`, registers the fd
-    /// with the reactor for read readiness and returns `Pending`.
-    /// On any other result, returns immediately.
+    /// This is a direct passthrough to the closure — no automatic
+    /// EAGAIN handling. If the closure returns `EAGAIN`/`EWOULDBLOCK`,
+    /// the caller should await [`Self::readable()`] before retrying.
     pub fn try_io<R, C>(&self, f: C) -> io::Result<R>
     where
         C: FnOnce() -> io::Result<R>,
@@ -85,10 +85,11 @@ impl<F: AsRawFd> AsyncFd<F> {
         f()
     }
 
-    /// Try to execute a write closure on this fd.
+    /// Execute a write closure on this fd.
     ///
-    /// If the closure returns `EAGAIN`/`EWOULDBLOCK`, the caller should
-    /// await [`Self::writable()`] before retrying.
+    /// This is a direct passthrough to the closure — no automatic
+    /// EAGAIN handling. If the closure returns `EAGAIN`/`EWOULDBLOCK`,
+    /// the caller should await [`Self::writable()`] before retrying.
     pub fn try_io_mut<R, C>(&self, f: C) -> io::Result<R>
     where
         C: FnOnce() -> io::Result<R>,
@@ -202,7 +203,8 @@ pub fn async_fd_from_raw(fd: RawFd) -> io::Result<AsyncFd<OwnedAsyncFd>> {
 /// Returns `(read_fd, write_fd)`.
 pub fn pipe() -> io::Result<(AsyncFd<OwnedAsyncFd>, AsyncFd<OwnedAsyncFd>)> {
     let mut fds: [RawFd; 2] = [0; 2];
-    let res = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    // Use pipe2 with O_CLOEXEC so fds are not inherited across exec.
+    let res = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
     if res < 0 {
         return Err(io::Error::last_os_error());
     }
