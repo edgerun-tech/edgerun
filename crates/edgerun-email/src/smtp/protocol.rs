@@ -17,35 +17,6 @@ pub const ESMTP_EXTENSIONS: &[&str] = &[
     "CHUNKING",
 ];
 
-/// Reads a single SMTP line (until `\r\n`) from an async reader.
-///
-/// Returns `None` on EOF. The line does NOT include the `\r\n`.
-pub async fn crate::server::read_line<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Option<String>> {
-    let mut line_buf = String::with_capacity(1024);
-    loop {
-        let mut buf = [0u8; 1];
-        let n = match reader.read(&mut buf).await {
-            Ok(0) => {
-                if line_buf.is_empty() {
-                    return Ok(None);
-                }
-                return Ok(Some(line_buf));
-            }
-            Ok(n) => n,
-            Err(e) => return Err(e),
-        };
-        if n == 0 {
-            continue;
-        }
-        if buf[0] == b'\n' {
-            if line_buf.ends_with('\r') {
-                line_buf.pop();
-            }
-            return Ok(Some(line_buf));
-        }
-        line_buf.push(buf[0] as char);
-    }
-}
 
 /// Owned line reader — wraps any `AsyncRead + Unpin` and reads `\r\n`-delimited lines.
 ///

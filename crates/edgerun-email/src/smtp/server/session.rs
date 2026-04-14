@@ -774,43 +774,14 @@ async fn handle_auth_response(
 }
 
 fn base64_decode(encoded: &str) -> io::Result<AuthCredentials> {
-    let decoded = decode_base64(encoded)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid base64"))?;
+    let decoded = edgerun_encoding::base64::standard_decode(encoded)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     AuthCredentials::from_plain(&decoded)
 }
 
 fn base64_decode_raw(encoded: &str) -> io::Result<Vec<u8>> {
-    decode_base64(encoded)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid base64"))
-}
-
-fn decode_base64(input: &str) -> Option<Vec<u8>> {
-    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    let input = input.trim();
-    if input.is_empty() {
-        return Some(Vec::new());
-    }
-
-    let mut result = Vec::with_capacity(input.len() * 3 / 4);
-    let mut buf: u32 = 0;
-    let mut bits_collected: u32 = 0;
-
-    for &byte in input.as_bytes() {
-        if byte == b'=' {
-            break;
-        }
-        let val = TABLE.iter().position(|&b| b == byte)? as u32;
-        buf = (buf << 6) | val;
-        bits_collected += 6;
-
-        if bits_collected >= 8 {
-            bits_collected -= 8;
-            result.push(((buf >> bits_collected) & 0xFF) as u8);
-        }
-    }
-
-    Some(result)
+    edgerun_encoding::base64::standard_decode(encoded)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 // ===========================================================================
