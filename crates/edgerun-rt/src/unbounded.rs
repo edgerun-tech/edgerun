@@ -8,7 +8,8 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
+use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
 /// Creates an unbounded mpsc channel.
@@ -37,7 +38,7 @@ struct UnboundedInner<T> {
 
 impl<T> UnboundedInner<T> {
     fn wake_receiver(&self) {
-        if let Some(waker) = self.recv_waker.lock().unwrap().take() {
+        if let Some(waker) = self.recv_waker.lock().take() {
             waker.wake();
         }
         self.sender_cvar.notify_one();
@@ -51,14 +52,14 @@ pub struct UnboundedSender<T> {
 
 impl<T> Clone for UnboundedSender<T> {
     fn clone(&self) -> Self {
-        *self.inner.sender_count.lock().unwrap() += 1;
+        *self.inner.sender_count.lock() += 1;
         Self { inner: self.inner.clone() }
     }
 }
 
 impl<T> Drop for UnboundedSender<T> {
     fn drop(&mut self) {
-        let mut count = self.inner.sender_count.lock().unwrap();
+        let mut count = self.inner.sender_count.lock();
         *count -= 1;
         if *count == 0 {
             self.inner.closed.store(true, Ordering::Release);
@@ -73,14 +74,14 @@ impl<T> UnboundedSender<T> {
         if self.inner.closed.load(Ordering::Relaxed) {
             return Err(SendError(val));
         }
-        self.inner.q.lock().unwrap().push_back(val);
+        self.inner.q.lock().push_back(val);
         self.inner.wake_receiver();
         Ok(())
     }
 
     /// Returns the approximate number of messages in the channel.
     pub fn len(&self) -> usize {
-        self.inner.q.lock().unwrap().len()
+        self.inner.q.lock().len()
     }
 
     /// Returns true if the channel has no messages.
@@ -103,7 +104,7 @@ impl<T> UnboundedReceiver<T> {
     /// Receives a value, blocking if the channel is empty.
     /// Returns `None` when all senders are dropped and the queue is empty.
     pub fn blocking_recv(&mut self) -> Option<T> {
-        let mut q = self.inner.q.lock().unwrap();
+        let mut q = self.inner.q.lock();
         loop {
             if let Some(v) = q.pop_front() {
                 return Some(v);
@@ -111,13 +112,13 @@ impl<T> UnboundedReceiver<T> {
             if self.inner.closed.load(Ordering::Acquire) {
                 return None;
             }
-            q = self.inner.sender_cvar.wait(q).unwrap();
+            self.inner.sender_cvar.wait(&mut q);
         }
     }
 
     /// Tries to receive a value without blocking.
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
-        let mut q = self.inner.q.lock().unwrap();
+        let mut q = self.inner.q.lock();
         if let Some(v) = q.pop_front() {
             return Ok(v);
         }
@@ -149,19 +150,19 @@ impl<T> Future for UnboundedRecvFut<'_, T> {
     type Output = Option<T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut q = self.inner.q.lock().unwrap();
+        let mut q = self.inner.q.lock();
         if let Some(v) = q.pop_front() {
             return Poll::Ready(Some(v));
         }
         if self.inner.closed.load(Ordering::Acquire) {
             return Poll::Ready(None);
         }
-        *self.inner.recv_waker.lock().unwrap() = Some(cx.waker().clone());
+        *self.inner.recv_waker.lock() = Some(cx.waker().clone());
 
         // Double-check: a value may have arrived while we were registering.
         if let Some(v) = q.pop_front() {
             // Clear our waker.
-            self.inner.recv_waker.lock().unwrap().take();
+            self.inner.recv_waker.lock().take();
             return Poll::Ready(Some(v));
         }
         if self.inner.closed.load(Ordering::Acquire) {
