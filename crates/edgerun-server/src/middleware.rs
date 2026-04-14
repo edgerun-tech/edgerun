@@ -70,7 +70,7 @@ pub trait ConnectionMiddleware: Send + Sync + 'static {
     fn on_connect(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>>;
 }
@@ -84,19 +84,19 @@ pub trait ConnectionMiddleware: Send + Sync + 'static {
 /// Calling `.run()` passes the connection downstream exactly once.
 /// The handle is consumed by `run()`, preventing double-handling.
 pub struct NextConnection {
-    inner: Box<dyn FnOnce(SocketAddr, AsyncTcpStream) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> + Send>,
+    inner: Box<dyn FnOnce(SocketAddr, Arc<AsyncTcpStream>) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> + Send>,
 }
 
 impl NextConnection {
     pub fn new<F>(inner: F) -> Self
     where
-        F: FnOnce(SocketAddr, AsyncTcpStream) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> + Send + 'static,
+        F: FnOnce(SocketAddr, Arc<AsyncTcpStream>) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> + Send + 'static,
     {
         Self { inner: Box::new(inner) }
     }
 
     /// Pass the connection to the next middleware or protocol handler.
-    pub fn run(self, peer: SocketAddr, stream: AsyncTcpStream) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> {
+    pub fn run(self, peer: SocketAddr, stream: Arc<AsyncTcpStream>) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> {
         (self.inner)(peer, stream)
     }
 }
@@ -114,7 +114,7 @@ impl ConnectionHandler for MiddlewareLayer {
     fn handle(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> {
         let mw = Arc::clone(&self.middleware);
         let inner = Arc::clone(&self.inner);
@@ -139,7 +139,7 @@ pub trait ConnectionHandler: Send + Sync + 'static {
     fn handle(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>>;
 }
 
@@ -210,7 +210,7 @@ pub struct FnConnectionMiddleware<F> {
 /// ```
 pub fn connection_fn<F>(f: F) -> FnConnectionMiddleware<F>
 where
-    F: Fn(SocketAddr, AsyncTcpStream, NextConnection) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>>
+    F: Fn(SocketAddr, Arc<AsyncTcpStream>, NextConnection) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>>
         + Send + Sync + 'static,
 {
     FnConnectionMiddleware { f }
@@ -218,13 +218,13 @@ where
 
 impl<F> ConnectionMiddleware for FnConnectionMiddleware<F>
 where
-    F: Fn(SocketAddr, AsyncTcpStream, NextConnection) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>>
+    F: Fn(SocketAddr, Arc<AsyncTcpStream>, NextConnection) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>>
         + Send + Sync + 'static,
 {
     fn on_connect(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         Box::pin((self.f)(peer, stream, next))
@@ -243,7 +243,7 @@ impl ConnectionHandler for PassThroughHandler {
     fn handle(
         &self,
         _peer: SocketAddr,
-        _stream: AsyncTcpStream,
+        _stream: Arc<AsyncTcpStream>,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> {
         Box::pin(async { Ok(()) })
     }
@@ -253,7 +253,7 @@ impl<T: ConnectionHandler + ?Sized> ConnectionHandler for Arc<T> {
     fn handle(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>> {
         T::handle(self, peer, stream)
     }
@@ -310,7 +310,7 @@ impl ConnectionMiddleware for IpFilter {
     fn on_connect(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         if self.is_allowed(peer.ip()) {
@@ -341,7 +341,7 @@ impl ConnectionMiddleware for ConnectionLogger {
     fn on_connect(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         edgerun_log::info!("{}: connection from {}", self.prefix, peer);
@@ -375,7 +375,7 @@ impl ConnectionMiddleware for ConnectionRateLimit {
     fn on_connect(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         let state = Arc::clone(&self.state);
@@ -422,7 +422,7 @@ impl ConnectionMiddleware for MiddlewareAdapter {
     fn on_connect(
         &self,
         peer: SocketAddr,
-        stream: AsyncTcpStream,
+        stream: Arc<AsyncTcpStream>,
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         self.0.on_connect(peer, stream, next)
@@ -457,19 +457,7 @@ impl edgerun_email::server::ConnectionInterceptor for ConnectionInterceptorAdapt
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         let handler = Arc::clone(&self.handler);
         Box::pin(async move {
-            // Try to unwrap the Arc to get an owned stream.
-            // If other references exist, we need to clone the underlying stream.
-            match Arc::try_unwrap(stream) {
-                Ok(s) => handler.handle(peer, s).await,
-                Err(arc) => {
-                    // Other references exist — we need to clone the stream.
-                    // AsyncTcpStream implements TryClone for this purpose.
-                    let cloned = arc.try_clone().map_err(|e| {
-                        io::Error::new(e.kind(), format!("failed to clone stream for interceptor: {e}"))
-                    })?;
-                    handler.handle(peer, cloned).await
-                }
-            }
+            handler.handle(peer, stream).await
         })
     }
 }

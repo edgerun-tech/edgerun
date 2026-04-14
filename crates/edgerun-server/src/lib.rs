@@ -33,7 +33,6 @@ use std::time::Duration;
 
 // Re-export key types.
 pub use edgerun_http::handler::Handler;
-use crate::middleware::{ConnectionChain, ConnectionInterceptorAdapter, MiddlewareAdapter, PassThroughHandler};
 pub use edgerun_http::middleware::{Chain, Extensions, Middleware, Next, middleware_fn};
 pub use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
 pub use edgerun_http::{Request, Response, StatusCode};
@@ -42,13 +41,13 @@ pub mod middleware;
 pub use middleware::{
     ConnectionChain, ConnectionHandler, ConnectionMiddleware, NextConnection,
     connection_fn, FnConnectionMiddleware, PassThroughHandler, MiddlewareAdapter,
+    ConnectionInterceptorAdapter,
     IpFilter, ConnectionLogger, ConnectionRateLimit,
 };
 
 // ---------------------------------------------------------------------------
 // Optional protocol configs (gated by feature flags)
 // ---------------------------------------------------------------------------
-
 #[cfg(feature = "dns")]
 mod dns_config {
     

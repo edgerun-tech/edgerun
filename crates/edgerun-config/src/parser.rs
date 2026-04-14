@@ -245,7 +245,7 @@ impl ConfigState {
                         scope.pool.reserve(ip);
                         // Reserve in the pool's lease map too
                         scope.pool.leases.insert(
-                            edgerun_dns::dhcp::lease::ip_to_u32(ip),
+                            edgerun_encoding::ip::ip_to_u32(&ip),
                             edgerun_dns::dhcp::lease::Lease::with_client_id(
                                 mac, res.mac.as_bytes().to_vec(), ip,
                                 server.default_lease_time, 0,
