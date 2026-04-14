@@ -449,7 +449,7 @@ pub fn add_use(file: &mut syn::File, use_path: &str) -> Result<(), String> {
 }
 
 pub fn add_derive(file: &mut syn::File, name: &str, derive: &str) -> Result<bool, String> {
-    let derive_paths: Vec<syn::Path> = derive
+    let new_paths: Vec<syn::Path> = derive
         .split(',')
         .map(|d| syn::parse_str(d.trim()).map_err(|e| format!("invalid derive '{d}': {e}")))
         .collect::<Result<_, _>>()?;
@@ -457,16 +457,38 @@ pub fn add_derive(file: &mut syn::File, name: &str, derive: &str) -> Result<bool
         match item {
             syn::Item::Struct(s) if s.ident == name => {
                 let existing = collect_derives(&s.attrs);
-                let all: Punctuated<syn::Path, syn::Token![,]> =
-                    existing.into_iter().chain(derive_paths).collect();
+                let existing_names: HashSet<String> = existing
+                    .iter()
+                    .filter_map(|p| p.segments.last().map(|s| s.ident.to_string()))
+                    .collect();
+                let all: Punctuated<syn::Path, syn::Token![,]> = existing
+                    .into_iter()
+                    .chain(new_paths.into_iter().filter(|p| {
+                        p.segments
+                            .last()
+                            .map(|s| !existing_names.contains(&s.ident.to_string()))
+                            .unwrap_or(true)
+                    }))
+                    .collect();
                 s.attrs.retain(|a| !a.path().is_ident("derive"));
                 s.attrs.push(syn::parse_quote!(#[derive(#all)]));
                 return Ok(true);
             }
             syn::Item::Enum(e) if e.ident == name => {
                 let existing = collect_derives(&e.attrs);
-                let all: Punctuated<syn::Path, syn::Token![,]> =
-                    existing.into_iter().chain(derive_paths).collect();
+                let existing_names: HashSet<String> = existing
+                    .iter()
+                    .filter_map(|p| p.segments.last().map(|s| s.ident.to_string()))
+                    .collect();
+                let all: Punctuated<syn::Path, syn::Token![,]> = existing
+                    .into_iter()
+                    .chain(new_paths.into_iter().filter(|p| {
+                        p.segments
+                            .last()
+                            .map(|s| !existing_names.contains(&s.ident.to_string()))
+                            .unwrap_or(true)
+                    }))
+                    .collect();
                 e.attrs.retain(|a| !a.path().is_ident("derive"));
                 e.attrs.push(syn::parse_quote!(#[derive(#all)]));
                 return Ok(true);

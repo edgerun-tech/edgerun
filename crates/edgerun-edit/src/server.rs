@@ -1,5 +1,6 @@
 //! HTTP server for the editor. Single POST /edit endpoint.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -105,21 +106,54 @@ impl Handler for EditHandler {
     }
 }
 
+/// Resolve the cargo binary path: tries `cargo` on PATH, then falls back
+/// to the standard rustup install location.
+fn resolve_cargo() -> PathBuf {
+    // Try PATH first (works when cargo is installed and on PATH)
+    if which_in_path("cargo") {
+        return PathBuf::from("cargo");
+    }
+    // Fallback: standard rustup location
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let candidate = PathBuf::from(format!("{home}/.cargo/bin/cargo"));
+    if candidate.exists() {
+        return candidate;
+    }
+    // Last resort: just use "cargo" and let the OS try PATH
+    PathBuf::from("cargo")
+}
+
+fn which_in_path(name: &str) -> bool {
+    if let Ok(paths) = std::env::var("PATH") {
+        for dir in paths.split(':') {
+            let candidate = PathBuf::from(dir).join(name);
+            if candidate.exists() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 async fn handle_edit(req: &Value) -> Value {
     // Resolve project
     let project_path = req["project"].as_str().unwrap_or(".");
     let project_path = PathBuf::from(project_path);
 
-    // If it's a Cargo.toml, load as project; if it's a .rs file, single-file mode
     let project = if project_path.ends_with("Cargo.toml") && project_path.exists() {
-        Project::from_manifest(&project_path)
+        match Project::from_manifest(&project_path) {
+            Ok(p) => p,
+            Err(e) => return json!({ "ok": false, "error": e }),
+        }
     } else if project_path.exists() {
         Project::single_file(&project_path)
     } else {
-        // Try auto-detect: look for Cargo.toml in project_path dir
         let candidate = project_path.join("Cargo.toml");
         if candidate.exists() {
-            Project::from_manifest(&candidate)
+            match Project::from_manifest(&candidate) {
+                Ok(p) => p,
+                Err(e) => return json!({ "ok": false, "error": e }),
+            }
         } else {
             return json!({
                 "ok": false,
@@ -136,12 +170,31 @@ async fn handle_edit(req: &Value) -> Value {
         });
     }
 
+    // Phase 1: Parse all project files once into a cache.
+    // Each file is parsed exactly once, then all transforms are applied
+    // to the in-memory AST, and only at the end are modified files written.
+    let mut file_cache: HashMap<PathBuf, syn::File> = HashMap::new();
+    for file in &project.source_files {
+        match edit_ops::parse_file(file) {
+            Ok(parsed) => {
+                file_cache.insert(file.clone(), parsed);
+            }
+            Err(e) => {
+                return json!({
+                    "ok": false,
+                    "error": format!("parsing {}: {e}", file.display()),
+                });
+            }
+        }
+    }
+
     // Set up git safety if project root is a git repo
     let root = project.root_dir();
     let mut git_safety = GitSafety::new(root);
 
-    // Apply each edit
-    let mut modified_files: Vec<String> = Vec::new();
+    // Phase 2: Apply edits to cached ASTs.
+    // Track which files are modified so we only write those.
+    let mut modified_paths: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
     let mut new_files: Vec<String> = Vec::new();
 
     for (i, edit) in edits.iter().enumerate() {
@@ -150,7 +203,7 @@ async fn handle_edit(req: &Value) -> Value {
             "rename_type" => {
                 let old = edit["old"].as_str().unwrap_or("");
                 let new_name = edit["new"].as_str().unwrap_or("");
-                apply_rename_type(&project, old, new_name, &mut modified_files)
+                apply_rename_type_cached(&mut file_cache, &project, old, new_name, &mut modified_paths)
             }
             "add_fn" => {
                 let file = resolve_file(&project, edit);
@@ -158,29 +211,29 @@ async fn handle_edit(req: &Value) -> Value {
                 let args = edit["args"].as_str().unwrap_or("");
                 let ret = edit["ret"].as_str().unwrap_or("");
                 let body = edit["body"].as_str().unwrap_or("");
-                apply_add_fn(&file, name, args, ret, body, &mut modified_files)
+                apply_add_fn_cached(&mut file_cache, &file, name, args, ret, body, &mut modified_paths)
             }
             "replace_fn_body" => {
                 let file = resolve_file(&project, edit);
                 let name = edit["name"].as_str().unwrap_or("");
                 let body = edit["body"].as_str().unwrap_or("");
-                apply_replace_fn_body(&file, name, body, &mut modified_files)
+                apply_replace_fn_body_cached(&mut file_cache, &file, name, body, &mut modified_paths)
             }
             "remove_fn" => {
                 let file = resolve_file(&project, edit);
                 let name = edit["name"].as_str().unwrap_or("");
-                apply_remove_fn(&file, name, &mut modified_files)
+                apply_remove_fn_cached(&mut file_cache, &file, name, &mut modified_paths)
             }
             "add_use" => {
                 let file = resolve_file(&project, edit);
                 let use_path = edit["use"].as_str().unwrap_or("");
-                apply_add_use(&file, use_path, &mut modified_files)
+                apply_add_use_cached(&mut file_cache, &file, use_path, &mut modified_paths)
             }
             "add_derive" => {
                 let file = resolve_file(&project, edit);
                 let name = edit["name"].as_str().unwrap_or("");
                 let derive = edit["derive"].as_str().unwrap_or("");
-                apply_add_derive(&file, name, derive, &mut modified_files)
+                apply_add_derive_cached(&mut file_cache, &file, name, derive, &mut modified_paths)
             }
             "new_file" => {
                 let path = edit["path"].as_str().unwrap_or("");
@@ -190,7 +243,7 @@ async fn handle_edit(req: &Value) -> Value {
             "remove_file" => {
                 let path = edit["path"].as_str().unwrap_or("");
                 let force = edit["force"].as_bool().unwrap_or(false);
-                apply_remove_file(&project, path, force, &mut modified_files)
+                apply_remove_file_cached(&mut file_cache, &project, path, force, &mut modified_paths)
             }
             _ => Err(format!("unknown op: {op}")),
         };
@@ -212,10 +265,27 @@ async fn handle_edit(req: &Value) -> Value {
         }
     }
 
+    // Phase 3: Write all modified files once.
+    for path in &modified_paths {
+        if let Some(ast) = file_cache.get(path) {
+            if let Err(e) = edit_ops::write_file(path, ast) {
+                // Rollback on write failure
+                if let Some(git) = &git_safety {
+                    let (_, _) = git.rollback();
+                }
+                return json!({
+                    "ok": false,
+                    "error": format!("writing {}: {e}", path.display()),
+                    "rolled_back": true,
+                });
+            }
+        }
+    }
+
     // Track all modified files for git
     if let Some(ref mut git) = git_safety {
-        for f in &modified_files {
-            git.track(PathBuf::from(f).as_path());
+        for f in &modified_paths {
+            git.track(f);
         }
         for f in &new_files {
             git.track(PathBuf::from(f).as_path());
@@ -245,7 +315,7 @@ async fn handle_edit(req: &Value) -> Value {
 
     // Stage changes
     let staged = if let Some(ref git) = git_safety {
-        let (ok, msg) = git.stage_all();
+        let (ok, _) = git.stage_all();
         ok
     } else {
         false
@@ -253,7 +323,7 @@ async fn handle_edit(req: &Value) -> Value {
 
     json!({
         "ok": true,
-        "files_modified": modified_files.len(),
+        "files_modified": modified_paths.len(),
         "new_files": new_files.len(),
         "staged": staged,
     })
@@ -275,113 +345,101 @@ fn resolve_file(project: &Project, edit: &Value) -> PathBuf {
     project.root_dir().join("src/main.rs")
 }
 
-fn apply_rename_type(
+// ── Cached apply functions (operate on in-memory ASTs) ───────────────────────
+
+fn apply_rename_type_cached(
+    cache: &mut HashMap<PathBuf, syn::File>,
     project: &Project,
     old: &str,
     new: &str,
-    modified: &mut Vec<String>,
+    modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
     for file in &project.source_files {
-        let mut parsed = edit_ops::parse_file(file)?;
-        edit_ops::rename_type_in_file(&mut parsed, old, new);
-        edit_ops::write_file(file, &parsed)?;
-        modified.push(file.to_string_lossy().to_string());
+        if let Some(parsed) = cache.get_mut(file) {
+            edit_ops::rename_type_in_file(parsed, old, new);
+            modified.insert(file.clone());
+        }
     }
     Ok(())
 }
 
-fn apply_add_fn(
+fn apply_add_fn_cached(
+    cache: &mut HashMap<PathBuf, syn::File>,
     file: &PathBuf,
     name: &str,
     args: &str,
     ret: &str,
     body: &str,
-    modified: &mut Vec<String>,
+    modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
-    let mut parsed = edit_ops::parse_file(file)?;
-    edit_ops::add_fn(&mut parsed, name, args, ret, body)?;
-    edit_ops::write_file(file, &parsed)?;
-    modified.push(file.to_string_lossy().to_string());
+    let parsed = ensure_in_cache(cache, file)?;
+    edit_ops::add_fn(parsed, name, args, ret, body)?;
+    modified.insert(file.clone());
     Ok(())
 }
 
-fn apply_replace_fn_body(
+fn apply_replace_fn_body_cached(
+    cache: &mut HashMap<PathBuf, syn::File>,
     file: &PathBuf,
     name: &str,
     body: &str,
-    modified: &mut Vec<String>,
+    modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
-    let mut parsed = edit_ops::parse_file(file)?;
-    if !edit_ops::replace_fn_body(&mut parsed, name, body)? {
+    let parsed = ensure_in_cache(cache, file)?;
+    if !edit_ops::replace_fn_body(parsed, name, body)? {
         return Err(format!("fn {name} not found"));
     }
-    edit_ops::write_file(file, &parsed)?;
-    modified.push(file.to_string_lossy().to_string());
+    modified.insert(file.clone());
     Ok(())
 }
 
-fn apply_remove_fn(
+fn apply_remove_fn_cached(
+    cache: &mut HashMap<PathBuf, syn::File>,
     file: &PathBuf,
     name: &str,
-    modified: &mut Vec<String>,
+    modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
-    let mut parsed = edit_ops::parse_file(file)?;
-    if !edit_ops::remove_fn(&mut parsed, name) {
+    let parsed = ensure_in_cache(cache, file)?;
+    if !edit_ops::remove_fn(parsed, name) {
         return Err(format!("fn {name} not found"));
     }
-    edit_ops::write_file(file, &parsed)?;
-    modified.push(file.to_string_lossy().to_string());
+    modified.insert(file.clone());
     Ok(())
 }
 
-fn apply_add_use(
+fn apply_add_use_cached(
+    cache: &mut HashMap<PathBuf, syn::File>,
     file: &PathBuf,
     use_path: &str,
-    modified: &mut Vec<String>,
+    modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
-    let mut parsed = edit_ops::parse_file(file)?;
-    edit_ops::add_use(&mut parsed, use_path)?;
-    edit_ops::write_file(file, &parsed)?;
-    modified.push(file.to_string_lossy().to_string());
+    let parsed = ensure_in_cache(cache, file)?;
+    edit_ops::add_use(parsed, use_path)?;
+    modified.insert(file.clone());
     Ok(())
 }
 
-fn apply_add_derive(
+fn apply_add_derive_cached(
+    cache: &mut HashMap<PathBuf, syn::File>,
     file: &PathBuf,
     name: &str,
     derive: &str,
-    modified: &mut Vec<String>,
+    modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
-    let mut parsed = edit_ops::parse_file(file)?;
-    if !edit_ops::add_derive(&mut parsed, name, derive)? {
+    let parsed = ensure_in_cache(cache, file)?;
+    if !edit_ops::add_derive(parsed, name, derive)? {
         return Err(format!("struct/enum {name} not found"));
     }
-    edit_ops::write_file(file, &parsed)?;
-    modified.push(file.to_string_lossy().to_string());
+    modified.insert(file.clone());
     Ok(())
 }
 
-fn apply_new_file(
-    project: &Project,
-    path: &str,
-    content: &str,
-    new_files: &mut Vec<String>,
-) -> Result<(), String> {
-    let abs = if PathBuf::from(path).is_absolute() {
-        PathBuf::from(path)
-    } else {
-        project.root_dir().join(path)
-    };
-    edit_ops::new_file(&abs, content)?;
-    new_files.push(abs.to_string_lossy().to_string());
-    Ok(())
-}
-
-fn apply_remove_file(
+fn apply_remove_file_cached(
+    cache: &mut HashMap<PathBuf, syn::File>,
     project: &Project,
     path: &str,
     force: bool,
-    modified: &mut Vec<String>,
+    modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
     let abs = if PathBuf::from(path).is_absolute() {
         PathBuf::from(path)
@@ -400,19 +458,53 @@ fn apply_remove_file(
         }
     }
     edit_ops::remove_file(&abs)?;
-    modified.push(abs.to_string_lossy().to_string());
+    cache.remove(&abs);
+    modified.insert(abs.clone());
+    Ok(())
+}
+
+/// Ensure a file is in the cache (for files not in the initial project scan,
+/// e.g. when a resolve_file points to a file outside source_files).
+fn ensure_in_cache<'a>(
+    cache: &'a mut HashMap<PathBuf, syn::File>,
+    file: &PathBuf,
+) -> Result<&'a mut syn::File, String> {
+    use std::collections::hash_map::Entry;
+    match cache.entry(file.clone()) {
+        Entry::Occupied(entry) => Ok(entry.into_mut()),
+        Entry::Vacant(entry) => {
+            let parsed = edit_ops::parse_file(file)?;
+            Ok(entry.insert(parsed))
+        }
+    }
+}
+
+fn apply_new_file(
+    project: &Project,
+    path: &str,
+    content: &str,
+    new_files: &mut Vec<String>,
+) -> Result<(), String> {
+    let abs = if PathBuf::from(path).is_absolute() {
+        PathBuf::from(path)
+    } else {
+        project.root_dir().join(path)
+    };
+    edit_ops::new_file(&abs, content)?;
+    new_files.push(abs.to_string_lossy().to_string());
     Ok(())
 }
 
 fn run_cargo_check(project: &Project) -> Result<(), String> {
     use std::process::Command;
-    let output = Command::new("cargo")
+    let cargo = resolve_cargo();
+    let output = Command::new(&cargo)
         .arg("check")
         .arg("--manifest-path")
         .arg(&project.manifest)
         .env("RUSTFLAGS", "-A dead_code -A unused_variables -A unused_imports -A unused_assignments -A unused_mut -A non_upper_case_globals -A non_snake_case -A non_camel_case_types")
         .output()
-        .map_err(|e| format!("running cargo check: {e}"))?;
+        .map_err(|e| format!("running {} check: {e}", cargo.display()))?;
     if output.status.success() {
         Ok(())
     } else {

@@ -11,25 +11,33 @@ pub struct Project {
 }
 
 impl Project {
-    /// Load a project from a Cargo.toml path using cargo metadata + filesystem walk.
-    pub fn from_manifest(manifest: &Path) -> Self {
+    /// Load a project from a Cargo.toml path by walking src/ directories.
+    pub fn from_manifest(manifest: &Path) -> Result<Self, String> {
         let manifest = manifest
             .canonicalize()
-            .unwrap_or_else(|e| panic!("Cargo.toml not found: {e}"));
+            .map_err(|e| format!("Cargo.toml not found: {e}"))?;
 
         let mut files: HashSet<PathBuf> = HashSet::new();
 
-        // Walk src/ dirs from workspace root for completeness
+        // Only walk the manifest directory's direct children that are likely workspace members
         if let Some(root) = manifest.parent() {
-            for entry in std::fs::read_dir(root).ok().into_iter().flatten().flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    let src = path.join("src");
-                    if src.is_dir() {
-                        walk_rs(&src, &mut files);
+            if let Ok(entries) = std::fs::read_dir(root) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    // Skip build artifacts, VCS dirs, and dependency trees
+                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if matches!(name, "target" | ".git" | "node_modules" | ".cargo") {
+                        continue;
+                    }
+                    if path.is_dir() {
+                        let src = path.join("src");
+                        if src.is_dir() {
+                            walk_rs(&src, &mut files);
+                        }
                     }
                 }
             }
+            // Also walk the root src/ directly
             let root_src = root.join("src");
             if root_src.is_dir() {
                 walk_rs(&root_src, &mut files);
@@ -46,10 +54,10 @@ impl Project {
             }
         }
 
-        Project {
+        Ok(Project {
             manifest,
             source_files: files.into_iter().collect(),
-        }
+        })
     }
 
     /// Single file "project".
@@ -61,7 +69,7 @@ impl Project {
     }
 
     pub fn root_dir(&self) -> &Path {
-        self.manifest.parent().unwrap()
+        self.manifest.parent().unwrap_or_else(|| Path::new("."))
     }
 }
 

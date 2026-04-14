@@ -65,15 +65,28 @@ impl GitSafety {
         }
     }
 
-    /// Stage all modified files after edits are applied.
+    /// Stage only the files tracked by this GitSafety instance.
     pub fn stage_all(&self) -> (bool, String) {
         if self.modified.is_empty() {
             return (true, "no files modified".to_string());
         }
-        let (_, _, ok) = run_git(&self.root, &["add", "--"]);
+        let files: Vec<&str> = self.modified.iter().map(|s| s.as_str()).collect();
+        // Try staging specific files first
+        let mut args = vec!["add", "--"];
+        for f in &files {
+            args.push(f);
+        }
+        let (_, stderr, ok) = run_git(&self.root, &args);
         if !ok {
-            // Try without -- (for untracked files)
-            run_git(&self.root, &["add", "-A"]);
+            // For untracked new files, add without --
+            let mut args = vec!["add"];
+            for f in &files {
+                args.push(f);
+            }
+            let (_, stderr, ok2) = run_git(&self.root, &args);
+            if !ok2 {
+                return (false, format!("git add failed: {stderr}"));
+            }
         }
         (true, format!("staged {} file(s)", self.modified.len()))
     }

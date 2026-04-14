@@ -131,7 +131,14 @@ pub struct SmtpClient {
 }
 
 impl SmtpClient {
-    /// Connect to an SMTP server.
+    /// Connect to an SMTP server and auto-negotiate STARTTLS if available.
+    ///
+    /// Flow:
+    /// 1. TCP connect → read greeting
+    /// 2. EHLO → parse capabilities
+    /// 3. If STARTTLS available and `tls` feature enabled → upgrade to TLS → re-EHLO
+    ///
+    /// The domain used in EHLO is derived from the server address.
     pub async fn connect(addr: &str) -> io::Result<Self> {
         let server_name = Self::extract_host(addr);
         let stream = Self::connect_tcp(addr).await?;
@@ -142,7 +149,7 @@ impl SmtpClient {
             transport,
             capabilities: Vec::new(),
             capabilities_map: HashMap::new(),
-            server_name,
+            server_name: server_name.clone(),
         };
 
         let greeting = client.read_response().await?;
@@ -153,6 +160,48 @@ impl SmtpClient {
             ));
         }
 
+        // Auto-EHLO
+        client.ehlo(&server_name).await?;
+
+        // Auto-STARTTLS if supported
+        #[cfg(feature = "tls")]
+        {
+            let has_starttls = client.capabilities_map.contains_key("STARTTLS");
+            if has_starttls {
+                client.starttls().await?;
+                // Re-EHLO after TLS upgrade (capabilities may change)
+                client.ehlo(&server_name).await?;
+                edgerun_log::info!("edgerun-smtp-client: auto-negotiated STARTTLS with {}", addr);
+            }
+        }
+
+        Ok(client)
+    }
+
+    /// Connect without STARTTLS negotiation.
+    ///
+    /// Use this when you need manual control over the TLS upgrade,
+    /// or when connecting to a server that doesn't support STARTTLS.
+    pub async fn connect_no_tls(addr: &str) -> io::Result<Self> {
+        let server_name = Self::extract_host(addr);
+        let stream = Self::connect_tcp(addr).await?;
+
+        let mut client = Self {
+            transport: ClientTransport::Plain(stream),
+            capabilities: Vec::new(),
+            capabilities_map: HashMap::new(),
+            server_name: server_name.clone(),
+        };
+
+        let greeting = client.read_response().await?;
+        if !greeting.code.is_success() {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionRefused,
+                format!("Server rejected: {}", greeting.message),
+            ));
+        }
+
+        client.ehlo(&server_name).await?;
         Ok(client)
     }
 
