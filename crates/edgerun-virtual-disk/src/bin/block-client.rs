@@ -110,31 +110,12 @@ fn parse_u64(value: &str, field: &str) -> Result<u64, BlockError> {
 }
 
 fn encode_hex(bytes: &[u8]) -> String {
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        use std::fmt::Write as _;
-        let _ = write!(&mut output, "{byte:02x}");
-    }
-    output
+    edgerun_encoding::hex::bytes_to_hex(bytes)
 }
 
 fn decode_hex(input: &str) -> Result<Vec<u8>, BlockError> {
-    if !input.len().is_multiple_of(2) {
-        return Err(BlockError::ProtocolError(
-            "hex payload must contain an even number of characters".into(),
-        ));
-    }
-    let mut bytes = Vec::with_capacity(input.len() / 2);
-    let mut chars = input.as_bytes().chunks_exact(2);
-    for pair in &mut chars {
-        let pair_str = std::str::from_utf8(pair)
-            .map_err(|err| BlockError::ProtocolError(format!("invalid hex: {err}")))?;
-        let byte = u8::from_str_radix(pair_str, 16).map_err(|err| {
-            BlockError::ProtocolError(format!("invalid hex byte `{pair_str}`: {err}"))
-        })?;
-        bytes.push(byte);
-    }
-    Ok(bytes)
+    edgerun_encoding::hex::hex_to_bytes(input)
+        .map_err(|err| BlockError::ProtocolError(format!("invalid hex: {err}")))
 }
 
 fn print_usage(program: &str) {

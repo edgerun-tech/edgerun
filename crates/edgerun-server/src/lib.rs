@@ -41,6 +41,7 @@ pub mod middleware;
 pub use middleware::{
     ConnectionChain, ConnectionHandler, ConnectionMiddleware, NextConnection,
     connection_fn, FnConnectionMiddleware, PassThroughHandler, MiddlewareAdapter,
+    IpFilter, ConnectionLogger, ConnectionRateLimit,
 };
 
 // ---------------------------------------------------------------------------

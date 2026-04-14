@@ -1716,6 +1716,9 @@ dependencies = [
 [[package]]
 name = "edgerun-virtual-disk"
 version = "0.1.0"
+dependencies = [
+ "edgerun-encoding",
+]
 
 [[package]]
 name = "edgerun-wifi"

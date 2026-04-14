@@ -260,6 +260,157 @@ impl<T: ConnectionHandler + ?Sized> ConnectionHandler for Arc<T> {
 }
 
 // ===========================================================================
+// Built-in Connection Middleware Implementations
+// ===========================================================================
+
+use std::collections::HashMap;
+use std::net::IpAddr;
+use std::time::Instant;
+
+/// IP filter — allow or deny connections by IP address prefix.
+///
+/// Uses simple string prefix matching (no subnet math).
+/// For CIDR matching, add the `ipnet` crate.
+pub struct IpFilter {
+    allowed: Vec<String>,
+    denied: Vec<String>,
+}
+
+impl IpFilter {
+    pub fn new() -> Self {
+        Self {
+            allowed: Vec::new(),
+            denied: Vec::new(),
+        }
+    }
+
+    pub fn allow_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.allowed.push(prefix.into());
+        self
+    }
+
+    pub fn deny_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.denied.push(prefix.into());
+        self
+    }
+
+    fn is_allowed(&self, ip: IpAddr) -> bool {
+        let ip_str = ip.to_string();
+        if self.denied.iter().any(|d| ip_str.starts_with(d)) {
+            return false;
+        }
+        if !self.allowed.is_empty() {
+            return self.allowed.iter().any(|a| ip_str.starts_with(a));
+        }
+        true
+    }
+}
+
+impl ConnectionMiddleware for IpFilter {
+    fn on_connect(
+        &self,
+        peer: SocketAddr,
+        stream: AsyncTcpStream,
+        next: NextConnection,
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
+        if self.is_allowed(peer.ip()) {
+            next.run(peer, stream)
+        } else {
+            Box::pin(async move {
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("IP {} not allowed", peer.ip()),
+                ))
+            })
+        }
+    }
+}
+
+/// Connection logger — logs every connect/disconnect.
+pub struct ConnectionLogger {
+    prefix: String,
+}
+
+impl ConnectionLogger {
+    pub fn new(prefix: impl Into<String>) -> Self {
+        Self { prefix: prefix.into() }
+    }
+}
+
+impl ConnectionMiddleware for ConnectionLogger {
+    fn on_connect(
+        &self,
+        peer: SocketAddr,
+        stream: AsyncTcpStream,
+        next: NextConnection,
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
+        edgerun_log::info!("{}: connection from {}", self.prefix, peer);
+        next.run(peer, stream)
+    }
+}
+
+/// Per-IP connection rate limiter.
+pub struct ConnectionRateLimit {
+    state: Arc<edgerun_rt::Mutex<HashMap<IpAddr, RateLimitEntry>>>,
+    max_connections: usize,
+    window_secs: u64,
+}
+
+struct RateLimitEntry {
+    count: usize,
+    window_start: Instant,
+}
+
+impl ConnectionRateLimit {
+    pub fn new(max_connections: usize, window_secs: u64) -> Self {
+        Self {
+            state: Arc::new(edgerun_rt::Mutex::new(HashMap::new())),
+            max_connections,
+            window_secs,
+        }
+    }
+}
+
+impl ConnectionMiddleware for ConnectionRateLimit {
+    fn on_connect(
+        &self,
+        peer: SocketAddr,
+        stream: AsyncTcpStream,
+        next: NextConnection,
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
+        let state = Arc::clone(&self.state);
+        let max = self.max_connections;
+        let window = self.window_secs;
+
+        Box::pin(async move {
+            let mut map = state.lock().await;
+            let now = Instant::now();
+
+            let entry = map.entry(peer.ip()).or_insert(RateLimitEntry {
+                count: 0,
+                window_start: now,
+            });
+
+            if now.duration_since(entry.window_start).as_secs() >= window {
+                entry.count = 0;
+                entry.window_start = now;
+            }
+
+            entry.count += 1;
+            if entry.count > max {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Connection rate limit exceeded ({} per {}s)", max, window),
+                ));
+            }
+
+            drop(map);
+            next.run(peer, stream).await
+        })
+    }
+}
+
+// ===========================================================================
 // Adapter: wrap Arc<dyn ConnectionMiddleware> as ConnectionMiddleware
 // ===========================================================================
 

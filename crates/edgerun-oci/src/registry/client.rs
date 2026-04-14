@@ -621,9 +621,7 @@ impl RegistryClient {
 /// Compute SHA-256 hex digest.
 fn hex_digest(data: &[u8]) -> String {
     let hash = edgerun_crypto::sha256(data);
-    let mut hex = String::with_capacity(64);
-    for b in &hash { hex.push_str(&format!("{:02x}", b)); }
-    hex
+    edgerun_encoding::hex::bytes_to_hex(&hash)
 }
 
 /// Create a gzip-compressed tar from a directory.

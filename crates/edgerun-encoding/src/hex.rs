@@ -171,4 +171,183 @@ mod tests {
     fn test_must_hex_to_bytes_panics() {
         must_hex_to_bytes("invalid");
     }
+
+    #[test]
+    fn test_bytes_to_hex_sep() {
+        assert_eq!(bytes_to_hex_sep(&[0x00], ':'), "00");
+        assert_eq!(bytes_to_hex_sep(&[0xab, 0xcd, 0xef], ':'), "ab:cd:ef");
+        assert_eq!(bytes_to_hex_sep(&[], ':'), "");
+        assert_eq!(bytes_to_hex_sep(&[0xff, 0x00], '-'), "ff-00");
+    }
+
+    #[test]
+    fn test_parse_mac() {
+        let mac = parse_mac("00:11:22:33:44:55").unwrap();
+        assert_eq!(mac, [0x00, 0x11, 0x22, 0x33, 0x44, 0x55]);
+        assert!(parse_mac("00:11:22:33:44").is_none()); // too short
+        assert!(parse_mac("00:11:22:33:44:55:66").is_none()); // too long
+        assert!(parse_mac("00:11:22:33:44:zz").is_none()); // invalid
+        assert!(parse_mac("").is_none());
+    }
+
+    #[test]
+    fn test_parse_bdaddr() {
+        // Bluetooth BDADDR is little-endian reversed
+        let addr = parse_bdaddr("00:11:22:33:44:55").unwrap();
+        assert_eq!(addr, [0x55, 0x44, 0x33, 0x22, 0x11, 0x00]);
+        assert!(parse_bdaddr("invalid").is_none());
+    }
+
+    #[test]
+    fn test_hex_to_bytes_fixed() {
+        let arr: [u8; 4] = hex_to_bytes_fixed("0102abcd").unwrap();
+        assert_eq!(arr, [0x01, 0x02, 0xab, 0xcd]);
+        assert!(hex_to_bytes_fixed::<4>("0102ab").is_none()); // too short
+        assert!(hex_to_bytes_fixed::<4>("0102abcd00").is_none()); // too long
+    }
+
+    #[test]
+    fn test_parse_hex_int() {
+        assert_eq!(parse_hex_int::<u8>("ff"), Some(0xff));
+        assert_eq!(parse_hex_int::<u8>("0xff"), Some(0xff));
+        assert_eq!(parse_hex_int::<u8>("0XFF"), Some(0xff));
+        assert_eq!(parse_hex_int::<u16>("abcd"), Some(0xabcd));
+        assert_eq!(parse_hex_int::<u32>("00001234"), Some(0x1234));
+        assert_eq!(parse_hex_int::<u64>("deadbeef"), Some(0xdeadbeef));
+        assert!(parse_hex_int::<u8>("xyz").is_none());
+        assert!(parse_hex_int::<u8>("").is_none());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MAC address parsing (colon-separated hex)
+// ---------------------------------------------------------------------------
+
+/// Parse a colon-separated MAC address string into `[u8; 6]`.
+///
+/// Accepts lowercase or uppercase hex, exactly 6 octets separated by `:`.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::hex::parse_mac;
+/// let mac = parse_mac("00:11:22:33:44:55").unwrap();
+/// assert_eq!(mac, [0x00, 0x11, 0x22, 0x33, 0x44, 0x55]);
+/// ```
+pub fn parse_mac(s: &str) -> Option<[u8; 6]> {
+    let mut result = [0u8; 6];
+    let parts = s.split(':');
+    let mut i = 0;
+    for part in parts {
+        if i >= 6 { return None; }
+        let bytes = part.as_bytes();
+        if bytes.len() != 2 { return None; }
+        let hi = hex_byte(bytes[0])?;
+        let lo = hex_byte(bytes[1])?;
+        result[i] = (hi << 4) | lo;
+        i += 1;
+    }
+    if i == 6 { Some(result) } else { None }
+}
+
+/// Parse a Bluetooth device address (BDADDR) string into `[u8; 6]`.
+///
+/// Same as `parse_mac` but reverses the bytes (Bluetooth uses little-endian
+/// octet ordering for display).
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::hex::parse_bdaddr;
+/// let addr = parse_bdaddr("00:11:22:33:44:55").unwrap();
+/// assert_eq!(addr, [0x55, 0x44, 0x33, 0x22, 0x11, 0x00]);
+/// ```
+pub fn parse_bdaddr(s: &str) -> Option<[u8; 6]> {
+    let mut mac = parse_mac(s)?;
+    mac.reverse();
+    Some(mac)
+}
+
+// ---------------------------------------------------------------------------
+// Fixed-size hex parsing
+// ---------------------------------------------------------------------------
+
+/// Decode a hex string into a fixed-size byte array `[u8; N]`.
+///
+/// The input must have exactly `N * 2` hex characters (no prefix, no odd length).
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::hex::hex_to_bytes_fixed;
+/// let arr: [u8; 4] = hex_to_bytes_fixed("0102abcd").unwrap();
+/// assert_eq!(arr, [0x01, 0x02, 0xab, 0xcd]);
+/// ```
+pub fn hex_to_bytes_fixed<const N: usize>(s: &str) -> Option<[u8; N]> {
+    let bytes = s.as_bytes();
+    if bytes.len() != N * 2 {
+        return None;
+    }
+    let mut result = [0u8; N];
+    for i in 0..N {
+        let hi = hex_byte(bytes[i * 2])?;
+        let lo = hex_byte(bytes[i * 2 + 1])?;
+        result[i] = (hi << 4) | lo;
+    }
+    Some(result)
+}
+
+// ---------------------------------------------------------------------------
+// Hex display formatting
+// ---------------------------------------------------------------------------
+
+/// Encode bytes to lowercase hex, separated by `sep`.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::hex::bytes_to_hex_sep;
+/// assert_eq!(bytes_to_hex_sep(&[0xab, 0xcd, 0xef], ':'), "ab:cd:ef");
+/// ```
+pub fn bytes_to_hex_sep(bytes: &[u8], sep: char) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    let mut result = String::with_capacity(bytes.len() * 3 - 1);
+    write!(result, "{:02x}", bytes[0]).unwrap();
+    for &byte in &bytes[1..] {
+        result.push(sep);
+        write!(result, "{:02x}", byte).unwrap();
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Hex integer parsing (sysfs-style)
+// ---------------------------------------------------------------------------
+
+/// Parse a hex string into an unsigned integer.
+///
+/// Accepts optional `0x` or `0X` prefix. Returns `None` on invalid input
+/// or if the value overflows the target type.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::hex::parse_hex_int;
+/// assert_eq!(parse_hex_int::<u8>("ff"), Some(0xff));
+/// assert_eq!(parse_hex_int::<u16>("0xabcd"), Some(0xabcd));
+/// assert_eq!(parse_hex_int::<u32>("0x00001234"), Some(0x1234));
+/// assert!(parse_hex_int::<u8>("xyz").is_none());
+/// ```
+pub fn parse_hex_int<T>(s: &str) -> Option<T>
+where
+    T: TryFrom<u128>,
+{
+    let s = s.strip_prefix("0x").unwrap_or(s);
+    let s = s.strip_prefix("0X").unwrap_or(s);
+    if s.is_empty() {
+        return None;
+    }
+    let mut result: u128 = 0;
+    for &b in s.as_bytes() {
+        let nibble = hex_byte(b)?;
+        result = result.checked_mul(16)?.checked_add(nibble as u128)?;
+    }
+    T::try_from(result).ok()
 }

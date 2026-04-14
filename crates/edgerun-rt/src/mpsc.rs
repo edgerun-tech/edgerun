@@ -60,6 +60,16 @@ struct ChanInner<T> {
     sender_count: Mutex<usize>,
     /// Number of reserved slots (held by Permits).
     reserved: AtomicUsize,
+    // Trace counters for deadlock diagnosis.
+    trace_try_push_ok: AtomicUsize,
+    trace_try_push_fail: AtomicUsize,
+    trace_try_push_wake_recv: AtomicUsize,
+    trace_recv_poll_dequeue: AtomicUsize,
+    trace_recv_poll_pending: AtomicUsize,
+    trace_recv_wake_sender: AtomicUsize,
+    trace_sender_register_pending: AtomicUsize,
+    trace_sender_recheck_ok: AtomicUsize,
+    trace_sender_claimed_by_recv: AtomicUsize,
 }
 
 impl<T> ChanInner<T> {
@@ -116,14 +126,11 @@ impl<T> ChanInner<T> {
     /// Try to push a value. Wakes the receiver if successful.
     fn try_push(&self, val: T) -> Result<(), T> {
         let mut q = self.q.lock();
-        eprintln!("  try_push: q_len={}, cap={}", q.len(), self.cap);
         if q.len() >= self.cap {
             return Err(val);
         }
         q.push_back(val);
-        eprintln!("  try_push: enqueued, q_len now={}", q.len());
         if let Some(w) = self.recv_waker.lock().take() {
-            eprintln!("  try_push: waking recv_waker");
             w.wake();
         }
         self.send_cvar.notify_one();
@@ -134,7 +141,6 @@ impl<T> ChanInner<T> {
     fn wake_one_pending_sender(&self) {
         let mut pending = self.pending_senders.lock();
         if let Some((waker, ps)) = pending.pop_front() {
-            eprintln!("  wake_one_pending_sender: found pending sender, trying to claim value");
             // Try to claim the value from shared state.
             let claimed = ps.val.lock().take();
             match claimed {
@@ -142,21 +148,18 @@ impl<T> ChanInner<T> {
                     let mut q = self.q.lock();
                     if q.len() < self.cap {
                         q.push_back(val);
-                        eprintln!("  wake_one_pending_sender: enqueued value, q_len now={}", q.len());
                         drop(q);
                         if let Some(w) = self.recv_waker.lock().take() {
                             w.wake();
                         }
                         self.send_cvar.notify_one();
                     } else {
-                        eprintln!("  wake_one_pending_sender: queue still full (q_len={}), putting value back", q.len());
                         *ps.val.lock() = Some(val);
                         pending.push_front((waker, ps));
                         return;
                     }
                 }
                 None => {
-                    eprintln!("  wake_one_pending_sender: value already consumed (SendFut enqueued it)");
                 }
             }
             waker.wake();
@@ -372,24 +375,20 @@ impl<T> Future for SendFut<T> {
 
         // If already pending from a previous poll, try to complete.
         if let Some(ps) = &this.pending {
-            eprintln!("  SendFut: re-poll (already pending)");
             // Try to claim the value — race with wake_one_pending_sender.
             let claimed = ps.val.lock().take();
             if claimed.is_none() {
                 // wake_one_pending_sender already enqueued our value.
-                eprintln!("  SendFut: value already enqueued by receiver, returning Ready");
                 this.pending = None;
                 return Poll::Ready(Ok(()));
             }
             match this.inner.try_push(claimed.unwrap()) {
                 Ok(()) => {
-                    eprintln!("  SendFut: re-poll try_push succeeded");
                     this.pending = None;
                     return Poll::Ready(Ok(()));
                 }
                 Err(val) => {
                     // Still full — put it back and stay pending.
-                    eprintln!("  SendFut: re-poll try_push failed, staying pending");
                     *ps.val.lock() = Some(val);
                     return Poll::Pending;
                 }
@@ -414,28 +413,22 @@ impl<T> Future for SendFut<T> {
         let ps = std::sync::Arc::new(PendingSend {
             val: Mutex::new(Some(val)),
         });
-        eprintln!("  SendFut: registering as pending (val moved to Arc)");
         this.inner.pending_senders.lock().push_back((cx.waker().clone(), ps.clone()));
 
         // Re-check: a receiver may have dequeued between our try_push failure
         // and our registration.
-        eprintln!("  SendFut: re-checking queue after registration");
         if let Some(val) = ps.val.lock().take() {
-            eprintln!("  SendFut: got value back, trying try_push");
             match this.inner.try_push(val) {
                 Ok(()) => {
-                    eprintln!("  SendFut: try_push succeeded in re-check");
                     this.pending = None;
                     return Poll::Ready(Ok(()));
                 }
                 Err(val) => {
                     // Still full — put value back, stay pending.
-                    eprintln!("  SendFut: try_push failed in re-check, putting value back");
                     *ps.val.lock() = Some(val);
                 }
             }
         } else {
-            eprintln!("  SendFut: value was taken (by wake_one_pending_sender) during re-check");
         }
 
         this.pending = Some(ps);
@@ -545,7 +538,6 @@ impl<T> Future for RecvFut<'_, T> {
                 return Poll::Ready(None);
             }
         }
-        eprintln!("  RecvFut: Pending (queue empty, not closed)");
         Poll::Pending
     }
 }
