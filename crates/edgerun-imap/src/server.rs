@@ -204,6 +204,10 @@ pub trait MailStore: Send + Sync + 'static {
     /// Search for messages matching criteria.
     fn search(&self, mailbox: &str, keys: &[SearchKey]) -> io::Result<Vec<u32>>;
 
+    /// Sort messages matching search criteria, returning UIDs in sorted order.
+    /// Each criterion can optionally be reversed (descending).
+    fn sort(&self, mailbox: &str, keys: &[SearchKey], criteria: &[(String, bool)]) -> io::Result<Vec<u32>>;
+
     /// Expunge deleted messages.
     fn expunge(&self, mailbox: &str) -> io::Result<Vec<u32>>;
 
@@ -556,6 +560,88 @@ impl MailStore for MemoryStore {
         }
     }
 
+    fn sort(&self, mailbox: &str, keys: &[SearchKey], criteria: &[(String, bool)]) -> io::Result<Vec<u32>> {
+        let mailboxes = self.mailboxes.lock().unwrap();
+        let Some(msgs) = mailboxes.get(mailbox) else {
+            return Ok(Vec::new());
+        };
+
+        // Filter by search keys
+        let mut matching: Vec<&Message> = msgs.iter()
+            .filter(|m| matches_keys(m, keys, msgs))
+            .collect();
+
+        if matching.is_empty() || criteria.is_empty() {
+            return Ok(matching.iter().map(|m| m.uid).collect());
+        }
+
+        // Sort by criteria (last criterion is primary, like RFC 5256)
+        for (criterion, reversed) in criteria.iter().rev() {
+            let rev = *reversed;
+            match criterion.to_uppercase().as_str() {
+                "ARRIVAL" => {
+                    matching.sort_by(|a, b| {
+                        let ord = a.internal_date.cmp(&b.internal_date);
+                        if rev { ord.reverse() } else { ord }
+                    });
+                }
+                "DATE" | "SENT" => {
+                    matching.sort_by(|a, b| {
+                        let ord = a.internal_date.cmp(&b.internal_date);
+                        if rev { ord.reverse() } else { ord }
+                    });
+                }
+                "SUBJECT" => {
+                    matching.sort_by(|a, b| {
+                        let subj_a = a.envelope.subject.as_deref().unwrap_or("");
+                        let subj_b = b.envelope.subject.as_deref().unwrap_or("");
+                        let ord = subj_a.cmp(subj_b);
+                        if rev { ord.reverse() } else { ord }
+                    });
+                }
+                "FROM" => {
+                    matching.sort_by(|a, b| {
+                        let from_a = a.envelope.from.first()
+                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let from_b = b.envelope.from.first()
+                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let ord = from_a.cmp(from_b);
+                        if rev { ord.reverse() } else { ord }
+                    });
+                }
+                "TO" => {
+                    matching.sort_by(|a, b| {
+                        let to_a = a.envelope.to.first()
+                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let to_b = b.envelope.to.first()
+                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let ord = to_a.cmp(to_b);
+                        if rev { ord.reverse() } else { ord }
+                    });
+                }
+                "CC" => {
+                    matching.sort_by(|a, b| {
+                        let cc_a = a.envelope.cc.first()
+                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let cc_b = b.envelope.cc.first()
+                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let ord = cc_a.cmp(cc_b);
+                        if rev { ord.reverse() } else { ord }
+                    });
+                }
+                "SIZE" => {
+                    matching.sort_by(|a, b| {
+                        let ord = a.size.cmp(&b.size);
+                        if rev { ord.reverse() } else { ord }
+                    });
+                }
+                _ => {} // Unknown criterion, keep order
+            }
+        }
+
+        Ok(matching.iter().map(|m| m.uid).collect())
+    }
+
     fn expunge(&self, mailbox: &str) -> io::Result<Vec<u32>> {
         let mut mailboxes = self.mailboxes.lock().unwrap();
         if let Some(msgs) = mailboxes.get_mut(mailbox) {
@@ -773,7 +859,7 @@ fn name_matches_pattern(name: &str, _reference: &str, pattern: &str) -> bool {
     name == pat
 }
 
-fn format_envelope_imap(env: &Envelope) -> String {
+pub fn format_envelope_imap(env: &Envelope) -> String {
     let date = format_string_or_nil_imap(&env.date);
     let subject = format_string_or_nil_imap(&env.subject);
     let from = format_address_list_imap(&env.from);
@@ -817,7 +903,7 @@ fn format_address_imap(addr: &Address) -> String {
     format!("({} {} {} {})", name, adl, mailbox, host)
 }
 
-fn format_internal_date(t: SystemTime) -> String {
+pub fn format_internal_date(t: SystemTime) -> String {
     use std::time::UNIX_EPOCH;
     let dur = t.duration_since(UNIX_EPOCH).unwrap_or_default();
     let secs = dur.as_secs() as i64;
@@ -868,35 +954,71 @@ fn parse_imap_date(s: &str) -> Result<SystemTime, ()> {
     }
 }
 
-fn parse_envelope_from_rfc822(data: &[u8]) -> Envelope {
+pub fn parse_envelope_from_rfc822(data: &[u8]) -> Envelope {
     let mut env = Envelope::default();
-    let headers = String::from_utf8_lossy(data);
+    let raw = String::from_utf8_lossy(data);
 
-    for line in headers.lines() {
+    // First, unfold headers per RFC 5322 §2.2.3: continuation lines start with whitespace
+    let mut unfolded = String::with_capacity(raw.len());
+    for line in raw.lines() {
+        if line.starts_with(|c| c == ' ' || c == '\t') && !unfolded.is_empty() {
+            // Continuation line — append to previous line
+            unfolded.push(' ');
+            unfolded.push_str(line.trim());
+        } else {
+            if !unfolded.is_empty() {
+                unfolded.push('\n');
+            }
+            unfolded.push_str(line);
+        }
+    }
+
+    for line in unfolded.lines() {
         if let Some((key, value)) = line.split_once(':') {
             let value = value.trim();
             match key.to_uppercase().as_str() {
-                "SUBJECT" => env.subject = Some(value.trim_matches('"').to_string()),
+                "SUBJECT" => env.subject = Some(unfold_encoded_word(value)),
                 "DATE" => env.date = Some(value.to_string()),
-                "MESSAGE-ID" => env.message_id = Some(value.trim_matches('<').trim_matches('>').to_string()),
-                "IN-REPLY-TO" => env.in_reply_to = Some(value.trim_matches('<').trim_matches('>').to_string()),
+                "MESSAGE-ID" => {
+                    let id = value.trim_matches(|c| c == '<' || c == '>' || c == ' ');
+                    if !id.is_empty() {
+                        env.message_id = Some(id.to_string());
+                    }
+                }
+                "IN-REPLY-TO" => {
+                    let id = value.trim_matches(|c| c == '<' || c == '>' || c == ' ');
+                    if !id.is_empty() {
+                        env.in_reply_to = Some(id.to_string());
+                    }
+                }
                 "FROM" => {
-                    if let Some(addr) = parse_imap_address(value) {
+                    for addr in parse_imap_address_list(value) {
                         env.from.push(addr);
                     }
                 }
+                "SENDER" => {
+                    if let Some(addr) = parse_imap_address_first(value) {
+                        env.sender = Some(addr);
+                    }
+                }
+                "REPLY-TO" => {
+                    if let Some(addr) = parse_imap_address_first(value) {
+                        env.reply_to = Some(addr);
+                    }
+                }
                 "TO" => {
-                    for part in value.split(',') {
-                        if let Some(addr) = parse_imap_address(part.trim()) {
-                            env.to.push(addr);
-                        }
+                    for addr in parse_imap_address_list(value) {
+                        env.to.push(addr);
                     }
                 }
                 "CC" => {
-                    for part in value.split(',') {
-                        if let Some(addr) = parse_imap_address(part.trim()) {
-                            env.cc.push(addr);
-                        }
+                    for addr in parse_imap_address_list(value) {
+                        env.cc.push(addr);
+                    }
+                }
+                "BCC" => {
+                    for addr in parse_imap_address_list(value) {
+                        env.bcc.push(addr);
                     }
                 }
                 _ => {}
@@ -906,14 +1028,119 @@ fn parse_envelope_from_rfc822(data: &[u8]) -> Envelope {
     env
 }
 
+/// Decode RFC 2047 encoded-words in a header value.
+/// Handles =?charset?Q?...?= and =?charset?B?...?=
+fn unfold_encoded_word(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut remaining = s;
+
+    while let Some(start) = remaining.find("=?") {
+        result.push_str(&remaining[..start]);
+        remaining = &remaining[start + 2..];
+
+        if let Some(end) = remaining.find("?=") {
+            let encoded = &remaining[..end];
+            remaining = &remaining[end + 2..];
+
+            // Parse: charset?encoding?value
+            let parts: Vec<&str> = encoded.splitn(3, '?').collect();
+            if parts.len() == 3 {
+                let encoding = parts[1].to_uppercase();
+                let value = parts[2];
+
+                if encoding == "Q" {
+                    // Decode Q-encoded: _ for space, =XX for hex
+                    let mut decoded = Vec::new();
+                    let mut i = 0;
+                    let bytes = value.as_bytes();
+                    while i < bytes.len() {
+                        if bytes[i] == b'_' {
+                            decoded.push(b' ');
+                            i += 1;
+                        } else if bytes[i] == b'=' && i + 2 < bytes.len() {
+                            if let Ok(val) = u8::from_str_radix(
+                                &std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("00"), 16
+                            ) {
+                                decoded.push(val);
+                            }
+                            i += 3;
+                        } else {
+                            decoded.push(bytes[i]);
+                            i += 1;
+                        }
+                    }
+                    result.push_str(&String::from_utf8_lossy(&decoded));
+                } else if encoding == "B" {
+                    // B encoding is base64
+                    if let Ok(decoded) = base64_decode(value) {
+                        result.push_str(&String::from_utf8_lossy(&decoded));
+                    } else {
+                        result.push_str(value);
+                    }
+                } else {
+                    // Unknown encoding, keep original
+                    result.push_str(&format!("?={}", encoded));
+                }
+            } else {
+                result.push_str("=?");
+            }
+        } else {
+            // No closing ?= found, stop
+            result.push_str("=?");
+            result.push_str(remaining);
+            remaining = "";
+        }
+    }
+
+    result.push_str(remaining);
+    result
+}
+
+/// Parse a list of email addresses from a header value (From, To, Cc, etc.)
+fn parse_imap_address_list(s: &str) -> Vec<Address> {
+    let mut addresses = Vec::new();
+
+    // Remove group syntax: "group: addr1, addr2;"
+    let s = s.trim();
+    if s.contains(':') && s.ends_with(';') {
+        // Group syntax — extract addresses between : and ;
+        if let Some(colon) = s.find(':') {
+            let inner = &s[colon + 1..s.len() - 1];
+            for part in inner.split(',') {
+                if let Some(addr) = parse_imap_address(part.trim()) {
+                    addresses.push(addr);
+                }
+            }
+        }
+        return addresses;
+    }
+
+    // Simple comma-separated addresses
+    for part in s.split(',') {
+        if let Some(addr) = parse_imap_address(part.trim()) {
+            addresses.push(addr);
+        }
+    }
+    addresses
+}
+
+/// Parse just the first address from a header (for Sender).
+fn parse_imap_address_first(s: &str) -> Option<Address> {
+    parse_imap_address_list(s).into_iter().next()
+}
+
 fn parse_imap_address(s: &str) -> Option<Address> {
     if s.is_empty() || s == "NIL" { return None; }
-    
+
+    // Remove display name and quoted-string prefix
+    let s = s.trim();
+
+    // Handle: "Display Name" <email@domain>
     if let Some(angle_start) = s.find('<') {
         if let Some(angle_end) = s.find('>') {
             let name = s[..angle_start].trim().trim_matches('"').to_string();
             let email = &s[angle_start + 1..angle_end];
-            
+
             if let Some(at_pos) = email.find('@') {
                 return Some(Address {
                     name: if name.is_empty() { None } else { Some(name) },
@@ -924,7 +1151,8 @@ fn parse_imap_address(s: &str) -> Option<Address> {
             }
         }
     }
-    
+
+    // Handle: email@domain (bare address)
     if let Some(at_pos) = s.find('@') {
         return Some(Address {
             name: None,
@@ -933,7 +1161,7 @@ fn parse_imap_address(s: &str) -> Option<Address> {
             host: Some(s[at_pos + 1..].to_string()),
         });
     }
-    
+
     None
 }
 
@@ -982,6 +1210,7 @@ fn matches_keys(msg: &Message, keys: &[SearchKey], all_msgs: &[Message]) -> bool
             SearchKey::All => true,
             SearchKey::Answered => msg.flags.answered,
             SearchKey::Deleted => msg.flags.deleted,
+            SearchKey::Undeleted => !msg.flags.deleted,
             SearchKey::Draft => msg.flags.draft,
             SearchKey::Flagged => msg.flags.flagged,
             SearchKey::Recent => msg.flags.recent,
@@ -1457,41 +1686,71 @@ async fn dispatch_command(
             if *state != ImapState::NotAuthenticated {
                 return Ok(ImapResponse::no(tag, "Already authenticated"));
             }
-            
-            // Only support PLAIN mechanism for now
-            if mechanism.to_uppercase() != "PLAIN" {
-                return Ok(ImapResponse::no(tag, &format!("Unsupported mechanism: {}", mechanism)));
-            }
-            
-            // Send continuation for base64-encoded credentials
-            {
+
+            let mech = mechanism.to_uppercase();
+
+            if mech == "PLAIN" {
+                // Send continuation for base64-encoded credentials
                 transport.write_all(b"+ \r\n").await?;
                 transport.flush().await?;
-            }
-            
-            // Read the base64 credentials
-            let creds = read_imap_line(transport).await?.unwrap_or_default();
-            // PLAIN format: authzid\0username\0password
-            // Decode base64 and parse
-            if let Ok(bytes) = base64_decode(&creds) {
-                if let Ok(s) = std::str::from_utf8(&bytes) {
-                    let parts: Vec<&str> = s.split('\0').collect();
-                    if parts.len() >= 3 {
-                        let username = parts[1];
-                        let password = parts[2];
-                        
-                        match store.authenticate(username, password) {
-                            Ok(Some(uname)) => {
-                                *state = ImapState::Authenticated;
-                                *authenticated_user = Some(uname.clone());
-                                return Ok(ImapResponse::ok(tag, &format!("AUTHENTICATE completed for {}", uname)));
+
+                let creds = read_imap_line(transport).await?.unwrap_or_default();
+                if let Ok(bytes) = base64_decode(&creds) {
+                    if let Ok(s) = std::str::from_utf8(&bytes) {
+                        let parts: Vec<&str> = s.split('\0').collect();
+                        if parts.len() >= 3 {
+                            let username = parts[1];
+                            let password = parts[2];
+
+                            match store.authenticate(username, password) {
+                                Ok(Some(uname)) => {
+                                    *state = ImapState::Authenticated;
+                                    *authenticated_user = Some(uname.clone());
+                                    edgerun_log::info!("edgerun-imap: user {} authenticated (PLAIN)", uname);
+                                    return Ok(ImapResponse::ok(tag, &format!("AUTHENTICATE completed for {}", uname)));
+                                }
+                                _ => return Ok(ImapResponse::no(tag, "AUTHENTICATE failed")),
                             }
-                            _ => return Ok(ImapResponse::no(tag, "AUTHENTICATE failed")),
                         }
                     }
                 }
+                Ok(ImapResponse::no(tag, "AUTHENTICATE failed: invalid credentials"))
+            } else if mech == "LOGIN" {
+                // LOGIN mechanism: two base64 challenge/responses
+                // Challenge 1: "Username:"
+                transport.write_all(b"+ VXNlcm5hbWU6\r\n").await?;
+                transport.flush().await?;
+
+                let username_b64 = read_imap_line(transport).await?.unwrap_or_default();
+                let username = if let Ok(bytes) = base64_decode(&username_b64) {
+                    String::from_utf8(bytes).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid username"))?
+                } else {
+                    return Ok(ImapResponse::no(tag, "AUTHENTICATE failed: invalid username"));
+                };
+
+                // Challenge 2: "Password:"
+                transport.write_all(b"+ UGFzc3dvcmQ6\r\n").await?;
+                transport.flush().await?;
+
+                let password_b64 = read_imap_line(transport).await?.unwrap_or_default();
+                let password = if let Ok(bytes) = base64_decode(&password_b64) {
+                    String::from_utf8(bytes).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid password"))?
+                } else {
+                    return Ok(ImapResponse::no(tag, "AUTHENTICATE failed: invalid password"));
+                };
+
+                match store.authenticate(&username, &password) {
+                    Ok(Some(uname)) => {
+                        *state = ImapState::Authenticated;
+                        *authenticated_user = Some(uname.clone());
+                        edgerun_log::info!("edgerun-imap: user {} authenticated (LOGIN)", uname);
+                        Ok(ImapResponse::ok(tag, &format!("AUTHENTICATE completed for {}", uname)))
+                    }
+                    _ => Ok(ImapResponse::no(tag, "AUTHENTICATE failed")),
+                }
+            } else {
+                Ok(ImapResponse::no(tag, &format!("Unsupported mechanism: {}", mechanism)))
             }
-            Ok(ImapResponse::no(tag, "AUTHENTICATE failed: invalid credentials"))
         }
 
         ImapCommand::Select { mailbox } => {
@@ -2034,27 +2293,19 @@ async fn dispatch_command(
             }
 
             if let Some(ref mailbox) = current_mailbox {
-                // Parse search criteria and search
                 let keys = parse_search_keys_simple(&search_criteria);
-                match store.search(mailbox, &keys) {
-                    Ok(mut ids) => {
-                        // Sort by criteria
-                        for criterion in sort_criteria.iter() {
-                            match criterion.to_uppercase().as_str() {
-                                "ARRIVAL" => ids.sort(), // Already in arrival order (UID)
-                                "DATE" | "SENT" => ids.sort(), // Sort by date (simplified: same as UID)
-                                "SUBJECT" => {
-                                    let mailboxes = store.list("", "");
-                                    // Sort by subject (simplified)
-                                    ids.sort_by(|a, b| a.cmp(b));
-                                }
-                                "FROM" => ids.sort(),
-                                "TO" => ids.sort(),
-                                "CC" => ids.sort(),
-                                "SIZE" => ids.sort(),
-                                _ => {} // Unknown criteria, keep order
-                            }
-                        }
+                // Parse sort criteria with optional REVERSE prefix
+                let parsed_criteria: Vec<(String, bool)> = sort_criteria.iter().map(|c| {
+                    let upper = c.to_uppercase();
+                    if upper.starts_with("REVERSE ") {
+                        (upper["REVERSE ".len()..].to_string(), true)
+                    } else {
+                        (upper, false)
+                    }
+                }).collect();
+
+                match store.sort(mailbox, &keys, &parsed_criteria) {
+                    Ok(ids) => {
                         let id_str: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
                         transport.write_all(parser::format_untagged(&format!("SORT {}", id_str.join(" "))).as_bytes()).await?;
                         transport.flush().await?;

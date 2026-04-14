@@ -5,14 +5,10 @@
 //! Never use sed, grep, heredocs, or string replacement on Rust files.
 //! All operations are AST-level: parse → transform → prettyplease → write.
 
-mod edit_ops;
-mod git;
-mod project;
-mod server;
-
 use std::path::PathBuf;
 
 use clap::Parser;
+use edgerun_edit::start_server;
 
 #[derive(Parser)]
 #[command(name = "edgerun-edit", about = "AST-level Rust code editor HTTP server")]
@@ -28,7 +24,7 @@ fn main() {
     let addr = format!("{}:{}", cli.host, cli.port);
     let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {
-        match server::start(&addr).await {
+        match start_server(&addr).await {
             Ok(server) => {
                 eprintln!("edgerun-edit server listening on {}", server.local_addr());
                 eprintln!("POST /edit — edit operations");

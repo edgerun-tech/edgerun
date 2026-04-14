@@ -8,9 +8,17 @@
 
 // Modules (all functionality lives in modules, not here).
 mod ready_queue;
+#[cfg(test)]
+mod ready_queue_test;
 mod waker;
+#[cfg(test)]
+mod waker_test;
 mod reactor;
+#[cfg(test)]
+mod reactor_test;
 mod task_map;
+#[cfg(test)]
+mod task_map_test;
 mod metrics;
 mod trace;
 mod blocking_pool;

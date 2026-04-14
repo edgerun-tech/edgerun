@@ -290,6 +290,8 @@ pub enum SearchKey {
     Answered,
     /// Messages with \Deleted flag.
     Deleted,
+    /// Messages without \Deleted flag.
+    Undeleted,
     /// Messages with \Draft flag.
     Draft,
     /// Messages with \Flagged flag.
