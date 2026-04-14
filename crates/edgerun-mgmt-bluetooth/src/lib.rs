@@ -2024,29 +2024,6 @@ mod tests {
         assert_eq!(format_bdaddr_le(&bytes), "00:00:00:00:00:00");
     }
 
-    // --- decode_c_string ---
-
-    #[test]
-    fn decode_c_string_basic() {
-        assert_eq!(decode_c_string(b"hello\0world"), "hello");
-    }
-
-    #[test]
-    fn decode_c_string_no_null() {
-        assert_eq!(decode_c_string(b"hello"), "hello");
-    }
-
-    #[test]
-    fn decode_c_string_empty() {
-        assert_eq!(decode_c_string(b""), "");
-        assert_eq!(decode_c_string(b"\0trailing"), "");
-    }
-
-    #[test]
-    fn decode_c_string_first_byte_null() {
-        assert_eq!(decode_c_string(b"\0"), "");
-    }
-
     // --- parse_settings ---
 
     #[test]

@@ -7,7 +7,7 @@ use edgerun_dns::client::DnsClient;
 use edgerun_dns::record::DnsRecordData;
 
 use crate::smtp::client::SmtpClient;
-use crate::smtp::protocol::read_smtp_line;
+use crate::server::read_line;
 use crate::smtp::types::MailEnvelope;
 
 // ===========================================================================

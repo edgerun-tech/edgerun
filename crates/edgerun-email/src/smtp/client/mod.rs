@@ -13,7 +13,7 @@ use std::task::{Context, Poll};
 
 use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture};
 
-use crate::smtp::protocol::read_smtp_line;
+use crate::server::read_line;
 use crate::smtp::types::{SmtpResponse, SmtpResponseCode};
 
 #[cfg(feature = "tls")]
@@ -268,7 +268,7 @@ impl SmtpClient {
 
     /// Read a response (handles multiline).
     async fn read_response(&mut self) -> io::Result<SmtpResponse> {
-        let line = read_smtp_line(&mut self.transport).await?;
+        let line = read_line(&mut self.transport).await?;
         let line = match line {
             Some(l) => l,
             None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
@@ -294,7 +294,7 @@ impl SmtpClient {
         if is_multiline {
             let mut all_lines = vec![message.clone()];
             loop {
-                let next_line = read_smtp_line(&mut self.transport).await?;
+                let next_line = read_line(&mut self.transport).await?;
                 let next_line = match next_line {
                     Some(l) => l,
                     None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),

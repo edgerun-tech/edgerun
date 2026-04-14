@@ -243,7 +243,7 @@ impl ImapClient {
     }
 
     async fn read_greeting(&mut self) -> io::Result<()> {
-        let line = read_imap_line(&mut self.transport).await?;
+        let line = read_line(&mut self.transport).await?;
         if let Some(line) = line {
             if line.starts_with("*") {
                 if let Some(cap_pos) = line.find("[CAPABILITY ") {
@@ -324,7 +324,7 @@ impl ImapClient {
         self.transport.flush().await?;
 
         loop {
-            let line = read_imap_line(&mut self.transport).await?;
+            let line = read_line(&mut self.transport).await?;
             let line = match line {
                 Some(l) => l,
                 None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
@@ -364,7 +364,7 @@ impl ImapClient {
         self.transport.write_all(cmd_line.as_bytes()).await?;
         self.transport.flush().await?;
 
-        let cont = read_imap_line(&mut self.transport).await?;
+        let cont = read_line(&mut self.transport).await?;
         if !cont.as_ref().map(|s| s.starts_with("+")).unwrap_or(false) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "expected continuation"));
         }
@@ -374,7 +374,7 @@ impl ImapClient {
         self.transport.flush().await?;
 
         loop {
-            let line = read_imap_line(&mut self.transport).await?;
+            let line = read_line(&mut self.transport).await?;
             let line = match line {
                 Some(l) => l,
                 None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
