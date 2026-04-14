@@ -103,11 +103,7 @@ impl DohServer {
 
 /// Decode base64url (RFC 4648 §5, no padding).
 fn decode_base64url(input: &str) -> Option<Vec<u8>> {
-    let s = input.replace('-', "+").replace('_', "/");
-    // Add padding
-    let pad = (4 - s.len() % 4) % 4;
-    let padded = format!("{}{}", s, "=".repeat(pad));
-    super::tsig::decode_base64(&padded)
+    edgerun_encoding::base64::base64url_decode(input).ok()
 }
 
 #[cfg(test)]

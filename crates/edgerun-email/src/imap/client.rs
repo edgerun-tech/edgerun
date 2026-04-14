@@ -93,37 +93,6 @@ impl AsyncWrite for ImapTransport {
 impl Unpin for ImapTransport {}
 
 // ===========================================================================
-// Read helper — same pattern as SMTP's read_smtp_line
-// ===========================================================================
-
-async fn read_imap_line<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Option<String>> {
-    let mut line = String::with_capacity(1024);
-    loop {
-        let mut buf = [0u8; 1];
-        let n = match reader.read(&mut buf).await {
-            Ok(0) => {
-                if line.is_empty() {
-                    return Ok(None);
-                }
-                return Ok(Some(line));
-            }
-            Ok(n) => n,
-            Err(e) => return Err(e),
-        };
-        if n == 0 {
-            continue;
-        }
-        if buf[0] == b'\n' {
-            if line.ends_with('\r') {
-                line.pop();
-            }
-            return Ok(Some(line));
-        }
-        line.push(buf[0] as char);
-    }
-}
-
-// ===========================================================================
 // IMAP Client
 // ===========================================================================
 

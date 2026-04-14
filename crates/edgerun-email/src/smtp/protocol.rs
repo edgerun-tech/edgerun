@@ -20,7 +20,7 @@ pub const ESMTP_EXTENSIONS: &[&str] = &[
 /// Reads a single SMTP line (until `\r\n`) from an async reader.
 ///
 /// Returns `None` on EOF. The line does NOT include the `\r\n`.
-pub async fn read_smtp_line<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Option<String>> {
+pub async fn crate::server::read_line<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Option<String>> {
     let mut line_buf = String::with_capacity(1024);
     loop {
         let mut buf = [0u8; 1];
@@ -50,7 +50,7 @@ pub async fn read_smtp_line<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<
 /// Owned line reader — wraps any `AsyncRead + Unpin` and reads `\r\n`-delimited lines.
 ///
 /// Used by the SMTP client which stores the reader as a field.
-/// For the server session loop, prefer [`read_smtp_line`] to avoid ownership issues.
+/// For the server session loop, prefer [`crate::server::read_line`] to avoid ownership issues.
 pub struct SmtpReader<R> {
     reader: R,
 }
@@ -62,7 +62,7 @@ impl<R: AsyncRead + Unpin> SmtpReader<R> {
 
     /// Read the next line (until `\r\n`). Returns `None` on EOF.
     pub async fn read_line(&mut self) -> io::Result<Option<String>> {
-        read_smtp_line(&mut self.reader).await
+        crate::server::read_line(&mut self.reader).await
     }
 
     /// Consume the reader and return the inner reader.

@@ -444,37 +444,7 @@ fn encode_tsig_name(name: &str) -> Vec<u8> {
 
 /// Decode base64 (standard, with padding).
 pub(crate) fn decode_base64(s: &str) -> Option<Vec<u8>> {
-    use edgerun_crypto::der::Decode;
-    // Simple base64 decode using base64 from deps
-    // Fallback: manual decode
-    let s = s.replace(char::is_whitespace, "");
-    if s.len() % 4 != 0 { return None; }
-    let mut out = Vec::new();
-    let mut buf = [0u8; 4];
-    let mut i = 0;
-    for ch in s.chars() {
-        let v = match ch {
-            'A'..='Z' => ch as u8 - b'A',
-            'a'..='z' => ch as u8 - b'a' + 26,
-            '0'..='9' => ch as u8 - b'0' + 52,
-            '+' => 62,
-            '/' => 63,
-            '=' => 0,
-            _ => return None,
-        };
-        buf[i] = v;
-        i += 1;
-        if i == 4 {
-            out.push((buf[0] << 2) | (buf[1] >> 4));
-            out.push((buf[1] << 4) | (buf[2] >> 2));
-            out.push((buf[2] << 6) | buf[3]);
-            i = 0;
-        }
-    }
-    // Remove padding bytes
-    let pad = s.chars().filter(|&c| c == '=').count();
-    for _ in 0..pad { out.pop(); }
-    Some(out)
+    edgerun_encoding::base64::standard_decode(s).ok()
 }
 
 /// Current time in seconds since epoch.
