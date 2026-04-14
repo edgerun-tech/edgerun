@@ -1,0 +1,13 @@
+[package]
+name = "edgerun-encoding"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Consolidated encoding utilities for the edgerun workspace"
+
+[dependencies]
+# No external dependencies — all implementations are self-contained
+
+[lints]
+workspace = true

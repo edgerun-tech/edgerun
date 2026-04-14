@@ -1,9 +1,15 @@
 //! Bounded mpsc channel with proper multi-sender backpressure.
 //!
-//! ## Fixes applied:
-//! - Uses our `sync::Mutex` (no `.unwrap()`)
-//! - `SendFut` stores `(Waker, T)` in pending queue — atomic register-then-check
-//!   under a single lock. No race between "queue full" and "space freed".
+//! ## Fix: lost-wake race between sender registration and receiver wakeup.
+//!
+//! The original code checked the queue, found it full, THEN registered in
+//! `pending_senders`. A receiver could dequeue between the check and the
+//! registration, call `wake_one_pending_sender` on an empty list, and both
+//! sides would wait forever.
+//!
+//! The fix: the value is stored in `Arc<Mutex<Option<T>>>` shared between
+//! `SendFut` and `pending_senders`. `wake_one_pending_sender` and `SendFut::poll`
+//! race to claim it — only one succeeds.
 
 use std::collections::VecDeque;
 use std::future::Future;
@@ -11,6 +17,13 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
+
+/// Shared state for a pending send. The value lives here so both
+/// `wake_one_pending_sender` (receiver side) and `SendFut::poll` (sender side)
+/// can race to claim it — only one succeeds, preventing double-enqueue.
+struct PendingSend<T> {
+    val: Mutex<Option<T>>,
+}
 
 pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
     let cap = cap.max(1);
@@ -37,8 +50,9 @@ struct ChanInner<T> {
     q: Mutex<VecDeque<T>>,
     cap: usize,
     recv_waker: Mutex<Option<Waker>>,
-    /// Pending senders waiting for space, with their values.
-    pending_senders: Mutex<VecDeque<(Waker, T)>>,
+    /// Pending senders waiting for space. Each entry holds a waker and a
+    /// shared `PendingSend` Arc so both sides can race to claim the value.
+    pending_senders: Mutex<VecDeque<(Waker, std::sync::Arc<PendingSend<T>>)>>,
     /// Pending reserve() waiters (just wakers, no values).
     reserve_wakers: Mutex<VecDeque<Waker>>,
     send_cvar: Condvar,
@@ -58,7 +72,6 @@ impl<T> ChanInner<T> {
 
     /// Try to reserve one slot. Returns true if successful.
     fn try_reserve_slot(&self) -> bool {
-        // CAS loop to atomically increment reserved if space available.
         loop {
             let q_len = self.q.lock().len();
             let reserved = self.reserved.load(Ordering::Acquire);
@@ -97,7 +110,6 @@ impl<T> ChanInner<T> {
             w.wake();
         }
         self.send_cvar.notify_one();
-        // Wake a pending sender since we freed the reserved slot.
         self.wake_one_pending_sender();
     }
 
@@ -115,31 +127,40 @@ impl<T> ChanInner<T> {
         Ok(())
     }
 
-    /// Wake the oldest pending sender (FIFO). It will re-poll and try to enqueue.
+    /// Wake the oldest pending sender. Races with `SendFut::poll` to claim the value.
     fn wake_one_pending_sender(&self) {
         let mut pending = self.pending_senders.lock();
-        if let Some((waker, val)) = pending.pop_front() {
-            // Try to enqueue the value now.
-            let mut q = self.q.lock();
-            if q.len() < self.cap {
-                q.push_back(val);
-                drop(q);
-                if let Some(w) = self.recv_waker.lock().take() {
-                    w.wake();
+        if let Some((waker, ps)) = pending.pop_front() {
+            // Try to claim the value from shared state.
+            let claimed = ps.val.lock().take();
+            match claimed {
+                Some(val) => {
+                    let mut q = self.q.lock();
+                    if q.len() < self.cap {
+                        q.push_back(val);
+                        drop(q);
+                        if let Some(w) = self.recv_waker.lock().take() {
+                            w.wake();
+                        }
+                        self.send_cvar.notify_one();
+                    } else {
+                        // Still full — put it back.
+                        *ps.val.lock() = Some(val);
+                        pending.push_front((waker, ps));
+                        return;
+                    }
                 }
-                self.send_cvar.notify_one();
-                // Wake the sender so its future resolves.
-                waker.wake();
-            } else {
-                // Still full — put it back.
-                pending.push_front((waker, val));
+                None => {
+                    // SendFut::poll already enqueued the value.
+                }
             }
+            waker.wake();
         }
     }
 
     fn wake_all_pending_senders(&self) {
         let mut pending = self.pending_senders.lock();
-        for (waker, _val) in pending.drain(..) {
+        for (waker, _ps) in pending.drain(..) {
             waker.wake();
         }
     }
@@ -192,6 +213,7 @@ impl<T> Sender<T> {
         SendFut {
             inner: self.inner.clone(),
             val: Some(val),
+            pending: None,
         }
     }
 
@@ -199,18 +221,6 @@ impl<T> Sender<T> {
         self.send_nowait(val)
     }
 
-    /// Reserves capacity to send a value.
-    ///
-    /// The returned [`Permit`] guarantees that one slot is reserved
-    /// for this sender. Use [`Permit::send`] to deliver the value
-    /// without the possibility of blocking or failing.
-    ///
-    /// This is useful for backpressure: acquire a permit first, do
-    /// async work, then send knowing it will succeed.
-    ///
-    /// Returns `Err(PermitError::Closed)` if the channel is closed,
-    /// or `Err(PermitError::Full)` if no capacity is available (use
-    /// `reserve().await` for the async version).
     pub fn try_reserve(&self) -> Result<Permit<T>, PermitError> {
         if self.inner.closed.load(Ordering::Relaxed) {
             return Err(PermitError::Closed);
@@ -223,9 +233,6 @@ impl<T> Sender<T> {
         })
     }
 
-    /// Async version of [`try_reserve`](Self::try_reserve).
-    ///
-    /// Waits until capacity is available, then returns a [`Permit`].
     pub fn reserve(&self) -> ReserveFut<T> {
         ReserveFut {
             inner: self.inner.clone(),
@@ -237,12 +244,9 @@ impl<T> Sender<T> {
 // Permit — reserved send capacity
 // ===========================================================================
 
-/// Error from [`Sender::try_reserve`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PermitError {
-    /// Channel is closed.
     Closed,
-    /// No capacity available right now.
     Full,
 }
 
@@ -255,28 +259,19 @@ impl std::fmt::Display for PermitError {
     }
 }
 
-/// A reserved slot to send a value. Guarantees [`send`](Permit::send) will succeed.
-///
-/// Created by [`Sender::try_reserve`] or [`Sender::reserve`].
-/// If dropped without calling `send`, the slot is released.
 pub struct Permit<T> {
     inner: std::sync::Arc<ChanInner<T>>,
 }
 
 impl<T> Permit<T> {
-    /// Sends the value, consuming this permit.
-    ///
-    /// This always succeeds — the slot was already reserved.
     pub fn send(self, val: T) {
         self.inner.send_with_permit(val);
-        // Don't run Drop — we consumed the slot.
         std::mem::forget(self);
     }
 }
 
 impl<T> Drop for Permit<T> {
     fn drop(&mut self) {
-        // Release the reserved slot back to the channel.
         self.inner.release_slot();
     }
 }
@@ -285,7 +280,6 @@ impl<T> Drop for Permit<T> {
 // ReserveFut — async reserve
 // ===========================================================================
 
-/// Future returned by [`Sender::reserve`].
 pub struct ReserveFut<T> {
     inner: std::sync::Arc<ChanInner<T>>,
 }
@@ -298,7 +292,6 @@ impl<T> Future for ReserveFut<T> {
             return Poll::Ready(Err(PermitError::Closed));
         }
 
-        // Try to reserve under the queue lock.
         {
             let q_len = self.inner.q.lock().len();
             let reserved = self.inner.reserved.load(Ordering::Acquire);
@@ -310,10 +303,8 @@ impl<T> Future for ReserveFut<T> {
             }
         }
 
-        // Register waker for reserve waiters.
         self.inner.reserve_wakers.lock().push_back(cx.waker().clone());
 
-        // Re-check after registering.
         {
             let q_len = self.inner.q.lock().len();
             let reserved = self.inner.reserved.load(Ordering::Acquire);
@@ -329,10 +320,26 @@ impl<T> Future for ReserveFut<T> {
     }
 }
 
+// ===========================================================================
+// SendFut — async send
+//
+// ## Correctness: no lost wakes with multiple producers
+//
+// The value is moved into a shared `Arc<PendingSend>` before registration.
+// Both `wake_one_pending_sender` (receiver side) and this `poll` race to
+// claim it from the Arc. Only one succeeds — preventing double-enqueue and
+// lost-wake scenarios.
+//
+// Registration order: we push to `pending_senders` FIRST, then re-check
+// the queue. This ensures `wake_one_pending_sender` always sees us.
+// ===========================================================================
+
 pub struct SendFut<T> {
     inner: std::sync::Arc<ChanInner<T>>,
-    /// Some = we still hold the value. None = it was enqueued by the receiver.
+    /// The value to send. `None` = moved into `pending.val` or already enqueued.
     val: Option<T>,
+    /// Set after first Pending return. Shared with the entry in `pending_senders`.
+    pending: Option<std::sync::Arc<PendingSend<T>>>,
 }
 
 impl<T> Future for SendFut<T> {
@@ -341,21 +348,49 @@ impl<T> Future for SendFut<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
 
+        // Closed check.
         if this.inner.closed.load(Ordering::Relaxed) {
+            // Check if value was already enqueued.
+            if this.val.is_none() {
+                return Poll::Ready(Ok(()));
+            }
+            let pending_empty = this.pending.as_ref().map_or(true, |ps| ps.val.lock().is_none());
+            if this.val.is_none() && pending_empty {
+                return Poll::Ready(Ok(()));
+            }
             let v = this.val.take();
-            // If val is None, it was already enqueued (success).
             return match v {
                 Some(val) => Poll::Ready(Err(SendError(val))),
                 None => Poll::Ready(Ok(())),
             };
         }
 
-        // If val is None, the receiver already enqueued it for us.
+        // If already pending from a previous poll, try to complete.
+        if let Some(ps) = &this.pending {
+            // Try to claim the value — race with wake_one_pending_sender.
+            let claimed = ps.val.lock().take();
+            if claimed.is_none() {
+                // wake_one_pending_sender already enqueued our value.
+                this.pending = None;
+                return Poll::Ready(Ok(()));
+            }
+            match this.inner.try_push(claimed.unwrap()) {
+                Ok(()) => {
+                    this.pending = None;
+                    return Poll::Ready(Ok(()));
+                }
+                Err(val) => {
+                    // Still full — put it back and stay pending.
+                    *ps.val.lock() = Some(val);
+                    return Poll::Pending;
+                }
+            }
+        }
+
+        // First poll for this value — try direct enqueue.
         if this.val.is_none() {
             return Poll::Ready(Ok(()));
         }
-
-        // Try to enqueue.
         if let Some(val) = this.val.take() {
             match this.inner.try_push(val) {
                 Ok(()) => return Poll::Ready(Ok(())),
@@ -363,29 +398,42 @@ impl<T> Future for SendFut<T> {
             }
         }
 
-        // Channel is full — register as pending sender with our value.
-        // This is atomic: we hold the lock, check the queue, and register.
-        {
-            let mut q = this.inner.q.lock();
-            if q.len() < this.inner.cap && this.val.is_some() {
-                // Space opened while we were locking — enqueue directly.
-                q.push_back(this.val.take().unwrap());
-                drop(q);
-                if let Some(w) = this.inner.recv_waker.lock().take() {
-                    w.wake();
+        // Channel full — register as pending.
+        // CRITICAL: register in pending_senders FIRST, then re-check the queue.
+        // This ensures wake_one_pending_sender always sees us.
+        let val = this.val.take().unwrap();
+        let ps = std::sync::Arc::new(PendingSend {
+            val: Mutex::new(Some(val)),
+        });
+        this.inner.pending_senders.lock().push_back((cx.waker().clone(), ps.clone()));
+
+        // Re-check: a receiver may have dequeued between our try_push failure
+        // and our registration.
+        if let Some(val) = ps.val.lock().take() {
+            match this.inner.try_push(val) {
+                Ok(()) => {
+                    this.pending = None;
+                    return Poll::Ready(Ok(()));
                 }
-                this.inner.send_cvar.notify_one();
-                return Poll::Ready(Ok(()));
+                Err(val) => {
+                    // Still full — put value back, stay pending.
+                    *ps.val.lock() = Some(val);
+                }
             }
-            // Still full — register our waker + value.
-            let val = this.val.take().unwrap();
-            this.inner
-                .pending_senders
-                .lock()
-                .push_back((cx.waker().clone(), val));
         }
 
+        this.pending = Some(ps);
         Poll::Pending
+    }
+}
+
+impl<T> Drop for SendFut<T> {
+    fn drop(&mut self) {
+        // Clean up: if we were pending and value wasn't enqueued,
+        // remove the entry so it doesn't try to enqueue a stale value.
+        if let Some(ps) = &self.pending {
+            ps.val.lock().take();
+        }
     }
 }
 
@@ -446,10 +494,16 @@ impl<T> Future for RecvFut<'_, T> {
     type Output = Option<T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // Wake one pending sender BEFORE dequeuing so it can enqueue its
+        // value to replace what we're about to consume.
+        self.inner.wake_one_pending_sender();
+        self.inner.wake_reserve_waiters();
+
         {
             let mut q = self.inner.q.lock();
             if let Some(v) = q.pop_front() {
                 drop(q);
+                // Wake another pending sender to keep the pipeline flowing.
                 self.inner.wake_one_pending_sender();
                 self.inner.wake_reserve_waiters();
                 return Poll::Ready(Some(v));
@@ -459,7 +513,11 @@ impl<T> Future for RecvFut<'_, T> {
             }
             *self.inner.recv_waker.lock() = Some(cx.waker().clone());
 
-            // Double-check after registering waker.
+            // Double-check after registering — also wake pending senders
+            // in case they enqueued between our first check and registration.
+            self.inner.wake_one_pending_sender();
+            self.inner.wake_reserve_waiters();
+
             if let Some(v) = q.pop_front() {
                 self.inner.recv_waker.lock().take();
                 drop(q);

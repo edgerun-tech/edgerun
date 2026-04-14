@@ -1,10 +1,7 @@
 //! IMAP client implementation (RFC 3501).
 //!
-//! Provides an async IMAP4rev1 client with:
-//! - TCP connect via `edgerun_rt::ConnectFuture`
-//! - Tag auto-generation (A0001, A0002, ...)
-//! - All standard IMAP commands: LOGIN, SELECT, FETCH, SEARCH, STORE, etc.
-//! - Response parsing for tagged and untagged responses
+//! Auto-negotiates STARTTLS on connect. Uses the same `AsyncTlsStream::client()`
+//! handshake utility as SMTP — single shared TLS implementation.
 
 use std::collections::HashMap;
 use std::io;
@@ -12,63 +9,139 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU16, Ordering};
 
 use edgerun_rt::{
-    AsyncReadExt, AsyncWriteExt, AsyncTcpStream, ConnectFuture,
+    AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
+    ConnectFuture,
 };
 
+#[cfg(feature = "tls")]
+use edgerun_tls::AsyncTlsStream;
+
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult};
-use crate::imap::parser::{self, ImapReader};
 use crate::imap::types::{Envelope, FetchAttr, Flags, Mailbox, MailboxStatus, SearchKey};
+
+// ===========================================================================
+// Transport enum — unified wrapper for plain TCP and TLS
+// ===========================================================================
+
+enum ImapTransport {
+    Plain(AsyncTcpStream),
+    #[cfg(feature = "tls")]
+    Tls(AsyncTlsStream<AsyncTcpStream>),
+}
+
+impl ImapTransport {
+    fn is_tls(&self) -> bool {
+        match self {
+            ImapTransport::Plain(_) => false,
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(_) => true,
+        }
+    }
+}
+
+impl AsyncRead for ImapTransport {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_read(cx, buf),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for ImapTransport {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_write(cx, buf),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_flush(cx),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_shutdown(cx),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_shutdown(cx),
+        }
+    }
+}
+
+impl Unpin for ImapTransport {}
+
+// ===========================================================================
+// Read helper — same pattern as SMTP's read_smtp_line
+// ===========================================================================
+
+async fn read_imap_line<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Option<String>> {
+    let mut line = String::with_capacity(1024);
+    loop {
+        let mut buf = [0u8; 1];
+        let n = match reader.read(&mut buf).await {
+            Ok(0) => {
+                if line.is_empty() {
+                    return Ok(None);
+                }
+                return Ok(Some(line));
+            }
+            Ok(n) => n,
+            Err(e) => return Err(e),
+        };
+        if n == 0 {
+            continue;
+        }
+        if buf[0] == b'\n' {
+            if line.ends_with('\r') {
+                line.pop();
+            }
+            return Ok(Some(line));
+        }
+        line.push(buf[0] as char);
+    }
+}
 
 // ===========================================================================
 // IMAP Client
 // ===========================================================================
 
-/// Async IMAP client.
-///
-/// # Example
-/// ```no_run
-/// use edgerun_imap::client::ImapClient;
-/// use edgerun_imap::FetchAttr;
-///
-/// # async fn example() -> std::io::Result<()> {
-/// let mut client = ImapClient::connect("mail.example.com:143").await?;
-/// client.login("user@example.com", "password").await?;
-/// let mailboxes = client.list("", "*").await?;
-/// client.select("INBOX").await?;
-/// let results = client.fetch("1", &[FetchAttr::Uid, FetchAttr::Flags]).await?;
-/// client.logout().await?;
-/// # Ok(())
-/// # }
-/// ```
 pub struct ImapClient {
-    stream: Arc<AsyncTcpStream>,
-    reader: ImapReader<edgerun_rt::AsyncReadHalf>,
-    writer: Arc<edgerun_rt::Mutex<edgerun_rt::AsyncWriteHalf>>,
+    transport: ImapTransport,
     tag_counter: AtomicU16,
-    /// Uncollected untagged responses.
     untagged: Vec<String>,
-    /// Server capabilities (from greeting).
     capabilities: Vec<String>,
-    /// Currently selected mailbox.
     selected_mailbox: Option<String>,
 }
 
-use std::sync::Arc;
-
 impl ImapClient {
-    /// Connect to an IMAP server.
+    /// Connect to an IMAP server and auto-negotiate STARTTLS if available.
     pub async fn connect(addr: &str) -> io::Result<Self> {
-        // Resolve and connect
         let stream = Self::connect_tcp(addr).await?;
-        let stream = Arc::new(stream);
-        let (read_half, write_half) = stream.split();
-        let reader = ImapReader::new(read_half);
-        let writer = Arc::new(edgerun_rt::Mutex::new(write_half));
+        let server_name = Self::extract_host(addr);
 
         let mut client = Self {
-            stream,
-            reader,
-            writer,
+            transport: ImapTransport::Plain(stream),
             tag_counter: AtomicU16::new(1),
             untagged: Vec::new(),
             capabilities: Vec::new(),
@@ -78,22 +151,60 @@ impl ImapClient {
         // Read greeting
         client.read_greeting().await?;
 
+        // Auto-CAPABILITY
+        client.do_capability().await?;
+
+        // Auto-STARTTLS if supported
+        #[cfg(feature = "tls")]
+        {
+            let has_starttls = client.capabilities.iter().any(|c| c == "STARTTLS");
+            if has_starttls {
+                client.do_starttls(&server_name).await?;
+                client.do_capability().await?;
+                edgerun_log::info!("edgerun-imap-client: auto-negotiated STARTTLS with {}", addr);
+            }
+        }
+
         Ok(client)
     }
 
-    /// TCP connection with DNS resolution.
+    /// Connect without STARTTLS negotiation.
+    pub async fn connect_no_tls(addr: &str) -> io::Result<Self> {
+        let stream = Self::connect_tcp(addr).await?;
+
+        let mut client = Self {
+            transport: ImapTransport::Plain(stream),
+            tag_counter: AtomicU16::new(1),
+            untagged: Vec::new(),
+            capabilities: Vec::new(),
+            selected_mailbox: None,
+        };
+
+        client.read_greeting().await?;
+        client.do_capability().await?;
+        Ok(client)
+    }
+
+    fn extract_host(addr: &str) -> String {
+        if let Ok(sock_addr) = addr.parse::<SocketAddr>() {
+            return sock_addr.ip().to_string();
+        }
+        if let Some(idx) = addr.rfind(':') {
+            return addr[..idx].to_string();
+        }
+        addr.to_string()
+    }
+
     async fn connect_tcp(addr: &str) -> io::Result<AsyncTcpStream> {
-        // Try parsing as SocketAddr first
         if let Ok(sock_addr) = addr.parse::<SocketAddr>() {
             let fut = ConnectFuture::new(sock_addr);
             match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
-                Ok(Ok(stream)) => return Ok((*stream).clone()),
+                Ok(Ok(stream)) => return Ok(std::sync::Arc::try_unwrap(stream).ok().unwrap()),
                 Ok(Err(e)) => return Err(e),
                 Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
             }
         }
 
-        // Parse host:port
         let parts: Vec<&str> = addr.rsplitn(2, ':').collect();
         if parts.len() != 2 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "addr must be host:port"));
@@ -102,17 +213,15 @@ impl ImapClient {
         let port: u16 = parts[0].parse()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
 
-        // Resolve DNS
         let resolved = Self::dns_resolve(host, port).await?;
         let fut = ConnectFuture::new(resolved);
         match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
-            Ok(Ok(stream)) => Ok((*stream).clone()),
+            Ok(Ok(stream)) => Ok(std::sync::Arc::try_unwrap(stream).ok().unwrap()),
             Ok(Err(e)) => Err(e),
             Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
         }
     }
 
-    /// DNS resolution via getaddrinfo.
     async fn dns_resolve(host: &str, port: u16) -> io::Result<SocketAddr> {
         let host_str = host.to_string();
         let result = edgerun_rt::spawn_blocking(move || {
@@ -133,12 +242,10 @@ impl ImapClient {
         }
     }
 
-    /// Read the server greeting.
     async fn read_greeting(&mut self) -> io::Result<()> {
-        let line = self.reader.read_line().await?;
+        let line = read_imap_line(&mut self.transport).await?;
         if let Some(line) = line {
             if line.starts_with("*") {
-                // Parse capabilities from greeting
                 if let Some(cap_pos) = line.find("[CAPABILITY ") {
                     let cap_end = line[cap_pos..].find(']').unwrap_or(line.len() - cap_pos);
                     let cap_str = &line[cap_pos + 12..cap_pos + cap_end - 1];
@@ -151,41 +258,84 @@ impl ImapClient {
         Ok(())
     }
 
-    /// Generate the next command tag.
     fn next_tag(&self) -> String {
         let tag = self.tag_counter.fetch_add(1, Ordering::SeqCst);
         format!("A{:04}", tag)
     }
 
-    /// Send a command and read the tagged response.
+    async fn do_capability(&mut self) -> io::Result<()> {
+        let resp = self.send_command("CAPABILITY").await?;
+        match resp {
+            ImapResponse::Tagged { result: ImapResult::Ok, message, .. } => {
+                // Re-parse capabilities from untagged responses
+                for line in &self.untagged {
+                    if line.starts_with("* CAPABILITY ") {
+                        let cap_str = &line[13..];
+                        self.capabilities = cap_str.split_whitespace()
+                            .map(|s| s.to_string())
+                            .collect();
+                        break;
+                    }
+                }
+                if self.capabilities.is_empty() {
+                    return Err(io::Error::new(io::ErrorKind::Other, message));
+                }
+                Ok(())
+            }
+            ImapResponse::Tagged { message, .. } => {
+                Err(io::Error::new(io::ErrorKind::Other, message))
+            }
+            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
+        }
+    }
+
+    #[cfg(feature = "tls")]
+    async fn do_starttls(&mut self, server_name: &str) -> io::Result<()> {
+        let resp = self.send_command("STARTTLS").await?;
+        match resp {
+            ImapResponse::Tagged { result: ImapResult::Ok, .. } => {}
+            ImapResponse::Tagged { message, .. } => {
+                return Err(io::Error::new(io::ErrorKind::Other, format!("STARTTLS rejected: {}", message)));
+            }
+            _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
+        }
+
+        // Upgrade transport to TLS
+        let current = match std::mem::replace(&mut self.transport, ImapTransport::placeholder()) {
+            ImapTransport::Plain(s) => s,
+            ImapTransport::Tls(_) => {
+                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+            }
+        };
+
+        let tls = AsyncTlsStream::client(current, server_name)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
+        self.transport = ImapTransport::Tls(tls);
+
+        Ok(())
+    }
+
     async fn send_command(&mut self, command: &str) -> io::Result<ImapResponse> {
         let tag = self.next_tag();
         let full_cmd = format!("{} {}\r\n", tag, command);
 
-        // Send command
-        {
-            let mut w = self.writer.lock().await;
-            w.write_all(full_cmd.as_bytes()).await?;
-            w.flush().await?;
-        }
+        self.transport.write_all(full_cmd.as_bytes()).await?;
+        self.transport.flush().await?;
 
-        // Read responses until tagged response with our tag
         loop {
-            let line = self.reader.read_line().await?;
+            let line = read_imap_line(&mut self.transport).await?;
             let line = match line {
                 Some(l) => l,
                 None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
             };
 
             if line.starts_with("* ") {
-                // Untagged response — store it
                 self.untagged.push(line.clone());
                 edgerun_log::debug!("edgerun-imap: untagged: {}", line);
             } else if line.starts_with("+ ") {
-                // Continuation request
                 return Ok(ImapResponse::continuation(&line[2..]));
             } else if line.starts_with(&tag) {
-                // Tagged response — parse result
                 let result = if line.contains(" OK ") {
                     ImapResult::Ok
                 } else if line.contains(" NO ") {
@@ -193,67 +343,7 @@ impl ImapClient {
                 } else if line.contains(" BAD ") {
                     ImapResult::Bad
                 } else {
-                    ImapResult::Ok // Default
-                };
-
-                let message = line.splitn(3, |c| c == ' ')
-                    .last()
-                    .unwrap_or("")
-                    .to_string();
-
-                return Ok(ImapResponse::Tagged {
-                    tag,
-                    result,
-                    message,
-                });
-            }
-        }
-    }
-
-    /// Send a command with literal data.
-    async fn send_command_with_literal(&mut self, command: &str, data: &[u8]) -> io::Result<ImapResponse> {
-        let tag = self.next_tag();
-        let size = data.len();
-        let cmd_line = format!("{} {} {{{}}}\r\n", tag, command, size);
-
-        // Send command with literal size
-        {
-            let mut w = self.writer.lock().await;
-            w.write_all(cmd_line.as_bytes()).await?;
-            w.flush().await?;
-        }
-
-        // Read continuation
-        let cont = self.reader.read_line().await?;
-        if !cont.as_ref().map(|s| s.starts_with("+")).unwrap_or(false) {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "expected continuation"));
-        }
-
-        // Send literal data
-        {
-            let mut w = self.writer.lock().await;
-            w.write_all(data).await?;
-            w.write_all(b"\r\n").await?;
-            w.flush().await?;
-        }
-
-        // Read tagged response
-        loop {
-            let line = self.reader.read_line().await?;
-            let line = match line {
-                Some(l) => l,
-                None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
-            };
-
-            if line.starts_with("* ") {
-                self.untagged.push(line.clone());
-            } else if line.starts_with(&tag) {
-                let result = if line.contains(" OK ") {
                     ImapResult::Ok
-                } else if line.contains(" NO ") {
-                    ImapResult::No
-                } else {
-                    ImapResult::Bad
                 };
 
                 let message = line.splitn(3, |c| c == ' ')
@@ -266,25 +356,62 @@ impl ImapClient {
         }
     }
 
-    // ===================================================================
-    // IMAP Commands
-    // ===================================================================
+    async fn send_command_with_literal(&mut self, command: &str, data: &[u8]) -> io::Result<ImapResponse> {
+        let tag = self.next_tag();
+        let size = data.len();
+        let cmd_line = format!("{} {} {{{}}}\r\n", tag, command, size);
 
-    /// Get server capabilities.
-    pub async fn capability(&mut self) -> io::Result<Vec<String>> {
-        let resp = self.send_command("CAPABILITY").await?;
-        match resp {
-            ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                Ok(self.capabilities.clone())
+        self.transport.write_all(cmd_line.as_bytes()).await?;
+        self.transport.flush().await?;
+
+        let cont = read_imap_line(&mut self.transport).await?;
+        if !cont.as_ref().map(|s| s.starts_with("+")).unwrap_or(false) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "expected continuation"));
+        }
+
+        self.transport.write_all(data).await?;
+        self.transport.write_all(b"\r\n").await?;
+        self.transport.flush().await?;
+
+        loop {
+            let line = read_imap_line(&mut self.transport).await?;
+            let line = match line {
+                Some(l) => l,
+                None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
+            };
+
+            if line.starts_with("* ") {
+                self.untagged.push(line.clone());
+            } else if line.starts_with("+ ") {
+                return Ok(ImapResponse::continuation(&line[2..]));
+            } else if line.starts_with(&tag) {
+                let result = if line.contains(" OK ") {
+                    ImapResult::Ok
+                } else if line.contains(" NO ") {
+                    ImapResult::No
+                } else {
+                    ImapResult::Bad
+                };
+                let message = line.splitn(3, |c| c == ' ').last().unwrap_or("").to_string();
+                return Ok(ImapResponse::Tagged { tag, result, message });
             }
-            ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
-            }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
     }
 
-    /// Authenticate with username and password.
+    // ── IMAP Commands ─────────────────────────────────────────────
+
+    pub fn is_tls(&self) -> bool {
+        self.transport.is_tls()
+    }
+
+    pub fn capabilities(&self) -> &[String] {
+        &self.capabilities
+    }
+
+    pub fn selected_mailbox(&self) -> Option<&str> {
+        self.selected_mailbox.as_deref()
+    }
+
     pub async fn login(&mut self, user: &str, password: &str) -> io::Result<()> {
         let cmd = format!("LOGIN {} {}", user, password);
         let resp = self.send_command(&cmd).await?;
@@ -297,19 +424,35 @@ impl ImapClient {
         }
     }
 
-    /// Logout from the server.
     pub async fn logout(&mut self) -> io::Result<()> {
         let _ = self.send_command("LOGOUT").await?;
         Ok(())
     }
 
-    /// Select a mailbox (read-write).
     pub async fn select(&mut self, mailbox: &str) -> io::Result<MailboxStatus> {
         let resp = self.send_command(&format!("SELECT {}", mailbox)).await?;
         match resp {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                // Parse untagged responses for mailbox status
-                let status = self.parse_mailbox_status();
+                let mut status = MailboxStatus::default();
+                for line in &self.untagged {
+                    if line.starts_with("* ") && line.contains(" EXISTS") {
+                        if let Some(n) = line.split_whitespace().nth(1) {
+                            status.messages = n.parse().unwrap_or(0);
+                        }
+                    } else if line.starts_with("* ") && line.contains(" RECENT") {
+                        if let Some(n) = line.split_whitespace().nth(1) {
+                            status.recent = n.parse().unwrap_or(0);
+                        }
+                    } else if line.starts_with("* OK [UIDVALIDITY ") {
+                        if let Some(n) = line.split_whitespace().nth(2) {
+                            status.uid_validity = n.trim_end_matches(']').parse().unwrap_or(0);
+                        }
+                    } else if line.starts_with("* OK [UIDNEXT ") {
+                        if let Some(n) = line.split_whitespace().nth(2) {
+                            status.uid_next = n.trim_end_matches(']').parse().unwrap_or(0);
+                        }
+                    }
+                }
                 self.selected_mailbox = Some(mailbox.to_string());
                 Ok(status)
             }
@@ -320,37 +463,16 @@ impl ImapClient {
         }
     }
 
-    /// Examine a mailbox (read-only).
-    pub async fn examine(&mut self, mailbox: &str) -> io::Result<MailboxStatus> {
-        let resp = self.send_command(&format!("EXAMINE {}", mailbox)).await?;
-        match resp {
-            ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                let status = self.parse_mailbox_status();
-                self.selected_mailbox = Some(mailbox.to_string());
-                Ok(status)
-            }
-            ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
-            }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
-        }
-    }
-
-    /// List mailboxes.
     pub async fn list(&mut self, reference: &str, pattern: &str) -> io::Result<Vec<Mailbox>> {
         let resp = self.send_command(&format!("LIST {} {}", reference, pattern)).await?;
         match resp {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                // Parse untagged LIST responses
                 let mut mailboxes = Vec::new();
                 for line in &self.untagged {
-                    if line.starts_with("* LIST ") || line.contains(" LIST ") {
-                        if let Some(name) = extract_list_name(line) {
-                            mailboxes.push(Mailbox::new(name));
-                        }
+                    if let Some(mb) = parse_list_response(line) {
+                        mailboxes.push(mb);
                     }
                 }
-                self.untagged.clear();
                 Ok(mailboxes)
             }
             ImapResponse::Tagged { message, .. } => {
@@ -360,22 +482,33 @@ impl ImapClient {
         }
     }
 
-    /// Fetch message data.
-    pub async fn fetch(&mut self, sequence: &str, attributes: &[FetchAttr]) -> io::Result<Vec<HashMap<String, String>>> {
-        let attr_str = format_fetch_attrs(attributes);
-        let resp = self.send_command(&format!("FETCH {} {}", sequence, attr_str)).await?;
+    pub async fn fetch(&mut self, sequence: &str, attrs: &[FetchAttr]) -> io::Result<Vec<(u32, HashMap<String, String>)>> {
+        let attr_str = attrs.iter()
+            .map(|a| match a {
+                FetchAttr::Uid => "UID".to_string(),
+                FetchAttr::Flags => "FLAGS".to_string(),
+                FetchAttr::Rfc822 => "RFC822".to_string(),
+                FetchAttr::Rfc822Header => "RFC822.HEADER".to_string(),
+                FetchAttr::Rfc822Size => "RFC822.SIZE".to_string(),
+                FetchAttr::Rfc822Text => "RFC822.TEXT".to_string(),
+                FetchAttr::Envelope => "ENVELOPE".to_string(),
+                FetchAttr::BodySection(section) => format!("BODY[{}]", section),
+                FetchAttr::InternalDate => "INTERNALDATE".to_string(),
+                FetchAttr::BodyStructure => "BODYSTRUCTURE".to_string(),
+                FetchAttr::MsgSize => "RFC822.SIZE".to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let resp = self.send_command(&format!("FETCH {} ({})", sequence, attr_str)).await?;
         match resp {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                // Parse FETCH responses
                 let mut results = Vec::new();
                 for line in &self.untagged {
-                    if line.contains("FETCH") {
-                        if let Some(data) = parse_fetch_data(line) {
-                            results.push(data);
-                        }
+                    if let Some((seq, attrs)) = parse_fetch_response(line) {
+                        results.push((seq, attrs));
                     }
                 }
-                self.untagged.clear();
                 Ok(results)
             }
             ImapResponse::Tagged { message, .. } => {
@@ -385,25 +518,57 @@ impl ImapClient {
         }
     }
 
-    /// Search for messages.
     pub async fn search(&mut self, keys: &[SearchKey]) -> io::Result<Vec<u32>> {
-        let key_str = format_search_keys(keys);
+        let key_str = keys.iter()
+            .map(|k| match k {
+                SearchKey::All => "ALL".to_string(),
+                SearchKey::Answered => "ANSWERED".to_string(),
+                SearchKey::Deleted => "DELETED".to_string(),
+                SearchKey::Undeleted => "UNDELETED".to_string(),
+                SearchKey::Draft => "DRAFT".to_string(),
+                SearchKey::Flagged => "FLAGGED".to_string(),
+                SearchKey::Recent => "RECENT".to_string(),
+                SearchKey::New => "NEW".to_string(),
+                SearchKey::Old => "OLD".to_string(),
+                SearchKey::Seen => "SEEN".to_string(),
+                SearchKey::Unseen => "UNSEEN".to_string(),
+                SearchKey::Not(inner) => format!("NOT {}", Self::search_key_to_str(inner)),
+                SearchKey::And(a, b) => format!("{} {}", Self::search_key_to_str(a), Self::search_key_to_str(b)),
+                SearchKey::Or(a, b) => format!("OR {} {}", Self::search_key_to_str(a), Self::search_key_to_str(b)),
+                SearchKey::UidSet(uids) => format!("UID {}", uids),
+                SearchKey::SeqSet(seq) => seq.clone(),
+                SearchKey::SentBefore(d) => format!("SENTBEFORE \"{}\"", d),
+                SearchKey::SentOn(d) => format!("SENTON \"{}\"", d),
+                SearchKey::SentSince(d) => format!("SENTSINCE \"{}\"", d),
+                SearchKey::Before(d) => format!("BEFORE \"{}\"", d),
+                SearchKey::On(d) => format!("ON \"{}\"", d),
+                SearchKey::Since(d) => format!("SINCE \"{}\"", d),
+                SearchKey::Smaller(n) => format!("SMALLER {}", n),
+                SearchKey::Larger(n) => format!("LARGER {}", n),
+                SearchKey::Subject(s) => format!("SUBJECT \"{}\"", s),
+                SearchKey::From(f) => format!("FROM \"{}\"", f),
+                SearchKey::To(t) => format!("TO \"{}\"", t),
+                SearchKey::Body(b) => format!("BODY \"{}\"", b),
+                SearchKey::Text(t) => format!("TEXT \"{}\"", t),
+                SearchKey::Header(h, v) => format!("HEADER \"{}\" \"{}\"", h, v),
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
         let resp = self.send_command(&format!("SEARCH {}", key_str)).await?;
         match resp {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                // Parse SEARCH response from untagged
+                let mut results = Vec::new();
                 for line in &self.untagged {
                     if line.starts_with("* SEARCH") {
-                        let ids: Vec<u32> = line["* SEARCH ".len()..]
-                            .split_whitespace()
-                            .filter_map(|s| s.parse().ok())
-                            .collect();
-                        self.untagged.clear();
-                        return Ok(ids);
+                        for num in line[8..].split_whitespace() {
+                            if let Ok(n) = num.parse::<u32>() {
+                                results.push(n);
+                            }
+                        }
                     }
                 }
-                self.untagged.clear();
-                Ok(Vec::new())
+                Ok(results)
             }
             ImapResponse::Tagged { message, .. } => {
                 Err(io::Error::new(io::ErrorKind::Other, message))
@@ -412,61 +577,57 @@ impl ImapClient {
         }
     }
 
-    /// Store flags on messages.
-    pub async fn store(&mut self, sequence: &str, action: &str, flags: &Flags) -> io::Result<()> {
-        let resp = self.send_command(&format!(
-            "STORE {} {} {}",
-            sequence, action, flags.format()
-        )).await?;
-        match resp {
-            ImapResponse::Tagged { result: ImapResult::Ok, .. } => Ok(()),
-            ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
-            }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
+    fn search_key_to_str(key: &SearchKey) -> String {
+        match key {
+            SearchKey::All => "ALL".to_string(),
+            SearchKey::Answered => "ANSWERED".to_string(),
+            SearchKey::Deleted => "DELETED".to_string(),
+            SearchKey::Undeleted => "UNDELETED".to_string(),
+            SearchKey::Draft => "DRAFT".to_string(),
+            SearchKey::Flagged => "FLAGGED".to_string(),
+            SearchKey::Recent => "RECENT".to_string(),
+            SearchKey::New => "NEW".to_string(),
+            SearchKey::Old => "OLD".to_string(),
+            SearchKey::Seen => "SEEN".to_string(),
+            SearchKey::Unseen => "UNSEEN".to_string(),
+            SearchKey::Not(inner) => format!("NOT {}", Self::search_key_to_str(inner)),
+            SearchKey::And(a, b) => format!("{} {}", Self::search_key_to_str(a), Self::search_key_to_str(b)),
+            SearchKey::Or(a, b) => format!("OR {} {}", Self::search_key_to_str(a), Self::search_key_to_str(b)),
+            SearchKey::UidSet(uids) => format!("UID {}", uids),
+            SearchKey::SeqSet(seq) => seq.clone(),
+            SearchKey::SentBefore(d) => format!("SENTBEFORE \"{}\"", d),
+            SearchKey::SentOn(d) => format!("SENTON \"{}\"", d),
+            SearchKey::SentSince(d) => format!("SENTSINCE \"{}\"", d),
+            SearchKey::Before(d) => format!("BEFORE \"{}\"", d),
+            SearchKey::On(d) => format!("ON \"{}\"", d),
+            SearchKey::Since(d) => format!("SINCE \"{}\"", d),
+            SearchKey::Smaller(n) => format!("SMALLER {}", n),
+            SearchKey::Larger(n) => format!("LARGER {}", n),
+            SearchKey::Subject(s) => format!("SUBJECT \"{}\"", s),
+            SearchKey::From(f) => format!("FROM \"{}\"", f),
+            SearchKey::To(t) => format!("TO \"{}\"", t),
+            SearchKey::Body(b) => format!("BODY \"{}\"", b),
+            SearchKey::Text(t) => format!("TEXT \"{}\"", t),
+            SearchKey::Header(h, v) => format!("HEADER \"{}\" \"{}\"", h, v),
         }
     }
 
-    /// Create a mailbox.
-    pub async fn create(&mut self, mailbox: &str) -> io::Result<()> {
-        let resp = self.send_command(&format!("CREATE {}", mailbox)).await?;
-        match resp {
-            ImapResponse::Tagged { result: ImapResult::Ok, .. } => Ok(()),
-            ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
-            }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
-        }
-    }
-
-    /// Delete a mailbox.
-    pub async fn delete(&mut self, mailbox: &str) -> io::Result<()> {
-        let resp = self.send_command(&format!("DELETE {}", mailbox)).await?;
-        match resp {
-            ImapResponse::Tagged { result: ImapResult::Ok, .. } => Ok(()),
-            ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
-            }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
-        }
-    }
-
-    /// Get mailbox status.
-    pub async fn status(&mut self, mailbox: &str, items: &[&str]) -> io::Result<HashMap<String, u32>> {
-        let items_str = items.join(" ");
-        let resp = self.send_command(&format!("STATUS {} ({})", mailbox, items_str)).await?;
+    pub async fn store(&mut self, sequence: &str, action: &str, flags: &[String]) -> io::Result<Vec<u32>> {
+        let flags_str = flags.join(" ");
+        let resp = self.send_command(&format!("STORE {} {}FLAGS ({})", sequence, action, flags_str)).await?;
         match resp {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                // Parse STATUS from untagged
+                let mut seqs = Vec::new();
                 for line in &self.untagged {
-                    if line.contains("STATUS") {
-                        let status = parse_status(line);
-                        self.untagged.clear();
-                        return Ok(status);
+                    if line.starts_with("* ") && line.contains(" FETCH") {
+                        if let Some(n) = line[2..].split_whitespace().next() {
+                            if let Ok(seq) = n.parse::<u32>() {
+                                seqs.push(seq);
+                            }
+                        }
                     }
                 }
-                self.untagged.clear();
-                Ok(HashMap::new())
+                Ok(seqs)
             }
             ImapResponse::Tagged { message, .. } => {
                 Err(io::Error::new(io::ErrorKind::Other, message))
@@ -475,7 +636,92 @@ impl ImapClient {
         }
     }
 
-    /// Close the selected mailbox.
+    pub async fn expunge(&mut self) -> io::Result<Vec<u32>> {
+        let resp = self.send_command("EXPUNGE").await?;
+        match resp {
+            ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
+                let mut seqs = Vec::new();
+                for line in &self.untagged {
+                    if line.starts_with("* ") && line.contains(" EXPUNGE") {
+                        if let Some(n) = line.split_whitespace().nth(1) {
+                            if let Ok(seq) = n.parse::<u32>() {
+                                seqs.push(seq);
+                            }
+                        }
+                    }
+                }
+                Ok(seqs)
+            }
+            ImapResponse::Tagged { message, .. } => {
+                Err(io::Error::new(io::ErrorKind::Other, message))
+            }
+            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
+        }
+    }
+
+    pub async fn append(&mut self, mailbox: &str, data: &[u8]) -> io::Result<u32> {
+        let resp = self.send_command_with_literal(&format!("APPEND {}", mailbox), data).await?;
+        match resp {
+            ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
+                let uid = self.untagged.iter()
+                    .find(|l| l.contains("APPENDUID"))
+                    .and_then(|l| l.split_whitespace().find(|w| w.parse::<u32>().is_ok()))
+                    .and_then(|w| w.parse::<u32>().ok());
+                Ok(uid.unwrap_or(0))
+            }
+            ImapResponse::Tagged { message, .. } => {
+                Err(io::Error::new(io::ErrorKind::Other, message))
+            }
+            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
+        }
+    }
+
+    pub async fn copy_messages(&mut self, sequence: &str, dest: &str) -> io::Result<()> {
+        let resp = self.send_command(&format!("COPY {} {}", sequence, dest)).await?;
+        match resp {
+            ImapResponse::Tagged { result: ImapResult::Ok, .. } => Ok(()),
+            ImapResponse::Tagged { message, .. } => {
+                Err(io::Error::new(io::ErrorKind::Other, message))
+            }
+            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
+        }
+    }
+
+    pub async fn status(&mut self, mailbox: &str) -> io::Result<MailboxStatus> {
+        let resp = self.send_command(&format!("STATUS {} (MESSAGES UNSEEN UIDNEXT UIDVALIDITY)", mailbox)).await?;
+        match resp {
+            ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
+                let mut status = MailboxStatus::default();
+                for line in &self.untagged {
+                    if line.starts_with("* ") && line.contains(" STATUS") {
+                        // Parse STATUS response
+                        if let Some(n) = line.split_whitespace().nth(1) {
+                            if n == mailbox {
+                                // Parse the parenthesized data
+                                if let Some(data_start) = line.find('(') {
+                                    let data = &line[data_start..];
+                                    if let Some(pos) = data.find("MESSAGES ") {
+                                        let n = &data[pos + 9..].split_whitespace().next().unwrap_or("0");
+                                        status.messages = n.trim_end_matches(')').parse().unwrap_or(0);
+                                    }
+                                    if let Some(pos) = data.find("UNSEEN ") {
+                                        let n = &data[pos + 7..].split_whitespace().next().unwrap_or("0");
+                                        status.recent = n.trim_end_matches(')').parse().unwrap_or(0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(status)
+            }
+            ImapResponse::Tagged { message, .. } => {
+                Err(io::Error::new(io::ErrorKind::Other, message))
+            }
+            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
+        }
+    }
+
     pub async fn close(&mut self) -> io::Result<()> {
         let resp = self.send_command("CLOSE").await?;
         match resp {
@@ -489,180 +735,54 @@ impl ImapClient {
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
     }
+}
 
-    /// Expunge deleted messages.
-    pub async fn expunge(&mut self) -> io::Result<Vec<u32>> {
-        let resp = self.send_command("EXPUNGE").await?;
-        match resp {
-            ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
-                let mut removed = Vec::new();
-                for line in &self.untagged {
-                    if line.contains("EXPUNGE") {
-                        if let Some(seq) = parse_expunge(line) {
-                            removed.push(seq);
-                        }
-                    }
-                }
-                self.untagged.clear();
-                Ok(removed)
-            }
-            ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
-            }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
-        }
-    }
-
-    /// No-operation (keepalive).
-    pub async fn noop(&mut self) -> io::Result<()> {
-        let _ = self.send_command("NOOP").await?;
-        Ok(())
-    }
-
-    // ===================================================================
-    // Helpers
-    // ===================================================================
-
-    /// Parse mailbox status from untagged responses.
-    fn parse_mailbox_status(&mut self) -> MailboxStatus {
-        let mut status = MailboxStatus::default();
-        for line in &self.untagged {
-            if let Some(count) = line.strip_suffix(" EXISTS") {
-                if let Ok(n) = count.parse() {
-                    status.messages = n;
-                }
-            }
-            if let Some(count) = line.strip_suffix(" RECENT") {
-                if let Ok(n) = count.parse() {
-                    status.recent = n;
-                }
-            }
-            if line.contains("UIDNEXT") {
-                if let Some(n) = extract_number(line, "UIDNEXT") {
-                    status.uid_next = n;
-                }
-            }
-            if line.contains("UIDVALIDITY") {
-                if let Some(n) = extract_number(line, "UIDVALIDITY") {
-                    status.uid_validity = n;
-                }
-            }
-        }
-        self.untagged.clear();
-        status
+impl ImapTransport {
+    fn placeholder() -> Self {
+        ImapTransport::Plain(AsyncTcpStream::from_fd(-1))
     }
 }
 
-// ===========================================================================
-// Helper Functions
-// ===========================================================================
-
-fn format_fetch_attrs(attrs: &[FetchAttr]) -> String {
-    let parts: Vec<&str> = attrs.iter().map(|a| match a {
-        FetchAttr::Uid => "UID",
-        FetchAttr::Flags => "FLAGS",
-        FetchAttr::Rfc822Size => "RFC822.SIZE",
-        FetchAttr::Rfc822 => "RFC822",
-        FetchAttr::Rfc822Header => "RFC822.HEADER",
-        FetchAttr::Rfc822Text => "RFC822.TEXT",
-        FetchAttr::Envelope => "ENVELOPE",
-        FetchAttr::InternalDate => "INTERNALDATE",
-        FetchAttr::BodyStructure => "BODYSTRUCTURE",
-        FetchAttr::BodySection(_) => "BODY[]",
-        FetchAttr::MsgSize => "RFC822.SIZE",
-    }).collect();
-    format!("({})", parts.join(" "))
-}
-
-fn format_search_keys(keys: &[SearchKey]) -> String {
-    keys.iter().map(|k| match k {
-        SearchKey::All => "ALL".to_string(),
-        SearchKey::Answered => "ANSWERED".to_string(),
-        SearchKey::Deleted => "DELETED".to_string(),
-        SearchKey::Draft => "DRAFT".to_string(),
-        SearchKey::Flagged => "FLAGGED".to_string(),
-        SearchKey::Recent => "RECENT".to_string(),
-        SearchKey::New => "NEW".to_string(),
-        SearchKey::Old => "OLD".to_string(),
-        SearchKey::Seen => "SEEN".to_string(),
-        SearchKey::Unseen => "UNSEEN".to_string(),
-        SearchKey::Subject(s) => format!("SUBJECT {}", s),
-        SearchKey::From(s) => format!("FROM {}", s),
-        SearchKey::To(s) => format!("TO {}", s),
-        SearchKey::Body(s) => format!("BODY {}", s),
-        SearchKey::SeqSet(s) => s.clone(),
-        SearchKey::UidSet(s) => format!("UID {}", s),
-        SearchKey::Smaller(n) => format!("SMALLER {}", n),
-        SearchKey::Larger(n) => format!("LARGER {}", n),
-        _ => "ALL".to_string(),
-    }).collect::<Vec<_>>().join(" ")
-}
-
-fn extract_list_name(line: &str) -> Option<String> {
-    // Parse: * LIST (attributes) "delimiter" "name"
-    // Simplified — just find the last quoted string
-    let mut iter = line.rsplitn(2, '"');
-    if let Some(name) = iter.next() {
-        if let Some(_) = iter.next() {
-            return Some(name.to_string());
-        }
+fn parse_list_response(line: &str) -> Option<Mailbox> {
+    if !line.starts_with("* LIST ") {
+        return None;
     }
-    None
+    let rest = &line[7..];
+    let open_paren = rest.find('(')?;
+    let close_paren = rest.find(')')?;
+    let flags_str = &rest[open_paren + 1..close_paren];
+    let flags: Vec<String> = flags_str.split_whitespace().map(|s| s.to_string()).collect();
+    let after_paren = rest[close_paren + 1..].trim_start();
+    let parts: Vec<&str> = after_paren.splitn(2, ' ').collect();
+    if parts.len() != 2 { return None; }
+    let delimiter = parts[0].trim_matches('"');
+    let delimiter = if delimiter == "NIL" { None } else { Some(delimiter.to_string()) };
+    let name = parts[1].trim_matches('"');
+    Some(Mailbox { name: name.to_string(), attributes: flags, delimiter, status: None })
 }
 
-fn parse_fetch_data(line: &str) -> Option<HashMap<String, String>> {
-    // Parse: * N FETCH (UID 1 FLAGS (\Seen))
-    // Simplified — extract key-value pairs
-    let mut data = HashMap::new();
-    if let Some(fetch_start) = line.find("FETCH (") {
-        let inner = &line[fetch_start + 7..];
-        let inner = inner.trim_end_matches(')');
-        let parts: Vec<&str> = inner.split_whitespace().collect();
-        let mut i = 0;
-        while i + 1 < parts.len() {
-            data.insert(parts[i].to_string(), parts[i + 1].to_string());
-            i += 2;
-        }
-    }
-    if !data.is_empty() {
-        Some(data)
-    } else {
-        None
-    }
-}
-
-fn parse_status(line: &str) -> HashMap<String, u32> {
-    let mut result = HashMap::new();
-    if let Some(start) = line.find('(') {
-        if let Some(end) = line.rfind(')') {
-            let inner = &line[start + 1..end];
-            let parts: Vec<&str> = inner.split_whitespace().collect();
-            let mut i = 0;
-            while i + 1 < parts.len() {
-                if let Ok(n) = parts[i + 1].parse() {
-                    result.insert(parts[i].to_string(), n);
+fn parse_fetch_response(line: &str) -> Option<(u32, HashMap<String, String>)> {
+    if !line.starts_with("* ") || !line.contains(" FETCH ") { return None; }
+    let seq = line[2..].split_whitespace().next()?.parse::<u32>().ok()?;
+    let fetch_pos = line.find(" FETCH ")?;
+    let after_fetch = &line[fetch_pos + 7..];
+    if !after_fetch.starts_with('(') || !after_fetch.ends_with(')') { return None; }
+    let inner = &after_fetch[1..after_fetch.len() - 1];
+    let mut attrs = HashMap::new();
+    let mut parts = inner.split_whitespace().peekable();
+    while let Some(key) = parts.next() {
+        if let Some(&value) = parts.peek() {
+            if value.starts_with('(') {
+                let mut val_parts = vec![value];
+                while let Some(v) = parts.next() {
+                    val_parts.push(v);
+                    if v.ends_with(')') { break; }
                 }
-                i += 2;
+                attrs.insert(key.to_string(), val_parts.join(" "));
+            } else {
+                attrs.insert(key.to_string(), value.to_string());
             }
         }
     }
-    result
-}
-
-fn parse_expunge(line: &str) -> Option<u32> {
-    // Parse: * N EXPUNGE
-    line.split_whitespace()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-}
-
-fn extract_number(line: &str, key: &str) -> Option<u32> {
-    if let Some(pos) = line.find(key) {
-        let rest = &line[pos + key.len()..];
-        rest.split_whitespace()
-            .next()
-            .and_then(|s| s.parse().ok())
-    } else {
-        None
-    }
+    Some((seq, attrs))
 }

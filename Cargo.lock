@@ -1116,6 +1116,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-encoding"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-evdev-input"
 version = "0.1.0"
 dependencies = [

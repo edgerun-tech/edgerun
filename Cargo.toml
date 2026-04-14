@@ -24,6 +24,7 @@ members = [
   "crates/edgerun-drm-display",
   "crates/edgerun-e2e-capability",
   "crates/edgerun-edit",
+  "crates/edgerun-encoding",
   "crates/edgerun-evdev-input",
   "crates/edgerun-face-detection",
   "crates/edgerun-fingerprint",
@@ -134,6 +135,7 @@ edgerun-capability-policy = { path = "crates/edgerun-capability-policy" }
 edgerun-linux-wifi = { path = "crates/edgerun-linux-wifi" }
 edgerun-input = { path = "crates/edgerun-input" }
 edgerun-oci = { path = "crates/edgerun-oci" }
+edgerun-encoding = { path = "crates/edgerun-encoding" }
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json

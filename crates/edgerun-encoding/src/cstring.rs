@@ -1,0 +1,166 @@
+//! C-string (null-terminated string) utilities.
+//!
+//! Consolidated from identical implementations in:
+//! - `edgerun-linux-cec/src/lib.rs`
+//! - `edgerun-mgmt-bluetooth/src/lib.rs`
+//!
+//! Provides safe conversion between null-terminated byte slices and Rust strings.
+
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+use core::str;
+
+/// Decode a null-terminated C string to a Rust `String`.
+///
+/// Stops at the first null byte (`\0`). Returns an error if the bytes
+/// before the null terminator are not valid UTF-8.
+///
+/// This consolidates the duplicate implementations in:
+/// - `edgerun-linux-cec/src/lib.rs`
+/// - `edgerun-mgmt-bluetooth/src/lib.rs`
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::cstring::decode_c_string;
+/// assert_eq!(decode_c_string(b"hello\0world"), Ok("hello".to_string()));
+/// assert_eq!(decode_c_string(b"hello\0"), Ok("hello".to_string()));
+/// assert_eq!(decode_c_string(b"\0"), Ok("".to_string()));
+/// ```
+pub fn decode_c_string(bytes: &[u8]) -> Result<String, core::str::Utf8Error> {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    str::from_utf8(&bytes[..end]).map(|s| s.to_string())
+}
+
+/// Decode a null-terminated C string, returning a string slice reference.
+///
+/// This is a zero-copy variant that returns a reference into the original buffer.
+/// Useful when you don't need ownership of the string.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::cstring::decode_c_string_ref;
+/// let data = b"hello\0world";
+/// assert_eq!(decode_c_string_ref(data), Ok("hello"));
+/// ```
+pub fn decode_c_string_ref(bytes: &[u8]) -> Result<&str, core::str::Utf8Error> {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    str::from_utf8(&bytes[..end])
+}
+
+/// Encode a string to a null-terminated C string.
+///
+/// Appends a `\0` byte to the UTF-8 representation of the string.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::cstring::encode_c_string;
+/// assert_eq!(encode_c_string("hello"), vec![b'h', b'e', b'l', b'l', b'o', 0]);
+/// assert_eq!(encode_c_string(""), vec![0]);
+/// ```
+pub fn encode_c_string(s: &str) -> Vec<u8> {
+    let mut result = Vec::with_capacity(s.len() + 1);
+    result.extend_from_slice(s.as_bytes());
+    result.push(0);
+    result
+}
+
+/// Decode multiple null-terminated C strings from a byte buffer.
+///
+/// Parses consecutive null-terminated strings until the buffer is exhausted.
+/// Empty strings (consecutive null bytes) are included as empty strings.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::cstring::decode_c_strings;
+/// let data = b"foo\0bar\0baz\0";
+/// let strings = decode_c_strings(data).unwrap();
+/// assert_eq!(strings, vec!["foo", "bar", "baz"]);
+/// ```
+pub fn decode_c_strings(bytes: &[u8]) -> Result<Vec<String>, core::str::Utf8Error> {
+    let mut result = Vec::new();
+    let mut offset = 0;
+
+    while offset < bytes.len() {
+        let end = bytes[offset..]
+            .iter()
+            .position(|&b| b == 0)
+            .map(|p| offset + p)
+            .unwrap_or(bytes.len());
+
+        result.push(str::from_utf8(&bytes[offset..end])?.to_string());
+        offset = end + 1; // skip null byte
+    }
+
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    #[test]
+    fn test_decode_c_string() {
+        assert_eq!(decode_c_string(b"hello\0world"), Ok("hello".to_string()));
+        assert_eq!(decode_c_string(b"hello\0"), Ok("hello".to_string()));
+        assert_eq!(decode_c_string(b"\0"), Ok("".to_string()));
+        assert_eq!(decode_c_string(b""), Ok("".to_string()));
+    }
+
+    #[test]
+    fn test_decode_c_string_ref() {
+        let data = b"hello\0world";
+        assert_eq!(decode_c_string_ref(data), Ok("hello"));
+
+        let data = b"\0";
+        assert_eq!(decode_c_string_ref(data), Ok(""));
+    }
+
+    #[test]
+    fn test_decode_c_string_invalid_utf8() {
+        assert!(decode_c_string(b"\xff\xfe\x00").is_err());
+    }
+
+    #[test]
+    fn test_encode_c_string() {
+        assert_eq!(encode_c_string("hello"), vec![b'h', b'e', b'l', b'l', b'o', 0]);
+        assert_eq!(encode_c_string(""), vec![0]);
+        assert_eq!(encode_c_string("a"), vec![b'a', 0]);
+    }
+
+    #[test]
+    fn test_encode_decode_roundtrip() {
+        let original = "hello world";
+        let encoded = encode_c_string(original);
+        let decoded = decode_c_string(&encoded).unwrap();
+        assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn test_decode_c_strings() {
+        let data = b"foo\0bar\0baz\0";
+        let strings = decode_c_strings(data).unwrap();
+        assert_eq!(strings, vec!["foo", "bar", "baz"]);
+    }
+
+    #[test]
+    fn test_decode_c_strings_empty() {
+        let data = b"\0\0\0";
+        let strings = decode_c_strings(data).unwrap();
+        assert_eq!(strings, vec!["", "", ""]);
+    }
+
+    #[test]
+    fn test_decode_c_strings_single() {
+        let data = b"single\0";
+        let strings = decode_c_strings(data).unwrap();
+        assert_eq!(strings, vec!["single"]);
+    }
+
+    #[test]
+    fn test_decode_c_strings_invalid_utf8() {
+        let data = b"foo\0\xff\xfe\0";
+        assert!(decode_c_strings(data).is_err());
+    }
+}
