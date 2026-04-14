@@ -69,6 +69,7 @@ members = [
   "crates/edgerun-server",
   "crates/edgerun-email-auth",
   "crates/edgerun-smtp",
+  "crates/edgerun-lmtp",
   "crates/edgerun-speaker",
   "crates/edgerun-storage",
   "crates/edgerun-stream",
