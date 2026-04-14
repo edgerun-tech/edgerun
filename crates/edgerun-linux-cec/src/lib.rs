@@ -148,14 +148,6 @@ pub struct LinuxCecAdapter {
     file: File,
 }
 
-fn decode_c_string(bytes: &[u8]) -> String {
-    let end = bytes
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).trim().to_string()
-}
-
 fn decode_capabilities(bits: u32) -> CecCapabilities {
     CecCapabilities {
         can_set_physical_address: (bits & CEC_CAP_PHYS_ADDR) != 0,
@@ -183,8 +175,8 @@ fn enrich_from_ioctl(file: &File, info: &mut LinuxCecAdapterInfo) {
     // SAFETY: ioctl is called with valid pointers to C-compatible structs for read/write requests.
     let caps_ok = unsafe { ioctl(fd, CEC_ADAP_G_CAPS, &mut caps) } == 0;
     if caps_ok {
-        let driver_name = decode_c_string(&caps.driver);
-        let adapter_name = decode_c_string(&caps.name);
+        let driver_name = edgerun_encoding::cstring::decode_c_string_trimmed(&caps.driver).unwrap_or_default();
+        let adapter_name = edgerun_encoding::cstring::decode_c_string_trimmed(&caps.name).unwrap_or_default();
         if !driver_name.is_empty() {
             info.driver_name = Some(driver_name);
         }
@@ -553,31 +545,6 @@ mod tests {
         let adapters = discover_cec_adapters_in(&root).unwrap();
         assert!(adapters.is_empty());
         let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn decode_c_string_basic() {
-        assert_eq!(decode_c_string(b"hello\x00world"), "hello");
-    }
-
-    #[test]
-    fn decode_c_string_no_null() {
-        assert_eq!(decode_c_string(b"hello"), "hello");
-    }
-
-    #[test]
-    fn decode_c_string_empty() {
-        assert_eq!(decode_c_string(b""), "");
-    }
-
-    #[test]
-    fn decode_c_string_null_at_start() {
-        assert_eq!(decode_c_string(b"\x00hello"), "");
-    }
-
-    #[test]
-    fn decode_c_string_trims_whitespace() {
-        assert_eq!(decode_c_string(b"test  \x00"), "test");
     }
 
     #[test]

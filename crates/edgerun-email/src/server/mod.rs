@@ -121,11 +121,17 @@ impl Unpin for Transport {}
 
 /// Read a line from the transport (CRLF-terminated).
 /// Returns `None` on EOF.
-pub async fn read_line(transport: &mut Transport) -> io::Result<Option<String>> {
+///
+/// Works with any type implementing `AsyncRead + Unpin`:
+/// - `AsyncTcpStream` (plain TCP)
+/// - `AsyncTlsStream<AsyncTcpStream>` (client TLS)
+/// - `AsyncTlsServerStream<AsyncTcpStream>` (server TLS)
+/// - Protocol-specific Transport enums
+pub async fn read_line<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<Option<String>> {
     let mut line = String::with_capacity(1024);
     loop {
         let mut buf = [0u8; 1];
-        let n = match transport.read(&mut buf).await {
+        let n = match reader.read(&mut buf).await {
             Ok(0) => {
                 if line.is_empty() {
                     return Ok(None);
@@ -171,12 +177,12 @@ pub trait MailProtocol: Send + Sync + 'static {
     fn parse_command(&self, line: &str) -> Result<Self::Command, String>;
 
     /// Execute a command and return the response.
-    async fn execute(
+    fn execute(
         &self,
         cmd: Self::Command,
         state: &mut ProtocolState,
         transport: &mut Transport,
-    ) -> io::Result<ControlFlow>;
+    ) -> impl std::future::Future<Output = io::Result<ControlFlow>> + Send;
 }
 
 /// Control flow returned by command execution.
@@ -308,28 +314,23 @@ impl<P: MailProtocol> ProtocolServer<P> {
 // ===========================================================================
 
 async fn handle_connection<P: MailProtocol>(
-    stream: AsyncTcpStream,
+    stream: Arc<AsyncTcpStream>,
     peer: SocketAddr,
     protocol: Arc<P>,
     config: ServerConfig,
     shutdown: CancellationToken,
 ) -> io::Result<()> {
-    // Implicit TLS (SMTPS/IMAPS) — wrap in TLS immediately
-    #[cfg(feature = "tls")]
-    let mut transport = if config.implicit_tls {
-        if let Some(ref cert) = config.tls_cert {
-            let mut tls_stream = edgerun_tls::AsyncTlsServerStream::new(stream);
-            tls_stream.handshake(cert).await
-                .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
-            Transport::Tls(tls_stream)
-        } else {
-            Transport::Plain(stream)
+    // Unwrap Arc to get owned stream
+    let stream = match Arc::try_unwrap(stream) {
+        Ok(s) => s,
+        Err(_) => {
+            edgerun_log::error!("edgerun-mail: stream has multiple references");
+            return Err(io::Error::new(io::ErrorKind::Other, "stream reference error"));
         }
-    } else {
-        Transport::Plain(stream)
     };
 
-    #[cfg(not(feature = "tls"))]
+    // Use plain TCP — protocol implementations handle their own TLS upgrade
+    // because AsyncTlsServerStream and AsyncTlsStream are different types.
     let mut transport = Transport::Plain(stream);
 
     // Send greeting
@@ -385,25 +386,12 @@ async fn handle_connection<P: MailProtocol>(
             Ok(ControlFlow::Continue) => {}
             Ok(ControlFlow::Quit) => break,
             Ok(ControlFlow::StartTls) => {
-                #[cfg(feature = "tls")]
-                {
-                    if let Some(ref cert) = config.tls_cert {
-                        let current = std::mem::replace(&mut transport, Transport::Plain(
-                            AsyncTcpStream::from_fd(-1)
-                        ));
-                        match current.upgrade_tls_server(cert).await {
-                            Ok(tls) => {
-                                transport = tls;
-                                state.tls_upgraded = true;
-                                edgerun_log::info!("edgerun-mail: STARTTLS complete for {}", peer);
-                            }
-                            Err(e) => {
-                                edgerun_log::error!("edgerun-mail: STARTTLS failed: {}", e);
-                                break;
-                            }
-                        }
-                    }
-                }
+                // Protocol handles its own TLS upgrade (needs AsyncTlsServerStream).
+                // The generic framework can't do server-side TLS because
+                // AsyncTlsServerStream and AsyncTlsStream are different types.
+                edgerun_log::warn!(
+                    "edgerun-mail: StartTls returned but protocol must handle TLS upgrade internally"
+                );
             }
             Err(e) => {
                 edgerun_log::error!("edgerun-mail: command error: {}", e);

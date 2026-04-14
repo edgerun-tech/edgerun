@@ -419,11 +419,6 @@ fn parse_bdaddr(addr: &str) -> Result<[u8; 6], CapabilityError> {
     Ok(bytes)
 }
 
-fn decode_c_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).to_string()
-}
-
 fn parse_settings(bits: u32) -> MgmtControllerSettings {
     MgmtControllerSettings {
         powered: bits & (1 << 0) != 0,
@@ -457,8 +452,8 @@ fn parse_controller_info(
         u32::from_le_bytes([payload[13], payload[14], payload[15], payload[16]]);
     let class_of_device =
         u32::from(payload[17]) | (u32::from(payload[18]) << 8) | (u32::from(payload[19]) << 16);
-    let name = decode_c_string(&payload[20..269]);
-    let short_name = decode_c_string(&payload[269..280]);
+    let name = edgerun_encoding::cstring::decode_c_string(&payload[20..269]).unwrap_or_default();
+    let short_name = edgerun_encoding::cstring::decode_c_string(&payload[269..280]).unwrap_or_default();
     Ok(MgmtControllerInfo {
         index,
         address,
@@ -934,8 +929,8 @@ fn parse_mgmt_controller_event(event: &MgmtEvent) -> Option<MgmtControllerEvent>
             })
         }
         MGMT_EV_LOCAL_NAME_CHANGED if event.payload.len() >= 260 => {
-            let name = decode_c_string(&event.payload[0..249]);
-            let short_name = decode_c_string(&event.payload[249..260]);
+            let name = edgerun_encoding::cstring::decode_c_string(&event.payload[0..249]).unwrap_or_default();
+            let short_name = edgerun_encoding::cstring::decode_c_string(&event.payload[249..260]).unwrap_or_default();
             Some(MgmtControllerEvent::LocalNameChanged {
                 index: event.index,
                 name,
@@ -1159,8 +1154,8 @@ pub fn set_controller_local_name(
         ));
     }
     let mut info = read_controller_info(index)?;
-    info.name = decode_c_string(&payload[0..249]);
-    info.short_name = decode_c_string(&payload[249..260]);
+    info.name = edgerun_encoding::cstring::decode_c_string(&payload[0..249]).unwrap_or_default();
+    info.short_name = edgerun_encoding::cstring::decode_c_string(&payload[249..260]).unwrap_or_default();
     Ok(info)
 }
 
