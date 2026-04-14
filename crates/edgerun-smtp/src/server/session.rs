@@ -15,6 +15,7 @@ use crate::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::server::rate_limit::RateLimiter;
 use crate::relay::{MailIndex, OutboundRelay, DeliveryWorker, DeliveryWorkerConfig};
+use crate::relay::bounce::BounceConfig;
 use crate::types::command::{extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret};
 use crate::types::response::EnhancedStatusCode;
 use crate::types::{
@@ -234,7 +235,12 @@ impl SmtpServer {
 
         // Spawn delivery worker if queue + relay configured
         if let (Some(ref q), Some(relay)) = (&queue, relay) {
-            let worker_config = DeliveryWorkerConfig::default();
+            let mut worker_config = DeliveryWorkerConfig::default();
+            worker_config.bounce_config = BounceConfig {
+                domain: self.config.domain.clone(),
+                dns_server: self.config.relay_dns_server.clone(),
+                ..Default::default()
+            };
             let worker = DeliveryWorker::new(worker_config, relay, Arc::clone(q));
             let shutdown = shutdown.clone();
             edgerun_rt::spawn(async move {

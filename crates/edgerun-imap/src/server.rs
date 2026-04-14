@@ -646,7 +646,7 @@ impl MailStore for MemoryStore {
 
     fn check(&self, mailbox: &str) -> io::Result<()> {
         // CHECK is a no-op in memory store — data is already consistent
-        let _ = self.mailboxes.lock().unwrap(); // Acquire lock to verify mailbox exists
+        drop(self.mailboxes.lock().unwrap()); // Verify mailbox exists
         Ok(())
     }
 }

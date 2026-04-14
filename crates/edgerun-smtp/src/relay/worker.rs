@@ -8,6 +8,7 @@ use edgerun_rt::CancellationToken;
 
 use crate::relay::queue::MailIndex;
 use crate::relay::relay::OutboundRelay;
+use crate::relay::bounce::{BounceConfig, send_bounce};
 use crate::types::MailEnvelope;
 
 /// Configuration for the delivery worker.
@@ -23,6 +24,8 @@ pub struct DeliveryWorkerConfig {
     pub max_retries: i32,
     /// Poll interval when queue is empty.
     pub poll_interval: Duration,
+    /// Bounce sender configuration.
+    pub bounce_config: BounceConfig,
 }
 
 impl Default for DeliveryWorkerConfig {
@@ -33,6 +36,7 @@ impl Default for DeliveryWorkerConfig {
             max_retry_interval: Duration::from_secs(86400),    // 24 hours
             max_retries: 8,
             poll_interval: Duration::from_secs(10),
+            bounce_config: BounceConfig::default(),
         }
     }
 }
@@ -132,10 +136,36 @@ impl DeliveryWorker {
         } else {
             let next_retry = msg.retry_count + 1;
             if next_retry >= self.config.max_retries {
+                // Max retries exceeded — send DSN bounce
                 edgerun_log::error!(
                     "edgerun-smtp: message {} exceeded max retries ({}), bouncing",
                     msg.message_id, self.config.max_retries
                 );
+
+                // Get failed recipients
+                let failed = self.queue.get_failed_recipients(&msg.message_id).await;
+
+                // Send bounce to original sender
+                match send_bounce(
+                    &msg.envelope_sender,
+                    &failed,
+                    &msg.data,
+                    &self.config.bounce_config,
+                ).await {
+                    Ok(()) => {
+                        edgerun_log::info!(
+                            "edgerun-smtp: bounce sent to {} for message {}",
+                            msg.envelope_sender, msg.message_id,
+                        );
+                    }
+                    Err(e) => {
+                        edgerun_log::error!(
+                            "edgerun-smtp: failed to send bounce for message {}: {}",
+                            msg.message_id, e,
+                        );
+                    }
+                }
+
                 if let Err(e) = self.queue.mark_bounced(&msg.message_id).await {
                     edgerun_log::error!("edgerun-smtp: failed to mark bounced: {}", e);
                 }
