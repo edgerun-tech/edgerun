@@ -23,7 +23,7 @@ pub use delegation::validate_delegation_case;
 pub use command::validate_command_case;
 pub use query::validate_query_case;
 pub use control::validate_control_change_case;
-pub use network::validate_network_case;
+pub use network::{validate_network_case, validate_route_advertisement};
 pub use stream::validate_stream_append_case;
 pub use snapshot::validate_snapshot_case;
 pub use object::validate_object_case;

@@ -397,3 +397,225 @@ pub fn validate_network_case(
     reject(ReasonCode::StructuralInvalid, empty_map(), empty_map())
 }
 
+// ===================================================================
+// Proto-level RouteAdvertisement validator
+// ===================================================================
+
+use crate::crypto::{
+    ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
+    SIG_DOMAIN_ROUTE_ADVERTISEMENT, verify_canonical_record,
+};
+use crate::protocol::{canonical_bytes, ProtocolRecord};
+
+/// Validates the structural integrity and signature of a RouteAdvertisement
+/// at the proto type level (spec §14.24).
+pub fn validate_route_advertisement(
+    adv: &edgerun_proto::edgerun::v0::network::RouteAdvertisement,
+) -> ValidationResult {
+    let Some(ref target) = adv.target_node else {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr("missing_target_node"))]),
+            empty_map(),
+        );
+    };
+    if target.node_id.is_empty() {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr("empty_target_node_id"))]),
+            empty_map(),
+        );
+    }
+    let Some(ref advertiser) = adv.advertiser else {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr("missing_advertiser"))]),
+            empty_map(),
+        );
+    };
+    if advertiser.identity_id.is_empty() {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr("missing_advertiser"))]),
+            empty_map(),
+        );
+    }
+    if adv.advertised_at.is_none() {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr("missing_advertised_at"))]),
+            empty_map(),
+        );
+    }
+    if adv.reachability.is_empty() {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr("no_reachability_hints"))]),
+            empty_map(),
+        );
+    }
+
+    if let Some(ref sig) = adv.signature {
+        if sig.value.len() != ECDSA_P256_SIGNATURE_LEN {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("bad_signature_length"))]),
+                empty_map(),
+            );
+        }
+        let Some(ref key_hint) = advertiser.key_hint else {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("missing_advertiser_key_hint"))]),
+                empty_map(),
+            );
+        };
+        if key_hint.len() != ECDSA_P256_PUBLIC_KEY_LEN {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("bad_key_hint_length"))]),
+                empty_map(),
+            );
+        }
+
+        let mut vk_sec1 = [0u8; 65];
+        vk_sec1[0] = 0x04;
+        vk_sec1[1..].copy_from_slice(key_hint);
+        let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
+            Ok(v) => v,
+            Err(_) => {
+                return reject(
+                    ReasonCode::CryptoInvalid,
+                    mapping([("reason", ystr("invalid_public_key"))]),
+                    empty_map(),
+                );
+            }
+        };
+
+        let canonical = canonical_bytes(
+            &ProtocolRecord::RouteAdvertisement(adv.clone()),
+            true,
+        );
+        if !verify_canonical_record(
+            &vk,
+            SIG_DOMAIN_ROUTE_ADVERTISEMENT,
+            &canonical,
+            &sig.value,
+        ) {
+            return reject(
+                ReasonCode::CryptoInvalid,
+                mapping([("reason", ystr("signature_verification_failed"))]),
+                empty_map(),
+            );
+        }
+    }
+
+    accept(
+        mapping([
+            ("validation_level", ystr("route_advertisement_valid")),
+            ("target_node", ystr(crate::util::bytes_to_hex(&adv.target_node.as_ref().map(|t| t.node_id.clone()).unwrap_or_default()))),
+        ]),
+        empty_map(),
+    )
+}
+
+#[cfg(test)]
+mod proto_tests {
+    use super::*;
+    use edgerun_proto::edgerun::v0::network::{RouteAdvertisement, ReachabilityHint};
+    use edgerun_proto::edgerun::v0::common::{
+        IdentityRef, NodeRef, Signature, TransportClass, Directness,
+    };
+    use prost_types::Timestamp;
+
+    fn make_test_keypair() -> (edgerun_crypto::p256::ecdsa::SigningKey, Vec<u8>) {
+        let sk = edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::OsRng);
+        let vk = *sk.verifying_key();
+        let sec1 = vk.to_encoded_point(false);
+        let pk = sec1.as_bytes()[1..].to_vec();
+        (sk, pk)
+    }
+
+    fn sign_ad(sk: &edgerun_crypto::p256::ecdsa::SigningKey, adv: &RouteAdvertisement) -> RouteAdvertisement {
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+        let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
+        let record_hash = crate::crypto::sha256(&canonical);
+        let sig_input = crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
+        let sig_input_digest = crate::crypto::sha256(&sig_input);
+        let sig: edgerun_crypto::p256::ecdsa::Signature =
+            sk.sign_prehash(sig_input_digest.as_slice()).unwrap();
+        let mut signed = adv.clone();
+        signed.signature = Some(Signature { algorithm: 1, value: sig.to_bytes().to_vec() });
+        signed
+    }
+
+    fn make_valid_ad(pk: Vec<u8>) -> RouteAdvertisement {
+        RouteAdvertisement {
+            advertisement_version: 1,
+            target_node: Some(NodeRef { node_id: vec![1, 2, 3] }),
+            advertiser: Some(IdentityRef {
+                identity_id: vec![4, 5, 6],
+                identity_kind: Some(2),
+                key_hint: Some(pk),
+            }),
+            next_hop_node: None,
+            reachability: vec![ReachabilityHint {
+                hint_version: 1,
+                subject_node: Some(NodeRef { node_id: vec![1, 2, 3] }),
+                transport_class: TransportClass::Quic as i32,
+                locator_payload: vec![0, 0, 0, 0],
+                directness: Directness::Direct as i32,
+                valid_after: Some(Timestamp { seconds: 1000, nanos: 0 }),
+                valid_until: Some(Timestamp { seconds: 2000, nanos: 0 }),
+                cost_hint: None,
+                quality_hint: None,
+                issuer: None,
+                signature: None,
+            }],
+            metric_hint: None,
+            advertised_at: Some(Timestamp { seconds: 1000, nanos: 0 }),
+            expires_at: None,
+            route_metadata: None,
+            signature: None,
+        }
+    }
+
+    #[test]
+    fn test_valid_signed_route_ad() {
+        let (sk, pk) = make_test_keypair();
+        let ad = make_valid_ad(pk);
+        let signed = sign_ad(&sk, &ad);
+        let result = validate_route_advertisement(&signed);
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+    }
+
+    #[test]
+    fn test_valid_unsigned_route_ad() {
+        let (_sk, pk) = make_test_keypair();
+        let ad = make_valid_ad(pk);
+        let result = validate_route_advertisement(&ad);
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+    }
+
+    #[test]
+    fn test_reject_missing_target_node() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.target_node = None;
+        let result = validate_route_advertisement(&ad);
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+    }
+
+    #[test]
+    fn test_reject_invalid_signature() {
+        let (sk, pk) = make_test_keypair();
+        let ad = make_valid_ad(pk);
+        let mut signed = sign_ad(&sk, &ad);
+        if let Some(ref mut sig) = signed.signature {
+            sig.value[0] ^= 0xFF;
+        }
+        let result = validate_route_advertisement(&signed);
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+    }
+}
+

@@ -207,10 +207,19 @@ where
         // even over TLS. We must consume the entire preface before reading frames.
         let negotiated_h2 = tls_stream.alpn_protocol() == Some(b"h2");
         if negotiated_h2 {
+            eprintln!("[h2] TLS+ALPN=h2 detected, entering HTTP/2 path");
             let mut reader = BufReader::new(tls_stream);
             // The BufReader is fresh — the full 24-byte preface is still in the stream.
             let mut discard = [0u8; 24];
-            reader.get_mut().read_exact(&mut discard).await?;
+            match reader.get_mut().read_exact(&mut discard).await {
+                Ok(()) => {
+                    eprintln!("[h2] Preface consumed: {:?}", std::str::from_utf8(&discard));
+                }
+                Err(e) => {
+                    eprintln!("[h2] Preface read FAILED: {:?}", e);
+                    return Err(e);
+                }
+            }
             // Pass skip_preface=true since we already consumed it above.
             handle_http2(reader, handler, http2_idle_timeout, max_request_size, true).await
         } else {
@@ -302,13 +311,14 @@ where
 
 /// Handle an HTTP/2 connection with the unified Handler trait.
 ///
-/// When `skip_preface` is true (TLS+ALPN=h2 path), the client has not sent
-/// the HTTP/2 connection preface — go straight to the frame loop.
+/// When `skip_preface` is true (TLS+ALPN=h2 path), the preface was already
+/// consumed by the caller — go straight to the frame loop.
 /// When false (h2c upgrade path), consume the remaining preface bytes first.
 async fn handle_http2<S>(mut reader: BufReader<S>, handler: Arc<dyn Handler>, idle_timeout: Duration, max_header_size: usize, skip_preface: bool) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    eprintln!("[h2] handle_http2 entered, skip_preface={}", skip_preface);
     // Consume remaining buffered data (rest of HTTP/2 connection preface)
     // The preface is "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" (24 bytes).
     // read_line() reads "PRI * HTTP/2.0\r\n" (17 bytes), leaving 7 bytes in buffer.
