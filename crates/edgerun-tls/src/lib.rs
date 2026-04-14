@@ -24,6 +24,8 @@
 //!
 //! All messages after ServerHello are encrypted with handshake keys.
 
+use edgerun_rt::sync::Mutex;
+
 pub mod alert;
 pub mod async_tls;
 pub mod certificate;
@@ -34,8 +36,10 @@ pub mod key_exchange;
 pub mod prf;
 pub mod record;
 pub mod server;
+pub mod session_cache;
 
 pub use async_tls::{AsyncTlsStream, AsyncTlsServerStream};
+pub use session_cache::{SessionCache, SessionTicket, parse_new_session_ticket};
 
 pub use alert::{Alert, AlertLevel};
 pub use certificate_gen::{

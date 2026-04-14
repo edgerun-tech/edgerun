@@ -16,6 +16,7 @@ pub mod compression;
 pub mod multipart;
 pub mod range;
 pub mod chunked;
+pub mod pool;
 
 pub use client::Client;
 pub use server::{Server, BoundServer};
@@ -39,3 +40,4 @@ pub use range::{
     is_range_satisfiable, has_range_header, get_range, build_partial_response,
     range_not_satisfiable_response,
 };
+pub use pool::ConnectionPool;

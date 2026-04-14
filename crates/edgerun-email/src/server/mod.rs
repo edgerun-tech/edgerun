@@ -82,7 +82,7 @@ impl Transport {
                 Err(io::Error::new(io::ErrorKind::Other, "already using TLS"))
             }
             Transport::Plain(stream) => {
-                let tls = AsyncTlsStream::client(stream, server_name)
+                let tls = AsyncTlsStream::client(stream, server_name, &[], None)
                     .await
                     .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
                 Ok(Transport::Tls(tls))

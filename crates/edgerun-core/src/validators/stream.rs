@@ -1,5 +1,5 @@
-use super::helpers::*;
 use super::event_semantics::validate_event_family_semantics;
+use super::helpers::*;
 pub fn validate_stream_append_case(
     semantic_input: &BTreeMap<String, Value>,
     local_state: &BTreeMap<String, Value>,
@@ -34,9 +34,8 @@ pub fn validate_stream_append_case(
         "event_hash_hex",
         &semantic_hash_hex(event).unwrap_or_default(),
     );
-    if let Some(result) = validate_event_family_semantics(semantic_input, event) {
-        return result;
-    }
+    // Per spec §18.4: POSITION_CHECK comes before FAMILY_CHECK
+    // Check for duplicate seq in existing events (part of POSITION_CHECK)
     if let Some(existing) = get_seq(local_state, "stream_events") {
         for item in existing {
             let Some(ev) = item.as_map() else {
@@ -74,6 +73,10 @@ pub fn validate_stream_append_case(
         .and_then(|v| map_value(v, &stream_id));
     if head.is_none() {
         if seq_no == 0 {
+            // Per spec §18.4: FAMILY_CHECK after POSITION_CHECK for genesis
+            if let Some(result) = validate_event_family_semantics(semantic_input, event) {
+                return result;
+            }
             return accept(
                 mapping([("event_hash", ystr(candidate_hash.clone()))]),
                 mapping([(
@@ -110,6 +113,10 @@ pub fn validate_stream_append_case(
                 mapping([("event_hash", ystr(candidate_hash))]),
                 empty_map(),
             );
+        }
+        // Per spec §18.4: FAMILY_CHECK (event semantics) comes after POSITION_CHECK
+        if let Some(result) = validate_event_family_semantics(semantic_input, event) {
+            return result;
         }
         return accept(
             mapping([("event_hash", ystr(candidate_hash.clone()))]),

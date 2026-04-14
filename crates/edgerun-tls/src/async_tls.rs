@@ -41,6 +41,7 @@ use crate::server::message_builder::{
     compute_server_finished_verify_data, compute_client_finished_verify_data,
 };
 use crate::{Result, TlsError};
+use crate::session_cache::SessionCache;
 
 use edgerun_rt::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
 
@@ -81,14 +82,23 @@ impl<S> AsyncTlsStream<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
-    /// Perform an async TLS 1.3 client handshake.
-    pub async fn client(mut stream: S, server_name: &str) -> Result<Self> {
+    /// Perform an async TLS 1.3 client handshake with ALPN protocol negotiation.
+    ///
+    /// `alpn_protocols` is a list of protocols to advertise (e.g., `&[b"h2", b"http/1.1"]`).
+    /// For plain HTTP/1.1 over TLS with no ALPN, pass `&[]`.
+    ///
+    /// `session_cache` enables TLS 1.3 session resumption. Pass `None` for
+    /// full handshake every time.
+    pub async fn client(
+        mut stream: S,
+        server_name: &str,
+        alpn_protocols: &[&[u8]],
+        session_cache: Option<&SessionCache>,
+    ) -> Result<Self> {
         let client_random = generate_random();
         let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519)
             .map_err(|e| TlsError::HandshakeFailure(e))?;
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
-        let _write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
-        let _read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
 
         // 1. Send ClientHello
         let public_key = key_pair.public_key_bytes();
@@ -96,9 +106,20 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
             KeyExchangeGroup::X25519 => NamedGroup::X25519,
         };
-        let ch = ClientHelloBuilder::new(client_random, server_name)
-            .key_share(&public_key, group)
-            .build()?;
+        let mut ch_builder = ClientHelloBuilder::new(client_random, server_name)
+            .key_share(&key_pair.public_key_bytes(), group);
+
+        // Try session resumption if cache provided
+        if let Some(cache) = session_cache {
+            if let Some(ticket) = cache.get(server_name) {
+                ch_builder = ch_builder.psk_identity(&ticket.ticket, 0, ticket.obfuscated_age());
+            }
+        }
+
+        if !alpn_protocols.is_empty() {
+            ch_builder = ch_builder.alpn_protocols(alpn_protocols);
+        }
+        let ch = ch_builder.build()?;
 
         let _ch_hash = Hasher::Sha256.hash(&ch);
         let mut transcript = ch.clone();
@@ -137,8 +158,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let _sh_hash = Hasher::Sha256.hash(&fragment);
         transcript.extend_from_slice(&fragment);
 
-        // 3. Derive handshake keys
-        let shared_secret = key_pair.exchange(&sh.server_key_share)?;
+        // 3. Derive handshake keys — offload ECDH to blocking pool
+        let key_pair = std::sync::Arc::new(key_pair);
+        let server_key_share = sh.server_key_share.clone();
+        let shared_secret = edgerun_rt::spawn_blocking(move || {
+            key_pair.exchange(&server_key_share)
+        }).await
+            .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
+            .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
         let hash = Hasher::Sha256;
         let transcript_hash = hash.hash(&transcript);
 
@@ -389,10 +416,18 @@ impl<S> AsyncTlsServerStream<S> {
     /// This is needed for STARTTLS where plaintext bytes are read before
     /// upgrading to TLS on the same connection.
     pub fn new(stream: S) -> Self {
+        // Dummy ciphers for pre-handshake state — replaced during handshake.
+        // The dummy keys are arbitrary; no real encryption happens before handshake.
+        let dummy_key = [0u8; 16];
+        let dummy_iv = [0u8; 12];
+        let write_cipher = RecordCipher::new(&dummy_key, &dummy_iv)
+            .expect("dummy write cipher should always succeed");
+        let read_cipher = RecordCipher::new(&dummy_key, &dummy_iv)
+            .expect("dummy read cipher should always succeed");
         Self {
             stream,
-            write_cipher: RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap(),
-            read_cipher: RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap(),
+            write_cipher,
+            read_cipher,
             handshake_done: false,
             pending_data: Vec::new(),
             pending_offset: 0,
@@ -940,8 +975,14 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     stream.write_all(&record.to_bytes()).await?;
     stream.flush().await?;
 
-    // 3. Derive handshake keys
-    let shared_secret = key_pair.exchange(&client_key_share)?;
+    // 3. Derive handshake keys — offload ECDH to blocking pool
+    let key_pair = std::sync::Arc::new(key_pair);
+    let client_key_share = client_key_share.clone();
+    let shared_secret = edgerun_rt::spawn_blocking(move || {
+        key_pair.exchange(&client_key_share)
+    }).await
+        .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
+        .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
     let hash = Hasher::Sha256;
     let transcript_hash = hash.hash(&transcript);
 

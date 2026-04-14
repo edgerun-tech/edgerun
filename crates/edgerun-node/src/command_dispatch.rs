@@ -1821,11 +1821,18 @@ mod tests {
     fn test_store() -> NodeStore {
         let root = tmp_data_root();
         let private_key = [0xBBu8; 32];
+        let vk = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes((&private_key).into())
+            .unwrap()
+            .verifying_key();
+        let encoded = vk.to_encoded_point(false);
+        let mut node_identity = [0u8; 64];
+        node_identity.copy_from_slice(&encoded.as_bytes()[1..65]);
         let config = NodeStoreConfig {
             data_root: root,
             blob_key_source: Arc::new(BlobKeySource::Software {
                 private_key_bytes: private_key.to_vec(),
             }),
+            node_identity: node_identity.to_vec(),
         };
         NodeStore::open(&config).unwrap()
     }

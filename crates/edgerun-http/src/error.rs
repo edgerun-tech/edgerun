@@ -58,6 +58,12 @@ impl From<std::io::Error> for Error {
     }
 }
 
+impl From<crate::http2::Http2Error> for Error {
+    fn from(err: crate::http2::Http2Error) -> Self {
+        Error::ProtocolError(format!("HTTP/2 error: {err}"))
+    }
+}
+
 /// Alias for `Result<T, Error>`
 pub type Result<T> = std::result::Result<T, Error>;
 

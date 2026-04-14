@@ -23,13 +23,15 @@ pub mod android_keystore;
 pub mod yubikey;
 
 #[cfg(feature = "tpm")]
-pub use tpm::{TpmHardwareKeyAdapter, sign_record_with_tpm_provider};
+pub use tpm::{sign_record_with_tpm_provider, TpmHardwareKeyAdapter};
 
 #[cfg(feature = "android-keystore")]
-pub use android_keystore::{AndroidKeystoreHardwareKeyAdapter, sign_record_with_android_keystore_provider};
+pub use android_keystore::{
+    sign_record_with_android_keystore_provider, AndroidKeystoreHardwareKeyAdapter,
+};
 
 #[cfg(feature = "yubikey")]
-pub use yubikey::{YubiKeyHardwareKeyAdapter, sign_record_with_yubikey_provider};
+pub use yubikey::{sign_record_with_yubikey_provider, YubiKeyHardwareKeyAdapter};
 
 // ---------------------------------------------------------------------------
 // Mesh identity constants — ECDSA P256 is the universal algorithm
@@ -286,13 +288,19 @@ pub trait MeshSigner {
     /// **Deprecated:** Use `sign_record` instead to get domain-separated signatures.
     /// This method signs the raw digest without any domain prefix, which means
     /// signatures could potentially be replayed across different record types.
-    fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError>;
+    fn sign_digest(
+        &self,
+        digest: &[u8; 32],
+    ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError>;
 
     /// Signs a record with domain separation (spec §17.9, §17.11).
     ///
     /// Computes `SHA-256(canonical_bytes)` to get the record hash, then
     /// signs `sig_domain_tag || 0x00 || record_hash`.
     /// This prevents signature replay across different record types.
+    ///
+    /// Per spec §17.11: `sig_input = sig_domain_tag || 0x00 || record_hash_bytes`,
+    /// then `signature = ECDSA_P256_SHA256_sign(private_key, sig_input)`.
     ///
     /// # Arguments
     /// * `sig_domain_tag` - Domain tag for signing (e.g., `SIG_DOMAIN_COMMAND_ENVELOPE`)
@@ -302,20 +310,29 @@ pub trait MeshSigner {
         sig_domain_tag: &str,
         canonical_bytes: &[u8],
     ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
-        // Build domain-separated signature input: sig_domain_tag || 0x00 || SHA-256(canonical_bytes)
         let record_hash = edgerun_core::crypto::sha256(canonical_bytes);
-        let mut sig_input = Vec::with_capacity(sig_domain_tag.len() + 1 + 32);
-        sig_input.extend_from_slice(sig_domain_tag.as_bytes());
-        sig_input.push(0);
-        sig_input.extend_from_slice(&record_hash);
-        // Sign the domain-prepared input directly (not double-hashed)
-        self.sign_digest(&{
-            let mut d = [0u8; 32];
-            // sig_input is the actual message to sign, hash it to 32 bytes for sign_digest
-            let h = edgerun_core::crypto::sha256(&sig_input);
-            d.copy_from_slice(&h);
-            d
-        })
+        let sig_input = edgerun_core::crypto::signature_input(sig_domain_tag, &record_hash);
+        self.sign_message_var(&sig_input)
+    }
+
+    /// Signs a message of variable length.
+    ///
+    /// For software signers, this signs the message directly using ECDSA P-256
+    /// with SHA-256 (per spec §17.11).
+    ///
+    /// For hardware signers that require fixed-size input, this hashes the
+    /// message to 32 bytes first (which means hardware signatures differ from
+    /// software signatures - this is a hardware limitation).
+    ///
+    /// Implementations that support variable-length signing SHOULD override this
+    /// method for spec compliance.
+    fn sign_message_var(
+        &self,
+        message: &[u8],
+    ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
+        let mut digest = [0u8; 32];
+        digest.copy_from_slice(&edgerun_core::crypto::sha256(message));
+        self.sign_digest(&digest)
     }
 
     /// Returns self as `Any` for downcasting (used by TCP task cloning).
@@ -351,12 +368,34 @@ impl<K: HardwareSigningKey> MeshSigner for HardwareMeshSigner<K> {
         self.node_id
     }
 
-    fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
+    fn sign_digest(
+        &self,
+        digest: &[u8; 32],
+    ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
         let sig = self.key.sign_message(digest)?;
         if sig.len() != MESH_SIGNATURE_LENGTH {
             return Err(HardwareSigningError::Provider(format!(
                 "hardware returned {}-byte signature, expected {}",
-                sig.len(), MESH_SIGNATURE_LENGTH
+                sig.len(),
+                MESH_SIGNATURE_LENGTH
+            )));
+        }
+        let mut out = [0u8; MESH_SIGNATURE_LENGTH];
+        out.copy_from_slice(&sig);
+        Ok(out)
+    }
+
+    fn sign_message_var(
+        &self,
+        message: &[u8],
+    ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
+        // Hardware supports variable-length signing via sign_message
+        let sig = self.key.sign_message(message)?;
+        if sig.len() != MESH_SIGNATURE_LENGTH {
+            return Err(HardwareSigningError::Provider(format!(
+                "hardware returned {}-byte signature, expected {}",
+                sig.len(),
+                MESH_SIGNATURE_LENGTH
             )));
         }
         let mut out = [0u8; MESH_SIGNATURE_LENGTH];
@@ -374,7 +413,10 @@ pub fn validate_hardware_key_info(
     requirements: &HardwareValidationRequirements,
 ) -> Result<(), HardwareSigningError> {
     if !requirements.allowed_providers.is_empty()
-        && !requirements.allowed_providers.iter().any(|p| p == &key_info.provider)
+        && !requirements
+            .allowed_providers
+            .iter()
+            .any(|p| p == &key_info.provider)
     {
         return Err(HardwareSigningError::Validation(
             HardwareValidationIssue::ProviderNotAllowed(key_info.provider.clone()),
@@ -382,7 +424,10 @@ pub fn validate_hardware_key_info(
     }
 
     if !requirements.allowed_algorithms.is_empty()
-        && !requirements.allowed_algorithms.iter().any(|a| a == &key_info.algorithm)
+        && !requirements
+            .allowed_algorithms
+            .iter()
+            .any(|a| a == &key_info.algorithm)
     {
         return Err(HardwareSigningError::Validation(
             HardwareValidationIssue::AlgorithmNotAllowed(key_info.algorithm.clone()),
@@ -498,7 +543,9 @@ mod tests {
         }
     }
 
-    struct FakeMeshKeyWithSig { sig_len: usize }
+    struct FakeMeshKeyWithSig {
+        sig_len: usize,
+    }
 
     impl HardwareSigningKey for FakeMeshKeyWithSig {
         fn key_info(&self) -> Result<HardwareKeyInfo, HardwareSigningError> {
@@ -519,7 +566,9 @@ mod tests {
         }
     }
 
-    struct FakeFailingKey { error_msg: String }
+    struct FakeFailingKey {
+        error_msg: String,
+    }
 
     impl HardwareSigningKey for FakeFailingKey {
         fn key_info(&self) -> Result<HardwareKeyInfo, HardwareSigningError> {
@@ -542,7 +591,10 @@ mod tests {
     #[test]
     fn node_id_short_display() {
         let mut bytes = [0u8; 64];
-        bytes[0] = 0xaa; bytes[1] = 0xbb; bytes[2] = 0xcc; bytes[3] = 0xdd;
+        bytes[0] = 0xaa;
+        bytes[1] = 0xbb;
+        bytes[2] = 0xcc;
+        bytes[3] = 0xdd;
         let id = NodeID(bytes);
         assert_eq!(id.short(), "0xaabbccdd");
         assert_eq!(id.to_hex().len(), 130);
@@ -551,7 +603,9 @@ mod tests {
     #[test]
     fn node_id_to_hex_produces_full_hex() {
         let mut bytes = [0u8; 64];
-        bytes[0] = 0x01; bytes[1] = 0x02; bytes[63] = 0xFF;
+        bytes[0] = 0x01;
+        bytes[1] = 0x02;
+        bytes[63] = 0xFF;
         let id = NodeID(bytes);
         let hex = id.to_hex();
         assert!(hex.starts_with("0x0102"));
@@ -561,7 +615,10 @@ mod tests {
     #[test]
     fn node_id_debug_format() {
         let mut bytes = [0u8; 64];
-        bytes[0] = 0xDE; bytes[1] = 0xAD; bytes[2] = 0xBE; bytes[3] = 0xEF;
+        bytes[0] = 0xDE;
+        bytes[1] = 0xAD;
+        bytes[2] = 0xBE;
+        bytes[3] = 0xEF;
         let id = NodeID(bytes);
         let debug = format!("{:?}", id);
         assert_eq!(debug, "NodeID(0xdeadbeef)");
@@ -569,7 +626,8 @@ mod tests {
 
     #[test]
     fn node_id_as_ref() {
-        let mut bytes = [0u8; 64]; bytes[0] = 0x42;
+        let mut bytes = [0u8; 64];
+        bytes[0] = 0x42;
         let id = NodeID(bytes);
         assert_eq!(id.as_ref()[0], 0x42);
     }
@@ -589,8 +647,10 @@ mod tests {
         let bytes = [42u8; 64];
         let id1 = NodeID(bytes);
         let id2 = NodeID(bytes);
-        let mut h1 = DefaultHasher::new(); id1.hash(&mut h1);
-        let mut h2 = DefaultHasher::new(); id2.hash(&mut h2);
+        let mut h1 = DefaultHasher::new();
+        id1.hash(&mut h1);
+        let mut h2 = DefaultHasher::new();
+        id2.hash(&mut h2);
         assert_eq!(h1.finish(), h2.finish());
     }
 
@@ -635,7 +695,10 @@ mod tests {
     fn opaque_algorithm_variant() {
         let opaque = HardwareSignatureAlgorithm::Opaque("my-custom-algo".into());
         assert!(!opaque.is_ecdsa_p256());
-        assert_eq!(opaque, HardwareSignatureAlgorithm::Opaque("my-custom-algo".into()));
+        assert_eq!(
+            opaque,
+            HardwareSignatureAlgorithm::Opaque("my-custom-algo".into())
+        );
         assert_ne!(opaque, HardwareSignatureAlgorithm::Eddsa);
     }
 
@@ -663,10 +726,22 @@ mod tests {
 
     #[test]
     fn assurance_level_strength_mapping() {
-        assert_eq!(HardwareAssuranceLevel::Unknown.strength(), HardwareAssuranceStrength::Unknown);
-        assert_eq!(HardwareAssuranceLevel::Software.strength(), HardwareAssuranceStrength::Software);
-        assert_eq!(HardwareAssuranceLevel::IsolatedHardware.strength(), HardwareAssuranceStrength::IsolatedHardware);
-        assert_eq!(HardwareAssuranceLevel::StrongBox.strength(), HardwareAssuranceStrength::StrongBox);
+        assert_eq!(
+            HardwareAssuranceLevel::Unknown.strength(),
+            HardwareAssuranceStrength::Unknown
+        );
+        assert_eq!(
+            HardwareAssuranceLevel::Software.strength(),
+            HardwareAssuranceStrength::Software
+        );
+        assert_eq!(
+            HardwareAssuranceLevel::IsolatedHardware.strength(),
+            HardwareAssuranceStrength::IsolatedHardware
+        );
+        assert_eq!(
+            HardwareAssuranceLevel::StrongBox.strength(),
+            HardwareAssuranceStrength::StrongBox
+        );
     }
 
     #[test]
@@ -938,7 +1013,9 @@ mod tests {
     // Failing key tests
     #[test]
     fn failing_key_propagates_error() {
-        let key = FakeFailingKey { error_msg: "broken".into() };
+        let key = FakeFailingKey {
+            error_msg: "broken".into(),
+        };
         let err = sign_record_with_hardware(&key, "test:v0:sig", b"hash").unwrap_err();
         assert!(matches!(err, HardwareSigningError::Provider(ref m) if m == "broken"));
     }

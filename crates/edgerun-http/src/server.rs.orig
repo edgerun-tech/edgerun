@@ -784,11 +784,19 @@ where
                 Ok(sf) => sf,
                 Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad SETTINGS").await; break; }
             };
+            // 1. Send server SETTINGS first
+            let entries = server.server_settings.to_entries();
             write_frame( &mut rdwr.stream, &server_sf.to_frame()).await?;
+            eprintln!("[DEBUG] Sending server SETTINGS (second)");
+            write_frame( &mut rdwr.stream, &server_sf.to_frame()).await?;
+            // 2. Process client settings (returns ACK frame)
+            match server.apply_client_settings(&settings_frame) {
+                FrameAction::WriteFrames(frames) => {
+                    eprintln!("[DEBUG] Sending {} frames in response to client SETTINGS", frames.len());
                     for f in &frames { 
                         eprintln!("[DEBUG] Writing frame: type={}, flags={:#x}, stream={}, len={}", f.frame_type as u8, f.flags, f.stream_id, f.payload.len());
                         write_frame( &mut rdwr.stream, f).await?;
-                    for f in &frames { 
+                    }
                     decoder.set_max_table_size(server.client_settings.header_table_size as usize);
                 }
                 FrameAction::Goaway { error_code, debug_data, .. } => { write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, &debug_data).await; break; }

@@ -7,8 +7,9 @@ use edgerun_tpm::{
 };
 
 use crate::{
-    HardwareAssuranceLevel, HardwareProviderKind, HardwareSignatureAlgorithm, HardwareSigningError,
-    HardwareSigningKey, HardwareValidationRequirements, HardwareKeyInfo, BiometricState,
+    BiometricState, HardwareAssuranceLevel, HardwareKeyInfo, HardwareProviderKind,
+    HardwareSignatureAlgorithm, HardwareSigningError, HardwareSigningKey,
+    HardwareValidationRequirements,
 };
 
 // ===========================================================================
@@ -46,7 +47,10 @@ impl<K: TpmSigningKey> HardwareSigningKey for TpmHardwareKeyAdapter<K> {
         // The mesh expects just r || s (64 bytes for P-256).
         // Strip the TPM signature wrapper for ECDSA.
         let key_info = self.inner.key_info().map_err(HardwareSigningError::from)?;
-        if matches!(key_info.algorithm, TpmSignatureAlgorithm::EcdsaP256Sha256 | TpmSignatureAlgorithm::EcdsaP384Sha384) {
+        if matches!(
+            key_info.algorithm,
+            TpmSignatureAlgorithm::EcdsaP256Sha256 | TpmSignatureAlgorithm::EcdsaP384Sha384
+        ) {
             if sig.len() < 8 {
                 return Err(HardwareSigningError::Provider(
                     "TPM ECDSA signature too short".into(),
@@ -153,9 +157,9 @@ fn map_hardware_to_tpm_algorithm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_tpm::{TpmAssuranceLevel, TpmError, TpmKeyInfo, TpmSignatureAlgorithm};
-    use crate::{HardwareAssuranceStrength, MESH_SIGNATURE_LENGTH};
     use crate::validate_hardware_key_info;
+    use crate::{HardwareAssuranceStrength, MESH_SIGNATURE_LENGTH};
+    use edgerun_tpm::{TpmAssuranceLevel, TpmError, TpmKeyInfo, TpmSignatureAlgorithm};
 
     // -----------------------------------------------------------------------
     // Fake TPM keys for testing
@@ -167,7 +171,9 @@ mod tests {
 
     impl FakeTpmKey {
         fn new() -> Self {
-            Self { pkcs1v15_key: false }
+            Self {
+                pkcs1v15_key: false,
+            }
         }
         fn with_pkcs1v15() -> Self {
             Self { pkcs1v15_key: true }
@@ -266,7 +272,10 @@ mod tests {
         assert_eq!(info.algorithm, HardwareSignatureAlgorithm::EcdsaP256Sha256);
         assert_eq!(info.public_key, vec![1, 2, 3]);
         assert_eq!(info.attestation, vec![vec![9, 9]]);
-        assert_eq!(info.assurance_level, HardwareAssuranceLevel::IsolatedHardware);
+        assert_eq!(
+            info.assurance_level,
+            HardwareAssuranceLevel::IsolatedHardware
+        );
     }
 
     #[test]
@@ -336,7 +345,10 @@ mod tests {
         let adapter = TpmHardwareKeyAdapter::new(key);
         let info = adapter.key_info().unwrap();
         assert_eq!(info.public_key, vec![0xABu8; 64]);
-        assert_eq!(info.assurance_level, HardwareAssuranceLevel::IsolatedHardware);
+        assert_eq!(
+            info.assurance_level,
+            HardwareAssuranceLevel::IsolatedHardware
+        );
         assert!(info.is_mesh_capable());
     }
 }

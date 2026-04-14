@@ -56,7 +56,7 @@ impl ClientTransport {
                 return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
             }
             ClientTransport::Plain(stream) => {
-                let tls = AsyncTlsStream::client(stream, server_name)
+                let tls = AsyncTlsStream::client(stream, server_name, &[], None)
                     .await
                     .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
                 Ok(ClientTransport::Tls(tls))
@@ -484,7 +484,7 @@ impl SmtpClient {
             }
         };
         let server_name = self.server_name.clone();
-        let tls = AsyncTlsStream::client(current, &server_name)
+        let tls = AsyncTlsStream::client(current, &server_name, &[], None)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
         self.transport = ClientTransport::Tls(tls);

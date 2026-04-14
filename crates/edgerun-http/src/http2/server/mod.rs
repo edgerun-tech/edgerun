@@ -59,12 +59,10 @@ pub use response::{respond_with_200, rst_stream, send_goaway, send_ping_ack, sen
 use std::collections::HashMap;
 
 use super::flow_control::FlowController;
-use crate::http2::frame::{
-    Frame, SettingsFrame,
-};
 use super::settings::Settings;
-use crate::http2::stream::StreamManager;
 use super::ErrorCode;
+use crate::http2::frame::{Frame, SettingsFrame};
+use crate::http2::stream::StreamManager;
 
 /// A sync callback invoked when complete request headers arrive on a stream.
 /// Takes the decoded request headers and returns frames to write back.
@@ -148,9 +146,8 @@ impl Http2Server {
                 }
                 // RFC 7540 §6.9.2: When INITIAL_WINDOW_SIZE changes, adjust all active streams
                 if self.client_settings.initial_window_size != old_initial_window {
-                    self.stream_manager.update_initial_window_size(
-                        self.client_settings.initial_window_size,
-                    );
+                    self.stream_manager
+                        .update_initial_window_size(self.client_settings.initial_window_size);
                 }
             }
             Err(_) => {
@@ -163,9 +160,21 @@ impl Http2Server {
             }
         }
 
-        FrameAction::WriteFrames(vec![
-            SettingsFrame::ack().to_frame(),
-        ])
+        FrameAction::WriteFrames(vec![SettingsFrame::ack().to_frame()])
+    }
+
+    /// Apply a single client setting (used for h2c upgrade)
+    pub fn apply_setting(&mut self, id: u16, value: u32) {
+        let old_initial_window = self.client_settings.initial_window_size;
+        self.client_settings.apply(id, value);
+        self.max_frame_size = self.client_settings.max_frame_size;
+        if let Some(max) = self.client_settings.max_concurrent_streams {
+            self.stream_manager.set_max_concurrent_streams(max);
+        }
+        if self.client_settings.initial_window_size != old_initial_window {
+            self.stream_manager
+                .update_initial_window_size(self.client_settings.initial_window_size);
+        }
     }
 
     // ── Internal helpers ──

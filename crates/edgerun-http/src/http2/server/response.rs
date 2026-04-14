@@ -1,11 +1,11 @@
 //! Response helper methods for the HTTP/2 server.
 
+use super::FrameAction;
 use crate::http2::frame::{
     GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
 use crate::http2::hpack::Encoder;
 use crate::http2::stream::StreamManager;
-use super::FrameAction;
 
 /// Send a 200 OK response.
 pub fn respond_with_200(stream_id: u32, encoder: &mut Encoder) -> FrameAction {

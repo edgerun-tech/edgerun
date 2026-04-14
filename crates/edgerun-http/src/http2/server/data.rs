@@ -1,11 +1,11 @@
 //! DATA frame handler for the HTTP/2 server.
 
-use crate::http2::frame::{DataFrame, Frame};
-use crate::http2::hpack::Encoder;
 use super::response;
-use crate::http2::ErrorCode;
 use super::FrameAction;
 use super::Http2Server;
+use crate::http2::frame::{DataFrame, Frame};
+use crate::http2::hpack::Encoder;
+use crate::http2::ErrorCode;
 
 impl Http2Server {
     /// Process an incoming DATA frame.
@@ -27,7 +27,8 @@ impl Http2Server {
 
         let state_before = self.stream_manager.get_stream(sid).map(|s| s.state);
         match state_before.unwrap_or(crate::http2::stream::StreamState::Idle) {
-            crate::http2::stream::StreamState::Idle | crate::http2::stream::StreamState::ReservedRemote => {
+            crate::http2::stream::StreamState::Idle
+            | crate::http2::stream::StreamState::ReservedRemote => {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
@@ -35,7 +36,8 @@ impl Http2Server {
                     b"DATA on idle stream",
                 );
             }
-            crate::http2::stream::StreamState::HalfClosedRemote | crate::http2::stream::StreamState::Closed => {
+            crate::http2::stream::StreamState::HalfClosedRemote
+            | crate::http2::stream::StreamState::Closed => {
                 return response::rst_stream(
                     sid,
                     ErrorCode::STREAM_CLOSED.to_u32(),

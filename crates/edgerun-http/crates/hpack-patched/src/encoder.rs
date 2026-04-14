@@ -266,9 +266,14 @@ impl<'a> Encoder<'a> {
             0x0
         };
 
-        buf.write_all(&[mask])?;
-        self.encode_string_literal(&header.0, buf)?;
-        self.encode_string_literal(&header.1, buf)?;
+        // Encode name with mask as high bits of the length prefix
+        encode_integer_into(header.0.len(), 6, mask, buf)?;
+        buf.write_all(header.0)?;
+        // Encode value (no mask needed)
+        encode_integer_into(header.1.len(), 7, 0, buf)?;
+        buf.write_all(header.1)?;
+
+        self.header_table.add_header(header.0.to_vec(), header.1.to_vec());
         Ok(())
     }
 

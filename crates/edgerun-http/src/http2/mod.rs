@@ -2,11 +2,13 @@
 //!
 //! Provides frame protocol, stream multiplexing, flow control, and SETTINGS negotiation.
 
+pub mod client;
 pub mod connection;
 pub mod flow_control;
 pub mod frame;
 pub mod hpack;
 pub mod headers;
+pub mod pool;
 pub mod server;
 pub mod settings;
 pub mod stream;
@@ -20,6 +22,7 @@ mod connection_conformance;
 #[cfg(test)]
 mod frame_sequence_conformance;
 
+pub use client::{AsyncClient, HttpResponse, PendingRequest};
 pub use connection::Connection;
 pub use flow_control::FlowController;
 pub use frame::{Frame, FrameType};
@@ -113,6 +116,12 @@ impl From<Http2Error> for std::io::Error {
 impl From<String> for Http2Error {
     fn from(err: String) -> Self {
         Http2Error::FrameParse(err)
+    }
+}
+
+impl From<hpack_patched::decoder::DecoderError> for Http2Error {
+    fn from(err: hpack_patched::decoder::DecoderError) -> Self {
+        Http2Error::HpackDecode(format!("{:?}", err))
     }
 }
 

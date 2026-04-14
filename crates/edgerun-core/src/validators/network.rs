@@ -315,7 +315,11 @@ pub fn validate_network_case(
     if let Some(route) = get_map(semantic_input, "route_advertisement") {
         if let Some(at) = route.get("advertised_at").and_then(Value::as_str) {
             if let Some(exp) = route.get("expires_at").and_then(Value::as_str) {
-                if parse_ts(exp).ok().zip(parse_ts(at).ok()).map_or(false, |(e, a)| e < a) {
+                if parse_ts(exp)
+                    .ok()
+                    .zip(parse_ts(at).ok())
+                    .map_or(false, |(e, a)| e < a)
+                {
                     return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
                 }
             }
@@ -402,8 +406,8 @@ pub fn validate_network_case(
 // ===================================================================
 
 use crate::crypto::{
-    ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
-    SIG_DOMAIN_ROUTE_ADVERTISEMENT, verify_canonical_record,
+    verify_canonical_record, ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
+    SIG_DOMAIN_ROUTE_ADVERTISEMENT,
 };
 use crate::protocol::{canonical_bytes, ProtocolRecord};
 
@@ -492,16 +496,8 @@ pub fn validate_route_advertisement(
             }
         };
 
-        let canonical = canonical_bytes(
-            &ProtocolRecord::RouteAdvertisement(adv.clone()),
-            true,
-        );
-        if !verify_canonical_record(
-            &vk,
-            SIG_DOMAIN_ROUTE_ADVERTISEMENT,
-            &canonical,
-            &sig.value,
-        ) {
+        let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
+        if !verify_canonical_record(&vk, SIG_DOMAIN_ROUTE_ADVERTISEMENT, &canonical, &sig.value) {
             return reject(
                 ReasonCode::CryptoInvalid,
                 mapping([("reason", ystr("signature_verification_failed"))]),
@@ -513,7 +509,15 @@ pub fn validate_route_advertisement(
     accept(
         mapping([
             ("validation_level", ystr("route_advertisement_valid")),
-            ("target_node", ystr(crate::util::bytes_to_hex(&adv.target_node.as_ref().map(|t| t.node_id.clone()).unwrap_or_default()))),
+            (
+                "target_node",
+                ystr(crate::util::bytes_to_hex(
+                    &adv.target_node
+                        .as_ref()
+                        .map(|t| t.node_id.clone())
+                        .unwrap_or_default(),
+                )),
+            ),
         ]),
         empty_map(),
     )
@@ -522,10 +526,10 @@ pub fn validate_route_advertisement(
 #[cfg(test)]
 mod proto_tests {
     use super::*;
-    use edgerun_proto::edgerun::v0::network::{RouteAdvertisement, ReachabilityHint};
     use edgerun_proto::edgerun::v0::common::{
-        IdentityRef, NodeRef, Signature, TransportClass, Directness,
+        Directness, IdentityRef, NodeRef, Signature, TransportClass,
     };
+    use edgerun_proto::edgerun::v0::network::{ReachabilityHint, RouteAdvertisement};
     use prost_types::Timestamp;
 
     fn make_test_keypair() -> (edgerun_crypto::p256::ecdsa::SigningKey, Vec<u8>) {
@@ -536,23 +540,31 @@ mod proto_tests {
         (sk, pk)
     }
 
-    fn sign_ad(sk: &edgerun_crypto::p256::ecdsa::SigningKey, adv: &RouteAdvertisement) -> RouteAdvertisement {
+    fn sign_ad(
+        sk: &edgerun_crypto::p256::ecdsa::SigningKey,
+        adv: &RouteAdvertisement,
+    ) -> RouteAdvertisement {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
         let record_hash = crate::crypto::sha256(&canonical);
-        let sig_input = crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
-        let sig_input_digest = crate::crypto::sha256(&sig_input);
-        let sig: edgerun_crypto::p256::ecdsa::Signature =
-            sk.sign_prehash(sig_input_digest.as_slice()).unwrap();
+        let sig_input =
+            crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
+        // Sign sig_input directly (per spec §17.11)
+        let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&sig_input).unwrap();
         let mut signed = adv.clone();
-        signed.signature = Some(Signature { algorithm: 1, value: sig.to_bytes().to_vec() });
+        signed.signature = Some(Signature {
+            algorithm: 1,
+            value: sig.to_bytes().to_vec(),
+        });
         signed
     }
 
     fn make_valid_ad(pk: Vec<u8>) -> RouteAdvertisement {
         RouteAdvertisement {
             advertisement_version: 1,
-            target_node: Some(NodeRef { node_id: vec![1, 2, 3] }),
+            target_node: Some(NodeRef {
+                node_id: vec![1, 2, 3],
+            }),
             advertiser: Some(IdentityRef {
                 identity_id: vec![4, 5, 6],
                 identity_kind: Some(2),
@@ -561,19 +573,30 @@ mod proto_tests {
             next_hop_node: None,
             reachability: vec![ReachabilityHint {
                 hint_version: 1,
-                subject_node: Some(NodeRef { node_id: vec![1, 2, 3] }),
+                subject_node: Some(NodeRef {
+                    node_id: vec![1, 2, 3],
+                }),
                 transport_class: TransportClass::Quic as i32,
                 locator_payload: vec![0, 0, 0, 0],
                 directness: Directness::Direct as i32,
-                valid_after: Some(Timestamp { seconds: 1000, nanos: 0 }),
-                valid_until: Some(Timestamp { seconds: 2000, nanos: 0 }),
+                valid_after: Some(Timestamp {
+                    seconds: 1000,
+                    nanos: 0,
+                }),
+                valid_until: Some(Timestamp {
+                    seconds: 2000,
+                    nanos: 0,
+                }),
                 cost_hint: None,
                 quality_hint: None,
                 issuer: None,
                 signature: None,
             }],
             metric_hint: None,
-            advertised_at: Some(Timestamp { seconds: 1000, nanos: 0 }),
+            advertised_at: Some(Timestamp {
+                seconds: 1000,
+                nanos: 0,
+            }),
             expires_at: None,
             route_metadata: None,
             signature: None,
@@ -618,4 +641,3 @@ mod proto_tests {
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
     }
 }
-

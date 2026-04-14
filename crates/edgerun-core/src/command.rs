@@ -22,7 +22,8 @@
 //! - Is this command type allowed under local policy?
 
 use crate::protocol::{
-    canonical_bytes, CapabilityDescriptor, CommandEnvelope, DelegationRecord, Digest, IdentityRef, ProtocolRecord,
+    canonical_bytes, CapabilityDescriptor, CommandEnvelope, DelegationRecord, Digest, IdentityRef,
+    ProtocolRecord,
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
@@ -99,7 +100,10 @@ pub fn validate_command_policy(ctx: &CommandPolicyContext<'_>) -> ValidationResu
 
     // Rule 2: Controller membership OR valid delegation
     if !ctx.controller_ids.is_empty() {
-        let is_controller = ctx.controller_ids.iter().any(|id| id.as_slice() == ctx.issuer_identity_id);
+        let is_controller = ctx
+            .controller_ids
+            .iter()
+            .any(|id| id.as_slice() == ctx.issuer_identity_id);
         if !is_controller && !ctx.has_valid_delegation {
             return reject(
                 ReasonCode::PolicyDenied,
@@ -165,14 +169,20 @@ pub fn validate_command(
     if command.envelope_version != 1 {
         return reject(
             ReasonCode::VersionUnsupported,
-            Value::String(format!("unsupported envelope_version: {}", command.envelope_version)),
+            Value::String(format!(
+                "unsupported envelope_version: {}",
+                command.envelope_version
+            )),
             empty_map(),
         );
     }
     if command.command_version != 1 {
         return reject(
             ReasonCode::VersionUnsupported,
-            Value::String(format!("unsupported command_version: {}", command.command_version)),
+            Value::String(format!(
+                "unsupported command_version: {}",
+                command.command_version
+            )),
             empty_map(),
         );
     }
@@ -223,7 +233,10 @@ pub fn validate_command(
         // SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 1
         return reject(
             ReasonCode::CryptoInvalid,
-            Value::String(format!("unsupported signature algorithm: {}", sig.algorithm)),
+            Value::String(format!(
+                "unsupported signature algorithm: {}",
+                sig.algorithm
+            )),
             empty_map(),
         );
     }
@@ -256,34 +269,15 @@ pub fn validate_command(
         );
     }
 
-    // --- Step 3: Replay detection ---
-    // The replay cache is keyed by command_hash (globally unique SHA-256).
-    // command_id is an application-level idempotency hint only.
-    let computed_hash = command_hash(command).value.clone();
-    if ctx.replay_cache.contains_key(&computed_hash) {
-        // Same command_hash = already processed = DUPLICATE
-        let mut derived = std::collections::BTreeMap::new();
-        derived.insert(
-            "command_hash".into(),
-            Value::String(crate::util::bytes_to_hex(&computed_hash)),
-        );
-        return duplicate(
-            ReasonCode::ReplayDetected,
-            Value::Map(derived),
-        );
-    }
-
-    // --- Step 4: Timing validation ---
+    // --- Step 3: Timing validation ---
+    // Per spec §18.6: TIME_CHECK comes before REPLAY_CHECK
     if let Some(ref not_before) = command.not_before {
         let not_before_ms = not_before.seconds * 1000 + (not_before.nanos as i64) / 1_000_000;
         if ctx.now_ms < not_before_ms {
             let mut derived = std::collections::BTreeMap::new();
             derived.insert("not_before_ms".into(), Value::Int(not_before_ms));
             derived.insert("now_ms".into(), Value::Int(ctx.now_ms));
-            return defer(
-                ReasonCode::TimeInvalid,
-                Value::Map(derived),
-            );
+            return defer(ReasonCode::TimeInvalid, Value::Map(derived));
         }
     }
 
@@ -298,13 +292,30 @@ pub fn validate_command(
         }
     }
 
+    // --- Step 4: Replay detection ---
+    // Per spec §18.6: REPLAY_CHECK comes after TIME_CHECK
+    // The replay cache is keyed by command_hash (globally unique SHA-256).
+    // command_id is an application-level idempotency hint only.
+    let computed_hash = command_hash(command).value.clone();
+    if ctx.replay_cache.contains_key(&computed_hash) {
+        let mut derived = std::collections::BTreeMap::new();
+        derived.insert(
+            "command_hash".into(),
+            Value::String(crate::util::bytes_to_hex(&computed_hash)),
+        );
+        return duplicate(ReasonCode::ReplayDetected, Value::Map(derived));
+    }
+
     // --- Step 5: Assurance requirement check (if requested) ---
     if let Some(ref req) = command.requested_assurance {
-        let required_class = req.required_class; // ASSURANCE_CLASS_UNSPECIFIED=0, SOFTWARE=1, HARDWARE_BACKED=2, ATTESTED_RUNTIME=3
+        let required_class = req.required_class;
         if required_class > 0 && ctx.local_assurance_class < required_class {
             let mut derived_map = std::collections::BTreeMap::new();
             derived_map.insert("required_class".into(), Value::Int(required_class as i64));
-            derived_map.insert("local_class".into(), Value::Int(ctx.local_assurance_class as i64));
+            derived_map.insert(
+                "local_class".into(),
+                Value::Int(ctx.local_assurance_class as i64),
+            );
             let derived = Value::Map(derived_map);
             return reject(
                 ReasonCode::AuthorityDenied,
@@ -316,11 +327,7 @@ pub fn validate_command(
 
     // --- Step 6: Delegation chain validation (if present) ---
     if !command.delegation_chain.is_empty() {
-        match validate_delegation_chain(
-            &command.delegation_chain,
-            &command.issuer,
-            ctx,
-        ) {
+        match validate_delegation_chain(&command.delegation_chain, &command.issuer, ctx) {
             Ok(()) => {}
             Err(reason) => return reason,
         }
@@ -339,7 +346,11 @@ pub fn validate_command(
     derived.insert(
         "issuer".into(),
         Value::String(crate::util::bytes_to_hex(
-            &command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default(),
+            &command
+                .issuer
+                .as_ref()
+                .map(|i| i.identity_id.clone())
+                .unwrap_or_default(),
         )),
     );
     derived.insert(
@@ -383,7 +394,9 @@ fn validate_delegation_chain(
     // Check chain from last to first (leaf to root)
     // The last delegation's recipient must match the command issuer
     let last = chain.last().unwrap();
-    if last.recipient.as_ref().map(|r| r.identity_id.clone()) != Some(effective_identity.identity_id.clone()) {
+    if last.recipient.as_ref().map(|r| r.identity_id.clone())
+        != Some(effective_identity.identity_id.clone())
+    {
         return Err(reject(
             ReasonCode::AuthorityDenied,
             Value::String("delegation chain recipient does not match command issuer".into()),
@@ -401,7 +414,8 @@ fn validate_delegation_chain(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
                     "delegation chain broken: chain[{}].recipient != chain[{}].issuer",
-                    i, i + 1
+                    i,
+                    i + 1
                 )),
                 empty_map(),
             ));
@@ -423,7 +437,10 @@ fn validate_delegation_chain(
 
     for delegation in chain {
         // Check revocation
-        if ctx.revoked_delegation_ids.contains(&delegation.delegation_id) {
+        if ctx
+            .revoked_delegation_ids
+            .contains(&delegation.delegation_id)
+        {
             return Err(reject(
                 ReasonCode::RevocationActive,
                 Value::String(format!(
@@ -475,7 +492,10 @@ fn validate_delegation_chain(
         if sig.value.len() != crate::crypto::ECDSA_P256_SIGNATURE_LEN {
             return Err(reject(
                 ReasonCode::CryptoInvalid,
-                Value::String(format!("delegation signature length {} != 64", sig.value.len())),
+                Value::String(format!(
+                    "delegation signature length {} != 64",
+                    sig.value.len()
+                )),
                 empty_map(),
             ));
         }
@@ -498,7 +518,10 @@ fn validate_delegation_chain(
         if key_hint.len() != crate::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
             return Err(reject(
                 ReasonCode::CryptoInvalid,
-                Value::String(format!("delegation key_hint length {} != 64", key_hint.len())),
+                Value::String(format!(
+                    "delegation key_hint length {} != 64",
+                    key_hint.len()
+                )),
                 empty_map(),
             ));
         }
@@ -628,15 +651,19 @@ fn attenuate_scope(
     };
 
     // target_nodes: child set must be subset of parent set
-    let parent_nodes: std::collections::HashSet<&[u8]> =
-        parent_scope.target_nodes.iter().map(|n| n.node_id.as_slice()).collect();
+    let parent_nodes: std::collections::HashSet<&[u8]> = parent_scope
+        .target_nodes
+        .iter()
+        .map(|n| n.node_id.as_slice())
+        .collect();
     if !parent_nodes.is_empty() {
         for target in &child_scope.target_nodes {
             if !parent_nodes.contains(target.node_id.as_slice()) {
                 return Err(reject(
                     ReasonCode::AuthorityDenied,
                     Value::String(format!(
-                        "scope attenuation: child adds target_node at depth {}", depth
+                        "scope attenuation: child adds target_node at depth {}",
+                        depth
                     )),
                     empty_map(),
                 ));
@@ -645,15 +672,19 @@ fn attenuate_scope(
     }
 
     // target_streams: child set must be subset of parent set
-    let parent_streams: std::collections::HashSet<(&[u8],)> =
-        parent_scope.target_streams.iter().map(|s| (s.stream_id.as_slice(),)).collect();
+    let parent_streams: std::collections::HashSet<(&[u8],)> = parent_scope
+        .target_streams
+        .iter()
+        .map(|s| (s.stream_id.as_slice(),))
+        .collect();
     if !parent_streams.is_empty() {
         for target in &child_scope.target_streams {
             if !parent_streams.contains(&(target.stream_id.as_slice(),)) {
                 return Err(reject(
                     ReasonCode::AuthorityDenied,
                     Value::String(format!(
-                        "scope attenuation: child adds target_stream at depth {}", depth
+                        "scope attenuation: child adds target_stream at depth {}",
+                        depth
                     )),
                     empty_map(),
                 ));
@@ -670,7 +701,8 @@ fn attenuate_scope(
                 return Err(reject(
                     ReasonCode::AuthorityDenied,
                     Value::String(format!(
-                        "scope attenuation: child adds target_object_kind {} at depth {}", kind, depth
+                        "scope attenuation: child adds target_object_kind {} at depth {}",
+                        kind, depth
                     )),
                     empty_map(),
                 ));
@@ -687,7 +719,8 @@ fn attenuate_scope(
                 return Err(reject(
                     ReasonCode::AuthorityDenied,
                     Value::String(format!(
-                        "scope attenuation: child adds target_view_type '{}' at depth {}", view, depth
+                        "scope attenuation: child adds target_view_type '{}' at depth {}",
+                        view, depth
                     )),
                     empty_map(),
                 ));
@@ -704,7 +737,8 @@ fn attenuate_scope(
                 return Err(reject(
                     ReasonCode::AuthorityDenied,
                     Value::String(format!(
-                        "scope attenuation: child adds target_domain '{}' at depth {}", domain, depth
+                        "scope attenuation: child adds target_domain '{}' at depth {}",
+                        domain, depth
                     )),
                     empty_map(),
                 ));
@@ -722,14 +756,18 @@ fn attenuate_timing(
     depth: usize,
 ) -> Result<(), ValidationResult> {
     // Child must not start before parent
-    if let (Some(child_not_before), Some(parent_not_before)) = (&child.not_before, &parent.not_before) {
+    if let (Some(child_not_before), Some(parent_not_before)) =
+        (&child.not_before, &parent.not_before)
+    {
         if child_not_before.seconds < parent_not_before.seconds
-            || (child_not_before.seconds == parent_not_before.seconds && child_not_before.nanos < parent_not_before.nanos)
+            || (child_not_before.seconds == parent_not_before.seconds
+                && child_not_before.nanos < parent_not_before.nanos)
         {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
-                    "timing attenuation: child not_before before parent at depth {}", depth
+                    "timing attenuation: child not_before before parent at depth {}",
+                    depth
                 )),
                 empty_map(),
             ));
@@ -739,12 +777,14 @@ fn attenuate_timing(
     // Child must not expire after parent
     if let (Some(child_expires), Some(parent_expires)) = (&child.expires_at, &parent.expires_at) {
         if child_expires.seconds > parent_expires.seconds
-            || (child_expires.seconds == parent_expires.seconds && child_expires.nanos > parent_expires.nanos)
+            || (child_expires.seconds == parent_expires.seconds
+                && child_expires.nanos > parent_expires.nanos)
         {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
-                    "timing attenuation: child expires_at after parent at depth {}", depth
+                    "timing attenuation: child expires_at after parent at depth {}",
+                    depth
                 )),
                 empty_map(),
             ));
@@ -768,7 +808,9 @@ fn attenuate_constraints(
     };
 
     // max_uses: child must not exceed parent
-    if let (Some(child_max), Some(parent_max)) = (child_constraints.max_uses, parent_constraints.max_uses) {
+    if let (Some(child_max), Some(parent_max)) =
+        (child_constraints.max_uses, parent_constraints.max_uses)
+    {
         if child_max > parent_max {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
@@ -788,7 +830,8 @@ fn attenuate_constraints(
         return Err(reject(
             ReasonCode::AuthorityDenied,
             Value::String(format!(
-                "constraint attenuation: child drops requires_local_session at depth {}", depth
+                "constraint attenuation: child drops requires_local_session at depth {}",
+                depth
             )),
             empty_map(),
         ));
@@ -801,22 +844,27 @@ fn attenuate_constraints(
         return Err(reject(
             ReasonCode::AuthorityDenied,
             Value::String(format!(
-                "constraint attenuation: child drops requires_user_presence at depth {}", depth
+                "constraint attenuation: child drops requires_user_presence at depth {}",
+                depth
             )),
             empty_map(),
         ));
     }
 
     // execution_class_limits: child set must be subset of parent set
-    let parent_exec: std::collections::HashSet<i32> =
-        parent_constraints.execution_class_limits.iter().cloned().collect();
+    let parent_exec: std::collections::HashSet<i32> = parent_constraints
+        .execution_class_limits
+        .iter()
+        .cloned()
+        .collect();
     if !parent_exec.is_empty() {
         for limit in &child_constraints.execution_class_limits {
             if !parent_exec.contains(limit) {
                 return Err(reject(
                     ReasonCode::AuthorityDenied,
                     Value::String(format!(
-                        "constraint attenuation: child adds execution_class_limit {} at depth {}", limit, depth
+                        "constraint attenuation: child adds execution_class_limit {} at depth {}",
+                        limit, depth
                     )),
                     empty_map(),
                 ));
@@ -825,15 +873,19 @@ fn attenuate_constraints(
     }
 
     // storage_class_limits: child set must be subset of parent set
-    let parent_storage: std::collections::HashSet<i32> =
-        parent_constraints.storage_class_limits.iter().cloned().collect();
+    let parent_storage: std::collections::HashSet<i32> = parent_constraints
+        .storage_class_limits
+        .iter()
+        .cloned()
+        .collect();
     if !parent_storage.is_empty() {
         for limit in &child_constraints.storage_class_limits {
             if !parent_storage.contains(limit) {
                 return Err(reject(
                     ReasonCode::AuthorityDenied,
                     Value::String(format!(
-                        "constraint attenuation: child adds storage_class_limit {} at depth {}", limit, depth
+                        "constraint attenuation: child adds storage_class_limit {} at depth {}",
+                        limit, depth
                     )),
                     empty_map(),
                 ));
@@ -872,14 +924,18 @@ fn attenuate_assurance(
 
     // acceptable_attesters: if parent restricts attesters, child must not broaden beyond that set
     if !parent_assurance.acceptable_attesters.is_empty() {
-        let parent_attesters: std::collections::HashSet<&[u8]> =
-            parent_assurance.acceptable_attesters.iter().map(|a| a.identity_id.as_slice()).collect();
+        let parent_attesters: std::collections::HashSet<&[u8]> = parent_assurance
+            .acceptable_attesters
+            .iter()
+            .map(|a| a.identity_id.as_slice())
+            .collect();
         for attester in &child_assurance.acceptable_attesters {
             if !parent_attesters.contains(attester.identity_id.as_slice()) {
                 return Err(reject(
                     ReasonCode::AssuranceInsufficient,
                     Value::String(format!(
-                        "assurance attenuation: child adds non-parent attester at depth {}", depth
+                        "assurance attenuation: child adds non-parent attester at depth {}",
+                        depth
                     )),
                     empty_map(),
                 ));
@@ -935,7 +991,10 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
     if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as _ {
         return reject(
             ReasonCode::CryptoInvalid,
-            Value::String(format!("unsupported signature algorithm: {}", sig.algorithm)),
+            Value::String(format!(
+                "unsupported signature algorithm: {}",
+                sig.algorithm
+            )),
             empty_map(),
         );
     }
@@ -988,21 +1047,25 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::result::Verdict;
     use crate::protocol::{
         CapabilityDescriptor, CommandEnvelope, DelegationRecord, IdentityRef, NodeRef,
     };
-    use edgerun_proto::edgerun::v0::common::Signature as ProtoSignature;
+    use crate::result::Verdict;
     use edgerun_crypto::p256;
-    use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::p256::ecdsa::SigningKey;
+    use edgerun_proto::edgerun::v0::common::Signature as ProtoSignature;
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [7u8; 32];
         SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 
-    const TEST_NODE_ID: [u8; 64] = [4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const TEST_NODE_ID: [u8; 64] = [
+        4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0,
+    ];
 
     fn make_unsigned_command() -> CommandEnvelope {
         CommandEnvelope {
@@ -1049,9 +1112,14 @@ mod tests {
         cmd
     }
 
-    fn make_signed_command_for_other_node(key: &SigningKey, key_hint: Option<Vec<u8>>) -> CommandEnvelope {
+    fn make_signed_command_for_other_node(
+        key: &SigningKey,
+        key_hint: Option<Vec<u8>>,
+    ) -> CommandEnvelope {
         let mut cmd = make_unsigned_command();
-        cmd.target_node = Some(NodeRef { node_id: vec![99, 99, 99] });
+        cmd.target_node = Some(NodeRef {
+            node_id: vec![99, 99, 99],
+        });
         cmd.issuer = Some(IdentityRef {
             identity_id: vec![7, 8, 9],
             identity_kind: Some(1),
@@ -1069,9 +1137,14 @@ mod tests {
     }
 
     fn default_ctx() -> CommandValidationContext<'static> {
-        static LOCAL_NODE_ID: [u8; 64] = [4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        static EMPTY_CACHE: std::sync::LazyLock<std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>> =
-            std::sync::LazyLock::new(std::collections::HashMap::new);
+        static LOCAL_NODE_ID: [u8; 64] = [
+            4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ];
+        static EMPTY_CACHE: std::sync::LazyLock<
+            std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
+        > = std::sync::LazyLock::new(std::collections::HashMap::new);
         static EMPTY_REVOKED: std::sync::LazyLock<std::collections::HashSet<Vec<u8>>> =
             std::sync::LazyLock::new(std::collections::HashSet::new);
         static EMPTY_ROOTS: [Vec<u8>; 0] = [];
@@ -1313,12 +1386,37 @@ mod tests {
         let mut ctx = default_ctx();
         ctx.local_node_id = &TEST_NODE_ID;
 
+        fn sign_delegation(key: &SigningKey, deleg: &mut DelegationRecord, issuer_key_hint: &[u8]) {
+            deleg.issuer.as_mut().unwrap().key_hint = Some(issuer_key_hint.to_vec());
+            deleg.signature = None;
+            let canonical = prost::Message::encode_to_vec(deleg);
+            // Use sign_canonical_record for domain-separated signing (matches verify_canonical_record)
+            let sig = crate::crypto::sign_canonical_record(
+                key,
+                crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,
+                &canonical,
+            )
+            .unwrap();
+            deleg.signature = Some(ProtoSignature {
+                algorithm: 1,
+                value: sig,
+            });
+        }
+
         // Parent grants ["read", "write"], child adds ["delete"] (violates attenuation)
-        let parent = DelegationRecord {
+        let mut parent = DelegationRecord {
             record_version: 1,
             delegation_id: b"deleg-1".to_vec(),
-            issuer: Some(IdentityRef { identity_id: b"root".to_vec(), identity_kind: None, key_hint: None }),
-            recipient: Some(IdentityRef { identity_id: b"mid".to_vec(), identity_kind: None, key_hint: None }),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.to_vec()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: b"mid".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
             issued_at: None,
             not_before: None,
             expires_at: None,
@@ -1335,14 +1433,23 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(ProtoSignature { algorithm: 1, value: vec![1; 64] }),
+            signature: None,
         };
+        sign_delegation(&key, &mut parent, &node_id);
 
-        let child = DelegationRecord {
+        let mut child = DelegationRecord {
             record_version: 1,
             delegation_id: b"deleg-2".to_vec(),
-            issuer: Some(IdentityRef { identity_id: b"mid".to_vec(), identity_kind: None, key_hint: None }),
-            recipient: Some(IdentityRef { identity_id: vec![7, 8, 9], identity_kind: None, key_hint: None }),
+            issuer: Some(IdentityRef {
+                identity_id: b"mid".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.to_vec()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
             issued_at: None,
             not_before: None,
             expires_at: None,
@@ -1359,8 +1466,9 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(ProtoSignature { algorithm: 1, value: vec![2; 64] }),
+            signature: None,
         };
+        sign_delegation(&key, &mut child, &node_id);
 
         let mut cmd = make_unsigned_command();
         cmd.delegation_chain = vec![parent, child];
@@ -1407,8 +1515,16 @@ mod tests {
         let deleg = DelegationRecord {
             record_version: 1,
             delegation_id: b"deleg-1".to_vec(), // This one is revoked
-            issuer: Some(IdentityRef { identity_id: b"root".to_vec(), identity_kind: None, key_hint: None }),
-            recipient: Some(IdentityRef { identity_id: vec![7, 8, 9], identity_kind: None, key_hint: None }),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
             issued_at: None,
             not_before: None,
             expires_at: None,
@@ -1425,7 +1541,10 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(ProtoSignature { algorithm: 1, value: vec![1; 64] }),
+            signature: Some(ProtoSignature {
+                algorithm: 1,
+                value: vec![1; 64],
+            }),
         };
 
         let mut cmd = make_unsigned_command();
@@ -1710,13 +1829,14 @@ mod tests {
         ctx.local_node_id = &TEST_NODE_ID;
         ctx.trusted_root_ids = &trusted;
 
-        let delegation = DelegationRecord {
+        // Create delegation with valid signature using domain-separated signing
+        let mut delegation = DelegationRecord {
             record_version: 1,
             delegation_id: vec![10, 20, 30],
             issuer: Some(IdentityRef {
                 identity_id: root_issuer_id.clone(),
                 identity_kind: Some(2),
-                key_hint: None,
+                key_hint: Some(node_id.to_vec()),
             }),
             recipient: Some(IdentityRef {
                 identity_id: delegate_id.clone(),
@@ -1739,11 +1859,21 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(ProtoSignature {
-                algorithm: 1,
-                value: vec![0xAA; 64],
-            }),
+            signature: None,
         };
+        // Sign the delegation with domain separation (matches verify_canonical_record)
+        delegation.signature = None;
+        let deleg_canonical = prost::Message::encode_to_vec(&delegation);
+        let deleg_sig = crate::crypto::sign_canonical_record(
+            &key,
+            crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,
+            &deleg_canonical,
+        )
+        .unwrap();
+        delegation.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: deleg_sig,
+        });
 
         let mut cmd = make_unsigned_command();
         cmd.issuer = Some(IdentityRef {
@@ -1764,8 +1894,7 @@ mod tests {
         });
 
         let result = validate_command(&cmd, &ctx);
-        // Root is trusted, so this should pass the root check (may fail signature verification on delegation)
-        // But since delegation signature is structurally valid (64 bytes, algorithm 1), it passes
+        // Root is trusted, and delegation has valid signature, so this should pass
         assert_eq!(result.verdict, Verdict::Accept);
     }
 }

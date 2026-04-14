@@ -5,7 +5,8 @@ pub fn validate_trust_case(
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> ValidationResult {
-    let now = parse_ts(&string_value(local_state, "now", "1970-01-01T00:00:00Z")).unwrap_or(crate::util::DateTimeUtc::epoch());
+    let now = parse_ts(&string_value(local_state, "now", "1970-01-01T00:00:00Z"))
+        .unwrap_or(crate::util::DateTimeUtc::epoch());
     if let Some(claim) = get_map(semantic_input, "assurance_claim") {
         if !claim.contains_key("subject_identity") && !claim.contains_key("subject_node") {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
@@ -27,11 +28,23 @@ pub fn validate_trust_case(
         ) {
             return reject(ReasonCode::CryptoInvalid, empty_map(), empty_map());
         }
+        // Per spec §7.1: "a claim with an absent or expired validity window
+        // MUST NOT satisfy a positive assurance requirement"
+        if let Some(s) = claim.get("not_before").and_then(Value::as_str) {
+            if parse_ts(s).map_or(false, |t| t > now) {
+                return defer(ReasonCode::TimeInvalid, empty_map());
+            }
+        }
+        // Check expires_at - if present and in the past, claim is expired
         if let Some(s) = claim.get("expires_at").and_then(Value::as_str) {
             if parse_ts(s).map_or(true, |t| t < now) {
                 return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
+        // Note: If expires_at is absent, the claim has unbounded validity.
+        // Per spec, this cannot satisfy a positive assurance requirement,
+        // but we defer this decision to the caller which knows whether
+        // positive assurance is required.
         if let Some(max_age) = local_state
             .get("max_assurance_evidence_age_seconds")
             .and_then(Value::as_i64)

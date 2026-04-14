@@ -37,16 +37,16 @@ pub const ECDSA_P256_PUBLIC_KEY_LEN: usize = 64;
 // Re-export raw crypto primitives from the single crypto boundary
 // ---------------------------------------------------------------------------
 pub use edgerun_crypto::digest;
-pub use edgerun_crypto::sha2::{Sha256, Sha384, Sha512};
-pub use edgerun_crypto::sha2::Digest as Sha2Digest;
-pub use edgerun_crypto::hmac;
 pub use edgerun_crypto::hkdf;
 pub use edgerun_crypto::hkdf::Hkdf;
-pub use edgerun_crypto::{hmac_sha256, hmac_sha384, hkdf_sha256, random_p256_signing_key};
+pub use edgerun_crypto::hmac;
 pub use edgerun_crypto::p256;
-pub use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 pub use edgerun_crypto::p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
+pub use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 pub use edgerun_crypto::rand_core;
+pub use edgerun_crypto::sha2::Digest as Sha2Digest;
+pub use edgerun_crypto::sha2::{Sha256, Sha384, Sha512};
+pub use edgerun_crypto::{hkdf_sha256, hmac_sha256, hmac_sha384, random_p256_signing_key};
 
 // ---------------------------------------------------------------------------
 // Convenience wrappers — drop-in replacements for old inline implementations
@@ -91,7 +91,8 @@ impl HkdfSha256 {
 
     pub fn expand(&self, info: &[u8], length: usize) -> Vec<u8> {
         let mut okm = vec![0u8; length];
-        self.inner.expand(info, &mut okm)
+        self.inner
+            .expand(info, &mut okm)
             .expect("HKDF expand failed");
         okm
     }
@@ -128,7 +129,8 @@ pub const HASH_DOMAIN_ASSURANCE_CLAIM: &str = "edgerun:v0:hash:assurance-claim";
 /// Domain tag for hashing a logical object descriptor.
 pub const HASH_DOMAIN_LOGICAL_OBJECT_DESCRIPTOR: &str = "edgerun:v0:hash:logical-object-descriptor";
 /// Domain tag for hashing a stored representation header.
-pub const HASH_DOMAIN_STORED_REPRESENTATION_HEADER: &str = "edgerun:v0:hash:stored-representation-header";
+pub const HASH_DOMAIN_STORED_REPRESENTATION_HEADER: &str =
+    "edgerun:v0:hash:stored-representation-header";
 /// Domain tag for hashing a chunk manifest.
 pub const HASH_DOMAIN_CHUNK_MANIFEST: &str = "edgerun:v0:hash:chunk-manifest";
 
@@ -229,7 +231,11 @@ pub fn signature_input(sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
 /// ECDSA P-256 with SHA-256 via the signing key's prehash signer.
 ///
 /// Returns the raw 64-byte signature (r || s), or an error if signing fails.
-pub fn sign_record(private_key: &SigningKey, sig_domain_tag: &str, record_hash: &[u8]) -> Result<Vec<u8>, p256::ecdsa::Error> {
+pub fn sign_record(
+    private_key: &SigningKey,
+    sig_domain_tag: &str,
+    record_hash: &[u8],
+) -> Result<Vec<u8>, p256::ecdsa::Error> {
     let sig_input = signature_input(sig_domain_tag, record_hash);
     let sig: Signature = private_key.sign_prehash(&sig_input)?;
     Ok(sig.to_bytes().to_vec())
@@ -264,8 +270,37 @@ pub fn sign_canonical_record(
 
 /// Verify a signature over canonical bytes with domain separation.
 ///
-/// Matches the signing done by `sign_canonical_record`.
+/// Per spec §17.11: sig_input = sig_domain_tag || 0x00 || record_hash_bytes
+/// then ECDSA_P256_SHA256_verify(public_key, sig_input, signature).
+///
+/// This verifies signatures produced by spec-compliant signing (ECDSA P-256 with
+/// SHA-256, which signs the message directly). This matches the signing done
+/// by `sign_record` in this module.
+///
+/// For hardware signers that require 32-byte pre-hash (which hash sig_input
+/// internally), use verify_canonical_record_hw() instead.
 pub fn verify_canonical_record(
+    public_key: &VerifyingKey,
+    sig_domain_tag: &str,
+    canonical_bytes: &[u8],
+    signature: &[u8],
+) -> bool {
+    let record_hash = sha256(canonical_bytes);
+    let sig_input = signature_input(sig_domain_tag, &record_hash);
+    let Ok(sig) = Signature::from_slice(signature) else {
+        return false;
+    };
+    public_key.verify_prehash(&sig_input, &sig).is_ok()
+}
+
+/// Verify a signature produced by hardware signers that require 32-byte pre-hash.
+///
+/// Hardware signers (TPM, YubiKey, etc.) that implement the `sign_digest` interface
+/// internally hash the message to 32 bytes before signing. This verification function
+/// expects signatures over SHA-256(sig_input), not sig_input directly.
+///
+/// Use this for verifying signatures from hardware-backed MeshSigner implementations.
+pub fn verify_canonical_record_hw(
     public_key: &VerifyingKey,
     sig_domain_tag: &str,
     canonical_bytes: &[u8],
@@ -277,7 +312,11 @@ pub fn verify_canonical_record(
     let Ok(sig) = Signature::from_slice(signature) else {
         return false;
     };
-    public_key.verify_prehash(&sig_input_digest, &sig).is_ok()
+    let digest_array: [u8; 32] = match sig_input_digest.try_into() {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    public_key.verify_prehash(&digest_array, &sig).is_ok()
 }
 
 /// Convert a verifying key to the 64-byte NodeID format (x || y without 0x04).
@@ -348,7 +387,8 @@ mod tests {
         let digest = sha256(b"");
         assert_eq!(
             digest,
-            hex::decode("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").unwrap()
+            hex::decode("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                .unwrap()
         );
     }
 
@@ -368,7 +408,8 @@ mod tests {
         let mac = hmac_sha256(key, data);
         assert_eq!(
             mac,
-            hex::decode("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843").unwrap()
+            hex::decode("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+                .unwrap()
         );
     }
 
@@ -405,7 +446,12 @@ mod tests {
         let record_hash = vec![2; 32];
         let sig = sign_record(&signing, "edgerun:v0:sig:test", &record_hash).unwrap();
         assert_eq!(sig.len(), 64);
-        assert!(verify_record(&verifying, "edgerun:v0:sig:test", &record_hash, &sig));
+        assert!(verify_record(
+            &verifying,
+            "edgerun:v0:sig:test",
+            &record_hash,
+            &sig
+        ));
     }
 
     #[test]
@@ -414,7 +460,12 @@ mod tests {
         let verifying = signing.verifying_key();
         let record_hash = vec![3; 32];
         let sig = sign_record(&signing, "edgerun:v0:sig:test-a", &record_hash).unwrap();
-        assert!(!verify_record(&verifying, "edgerun:v0:sig:test-b", &record_hash, &sig));
+        assert!(!verify_record(
+            &verifying,
+            "edgerun:v0:sig:test-b",
+            &record_hash,
+            &sig
+        ));
     }
 
     #[test]
@@ -423,7 +474,10 @@ mod tests {
         let verifying = signing.verifying_key();
         let node_id = verifying_key_to_node_id(&verifying);
         let vk2 = node_id_to_verifying_key(&node_id).unwrap();
-        assert_eq!(verifying.to_encoded_point(false), vk2.to_encoded_point(false));
+        assert_eq!(
+            verifying.to_encoded_point(false),
+            vk2.to_encoded_point(false)
+        );
     }
 
     #[test]

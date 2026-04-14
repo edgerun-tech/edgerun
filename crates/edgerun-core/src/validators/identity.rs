@@ -7,11 +7,11 @@
 
 use super::helpers::*;
 use crate::crypto::{
-    ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
-    SIG_DOMAIN_IDENTITY_RECORD, verify_canonical_record,
+    verify_canonical_record, ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
+    SIG_DOMAIN_IDENTITY_RECORD,
 };
 use crate::protocol::{canonical_bytes, ProtocolRecord};
-use crate::result::{reject, ValidationResult, ReasonCode};
+use crate::result::{reject, ReasonCode, ValidationResult};
 use crate::value::Value;
 use std::collections::BTreeMap;
 
@@ -116,7 +116,10 @@ pub fn validate_identity_record(
     accept(
         mapping([
             ("validation_level", ystr("identity_verified")),
-            ("identity_id", ystr(crate::util::bytes_to_hex(&record.identity_id))),
+            (
+                "identity_id",
+                ystr(crate::util::bytes_to_hex(&record.identity_id)),
+            ),
         ]),
         empty_map(),
     )
@@ -125,8 +128,8 @@ pub fn validate_identity_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_proto::edgerun::v0::identity::IdentityRecord;
     use edgerun_proto::edgerun::v0::common::{IdentityKind, Signature};
+    use edgerun_proto::edgerun::v0::identity::IdentityRecord;
 
     fn make_test_keypair() -> (
         edgerun_crypto::p256::ecdsa::SigningKey,
@@ -150,9 +153,8 @@ mod tests {
         let canonical = canonical_bytes(&ProtocolRecord::IdentityRecord(record.clone()), true);
         let record_hash = crate::crypto::sha256(&canonical);
         let sig_input = crate::crypto::signature_input(SIG_DOMAIN_IDENTITY_RECORD, &record_hash);
-        let sig_input_digest = crate::crypto::sha256(&sig_input);
-
-        let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(sig_input_digest.as_slice()).unwrap();
+        // Sign sig_input directly (per spec §17.11)
+        let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&sig_input).unwrap();
         let sig_bytes = sig.to_bytes();
 
         let mut signed = record.clone();

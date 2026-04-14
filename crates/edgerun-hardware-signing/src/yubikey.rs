@@ -3,13 +3,14 @@
 //! Gate with `feature = "yubikey"`.
 
 use edgerun_yubikey::{
-    sign_record_with_yubikey_checked, YubiKeyAssuranceLevel,
-    YubiKeySignatureAlgorithm, YubiKeySigningKey,
+    sign_record_with_yubikey_checked, YubiKeyAssuranceLevel, YubiKeySignatureAlgorithm,
+    YubiKeySigningKey,
 };
 
 use crate::{
-    HardwareAssuranceLevel, HardwareProviderKind, HardwareSignatureAlgorithm, HardwareSigningError,
-    HardwareSigningKey, HardwareValidationRequirements, HardwareKeyInfo, BiometricState,
+    BiometricState, HardwareAssuranceLevel, HardwareKeyInfo, HardwareProviderKind,
+    HardwareSignatureAlgorithm, HardwareSigningError, HardwareSigningKey,
+    HardwareValidationRequirements,
 };
 
 // ===========================================================================
@@ -130,8 +131,11 @@ fn map_hardware_to_yubikey_algorithm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_yubikey::{YubiKeyAssuranceLevel, YubiKeyError, YubiKeyKeyInfo, YubiKeyPinPolicy, YubiKeyTouchPolicy, YubiKeySignatureAlgorithm};
     use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
+    use edgerun_yubikey::{
+        YubiKeyAssuranceLevel, YubiKeyError, YubiKeyKeyInfo, YubiKeyPinPolicy,
+        YubiKeySignatureAlgorithm, YubiKeyTouchPolicy,
+    };
 
     // -----------------------------------------------------------------------
     // Fake YubiKey keys for testing
@@ -196,7 +200,10 @@ mod tests {
         assert_eq!(info.algorithm, HardwareSignatureAlgorithm::EcdsaP256Sha256);
         assert_eq!(info.public_key, vec![6, 5, 4]);
         assert_eq!(info.attestation, vec![vec![3, 2, 1]]);
-        assert_eq!(info.assurance_level, HardwareAssuranceLevel::IsolatedHardware);
+        assert_eq!(
+            info.assurance_level,
+            HardwareAssuranceLevel::IsolatedHardware
+        );
     }
 
     #[test]
@@ -254,7 +261,10 @@ mod tests {
         let adapter = YubiKeyHardwareKeyAdapter::new(key);
         let info = adapter.key_info().unwrap();
         assert_eq!(info.public_key, vec![10, 11, 12]);
-        assert_eq!(info.assurance_level, HardwareAssuranceLevel::IsolatedHardware);
+        assert_eq!(
+            info.assurance_level,
+            HardwareAssuranceLevel::IsolatedHardware
+        );
         assert!(info.is_mesh_capable());
     }
 }

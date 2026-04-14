@@ -69,6 +69,9 @@ pub struct NodeStoreConfig {
     /// How to obtain the blob encryption key.
     /// Uses `Arc` internally to allow cloning the config.
     pub blob_key_source: std::sync::Arc<BlobKeySource>,
+    /// The node's identity (64-byte NodeID: x || y of ECDSA P-256 public key).
+    /// Per spec §6.2: every persisted blob MUST name at least one recipient.
+    pub node_identity: Vec<u8>,
 }
 
 /// THE EVENT LOG IS THE STATE.
@@ -121,7 +124,11 @@ impl NodeStore {
             }
         };
         let blobs = Arc::new(BlobStore::open(&blob_config, key_source)?);
-        let credentials = CredentialStore::new(Arc::clone(&blobs), Arc::clone(&index));
+        let credentials = CredentialStore::new(
+            Arc::clone(&blobs),
+            Arc::clone(&index),
+            config.node_identity.clone(),
+        );
 
         // Build the event loop — all mutations flow through this
         let mut builder = EventLoopBuilder::new(events_dir, Arc::clone(&index), Arc::clone(&blobs));
@@ -1178,6 +1185,9 @@ impl NodeStore {
     /// The secret is encrypted with AES-256-GCM using the node's blob
     /// encryption key (derived from the node identity or hardware-sealed).
     ///
+    /// Per spec §6.2: every persisted blob MUST name at least one recipient.
+    /// The node's identity is used as the recipient.
+    ///
     /// If a credential with the same `(namespace, name)` already exists,
     /// it is overwritten.
     pub fn put_credential(
@@ -1187,10 +1197,8 @@ impl NodeStore {
         secret: &[u8],
         description: Option<&str>,
     ) -> Result<(), StorageError> {
-        // Encrypt and store as a blob (no recipients — node decrypts with its own key)
-        let blob_id = self.blobs.store(secret, &[])?;
+        let blob_id = self.blobs.store(secret, &[self.config.node_identity.clone()])?;
 
-        // Index the mapping
         self.index.put_credential(namespace, name, &blob_id, description)?;
 
         Ok(())

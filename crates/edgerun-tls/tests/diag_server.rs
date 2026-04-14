@@ -57,7 +57,7 @@ fn verify_async_tls_loopback() {
             .expect("server handshake failed");
 
         // Client handshake
-        let mut client_tls = AsyncTlsStream::client(arc_client, "localhost").await
+        let mut client_tls = AsyncTlsStream::client(arc_client, "localhost", &[], None).await
             .expect("client handshake failed");
 
         // Client writes

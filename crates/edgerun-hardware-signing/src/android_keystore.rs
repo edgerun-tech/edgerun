@@ -8,8 +8,9 @@ use edgerun_android_keystore::{
 };
 
 use crate::{
-    HardwareAssuranceLevel, HardwareProviderKind, HardwareSignatureAlgorithm, HardwareSigningError,
-    HardwareSigningKey, HardwareValidationRequirements, HardwareKeyInfo, BiometricState,
+    BiometricState, HardwareAssuranceLevel, HardwareKeyInfo, HardwareProviderKind,
+    HardwareSignatureAlgorithm, HardwareSigningError, HardwareSigningKey,
+    HardwareValidationRequirements,
 };
 
 // ===========================================================================
@@ -142,10 +143,11 @@ fn map_hardware_to_keystore_algorithm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_android_keystore::{
-        AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo, AndroidKeystoreSignatureAlgorithm,
-    };
     use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
+    use edgerun_android_keystore::{
+        AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo,
+        AndroidKeystoreSignatureAlgorithm,
+    };
 
     // -----------------------------------------------------------------------
     // Fake keystore keys for testing
@@ -256,9 +258,11 @@ mod tests {
 
     #[test]
     fn sign_record_with_android_keystore_provider_success() {
-        let key = FakeKeystoreKey::with_algorithm(AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256);
+        let key =
+            FakeKeystoreKey::with_algorithm(AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256);
         let req = HardwareValidationRequirements::default();
-        let sig = sign_record_with_android_keystore_provider(&key, &req, "test:v0:sig", b"hash").unwrap();
+        let sig =
+            sign_record_with_android_keystore_provider(&key, &req, "test:v0:sig", b"hash").unwrap();
         assert_eq!(sig, b"hash");
     }
 
@@ -273,7 +277,10 @@ mod tests {
         let adapter = AndroidKeystoreHardwareKeyAdapter::new(key);
         let info = adapter.key_info().unwrap();
         assert_eq!(info.public_key, pk.to_vec());
-        assert_eq!(info.assurance_level, HardwareAssuranceLevel::IsolatedHardware);
+        assert_eq!(
+            info.assurance_level,
+            HardwareAssuranceLevel::IsolatedHardware
+        );
         assert!(info.is_mesh_capable());
     }
 }

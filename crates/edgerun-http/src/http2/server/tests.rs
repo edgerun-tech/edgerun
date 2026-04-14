@@ -1,5 +1,7 @@
 use super::*;
-use crate::http2::frame::{DataFrame, Frame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame, WindowUpdateFrame};
+use crate::http2::frame::{
+    DataFrame, Frame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame, WindowUpdateFrame,
+};
 use crate::http2::{Decoder, Encoder, FrameType};
 
 fn h(name: &str, value: &str) -> (Vec<u8>, Vec<u8>) {

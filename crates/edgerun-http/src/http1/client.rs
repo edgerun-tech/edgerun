@@ -563,7 +563,7 @@ impl Client {
         port: u16,
     ) -> Result<AsyncTlsStream<Arc<AsyncTcpStream>>> {
         let stream = self.resolve_and_connect(host, port).await?;
-        AsyncTlsStream::client(stream, host).await
+        AsyncTlsStream::client(stream, host, &[], None).await
             .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {}", e)))
     }
 

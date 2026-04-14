@@ -371,6 +371,7 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         blob_key_source: Arc::new(BlobKeySource::Software {
             private_key_bytes: private_key_bytes.clone(),
         }),
+        node_identity: node_id.0.to_vec(),
     };
     let mut store = NodeStore::open(&store_config).unwrap_or_else(|e| {
         edgerun_log::error!("failed to open storage at {}: {}", data_root.display(), e);

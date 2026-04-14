@@ -34,13 +34,16 @@
 use std::sync::Arc;
 
 use crate::blobs::BlobStore;
-use crate::file_index::FileIndex;
 use crate::error::StorageError;
+use crate::file_index::FileIndex;
 
 /// High-level credential store backed by encrypted blobs.
 pub struct CredentialStore {
     blobs: Arc<BlobStore>,
     index: Arc<FileIndex>,
+    /// The node's identity (used as the default recipient for blob encryption).
+    /// Per spec §6.2: every persisted blob MUST name at least one recipient.
+    node_identity: Vec<u8>,
 }
 
 impl CredentialStore {
@@ -48,8 +51,14 @@ impl CredentialStore {
     ///
     /// The `blobs` handle provides encryption; the `index` tracks
     /// the mapping from `(namespace, name)` to encrypted blob IDs.
-    pub fn new(blobs: Arc<BlobStore>, index: Arc<FileIndex>) -> Self {
-        Self { blobs, index }
+    /// The `node_identity` is used as the recipient for blob encryption
+    /// (per spec §6.2: every blob must name at least one recipient).
+    pub fn new(blobs: Arc<BlobStore>, index: Arc<FileIndex>, node_identity: Vec<u8>) -> Self {
+        Self {
+            blobs,
+            index,
+            node_identity,
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -63,6 +72,9 @@ impl CredentialStore {
     /// disk as orphaned content-addressed data).
     ///
     /// The `description` is optional metadata stored for auditing purposes.
+    ///
+    /// Per spec §6.2: every persisted blob MUST name at least one recipient.
+    /// The node's identity is used as the recipient.
     pub fn put(
         &self,
         namespace: &str,
@@ -70,11 +82,10 @@ impl CredentialStore {
         secret: &[u8],
         description: Option<&str>,
     ) -> Result<(), StorageError> {
-        // Encrypt and store as a blob (no recipients — node decrypts with its own key)
-        let blob_id = self.blobs.store(secret, &[])?;
+        let blob_id = self.blobs.store(secret, &[self.node_identity.clone()])?;
 
-        // Index the mapping
-        self.index.put_credential(namespace, name, &blob_id, description)?;
+        self.index
+            .put_credential(namespace, name, &blob_id, description)?;
 
         Ok(())
     }
@@ -104,13 +115,18 @@ impl CredentialStore {
     ///
     /// Returns `true` if the credential existed, `false` if it was already gone.
     pub fn delete(&self, namespace: &str, name: &str) -> Result<bool, StorageError> {
-        self.index.delete_credential(namespace, name).map_err(StorageError::Io)
+        self.index
+            .delete_credential(namespace, name)
+            .map_err(StorageError::Io)
     }
 
     /// List all credential names in a namespace.
     ///
     /// Returns `(name, description, stored_at)` tuples sorted by name.
-    pub fn list(&self, namespace: &str) -> Result<Vec<(String, Option<String>, i64)>, StorageError> {
+    pub fn list(
+        &self,
+        namespace: &str,
+    ) -> Result<Vec<(String, Option<String>, i64)>, StorageError> {
         Ok(self.index.list_credentials(namespace)?)
     }
 
@@ -142,7 +158,7 @@ impl CredentialStore {
 #[cfg(test)]
 mod tests {
     use super::CredentialStore;
-    use crate::blobs::{BlobStore, BlobKeySource, BlobStoreConfig};
+    use crate::blobs::{BlobKeySource, BlobStore, BlobStoreConfig};
     use crate::file_index::FileIndex;
     use std::path::PathBuf;
 
@@ -161,9 +177,15 @@ mod tests {
         let blob_config = BlobStoreConfig {
             blob_dir: data_root.join("blobs"),
         };
-        let blobs = Arc::new(BlobStore::open(&blob_config, BlobKeySource::Software {
-            private_key_bytes: private_key.to_vec(),
-        }).unwrap());
+        let blobs = Arc::new(
+            BlobStore::open(
+                &blob_config,
+                BlobKeySource::Software {
+                    private_key_bytes: private_key.to_vec(),
+                },
+            )
+            .unwrap(),
+        );
         let index = Arc::new(FileIndex::open(&data_root).unwrap());
         CredentialStore::new(blobs, index)
     }
@@ -175,7 +197,9 @@ mod tests {
         let root = tmp_data_root();
         let store = make_store(root);
 
-        store.put("api", "github", b"ghp_xxx123", Some("GitHub PAT")).unwrap();
+        store
+            .put("api", "github", b"ghp_xxx123", Some("GitHub PAT"))
+            .unwrap();
         let secret = store.get("api", "github").unwrap();
         assert_eq!(secret, Some(b"ghp_xxx123".to_vec()));
     }
@@ -215,7 +239,9 @@ mod tests {
         let store = make_store(root);
 
         store.put("api", "stripe", b"sk_old", None).unwrap();
-        store.put("api", "stripe", b"sk_new", Some("rotated")).unwrap();
+        store
+            .put("api", "stripe", b"sk_new", Some("rotated"))
+            .unwrap();
 
         let secret = store.get("api", "stripe").unwrap();
         assert_eq!(secret, Some(b"sk_new".to_vec()));
@@ -229,7 +255,9 @@ mod tests {
         let store = make_store(root);
 
         store.put("wifi", "home", b"home-pass", None).unwrap();
-        store.put("wifi", "office", b"office-pass", Some("WPA2")).unwrap();
+        store
+            .put("wifi", "office", b"office-pass", Some("WPA2"))
+            .unwrap();
         store.put("api", "github", b"ghp_xxx", None).unwrap();
 
         let creds = store.list("wifi").unwrap();
@@ -269,7 +297,9 @@ mod tests {
         let store = make_store(root);
 
         store.put("api", "aws", b"old-key", None).unwrap();
-        store.rotate("api", "aws", b"new-key-2025", Some("rotated Jan 2025")).unwrap();
+        store
+            .rotate("api", "aws", b"new-key-2025", Some("rotated Jan 2025"))
+            .unwrap();
 
         let secret = store.get("api", "aws").unwrap();
         assert_eq!(secret, Some(b"new-key-2025".to_vec()));
@@ -284,7 +314,9 @@ mod tests {
         // First session: store
         {
             let store = make_store(root.clone());
-            store.put("persistent", "key", b"persistent-value", None).unwrap();
+            store
+                .put("persistent", "key", b"persistent-value", None)
+                .unwrap();
         }
 
         // Second session: retrieve (FileIndex persists via .bin files)
@@ -324,12 +356,23 @@ mod tests {
         let store = make_store(root);
 
         store.put("test", "key-with-dashes", b"v1", None).unwrap();
-        store.put("test", "key_with_underscores", b"v2", None).unwrap();
+        store
+            .put("test", "key_with_underscores", b"v2", None)
+            .unwrap();
         store.put("test", "key.with.dots", b"v3", None).unwrap();
 
-        assert_eq!(store.get("test", "key-with-dashes").unwrap(), Some(b"v1".to_vec()));
-        assert_eq!(store.get("test", "key_with_underscores").unwrap(), Some(b"v2".to_vec()));
-        assert_eq!(store.get("test", "key.with.dots").unwrap(), Some(b"v3".to_vec()));
+        assert_eq!(
+            store.get("test", "key-with-dashes").unwrap(),
+            Some(b"v1".to_vec())
+        );
+        assert_eq!(
+            store.get("test", "key_with_underscores").unwrap(),
+            Some(b"v2".to_vec())
+        );
+        assert_eq!(
+            store.get("test", "key.with.dots").unwrap(),
+            Some(b"v3".to_vec())
+        );
     }
 
     #[test]
@@ -337,8 +380,13 @@ mod tests {
         let root = tmp_data_root();
         let store = make_store(root);
 
-        store.put("com.example", "api-key", b"secret", None).unwrap();
-        assert_eq!(store.get("com.example", "api-key").unwrap(), Some(b"secret".to_vec()));
+        store
+            .put("com.example", "api-key", b"secret", None)
+            .unwrap();
+        assert_eq!(
+            store.get("com.example", "api-key").unwrap(),
+            Some(b"secret".to_vec())
+        );
     }
 
     #[test]
@@ -347,7 +395,9 @@ mod tests {
         let store = make_store(root);
 
         let utf8_secret = "🔐 secret Unicode key 🔑".as_bytes();
-        store.put("test", "utf8", utf8_secret, Some("Unicode test")).unwrap();
+        store
+            .put("test", "utf8", utf8_secret, Some("Unicode test"))
+            .unwrap();
         let retrieved = store.get("test", "utf8").unwrap();
         assert_eq!(retrieved, Some(utf8_secret.to_vec()));
     }
@@ -357,7 +407,9 @@ mod tests {
         let root = tmp_data_root();
         let store = make_store(root);
 
-        store.put("api", "key1", b"v1", Some("Production API key")).unwrap();
+        store
+            .put("api", "key1", b"v1", Some("Production API key"))
+            .unwrap();
         store.put("api", "key2", b"v2", None).unwrap();
 
         let creds = store.list("api").unwrap();

@@ -273,7 +273,7 @@ impl ImapClient {
             }
         };
 
-        let tls = AsyncTlsStream::client(current, server_name)
+        let tls = AsyncTlsStream::client(current, server_name, &[], None)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
         self.transport = ImapTransport::Tls(tls);

@@ -2,16 +2,15 @@
 //!
 //! Each handler is a method on `Http2Server` in this module.
 
-use crate::http2::flow_control::FlowController;
-use crate::http2::frame::{
-    Frame, PingFrame, PriorityFrame, RstStreamFrame,
-    SettingsFrame, WindowUpdateFrame,
-};
 use super::response;
-use crate::http2::settings::Settings;
-use crate::http2::ErrorCode;
 use super::FrameAction;
 use super::Http2Server;
+use crate::http2::flow_control::FlowController;
+use crate::http2::frame::{
+    Frame, PingFrame, PriorityFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
+};
+use crate::http2::settings::Settings;
+use crate::http2::ErrorCode;
 
 impl Http2Server {
     /// Process an incoming SETTINGS frame (after preface).
@@ -39,7 +38,9 @@ impl Http2Server {
                 }
                 Err(e) => {
                     let error_code = match &e {
-                        crate::http2::Http2Error::FlowControl(_) => ErrorCode::FLOW_CONTROL_ERROR.to_u32(),
+                        crate::http2::Http2Error::FlowControl(_) => {
+                            ErrorCode::FLOW_CONTROL_ERROR.to_u32()
+                        }
                         _ => ErrorCode::PROTOCOL_ERROR.to_u32(),
                     };
                     return response::send_goaway(

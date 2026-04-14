@@ -1,16 +1,15 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use edgerun_hardware_signing::{
-    HardwareMeshSigner, MeshSigner, NodeID,
-    TpmHardwareKeyAdapter, YubiKeyHardwareKeyAdapter,
-};
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+use edgerun_crypto::p256::ecdsa::SigningKey;
 #[cfg(feature = "android-hardware")]
 use edgerun_hardware_signing::AndroidKeystoreHardwareKeyAdapter;
+use edgerun_hardware_signing::{
+    HardwareMeshSigner, MeshSigner, NodeID, TpmHardwareKeyAdapter, YubiKeyHardwareKeyAdapter,
+};
 use edgerun_tpm::{LinuxTpmSigningKey, TpmHandle};
 use edgerun_yubikey::{LinuxPcscYubiKey, YubiKeyPivSlot};
-use edgerun_crypto::p256::ecdsa::SigningKey;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
 use crate::config::{NodeConfig, SignerConfig};
 use crate::init_cmd::detect_yubikey_device;
@@ -43,9 +42,28 @@ impl MeshSigner for SyncSoftwareSigner {
         &self,
         digest: &[u8; 32],
     ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-        let key = self.key.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let key = self
+            .key
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let sig: edgerun_crypto::p256::ecdsa::Signature = key
             .sign_prehash(digest)
+            .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
+        let mut bytes = [0u8; 64];
+        bytes.copy_from_slice(&sig.to_bytes());
+        Ok(bytes)
+    }
+
+    fn sign_message_var(
+        &self,
+        message: &[u8],
+    ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
+        let key = self
+            .key
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let sig: edgerun_crypto::p256::ecdsa::Signature = key
+            .sign_prehash(message)
             .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
         let mut bytes = [0u8; 64];
         bytes.copy_from_slice(&sig.to_bytes());
@@ -73,28 +91,34 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
             Arc::new(SyncSoftwareSigner::new(signing_key))
         }
         "tpm" => {
-            let handle_hex = signer_config.handle.as_ref().expect("TPM signer requires handle");
-            let handle = edgerun_encoding::hex::parse_hex_int::<u32>(handle_hex.trim_start_matches("0x"))
-                .unwrap_or_else(|| {
-                    eprintln!("error: invalid TPM handle '{}'", handle_hex);
-                    std::process::exit(1);
-                });
+            let handle_hex = signer_config
+                .handle
+                .as_ref()
+                .expect("TPM signer requires handle");
+            let handle =
+                edgerun_encoding::hex::parse_hex_int::<u32>(handle_hex.trim_start_matches("0x"))
+                    .unwrap_or_else(|| {
+                        eprintln!("error: invalid TPM handle '{}'", handle_hex);
+                        std::process::exit(1);
+                    });
 
             edgerun_log::info!("using TPM signer: handle=0x{:08X}", handle);
 
             let tpm_key = LinuxTpmSigningKey::new("/dev/tpmrm0", TpmHandle(handle));
 
             let adapter = TpmHardwareKeyAdapter::new(tpm_key);
-            let mesh_signer = HardwareMeshSigner::new(adapter)
-                .unwrap_or_else(|e| {
-                    eprintln!("error: failed to initialize TPM signer: {}", e);
-                    std::process::exit(1);
-                });
+            let mesh_signer = HardwareMeshSigner::new(adapter).unwrap_or_else(|e| {
+                eprintln!("error: failed to initialize TPM signer: {}", e);
+                std::process::exit(1);
+            });
 
             Arc::new(mesh_signer)
         }
         "yubikey" => {
-            let slot_str = signer_config.handle.as_ref().expect("YubiKey signer requires handle");
+            let slot_str = signer_config
+                .handle
+                .as_ref()
+                .expect("YubiKey signer requires handle");
             let slot = match slot_str.as_str() {
                 "9a" => YubiKeyPivSlot::Authentication,
                 "9c" => YubiKeyPivSlot::Signature,
@@ -111,21 +135,27 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 std::process::exit(1);
             });
 
-            edgerun_log::info!("using YubiKey signer: bus={:03}, device={:03}, slot={}",
-                device.bus, device.device, slot_str);
+            edgerun_log::info!(
+                "using YubiKey signer: bus={:03}, device={:03}, slot={}",
+                device.bus,
+                device.device,
+                slot_str
+            );
 
             let yubikey = LinuxPcscYubiKey::new(device, slot);
             let adapter = YubiKeyHardwareKeyAdapter::new(yubikey);
-            let mesh_signer = HardwareMeshSigner::new(adapter)
-                .unwrap_or_else(|e| {
-                    eprintln!("error: failed to initialize YubiKey signer: {}", e);
-                    std::process::exit(1);
-                });
+            let mesh_signer = HardwareMeshSigner::new(adapter).unwrap_or_else(|e| {
+                eprintln!("error: failed to initialize YubiKey signer: {}", e);
+                std::process::exit(1);
+            });
 
             Arc::new(mesh_signer)
         }
         "android-keystore" => {
-            let alias = signer_config.handle.as_ref().expect("Android Keystore signer requires handle (key alias)");
+            let alias = signer_config
+                .handle
+                .as_ref()
+                .expect("Android Keystore signer requires handle (key alias)");
 
             edgerun_log::info!("using Android Keystore signer: alias={}", alias);
 
@@ -138,19 +168,23 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 });
 
                 // Use ECDSA P-256 (most common on Android)
-                let algo = edgerun_android_keystore::AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256;
-                let keystore_key = edgerun_android_keystore::JniKeystoreKey::generate_or_retrieve(alias, algo)
-                    .unwrap_or_else(|e| {
-                        eprintln!("error: failed to retrieve Android Keystore key '{}': {}", alias, e);
-                        std::process::exit(1);
-                    });
+                let algo =
+                    edgerun_android_keystore::AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256;
+                let keystore_key =
+                    edgerun_android_keystore::JniKeystoreKey::generate_or_retrieve(alias, algo)
+                        .unwrap_or_else(|e| {
+                            eprintln!(
+                                "error: failed to retrieve Android Keystore key '{}': {}",
+                                alias, e
+                            );
+                            std::process::exit(1);
+                        });
 
                 let adapter = AndroidKeystoreHardwareKeyAdapter::new(keystore_key);
-                let mesh_signer = HardwareMeshSigner::new(adapter)
-                    .unwrap_or_else(|e| {
-                        eprintln!("error: failed to initialize Android Keystore signer: {}", e);
-                        std::process::exit(1);
-                    });
+                let mesh_signer = HardwareMeshSigner::new(adapter).unwrap_or_else(|e| {
+                    eprintln!("error: failed to initialize Android Keystore signer: {}", e);
+                    std::process::exit(1);
+                });
 
                 return Arc::new(mesh_signer);
             }
