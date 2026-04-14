@@ -152,6 +152,24 @@ pub fn dispatch_command(
 
     let local_node_id = signer.node_id().0;
 
+    // Check persistent replay cache first (survives restarts, spec §19.10)
+    let computed_hash = command_hash(command);
+    let cmd_hash_hex = edgerun_core::util::bytes_to_hex(&computed_hash.value);
+    if let Some(ref target) = command.target_node {
+        let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
+        if let Ok(Some((_cmd_id, _event_seq))) = store.get_replay_entry(&target_hex, &cmd_hash_hex) {
+            // Previously processed command — return DUPLICATE without re-execution
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                true, "duplicate_command", Vec::new(), None);
+        }
+    }
+
+    // Also check in-memory replay cache for this session's commands
+    if replay_cache.contains_key(&computed_hash.value) {
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            true, "duplicate_command", Vec::new(), None);
+    }
+
     // Build validation context for full validate_command
     let ctx = CommandValidationContext {
         local_node_id: &local_node_id,
@@ -1614,6 +1632,22 @@ fn record_and_respond(
         delegations,
         vec![],
     );
+
+    // 3b. Write persistent replay cache entry (spec §19.10)
+    // The replay key is command_hash, not command_id.
+    if let Some(ref target) = command.target_node {
+        let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
+        let cmd_hash_hex = edgerun_core::util::bytes_to_hex(
+            &command_hash(command).value,
+        );
+        if let Err(e) = store.put_replay_entry(
+            &target_hex, &cmd_hash_hex,
+            &edgerun_core::util::bytes_to_hex(&command.command_id),
+            _event_seq.unwrap_or(0) as i64,
+        ) {
+            edgerun_log::warn!("failed to write replay cache entry: {}", e);
+        }
+    }
 
 
     // 4. Emit ActionCompleted or ActionFailed

@@ -214,6 +214,24 @@ impl NodeStore {
         Ok(self.index.list_stream_heads()?)
     }
 
+    // -----------------------------------------------------------------------
+    // Replay cache (spec §19.10)
+    // -----------------------------------------------------------------------
+
+    /// Looks up a previously processed command by its hash.
+    /// Returns (command_id, decision_event_seq) if found.
+    pub fn get_replay_entry(&self, target_node: &str, command_hash: &str) -> Result<Option<(String, i64)>, StorageError> {
+        match self.index.get_replay_entry(target_node, command_hash)? {
+            Some(entry) => Ok(Some((entry.command_id, entry.decision_event_seq))),
+            None => Ok(None),
+        }
+    }
+
+    /// Records a processed command in the persistent replay cache.
+    pub fn put_replay_entry(&self, target_node: &str, command_hash: &str, command_id: &str, decision_event_seq: i64) -> Result<(), StorageError> {
+        Ok(self.index.put_replay_entry(target_node, command_hash, command_id, decision_event_seq)?)
+    }
+
     /// Validates the cryptographic integrity of a stream chain.
     ///
     /// Walks the stream from genesis to head, checking:
