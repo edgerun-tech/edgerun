@@ -1,6 +1,5 @@
 //! DMARC evaluation (RFC 7489).
 
-use std::collections::HashMap;
 use std::io;
 
 use crate::dkim::{DkimResult, DkimStatus};
@@ -172,7 +171,7 @@ fn is_spf_aligned(spf: &SpfResult, header_from: &str, policy: &DmarcPolicy) -> b
     // SPF alignment: envelope_from domain must align with header_from domain
     // For relaxed alignment, organizational domain must match
     // For strict alignment, domains must be identical
-    let header_domain = extract_organizational_domain(header_from);
+    let _header_domain = extract_organizational_domain(header_from);
 
     // SPF doesn't directly provide the aligned domain — we check if the
     // envelope sender domain matches the header from domain

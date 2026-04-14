@@ -529,6 +529,7 @@ pub struct BoundServer {
     lmtp: Option<edgerun_email::lmtp::LmtpServer>,
     /// Compiled connection middleware chain.
     /// If empty, connections go directly to protocol handlers.
+    #[allow(dead_code)]
     connection_middleware: Arc<dyn ConnectionHandler>,
 }
 

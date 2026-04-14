@@ -93,10 +93,11 @@ fn evaluate_spf(record: &str, client_ip: &IpAddr, domain: &str) -> io::Result<Sp
 enum MechanismResult {
     Match(SpfResult),
     NoMatch,
+    #[allow(dead_code)]
     Error(io::Error),
 }
 
-fn evaluate_mechanism(mech: &str, client_ip: &IpAddr, domain: &str) -> MechanismResult {
+fn evaluate_mechanism(mech: &str, client_ip: &IpAddr, _domain: &str) -> MechanismResult {
     // Parse qualifier and mechanism
     let (qualifier, mechanism) = match mech.chars().next() {
         Some('+') => (SpfResult::Pass, &mech[1..]),

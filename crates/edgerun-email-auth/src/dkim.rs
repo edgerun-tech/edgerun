@@ -152,7 +152,7 @@ pub async fn verify_signature<D: DnsQuery>(
     body: &[u8],
 ) -> io::Result<()> {
     // 1. Verify body hash
-    let (_header_canon, body_canon) = parse_canonicalization(sig.canonicalization.as_deref());
+    let (_header_canon, _body_canon) = parse_canonicalization(sig.canonicalization.as_deref());
     let body_canon_result = match canonicalize_body(body, sig.canonicalization.as_deref()) {
         Ok(b) => b,
         Err(e) => return Err(e),
@@ -204,7 +204,6 @@ pub async fn verify_signature<D: DnsQuery>(
     let rsa_key = RsaPublicKey::from_public_key_der(&public_key)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid RSA key: {}", e)))?;
 
-    use rsa::signature::Verifier;
     let verifying_key = rsa::Pkcs1v15Sign::new::<sha2::Sha256>();
     rsa_key
         .verify(verifying_key, &hash, &sig.signature)
