@@ -10,7 +10,7 @@ use edgerun_rt::{
     AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, CancellationToken,
 };
 
-use crate::smtp::protocol::read_smtp_line;
+use crate::server::read_line;
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::smtp::server::rate_limit::RateLimiter;
@@ -467,7 +467,7 @@ async fn handle_connection(
             break;
         }
 
-        let line = match read_smtp_line(&mut transport).await? {
+        let line = match read_line(&mut transport).await? {
             Some(l) => l,
             None => {
                 edgerun_log::info!("edgerun-smtp: {} disconnected", peer);

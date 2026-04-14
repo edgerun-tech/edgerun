@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use edgerun_rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 
-use crate::smtp::protocol::read_smtp_line;
+use crate::server::read_line;
 use crate::smtp::types::{
     DsnNotify, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
     SmtpResponseCode, SmtpState,
@@ -201,7 +201,7 @@ async fn handle_connection(
 
         // ── DATA phase: read body lines until "." ─────────────────
         if in_data_phase {
-            let line = match read_smtp_line(&mut stream).await {
+            let line = match read_line(&mut stream).await {
                 Ok(Some(l)) => l,
                 Ok(None) => break,
                 Err(e) => {
@@ -297,7 +297,7 @@ async fn handle_connection(
         }
 
         // ── Read and parse command ────────────────────────────────
-        let line = match read_smtp_line(&mut stream).await {
+        let line = match read_line(&mut stream).await {
             Ok(Some(l)) => l,
             Ok(None) => {
                 edgerun_log::info!("edgerun-lmtp: {} disconnected", peer);

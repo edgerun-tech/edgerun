@@ -24,3 +24,4 @@ edgerun-dns = { path = "../edgerun-dns" }
 edgerun-email-auth = { path = "../edgerun-email-auth" }
 edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-tls = { path = "../edgerun-tls", optional = true }
+edgerun-encoding = { path = "../edgerun-encoding" }

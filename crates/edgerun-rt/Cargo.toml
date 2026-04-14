@@ -171,3 +171,6 @@ harness = false
 [[test]]
 name = "shutdown_test"
 harness = false
+
+[[test]]
+name = "mpsc_debug_test"

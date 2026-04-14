@@ -124,23 +124,11 @@ pub fn build_websocket_accept_headers(client_key: &str) -> HeaderMap {
     let mut hasher = DefaultHasher::new();
     accept_input.hash(&mut hasher);
     let hash = hasher.finish();
-    let accept_key = base64_encode_u64(hash);
+    let accept_key = edgerun_encoding::base64::encode_u64_base64(hash);
 
     let _ = headers.insert("Sec-WebSocket-Accept", &accept_key);
 
     headers
-}
-
-/// Simple base64 encoding of a u64 for WebSocket accept key
-fn base64_encode_u64(value: u64) -> String {
-    const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity(12);
-    let mut v = value;
-    for _ in 0..12 {
-        result.push(BASE64_CHARS[(v & 0x3F) as usize] as char);
-        v >>= 6;
-    }
-    result
 }
 
 /// State machine for handling an upgrade request

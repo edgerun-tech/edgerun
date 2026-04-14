@@ -95,6 +95,22 @@ pub fn decode_c_strings(bytes: &[u8]) -> Result<Vec<String>, core::str::Utf8Erro
     Ok(result)
 }
 
+/// Decode a null-terminated C string and trim whitespace.
+///
+/// This variant is for callers like `edgerun-linux-cec` that need trimming.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::cstring::decode_c_string_trimmed;
+/// assert_eq!(decode_c_string_trimmed(b"hello  \0world").unwrap(), "hello");
+/// assert_eq!(decode_c_string_trimmed(b"  trimmed  \0").unwrap(), "trimmed");
+/// ```
+pub fn decode_c_string_trimmed(bytes: &[u8]) -> Result<String, core::str::Utf8Error> {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    let s = str::from_utf8(&bytes[..end])?;
+    Ok(s.trim().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +178,13 @@ mod tests {
     fn test_decode_c_strings_invalid_utf8() {
         let data = b"foo\0\xff\xfe\0";
         assert!(decode_c_strings(data).is_err());
+    }
+
+    #[test]
+    fn test_decode_c_string_trimmed() {
+        assert_eq!(decode_c_string_trimmed(b"hello  \0world").unwrap(), "hello");
+        assert_eq!(decode_c_string_trimmed(b"  trimmed  \0").unwrap(), "trimmed");
+        assert_eq!(decode_c_string_trimmed(b"no-trim\0").unwrap(), "no-trim");
+        assert_eq!(decode_c_string_trimmed(b"\0").unwrap(), "");
     }
 }

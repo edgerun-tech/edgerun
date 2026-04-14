@@ -14,6 +14,7 @@ edgerun-rt = { path = "../edgerun-rt" }
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
 edgerun-core = { path = "../edgerun-core" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 serde = { version = "1", features = ["derive"] }
 libc = "0.2"
 flate2 = "1"

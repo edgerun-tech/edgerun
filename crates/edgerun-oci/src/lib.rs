@@ -46,7 +46,6 @@ pub mod cli;
 // Registry modules (private, re-exported below)
 mod registry {
     pub(crate) mod auth;
-    pub(crate) mod base64;
     pub(crate) mod client;
     pub(crate) mod config;
     pub(crate) mod dbus_client;

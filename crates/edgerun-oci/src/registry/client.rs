@@ -307,7 +307,7 @@ impl RegistryClient {
 
         if let Some((username, password)) = creds {
             let auth_str = format!("{}:{}", username, password);
-            let encoded = super::base64::encode(auth_str.as_bytes());
+            let encoded = edgerun_encoding::base64::standard_encode(auth_str.as_bytes());
             builder = builder.header("Authorization", &format!("Basic {}", encoded));
         }
 

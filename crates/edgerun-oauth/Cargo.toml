@@ -11,6 +11,7 @@ edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 
 [lints]
 workspace = true

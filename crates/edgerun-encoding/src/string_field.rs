@@ -251,6 +251,130 @@ pub fn decode_bytes(bytes: &[u8], cursor: &mut usize) -> Result<Vec<u8>, StringF
     Ok(result)
 }
 
+// ─── u32-LE prefixed variants (for edgerun-remote-capability wire format) ─────
+
+/// Encode a string field with a 4-byte little-endian length prefix.
+///
+/// This is the wire format used by `edgerun-remote-capability` adapters.
+/// Supports strings up to 4 GiB.
+///
+/// Writes directly into the provided output buffer (cursor-based).
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::string_field::encode_string_field_u32;
+/// let mut out = Vec::new();
+/// encode_string_field_u32("hello", &mut out).unwrap();
+/// assert_eq!(out, vec![0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']);
+/// ```
+pub fn encode_string_field_u32(value: &str, out: &mut Vec<u8>) -> Result<(), StringFieldError> {
+    let bytes = value.as_bytes();
+    if bytes.len() > u32::MAX as usize {
+        return Err(StringFieldError::LengthExceedsInput);
+    }
+
+    let len = bytes.len() as u32;
+    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(bytes);
+    Ok(())
+}
+
+/// Decode a string field with a 4-byte little-endian length prefix.
+///
+/// This is the wire format used by `edgerun-remote-capability` adapters.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::string_field::decode_string_field_u32;
+/// let data = vec![0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o'];
+/// let mut cursor = 0;
+/// let s = decode_string_field_u32(&data, &mut cursor).unwrap();
+/// assert_eq!(s, "hello");
+/// assert_eq!(cursor, 9);
+/// ```
+pub fn decode_string_field_u32(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<String, StringFieldError> {
+    if *cursor + 4 > bytes.len() {
+        return Err(StringFieldError::TruncatedInput);
+    }
+
+    let len = u32::from_le_bytes(
+        bytes[*cursor..*cursor + 4]
+            .try_into()
+            .map_err(|_| StringFieldError::TruncatedInput)?,
+    ) as usize;
+    *cursor += 4;
+
+    if *cursor + len > bytes.len() {
+        return Err(StringFieldError::TruncatedInput);
+    }
+
+    let s = str::from_utf8(&bytes[*cursor..*cursor + len])
+        .map_err(|_| StringFieldError::InvalidUtf8)?
+        .to_string();
+
+    *cursor += len;
+    Ok(s)
+}
+
+/// Encode an optional string field with u32-LE length prefix and presence byte.
+///
+/// Format: `[presence: u8][length: u32 LE][bytes...]`
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::string_field::encode_optional_string_field_u32;
+/// let mut out = Vec::new();
+/// encode_optional_string_field_u32(Some("hello"), &mut out).unwrap();
+/// assert_eq!(out, vec![0x01, 0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']);
+/// ```
+pub fn encode_optional_string_field_u32(
+    value: Option<&str>,
+    out: &mut Vec<u8>,
+) -> Result<(), StringFieldError> {
+    match value {
+        Some(s) => {
+            out.push(1);
+            encode_string_field_u32(s, out)?;
+        }
+        None => {
+            out.push(0);
+        }
+    }
+    Ok(())
+}
+
+/// Decode an optional string field with u32-LE length prefix and presence byte.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::string_field::decode_optional_string_field_u32;
+/// let data = vec![0x01, 0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o'];
+/// let mut cursor = 0;
+/// let s = decode_optional_string_field_u32(&data, &mut cursor).unwrap();
+/// assert_eq!(s, Some("hello".to_string()));
+/// assert_eq!(cursor, 10);
+/// ```
+pub fn decode_optional_string_field_u32(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<Option<String>, StringFieldError> {
+    if *cursor >= bytes.len() {
+        return Err(StringFieldError::TruncatedInput);
+    }
+
+    let present = bytes[*cursor] != 0;
+    *cursor += 1;
+
+    if present {
+        decode_string_field_u32(bytes, cursor).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,5 +502,66 @@ mod tests {
             assert_eq!(*b, decoded);
             assert_eq!(cursor, encoded.len());
         }
+    }
+
+    #[test]
+    fn test_encode_string_field_u32() {
+        let mut out = Vec::new();
+        encode_string_field_u32("hello", &mut out).unwrap();
+        assert_eq!(out, vec![0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']);
+    }
+
+    #[test]
+    fn test_decode_string_field_u32() {
+        let data = vec![0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o'];
+        let mut cursor = 0;
+        let s = decode_string_field_u32(&data, &mut cursor).unwrap();
+        assert_eq!(s, "hello");
+        assert_eq!(cursor, 9);
+    }
+
+    #[test]
+    fn test_string_field_u32_roundtrip() {
+        let test_strings: Vec<&str> = vec!["", "hello", "世界", "a".repeat(1000).leak()];
+        for s in &test_strings {
+            let mut out = Vec::new();
+            encode_string_field_u32(s, &mut out).unwrap();
+            let mut cursor = 0;
+            let decoded = decode_string_field_u32(&out, &mut cursor).unwrap();
+            assert_eq!(*s, decoded);
+            assert_eq!(cursor, out.len());
+        }
+    }
+
+    #[test]
+    fn test_encode_optional_string_field_u32_some() {
+        let mut out = Vec::new();
+        encode_optional_string_field_u32(Some("hello"), &mut out).unwrap();
+        assert_eq!(out, vec![0x01, 0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']);
+    }
+
+    #[test]
+    fn test_encode_optional_string_field_u32_none() {
+        let mut out = Vec::new();
+        encode_optional_string_field_u32(None, &mut out).unwrap();
+        assert_eq!(out, vec![0x00]);
+    }
+
+    #[test]
+    fn test_decode_optional_string_field_u32_some() {
+        let data = vec![0x01, 0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o'];
+        let mut cursor = 0;
+        let s = decode_optional_string_field_u32(&data, &mut cursor).unwrap();
+        assert_eq!(s, Some("hello".to_string()));
+        assert_eq!(cursor, 10);
+    }
+
+    #[test]
+    fn test_decode_optional_string_field_u32_none() {
+        let data = vec![0x00];
+        let mut cursor = 0;
+        let s = decode_optional_string_field_u32(&data, &mut cursor).unwrap();
+        assert_eq!(s, None);
+        assert_eq!(cursor, 1);
     }
 }

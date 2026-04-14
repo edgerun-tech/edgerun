@@ -4,7 +4,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use super::base64;
+use edgerun_encoding::base64::{standard_decode, standard_encode};
 
 /// Authentication credentials for a registry.
 #[derive(Clone, Debug)]
@@ -59,7 +59,7 @@ pub fn load_registry_auth(path: &std::path::Path) -> io::Result<RegistryAuth> {
 
 /// Decode a base64-encoded basic auth string ("user:pass").
 pub fn decode_basic_auth(auth: &str) -> Option<(String, String)> {
-    let decoded = base64::decode(auth).ok()?;
+    let decoded = standard_decode(auth).ok()?;
     let s = String::from_utf8(decoded).ok()?;
     let (username, password) = s.split_once(':')?;
     Some((username.to_string(), password.to_string()))
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn decode_basic_auth_roundtrip() {
-        let encoded = super::base64::encode(b"myuser:mypass");
+        let encoded = standard_encode(b"myuser:mypass");
         let (user, pass) = decode_basic_auth(&encoded).unwrap();
         assert_eq!(user, "myuser");
         assert_eq!(pass, "mypass");

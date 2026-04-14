@@ -61,24 +61,6 @@ impl Transport {
             }
         }
     }
-
-    /// Upgrade this transport to TLS via the server handshake.
-    #[cfg(feature = "tls")]
-    pub async fn upgrade_tls_server(self, cert: &CertificateAndKey) -> io::Result<Self> {
-        match self {
-            Transport::Tls(_) => {
-                Err(io::Error::new(io::ErrorKind::Other, "already using TLS"))
-            }
-            Transport::Plain(stream) => {
-                let mut tls_stream = AsyncTlsStream::server(stream, cert)
-                    .await
-                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
-                tls_stream.handshake(cert).await
-                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
-                Ok(Transport::Tls(tls_stream))
-            }
-        }
-    }
 }
 
 impl AsyncRead for Transport {

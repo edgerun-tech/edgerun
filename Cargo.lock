@@ -1031,6 +1031,7 @@ name = "edgerun-dns"
 version = "0.1.0"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-tls",
@@ -1096,6 +1097,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-dns",
  "edgerun-email-auth",
+ "edgerun-encoding",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-tls",
@@ -1179,6 +1181,7 @@ dependencies = [
  "brotli",
  "edgerun-crypto",
  "edgerun-dns",
+ "edgerun-encoding",
  "edgerun-json",
  "edgerun-log",
  "edgerun-qpack",
@@ -1219,6 +1222,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-cec",
+ "edgerun-encoding",
  "edgerun-linux-gpu",
  "edgerun-linux-sysfs",
 ]
@@ -1397,6 +1401,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-bluetooth",
  "edgerun-capabilities",
+ "edgerun-encoding",
 ]
 
 [[package]]
@@ -1516,6 +1521,7 @@ name = "edgerun-oauth"
 version = "0.1.0"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-http",
  "edgerun-json",
  "edgerun-rt",
@@ -1528,6 +1534,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-http",
  "edgerun-json",
  "edgerun-rt",
@@ -1720,6 +1727,7 @@ name = "edgerun-yubikey"
 version = "0.1.0"
 dependencies = [
  "edgerun-core",
+ "edgerun-encoding",
  "libc",
 ]
 
