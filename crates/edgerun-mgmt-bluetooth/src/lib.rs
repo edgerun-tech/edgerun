@@ -388,12 +388,9 @@ fn wait_for_command_result(
 }
 
 fn format_bdaddr_le(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .rev()
-        .map(|b| format!("{b:02X}"))
-        .collect::<Vec<_>>()
-        .join(":")
+    let mut reversed = bytes.to_vec();
+    reversed.reverse();
+    edgerun_encoding::hex::bytes_to_hex_sep(&reversed, ':')
 }
 
 /// Parse a BDADDR string (e.g. "AA:BB:CC:DD:EE:FF") into little-endian bytes
@@ -508,10 +505,10 @@ fn normalize_service_uuid(value: &str) -> Option<String> {
     }
     match compact.len() {
         4 => Some(format_16bit_service_uuid(
-            u16::from_str_radix(&compact, 16).ok()?,
+            edgerun_encoding::hex::parse_hex_int(&compact)?,
         )),
         8 => Some(format_32bit_service_uuid(
-            u32::from_str_radix(&compact, 16).ok()?,
+            edgerun_encoding::hex::parse_hex_int(&compact)?,
         )),
         32 => Some(format!(
             "{}-{}-{}-{}-{}",
@@ -535,15 +532,15 @@ fn parse_uuid16_from_service_uuid(raw: &str) -> Option<u16> {
         .replace('-', "");
     let compact = compact.to_ascii_lowercase();
     match compact.len() {
-        4 if is_hex(&compact) => u16::from_str_radix(&compact, 16).ok(),
+        4 if is_hex(&compact) => edgerun_encoding::hex::parse_hex_int(&compact),
         8 if is_hex(&compact) && compact.starts_with("0000") => {
-            u16::from_str_radix(&compact[4..], 16).ok()
+            edgerun_encoding::hex::parse_hex_int(&compact[4..])
         }
         32 if is_hex(&compact)
             && compact.starts_with("0000")
             && compact.ends_with("00001000800000805f9b34fb") =>
         {
-            u16::from_str_radix(&compact[4..8], 16).ok()
+            edgerun_encoding::hex::parse_hex_int(&compact[4..8])
         }
         _ => None,
     }

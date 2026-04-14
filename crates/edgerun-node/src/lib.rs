@@ -304,22 +304,11 @@ fn now_ms() -> i64 {
 // ---------------------------------------------------------------------------
 
 fn unquote(s: &str) -> String {
-    let s = s.trim();
-    if s.len() >= 2 && s.starts_with("\x22") && s.ends_with("\x22") {
-        return s[1..s.len()-1].to_string();
-    }
-    s.to_string()
+    edgerun_encoding::kv::unquote(s)
 }
 
 fn parse_list(val: &str) -> Vec<String> {
-    let val = val.trim();
-    if val == "[]" || val.is_empty() { return Vec::new(); }
-    if val.starts_with('[') && val.ends_with(']') {
-        let inner = &val[1..val.len()-1];
-        if inner.trim().is_empty() { return Vec::new(); }
-        return inner.split(',').map(|s| unquote(s.trim())).collect();
-    }
-    Vec::new()
+    edgerun_encoding::kv::parse_bracket_list(val)
 }
 
 // ---------------------------------------------------------------------------

@@ -136,10 +136,16 @@ impl RuntimeInner {
     }
 
     /// Get a point-in-time snapshot of runtime metrics.
+    /// Uses `try_lock` to avoid deadlocking when called from within `block_on`
+    /// while worker threads may hold the internal locks.
     pub(crate) fn snapshot_metrics(&self) -> RuntimeMetrics {
+        // Use try_lock — if we can't grab these immediately (because a worker
+        // holds the lock), report 0 rather than risk a deadlock.
+        let task_map_len = self.tasks.try_len().unwrap_or(0);
+        let queue_len = self.queue.try_len().unwrap_or(0);
         self.metrics.snapshot(
-            self.tasks.len(),
-            self.queue.len(),
+            task_map_len,
+            queue_len,
             self.blocking.thread_count(),
             self.blocking.active(),
         )

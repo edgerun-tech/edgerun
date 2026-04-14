@@ -23,6 +23,7 @@ use edgerun_rt::{
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
 
+use crate::server::ConnectionInterceptor;
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
@@ -1362,6 +1363,8 @@ pub struct ImapServer {
     /// Command middleware layers. Composed with the store at runtime
     /// so middleware can capture mutable session state.
     command_middleware: Vec<Arc<dyn CommandMiddleware<ImapCommand, ImapResponse>>>,
+    /// Connection interceptor (IP filter, rate limit, etc.).
+    connection_interceptor: Option<Arc<dyn ConnectionInterceptor>>,
 }
 
 impl ImapServer {
@@ -1377,6 +1380,7 @@ impl ImapServer {
             tls_cert: config.tls_cert,
             imaps: config.imaps,
             command_middleware: Vec::new(),
+            connection_interceptor: None,
         })
     }
 
@@ -1391,6 +1395,19 @@ impl ImapServer {
         self
     }
 
+    /// Set the connection interceptor.
+    ///
+    /// The interceptor runs on every new TCP connection before protocol
+    /// parsing. It can reject connections (IP filter, rate limit) or
+    /// pass them through to the IMAP handler.
+    pub fn with_connection_interceptor(
+        mut self,
+        interceptor: Arc<dyn ConnectionInterceptor>,
+    ) -> Self {
+        self.connection_interceptor = Some(interceptor);
+        self
+    }
+
     /// Create a server with a custom mail store.
     pub fn with_store(config: ImapServerConfig, store: Arc<dyn MailStore>) -> io::Result<Self> {
         let listener = Arc::new(AsyncTcpListener::bind(&config.bind_addr)?);
@@ -1402,6 +1419,7 @@ impl ImapServer {
             tls_cert: config.tls_cert,
             imaps: config.imaps,
             command_middleware: Vec::new(),
+            connection_interceptor: None,
         })
     }
 
@@ -1418,6 +1436,23 @@ impl ImapServer {
         while !shutdown.is_cancelled() {
             match self.listener.accept().await {
                 Ok((stream, peer)) => {
+                    // Connection interceptor (IP filter, rate limit, etc.)
+                    if let Some(ref interceptor) = self.connection_interceptor {
+                        let interceptor = Arc::clone(interceptor);
+                        let peer_addr = peer;
+                        let stream_ref = Arc::clone(&stream);
+                        match interceptor.intercept(peer_addr, stream_ref).await {
+                            Ok(()) => {}
+                            Err(e) => {
+                                edgerun_log::info!(
+                                    "edgerun-imap: connection from {} rejected: {}",
+                                    peer, e
+                                );
+                                continue;
+                            }
+                        }
+                    }
+
                     let store = Arc::clone(&self.store);
                     let domain = self.domain.clone();
                     #[cfg(feature = "tls")]

@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-json = { path = "../edgerun-json" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-linux-netif = { path = "../edgerun-linux-netif" }
 edgerun-linux-pci = { path = "../edgerun-linux-pci" }
 edgerun-linux-usb = { path = "../edgerun-linux-usb" }

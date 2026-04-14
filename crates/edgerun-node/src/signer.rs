@@ -74,9 +74,9 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
         }
         "tpm" => {
             let handle_hex = signer_config.handle.as_ref().expect("TPM signer requires handle");
-            let handle = u32::from_str_radix(handle_hex.trim_start_matches("0x"), 16)
-                .unwrap_or_else(|e| {
-                    eprintln!("error: invalid TPM handle '{}': {}", handle_hex, e);
+            let handle = edgerun_encoding::hex::parse_hex_int::<u32>(handle_hex.trim_start_matches("0x"))
+                .unwrap_or_else(|| {
+                    eprintln!("error: invalid TPM handle '{}'", handle_hex);
                     std::process::exit(1);
                 });
 

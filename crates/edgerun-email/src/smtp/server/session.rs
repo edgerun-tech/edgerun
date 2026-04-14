@@ -14,7 +14,7 @@ use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow,
     NextCommand, SessionExtensions,
 };
-use crate::server::read_line;
+use crate::server::{read_line, ConnectionInterceptor};
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::smtp::server::rate_limit::RateLimiter;
@@ -187,6 +187,9 @@ pub struct SmtpServer {
     /// Command middleware layers. Composed with the handler at runtime
     /// so the handler can capture mutable session state.
     command_middleware: Vec<Arc<dyn CommandMiddleware<SmtpCommand, SmtpResponse>>>,
+    /// Connection interceptor (IP filter, rate limit, etc.).
+    /// If None, all connections are accepted.
+    connection_interceptor: Option<Arc<dyn ConnectionInterceptor>>,
 }
 
 impl SmtpServer {
@@ -200,6 +203,7 @@ impl SmtpServer {
             queue: None,
             relay: None,
             command_middleware: Vec::new(),
+            connection_interceptor: None,
         })
     }
 
@@ -211,6 +215,19 @@ impl SmtpServer {
         mw: M,
     ) -> Self {
         self.command_middleware.push(Arc::new(mw));
+        self
+    }
+
+    /// Set the connection interceptor.
+    ///
+    /// The interceptor runs on every new TCP connection before protocol
+    /// parsing. It can reject connections (IP filter, rate limit) or
+    /// pass them through to the SMTP handler.
+    pub fn with_connection_interceptor(
+        mut self,
+        interceptor: Arc<dyn ConnectionInterceptor>,
+    ) -> Self {
+        self.connection_interceptor = Some(interceptor);
         self
     }
 
@@ -270,6 +287,23 @@ impl SmtpServer {
         while !shutdown.is_cancelled() {
             match self.listener.accept().await {
                 Ok((stream, peer)) => {
+                    // Connection interceptor (IP filter, rate limit, etc.)
+                    if let Some(ref interceptor) = self.connection_interceptor {
+                        let interceptor = Arc::clone(interceptor);
+                        let peer_addr = peer;
+                        let stream_ref = Arc::clone(&stream);
+                        match interceptor.intercept(peer_addr, stream_ref).await {
+                            Ok(()) => {}
+                            Err(e) => {
+                                edgerun_log::info!(
+                                    "edgerun-smtp: connection from {} rejected: {}",
+                                    peer, e
+                                );
+                                continue;
+                            }
+                        }
+                    }
+
                     // Rate limit check
                     if let Some(ref limiter) = self.config.rate_limiter {
                         if !limiter.is_allowed(peer.ip()).await {

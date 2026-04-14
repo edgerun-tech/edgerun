@@ -44,6 +44,7 @@ pub mod types;
 
 pub use client::{EmailBuilder, MimePart, SmtpClient};
 pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
+pub use crate::server::ConnectionInterceptor;
 pub use server::handler::{AuthCredentials, AuthResult};
 pub use relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
 pub use types::{

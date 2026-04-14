@@ -249,6 +249,17 @@ pub fn parse_mac(s: &str) -> Option<[u8; 6]> {
     if i == 6 { Some(result) } else { None }
 }
 
+/// Format `[u8; 6]` as a colon-separated MAC address string.
+///
+/// # Examples
+/// ```
+/// use edgerun_encoding::hex::format_mac;
+/// assert_eq!(format_mac(&[0x00, 0x11, 0x22, 0x33, 0x44, 0x55]), "00:11:22:33:44:55");
+/// ```
+pub fn format_mac(bytes: &[u8; 6]) -> String {
+    bytes_to_hex_sep(bytes, ':')
+}
+
 /// Parse a Bluetooth device address (BDADDR) string into `[u8; 6]`.
 ///
 /// Same as `parse_mac` but reverses the bytes (Bluetooth uses little-endian

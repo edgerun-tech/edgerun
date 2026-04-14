@@ -227,15 +227,10 @@ impl SmtpClient {
             }
         }
 
-        let parts: Vec<&str> = addr.rsplitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "addr must be host:port"));
-        }
-        let host = parts[1];
-        let port: u16 = parts[0].parse()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+        let (host, port) = edgerun_encoding::net::parse_host_port(addr)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "addr must be host:port"))?;
 
-        let resolved = Self::dns_resolve(host, port).await?;
+        let resolved = Self::dns_resolve(&host, port).await?;
         let fut = ConnectFuture::new(resolved);
         match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
             Ok(Ok(stream)) => Ok(Arc::try_unwrap(stream).ok().unwrap()),

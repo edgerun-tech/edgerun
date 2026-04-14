@@ -40,14 +40,11 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
 
-        // Detect signer section
         if trimmed.starts_with("signer:") {
             in_signer = true;
             continue;
         }
 
-        // Other top-level sections end signer parsing
-        // A top-level key has no leading whitespace (check original line, not trimmed)
         if in_signer && !line.starts_with(' ') && !line.starts_with('\t') {
             in_signer = false;
         }
@@ -96,35 +93,15 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
 }
 
 pub fn parse_kv(line: &str) -> Option<(String, String)> {
-    let colon = line.find(':')?;
-    let key = line[..colon].trim().to_string();
-    let val = line[colon + 1..].trim().to_string();
-    Some((key, val))
+    edgerun_encoding::kv::parse_kv_colon(line)
 }
 
 pub fn parse_list(val: &str) -> Vec<String> {
-    let val = val.trim();
-    if val == "[]" || val.is_empty() { return Vec::new(); }
-    // Handle [item1, item2] format
-    if val.starts_with('[') && val.ends_with(']') {
-        let inner = &val[1..val.len() - 1];
-        if inner.trim().is_empty() { return Vec::new(); }
-        return inner.split(',').map(|s| unquote(s.trim())).collect();
-    }
-    // Handled elsewhere
-    Vec::new()
+    edgerun_encoding::kv::parse_bracket_list(val)
 }
 
 pub fn unquote(s: &str) -> String {
-    let s = s.trim();
-    if s.len() >= 2 {
-        let bytes = s.as_bytes();
-        if (bytes[0] == b'"' && bytes[s.len() - 1] == b'"') ||
-           (bytes[0] == 39 && bytes[s.len() - 1] == 39) {
-            return s[1..s.len() - 1].to_string();
-        }
-    }
-    s.to_string()
+    edgerun_encoding::kv::unquote(s)
 }
 
 /// Parsed bootstrap peer configuration.
@@ -136,7 +113,6 @@ pub struct BootstrapPeer {
 
 pub fn parse_bootstrap_peers(entries: &[String]) -> Vec<BootstrapPeer> {
     entries.iter().filter_map(|entry| {
-        // Format: "host:port@node_id_hex"
         let parts: Vec<&str> = entry.splitn(2, '@').collect();
         if parts.len() == 2 {
             Some(BootstrapPeer {
@@ -160,9 +136,6 @@ pub fn extract_private_key_bytes(config: &NodeConfig) -> Vec<u8> {
                 });
             }
         } else if signer.signer_type == "tpm" || signer.signer_type == "yubikey" {
-            // Hardware signers don't expose private keys.
-            // For blob encryption, derive a key from the public key or use a separate mechanism.
-            // Return empty vec for now -- the storage layer should handle this gracefully.
             return Vec::new();
         }
     }

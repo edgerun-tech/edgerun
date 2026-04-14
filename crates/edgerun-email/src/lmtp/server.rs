@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use edgerun_rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 
+use crate::server::ConnectionInterceptor;
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
@@ -54,6 +55,8 @@ pub struct LmtpServer {
     listener: Arc<edgerun_rt::AsyncTcpListener>,
     handler: Arc<dyn MailHandler>,
     config: LmtpServerConfig,
+    /// Connection interceptor (IP filter, rate limit, etc.).
+    connection_interceptor: Option<Arc<dyn ConnectionInterceptor>>,
     /// Command middleware layers. Composed with the handler at runtime
     /// so middleware can capture mutable session state.
     command_middleware: Vec<Arc<dyn CommandMiddleware<SmtpCommand, SmtpResponse>>>,
@@ -67,6 +70,7 @@ impl LmtpServer {
             listener,
             handler,
             config,
+            connection_interceptor: None,
             command_middleware: Vec::new(),
         })
     }
@@ -82,6 +86,19 @@ impl LmtpServer {
         self
     }
 
+    /// Set the connection interceptor.
+    ///
+    /// The interceptor runs on every new TCP connection before protocol
+    /// parsing. It can reject connections (IP filter, rate limit) or
+    /// pass them through to the LMTP handler.
+    pub fn with_connection_interceptor(
+        mut self,
+        interceptor: Arc<dyn ConnectionInterceptor>,
+    ) -> Self {
+        self.connection_interceptor = Some(interceptor);
+        self
+    }
+
     pub fn with_memory_store(config: LmtpServerConfig) -> io::Result<Self> {
         let store = Arc::new(MemoryMailStore::new());
         Self::new(config, store)
@@ -91,6 +108,23 @@ impl LmtpServer {
         while !shutdown.is_cancelled() {
             match self.listener.accept().await {
                 Ok((stream, peer)) => {
+                    // Connection interceptor (IP filter, rate limit, etc.)
+                    if let Some(ref interceptor) = self.connection_interceptor {
+                        let interceptor = Arc::clone(interceptor);
+                        let peer_addr = peer;
+                        let stream_ref = Arc::clone(&stream);
+                        match interceptor.intercept(peer_addr, stream_ref).await {
+                            Ok(()) => {}
+                            Err(e) => {
+                                edgerun_log::info!(
+                                    "edgerun-lmtp: connection from {} rejected: {}",
+                                    peer, e
+                                );
+                                continue;
+                            }
+                        }
+                    }
+
                     let handler = Arc::clone(&self.handler);
                     let config = self.config.clone();
                     let shutdown = shutdown.clone();

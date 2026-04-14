@@ -3,6 +3,8 @@
 use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 
+use edgerun_encoding::ip::{ip_to_u32, u32_to_ip};
+
 /// DHCP lease states per RFC 2131 §3.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LeaseState {
@@ -153,7 +155,7 @@ impl LeasePool {
 
     /// Reserve an IP address (won't be handed out by DHCP).
     pub fn reserve(&mut self, ip: Ipv4Addr) {
-        self.reserved.insert(ip_to_u32(ip));
+        self.reserved.insert(ip_to_u32(&ip));
     }
 
     /// Find an existing lease for this MAC address.
@@ -165,7 +167,7 @@ impl LeasePool {
 
     /// Find an existing lease for this IP address.
     pub fn find_lease_by_ip(&self, ip: Ipv4Addr) -> Option<&Lease> {
-        self.leases.get(&ip_to_u32(ip))
+        self.leases.get(&ip_to_u32(&ip))
     }
 
     /// Allocate (offer) the next available IP address for a client.
@@ -196,8 +198,8 @@ impl LeasePool {
         self.sweep_expired();
 
         // Find a free IP
-        let start = ip_to_u32(self.pool_start);
-        let end = ip_to_u32(self.pool_end);
+        let start = ip_to_u32(&self.pool_start);
+        let end = ip_to_u32(&self.pool_end);
         let now = Instant::now();
 
         for ip_u32 in start..=end {
@@ -290,7 +292,7 @@ impl LeasePool {
 
     /// Total addresses in the pool (including reserved and leased).
     pub fn pool_size(&self) -> u32 {
-        ip_to_u32(self.pool_end) - ip_to_u32(self.pool_start) + 1
+        ip_to_u32(&self.pool_end) - ip_to_u32(&self.pool_start) + 1
     }
 
     /// Number of available addresses.
@@ -302,7 +304,7 @@ impl LeasePool {
     /// Record an IP conflict (RFC 2131 §2.2).
     /// Called when a DECLINE is received — the client detected the IP via ARP.
     pub fn record_conflict(&mut self, ip: Ipv4Addr, reporter_mac: [u8; 6]) {
-        let ip_u32 = ip_to_u32(ip);
+        let ip_u32 = ip_to_u32(&ip);
         edgerun_log::warn!("edgerun-dhcp: IP conflict detected for {} (reported by {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x})",
             ip,
             reporter_mac[0], reporter_mac[1], reporter_mac[2],
@@ -430,20 +432,6 @@ impl LeasePool {
     }
 }
 
-pub fn ip_to_u32(ip: Ipv4Addr) -> u32 {
-    let o = ip.octets();
-    ((o[0] as u32) << 24) | ((o[1] as u32) << 16) | ((o[2] as u32) << 8) | (o[3] as u32)
-}
-
-fn u32_to_ip(n: u32) -> Ipv4Addr {
-    Ipv4Addr::new(
-        (n >> 24) as u8,
-        ((n >> 16) & 0xFF) as u8,
-        ((n >> 8) & 0xFF) as u8,
-        (n & 0xFF) as u8,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -534,11 +522,11 @@ mod tests {
     #[test]
     fn test_ip_u32_conversion() {
         let ip = Ipv4Addr::new(192, 168, 1, 100);
-        let n = ip_to_u32(ip);
+        let n = ip_to_u32(&ip);
         assert_eq!(u32_to_ip(n), ip);
 
-        assert_eq!(ip_to_u32(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        assert_eq!(ip_to_u32(Ipv4Addr::new(255, 255, 255, 255)), 0xFFFFFFFF);
+        assert_eq!(ip_to_u32(&Ipv4Addr::new(0, 0, 0, 0)), 0);
+        assert_eq!(ip_to_u32(&Ipv4Addr::new(255, 255, 255, 255)), 0xFFFFFFFF);
     }
 
     #[test]

@@ -71,6 +71,7 @@ all-hardware = [
 
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-capability-policy = { path = "../edgerun-capability-policy" }

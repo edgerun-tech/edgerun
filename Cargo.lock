@@ -882,6 +882,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-hardware-signing",
  "edgerun-mesh",
  "edgerun-tpm",
@@ -1025,9 +1026,6 @@ dependencies = [
 [[package]]
 name = "edgerun-display"
 version = "0.1.0"
-dependencies = [
- "edgerun-capabilities",
-]
 
 [[package]]
 name = "edgerun-dns"
@@ -1154,6 +1152,7 @@ dependencies = [
 name = "edgerun-goodix-fingerprint"
 version = "0.1.0"
 dependencies = [
+ "edgerun-encoding",
  "edgerun-fingerprint",
  "edgerun-linux-sysfs",
 ]
@@ -1161,9 +1160,6 @@ dependencies = [
 [[package]]
 name = "edgerun-gpu"
 version = "0.1.0"
-dependencies = [
- "edgerun-capabilities",
-]
 
 [[package]]
 name = "edgerun-hardware-signing"
@@ -1323,6 +1319,7 @@ version = "0.1.0"
 name = "edgerun-machine-report"
 version = "0.1.0"
 dependencies = [
+ "edgerun-encoding",
  "edgerun-json",
  "edgerun-linux-netif",
  "edgerun-linux-pci",
@@ -1466,6 +1463,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-display",
  "edgerun-drm-display",
+ "edgerun-encoding",
  "edgerun-evdev-input",
  "edgerun-fingerprint",
  "edgerun-goodix-fingerprint",
@@ -1713,6 +1711,7 @@ dependencies = [
  "edgerun-biometrics",
  "edgerun-camera-biometrics",
  "edgerun-capabilities",
+ "edgerun-encoding",
  "edgerun-linux-sysfs",
  "edgerun-proto",
 ]

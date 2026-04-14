@@ -282,8 +282,8 @@ impl From<CameraBiometricError> for V4l2CameraError {
 }
 
 pub fn parse_c_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).to_string()
+    edgerun_encoding::cstring::decode_c_string_trimmed(bytes)
+        .unwrap_or_default()
 }
 
 fn pixel_format_from_v4l2(value: u32) -> CameraPixelFormat {

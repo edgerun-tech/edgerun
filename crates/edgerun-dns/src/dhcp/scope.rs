@@ -47,13 +47,13 @@ impl DhcpScope {
         dns_servers: Vec<Ipv4Addr>,
         lease_time: u32,
     ) -> Self {
-        let network = apply_mask(pool_start, subnet_mask);
+        let network = apply_mask(&pool_start, &subnet_mask);
         let mut pool = LeasePool::new(pool_start, pool_end);
 
         // Reserve server IP (network addr), gateway, broadcast, and DNS
         pool.reserve(network);
         pool.reserve(router);
-        pool.reserve(network_broadcast(network, subnet_mask));
+        pool.reserve(network_broadcast(&network, &subnet_mask));
         for dns in &dns_servers {
             pool.reserve(*dns);
         }
@@ -80,12 +80,12 @@ impl DhcpScope {
 
     /// Get the broadcast address for this scope.
     pub fn broadcast(&self) -> Ipv4Addr {
-        network_broadcast(self.network, self.subnet_mask)
+        network_broadcast(&self.network, &self.subnet_mask)
     }
 
     /// Check if an IP is in this scope's network.
     pub fn contains_ip(&self, ip: Ipv4Addr) -> bool {
-        apply_mask(ip, self.subnet_mask) == self.network
+        apply_mask(&ip, &self.subnet_mask) == self.network
     }
 
     /// Statistics for this scope.
@@ -102,29 +102,13 @@ impl DhcpScope {
 }
 
 /// Helper: apply subnet mask to IP.
-fn apply_mask(ip: Ipv4Addr, mask: Ipv4Addr) -> Ipv4Addr {
-    let ip_u32 = ip_to_u32(ip);
-    let mask_u32 = ip_to_u32(mask);
-    u32_to_ip(ip_u32 & mask_u32)
+fn apply_mask(ip: &Ipv4Addr, mask: &Ipv4Addr) -> Ipv4Addr {
+    edgerun_encoding::ip::network_address(ip, mask)
 }
 
 /// Helper: broadcast address for network + mask.
-fn network_broadcast(network: Ipv4Addr, mask: Ipv4Addr) -> Ipv4Addr {
-    let network_u32 = ip_to_u32(network);
-    let mask_u32 = ip_to_u32(mask);
-    let broadcast_u32 = network_u32 | !mask_u32;
-    u32_to_ip(broadcast_u32)
-}
-
-/// Convert IP to u32 (big-endian).
-fn ip_to_u32(ip: Ipv4Addr) -> u32 {
-    let o = ip.octets();
-    ((o[0] as u32) << 24) | ((o[1] as u32) << 16) | ((o[2] as u32) << 8) | (o[3] as u32)
-}
-
-/// Convert u32 to IP (big-endian).
-fn u32_to_ip(v: u32) -> Ipv4Addr {
-    Ipv4Addr::from_bits(v)
+fn network_broadcast(network: &Ipv4Addr, mask: &Ipv4Addr) -> Ipv4Addr {
+    edgerun_encoding::ip::broadcast_address(network, mask)
 }
 
 /// A DHCP server with multiple scopes (subnets).

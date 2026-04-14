@@ -62,4 +62,9 @@ impl ReadyQueue {
     pub(crate) fn len(&self) -> usize {
         self.inner.q.lock().len()
     }
+
+    /// Non-blocking length check. Returns None if the lock is contended.
+    pub(crate) fn try_len(&self) -> Option<usize> {
+        self.inner.q.try_lock().map(|g| g.len())
+    }
 }

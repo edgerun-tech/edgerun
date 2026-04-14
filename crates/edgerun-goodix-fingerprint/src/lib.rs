@@ -512,14 +512,7 @@ fn hex_string(bytes: &[u8]) -> String {
 }
 
 fn decode_hex_32(s: &str) -> Option<[u8; 32]> {
-    if s.len() != 64 {
-        return None;
-    }
-    let mut out = [0u8; 32];
-    for i in 0..32 {
-        out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
-    }
-    Some(out)
+    edgerun_encoding::hex::hex_to_bytes_fixed(s)
 }
 
 fn decode_template_id_hex(s: &str) -> Result<[u8; 32], FingerprintError> {
@@ -1451,8 +1444,8 @@ fn read_file_trimmed(path: PathBuf) -> Result<String, GoodixFingerprintError> {
 
 fn read_hex_u16(path: PathBuf) -> Result<u16, GoodixFingerprintError> {
     let text = read_file_trimmed(path)?;
-    u16::from_str_radix(text.trim_start_matches("0x"), 16)
-        .map_err(|_| GoodixFingerprintError::Parse(format!("invalid hex device attribute: {text}")))
+    edgerun_encoding::hex::parse_hex_int(text.trim_start_matches("0x"))
+        .ok_or_else(|| GoodixFingerprintError::Parse(format!("invalid hex device attribute: {text}")))
 }
 
 fn read_dec_u8(path: PathBuf) -> Result<u8, GoodixFingerprintError> {
@@ -1472,7 +1465,7 @@ fn read_alt_setting(path: &Path) -> Result<u8, GoodixFingerprintError> {
 
 fn parse_endpoint_name(name: &str) -> Option<u8> {
     let suffix = name.strip_prefix("ep_")?;
-    u8::from_str_radix(suffix, 16).ok()
+    edgerun_encoding::hex::parse_hex_int(suffix)
 }
 
 fn discover_interface_endpoints(interface_path: &Path) -> Result<Vec<u8>, GoodixFingerprintError> {

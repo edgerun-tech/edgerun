@@ -615,10 +615,10 @@ pub fn print_benchmark_results(cert: &PerformanceCertificate) {
 }
 
 fn hex8(b: &[u8; 64]) -> String {
-    b[..4].iter().map(|x| format!("{:02x}", x)).collect()
+    edgerun_encoding::hex::bytes_to_hex(&b[..4])
 }
 fn hex32(b: &[u8; 32]) -> String {
-    b.iter().map(|x| format!("{:02x}", x)).collect::<Vec<_>>().join("")
+    edgerun_encoding::hex::bytes_to_hex(b)
 }
 
 // ===========================================================================

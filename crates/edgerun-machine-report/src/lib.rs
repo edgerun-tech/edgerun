@@ -365,21 +365,15 @@ fn render_section_header(out: &mut String, name: &str, count: usize, error: Opti
 }
 
 fn format_hex_u8(value: Option<u8>) -> String {
-    value
-        .map(|value| format!("{value:02x}"))
-        .unwrap_or_default()
+    edgerun_encoding::kv::format_hex_u8(value)
 }
 
 fn format_hex_u16(value: Option<u16>) -> String {
-    value
-        .map(|value| format!("{value:04x}"))
-        .unwrap_or_default()
+    edgerun_encoding::kv::format_hex_u16(value)
 }
 
 fn format_hex_u32(value: Option<u32>) -> String {
-    value
-        .map(|value| format!("{value:06x}"))
-        .unwrap_or_default()
+    edgerun_encoding::kv::format_hex_u32(value)
 }
 
 impl MachineReport {

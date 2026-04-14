@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-core.workspace = true
+edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-tpm = { path = "../edgerun-tpm" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", features = ["tpm"] }

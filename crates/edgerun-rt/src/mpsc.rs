@@ -404,22 +404,40 @@ impl<T> Future for SendFut<T> {
         }
 
         // If already pending from a previous poll, try to complete.
-        if let Some(ps) = &this.pending {
+        if let Some(ps) = this.pending.take() {
             // Try to claim the value — race with wake_one_pending_sender.
             let claimed = ps.val.lock().take();
             if claimed.is_none() {
                 // wake_one_pending_sender already enqueued our value.
-                this.pending = None;
                 return Poll::Ready(Ok(()));
             }
             match this.inner.try_push(claimed.unwrap()) {
                 Ok(()) => {
-                    this.pending = None;
                     return Poll::Ready(Ok(()));
                 }
                 Err(val) => {
-                    // Still full — put it back and stay pending.
+                    // Queue still full. Our waker was ALREADY popped from
+                    // pending_senders by wake_one_pending_sender — if we just
+                    // return Pending, we'll never be woken again → deadlock.
+                    // Re-register in pending_senders, then re-check.
                     *ps.val.lock() = Some(val);
+                    this.inner.pending_senders.lock().push_back((cx.waker().clone(), ps.clone()));
+                    // Re-check: receiver may have dequeued between re-reg and now.
+                    let val = ps.val.lock().take();
+                    match val {
+                        Some(val) => {
+                            match this.inner.try_push(val) {
+                                Ok(()) => {
+                                    return Poll::Ready(Ok(()));
+                                }
+                                Err(val) => {
+                                    *ps.val.lock() = Some(val);
+                                }
+                            }
+                        }
+                        None => {}
+                    }
+                    this.pending = Some(ps);
                     return Poll::Pending;
                 }
             }

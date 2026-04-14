@@ -91,5 +91,5 @@ fn to_f64(fp: edgerun_core::fixed_point::FixedPoint16) -> f64 {
 }
 
 fn hex_slice(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{:02x}", x)).collect::<Vec<_>>().join("")
+    edgerun_encoding::hex::bytes_to_hex(b)
 }

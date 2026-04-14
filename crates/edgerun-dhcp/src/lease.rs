@@ -3,6 +3,8 @@
 use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 
+use edgerun_encoding::ip::{ip_to_u32, u32_to_ip};
+
 /// A DHCP lease record.
 #[derive(Debug, Clone)]
 pub struct Lease {
@@ -85,7 +87,7 @@ impl LeasePool {
 
     /// Reserve an IP address (won't be handed out by DHCP).
     pub fn reserve(&mut self, ip: Ipv4Addr) {
-        self.reserved.insert(ip_to_u32(ip));
+        self.reserved.insert(ip_to_u32(&ip));
     }
 
     /// Find an existing lease for this MAC address.
@@ -97,7 +99,7 @@ impl LeasePool {
 
     /// Find an existing lease for this IP address.
     pub fn find_lease_by_ip(&self, ip: Ipv4Addr) -> Option<&Lease> {
-        self.leases.get(&ip_to_u32(ip))
+        self.leases.get(&ip_to_u32(&ip))
     }
 
     /// Allocate the next available IP address for a client.
@@ -116,8 +118,8 @@ impl LeasePool {
         self.sweep_expired();
 
         // Find a free IP
-        let start = ip_to_u32(self.pool_start);
-        let end = ip_to_u32(self.pool_end);
+        let start = ip_to_u32(&self.pool_start);
+        let end = ip_to_u32(&self.pool_end);
 
         for ip_u32 in start..=end {
             if self.reserved.contains(&ip_u32) {
@@ -165,7 +167,7 @@ impl LeasePool {
 
     /// Total addresses in the pool (including reserved and leased).
     pub fn pool_size(&self) -> u32 {
-        ip_to_u32(self.pool_end) - ip_to_u32(self.pool_start) + 1
+        ip_to_u32(&self.pool_end) - ip_to_u32(&self.pool_start) + 1
     }
 
     /// Number of available addresses.
@@ -173,20 +175,6 @@ impl LeasePool {
         let used = self.leases.len() as u32 + self.reserved.len() as u32;
         self.pool_size().saturating_sub(used)
     }
-}
-
-fn ip_to_u32(ip: Ipv4Addr) -> u32 {
-    let o = ip.octets();
-    ((o[0] as u32) << 24) | ((o[1] as u32) << 16) | ((o[2] as u32) << 8) | (o[3] as u32)
-}
-
-fn u32_to_ip(n: u32) -> Ipv4Addr {
-    Ipv4Addr::new(
-        (n >> 24) as u8,
-        ((n >> 16) & 0xFF) as u8,
-        ((n >> 8) & 0xFF) as u8,
-        (n & 0xFF) as u8,
-    )
 }
 
 #[cfg(test)]
@@ -279,11 +267,11 @@ mod tests {
     #[test]
     fn test_ip_u32_conversion() {
         let ip = Ipv4Addr::new(192, 168, 1, 100);
-        let n = ip_to_u32(ip);
+        let n = ip_to_u32(&ip);
         assert_eq!(u32_to_ip(n), ip);
 
-        assert_eq!(ip_to_u32(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        assert_eq!(ip_to_u32(Ipv4Addr::new(255, 255, 255, 255)), 0xFFFFFFFF);
+        assert_eq!(ip_to_u32(&Ipv4Addr::new(0, 0, 0, 0)), 0);
+        assert_eq!(ip_to_u32(&Ipv4Addr::new(255, 255, 255, 255)), 0xFFFFFFFF);
     }
 
     #[test]

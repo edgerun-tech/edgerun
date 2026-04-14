@@ -25,6 +25,34 @@ use edgerun_rt::{
 use edgerun_tls::{AsyncTlsStream, CertificateAndKey};
 
 // ===========================================================================
+// Connection Interceptor — protocol-agnostic hook for connection middleware
+// ===========================================================================
+
+use std::future::Future;
+use std::pin::Pin;
+
+/// A hook that runs on every new TCP connection before protocol parsing.
+///
+/// Implementations can:
+/// - **Accept** the connection and pass it downstream via returning `Ok(())`
+/// - **Reject** the connection by returning `Err` (caller closes immediately)
+///
+/// This trait lives in `edgerun-email` so protocol servers can store
+/// it without depending on `edgerun-server`. The server crate builds
+/// the middleware chain and passes it in.
+pub trait ConnectionInterceptor: Send + Sync + 'static {
+    /// Called on every new TCP connection.
+    ///
+    /// Returns `Ok(())` to continue processing, or `Err` to reject
+    /// the connection (the server will close it immediately).
+    fn intercept(
+        &self,
+        peer: SocketAddr,
+        stream: Arc<AsyncTcpStream>,
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>>;
+}
+
+// ===========================================================================
 // Transport — unified wrapper for plain TCP and TLS
 // ===========================================================================
 

@@ -428,3 +428,41 @@ impl ConnectionMiddleware for MiddlewareAdapter {
         self.0.on_connect(peer, stream, next)
     }
 }
+
+// ===========================================================================
+// ConnectionInterceptor Adapter — wraps edgerun-server middleware for
+// edgerun-email protocol servers
+// ===========================================================================
+
+/// Adapter that implements `edgerun_email::server::ConnectionInterceptor`
+/// by delegating to a compiled `ConnectionHandler`.
+///
+/// This allows edgerun-server's connection middleware chain to be passed
+/// into SMTP/IMAP/LMTP servers without circular dependencies.
+pub struct ConnectionInterceptorAdapter {
+    handler: Arc<dyn ConnectionHandler>,
+}
+
+impl ConnectionInterceptorAdapter {
+    pub fn new(handler: Arc<dyn ConnectionHandler>) -> Self {
+        Self { handler }
+    }
+}
+
+impl edgerun_email::server::ConnectionInterceptor for ConnectionInterceptorAdapter {
+    fn intercept(
+        &self,
+        peer: SocketAddr,
+        stream: Arc<AsyncTcpStream>,
+    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
+        let handler = Arc::clone(&self.handler);
+        let stream = Arc::clone(&stream);
+        Box::pin(async move {
+            let stream = match Arc::try_unwrap(stream) {
+                Ok(s) => s,
+                Err(arc) => Arc::clone(&arc),
+            };
+            handler.handle(peer, stream).await
+        })
+    }
+}

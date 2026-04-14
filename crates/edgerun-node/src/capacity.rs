@@ -153,14 +153,7 @@ fn memory_bytes() -> u64 {
 
 /// Format bytes as human-readable string.
 pub fn format_bytes(bytes: u64) -> String {
-    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-    let mut val = bytes as f64;
-    let mut idx = 0;
-    while val >= 1024.0 && idx < UNITS.len() - 1 {
-        val /= 1024.0;
-        idx += 1;
-    }
-    format!("{:.1} {}", val, UNITS[idx])
+    edgerun_encoding::kv::format_bytes(bytes)
 }
 
 #[cfg(test)]

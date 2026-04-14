@@ -407,7 +407,19 @@ impl Server {
             Some(srv)
         } else {
             None
+        // Build connection middleware chain
+        let connection_middleware = if self.connection_middleware.is_empty() {
+            Arc::new(PassThroughHandler) as Arc<dyn ConnectionHandler>
+        } else {
+            let chain = self.connection_middleware.into_iter().fold(
+                ConnectionChain::new(PassThroughHandler),
+                |chain, mw| chain.with(MiddlewareAdapter(mw)),
+            );
+            Arc::new(chain.build()) as Arc<dyn ConnectionHandler>
         };
+        let connection_interceptor = Arc::new(ConnectionInterceptorAdapter::new(
+            Arc::clone(&connection_middleware),
+        )) as Arc<dyn edgerun_email::server::ConnectionInterceptor>;
 
         #[cfg(feature = "imap")]
         let imap_server = if let Some(config) = self.imap {
@@ -417,14 +429,13 @@ impl Server {
                 imaps: config.imaps,
                 ..Default::default()
             };
-            let srv = if let Some(ref maildir_root) = config.maildir_root {
-                // Use MaildirImapStore — reads same Maildir that SMTP writes to
+            let mut srv = if let Some(ref maildir_root) = config.maildir_root {
                 let store = edgerun_email::imap::MaildirImapStore::new(maildir_root)?;
                 edgerun_email::imap::ImapServer::with_store(imap_config, std::sync::Arc::new(store))?
             } else {
-                // Fallback to in-memory store
                 edgerun_email::imap::ImapServer::new(imap_config)?
             };
+            srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
             Some(srv)
         } else {
             None
@@ -446,15 +457,14 @@ impl Server {
                 ..Default::default()
             };
 
-            let srv = if let Some(ref maildir_root) = config.maildir_root {
-                // Use persistent MaildirStore
+            let mut srv = if let Some(ref maildir_root) = config.maildir_root {
                 let store = edgerun_email::smtp::server::MaildirStore::new(maildir_root)?;
                 let handler = std::sync::Arc::new(store);
                 edgerun_email::smtp::server::SmtpServer::new(smtp_config, handler)?
             } else {
-                // Fallback to in-memory store
                 edgerun_email::smtp::SmtpServer::with_memory_store(smtp_config)?
             };
+            srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
             Some(srv)
         } else {
             None
@@ -470,12 +480,12 @@ impl Server {
                     ..Default::default()
                 },
             };
-            let srv = edgerun_email::lmtp::LmtpServer::with_memory_store(lmtp_config)?;
+            let mut srv = edgerun_email::lmtp::LmtpServer::with_memory_store(lmtp_config)?;
+            srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
             Some(srv)
         } else {
             None
         };
-
         // Build connection middleware chain
         let connection_middleware = if self.connection_middleware.is_empty() {
             // No middleware — use a pass-through handler
