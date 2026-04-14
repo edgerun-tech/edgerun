@@ -1622,6 +1622,7 @@ dependencies = [
  "edgerun-dns",
  "edgerun-http",
  "edgerun-imap",
+ "edgerun-lmtp",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-smtp",

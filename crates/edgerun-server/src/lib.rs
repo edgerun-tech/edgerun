@@ -170,6 +170,28 @@ mod smtp_config {
 #[cfg(feature = "smtp")]
 pub use smtp_config::SmtpConfig;
 
+#[cfg(feature = "lmtp")]
+mod lmtp_config {
+    #[derive(Clone)]
+    pub struct LmtpConfig {
+        pub bind_addr: String,
+        pub domain_name: String,
+        pub max_message_size: usize,
+    }
+
+    impl Default for LmtpConfig {
+        fn default() -> Self {
+            Self {
+                bind_addr: "0.0.0.0:24".to_string(),
+                domain_name: "edgerun.mail".to_string(),
+                max_message_size: 35_882_577,
+            }
+        }
+    }
+}
+#[cfg(feature = "lmtp")]
+pub use lmtp_config::LmtpConfig;
+
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
@@ -187,6 +209,8 @@ pub struct Server {
     imap: Option<ImapConfig>,
     #[cfg(feature = "smtp")]
     smtp: Option<SmtpConfig>,
+    #[cfg(feature = "lmtp")]
+    lmtp: Option<LmtpConfig>,
 }
 
 struct HttpBuilder {
@@ -212,6 +236,8 @@ impl Server {
             imap: None,
             #[cfg(feature = "smtp")]
             smtp: None,
+            #[cfg(feature = "lmtp")]
+            lmtp: None,
         }
     }
 
@@ -276,6 +302,13 @@ impl Server {
     #[cfg(feature = "smtp")]
     pub fn with_smtp(mut self, config: SmtpConfig) -> Self {
         self.smtp = Some(config);
+        self
+    }
+
+    /// Enable the LMTP server.
+    #[cfg(feature = "lmtp")]
+    pub fn with_lmtp(mut self, config: LmtpConfig) -> Self {
+        self.lmtp = Some(config);
         self
     }
 
@@ -373,6 +406,22 @@ impl Server {
             None
         };
 
+        #[cfg(feature = "lmtp")]
+        let lmtp_server = if let Some(config) = self.lmtp {
+            let lmtp_config = edgerun_lmtp::server::LmtpServerConfig {
+                bind_addr: config.bind_addr,
+                domain: config.domain_name,
+                limits: edgerun_smtp::ServerLimits {
+                    max_message_size: config.max_message_size,
+                    ..Default::default()
+                },
+            };
+            let srv = edgerun_lmtp::LmtpServer::with_memory_store(lmtp_config)?;
+            Some(srv)
+        } else {
+            None
+        };
+
         Ok(BoundServer {
             http: http_bound.map(Arc::new),
             #[cfg(feature = "dns")]
@@ -385,6 +434,8 @@ impl Server {
             imap: imap_server,
             #[cfg(feature = "smtp")]
             smtp: smtp_server,
+            #[cfg(feature = "lmtp")]
+            lmtp: lmtp_server,
         })
     }
 }
@@ -406,6 +457,8 @@ pub struct BoundServer {
     imap: Option<edgerun_imap::ImapServer>,
     #[cfg(feature = "smtp")]
     smtp: Option<edgerun_smtp::SmtpServer>,
+    #[cfg(feature = "lmtp")]
+    lmtp: Option<edgerun_lmtp::LmtpServer>,
 }
 
 impl BoundServer {
@@ -476,6 +529,15 @@ impl BoundServer {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
                 smtp.run(token).await
+            }));
+        }
+
+        // LMTP
+        #[cfg(feature = "lmtp")]
+        if let Some(lmtp) = self.lmtp.take() {
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                lmtp.run(token).await
             }));
         }
 
