@@ -132,25 +132,24 @@ fn parse_dmarc_record(record: &str) -> io::Result<DmarcPolicy> {
         let value = value.as_str();
 
         match tag.as_str() {
-                "p" => policy.policy = value.to_lowercase(),
-                "sp" => policy.sp_policy = value.to_lowercase(),
-                "pct" => policy.pct = value.parse().unwrap_or(100),
-                "adkim" => policy.adkim = value.to_lowercase(),
-                "aspf" => policy.aspf = value.to_lowercase(),
-                "rua" => {
-                    policy.rua = value
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .collect();
-                }
-                "ruf" => {
-                    policy.ruf = value
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .collect();
-                }
-                _ => {}
+            "p" => policy.policy = value.to_lowercase(),
+            "sp" => policy.sp_policy = value.to_lowercase(),
+            "pct" => policy.pct = value.parse().unwrap_or(100),
+            "adkim" => policy.adkim = value.to_lowercase(),
+            "aspf" => policy.aspf = value.to_lowercase(),
+            "rua" => {
+                policy.rua = value
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .collect();
             }
+            "ruf" => {
+                policy.ruf = value
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .collect();
+            }
+            _ => {}
         }
     }
 

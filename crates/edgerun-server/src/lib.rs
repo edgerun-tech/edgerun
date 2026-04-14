@@ -33,6 +33,7 @@ use std::time::Duration;
 
 // Re-export key types.
 pub use edgerun_http::handler::Handler;
+use crate::middleware::{ConnectionChain, ConnectionInterceptorAdapter, MiddlewareAdapter, PassThroughHandler};
 pub use edgerun_http::middleware::{Chain, Extensions, Middleware, Next, middleware_fn};
 pub use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
 pub use edgerun_http::{Request, Response, StatusCode};
@@ -407,6 +408,8 @@ impl Server {
             Some(srv)
         } else {
             None
+        };
+
         // Build connection middleware chain
         let connection_middleware = if self.connection_middleware.is_empty() {
             Arc::new(PassThroughHandler) as Arc<dyn ConnectionHandler>
@@ -485,17 +488,6 @@ impl Server {
             Some(srv)
         } else {
             None
-        };
-        // Build connection middleware chain
-        let connection_middleware = if self.connection_middleware.is_empty() {
-            // No middleware — use a pass-through handler
-            Arc::new(PassThroughHandler) as Arc<dyn ConnectionHandler>
-        } else {
-            let chain = self.connection_middleware.into_iter().fold(
-                ConnectionChain::new(PassThroughHandler),
-                |chain, mw| chain.with(MiddlewareAdapter(mw)),
-            );
-            Arc::new(chain.build()) as Arc<dyn ConnectionHandler>
         };
 
         Ok(BoundServer {

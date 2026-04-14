@@ -453,7 +453,7 @@ fn verify_query_signature(
 
     if !edgerun_core::crypto::verify_canonical_record(
         &vk,
-        edgerun_core::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT,
+        edgerun_core::crypto::SIG_DOMAIN_QUERY_REQUEST,
         &canonical,
         &sig.value,
     ) {

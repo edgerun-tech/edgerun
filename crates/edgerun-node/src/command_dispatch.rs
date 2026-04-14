@@ -249,9 +249,18 @@ pub fn dispatch_command(
             dispatch_terminate_workload(command, store, stream_id, signer, controllers, capacity_tracker, running_workloads)
         }
         _ => {
-            // Unknown or custom command — accept but don't execute
-            record_and_respond(command, store, stream_id, signer, controllers,
-                true, "", Vec::new(), None)
+            // Spec §11.1: unknown values in authority-critical enums MUST cause rejection.
+            // CommandType is authority-critical. The proto reserves 13..=999.
+            // Extension types start at 1000; unknown types below 1000 are rejected.
+            if command_type > 0 && command_type < 1000 {
+                record_and_respond(command, store, stream_id, signer, controllers,
+                    false, "unknown_command_type_reserved", Vec::new(), None)
+            } else {
+                // Unknown extension type (>= 1000) — accept but don't execute.
+                // Local policy may allow specific extension types.
+                record_and_respond(command, store, stream_id, signer, controllers,
+                    true, "", Vec::new(), None)
+            }
         }
     }
 }
@@ -302,6 +311,13 @@ fn dispatch_remove_controller(
             false, "controller_not_found", Vec::new(), None);
     }
 
+    // Guard: never allow removing the last controller — node would be orphaned
+    if controllers.to_vec().is_empty() {
+        controllers.add(target_id); // revert
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "cannot_remove_last_controller", Vec::new(), None);
+    }
+
     edgerun_log::info!("controller removed");
 
     let response = format!("controller removed: {}", edgerun_core::util::bytes_to_hex_prefixed(&target_id)).into_bytes();
@@ -323,10 +339,13 @@ fn dispatch_transfer_control(
             false, "missing_target_identity", Vec::new(), None);
     }
 
-    // Safe transfer: add new controller first (removing old ones is manual)
+    // Spec §18.7 safe transfer step 1: add new controller.
+    // Steps 2 (verify possession) and 3 (remove old controllers) are
+    // separate commands issued after the new controller confirms functionality.
+    // This prevents lockout if the new controller cannot authenticate.
     controllers.add(new_controller_id.clone());
 
-    edgerun_log::info!("control transfer initiated — new controller added, old controllers remain until explicitly removed");
+    edgerun_log::info!("control transfer step 1 complete — new controller added; send REMOVE_CONTROLLER commands for old controllers after verification");
 
     let response = format!("control transferred to: {}", edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id)).into_bytes();
     record_and_respond(command, store, stream_id, signer, controllers,
@@ -1351,6 +1370,15 @@ pub fn create_node_genesis_payload(
 ) -> edgerun_proto::edgerun::v0::common::ObjectRef {
     use edgerun_proto::edgerun::v0::stream::NodeGenesisPayload;
     use edgerun_proto::edgerun::v0::common::IdentityRef;
+
+    // Spec §14.12: initial_controllers is repeated required — must have at least one
+    if initial_controllers.is_empty() {
+        edgerun_log::error!("genesis requires at least one initial controller");
+        return edgerun_proto::edgerun::v0::common::ObjectRef {
+            object_id: vec![],
+            object_kind: None,
+        };
+    }
 
     let controllers: Vec<IdentityRef> = initial_controllers.iter().map(|id| IdentityRef {
         identity_id: id.clone(),

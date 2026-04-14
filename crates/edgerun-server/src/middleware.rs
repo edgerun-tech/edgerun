@@ -456,13 +456,20 @@ impl edgerun_email::server::ConnectionInterceptor for ConnectionInterceptorAdapt
         stream: Arc<AsyncTcpStream>,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         let handler = Arc::clone(&self.handler);
-        let stream = Arc::clone(&stream);
         Box::pin(async move {
-            let stream = match Arc::try_unwrap(stream) {
-                Ok(s) => s,
-                Err(arc) => Arc::clone(&arc),
-            };
-            handler.handle(peer, stream).await
+            // Try to unwrap the Arc to get an owned stream.
+            // If other references exist, we need to clone the underlying stream.
+            match Arc::try_unwrap(stream) {
+                Ok(s) => handler.handle(peer, s).await,
+                Err(arc) => {
+                    // Other references exist — we need to clone the stream.
+                    // AsyncTcpStream implements TryClone for this purpose.
+                    let cloned = arc.try_clone().map_err(|e| {
+                        io::Error::new(e.kind(), format!("failed to clone stream for interceptor: {e}"))
+                    })?;
+                    handler.handle(peer, cloned).await
+                }
+            }
         })
     }
 }
