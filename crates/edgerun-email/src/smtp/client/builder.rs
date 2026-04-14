@@ -226,41 +226,7 @@ fn encode_base64(data: &[u8]) -> Vec<u8> {
 
 /// Encode a string as quoted-printable (RFC 2045).
 fn encode_quoted_printable(s: &str) -> Vec<u8> {
-    let mut result = Vec::with_capacity(s.len() * 3);
-    let mut col = 0;
-    const HEX: &[u8] = b"0123456789ABCDEF";
-
-    for &byte in s.as_bytes() {
-        match byte {
-            b'\r' | b'\n' => {
-                result.push(byte);
-                col = 0;
-            }
-            33..=60 | 62..=126 => {
-                // Printable ASCII except `=` (61)
-                result.push(byte);
-                col += 1;
-            }
-            b' ' | b'\t' => {
-                // Space/tab — encode if at end of line
-                result.push(byte);
-                col += 1;
-            }
-            _ => {
-                result.push(b'=');
-                result.push(HEX[((byte >> 4) & 0xF) as usize]);
-                result.push(HEX[(byte & 0xF) as usize]);
-                col += 3;
-            }
-        }
-
-        if col >= 73 {
-            result.extend_from_slice(b"=\r\n");
-            col = 0;
-        }
-    }
-
-    result
+    edgerun_encoding::quoted_printable::encode_quoted_printable(s)
 }
 
 // ===========================================================================

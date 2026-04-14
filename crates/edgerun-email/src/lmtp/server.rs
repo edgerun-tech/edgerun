@@ -14,6 +14,9 @@ use std::sync::Arc;
 
 use edgerun_rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 
+use crate::command_middleware::{
+    CommandHandler, ControlFlow as MwControlFlow, SessionExtensions,
+};
 use crate::server::read_line;
 use crate::smtp::types::{
     DsnNotify, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
@@ -51,6 +54,9 @@ pub struct LmtpServer {
     listener: Arc<edgerun_rt::AsyncTcpListener>,
     handler: Arc<dyn MailHandler>,
     config: LmtpServerConfig,
+    /// Command middleware chain. If set, all commands go through
+    /// middleware before reaching the handler.
+    command_chain: Option<Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>>,
 }
 
 impl LmtpServer {
@@ -61,7 +67,17 @@ impl LmtpServer {
             listener,
             handler,
             config,
+            command_chain: None,
         })
+    }
+
+    /// Set the command middleware chain for this server.
+    pub fn with_command_chain(
+        mut self,
+        chain: Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>,
+    ) -> Self {
+        self.command_chain = Some(chain);
+        self
     }
 
     pub fn with_memory_store(config: LmtpServerConfig) -> io::Result<Self> {
@@ -76,10 +92,11 @@ impl LmtpServer {
                     let handler = Arc::clone(&self.handler);
                     let config = self.config.clone();
                     let shutdown = shutdown.clone();
+                    let command_chain = self.command_chain.clone();
 
                     edgerun_log::info!("edgerun-lmtp: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        if let Err(e) = handle_connection(stream, peer, handler, config, shutdown)
+                        if let Err(e) = handle_connection(stream, peer, handler, config, shutdown, command_chain)
                             .await
                         {
                             edgerun_log::error!("edgerun-lmtp: connection error: {}", e);
@@ -157,6 +174,7 @@ async fn handle_connection(
     handler: Arc<dyn MailHandler>,
     config: LmtpServerConfig,
     _shutdown: CancellationToken,
+    command_chain: Option<Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>>,
 ) -> io::Result<()> {
     let mut stream = match Arc::try_unwrap(stream) {
         Ok(s) => s,
@@ -319,6 +337,24 @@ async fn handle_connection(
                 continue;
             }
         };
+
+        // ── Middleware chain (if configured) ──────────────────────
+        if let Some(ref chain) = command_chain {
+            let session = SessionExtensions::new();
+            match chain.handle(cmd.clone(), session).await {
+                Ok(MwControlFlow::Respond(resp)) => {
+                    send_response(&mut stream, &resp).await?;
+                    continue;
+                }
+                Ok(MwControlFlow::Continue) => {
+                    // Passed through — run handler
+                }
+                Err(e) => {
+                    send_response(&mut stream, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                    continue;
+                }
+            }
+        }
 
         match handle_command(
             cmd,

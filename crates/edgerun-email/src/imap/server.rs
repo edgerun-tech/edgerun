@@ -23,11 +23,34 @@ use edgerun_rt::{
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
 
+use crate::command_middleware::{
+    CommandHandler, ControlFlow as MwControlFlow, SessionExtensions,
+};
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult, StoreAction};
 use crate::imap::parser::{self, ImapReader};
 use crate::imap::types::{
     Envelope, FetchAttr, Flags, ImapState, Mailbox, MailboxStatus, Message, SearchKey, Address,
 };
+
+// ===========================================================================
+// IMAP Session Extension Types
+// ===========================================================================
+
+/// Authenticated user identity stored in SessionExtensions.
+#[derive(Clone)]
+pub struct ImapUser(pub Option<String>);
+
+/// Currently selected mailbox stored in SessionExtensions.
+#[derive(Clone)]
+pub struct ImapMailbox(pub Option<String>);
+
+/// Connection state for middleware visibility.
+#[derive(Clone)]
+pub struct ImapConnState {
+    pub state: ImapState,
+    pub mailbox: Option<String>,
+    pub authenticated_user: Option<String>,
+}
 
 // ===========================================================================
 // IMAP Capabilities
@@ -1336,6 +1359,9 @@ pub struct ImapServer {
     #[cfg(feature = "tls")]
     tls_cert: Option<CertificateAndKey>,
     imaps: bool,
+    /// Command middleware chain. If set, all commands go through
+    /// middleware before reaching the store.
+    command_chain: Option<Arc<dyn CommandHandler<ImapCommand, ImapResponse>>>,
 }
 
 impl ImapServer {
@@ -1350,7 +1376,17 @@ impl ImapServer {
             #[cfg(feature = "tls")]
             tls_cert: config.tls_cert,
             imaps: config.imaps,
+            command_chain: None,
         })
+    }
+
+    /// Set the command middleware chain for this server.
+    pub fn with_command_chain(
+        mut self,
+        chain: Arc<dyn CommandHandler<ImapCommand, ImapResponse>>,
+    ) -> Self {
+        self.command_chain = Some(chain);
+        self
     }
 
     /// Create a server with a custom mail store.
@@ -1363,6 +1399,7 @@ impl ImapServer {
             #[cfg(feature = "tls")]
             tls_cert: config.tls_cert,
             imaps: config.imaps,
+            command_chain: None,
         })
     }
 
@@ -1384,12 +1421,14 @@ impl ImapServer {
                     #[cfg(feature = "tls")]
                     let tls_cert = self.tls_cert.clone();
                     let imaps = self.imaps;
+                    let command_chain = self.command_chain.clone();
                     edgerun_rt::spawn(async move {
                         if let Err(e) = handle_connection(
                             stream, peer, store, domain,
                             #[cfg(feature = "tls")]
                             tls_cert,
                             imaps,
+                            command_chain,
                         ).await {
                             edgerun_log::warn!("edgerun-imap: connection error from {}: {}", peer, e);
                         }
@@ -1419,6 +1458,7 @@ async fn handle_connection(
     domain: String,
     #[cfg(feature = "tls")] tls_cert: Option<CertificateAndKey>,
     imaps: bool,
+    command_chain: Option<Arc<dyn CommandHandler<ImapCommand, ImapResponse>>>,
 ) -> io::Result<()> {
     edgerun_log::info!("edgerun-imap: connection from {}", peer);
 
@@ -1542,16 +1582,57 @@ async fn handle_connection(
         }
 
         // Dispatch command
-        let response = dispatch_command(
-            &cmd,
-            &tag,
-            &mut state,
-            &mut current_mailbox,
-            &mut authenticated_user,
-            &store,
-            &domain,
-            &mut transport,
-        ).await?;
+        let response = if let Some(ref chain) = command_chain {
+            // Run through middleware first
+            let session = SessionExtensions::new();
+            session.insert(ImapConnState {
+                state: state.clone(),
+                mailbox: current_mailbox.clone(),
+                authenticated_user: authenticated_user.clone(),
+            }).await;
+
+            let session_for_sync = session.clone();
+            match chain.handle(cmd.clone(), session).await {
+                Ok(MwControlFlow::Respond(resp)) => {
+                    // Middleware short-circuited — send response
+                    resp
+                }
+                Ok(MwControlFlow::Continue) => {
+                    // Sync state back from middleware
+                    if let Some(conn) = session_for_sync.get::<ImapConnState>().await {
+                        state = conn.state;
+                        current_mailbox = conn.mailbox;
+                        authenticated_user = conn.authenticated_user;
+                    }
+                    // Middleware passed through — run handler
+                    dispatch_command(
+                        &cmd,
+                        &tag,
+                        &mut state,
+                        &mut current_mailbox,
+                        &mut authenticated_user,
+                        &store,
+                        &domain,
+                        &mut transport,
+                    ).await?
+                }
+                Err(e) => {
+                    ImapResponse::bad(&tag, &format!("Error: {}", e))
+                }
+            }
+        } else {
+            // No middleware — direct dispatch
+            dispatch_command(
+                &cmd,
+                &tag,
+                &mut state,
+                &mut current_mailbox,
+                &mut authenticated_user,
+                &store,
+                &domain,
+                &mut transport,
+            ).await?
+        };
 
         write_response(&mut transport, &response).await?;
 
