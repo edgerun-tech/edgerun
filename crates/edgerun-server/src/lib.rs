@@ -37,6 +37,12 @@ pub use edgerun_http::middleware::{Chain, Extensions, Middleware, Next, middlewa
 pub use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
 pub use edgerun_http::{Request, Response, StatusCode};
 
+pub mod middleware;
+pub use middleware::{
+    ConnectionChain, ConnectionHandler, ConnectionMiddleware, NextConnection,
+    connection_fn, FnConnectionMiddleware, PassThroughHandler, MiddlewareAdapter,
+};
+
 // ---------------------------------------------------------------------------
 // Optional protocol configs (gated by feature flags)
 // ---------------------------------------------------------------------------
@@ -223,6 +229,7 @@ pub struct Server {
     smtp: Option<SmtpConfig>,
     #[cfg(feature = "lmtp")]
     lmtp: Option<LmtpConfig>,
+    connection_middleware: Vec<Arc<dyn ConnectionMiddleware>>,
 }
 
 struct HttpBuilder {
@@ -250,7 +257,18 @@ impl Server {
             smtp: None,
             #[cfg(feature = "lmtp")]
             lmtp: None,
+            connection_middleware: Vec::new(),
         }
+    }
+
+    /// Add connection-level middleware that runs on every TCP connection
+    /// before protocol parsing.
+    ///
+    /// Middleware is applied in order: first `.with_connection_middleware()`
+    /// = outermost (runs first on connect).
+    pub fn with_connection_middleware<M: ConnectionMiddleware>(mut self, mw: M) -> Self {
+        self.connection_middleware.push(Arc::new(mw));
+        self
     }
 
     /// Enable HTTP with the given handler and bind address.
@@ -446,6 +464,18 @@ impl Server {
             None
         };
 
+        // Build connection middleware chain
+        let connection_middleware = if self.connection_middleware.is_empty() {
+            // No middleware — use a pass-through handler
+            Arc::new(PassThroughHandler) as Arc<dyn ConnectionHandler>
+        } else {
+            let chain = self.connection_middleware.into_iter().fold(
+                ConnectionChain::new(PassThroughHandler),
+                |chain, mw| chain.with(MiddlewareAdapter(mw)),
+            );
+            Arc::new(chain.build()) as Arc<dyn ConnectionHandler>
+        };
+
         Ok(BoundServer {
             http: http_bound.map(Arc::new),
             #[cfg(feature = "dns")]
@@ -460,6 +490,7 @@ impl Server {
             smtp: smtp_server,
             #[cfg(feature = "lmtp")]
             lmtp: lmtp_server,
+            connection_middleware,
         })
     }
 }
@@ -483,6 +514,9 @@ pub struct BoundServer {
     smtp: Option<edgerun_email::smtp::SmtpServer>,
     #[cfg(feature = "lmtp")]
     lmtp: Option<edgerun_email::lmtp::LmtpServer>,
+    /// Compiled connection middleware chain.
+    /// If empty, connections go directly to protocol handlers.
+    connection_middleware: Arc<dyn ConnectionHandler>,
 }
 
 impl BoundServer {

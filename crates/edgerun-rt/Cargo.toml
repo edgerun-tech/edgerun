@@ -174,3 +174,8 @@ harness = false
 
 [[test]]
 name = "mpsc_debug_test"
+harness = false
+
+[[test]]
+name = "e2e_integration_test"
+harness = false

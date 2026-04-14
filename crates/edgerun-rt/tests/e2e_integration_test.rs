@@ -3,44 +3,19 @@
 // timers, processes, and their interactions under concurrent load.
 // Every test is designed to expose issues immediately — no sleeps without assertions,
 // no "maybe passes" — deterministic assertions on all outcomes.
-use edgerun_rt::{
-    AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWriteExt,
-    Barrier, BlockOnGuard, BroadcastSender, BroadcastStream, BroadcastError,
-    BufReader, BufWriter, Builder, CancellationToken, Child, Condvar, Cursor,
-    DuplexStream, Elapsed, Empty, EnterGuard, FdReadReady, FdWriteReady,
-    Interval, IoSlice, IoSliceMut, JoinError, JoinHandle, JoinNext, JoinSet,
-    Latch, LatchWait, Lines, LocalKey, MissedTickBehavior, MpscReceiver,
-    MpscSender, Mutex, MutexGuard, Notify, Notified, OnceCell, OnceCellWait,
-    OwnedAsyncFd, Permit, PollFn, RateLimiter, RateLimitError, RawFd, Reactor,
-    ReadyQueue, Repeat, Reservoir, ReservoirError, RwLock, RwLockReadGuard,
-    RwLockWriteGuard, Runtime, RuntimeHandle, RuntimeMetrics, Semaphore,
-    SemaphorePermit, Signal, SignalKind, SignalStream, Sleep, SleepUntil, Span,
-    Sink, TaskId, TaskMap, TcpSocket, Timeout, TokioCompat, TraceEnter,
-    TraceExit, TraceGuard, TraceId, TraceSpan, TryAcquireError, UnixConnectFuture,
-    UnixDatagram, UnixListener, UnixStream, UnboundedReceiver, UnboundedSender,
-    WatchReceiver, WatchSender, Waker, YieldNow, async_fd_from_raw, blocking_pool,
-    broadcast, cursor, current_handle, duplex, enable_all, fs, interval,
-    interval_at, make_waker, mpsc, notify, once_cell, oneshot, pipe, poll_fn,
-    process, rate_limiter, ready_queue, repeat, rwlock, semaphore, set_current_rt,
-    signal, sleep, sleep_until, sink, spawn, spawn_blocking, sync, task_map, tcp,
-    tcp_socket, timers, trace, try_current_rt, udp, unbounded, unix, unix_dgram,
-    watch, waker, yieldnow,
-};
-// Note: only import what actually exists. The above is intentionally broad to
-// surface missing/extra exports at compile time.  We'll refine below.
+//
+// harness = false — custom main() test runner.
 
-// Refined imports — only what the runtime actually exports.
 use edgerun_rt::{
     AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWriteExt,
-    Barrier, Builder, CancellationToken, Condvar, Cursor, DuplexStream, Elapsed,
-    Empty, Interval, JoinError, JoinHandle, JoinSet, Latch, MissedTickBehavior,
-    Mutex, Notify, OnceCell, OwnedAsyncFd, RateLimiter, Repeat, RwLock, Semaphore,
-    Signal, SignalKind, Sleep, Timeout, UnixDatagram, UnixListener, UnixStream,
-    YieldNow, async_fd_from_raw, broadcast, fs, interval, interval_at, mpsc,
-    notify, oneshot, pipe, poll_fn, process, repeat, signal, sleep, sink, spawn,
-    spawn_blocking, sleep_until, sync, tcp, unbounded, watch, yieldnow,
-    AsyncRead, AsyncWrite, BufReader, BufWriter, Runtime, RuntimeHandle,
-    RuntimeMetrics, CancellationToken,
+    Barrier, Builder, CancellationToken, Cursor, DuplexStream, Empty, Interval,
+    JoinSet, Latch, MissedTickBehavior, Mutex, Notify, OnceCell, OwnedAsyncFd,
+    RateLimiter, Repeat, RwLock, Semaphore, Sleep, Timeout,
+    UnixDatagram, UnixListener, UnixStream,
+    broadcast, fs, interval, mpsc, oneshot, pipe, poll_fn, process,
+    repeat, sleep, sink, spawn, spawn_blocking, sleep_until, timeout, unbounded,
+    yieldnow, AsyncRead, AsyncWrite, BufReader, BufWriter, Runtime, RuntimeHandle,
+    RuntimeMetrics,
 };
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -63,23 +38,89 @@ fn make_temp_dir() -> std::path::PathBuf {
     std::env::temp_dir().join(format!("edgerun_e2e_{}_{}", id, n))
 }
 
+struct CleanupDir(std::path::PathBuf);
+impl Drop for CleanupDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 // ===========================================================================
-// Runtime lifecycle & scheduling
+// Main dispatch
 // ===========================================================================
 
 fn main() {
+    println!("=== edgerun-rt E2E Integration Tests ===");
+
+    // Runtime lifecycle & scheduling
     e2e_runtime_lifecycle();
     e2e_cross_thread_handle_spawn();
     e2e_blocking_pool_exhaustion();
     e2e_task_panic_isolation();
-    e2e_nested_block_on_rejection();
+    e2e_nested_block_on();
     e2e_shutdown_with_pending_tasks();
     e2e_metrics_accuracy();
     e2e_handle_clone_independence();
     e2e_free_spawn_from_worker_thread();
     e2e_yield_cooperative_scheduling();
+
+    // Network I/O
+    e2e_tcp_full_request_response();
+    e2e_tcp_connection_refused();
+    e2e_udp_send_recv_roundtrip();
+    e2e_tcp_concurrent_accept();
+    e2e_unix_stream_connected_pair();
+    e2e_unix_dgram_send_recv();
+
+    // Channels
+    e2e_mpsc_backpressure_under_load();
+    e2e_oneshot_cross_thread();
+    e2e_broadcast_multi_producer_multi_consumer();
+    e2e_watch_version_tracking();
+    e2e_unbounded_never_blocks_sender();
+
+    // Sync primitives
+    e2e_mutex_sequential();
+    e2e_rwlock_read_concurrency();
+    e2e_semaphore_capacity_exhaustion();
+    e2e_barrier_multi_wait_generations();
+    e2e_notify_fifo_ordering();
+    e2e_once_cell_concurrent_init();
+    e2e_latch_countdown();
+    e2e_rate_limiter_token_bucket();
+    e2e_cancellation_composition();
+
+    // I/O utilities
+    e2e_duplex_stream_through_bufio();
+    e2e_cursor_read_write_seek();
+    e2e_copy_bidirectional();
+    e2e_pipe_async_fd();
+    e2e_repeat_and_sink();
+    e2e_empty_eof();
+    e2e_async_fd_owned_close();
+
+    // File I/O
+    e2e_fs_concurrent_write_read();
+    e2e_fs_nonexistent_path_error();
+
+    // Process management
+    e2e_process_output_and_kill();
+    e2e_process_concurrent_execution();
+
+    // Timer edge cases
+    e2e_timeout_cancels_inner_future();
+    e2e_interval_missed_tick_skip();
+    e2e_sleep_at_future_deadline();
+
+    // JoinSet
+    e2e_join_set_dynamic_tasks_with_abort();
+
     println!("\n=== All E2E tests passed ===");
 }
+
+// ===========================================================================
+// Runtime lifecycle & scheduling
+// ===========================================================================
 
 fn e2e_runtime_lifecycle() {
     println!("\n  e2e_runtime_lifecycle...");
@@ -205,8 +246,7 @@ fn e2e_task_panic_isolation() {
     });
 
     rt.block_on(async {
-        // Panicking task should not propagate error to caller via unwrap,
-        // but JoinHandle should return Err(JoinError).
+        // Panicking task should return Err(JoinError).
         let result = panicking.await;
         assert!(result.is_err(), "panicking task should return Err");
 
@@ -220,12 +260,11 @@ fn e2e_task_panic_isolation() {
     println!("  e2e_task_panic_isolation OK");
 }
 
-fn e2e_nested_block_on_rejection() {
-    println!("  e2e_nested_block_on_rejection...");
+fn e2e_nested_block_on() {
+    println!("  e2e_nested_block_on...");
     let rt = Builder::new_multi_thread().build().unwrap();
 
-    // block_on from within block_on should work (same thread re-entrancy).
-    // This verifies the runtime doesn't deadlock on nested block_on.
+    // block_on from within block_on — nested runtime should work.
     let result = rt.block_on(async {
         let inner_rt = Builder::new_multi_thread().build().unwrap();
         inner_rt.block_on(async {
@@ -236,7 +275,7 @@ fn e2e_nested_block_on_rejection() {
 
     assert_eq!(result, 123);
     rt.shutdown();
-    println!("  e2e_nested_block_on_rejection OK");
+    println!("  e2e_nested_block_on OK");
 }
 
 fn e2e_shutdown_with_pending_tasks() {
@@ -257,8 +296,7 @@ fn e2e_shutdown_with_pending_tasks() {
 
     // Give shutdown time to complete pending tasks.
     std::thread::sleep(Duration::from_millis(500));
-    // Tasks may or may not complete depending on shutdown behavior.
-    // The key assertion: no crash / segfault / hang.
+    // Key assertion: no crash / segfault / hang.
     println!("  e2e_shutdown_with_pending_tasks OK (completed {})", completed.load(Ordering::SeqCst));
 }
 
@@ -270,7 +308,7 @@ fn e2e_metrics_accuracy() {
         .unwrap();
 
     let initial = rt.metrics();
-    let initial_spawned = initial.total_spawned;
+    let initial_spawned = initial.total_spawned();
 
     let mut handles = vec![];
     for _ in 0..5 {
@@ -287,10 +325,10 @@ fn e2e_metrics_accuracy() {
 
     let after = rt.metrics();
     assert_eq!(
-        after.total_spawned - initial_spawned,
+        after.total_spawned() - initial_spawned,
         5,
         "spawned counter should reflect 5 new tasks, was {} - {} = {}",
-        after.total_spawned, initial_spawned, after.total_spawned - initial_spawned
+        after.total_spawned(), initial_spawned, after.total_spawned() - initial_spawned
     );
 
     rt.shutdown();
@@ -327,7 +365,6 @@ fn e2e_free_spawn_from_worker_thread() {
 
     // spawn() from within block_on should use thread-local runtime.
     let outer = rt.spawn(async {
-        // Inner spawn uses free fn — must find current runtime.
         let inner = spawn(async { 77 });
         inner.await.unwrap()
     });
@@ -373,9 +410,6 @@ fn e2e_yield_cooperative_scheduling() {
 // ===========================================================================
 // Network I/O end-to-end
 // ===========================================================================
-
-// These are called from a separate section below to keep main() clean.
-// We extend main() to call them.
 
 fn e2e_tcp_full_request_response() {
     println!("\n  e2e_tcp_full_request_response...");
@@ -433,13 +467,10 @@ fn e2e_tcp_connection_refused() {
     rt.block_on(async {
         // Try to connect to a port that has no listener.
         let port = find_free_port();
-        // Ensure no one is listening — the port is immediately freed.
         let addr = format!("127.0.0.1:{}", port);
 
         // AsyncTcpStream::connect should fail with ConnectionRefused.
         let result = AsyncTcpStream::connect(&addr).await;
-        // The connect should fail — we don't assert specific error kind
-        // because epoll error wrapping varies, but it MUST be Err.
         assert!(result.is_err(), "connect to unbound port should fail");
     });
 
@@ -526,7 +557,6 @@ fn e2e_tcp_concurrent_accept() {
         // Verify all clients got their data echoed back.
         for (i, ch) in client_handles.into_iter().enumerate() {
             let result = ch.await;
-            // Client may have completed or been dropped.
             if let Ok(msg) = result {
                 assert_eq!(msg, format!("client{}", i));
             }
@@ -544,7 +574,6 @@ fn e2e_unix_stream_connected_pair() {
     rt.block_on(async {
         let path = make_temp_dir().join("unix_e2e.sock");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-
         let _cleanup = CleanupDir(path.parent().unwrap().to_path_buf());
 
         let listener = Arc::new(UnixListener::bind(&path).unwrap());
@@ -632,7 +661,7 @@ fn e2e_mpsc_backpressure_under_load() {
 
         // Single consumer.
         let mut received = 0u64;
-        while let Some(val) = rx.recv().await {
+        while let Some(_val) = rx.recv().await {
             received += 1;
         }
 
@@ -698,9 +727,9 @@ fn e2e_broadcast_multi_producer_multi_consumer() {
         let mut c3_count = 0;
 
         for _ in 0..10 {
-            if let Ok(v) = rx1.recv().await { c1_count += 1; let _ = v; }
-            if let Ok(v) = rx2.recv().await { c2_count += 1; let _ = v; }
-            if let Ok(v) = rx3.recv().await { c3_count += 1; let _ = v; }
+            if let Ok(_v) = rx1.recv().await { c1_count += 1; }
+            if let Ok(_v) = rx2.recv().await { c2_count += 1; }
+            if let Ok(_v) = rx3.recv().await { c3_count += 1; }
         }
 
         p1.await.unwrap();
@@ -775,8 +804,8 @@ fn e2e_unbounded_never_blocks_sender() {
 // Sync primitives end-to-end
 // ===========================================================================
 
-fn e2e_mutex_reentrant_from_same_task() {
-    println!("\n  e2e_mutex_reentrant_from_same_task...");
+fn e2e_mutex_sequential() {
+    println!("\n  e2e_mutex_sequential...");
     let rt = Builder::new_multi_thread().build().unwrap();
 
     rt.block_on(async {
@@ -796,7 +825,7 @@ fn e2e_mutex_reentrant_from_same_task() {
     });
 
     rt.shutdown();
-    println!("  e2e_mutex_reentrant_from_same_task OK");
+    println!("  e2e_mutex_sequential OK");
 }
 
 fn e2e_rwlock_read_concurrency() {
@@ -1076,7 +1105,6 @@ fn e2e_cancellation_composition() {
             let s = sem.clone();
             let wd = work_done.clone();
             tasks.push(spawn(async move {
-                // Wait for either cancellation or semaphore.
                 loop {
                     if t.is_cancelled() {
                         return false;
@@ -1166,7 +1194,6 @@ fn e2e_copy_bidirectional() {
     rt.block_on(async {
         let (a, b) = DuplexStream::channel();
 
-        // Spawn writer to a, reader from b.
         let writer = spawn(async move {
             let mut a = a;
             a.write_all(b"left to right").await.unwrap();
@@ -1212,13 +1239,11 @@ fn e2e_repeat_and_sink() {
     let rt = Builder::new_multi_thread().build().unwrap();
 
     rt.block_on(async {
-        // repeat(0xAB) yields 0xAB forever.
         let mut rep = repeat(0xAB);
         let mut buf = [0u8; 10];
         rep.read_exact(&mut buf).await.unwrap();
         assert_eq!(buf, [0xAB; 10]);
 
-        // sink() discards everything.
         let mut s = sink();
         s.write_all(b"discard me").await.unwrap();
         s.flush().await.unwrap();
@@ -1241,6 +1266,25 @@ fn e2e_empty_eof() {
 
     rt.shutdown();
     println!("  e2e_empty_eof OK");
+}
+
+fn e2e_async_fd_owned_close() {
+    println!("  e2e_async_fd_owned_close...");
+    let rt = Builder::new_multi_thread().build().unwrap();
+
+    rt.block_on(async {
+        let (r, w) = pipe();
+        // Convert to OwnedAsyncFd — should close fd on drop.
+        let owned_r = OwnedAsyncFd::new(r).unwrap();
+        drop(owned_r);
+
+        // Write end should still work.
+        let mut w = w;
+        w.write_all(b"still works").await.unwrap();
+    });
+
+    rt.shutdown();
+    println!("  e2e_async_fd_owned_close OK");
 }
 
 // ===========================================================================
@@ -1371,52 +1415,11 @@ fn e2e_process_concurrent_execution() {
 }
 
 // ===========================================================================
-// JoinSet end-to-end
-// ===========================================================================
-
-fn e2e_join_set_dynamic_tasks_with_abort() {
-    println!("\n  e2e_join_set_dynamic_tasks_with_abort...");
-    let rt = Builder::new_multi_thread().build().unwrap();
-
-    rt.block_on(async {
-        let mut set = JoinSet::new();
-        let completed = Arc::new(AtomicUsize::new(0));
-
-        // Spawn 10 slow tasks.
-        for i in 0..10 {
-            let c = completed.clone();
-            set.spawn(async move {
-                sleep(Duration::from_secs(100)).await;
-                c.fetch_add(1, Ordering::SeqCst);
-                i
-            });
-        }
-
-        // Let them start.
-        sleep(Duration::from_millis(20)).await;
-
-        // Abort all.
-        set.abort_all();
-        assert!(set.is_empty());
-
-        // join_next should return None.
-        let next = set.join_next().await;
-        assert!(next.is_none());
-
-        // No tasks should have completed.
-        assert_eq!(completed.load(Ordering::SeqCst), 0);
-    });
-
-    rt.shutdown();
-    println!("  e2e_join_set_dynamic_tasks_with_abort OK");
-}
-
-// ===========================================================================
 // Timer edge cases
 // ===========================================================================
 
 fn e2e_timeout_cancels_inner_future() {
-    println!("  e2e_timeout_cancels_inner_future...");
+    println!("\n  e2e_timeout_cancels_inner_future...");
     let rt = Builder::new_multi_thread().build().unwrap();
 
     rt.block_on(async {
@@ -1464,7 +1467,7 @@ fn e2e_sleep_at_future_deadline() {
 
     rt.block_on(async {
         let deadline = Instant::now() + Duration::from_millis(50);
-        let result = sleep_until(deadline).await;
+        let _result = sleep_until(deadline).await;
         let elapsed = deadline.elapsed();
 
         // Should complete right at the deadline.
@@ -1476,96 +1479,42 @@ fn e2e_sleep_at_future_deadline() {
 }
 
 // ===========================================================================
-// AsyncFd edge cases
+// JoinSet end-to-end
 // ===========================================================================
 
-fn e2e_async_fd_owned_close() {
-    println!("  e2e_async_fd_owned_close...");
+fn e2e_join_set_dynamic_tasks_with_abort() {
+    println!("\n  e2e_join_set_dynamic_tasks_with_abort...");
     let rt = Builder::new_multi_thread().build().unwrap();
 
     rt.block_on(async {
-        let (r, w) = pipe();
-        // Convert to OwnedAsyncFd — should close fd on drop.
-        let owned_r = OwnedAsyncFd::new(r).unwrap();
-        drop(owned_r);
+        let mut set = JoinSet::new();
+        let completed = Arc::new(AtomicUsize::new(0));
 
-        // Write end should still work.
-        let mut w = w;
-        w.write_all(b"still works").await.unwrap();
+        // Spawn 10 slow tasks.
+        for i in 0..10 {
+            let c = completed.clone();
+            set.spawn(async move {
+                sleep(Duration::from_secs(100)).await;
+                c.fetch_add(1, Ordering::SeqCst);
+                i
+            });
+        }
+
+        // Let them start.
+        sleep(Duration::from_millis(20)).await;
+
+        // Abort all.
+        set.abort_all();
+        assert!(set.is_empty());
+
+        // join_next should return None.
+        let next = set.join_next().await;
+        assert!(next.is_none());
+
+        // No tasks should have completed.
+        assert_eq!(completed.load(Ordering::SeqCst), 0);
     });
 
     rt.shutdown();
-    println!("  e2e_async_fd_owned_close OK");
-}
-
-// ===========================================================================
-// Main dispatch — all E2E test groups
-// ===========================================================================
-
-// Called before the final println in main().
-fn run_network_tests() {
-    e2e_tcp_full_request_response();
-    e2e_tcp_connection_refused();
-    e2e_udp_send_recv_roundtrip();
-    e2e_tcp_concurrent_accept();
-    e2e_unix_stream_connected_pair();
-    e2e_unix_dgram_send_recv();
-}
-
-fn run_channel_tests() {
-    e2e_mpsc_backpressure_under_load();
-    e2e_oneshot_cross_thread();
-    e2e_broadcast_multi_producer_multi_consumer();
-    e2e_watch_version_tracking();
-    e2e_unbounded_never_blocks_sender();
-}
-
-fn run_sync_tests() {
-    e2e_mutex_reentrant_from_same_task();
-    e2e_rwlock_read_concurrency();
-    e2e_semaphore_capacity_exhaustion();
-    e2e_barrier_multi_wait_generations();
-    e2e_notify_fifo_ordering();
-    e2e_once_cell_concurrent_init();
-    e2e_latch_countdown();
-    e2e_rate_limiter_token_bucket();
-    e2e_cancellation_composition();
-}
-
-fn run_io_util_tests() {
-    e2e_duplex_stream_through_bufio();
-    e2e_cursor_read_write_seek();
-    e2e_copy_bidirectional();
-    e2e_pipe_async_fd();
-    e2e_repeat_and_sink();
-    e2e_empty_eof();
-    e2e_async_fd_owned_close();
-}
-
-fn run_fs_tests() {
-    e2e_fs_concurrent_write_read();
-    e2e_fs_nonexistent_path_error();
-}
-
-fn run_process_tests() {
-    e2e_process_output_and_kill();
-    e2e_process_concurrent_execution();
-}
-
-fn run_timer_tests() {
-    e2e_timeout_cancels_inner_future();
-    e2e_interval_missed_tick_skip();
-    e2e_sleep_at_future_deadline();
-}
-
-fn run_join_set_tests() {
-    e2e_join_set_dynamic_tasks_with_abort();
-}
-
-// Cleanup helper.
-struct CleanupDir(std::path::PathBuf);
-impl Drop for CleanupDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
+    println!("  e2e_join_set_dynamic_tasks_with_abort OK");
 }
