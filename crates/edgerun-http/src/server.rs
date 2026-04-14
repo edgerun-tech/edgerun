@@ -199,7 +199,18 @@ where
         let tls_stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("TLS handshake failed: {e}")))?;
-        handle_connection_inner(tls_stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
+
+        // When TLS is established, use the negotiated ALPN protocol to
+        // determine the HTTP version. h2 clients skip the connection preface
+        // (they send HTTP/2 frames immediately after the TLS handshake).
+        let negotiated_h2 = tls_stream.alpn_protocol() == Some(b"h2");
+        if negotiated_h2 {
+            // Consume the TLS stream directly — no connection preface to skip.
+            let reader = BufReader::new(tls_stream);
+            handle_http2(reader, handler, http2_idle_timeout, max_request_size, true).await
+        } else {
+            handle_connection_inner(tls_stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
+        }
     } else {
         handle_connection_inner(stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
     }
@@ -217,7 +228,7 @@ where
     };
 
     if first_line.starts_with("PRI * HTTP/2.0") {
-        handle_http2(reader, handler, http2_idle_timeout, max_request_size).await
+        handle_http2(reader, handler, http2_idle_timeout, max_request_size, false).await
     } else {
         handle_http1_line(reader, first_line, handler, keep_alive, max_request_size).await
     }
@@ -285,25 +296,31 @@ where
 }
 
 /// Handle an HTTP/2 connection with the unified Handler trait.
-async fn handle_http2<S>(mut reader: BufReader<S>, handler: Arc<dyn Handler>, idle_timeout: Duration, max_header_size: usize) -> std::io::Result<()>
+///
+/// When `skip_preface` is true (TLS+ALPN=h2 path), the client has not sent
+/// the HTTP/2 connection preface — go straight to the frame loop.
+/// When false (h2c upgrade path), consume the remaining preface bytes first.
+async fn handle_http2<S>(mut reader: BufReader<S>, handler: Arc<dyn Handler>, idle_timeout: Duration, max_header_size: usize, skip_preface: bool) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     // Consume remaining buffered data (rest of HTTP/2 connection preface)
     // The preface is "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" (24 bytes).
     // read_line() reads "PRI * HTTP/2.0\r\n" (17 bytes), leaving 7 bytes in buffer.
-    let remaining_preface = H2_PREFACE.len() - 17;
-    
-    // First consume from buffer, then read remaining from stream if needed
-    let buffered = reader.buffered();
-    if buffered >= remaining_preface {
-        reader.consume(remaining_preface);
-    } else {
-        // Consume what's buffered, read the rest from stream
-        reader.consume(buffered);
-        let mut discard = [0u8; 7];
-        let to_read = remaining_preface - buffered;
-        reader.get_mut().read_exact(&mut discard[..to_read]).await?;
+    if !skip_preface {
+        let remaining_preface = H2_PREFACE.len() - 17;
+
+        // First consume from buffer, then read remaining from stream if needed
+        let buffered = reader.buffered();
+        if buffered >= remaining_preface {
+            reader.consume(remaining_preface);
+        } else {
+            // Consume what's buffered, read the rest from stream
+            reader.consume(buffered);
+            let mut discard = [0u8; 7];
+            let to_read = remaining_preface - buffered;
+            reader.get_mut().read_exact(&mut discard[..to_read]).await?;
+        }
     }
     
     let mut rdwr = reader.into_inner();

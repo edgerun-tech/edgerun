@@ -372,6 +372,9 @@ pub struct AsyncTlsServerStream<S> {
     pending_data: Vec<u8>,
     pending_offset: usize,
     cipher_suite: CipherSuite,
+    /// The ALPN protocol negotiated during the TLS handshake
+    /// (e.g. b"h2" or b"http/1.1").
+    alpn_protocol: Option<Vec<u8>>,
 }
 
 impl<S> AsyncTlsServerStream<S> {
@@ -394,7 +397,14 @@ impl<S> AsyncTlsServerStream<S> {
             pending_data: Vec::new(),
             pending_offset: 0,
             cipher_suite: CipherSuite::TLS_AES_128_GCM_SHA256,
+            alpn_protocol: None,
         }
+    }
+
+    /// Returns the negotiated ALPN protocol (e.g. `b"h2"` or `b"http/1.1"`),
+    /// or `None` if no ALPN was negotiated.
+    pub fn alpn_protocol(&self) -> Option<&[u8]> {
+        self.alpn_protocol.as_deref()
     }
 
     /// Consume the TLS server stream and return the underlying transport stream.
@@ -406,7 +416,7 @@ impl<S> AsyncTlsServerStream<S> {
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     /// Accept an async TLS 1.3 handshake from a connected stream.
     pub async fn accept(mut stream: S, cert_and_key: &CertificateAndKey) -> Result<Self> {
-        let (write_cipher, read_cipher, cipher_suite) =
+        let (write_cipher, read_cipher, cipher_suite, alpn_protocol) =
             server_handshake_impl(&mut stream, cert_and_key).await?;
 
         Ok(AsyncTlsServerStream {
@@ -417,6 +427,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             pending_data: Vec::new(),
             pending_offset: 0,
             cipher_suite,
+            alpn_protocol,
         })
     }
 
@@ -437,11 +448,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     pub async fn handshake(&mut self, cert_and_key: &CertificateAndKey) -> Result<()> {
         server_handshake_impl(&mut self.stream, cert_and_key)
             .await
-            .map(|(write_cipher, read_cipher, cipher_suite)| {
+            .map(|(write_cipher, read_cipher, cipher_suite, alpn)| {
                 self.write_cipher = write_cipher;
                 self.read_cipher = read_cipher;
                 self.handshake_done = true;
                 self.cipher_suite = cipher_suite;
+                self.alpn_protocol = alpn;
             })
     }
 
@@ -843,7 +855,7 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
 async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut S,
     cert_and_key: &CertificateAndKey,
-) -> Result<(RecordCipher, RecordCipher, CipherSuite)> {
+) -> Result<(RecordCipher, RecordCipher, CipherSuite, Option<Vec<u8>>)> {
     // 1. Read ClientHello
     let mut hdr = [0u8; 5];
     stream.read_exact(&mut hdr).await?;
@@ -972,7 +984,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     let write_cipher = RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv)?;
     let read_cipher = RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
 
-    Ok((write_cipher, read_cipher, negotiated_suite))
+    Ok((write_cipher, read_cipher, negotiated_suite, alpn_protocol))
 }
 
 // ---------------------------------------------------------------------------

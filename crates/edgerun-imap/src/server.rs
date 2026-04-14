@@ -9,16 +9,19 @@
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::SystemTime;
 
 use edgerun_rt::{
-    AsyncReadExt, AsyncWriteExt, AsyncTcpListener, AsyncTcpStream,
+    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
+    AsyncTcpListener, AsyncTcpStream,
     CancellationToken, Mutex,
 };
 
 #[cfg(feature = "tls")]
-use edgerun_tls::{AsyncTlsServerStream, TlsCertificate};
+use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
 
 use crate::message::{ImapCommand, ImapResponse, ImapResult, StoreAction};
 use crate::parser::{self, ImapReader};
@@ -67,6 +70,103 @@ struct Quota {
     storage_limit: u32,
     message_limit: u32,
 }
+
+// ===========================================================================
+// Transport (supports in-place TLS upgrade for STARTTLS)
+// ===========================================================================
+
+/// Unified transport that can be upgraded from plain to TLS mid-session.
+/// Mirrors the SMTP server's `SmtpTransport` pattern.
+pub enum ImapTransport {
+    Plain(AsyncTcpStream),
+    #[cfg(feature = "tls")]
+    Tls(AsyncTlsServerStream<AsyncTcpStream>),
+}
+
+impl ImapTransport {
+    /// Whether this transport is already using TLS.
+    #[cfg(feature = "tls")]
+    pub fn is_tls(&self) -> bool {
+        match self {
+            ImapTransport::Plain(_) => false,
+            ImapTransport::Tls(_) => true,
+        }
+    }
+
+    #[cfg(not(feature = "tls"))]
+    pub fn is_tls(&self) -> bool {
+        false
+    }
+
+    /// Upgrade a plain transport to TLS in place.
+    #[cfg(feature = "tls")]
+    pub async fn upgrade_tls(
+        self,
+        cert_and_key: &CertificateAndKey,
+    ) -> io::Result<ImapTransport> {
+        match self {
+            ImapTransport::Tls(_) => {
+                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+            }
+            ImapTransport::Plain(stream) => {
+                let fd = stream.into_fd();
+                let tcp = AsyncTcpStream::from_raw(fd);
+                let mut tls_stream = AsyncTlsServerStream::new(tcp);
+                tls_stream
+                    .handshake(cert_and_key)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
+                Ok(ImapTransport::Tls(tls_stream))
+            }
+        }
+    }
+}
+
+impl AsyncRead for ImapTransport {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => Pin::new(s).poll_read(cx, buf),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => Pin::new(s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for ImapTransport {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => Pin::new(s).poll_write(cx, buf),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => Pin::new(s).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => Pin::new(s).poll_flush(cx),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => Pin::new(s).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match &mut *self {
+            ImapTransport::Plain(s) => Pin::new(s).poll_shutdown(cx),
+            #[cfg(feature = "tls")]
+            ImapTransport::Tls(s) => Pin::new(s).poll_shutdown(cx),
+        }
+    }
+}
+
+impl Unpin for ImapTransport {}
 
 // ===========================================================================
 // Mail Store Trait
