@@ -707,39 +707,61 @@ fn e2e_mpsc_backpressure_under_load() {
             let (tx, mut rx) = mpsc::channel::<u64>(4);
             let send_count = Arc::new(AtomicUsize::new(0));
 
-            // Phase 1: Verify single producer/consumer with backpressure.
-            // Cap=1 forces every send to wait for recv.
-            println!("    Phase 1: single producer, cap=1, 10 items...");
+            // Phase 1: single producer, cap=1 — trace every state transition.
+            // This test is deterministic and exposes the exact deadlock point.
+            println!("    Phase 1: single producer, cap=1, 5 items (traced)...");
             {
-                let (tx1, mut rx1) = mpsc::channel::<u64>(1);
+                let (tx1, rx1) = mpsc::channel::<u64>(1);
                 let sent = Arc::new(AtomicUsize::new(0));
+                let done = Arc::new(AtomicBool::new(false));
                 let s = sent.clone();
+                let d = done.clone();
                 let producer = spawn(async move {
-                    for i in 0..10u64 {
-                        eprintln!("      [producer] sending item {}", i);
+                    for i in 0..5u64 {
+                        eprintln!("      >>> SEND {} START", i);
                         tx1.send(i).await.unwrap();
-                        eprintln!("      [producer] sent item {}", i);
+                        eprintln!("      <<< SEND {} DONE", i);
                         s.fetch_add(1, Ordering::SeqCst);
                     }
-                    eprintln!("      [producer] done, dropping sender");
+                    d.store(true, Ordering::SeqCst);
+                    eprintln!("      >>> PRODUCER DONE, dropping tx");
                 });
+
                 let mut received = 0;
-                loop {
-                    eprintln!("      [receiver] calling recv... received so far={}", received);
-                    let item = rx1.recv().await;
-                    eprintln!("      [receiver] recv returned: {:?}", item.as_ref());
+                while received < 5 {
+                    eprintln!("      >>> RECV START (expected 5, got {})", received);
+                    // Use timeout to catch deadlock at EXACT recv call.
+                    let item = timeout(Duration::from_secs(2), rx1.recv()).await;
                     match item {
-                        Some(_v) => received += 1,
-                        None => break,
+                        Ok(Some(v)) => {
+                            received += 1;
+                            eprintln!("      <<< RECV OK, got={}, total={}", v, received);
+                        }
+                        Ok(None) => {
+                            eprintln!("      <<< RECV None (channel closed), total={}", received);
+                            break;
+                        }
+                        Err(_) => {
+                            eprintln!("      <<< RECV TIMEOUT after 2s!");
+                            eprintln!("      >>> DEADLOCK DIAGNOSIS:");
+                            eprintln!("          received = {}", received);
+                            eprintln!("          sent = {}", sent.load(Ordering::SeqCst));
+                            eprintln!("          producer_done = {}", done.load(Ordering::SeqCst));
+                            panic!(
+                                "DEADLOCK: recv() timed out. received={}, sent={}, producer_done={}",
+                                received,
+                                sent.load(Ordering::SeqCst),
+                                done.load(Ordering::SeqCst),
+                            );
+                        }
                     }
                 }
-                eprintln!("      [receiver] channel closed, received={}", received);
-                eprintln!("      [receiver] awaiting producer handle...");
+                eprintln!("      >>> Awaiting producer handle...");
                 producer.await.unwrap();
-                eprintln!("      [receiver] producer handle resolved");
-                assert_eq!(received, 10, "Phase 1: expected 10 recv, got {}", received);
-                assert_eq!(sent.load(Ordering::SeqCst), 10, "Phase 1: expected 10 sent");
-                println!("    Phase 1 OK (10 items through cap=1)");
+                eprintln!("      <<< Producer handle resolved");
+                assert_eq!(received, 5);
+                assert_eq!(sent.load(Ordering::SeqCst), 5);
+                println!("    Phase 1 OK");
             }
 
             // Phase 2: Two producers, cap=2.

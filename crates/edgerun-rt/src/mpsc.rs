@@ -37,6 +37,15 @@ pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
         closed: AtomicBool::new(false),
         sender_count: Mutex::new(1),
         reserved: AtomicUsize::new(0),
+        trace_try_push_ok: AtomicUsize::new(0),
+        trace_try_push_fail: AtomicUsize::new(0),
+        trace_try_push_wake_recv: AtomicUsize::new(0),
+        trace_recv_poll_dequeue: AtomicUsize::new(0),
+        trace_recv_poll_pending: AtomicUsize::new(0),
+        trace_recv_wake_sender: AtomicUsize::new(0),
+        trace_sender_register_pending: AtomicUsize::new(0),
+        trace_sender_recheck_ok: AtomicUsize::new(0),
+        trace_sender_claimed_by_recv: AtomicUsize::new(0),
     });
     (
         Sender {
@@ -127,10 +136,13 @@ impl<T> ChanInner<T> {
     fn try_push(&self, val: T) -> Result<(), T> {
         let mut q = self.q.lock();
         if q.len() >= self.cap {
+            self.trace_try_push_fail.fetch_add(1, Ordering::Relaxed);
             return Err(val);
         }
         q.push_back(val);
+        self.trace_try_push_ok.fetch_add(1, Ordering::Relaxed);
         if let Some(w) = self.recv_waker.lock().take() {
+            self.trace_try_push_wake_recv.fetch_add(1, Ordering::Relaxed);
             w.wake();
         }
         self.send_cvar.notify_one();
@@ -141,6 +153,7 @@ impl<T> ChanInner<T> {
     fn wake_one_pending_sender(&self) {
         let mut pending = self.pending_senders.lock();
         if let Some((waker, ps)) = pending.pop_front() {
+            self.trace_recv_wake_sender.fetch_add(1, Ordering::Relaxed);
             // Try to claim the value from shared state.
             let claimed = ps.val.lock().take();
             match claimed {
@@ -160,6 +173,7 @@ impl<T> ChanInner<T> {
                     }
                 }
                 None => {
+                    self.trace_sender_claimed_by_recv.fetch_add(1, Ordering::Relaxed);
                 }
             }
             waker.wake();
@@ -210,6 +224,22 @@ impl<T> Drop for Sender<T> {
 }
 
 impl<T> Sender<T> {
+    /// Dump internal trace counters. Useful for diagnosing deadlocks.
+    pub fn dump_trace(&self) {
+        eprintln!("    [mpsc trace] try_push_ok={} try_push_fail={} try_push_wake_recv={}",
+            self.inner.trace_try_push_ok.load(Ordering::Relaxed),
+            self.inner.trace_try_push_fail.load(Ordering::Relaxed),
+            self.inner.trace_try_push_wake_recv.load(Ordering::Relaxed));
+        eprintln!("    [mpsc trace] recv_dequeue={} recv_pending={} recv_wake_sender={}",
+            self.inner.trace_recv_poll_dequeue.load(Ordering::Relaxed),
+            self.inner.trace_recv_poll_pending.load(Ordering::Relaxed),
+            self.inner.trace_recv_wake_sender.load(Ordering::Relaxed));
+        eprintln!("    [mpsc trace] sender_register_pending={} sender_recheck_ok={} sender_claimed_by_recv={}",
+            self.inner.trace_sender_register_pending.load(Ordering::Relaxed),
+            self.inner.trace_sender_recheck_ok.load(Ordering::Relaxed),
+            self.inner.trace_sender_claimed_by_recv.load(Ordering::Relaxed));
+    }
+
     pub fn send_nowait(&self, val: T) -> Result<(), SendError<T>> {
         if self.inner.closed.load(Ordering::Relaxed) {
             return Err(SendError(val));
@@ -414,12 +444,14 @@ impl<T> Future for SendFut<T> {
             val: Mutex::new(Some(val)),
         });
         this.inner.pending_senders.lock().push_back((cx.waker().clone(), ps.clone()));
+        this.inner.trace_sender_register_pending.fetch_add(1, Ordering::Relaxed);
 
         // Re-check: a receiver may have dequeued between our try_push failure
         // and our registration.
         if let Some(val) = ps.val.lock().take() {
             match this.inner.try_push(val) {
                 Ok(()) => {
+                    this.inner.trace_sender_recheck_ok.fetch_add(1, Ordering::Relaxed);
                     this.pending = None;
                     return Poll::Ready(Ok(()));
                 }
@@ -429,6 +461,7 @@ impl<T> Future for SendFut<T> {
                 }
             }
         } else {
+            this.inner.trace_sender_claimed_by_recv.fetch_add(1, Ordering::Relaxed);
         }
 
         this.pending = Some(ps);
@@ -511,6 +544,7 @@ impl<T> Future for RecvFut<'_, T> {
         {
             let mut q = self.inner.q.lock();
             if let Some(v) = q.pop_front() {
+                self.inner.trace_recv_poll_dequeue.fetch_add(1, Ordering::Relaxed);
                 drop(q);
                 // Wake another pending sender to keep the pipeline flowing.
                 self.inner.wake_one_pending_sender();
@@ -528,6 +562,7 @@ impl<T> Future for RecvFut<'_, T> {
             self.inner.wake_reserve_waiters();
 
             if let Some(v) = q.pop_front() {
+                self.inner.trace_recv_poll_dequeue.fetch_add(1, Ordering::Relaxed);
                 self.inner.recv_waker.lock().take();
                 drop(q);
                 self.inner.wake_one_pending_sender();
@@ -538,6 +573,7 @@ impl<T> Future for RecvFut<'_, T> {
                 return Poll::Ready(None);
             }
         }
+        self.inner.trace_recv_poll_pending.fetch_add(1, Ordering::Relaxed);
         Poll::Pending
     }
 }

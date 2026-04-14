@@ -10,5 +10,6 @@ description = "Async DHCPv4 server and client"
 workspace = true
 
 [dependencies]
+edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }

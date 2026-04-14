@@ -399,24 +399,8 @@ fn format_bdaddr_le(bytes: &[u8]) -> String {
 /// Parse a BDADDR string (e.g. "AA:BB:CC:DD:EE:FF") into little-endian bytes
 /// as used by the kernel mgmt protocol.
 fn parse_bdaddr(addr: &str) -> Result<[u8; 6], CapabilityError> {
-    let parts: Vec<&str> = addr.split(':').collect();
-    if parts.len() != 6 {
-        return Err(CapabilityError::Provider(
-            format!("invalid BDADDR format: {}", addr).into(),
-        ));
-    }
-    let mut bytes = [0u8; 6];
-    for (i, part) in parts.iter().enumerate() {
-        bytes[i] = u8::from_str_radix(part, 16).map_err(|e| {
-            CapabilityError::Provider(
-                format!("invalid BDADDR component '{}': {}", part, e).into(),
-            )
-        })?;
-    }
-    // The string is in normal order (AA:BB:CC:DD:EE:FF), but the kernel
-    // expects little-endian, so reverse.
-    bytes.reverse();
-    Ok(bytes)
+    edgerun_encoding::hex::parse_bdaddr(addr)
+        .ok_or_else(|| CapabilityError::Provider(format!("invalid BDADDR format: {}", addr).into()))
 }
 
 fn parse_settings(bits: u32) -> MgmtControllerSettings {

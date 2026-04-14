@@ -291,26 +291,10 @@ impl DhcpClient {
 // ---------------------------------------------------------------------------
 
 fn read_mac_from_interface(interface: &str) -> Result<[u8; 6], io::Error> {
-    // Read from sysfs
     let path = format!("/sys/class/net/{}/address", interface);
     let mac_str = std::fs::read_to_string(&path)?;
-    let mac_str = mac_str.trim();
-
-    let parts: Vec<u8> = mac_str
-        .split(':')
-        .map(|s| u8::from_str_radix(s, 16).unwrap_or(0))
-        .collect();
-
-    if parts.len() != 6 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid MAC address: {}", mac_str),
-        ));
-    }
-
-    let mut mac = [0u8; 6];
-    mac.copy_from_slice(&parts);
-    Ok(mac)
+    edgerun_encoding::hex::parse_mac(mac_str.trim())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, format!("Invalid MAC address: {}", mac_str.trim())))
 }
 
 fn random_xid() -> u32 {

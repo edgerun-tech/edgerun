@@ -25,17 +25,17 @@ pub fn read_trimmed(path: &Path) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Parsing helpers
+// Parsing helpers — delegates hex parsing to edgerun-encoding
 // ---------------------------------------------------------------------------
 
 #[must_use]
 pub fn parse_hex_u16(text: Option<String>) -> Option<u16> {
-    text.and_then(|v| u16::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+    text.as_deref().and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
 }
 
 #[must_use]
 pub fn parse_hex_u32(text: Option<String>) -> Option<u32> {
-    text.and_then(|v| u32::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+    text.as_deref().and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
 }
 
 /// Parse a hex u32 from a `&str` directly (useful when chaining with `and_then`
@@ -43,13 +43,12 @@ pub fn parse_hex_u32(text: Option<String>) -> Option<u32> {
 #[must_use]
 pub fn parse_hex_u32_from_str(s: &str) -> Option<u32> {
     let trimmed = s.trim();
-    let trimmed = trimmed.strip_prefix("0x").unwrap_or(trimmed);
-    u32::from_str_radix(trimmed, 16).ok()
+    edgerun_encoding::hex::parse_hex_int(trimmed.strip_prefix("0x").unwrap_or(trimmed))
 }
 
 #[must_use]
 pub fn parse_hex_u8(text: Option<String>) -> Option<u8> {
-    text.and_then(|v| u8::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+    text.as_deref().and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
 }
 
 #[must_use]

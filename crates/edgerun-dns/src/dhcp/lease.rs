@@ -375,9 +375,9 @@ impl LeasePool {
         writeln!(f, "# edgerun-dhcp lease database")?;
         writeln!(f, "# pool_start={} pool_end={}", self.pool_start, self.pool_end)?;
         for (ip_u32, lease) in &self.leases {
-            let mac_hex = lease.mac.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(":");
+            let mac_hex = edgerun_encoding::hex::bytes_to_hex_sep(&lease.mac, ':');
             let cid_hex = lease.client_id.as_ref()
-                .map(|c| c.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(":"))
+                .map(|c| edgerun_encoding::hex::bytes_to_hex_sep(c, ':'))
                 .unwrap_or_else(|| "-".to_string());
             let epoch = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -404,11 +404,7 @@ impl LeasePool {
             if parts.len() != 6 { continue; }
             let ip_u32: u32 = parts[0].parse().unwrap_or(0);
             let ip = u32_to_ip(ip_u32);
-            let mac_parts: Vec<u8> = parts[1].split(':')
-                .filter_map(|s| u8::from_str_radix(s, 16).ok()).collect();
-            if mac_parts.len() != 6 { continue; }
-            let mut mac = [0u8; 6];
-            mac.copy_from_slice(&mac_parts);
+            let Some(mac) = edgerun_encoding::hex::parse_mac(parts[1]) else { continue; };
             let client_id = if parts[2] != "-" {
                 Some(parts[2].split(':').filter_map(|s| u8::from_str_radix(s, 16).ok()).collect::<Vec<_>>())
             } else { None };

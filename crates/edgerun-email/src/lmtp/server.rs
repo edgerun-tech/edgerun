@@ -15,7 +15,7 @@ use std::sync::Arc;
 use edgerun_rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 
 use crate::command_middleware::{
-    CommandHandler, ControlFlow as MwControlFlow, SessionExtensions,
+    CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
 use crate::server::read_line;
 use crate::smtp::types::{
@@ -54,9 +54,9 @@ pub struct LmtpServer {
     listener: Arc<edgerun_rt::AsyncTcpListener>,
     handler: Arc<dyn MailHandler>,
     config: LmtpServerConfig,
-    /// Command middleware chain. If set, all commands go through
-    /// middleware before reaching the handler.
-    command_chain: Option<Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>>,
+    /// Command middleware layers. Composed with the handler at runtime
+    /// so middleware can capture mutable session state.
+    command_middleware: Vec<Arc<dyn CommandMiddleware<SmtpCommand, SmtpResponse>>>,
 }
 
 impl LmtpServer {
@@ -67,16 +67,18 @@ impl LmtpServer {
             listener,
             handler,
             config,
-            command_chain: None,
+            command_middleware: Vec::new(),
         })
     }
 
-    /// Set the command middleware chain for this server.
-    pub fn with_command_chain(
+    /// Add a command middleware layer.
+    ///
+    /// Middleware runs in order: first added = outermost (sees command first).
+    pub fn with_command_middleware<M: CommandMiddleware<SmtpCommand, SmtpResponse>>(
         mut self,
-        chain: Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>,
+        mw: M,
     ) -> Self {
-        self.command_chain = Some(chain);
+        self.command_middleware.push(Arc::new(mw));
         self
     }
 
@@ -92,11 +94,11 @@ impl LmtpServer {
                     let handler = Arc::clone(&self.handler);
                     let config = self.config.clone();
                     let shutdown = shutdown.clone();
-                    let command_chain = self.command_chain.clone();
+                    let command_middleware = self.command_middleware.clone();
 
                     edgerun_log::info!("edgerun-lmtp: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        if let Err(e) = handle_connection(stream, peer, handler, config, shutdown, command_chain)
+                        if let Err(e) = handle_connection(stream, peer, handler, config, shutdown, command_middleware)
                             .await
                         {
                             edgerun_log::error!("edgerun-lmtp: connection error: {}", e);
@@ -174,7 +176,7 @@ async fn handle_connection(
     handler: Arc<dyn MailHandler>,
     config: LmtpServerConfig,
     _shutdown: CancellationToken,
-    command_chain: Option<Arc<dyn CommandHandler<SmtpCommand, SmtpResponse>>>,
+    command_middleware: Vec<Arc<dyn CommandMiddleware<SmtpCommand, SmtpResponse>>>,
 ) -> io::Result<()> {
     let mut stream = match Arc::try_unwrap(stream) {
         Ok(s) => s,
@@ -338,21 +340,35 @@ async fn handle_connection(
             }
         };
 
-        // ── Middleware chain (if configured) ──────────────────────
-        if let Some(ref chain) = command_chain {
+        // ── Middleware pre-filter (if configured) ──────────────────
+        if !command_middleware.is_empty() {
             let session = SessionExtensions::new();
-            match chain.handle(cmd.clone(), session).await {
-                Ok(MwControlFlow::Respond(resp)) => {
-                    send_response(&mut stream, &resp).await?;
-                    continue;
+
+            let mut blocked = false;
+            for mw in &command_middleware {
+                let mw = Arc::clone(mw);
+                let cmd_for_mw = cmd.clone();
+                let session_for_mw = session.clone();
+                let next = NextCommand::new(|_cmd, _session| {
+                    Box::pin(async move { Ok(MwControlFlow::Continue) })
+                });
+
+                match mw.handle(cmd_for_mw, session_for_mw, next).await {
+                    Ok(MwControlFlow::Respond(resp)) => {
+                        send_response(&mut stream, &resp).await?;
+                        blocked = true;
+                        break;
+                    }
+                    Ok(MwControlFlow::Continue) => {}
+                    Err(e) => {
+                        send_response(&mut stream, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                        blocked = true;
+                        break;
+                    }
                 }
-                Ok(MwControlFlow::Continue) => {
-                    // Passed through — run handler
-                }
-                Err(e) => {
-                    send_response(&mut stream, &SmtpResponse::syntax_error(&e.to_string())).await?;
-                    continue;
-                }
+            }
+            if blocked {
+                continue;
             }
         }
 

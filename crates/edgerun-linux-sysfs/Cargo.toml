@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+edgerun-encoding = { path = "../edgerun-encoding" }
 libc.workspace = true
 
 [lints]

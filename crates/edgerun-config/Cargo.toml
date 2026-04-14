@@ -9,6 +9,7 @@ description = "Kubernetes-compatible DNS/DHCP configuration with event-sourced s
 [dependencies]
 edgerun-dns = { path = "../edgerun-dns" }
 edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 thiserror = "1"

@@ -937,6 +937,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-dhcpv6",
  "edgerun-dns",
+ "edgerun-encoding",
  "serde",
  "serde_yaml",
  "thiserror 1.0.69",
@@ -1006,6 +1007,7 @@ dependencies = [
 name = "edgerun-dhcp"
 version = "0.1.0"
 dependencies = [
+ "edgerun-encoding",
  "edgerun-log",
  "edgerun-rt",
 ]
@@ -1285,6 +1287,7 @@ dependencies = [
 name = "edgerun-linux-sysfs"
 version = "0.1.0"
 dependencies = [
+ "edgerun-encoding",
  "libc",
 ]
 
@@ -1303,6 +1306,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-linux-netif",
  "edgerun-linux-sysfs",
  "edgerun-log",

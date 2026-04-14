@@ -24,7 +24,7 @@ use edgerun_rt::{
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
 
 use crate::command_middleware::{
-    CommandHandler, ControlFlow as MwControlFlow, SessionExtensions,
+    CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult, StoreAction};
 use crate::imap::parser::{self, ImapReader};
@@ -1359,9 +1359,9 @@ pub struct ImapServer {
     #[cfg(feature = "tls")]
     tls_cert: Option<CertificateAndKey>,
     imaps: bool,
-    /// Command middleware chain. If set, all commands go through
-    /// middleware before reaching the store.
-    command_chain: Option<Arc<dyn CommandHandler<ImapCommand, ImapResponse>>>,
+    /// Command middleware layers. Composed with the store at runtime
+    /// so middleware can capture mutable session state.
+    command_middleware: Vec<Arc<dyn CommandMiddleware<ImapCommand, ImapResponse>>>,
 }
 
 impl ImapServer {
@@ -1376,16 +1376,18 @@ impl ImapServer {
             #[cfg(feature = "tls")]
             tls_cert: config.tls_cert,
             imaps: config.imaps,
-            command_chain: None,
+            command_middleware: Vec::new(),
         })
     }
 
-    /// Set the command middleware chain for this server.
-    pub fn with_command_chain(
+    /// Add a command middleware layer.
+    ///
+    /// Middleware runs in order: first added = outermost (sees command first).
+    pub fn with_command_middleware<M: CommandMiddleware<ImapCommand, ImapResponse>>(
         mut self,
-        chain: Arc<dyn CommandHandler<ImapCommand, ImapResponse>>,
+        mw: M,
     ) -> Self {
-        self.command_chain = Some(chain);
+        self.command_middleware.push(Arc::new(mw));
         self
     }
 
@@ -1399,7 +1401,7 @@ impl ImapServer {
             #[cfg(feature = "tls")]
             tls_cert: config.tls_cert,
             imaps: config.imaps,
-            command_chain: None,
+            command_middleware: Vec::new(),
         })
     }
 
@@ -1421,14 +1423,14 @@ impl ImapServer {
                     #[cfg(feature = "tls")]
                     let tls_cert = self.tls_cert.clone();
                     let imaps = self.imaps;
-                    let command_chain = self.command_chain.clone();
+                    let command_middleware = self.command_middleware.clone();
                     edgerun_rt::spawn(async move {
                         if let Err(e) = handle_connection(
                             stream, peer, store, domain,
                             #[cfg(feature = "tls")]
                             tls_cert,
                             imaps,
-                            command_chain,
+                            command_middleware,
                         ).await {
                             edgerun_log::warn!("edgerun-imap: connection error from {}: {}", peer, e);
                         }
@@ -1458,7 +1460,7 @@ async fn handle_connection(
     domain: String,
     #[cfg(feature = "tls")] tls_cert: Option<CertificateAndKey>,
     imaps: bool,
-    command_chain: Option<Arc<dyn CommandHandler<ImapCommand, ImapResponse>>>,
+    command_middleware: Vec<Arc<dyn CommandMiddleware<ImapCommand, ImapResponse>>>,
 ) -> io::Result<()> {
     edgerun_log::info!("edgerun-imap: connection from {}", peer);
 
@@ -1581,9 +1583,8 @@ async fn handle_connection(
             }
         }
 
-        // Dispatch command
-        let response = if let Some(ref chain) = command_chain {
-            // Run through middleware first
+        // ── Middleware pre-filter (if configured) ──────────────────
+        if !command_middleware.is_empty() {
             let session = SessionExtensions::new();
             session.insert(ImapConnState {
                 state: state.clone(),
@@ -1591,48 +1592,52 @@ async fn handle_connection(
                 authenticated_user: authenticated_user.clone(),
             }).await;
 
-            let session_for_sync = session.clone();
-            match chain.handle(cmd.clone(), session).await {
-                Ok(MwControlFlow::Respond(resp)) => {
-                    // Middleware short-circuited — send response
-                    resp
-                }
-                Ok(MwControlFlow::Continue) => {
-                    // Sync state back from middleware
-                    if let Some(conn) = session_for_sync.get::<ImapConnState>().await {
-                        state = conn.state;
-                        current_mailbox = conn.mailbox;
-                        authenticated_user = conn.authenticated_user;
+            let mut blocked = false;
+            for mw in &command_middleware {
+                let mw = Arc::clone(mw);
+                let cmd_for_mw = cmd.clone();
+                let session_for_mw = session.clone();
+                let next = NextCommand::new(|_cmd, _session| {
+                    Box::pin(async move { Ok(MwControlFlow::Continue) })
+                });
+
+                match mw.handle(cmd_for_mw, session_for_mw, next).await {
+                    Ok(MwControlFlow::Respond(resp)) => {
+                        write_response(&mut transport, &resp).await?;
+                        blocked = true;
+                        break;
                     }
-                    // Middleware passed through — run handler
-                    dispatch_command(
-                        &cmd,
-                        &tag,
-                        &mut state,
-                        &mut current_mailbox,
-                        &mut authenticated_user,
-                        &store,
-                        &domain,
-                        &mut transport,
-                    ).await?
-                }
-                Err(e) => {
-                    ImapResponse::bad(&tag, &format!("Error: {}", e))
+                    Ok(MwControlFlow::Continue) => {
+                        if let Some(conn) = session.get::<ImapConnState>().await {
+                            state = conn.state;
+                            current_mailbox = conn.mailbox;
+                            authenticated_user = conn.authenticated_user;
+                        }
+                    }
+                    Err(e) => {
+                        let resp = ImapResponse::bad(&tag, &format!("Error: {}", e));
+                        write_response(&mut transport, &resp).await?;
+                        blocked = true;
+                        break;
+                    }
                 }
             }
-        } else {
-            // No middleware — direct dispatch
-            dispatch_command(
-                &cmd,
-                &tag,
-                &mut state,
-                &mut current_mailbox,
-                &mut authenticated_user,
-                &store,
-                &domain,
-                &mut transport,
-            ).await?
-        };
+            if blocked {
+                continue;
+            }
+        }
+
+        // Dispatch command
+        let response = dispatch_command(
+            &cmd,
+            &tag,
+            &mut state,
+            &mut current_mailbox,
+            &mut authenticated_user,
+            &store,
+            &domain,
+            &mut transport,
+        ).await?;
 
         write_response(&mut transport, &response).await?;
 

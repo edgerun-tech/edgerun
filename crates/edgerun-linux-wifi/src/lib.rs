@@ -2090,15 +2090,7 @@ impl WifiAccessPointController for LinuxWifiBackend {
 
 /// Parse a MAC address string like "AA:BB:CC:DD:EE:FF" into bytes.
 fn parse_mac_string(s: &str) -> Option<[u8; 6]> {
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 6 {
-        return None;
-    }
-    let mut mac = [0u8; 6];
-    for (i, part) in parts.iter().enumerate() {
-        mac[i] = u8::from_str_radix(part, 16).ok()?;
-    }
-    Some(mac)
+    edgerun_encoding::hex::parse_mac(s)
 }
 
 /// Derive the Pairwise Master Key (PMK) from a WPA passphrase using PBKDF2-SHA1.

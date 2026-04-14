@@ -11,6 +11,7 @@ edgerun-linux-netif = { path = "../edgerun-linux-netif" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-wifi = { path = "../edgerun-wifi" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 libc.workspace = true
 edgerun-crypto.workspace = true
 edgerun-log = { path = "../edgerun-log" }

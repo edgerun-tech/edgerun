@@ -331,16 +331,8 @@ fn parse_ipv6(s: &str) -> Result<std::net::Ipv6Addr, ConfigError> {
 }
 
 fn parse_mac(s: &str) -> Result<[u8; 6], ConfigError> {
-    let parts: Vec<u8> = s.split(':')
-        .map(|p| u8::from_str_radix(p, 16)
-            .map_err(|e| ConfigError::ValidationError(format!("invalid MAC '{}': {}", s, e))))
-        .collect::<Result<Vec<_>, _>>()?;
-    if parts.len() != 6 {
-        return Err(ConfigError::ValidationError(format!("invalid MAC '{}' (need 6 bytes)", s)));
-    }
-    let mut mac = [0u8; 6];
-    mac.copy_from_slice(&parts);
-    Ok(mac)
+    edgerun_encoding::hex::parse_mac(s)
+        .ok_or_else(|| ConfigError::ValidationError(format!("invalid MAC '{}' (need 6 bytes)", s)))
 }
 
 /// Parse a DUID (DHCP Unique Identifier) or MAC address into bytes.
