@@ -522,6 +522,23 @@ fn parse_store_action(s: &str) -> io::Result<StoreAction> {
     }
 }
 
+/// Parse a single search key atom (used by OR).
+fn parse_single_search_key(s: &str) -> Option<SearchKey> {
+    match s.to_uppercase().as_str() {
+        "ALL" => Some(SearchKey::All),
+        "ANSWERED" => Some(SearchKey::Answered),
+        "DELETED" => Some(SearchKey::Deleted),
+        "DRAFT" => Some(SearchKey::Draft),
+        "FLAGGED" => Some(SearchKey::Flagged),
+        "RECENT" => Some(SearchKey::Recent),
+        "NEW" => Some(SearchKey::New),
+        "OLD" => Some(SearchKey::Old),
+        "SEEN" => Some(SearchKey::Seen),
+        "UNSEEN" => Some(SearchKey::Unseen),
+        _ => None,
+    }
+}
+
 fn parse_search_keys(args: &[String]) -> Vec<SearchKey> {
     let mut keys = Vec::new();
     let mut i = 0;
@@ -630,6 +647,75 @@ fn parse_search_keys(args: &[String]) -> Vec<SearchKey> {
                     i += 1;
                     continue;
                 }
+            }
+            "BEFORE" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::Before(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "SINCE" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::Since(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "ON" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::On(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "SENTBEFORE" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::SentBefore(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "SENTSINCE" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::SentSince(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "SENTON" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::SentOn(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "TEXT" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::Text(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "HEADER" => {
+                if i + 2 < args.len() {
+                    let name = args[i + 1].clone();
+                    let value = args[i + 2].clone();
+                    i += 2;
+                    SearchKey::Header(name, value)
+                } else { i += 1; continue; }
+            }
+            "CC" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    SearchKey::To(args[i].clone())
+                } else { i += 1; continue; }
+            }
+            "BCC" => {
+                if i + 1 < args.len() { i += 1; }
+                SearchKey::All // Simplified: BCC always matches all
+            }
+            "OR" => {
+                if i + 2 < args.len() {
+                    i += 1;
+                    let key1 = parse_single_search_key(&args[i]).unwrap_or(SearchKey::All);
+                    i += 1;
+                    let key2 = parse_single_search_key(&args[i]).unwrap_or(SearchKey::All);
+                    SearchKey::Or(Box::new(key1), Box::new(key2))
+                } else { i += 1; continue; }
             }
             _ => {
                 // Treat as a sequence set
