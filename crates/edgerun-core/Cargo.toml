@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-crypto.workspace = true
+edgerun-encoding = { path = "../edgerun-encoding" }
 prost.workspace = true
 prost-types.workspace = true
 serde_yaml = "0.9"

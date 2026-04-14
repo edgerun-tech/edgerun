@@ -207,9 +207,10 @@ pub fn canonical_time_string(value: &str) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Hex encoding/decoding — replaces `hex` crate
+// Hex encoding/decoding — delegates to edgerun-encoding
 // ---------------------------------------------------------------------------
 
+/// Hex decoding error (compatibility alias for edgerun-encoding).
 #[derive(Debug, PartialEq)]
 pub enum HexError {
     InvalidChar,
@@ -224,56 +225,31 @@ impl std::fmt::Display for HexError {
 
 impl std::error::Error for HexError {}
 
-/// Encode bytes as lowercase hex (no prefix). Replaces `hex::encode`.
-pub fn bytes_to_hex(value: &[u8]) -> String {
-    let mut out = String::with_capacity(value.len() * 2);
-    for &b in value {
-        out.push(HEX_DIGITS[(b >> 4) as usize] as char);
-        out.push(HEX_DIGITS[(b & 0x0f) as usize] as char);
+fn map_hex_error(e: edgerun_encoding::hex::HexError) -> HexError {
+    match e {
+        edgerun_encoding::hex::HexError::InvalidCharacter(_) |
+        edgerun_encoding::hex::HexError::InvalidLength => HexError::InvalidChar,
     }
-    out
 }
 
-const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+/// Encode bytes as lowercase hex (no prefix). Replaces `hex::encode`.
+pub fn bytes_to_hex(value: &[u8]) -> String {
+    edgerun_encoding::hex::bytes_to_hex(value)
+}
 
 /// Decode hex string (no prefix expected). Replaces `hex::decode`.
 pub fn hex_to_bytes(value: &str) -> Result<Vec<u8>, HexError> {
-    let trimmed = value.strip_prefix("0x").unwrap_or(value);
-    if trimmed.len() % 2 != 0 {
-        return decode_hex_with_odd_prefix_handling(trimmed);
-    }
-    let mut out = Vec::with_capacity(trimmed.len() / 2);
-    let bytes = trimmed.as_bytes();
-    for chunk in bytes.chunks_exact(2) {
-        let hi = hex_byte(chunk[0]).ok_or(HexError::InvalidChar)?;
-        let lo = hex_byte(chunk[1]).ok_or(HexError::InvalidChar)?;
-        out.push((hi << 4) | lo);
-    }
-    Ok(out)
-}
-
-fn decode_hex_with_odd_prefix_handling(s: &str) -> Result<Vec<u8>, HexError> {
-    let padded = format!("0{}", s);
-    hex_to_bytes(&padded)
-}
-
-fn hex_byte(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
+    edgerun_encoding::hex::hex_to_bytes(value).map_err(map_hex_error)
 }
 
 /// Decode hex, panic on error.
 pub fn must_hex_to_bytes(value: &str) -> Vec<u8> {
-    hex_to_bytes(value).unwrap()
+    edgerun_encoding::hex::must_hex_to_bytes(value)
 }
 
 /// Encode bytes as lowercase hex with `0x` prefix.
 pub fn bytes_to_hex_prefixed(value: &[u8]) -> String {
-    format!("0x{}", bytes_to_hex(value))
+    edgerun_encoding::hex::bytes_to_hex_prefixed(value)
 }
 
 #[cfg(test)]

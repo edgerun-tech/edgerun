@@ -110,44 +110,23 @@ fn bluetooth_link_kind_from_u8(v: u8) -> Result<BluetoothLinkKind, CapabilityErr
 // --- String helpers ---
 
 fn encode_string_field(value: &str, out: &mut Vec<u8>) {
-    let bytes = value.as_bytes();
-    out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
-    out.extend_from_slice(bytes);
+    edgerun_encoding::string_field::encode_string_field_u32(value, out)
+        .expect("string field encode failed");
 }
 
 fn decode_string_field(bytes: &[u8], cursor: &mut usize) -> Result<String, CapabilityError> {
-    if bytes.len() < *cursor + 4 {
-        return Err(CapabilityError::InvalidRequest("remote string field length missing"));
-    }
-    let len = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap()) as usize;
-    *cursor += 4;
-    if bytes.len() < *cursor + len {
-        return Err(CapabilityError::InvalidRequest("remote string field payload too short"));
-    }
-    let s = String::from_utf8(bytes[*cursor..*cursor + len].to_vec())
-        .map_err(|_| CapabilityError::InvalidRequest("remote string field is not valid utf-8"))?;
-    *cursor += len;
-    Ok(s)
+    edgerun_encoding::string_field::decode_string_field_u32(bytes, cursor)
+        .map_err(|_| CapabilityError::InvalidRequest("remote string field decode failed"))
 }
 
 fn encode_optional_string_field(value: &Option<String>, out: &mut Vec<u8>) {
-    out.push(value.is_some() as u8);
-    if let Some(v) = value {
-        encode_string_field(v, out);
-    }
+    edgerun_encoding::string_field::encode_optional_string_field_u32(value.as_deref(), out)
+        .expect("optional string field encode failed");
 }
 
 fn decode_optional_string_field(bytes: &[u8], cursor: &mut usize) -> Result<Option<String>, CapabilityError> {
-    if bytes.len() < *cursor + 1 {
-        return Err(CapabilityError::InvalidRequest("remote optional string presence byte missing"));
-    }
-    let present = bytes[*cursor] != 0;
-    *cursor += 1;
-    if present {
-        Ok(Some(decode_string_field(bytes, cursor)?))
-    } else {
-        Ok(None)
-    }
+    edgerun_encoding::string_field::decode_optional_string_field_u32(bytes, cursor)
+        .map_err(|_| CapabilityError::InvalidRequest("remote optional string field decode failed"))
 }
 
 fn encode_string_vec(values: &[String], out: &mut Vec<u8>) {

@@ -947,6 +947,7 @@ name = "edgerun-core"
 version = "0.1.0"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-proto",
  "hex",
  "prost",
@@ -1588,6 +1589,7 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-display",
+ "edgerun-encoding",
  "edgerun-fingerprint",
  "edgerun-hardware-signing",
  "edgerun-input",

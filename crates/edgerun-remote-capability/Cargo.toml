@@ -21,6 +21,7 @@ edgerun-fingerprint = { path = "../edgerun-fingerprint" }
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-crypto.workspace = true
+edgerun-encoding = { path = "../edgerun-encoding" }
 prost.workspace = true
 
 edgerun-core = { path = "../edgerun-core" }
