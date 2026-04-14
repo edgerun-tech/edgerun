@@ -1167,40 +1167,7 @@ fn parse_imap_address(s: &str) -> Option<Address> {
 
 /// Simple base64 decoder (for SASL PLAIN mechanism)
 pub fn base64_decode(s: &str) -> Result<Vec<u8>, ()> {
-    use std::collections::HashMap;
-    let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let map: HashMap<char, u8> = alphabet.chars().enumerate().map(|(i, c)| (c, i as u8)).collect();
-    
-    let s = s.trim();
-    let mut bytes = Vec::new();
-    let mut buf = [0u8; 4];
-    let mut count = 0;
-    
-    for c in s.chars() {
-        if c == '=' { continue; } // padding
-        if let Some(&val) = map.get(&c) {
-            buf[count] = val;
-            count += 1;
-            if count == 4 {
-                bytes.push((buf[0] << 2) | (buf[1] >> 4));
-                bytes.push((buf[1] << 4) | (buf[2] >> 2));
-                bytes.push((buf[2] << 6) | buf[3]);
-                count = 0;
-            }
-        }
-    }
-    
-    // Handle remaining
-    if count == 3 {
-        bytes.push((buf[0] << 2) | (buf[1] >> 4));
-        bytes.push((buf[1] << 4) | (buf[2] >> 2));
-    } else if count == 2 {
-        bytes.push((buf[0] << 2) | (buf[1] >> 4));
-    } else if count != 0 {
-        return Err(());
-    }
-    
-    Ok(bytes)
+    edgerun_encoding::base64::standard_decode(s).map_err(|_| ())
 }
 
 /// Check if a message matches search keys.

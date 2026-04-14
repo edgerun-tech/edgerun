@@ -221,42 +221,7 @@ impl Default for EmailBuilder {
 
 /// Encode bytes as base64 with 76-char line wrapping (RFC 2045).
 fn encode_base64(data: &[u8]) -> Vec<u8> {
-    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = Vec::with_capacity((data.len() * 4 + 2) / 3);
-    let mut col = 0;
-
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-
-        let triple = (b0 << 16) | (b1 << 8) | b2;
-
-        result.push(TABLE[((triple >> 18) & 0x3F) as usize]);
-        result.push(TABLE[((triple >> 12) & 0x3F) as usize]);
-        if chunk.len() > 1 {
-            result.push(TABLE[((triple >> 6) & 0x3F) as usize]);
-        } else {
-            result.push(b'=');
-        }
-        if chunk.len() > 2 {
-            result.push(TABLE[(triple & 0x3F) as usize]);
-        } else {
-            result.push(b'=');
-        }
-
-        col += 4;
-        if col >= 76 {
-            result.extend_from_slice(b"\r\n");
-            col = 0;
-        }
-    }
-
-    if col > 0 {
-        result.extend_from_slice(b"\r\n");
-    }
-
-    result
+    edgerun_encoding::base64::standard_encode_wrapped(data)
 }
 
 /// Encode a string as quoted-printable (RFC 2045).
