@@ -1,0 +1,26 @@
+[package]
+name = "edgerun-email"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Complete email server: SMTP (RFC 5321), IMAP (RFC 3501), LMTP (RFC 2033)"
+
+[[bin]]
+name = "edgerun-mailq"
+path = "src/bin/edgerun-mailq.rs"
+
+[features]
+default = []
+tls = ["dep:edgerun-tls"]
+
+[lints]
+workspace = true
+
+[dependencies]
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+edgerun-dns = { path = "../edgerun-dns" }
+edgerun-email-auth = { path = "../edgerun-email-auth" }
+edgerun-crypto = { path = "../edgerun-crypto" }
+edgerun-tls = { path = "../edgerun-tls", optional = true }

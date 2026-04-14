@@ -388,13 +388,13 @@ impl Server {
 
         #[cfg(feature = "imap")]
         let imap_server = if let Some(config) = self.imap {
-            let imap_config = edgerun_imap::server::ImapServerConfig {
+            let imap_config = edgerun_email::imap::server::ImapServerConfig {
                 bind_addr: config.bind_addr,
                 domain_name: config.domain_name,
                 imaps: config.imaps,
                 ..Default::default()
             };
-            let srv = edgerun_imap::ImapServer::new(imap_config)?;
+            let srv = edgerun_email::imap::ImapServer::new(imap_config)?;
             Some(srv)
         } else {
             None
@@ -402,10 +402,10 @@ impl Server {
 
         #[cfg(feature = "smtp")]
         let smtp_server = if let Some(config) = self.smtp {
-            let smtp_config = edgerun_smtp::server::SmtpServerConfig {
+            let smtp_config = edgerun_email::smtp::server::SmtpServerConfig {
                 bind_addr: config.bind_addr,
                 domain: config.domain_name,
-                limits: edgerun_smtp::ServerLimits {
+                limits: edgerun_email::smtp::ServerLimits {
                     max_message_size: config.max_message_size,
                     ..Default::default()
                 },
@@ -418,12 +418,12 @@ impl Server {
 
             let srv = if let Some(ref maildir_root) = config.maildir_root {
                 // Use persistent MaildirStore
-                let store = edgerun_smtp::server::MaildirStore::new(maildir_root)?;
+                let store = edgerun_email::smtp::server::MaildirStore::new(maildir_root)?;
                 let handler = std::sync::Arc::new(store);
-                edgerun_smtp::server::SmtpServer::new(smtp_config, handler)?
+                edgerun_email::smtp::server::SmtpServer::new(smtp_config, handler)?
             } else {
                 // Fallback to in-memory store
-                edgerun_smtp::SmtpServer::with_memory_store(smtp_config)?
+                edgerun_email::smtp::SmtpServer::with_memory_store(smtp_config)?
             };
             Some(srv)
         } else {
@@ -432,15 +432,15 @@ impl Server {
 
         #[cfg(feature = "lmtp")]
         let lmtp_server = if let Some(config) = self.lmtp {
-            let lmtp_config = edgerun_lmtp::server::LmtpServerConfig {
+            let lmtp_config = edgerun_email::lmtp::server::LmtpServerConfig {
                 bind_addr: config.bind_addr,
                 domain: config.domain_name,
-                limits: edgerun_smtp::ServerLimits {
+                limits: edgerun_email::smtp::ServerLimits {
                     max_message_size: config.max_message_size,
                     ..Default::default()
                 },
             };
-            let srv = edgerun_lmtp::LmtpServer::with_memory_store(lmtp_config)?;
+            let srv = edgerun_email::lmtp::LmtpServer::with_memory_store(lmtp_config)?;
             Some(srv)
         } else {
             None
@@ -478,11 +478,11 @@ pub struct BoundServer {
     #[cfg(feature = "tftp")]
     tftp: Option<edgerun_tftp::TftpServer>,
     #[cfg(feature = "imap")]
-    imap: Option<edgerun_imap::ImapServer>,
+    imap: Option<edgerun_email::imap::ImapServer>,
     #[cfg(feature = "smtp")]
-    smtp: Option<edgerun_smtp::SmtpServer>,
+    smtp: Option<edgerun_email::smtp::SmtpServer>,
     #[cfg(feature = "lmtp")]
-    lmtp: Option<edgerun_lmtp::LmtpServer>,
+    lmtp: Option<edgerun_email::lmtp::LmtpServer>,
 }
 
 impl BoundServer {

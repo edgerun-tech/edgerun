@@ -45,7 +45,7 @@ pub fn find_git_root(dir: &Path) -> Option<PathBuf> {
 pub struct GitSafety {
     root: PathBuf,
     /// Files modified since we started this batch (for rollback).
-    modified: Vec<String>,
+    pub modified: Vec<String>,
 }
 
 impl GitSafety {
