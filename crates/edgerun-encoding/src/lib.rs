@@ -35,6 +35,7 @@ pub mod kv;
 pub mod net;
 pub mod percent;
 pub mod protobuf;
+pub mod quic_varint;
 pub mod quoted_printable;
 pub mod rfc2822;
 pub mod rfc3339;

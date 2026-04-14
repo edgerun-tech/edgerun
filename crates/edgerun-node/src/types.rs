@@ -8,7 +8,8 @@ pub enum StoreRequest {
         command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
         /// Peer identity for allowlist check.
         peer_id: Option<Vec<u8>>,
-        reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
+        /// Reply channel. `None` for fire-and-forget (e.g., mesh commands).
+        reply_tx: Option<edgerun_rt::oneshot::Sender<StoreResponse>>,
     },
     Query {
         /// The raw message bytes (for dedup hashing before decode).
@@ -16,7 +17,8 @@ pub enum StoreRequest {
         query: edgerun_proto::edgerun::v0::access::QueryRequest,
         /// Peer identity for allowlist check.
         peer_id: Option<Vec<u8>>,
-        reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
+        /// Reply channel. `None` for fire-and-forget (e.g., mesh commands).
+        reply_tx: Option<edgerun_rt::oneshot::Sender<StoreResponse>>,
     },
     /// Produce a snapshot of current stream heads.
     ProduceSnapshot {

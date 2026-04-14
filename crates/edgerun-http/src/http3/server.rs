@@ -553,31 +553,8 @@ impl Http3Server {
         if pos >= data.len() {
             return Err("Out of bounds".into());
         }
-        let first = data[pos];
-        let len = match first >> 6 {
-            0 => 1,
-            1 => 2,
-            2 => 4,
-            3 => 8,
-            _ => return Err("Invalid varint".into()),
-        };
-        if pos + len > data.len() {
-            return Err("Varint incomplete".into());
-        }
-        let value = match len {
-            1 => (first & 0x3F) as u64,
-            2 => u16::from_be_bytes([first & 0x3F, data[pos + 1]]) as u64,
-            4 => {
-                let b = [first & 0x3F, data[pos + 1], data[pos + 2], data[pos + 3]];
-                u32::from_be_bytes(b) as u64
-            }
-            8 => {
-                let mut b: [u8; 8] = data[pos..pos + 8].try_into().unwrap();
-                b[0] &= 0x3F;
-                u64::from_be_bytes(b)
-            }
-            _ => unreachable!(),
-        };
+        let (value, len) = edgerun_encoding::quic_varint::decode_varint(&data[pos..])
+            .map_err(|e| format!("{e}"))?;
         Ok((value, len))
     }
 

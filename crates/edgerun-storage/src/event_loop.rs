@@ -454,6 +454,10 @@ fn run_event_loop(
     }
 }
 
+struct Materializer {
+    index: Arc<FileIndex>,
+}
+
 impl Materializer {
     fn materialize_with_offset(
         &self,

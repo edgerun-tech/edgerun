@@ -658,7 +658,7 @@ impl<T> Future for RecvFut<'_, T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct SendError<T>(pub T);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

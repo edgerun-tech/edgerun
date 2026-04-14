@@ -363,69 +363,13 @@ impl QuicPacket {
 
     /// Encode variable-length integer
     fn encode_varint(&self, value: u64, output: &mut Vec<u8>) {
-        if value < 64 {
-            output.push(value as u8);
-        } else if value < 16384 {
-            output.push(((value >> 8) as u8) | 0x40);
-            output.push(value as u8);
-        } else if value < 1073741824 {
-            let bytes = (value as u32).to_be_bytes();
-            output.push(bytes[0] | 0x80);
-            output.push(bytes[1]);
-            output.push(bytes[2]);
-            output.push(bytes[3]);
-        } else {
-            let bytes = value.to_be_bytes();
-            output.push(bytes[0] | 0xC0);
-            output.extend_from_slice(&bytes[1..]);
-        }
+        edgerun_encoding::quic_varint::encode_varint(value, output)
     }
 
     /// Decode variable-length integer
     fn decode_varint(data: &[u8]) -> Result<(u64, usize), std::io::Error> {
-        if data.is_empty() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "Empty varint",
-            ));
-        }
-
-        let first = data[0];
-        let len = match first >> 6 {
-            0 => 1,
-            1 => 2,
-            2 => 4,
-            3 => 8,
-            _ => unreachable!(),
-        };
-
-        if data.len() < len {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "Incomplete varint",
-            ));
-        }
-
-        let value = match len {
-            1 => (first & 0x3F) as u64,
-            2 => {
-                let bytes = [first & 0x3F, data[1]];
-                u16::from_be_bytes(bytes) as u64
-            }
-            4 => {
-                let bytes = [first & 0x3F, data[1], data[2], data[3]];
-                u32::from_be_bytes(bytes) as u64
-            }
-            8 => {
-                let bytes: [u8; 8] = data[..8].try_into().unwrap();
-                let mut bytes = bytes;
-                bytes[0] &= 0x3F;
-                u64::from_be_bytes(bytes)
-            }
-            _ => unreachable!(),
-        };
-
-        Ok((value, len))
+        edgerun_encoding::quic_varint::decode_varint(data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, format!("{e}")))
     }
 }
 

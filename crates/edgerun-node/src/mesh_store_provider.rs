@@ -22,6 +22,9 @@ use crate::types::{StoreRequest, StoreResponse};
 /// Creates a command handler closure that decodes encrypted mesh frames
 /// and forwards them to the store task through the same channel used by TCP.
 ///
+/// Fix #6: Mesh commands are fire-and-forget — no oneshot reply channel
+/// is allocated, avoiding wasted Arc + store task computation for nobody.
+///
 /// The handler uses `edgerun_rt::spawn` to bridge from the blocking daemon
 /// thread to the async channel, since `store_tx.send()` is async.
 pub fn make_mesh_command_handler(
@@ -31,28 +34,27 @@ pub fn make_mesh_command_handler(
         let tx = store_tx.clone();
         let peer_id_bytes = peer_id.0.to_vec();
 
-        // Decode as CommandEnvelope first, then QueryRequest
         edgerun_rt::spawn(async move {
             let raw = decrypted.clone();
             if let Ok(command) = edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&decrypted[..]) {
-                let (reply_tx, _reply_rx) = edgerun_rt::oneshot::channel::<StoreResponse>();
+                // Fire-and-forget — no reply channel needed.
                 let _ = tx.send(StoreRequest::Command {
                     raw_bytes: raw,
                     command,
                     peer_id: Some(peer_id_bytes),
-                    reply_tx,
+                    reply_tx: None,
                 }).await;
                 return;
             }
 
             let raw = decrypted.clone();
             if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&decrypted[..]) {
-                let (reply_tx, _reply_rx) = edgerun_rt::oneshot::channel::<StoreResponse>();
+                // Fire-and-forget — no reply channel needed.
                 let _ = tx.send(StoreRequest::Query {
                     raw_bytes: raw,
                     query,
                     peer_id: Some(peer_id_bytes),
-                    reply_tx,
+                    reply_tx: None,
                 }).await;
             }
         });

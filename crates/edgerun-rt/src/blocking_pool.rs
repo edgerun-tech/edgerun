@@ -280,8 +280,8 @@ impl BlockingPool {
     where
         F: FnOnce() + Send + 'static,
     {
-        let tx_guard = self.inner.tx.lock().unwrap();
-        let tx = tx_guard.as_ref().ok_or(PoolError::Shutdown)?;
+        let tx_guard = self.inner.tx.lock();
+        let tx = (&*tx_guard).as_ref().ok_or(PoolError::Shutdown)?;
 
         let inner = Arc::clone(&self.inner);
         tx.send(Box::new(move || {
@@ -296,14 +296,14 @@ impl BlockingPool {
     /// and exit. No more jobs are accepted after this call.
     pub(crate) fn shutdown(&self) {
         // Take and drop the sender → all workers get Disconnected.
-        self.inner.tx.lock().unwrap().take();
+        self.inner.tx.lock().take();
     }
 
     pub(crate) fn join(&self) {
         if self.inner.joined.swap(true, Ordering::AcqRel) {
             return;
         }
-        for t in self.inner.threads.lock().unwrap().drain(..) {
+        for t in self.inner.threads.lock().drain(..) {
             let _ = t.join();
         }
     }

@@ -115,65 +115,60 @@ pub fn run_store_task(
             // 1. Recent duplicate detection (before any crypto work)
             let msg_hash = ingress::quick_message_hash(&raw_bytes);
             if message_hash_cache.contains(msg_hash) {
-                let reply = match req {
-                    StoreRequest::Command { reply_tx, .. } => reply_tx,
-                    StoreRequest::Query { reply_tx, .. } => reply_tx,
-                    StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
-                    StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
-                    StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
-                    StoreRequest::FetchDequeue { reply_tx } => reply_tx,
-                    StoreRequest::FetchMarkDone { reply_tx, .. } => reply_tx,
-                    StoreRequest::FetchRequeue { reply_tx, .. } => reply_tx,
-                    StoreRequest::PeerLookup { reply_tx, .. } => reply_tx,
-                    StoreRequest::ConfigReload { reply_tx, .. } => reply_tx,
-                    StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {
-                        continue;
-                    }
+                // For fire-and-forget (mesh) commands with no reply_tx, just skip.
+                let rejected = StoreResponse::Rejected(ingress::IngressResult::Duplicate);
+                match req {
+                    StoreRequest::Command { reply_tx, .. } => { if let Some(tx) = reply_tx { let _ = tx.send(rejected); } }
+                    StoreRequest::Query { reply_tx, .. } => { if let Some(tx) = reply_tx { let _ = tx.send(rejected); } }
+                    StoreRequest::ProduceSnapshot { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchObject { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::SendCommand { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchDequeue { reply_tx } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchMarkDone { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchRequeue { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::PeerLookup { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::ConfigReload { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {}
                 };
-                let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::Duplicate));
                 continue;
             }
 
             // 2. Global rate limit
             if !global_rate_limiter.try_consume() {
-                let reply = match req {
-                    StoreRequest::Command { reply_tx, .. } => reply_tx,
-                    StoreRequest::Query { reply_tx, .. } => reply_tx,
-                    StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
-                    StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
-                    StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
-                    StoreRequest::FetchDequeue { reply_tx } => reply_tx,
-                    StoreRequest::FetchMarkDone { reply_tx, .. } => reply_tx,
-                    StoreRequest::FetchRequeue { reply_tx, .. } => reply_tx,
-                    StoreRequest::PeerLookup { reply_tx, .. } => reply_tx,
-                    StoreRequest::ConfigReload { reply_tx, .. } => reply_tx,
-                    StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {
-                        continue;
-                    }
+                let rejected = StoreResponse::Rejected(ingress::IngressResult::RateLimited);
+                match req {
+                    StoreRequest::Command { reply_tx, .. } => { if let Some(tx) = reply_tx { let _ = tx.send(rejected); } }
+                    StoreRequest::Query { reply_tx, .. } => { if let Some(tx) = reply_tx { let _ = tx.send(rejected); } }
+                    StoreRequest::ProduceSnapshot { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchObject { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::SendCommand { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchDequeue { reply_tx } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchMarkDone { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::FetchRequeue { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::PeerLookup { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::ConfigReload { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                    StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {}
                 };
-                let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                 continue;
             }
 
             // 3. Peer allowlist check
             if let Some(ref p) = peer_id {
                 if !ingress::is_peer_allowed(p, &allowed_peers) {
-                    let reply = match req {
-                        StoreRequest::Command { reply_tx, .. } => reply_tx,
-                        StoreRequest::Query { reply_tx, .. } => reply_tx,
-                        StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
-                        StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
-                        StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
-                        StoreRequest::FetchDequeue { reply_tx } => reply_tx,
-                        StoreRequest::FetchMarkDone { reply_tx, .. } => reply_tx,
-                        StoreRequest::FetchRequeue { reply_tx, .. } => reply_tx,
-                        StoreRequest::PeerLookup { reply_tx, .. } => reply_tx,
-                        StoreRequest::ConfigReload { reply_tx, .. } => reply_tx,
-                        StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {
-                            continue;
-                        }
+                    let rejected = StoreResponse::Rejected(ingress::IngressResult::PeerNotAllowed);
+                    match req {
+                        StoreRequest::Command { reply_tx, .. } => { if let Some(tx) = reply_tx { let _ = tx.send(rejected); } }
+                        StoreRequest::Query { reply_tx, .. } => { if let Some(tx) = reply_tx { let _ = tx.send(rejected); } }
+                        StoreRequest::ProduceSnapshot { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::FetchObject { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::SendCommand { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::FetchDequeue { reply_tx } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::FetchMarkDone { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::FetchRequeue { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::PeerLookup { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::ConfigReload { reply_tx, .. } => { let _ = reply_tx.send(rejected); }
+                        StoreRequest::MaintenanceTick | StoreRequest::PeerStatusUpdate { .. } | StoreRequest::Shutdown => {}
                     };
-                    let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::PeerNotAllowed));
                     continue;
                 }
             }
@@ -193,19 +188,25 @@ pub fn run_store_task(
                     &capacity_tracker, &workload_policy, &rate_limiter,
                     &running_workloads,
                 );
-                let _ = reply_tx.send(StoreResponse::Ok(result.response_bytes));
+                if let Some(tx) = reply_tx {
+                    let _ = tx.send(StoreResponse::Ok(result.response_bytes));
+                }
             }
             StoreRequest::Query { query, raw_bytes, reply_tx, peer_id } => {
                 // Verify query signature if present
                 if let Some(ref sig) = query.signature {
                     if let Err(reason) = verify_query_signature(&query, sig) {
                         edgerun_log::warn!("query signature verification failed: {}", reason);
-                        let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                        if let Some(tx) = reply_tx {
+                            let _ = tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                        }
                         continue;
                     }
                 }
                 let result = execute_query(&query, &mut store, stream_id, &responder_node_id, &*signer);
-                let _ = reply_tx.send(StoreResponse::Ok(result));
+                if let Some(tx) = reply_tx {
+                    let _ = tx.send(StoreResponse::Ok(result));
+                }
             }
             StoreRequest::ProduceSnapshot { view_type, completeness, reply_tx } => {
                 match store.produce_snapshot(signer, &view_type, completeness) {

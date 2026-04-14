@@ -178,35 +178,8 @@ impl Http3Stream {
     }
 
     fn decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
-        if data.is_empty() {
-            return Err("Empty".to_string());
-        }
-        let first = data[0];
-        let len = match first >> 6 {
-            0 => 1,
-            1 => 2,
-            2 => 4,
-            3 => 8,
-            _ => return Err("Invalid".to_string()),
-        };
-        if data.len() < len {
-            return Err("Incomplete".to_string());
-        }
-        let value = match len {
-            1 => (first & 0x3F) as u64,
-            2 => u16::from_be_bytes([first & 0x3F, data[1]]) as u64,
-            4 => {
-                let b = [first & 0x3F, data[1], data[2], data[3]];
-                u32::from_be_bytes(b) as u64
-            }
-            8 => {
-                let mut b: [u8; 8] = data[..8].try_into().unwrap();
-                b[0] &= 0x3F;
-                u64::from_be_bytes(b)
-            }
-            _ => unreachable!(),
-        };
-        Ok((value, len))
+        edgerun_encoding::quic_varint::decode_varint(data)
+            .map_err(|e| format!("{e}"))
     }
 }
 

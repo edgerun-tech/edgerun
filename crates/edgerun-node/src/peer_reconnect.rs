@@ -346,7 +346,7 @@ async fn handle_peer_messages<R, W>(
                     raw_bytes: raw,
                     command,
                     peer_id: None,
-                    reply_tx,
+                    reply_tx: Some(reply_tx),
                 })
                 .await
                 .is_err()
@@ -380,7 +380,7 @@ async fn handle_peer_messages<R, W>(
                     raw_bytes: raw,
                     query,
                     peer_id: None,
-                    reply_tx,
+                    reply_tx: Some(reply_tx),
                 })
                 .await
                 .is_err()

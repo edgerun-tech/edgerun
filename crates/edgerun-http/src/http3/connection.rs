@@ -1264,22 +1264,7 @@ impl Http3Connection {
     }
 
     fn encode_varint(value: u64, output: &mut Vec<u8>) {
-        if value < 64 {
-            output.push(value as u8);
-        } else if value < 16384 {
-            output.push(((value >> 8) as u8) | 0x40);
-            output.push(value as u8);
-        } else if value < 1073741824 {
-            let bytes = (value as u32).to_be_bytes();
-            output.push(bytes[0] | 0x80);
-            output.push(bytes[1]);
-            output.push(bytes[2]);
-            output.push(bytes[3]);
-        } else {
-            let bytes = value.to_be_bytes();
-            output.push(bytes[0] | 0xC0);
-            output.extend_from_slice(&bytes[1..]);
-        }
+        edgerun_encoding::quic_varint::encode_varint(value, output)
     }
 
     // ------------------------------------------------------------------

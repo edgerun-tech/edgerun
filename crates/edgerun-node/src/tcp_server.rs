@@ -505,7 +505,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
 
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx.send(StoreRequest::Command {
-                raw_bytes: raw, command, peer_id: None, reply_tx,
+                raw_bytes: raw, command, peer_id: None, reply_tx: Some(reply_tx),
             }).await.is_err() {
                 return;
             }
@@ -532,7 +532,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             let raw = payload.clone();
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx.send(StoreRequest::Query {
-                raw_bytes: raw, query, peer_id: None, reply_tx,
+                raw_bytes: raw, query, peer_id: None, reply_tx: Some(reply_tx),
             }).await.is_err() {
                 return;
             }
