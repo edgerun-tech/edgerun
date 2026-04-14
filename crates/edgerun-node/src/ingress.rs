@@ -159,6 +159,62 @@ pub fn is_peer_allowed(peer_id: &[u8], allowed_peers: &[Vec<u8>]) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Composite screening (spec §18.3 correct order)
+// ---------------------------------------------------------------------------
+
+/// Screens an incoming message through the full cheap pre-filter pipeline.
+///
+/// Spec §18.3 recommended order:
+/// 1. Size and framing sanity (done by TCP framing layer — assumed OK here)
+/// 2. Target relevance (does this message target MY node?)
+/// 3. Duplicate or already-known hash/head check
+/// 4. Local interest check (peer allowlist)
+/// 5. Rate limit
+/// 6. Only then: deeper signature, decryption, and authority work
+///
+/// All parameters are mutable references so the caller's rate limiter and
+/// duplicate cache are updated in place.
+pub fn screen_message(
+    message_bytes: &[u8],
+    target_node_id: Option<&[u8]>,
+    local_node_id: &[u8],
+    rate_limiter: &mut TokenBucket,
+    recent_hashes: &mut RecentHashCache,
+    allowed_peers: &[Vec<u8>],
+    peer_id: Option<&[u8]>,
+) -> IngressResult {
+    // Step 2: Target relevance — drop messages not targeting this node
+    if let Some(target) = target_node_id {
+        if target != local_node_id {
+            return IngressResult::PeerNotAllowed; // mis-targeted
+        }
+    }
+
+    // Step 3: Duplicate detection (before rate limit to avoid wasting tokens on dups)
+    let msg_hash = quick_message_hash(message_bytes);
+    if recent_hashes.contains(msg_hash) {
+        return IngressResult::Duplicate;
+    }
+
+    // Step 4: Local interest / peer allowlist
+    if let Some(pid) = peer_id {
+        if !is_peer_allowed(pid, allowed_peers) {
+            return IngressResult::PeerNotAllowed;
+        }
+    }
+
+    // Step 5: Rate limit
+    if !rate_limiter.try_consume() {
+        return IngressResult::RateLimited;
+    }
+
+    // Record the hash after passing all checks (so we don't cache irrelevant msgs)
+    recent_hashes.insert(msg_hash);
+
+    IngressResult::Allow
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -456,5 +512,86 @@ mod tests {
         assert_eq!(IngressResult::Allow, IngressResult::Allow);
         assert_ne!(IngressResult::Allow, IngressResult::RateLimited);
         assert_ne!(IngressResult::Duplicate, IngressResult::PeerNotAllowed);
+    }
+
+    // -----------------------------------------------------------------------
+    // screen_message composite screening
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn screen_message_allows_valid_message() {
+        let mut bucket = TokenBucket::new(100, 100);
+        let mut cache = RecentHashCache::new(100);
+        let msg = b"test message";
+        let result = screen_message(
+            msg,
+            Some(&[1u8; 64]),
+            &[1u8; 64],
+            &mut bucket,
+            &mut cache,
+            &[], // open peer mode
+            None,
+        );
+        assert_eq!(result, IngressResult::Allow);
+    }
+
+    #[test]
+    fn screen_message_rejects_wrong_target() {
+        let mut bucket = TokenBucket::new(100, 100);
+        let mut cache = RecentHashCache::new(100);
+        let result = screen_message(
+            b"msg",
+            Some(&[1u8; 64]),
+            &[2u8; 64], // different node
+            &mut bucket,
+            &mut cache,
+            &[],
+            None,
+        );
+        assert_eq!(result, IngressResult::PeerNotAllowed);
+    }
+
+    #[test]
+    fn screen_message_detects_duplicate() {
+        let mut bucket = TokenBucket::new(100, 100);
+        let mut cache = RecentHashCache::new(100);
+        let msg = b"same message";
+        let r1 = screen_message(msg, None, &[0u8; 64], &mut bucket, &mut cache, &[], None);
+        assert_eq!(r1, IngressResult::Allow);
+        let r2 = screen_message(msg, None, &[0u8; 64], &mut bucket, &mut cache, &[], None);
+        assert_eq!(r2, IngressResult::Duplicate);
+    }
+
+    #[test]
+    fn screen_message_respects_peer_allowlist() {
+        let mut bucket = TokenBucket::new(100, 100);
+        let mut cache = RecentHashCache::new(100);
+        let allowed = vec![vec![1u8, 2, 3]];
+        let result = screen_message(
+            b"msg",
+            None,
+            &[0u8; 64],
+            &mut bucket,
+            &mut cache,
+            &allowed,
+            Some(&[9u8, 9, 9]), // not in allowlist
+        );
+        assert_eq!(result, IngressResult::PeerNotAllowed);
+    }
+
+    #[test]
+    fn screen_message_rate_limits() {
+        let mut bucket = TokenBucket::new(1, 0); // 1 burst, no refill
+        let mut cache = RecentHashCache::new(100);
+        let msg1 = b"message one";
+        let msg2 = b"message two";
+        assert_eq!(
+            screen_message(msg1, None, &[0u8; 64], &mut bucket, &mut cache, &[], None),
+            IngressResult::Allow
+        );
+        assert_eq!(
+            screen_message(msg2, None, &[0u8; 64], &mut bucket, &mut cache, &[], None),
+            IngressResult::RateLimited
+        );
     }
 }

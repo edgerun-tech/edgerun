@@ -391,6 +391,23 @@ fn validate_delegation_chain(
         ));
     }
 
+    // Verify intermediate link continuity: chain[i].recipient == chain[i+1].issuer
+    // This ensures no gaps in the delegation path from root to leaf
+    for i in 0..chain.len() - 1 {
+        let child_recipient = chain[i].recipient.as_ref().map(|r| r.identity_id.clone());
+        let next_issuer = chain[i + 1].issuer.as_ref().map(|i| i.identity_id.clone());
+        if child_recipient != next_issuer {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(format!(
+                    "delegation chain broken: chain[{}].recipient != chain[{}].issuer",
+                    i, i + 1
+                )),
+                empty_map(),
+            ));
+        }
+    }
+
     // Verify root trust: the first delegation's issuer must be in the trusted root set
     let first = chain.first().unwrap();
     if !ctx.trusted_root_ids.is_empty() {

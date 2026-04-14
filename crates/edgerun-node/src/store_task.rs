@@ -420,13 +420,11 @@ fn config_controllers_from_signer(signer: &dyn MeshSigner) -> Vec<Vec<u8>> {
 
 /// Verifies the ECDSA P-256 signature on a QueryRequest.
 /// Returns `Ok(())` if the signature is valid, or `Err(reason)` if not.
+/// Uses domain-separated canonical verification per spec §17.
 fn verify_query_signature(
     query: &edgerun_proto::edgerun::v0::access::QueryRequest,
     sig: &edgerun_proto::edgerun::v0::common::Signature,
 ) -> Result<(), &'static str> {
-    if sig.algorithm != edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
-        return Err("bad_algorithm");
-    }
     if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
         return Err("bad_signature_length");
     }
@@ -449,24 +447,16 @@ fn verify_query_signature(
         Err(_) => return Err("bad_public_key"),
     };
 
-    // Canonical signable: clone query, clear signature, encode
-    let mut signable = query.clone();
-    signable.signature = None;
-    let mut canonical = Vec::new();
-    prost::Message::encode(&signable, &mut canonical).map_err(|_| "encode_failed")?;
-    let digest = edgerun_core::crypto::sha256(&canonical);
+    // Canonical signable: clear signature, encode via protocol canonical_bytes
+    let record = edgerun_core::protocol::ProtocolRecord::QueryRequest(query.clone());
+    let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
 
-    // Verify the ECDSA signature
-    let mut sig_bytes = [0u8; 64];
-    sig_bytes.copy_from_slice(&sig.value);
-    let r = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[..32]);
-    let s = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[32..]);
-    let ecdsa_sig = match edgerun_crypto::p256::ecdsa::Signature::from_scalars(*r, *s) {
-        Ok(sig) => sig,
-        Err(_) => return Err("invalid_signature"),
-    };
-
-    if vk.verify_prehash(digest.as_slice(), &ecdsa_sig).is_err() {
+    if !edgerun_core::crypto::verify_canonical_record(
+        &vk,
+        edgerun_core::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT,
+        &canonical,
+        &sig.value,
+    ) {
         return Err("invalid_signature");
     }
 

@@ -11,6 +11,7 @@ pub enum StorageError {
     Decode(String),
     Encryption(String),
     Decryption(String),
+    InvalidBlob(String),
 }
 
 impl fmt::Display for StorageError {
@@ -21,6 +22,7 @@ impl fmt::Display for StorageError {
             Self::Decode(e) => write!(f, "decode error: {e}"),
             Self::Encryption(e) => write!(f, "encryption error: {e}"),
             Self::Decryption(e) => write!(f, "decryption error: {e}"),
+            Self::InvalidBlob(e) => write!(f, "invalid blob: {e}"),
         }
     }
 }

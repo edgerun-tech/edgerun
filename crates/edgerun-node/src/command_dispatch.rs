@@ -16,7 +16,6 @@ use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, Comma
 use edgerun_proto::edgerun::v0::trust::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
 use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
 use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 use prost::Message;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -76,107 +75,9 @@ pub struct CommandDispatchResult {
     pub response_bytes: Vec<u8>,
 }
 
-// ---------------------------------------------------------------------------
-// Full command validation
-// ---------------------------------------------------------------------------
-
-/// Validates a command's signature against the issuer's actual public key.
-///
-/// Unlike the old `validate_command_signature` which only checked the
-/// key_hint length, this actually verifies the ECDSA signature.
-fn verify_command_signature(command: &CommandEnvelope) -> Result<(), &'static str> {
-    let Some(sig) = &command.signature else {
-        return Err("missing_signature");
-    };
-    if sig.algorithm != edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
-        return Err("bad_algorithm");
-    }
-    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return Err("bad_signature_length");
-    }
-    let Some(issuer) = &command.issuer else {
-        return Err("no_issuer");
-    };
-    let Some(key_hint) = &issuer.key_hint else {
-        return Err("bad_key_hint");
-    };
-    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
-        return Err("bad_key_hint");
-    }
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04;
-    vk_sec1[1..].copy_from_slice(key_hint);
-    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
-        Ok(v) => v,
-        Err(_) => return Err("bad_public_key"),
-    };
-
-    let mut signable_cmd = command.clone();
-    signable_cmd.signature = None;
-    let mut canonical = Vec::new();
-    prost::Message::encode(&signable_cmd, &mut canonical).map_err(|_| "encode_failed")?;
-    let digest = edgerun_core::crypto::sha256(&canonical);
-
-    let mut sig_bytes = [0u8; 64];
-    sig_bytes.copy_from_slice(&sig.value);
-    let r = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[..32]);
-    let s = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[32..]);
-    let ecdsa_sig = match edgerun_crypto::p256::ecdsa::Signature::from_scalars(*r, *s) {
-        Ok(sig) => sig,
-        Err(_) => return Err("invalid_signature"),
-    };
-
-    if vk.verify_prehash(digest.as_slice(), &ecdsa_sig).is_err() {
-        return Err("invalid_signature");
-    }
-
-    Ok(())
-}
-
-/// Verifies a delegation record's signature against its issuer's public key.
-fn verify_delegation_signature(delegation: &edgerun_proto::edgerun::v0::trust::DelegationRecord) -> Result<(), &'static str> {
-    let Some(sig) = &delegation.signature else {
-        return Err("missing_signature");
-    };
-    if sig.algorithm != edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 || sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return Err("bad_signature");
-    }
-    let Some(issuer) = &delegation.issuer else {
-        return Err("no_issuer");
-    };
-    let Some(key_hint) = &issuer.key_hint else {
-        return Err("bad_key_hint");
-    };
-    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
-        return Err("bad_key_hint");
-    }
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04;
-    vk_sec1[1..].copy_from_slice(key_hint);
-    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
-        Ok(v) => v,
-        Err(_) => return Err("bad_public_key"),
-    };
-
-    let mut signable = delegation.clone();
-    signable.signature = None;
-    let mut canonical = Vec::new();
-    prost::Message::encode(&signable, &mut canonical).map_err(|_| "encode_failed")?;
-    let digest = edgerun_core::crypto::sha256(&canonical);
-
-    let r = edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[..32]);
-    let s = edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[32..]);
-    let ecdsa_sig = match edgerun_crypto::p256::ecdsa::Signature::from_scalars(*r, *s) {
-        Ok(sig) => sig,
-        Err(_) => return Err("invalid_signature"),
-    };
-
-    if vk.verify_prehash(digest.as_slice(), &ecdsa_sig).is_err() {
-        return Err("invalid_signature");
-    }
-
-    Ok(())
-}
+// Removed dead signature verification functions (verify_command_signature, verify_delegation_signature).
+// These used a single-hash signing path inconsistent with spec §17 (double-hash).
+// All signature verification is now handled by validate_command() via verify_canonical_record().
 
 // ---------------------------------------------------------------------------
 // Controller projection from event log
@@ -278,8 +179,11 @@ pub fn dispatch_command(
                 false, "deferred", Vec::new(), None);
         }
         Verdict::Duplicate => {
-            // Already processed — return cached result
-            // For now, just re-process (in production we'd cache results)
+            // Already processed — return prior acknowledgment per spec §19.10.
+            // Same command_hash means the command was already committed/rejected.
+            // No re-execution of side effects.
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                true, "duplicate_command", Vec::new(), None);
         }
         Verdict::Accept => {}
     }
@@ -1250,10 +1154,43 @@ fn dispatch_create_delegation(
     controllers: &mut ControllerSet,
     delegation: &ProtoDelegationRecord,
 ) -> CommandDispatchResult {
-    // Verify the delegation signature
-    if let Err(reason) = verify_delegation_signature(delegation) {
+    // Verify the delegation signature using domain-separated canonical verification.
+    let Some(sig) = &delegation.signature else {
         return record_and_respond(command, store, stream_id, signer, controllers,
-            false, reason, Vec::new(), None);
+            false, "missing_signature", Vec::new(), None);
+    };
+    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "bad_signature_length", Vec::new(), None);
+    }
+    let Some(issuer_ref) = &delegation.issuer else {
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "missing_issuer", Vec::new(), None);
+    };
+    let Some(key_hint) = &issuer_ref.key_hint else {
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "missing_key_hint", Vec::new(), None);
+    };
+    let mut vk_sec1 = [0u8; 65];
+    vk_sec1[0] = 0x04;
+    vk_sec1[1..].copy_from_slice(key_hint);
+    let Ok(vk) = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) else {
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "bad_public_key", Vec::new(), None);
+    };
+    let canonical = prost::Message::encode_to_vec(&{
+        let mut s = delegation.clone();
+        s.signature = None;
+        s
+    });
+    if !edgerun_core::crypto::verify_canonical_record(
+        &vk,
+        edgerun_core::crypto::SIG_DOMAIN_DELEGATION_RECORD,
+        &canonical,
+        &sig.value,
+    ) {
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "signature_verification_failed", Vec::new(), None);
     }
 
     // Store the delegation as an object so it's cryptographically linked
@@ -2869,120 +2806,6 @@ mod tests {
         assert!(result.contains(&vec![2]));
         assert!(result.contains(&vec![3]));
         assert_eq!(result.to_vec().len(), 3);
-    }
-
-    // -----------------------------------------------------------------------
-    // Signature verification helpers
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn verify_command_signature_fails_without_signature() {
-        let command = make_command(vec![1], vec![2], vec![3], 1);
-        let result = verify_command_signature(&command);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "missing_signature");
-    }
-
-    #[test]
-    fn verify_command_signature_fails_bad_algorithm() {
-        let mut command = make_command(vec![1], vec![2], vec![3], 1);
-        command.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
-            algorithm: 99,
-            value: vec![0u8; 64],
-        });
-        let result = verify_command_signature(&command);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "bad_algorithm");
-    }
-
-    #[test]
-    fn verify_command_signature_fails_bad_sig_length() {
-        let mut command = make_command(vec![1], vec![2], vec![3], 1);
-        command.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
-            algorithm: 1,
-            value: vec![0u8; 32], // wrong length
-        });
-        let result = verify_command_signature(&command);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "bad_signature_length");
-    }
-
-    #[test]
-    fn verify_command_signature_fails_no_issuer() {
-        let mut command = make_command(vec![1], vec![2], vec![3], 1);
-        command.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
-            algorithm: 1,
-            value: vec![0u8; 64],
-        });
-        command.issuer = None;
-        let result = verify_command_signature(&command);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "no_issuer");
-    }
-
-    #[test]
-    fn verify_command_signature_fails_bad_key_hint_length() {
-        let mut command = make_command(vec![1], vec![2], vec![3], 1);
-        command.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
-            algorithm: 1,
-            value: vec![0u8; 64],
-        });
-        command.issuer = Some(edgerun_proto::edgerun::v0::common::IdentityRef {
-            identity_id: vec![1],
-            identity_kind: Some(0),
-            key_hint: Some(vec![0u8; 32]), // wrong length
-        });
-        let result = verify_command_signature(&command);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "bad_key_hint");
-    }
-
-    #[test]
-    fn verify_delegation_signature_fails_without_signature() {
-        let delegation = ProtoDelegationRecord {
-            record_version: 1,
-            delegation_id: vec![1],
-            issuer: None,
-            recipient: None,
-            issued_at: None,
-            not_before: None,
-            expires_at: None,
-            capability: None,
-            parent_delegation: None,
-            revocation_authorities: vec![],
-            delegation_metadata: None,
-            signature: None,
-        };
-        let result = verify_delegation_signature(&delegation);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "missing_signature");
-    }
-
-    #[test]
-    fn verify_delegation_signature_fails_bad_sig() {
-        let delegation = ProtoDelegationRecord {
-            record_version: 1,
-            delegation_id: vec![1],
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
-                identity_id: vec![1],
-                identity_kind: Some(0),
-                key_hint: None,
-            }),
-            recipient: None,
-            issued_at: None,
-            not_before: None,
-            expires_at: None,
-            capability: None,
-            parent_delegation: None,
-            revocation_authorities: vec![],
-            delegation_metadata: None,
-            signature: Some(edgerun_proto::edgerun::v0::common::Signature {
-                algorithm: 1,
-                value: vec![0u8; 32], // wrong length
-            }),
-        };
-        let result = verify_delegation_signature(&delegation);
-        assert!(result.is_err());
     }
 
     // -----------------------------------------------------------------------

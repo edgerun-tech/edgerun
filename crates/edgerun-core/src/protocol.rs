@@ -24,6 +24,7 @@ pub use edgerun_proto::edgerun::v0::{
     stream::{
         ActionLifecyclePayload, CommandEnvelope, CommandResultPayload, CommandSentPayload,
         EventEnvelope, NodeGenesisPayload,
+        SecretPutPayload, SecretDeletePayload, CollectionCreatedPayload, CollectionDeletedPayload,
     },
     trust::{
         AggregateTrustPolicy, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor,
@@ -92,6 +93,10 @@ pub enum ProtocolRecord {
     CommandSentPayload(CommandSentPayload),
     CommandResultPayload(CommandResultPayload),
     ActionLifecyclePayload(ActionLifecyclePayload),
+    SecretPutPayload(SecretPutPayload),
+    SecretDeletePayload(SecretDeletePayload),
+    CollectionCreatedPayload(CollectionCreatedPayload),
+    CollectionDeletedPayload(CollectionDeletedPayload),
     LogicalObjectDescriptor(LogicalObjectDescriptor),
     StoredRepresentationHeader(StoredRepresentationHeader),
     ChunkEntry(ChunkEntry),
@@ -157,14 +162,17 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> Vec<u8> {
         signable: [
             EventEnvelope, CommandEnvelope, DelegationRecord, RevocationRecord,
             SnapshotDescriptor, IdentityRecord, AssuranceClaim, QueryResultFragment,
+            QueryRequest, FederatedAggregateDescriptor,
             RouteAdvertisement, SessionHello, SessionAccept, RelayEnvelope,
         ],
         plain: [
             IdentityRef, NodeRef, StreamRef, EventRef, HeadRef, CheckpointRef,
             ObjectRef, RepresentationRef, CommandRef, DelegationRef, RevocationRef,
             SnapshotRef, Digest, Signature, TimeWindow, CostLimit, ScopeDescriptor,
-            QueryRequest, FederatedAggregateDescriptor, NodeGenesisPayload,
+            NodeGenesisPayload,
             CommandSentPayload, CommandResultPayload, ActionLifecyclePayload,
+            SecretPutPayload, SecretDeletePayload,
+            CollectionCreatedPayload, CollectionDeletedPayload,
             LogicalObjectDescriptor, StoredRepresentationHeader, ChunkEntry,
             ChunkManifest, AggregateTrustPolicy, RouteTrustAssignment,
             RouteTrustAssignments, RouteSelectionPolicy, AssuranceRequirement,
@@ -478,6 +486,51 @@ mod tests {
 
         assert!(!signable_bytes.contains(&0xE0));
         assert!(full_bytes.contains(&0xE0));
+    }
+
+    #[test]
+    fn canonical_query_request_signable_clears_signature() {
+        let qr = QueryRequest {
+            request_version: 1,
+            query_id: b"q-1".to_vec(),
+            requester: Some(IdentityRef { identity_id: b"req".to_vec(), identity_kind: None, key_hint: None }),
+            target_scope: None,
+            query_class: 0,
+            time_window: None,
+            checkpoint_base: None,
+            result_limit: None,
+            cost_limit: None,
+            required_proof_classes: vec![],
+            query_payload_object: None,
+            signature: Some(test_sig(0xE1)),
+        };
+
+        let signable_bytes = canonical_bytes(&ProtocolRecord::QueryRequest(qr.clone()), true);
+        let full_bytes = canonical_bytes(&ProtocolRecord::QueryRequest(qr.clone()), false);
+
+        assert!(!signable_bytes.contains(&0xE1));
+        assert!(full_bytes.contains(&0xE1));
+    }
+
+    #[test]
+    fn canonical_federated_aggregate_descriptor_signable_clears_signature() {
+        let fad = FederatedAggregateDescriptor {
+            descriptor_version: 1,
+            aggregate_id: b"agg-1".to_vec(),
+            source_query_id: b"q-1".to_vec(),
+            aggregator: Some(IdentityRef { identity_id: b"agg".to_vec(), identity_kind: None, key_hint: None }),
+            aggregated_at: None,
+            input_fragments: vec![],
+            aggregation_policy_object: None,
+            payload_object: None,
+            signature: Some(test_sig(0xE2)),
+        };
+
+        let signable_bytes = canonical_bytes(&ProtocolRecord::FederatedAggregateDescriptor(fad.clone()), true);
+        let full_bytes = canonical_bytes(&ProtocolRecord::FederatedAggregateDescriptor(fad.clone()), false);
+
+        assert!(!signable_bytes.contains(&0xE2));
+        assert!(full_bytes.contains(&0xE2));
     }
 
     // ---- Non-signable types: signable flag has no effect ----

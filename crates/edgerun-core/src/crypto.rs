@@ -162,6 +162,8 @@ pub const SIG_DOMAIN_IDENTITY_RECORD: &str = "edgerun:v0:sig:identity-record";
 pub const SIG_DOMAIN_ASSURANCE_CLAIM: &str = "edgerun:v0:sig:assurance-claim";
 /// Domain tag for signing a mesh frame.
 pub const SIG_DOMAIN_MESH_FRAME: &str = "edgerun:v0:sig:mesh-frame";
+/// Domain tag for signing a query request.
+pub const SIG_DOMAIN_QUERY_REQUEST: &str = "edgerun:v0:sig:query-request";
 
 // ---------------------------------------------------------------------------
 // Object identity derivation tags (spec §17.14–17.16)

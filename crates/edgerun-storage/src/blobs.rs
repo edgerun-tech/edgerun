@@ -115,6 +115,13 @@ impl BlobStore {
         plaintext: &[u8],
         recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
+        // Spec §6.2: every persisted blob MUST name at least one recipient
+        if recipients.is_empty() {
+            return Err(StorageError::InvalidBlob(
+                "blob must name at least one recipient".into(),
+            ));
+        }
+
         // Derive blob ID from plaintext hash (content-addressed)
         let blob_id = edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(plaintext));
 

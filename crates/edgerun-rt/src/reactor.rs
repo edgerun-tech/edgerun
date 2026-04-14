@@ -3,18 +3,17 @@
 //! One reactor thread runs `Reactor::run()` which calls `epoll_wait` and
 //! fires wakers when I/O readiness or timer deadlines arrive.
 //!
+//! ## Timer wakeup
+//! The reactor monitors an eventfd via epoll. When `register_timer` is called,
+//! a byte is written to the eventfd, waking the reactor so it can recalculate
+//! the epoll timeout. Without this, the reactor could sleep for the default
+//! 100ms timeout even when a 1ms timer was just registered.
+//!
 //! ## Thread safety
 //! All fd interest state is protected by a single Mutex on FdInterest.
 //! `update_epoll` holds the lock through the entire read-compute-epoll_ctl
 //! sequence, eliminating TOCTOU races between concurrent waker registration
 //! and epoll event updates.
-//!
-//! FDs are not auto-deregistered in the event loop to avoid races between
-//! event-loop deregistration and concurrent waker registration. Stale fds
-//! are harmless: they sit in the map with 0 epoll events and are reclaimed
-//! when the kernel reuses the fd number (the old FdInterest is still valid
-//! for the new fd — wakers will fire but the syscall will fail with EBADF,
-//! which the caller handles correctly).
 
 use std::collections::BinaryHeap;
 use std::io::{self};
@@ -63,6 +62,71 @@ impl EpollFd {
 impl Drop for EpollFd {
     fn drop(&mut self) {
         unsafe { libc::close(self.0) };
+    }
+}
+
+// ===========================================================================
+// Timer wakeup via eventfd
+// ===========================================================================
+
+/// Writes to this eventfd to wake the reactor when a new timer is registered.
+struct TimerNotify {
+    fd: libc::c_int,
+}
+
+impl TimerNotify {
+    fn new() -> io::Result<Self> {
+        // EFD_NONBLOCK: reads never block, writes never block (counter-based).
+        let fd = unsafe { libc::eventfd(0, libc::EFD_NONBLOCK | libc::EFD_CLOEXEC) };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Self { fd })
+    }
+
+    /// Write a byte to wake the reactor. Safe to call from any thread.
+    fn notify(&self) {
+        let buf: u64 = 1;
+        let ret = unsafe {
+            libc::write(
+                self.fd,
+                &buf as *const u64 as *const libc::c_void,
+                std::mem::size_of::<u64>(),
+            )
+        };
+        // Ignore errors — if the pipe is full or closed, the reactor will
+        // wake up on the next timer/fire anyway.
+        if ret < 0 {
+            // EAGAIN means the counter is already non-zero — reactor will wake.
+            let err = io::Error::last_os_error();
+            if err.raw_os_error() != Some(libc::EAGAIN) && err.raw_os_error() != Some(libc::EWOULDBLOCK) {
+                edgerun_log::warn!("timer notify write error: {}", err);
+            }
+        }
+    }
+
+    /// Drain the eventfd counter. Called by the reactor after waking.
+    fn drain(&self) {
+        let mut buf: u64 = 0;
+        let ret = unsafe {
+            libc::read(
+                self.fd,
+                &mut buf as *mut u64 as *mut libc::c_void,
+                std::mem::size_of::<u64>(),
+            )
+        };
+        if ret < 0 {
+            let err = io::Error::last_os_error();
+            if err.raw_os_error() != Some(libc::EAGAIN) && err.raw_os_error() != Some(libc::EWOULDBLOCK) {
+                edgerun_log::warn!("timer notify drain error: {}", err);
+            }
+        }
+    }
+}
+
+impl Drop for TimerNotify {
+    fn drop(&mut self) {
+        unsafe { libc::close(self.fd) };
     }
 }
 
@@ -227,15 +291,27 @@ pub(crate) struct Reactor {
     epoll: EpollFd,
     fds: Mutex<std::collections::HashMap<RawFd, std::sync::Arc<FdInterest>>>,
     timers: Mutex<BinaryHeap<Timer>>,
+    timer_notify: TimerNotify,
     shutdown: AtomicBool,
 }
 
 impl Reactor {
     pub(crate) fn new() -> io::Result<Self> {
+        let notify = TimerNotify::new()?;
+
+        // Register the eventfd with epoll so the reactor wakes on timer notifications.
+        let mut ev = libc::epoll_event {
+            events: (libc::EPOLLIN | libc::EPOLLET) as _,
+            u64: notify.fd as u64,
+        };
+        let epoll = EpollFd::new()?;
+        epoll.ctl(libc::EPOLL_CTL_ADD, notify.fd, &mut ev)?;
+
         Ok(Self {
-            epoll: EpollFd::new()?,
+            epoll,
             fds: Mutex::new(std::collections::HashMap::new()),
             timers: Mutex::new(BinaryHeap::new()),
+            timer_notify: notify,
             shutdown: AtomicBool::new(false),
         })
     }
@@ -277,6 +353,10 @@ impl Reactor {
 
     pub(crate) fn register_timer(&self, deadline: Instant, waker: Waker) {
         self.timers.lock().push(Timer { deadline, waker });
+        // Wake the reactor so it can recalculate the epoll timeout.
+        // Without this, the reactor could be blocked in epoll_wait(100)
+        // and miss a timer that expires in 1ms.
+        self.timer_notify.notify();
     }
 
     pub(crate) fn run(&self, _queue: &std::sync::Arc<ReadyQueue>) {
@@ -292,23 +372,27 @@ impl Reactor {
             let ms = {
                 let timers = self.timers.lock();
                 if let Some(t) = timers.peek() {
-                    t.deadline
+                    let remaining = t.deadline
                         .saturating_duration_since(Instant::now())
                         .as_millis()
-                        .min(i32::MAX as u128) as i32
+                        .min(i32::MAX as u128) as i32;
+                    // Ensure we always wait at least 1ms when there are pending
+                    // timers, to avoid busy-spinning on sub-millisecond deadlines.
+                    remaining.max(1)
                 } else {
-                    100
+                    -1 // Block indefinitely until a timer or I/O event arrives.
                 }
             };
 
             match self.epoll.wait(&mut evts, ms) {
                 Ok(n) => {
-                    // Fire expired timers first.
+                    // Drain timer notifications first.
+                    self.timer_notify.drain();
+
+                    // Fire expired timers.
                     {
                         let mut timers = self.timers.lock();
                         while let Some(t) = timers.peek() {
-                            // Refresh `now` on each iteration to avoid delaying
-                            // timers whose deadlines fall during waker dispatch.
                             if t.deadline <= Instant::now() {
                                 let t = timers.pop().unwrap();
                                 t.waker.wake();
@@ -323,11 +407,14 @@ impl Reactor {
                         let fd = evt.u64 as RawFd;
                         let bits = evt.events;
 
+                        // Skip the timer notify fd.
+                        if fd == self.timer_notify.fd {
+                            continue;
+                        }
+
                         // Get the fd interest under the map lock.
                         let interest = self.fds.lock().get(&fd).cloned();
                         if let Some(interest) = interest {
-                            // Fire wakers and update epoll atomically.
-                            // fire_and_update handles all locking internally.
                             interest.fire_and_update(&self.epoll, fd, bits);
                         }
                     }
@@ -343,5 +430,7 @@ impl Reactor {
 
     pub(crate) fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Release);
+        // Wake the reactor so it can see the shutdown flag and exit.
+        self.timer_notify.notify();
     }
 }
