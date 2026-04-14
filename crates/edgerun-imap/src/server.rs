@@ -1111,7 +1111,7 @@ pub struct ImapServerConfig {
     pub domain_name: String,
     /// Optional TLS certificate for STARTTLS/IMAPS.
     #[cfg(feature = "tls")]
-    pub tls_cert: Option<TlsCertificate>,
+    pub tls_cert: Option<CertificateAndKey>,
     /// Whether this is an IMAPS server (TLS from start, port 993).
     pub imaps: bool,
 }
@@ -1138,7 +1138,7 @@ pub struct ImapServer {
     store: Arc<dyn MailStore>,
     domain: String,
     #[cfg(feature = "tls")]
-    tls_cert: Option<TlsCertificate>,
+    tls_cert: Option<CertificateAndKey>,
     imaps: bool,
 }
 
@@ -1261,17 +1261,17 @@ async fn handle_connection(
     let greeting = parser::format_greeting(&CAPABILITIES.iter()
         .map(|s| *s)
         .collect::<Vec<_>>());
-    write_response(&mut transport, &ImapResponse::untagged_ok(&format!("* OK [CAPABILITY IMAP4rev1 UIDPLUS CHILDREN IDLE NAMESPACE QUOTA MOVE SASL-IR ENABLE] IMAP4rev1 Service Ready"))).await?;
+    transport.write_all(greeting.as_bytes()).await?;
+    transport.flush().await?;
 
     // Session state
     let mut state = ImapState::NotAuthenticated;
     let mut current_mailbox: Option<String> = None;
     let mut authenticated_user: Option<String> = None;
 
-    // Command loop
-    let mut reader = ImapReader::new(&mut transport);
+    // Command loop — read lines directly from transport
     loop {
-        let line = match reader.read_line().await {
+        let line = match read_imap_line(&mut transport).await {
             Ok(Some(line)) => line,
             Ok(None) => {
                 edgerun_log::info!("edgerun-imap: client {} disconnected", peer);
@@ -1354,7 +1354,6 @@ async fn handle_connection(
             &mut authenticated_user,
             &store,
             &domain,
-            &mut reader,
             &mut transport,
         ).await?;
 
@@ -1364,6 +1363,28 @@ async fn handle_connection(
             edgerun_log::info!("edgerun-imap: client {} logged out", peer);
             return Ok(());
         }
+    }
+}
+
+/// Read a single IMAP line (until \r\n) from the transport.
+async fn read_imap_line(transport: &mut ImapTransport) -> io::Result<Option<String>> {
+    let mut buf = Vec::new();
+    loop {
+        let mut byte = [0u8; 1];
+        let n = transport.read(&mut byte).await?;
+        if n == 0 {
+            if buf.is_empty() {
+                return Ok(None);
+            }
+            return Ok(Some(String::from_utf8_lossy(&buf).to_string()));
+        }
+        if byte[0] == b'\n' {
+            if buf.ends_with(&[b'\r']) {
+                buf.pop();
+            }
+            return Ok(Some(String::from_utf8_lossy(&buf).to_string()));
+        }
+        buf.push(byte[0]);
     }
 }
 
@@ -1382,7 +1403,7 @@ async fn write_response(
 // Command Dispatcher
 // ===========================================================================
 
-async fn dispatch_command<R: AsyncReadExt + Unpin>(
+async fn dispatch_command(
     cmd: &ImapCommand,
     tag: &str,
     state: &mut ImapState,
@@ -1390,8 +1411,7 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
     authenticated_user: &mut Option<String>,
     store: &Arc<dyn MailStore>,
     domain: &str,
-    reader: &mut ImapReader<R>,
-    writer: &mut ImapTransport,
+    transport: &mut ImapTransport,
 ) -> io::Result<ImapResponse> {
     match cmd {
         ImapCommand::Capability => {
@@ -1399,8 +1419,8 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             let cap_resp = parser::format_capability(&CAPABILITIES.iter()
                 .map(|s| *s)
                 .collect::<Vec<_>>());
-            writer.write_all(cap_resp.as_bytes()).await?;
-            writer.flush().await?;
+            transport.write_all(cap_resp.as_bytes()).await?;
+            transport.flush().await?;
 
             Ok(ImapResponse::ok(tag, "CAPABILITY completed"))
         }
@@ -1411,15 +1431,10 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
 
         ImapCommand::Logout => {
             *state = ImapState::Logout;
-            writer.write_all(parser::format_untagged("BYE Logging out").as_bytes()).await?;
-            writer.flush().await?;
+            transport.write_all(parser::format_untagged("BYE Logging out").as_bytes()).await?;
+            transport.flush().await?;
 
             Ok(ImapResponse::ok(tag, "LOGOUT completed"))
-        }
-
-        ImapCommand::Starttls => {
-            // STARTTLS not implemented (requires TLS feature and stream upgrade)
-            Ok(ImapResponse::no(tag, "STARTTLS not supported"))
         }
 
         ImapCommand::Login { user, password } => {
@@ -1450,12 +1465,12 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             
             // Send continuation for base64-encoded credentials
             {
-                writer.write_all(b"+ \r\n").await?;
-                writer.flush().await?;
+                transport.write_all(b"+ \r\n").await?;
+                transport.flush().await?;
             }
             
             // Read the base64 credentials
-            let creds = reader.read_line().await?.unwrap_or_default();
+            let creds = read_imap_line(transport).await?.unwrap_or_default();
             // PLAIN format: authzid\0username\0password
             // Decode base64 and parse
             if let Ok(bytes) = base64_decode(&creds) {
@@ -1492,17 +1507,17 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
 
                     // Send mailbox status
                     if let Some(status) = &mb.status {
-                        writer.write_all(parser::format_exists(status.messages).as_bytes()).await?;
-                        writer.write_all(parser::format_recent(status.recent).as_bytes()).await?;
+                        transport.write_all(parser::format_exists(status.messages).as_bytes()).await?;
+                        transport.write_all(parser::format_recent(status.recent).as_bytes()).await?;
 
                         let flags = ["\\Seen", "\\Answered", "\\Flagged", "\\Deleted", "\\Draft"];
-                        writer.write_all(parser::format_flags(&flags).as_bytes()).await?;
+                        transport.write_all(parser::format_flags(&flags).as_bytes()).await?;
 
-                        writer.write_all(parser::format_uid_validity(status.uid_validity).as_bytes()).await?;
-                        writer.write_all(parser::format_uid_next(status.uid_next).as_bytes()).await?;
+                        transport.write_all(parser::format_uid_validity(status.uid_validity).as_bytes()).await?;
+                        transport.write_all(parser::format_uid_next(status.uid_next).as_bytes()).await?;
                     }
 
-                    writer.flush().await?;
+                    transport.flush().await?;
 
 
                     Ok(ImapResponse::ok(tag, "[READ-WRITE] SELECT completed"))
@@ -1523,14 +1538,14 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                     *current_mailbox = Some(mailbox.clone());
 
                     if let Some(status) = &mb.status {
-                        writer.write_all(parser::format_exists(status.messages).as_bytes()).await?;
-                        writer.write_all(parser::format_recent(status.recent).as_bytes()).await?;
+                        transport.write_all(parser::format_exists(status.messages).as_bytes()).await?;
+                        transport.write_all(parser::format_recent(status.recent).as_bytes()).await?;
                         let flags = ["\\Seen", "\\Answered", "\\Flagged", "\\Deleted", "\\Draft"];
-                        writer.write_all(parser::format_flags(&flags).as_bytes()).await?;
-                        writer.write_all(parser::format_uid_validity(status.uid_validity).as_bytes()).await?;
-                        writer.write_all(parser::format_uid_next(status.uid_next).as_bytes()).await?;
+                        transport.write_all(parser::format_flags(&flags).as_bytes()).await?;
+                        transport.write_all(parser::format_uid_validity(status.uid_validity).as_bytes()).await?;
+                        transport.write_all(parser::format_uid_next(status.uid_next).as_bytes()).await?;
                     }
-                    writer.flush().await?;
+                    transport.flush().await?;
 
 
                     Ok(ImapResponse::ok(tag, "[READ-ONLY] EXAMINE completed"))
@@ -1551,9 +1566,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                         let attrs: Vec<&str> = mb.attributes.iter().map(|s| s.as_str()).collect();
                         let resp = parser::format_list(&attrs,
                             mb.delimiter.as_deref().unwrap_or("/"), &mb.name);
-                        writer.write_all(resp.as_bytes()).await?;
+                        transport.write_all(resp.as_bytes()).await?;
                     }
-                    writer.flush().await?;
+                    transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "LIST completed"))
                 }
@@ -1574,9 +1589,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                                 .map(|(k, v)| format!("{} {}", k, v))
                                 .collect();
                             let resp = parser::format_fetch(*uid, &parts.join(" "));
-                            writer.write_all(resp.as_bytes()).await?;
+                            transport.write_all(resp.as_bytes()).await?;
                         }
-                        writer.flush().await?;
+                        transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "FETCH completed"))
                     }
@@ -1595,8 +1610,8 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             if let Some(ref mailbox) = current_mailbox {
                 match store.search(mailbox, keys) {
                     Ok(ids) => {
-                        writer.write_all(parser::format_search(&ids).as_bytes()).await?;
-                        writer.flush().await?;
+                        transport.write_all(parser::format_search(&ids).as_bytes()).await?;
+                        transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "SEARCH completed"))
                     }
@@ -1648,10 +1663,10 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                             _ => {}
                         }
                     }
-                    writer.write_all(parser::format_untagged(&format!(
+                    transport.write_all(parser::format_untagged(&format!(
                         "STATUS {} ({})", mailbox, parts.join(" ")
                     )).as_bytes()).await?;
-                    writer.flush().await?;
+                    transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "STATUS completed"))
                 }
@@ -1684,9 +1699,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                 match store.expunge(mailbox) {
                     Ok(removed) => {
                         for seq in &removed {
-                            writer.write_all(parser::format_expunge(*seq).as_bytes()).await?;
+                            transport.write_all(parser::format_expunge(*seq).as_bytes()).await?;
                         }
-                        writer.flush().await?;
+                        transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "EXPUNGE completed"))
                     }
@@ -1708,9 +1723,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                         for uid in &updated {
                             // Send FETCH response with updated flags
                             let resp = parser::format_fetch(*uid, "FLAGS ()");
-                            writer.write_all(resp.as_bytes()).await?;
+                            transport.write_all(resp.as_bytes()).await?;
                         }
-                        writer.flush().await?;
+                        transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "STORE completed"))
                     }
@@ -1769,9 +1784,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                         };
                         let resp = parser::format_list(&attrs,
                             mb.delimiter.as_deref().unwrap_or("/"), &mb.name);
-                        writer.write_all(resp.as_bytes()).await?;
+                        transport.write_all(resp.as_bytes()).await?;
                     }
-                    writer.flush().await?;
+                    transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "LSUB completed"))
                 }
@@ -1804,15 +1819,15 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
 
             // Send continuation for literal data
             {
-                writer.write_all(b"+ Ready for literal data\r\n").await?;
-                writer.flush().await?;
+                transport.write_all(b"+ Ready for literal data\r\n").await?;
+                transport.flush().await?;
             }
 
             // Read the literal message data
-            let data = reader.read_exact_bytes(*literal_size).await?;
+            let data = read_imap_exact(transport, *literal_size).await?;
 
             // Consume trailing \r\n after literal data (it's a blank line)
-            reader.read_line().await?;
+            read_imap_line(transport).await?;
 
             // Parse flags if provided
             let msg_flags = flags.as_ref()
@@ -1845,7 +1860,7 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
         ImapCommand::Uid { command } => {
             // UID commands are dispatched to the inner command
             // The inner command has already been parsed with UID context
-            Box::pin(dispatch_command(command, tag, state, current_mailbox, authenticated_user, store, domain, reader, writer)).await
+            Box::pin(dispatch_command(command, tag, state, current_mailbox, authenticated_user, store, domain, transport)).await
         }
 
         ImapCommand::Idle => {
@@ -1854,13 +1869,13 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             }
             // IDLE - send continuation, then wait for DONE from client
             {
-                writer.write_all(b"+ idling\r\n").await?;
-                writer.flush().await?;
+                transport.write_all(b"+ idling\r\n").await?;
+                transport.flush().await?;
             }
 
             // Read lines until we get DONE
             loop {
-                let line = match reader.read_line().await {
+                let line = match read_imap_line(transport).await {
                     Ok(Some(l)) => l,
                     Ok(None) => {
                         edgerun_log::info!("edgerun-imap: client disconnected during IDLE");
@@ -1880,8 +1895,8 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                             .flatten()
                             .map(|s| s.messages)
                             .unwrap_or(0);
-                        writer.write_all(parser::format_untagged(&format!("EXISTS {}", msg_count)).as_bytes()).await?;
-                        writer.flush().await?;
+                        transport.write_all(parser::format_untagged(&format!("EXISTS {}", msg_count)).as_bytes()).await?;
+                        transport.flush().await?;
 
                     }
                     return Ok(ImapResponse::ok(tag, "IDLE completed"));
@@ -1906,9 +1921,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                 }
             }
             if !enabled.is_empty() {
-                writer.write_all(parser::format_untagged(&format!("ENABLED {}", enabled.join(" "))).as_bytes()).await?;
+                transport.write_all(parser::format_untagged(&format!("ENABLED {}", enabled.join(" "))).as_bytes()).await?;
             }
-            writer.flush().await?;
+            transport.flush().await?;
 
             Ok(ImapResponse::ok(tag, "ENABLE completed"))
         }
@@ -1968,10 +1983,10 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            writer.write_all(parser::format_untagged(
+            transport.write_all(parser::format_untagged(
                 r#"NAMESPACE (("" "/")) NIL NIL"#
             ).as_bytes()).await?;
-            writer.flush().await?;
+            transport.flush().await?;
 
             Ok(ImapResponse::ok(tag, "NAMESPACE completed"))
         }
@@ -1982,11 +1997,11 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             }
             match store.get_quota(mailbox) {
                 Ok(Some(qi)) => {
-                    writer.write_all(parser::format_untagged(&format!(
+                    transport.write_all(parser::format_untagged(&format!(
                         r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
                         qi.mailbox, qi.storage_used, qi.storage_limit, qi.message_count, qi.message_limit
                     )).as_bytes()).await?;
-                    writer.flush().await?;
+                    transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "QUOTA completed"))
                 }
@@ -2001,11 +2016,11 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             }
             match store.set_quota(mailbox, limits.iter().map(|(k, v)| (k.as_str(), *v)).collect()) {
                 Ok(qi) => {
-                    writer.write_all(parser::format_untagged(&format!(
+                    transport.write_all(parser::format_untagged(&format!(
                         r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
                         qi.mailbox, qi.storage_used, qi.storage_limit, qi.message_count, qi.message_limit
                     )).as_bytes()).await?;
-                    writer.flush().await?;
+                    transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "SETQUOTA completed"))
                 }
@@ -2041,8 +2056,8 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                             }
                         }
                         let id_str: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
-                        writer.write_all(parser::format_untagged(&format!("SORT {}", id_str.join(" "))).as_bytes()).await?;
-                        writer.flush().await?;
+                        transport.write_all(parser::format_untagged(&format!("SORT {}", id_str.join(" "))).as_bytes()).await?;
+                        transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "SORT completed"))
                     }
@@ -2065,9 +2080,9 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
                         // Simple threading: group by In-Reply-To / References
                         // For now, return each message as its own thread
                         let thread_str: Vec<String> = ids.iter().map(|i| format!("({})", i)).collect();
-                        writer.write_all(parser::format_untagged(&format!("THREAD ({} {})",
+                        transport.write_all(parser::format_untagged(&format!("THREAD ({} {})",
                             algorithm.to_uppercase(), thread_str.join(") ("))).as_bytes()).await?;
-                        writer.flush().await?;
+                        transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "THREAD completed"))
                     }
@@ -2080,10 +2095,10 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
 
         ImapCommand::Id { params } => {
             edgerun_log::debug!("edgerun-imap: ID params: {:?}", params);
-            writer.write_all(parser::format_untagged(
+            transport.write_all(parser::format_untagged(
                 r#"ID ("name" "edgerun-imap" "version" "0.1.0" "os" "linux" "os-version" "x86_64" "vendor" "edgerun")"#
             ).as_bytes()).await?;
-            writer.flush().await?;
+            transport.flush().await?;
 
             Ok(ImapResponse::ok(tag, "ID completed"))
         }
@@ -2118,15 +2133,9 @@ fn parse_search_keys_simple(criteria: &[String]) -> Vec<crate::types::SearchKey>
 
 // ===========================================================================
 // Response Sender
-// ===========================================================================
-
-async fn send_response<W: AsyncWriteExt + Unpin>(
-    writer: &Arc<Mutex<W>>,
-    resp: &ImapResponse,
-) -> io::Result<()> {
-    let wire = resp.to_wire();
-    writer.write_all(wire.as_bytes()).await?;
-    writer.flush().await?;
-
-    Ok(())
+/// Read exactly `n` bytes from the transport (for APPEND literal data).
+async fn read_imap_exact(transport: &mut ImapTransport, n: usize) -> io::Result<Vec<u8>> {
+    let mut buf = vec![0u8; n];
+    transport.read_exact(&mut buf).await?;
+    Ok(buf)
 }

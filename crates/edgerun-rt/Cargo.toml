@@ -167,3 +167,7 @@ harness = false
 [[test]]
 name = "metrics_test"
 harness = false
+
+[[test]]
+name = "shutdown_test"
+harness = false

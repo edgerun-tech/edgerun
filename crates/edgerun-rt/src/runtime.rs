@@ -56,6 +56,8 @@ pub(crate) struct RuntimeInner {
     metrics: Arc<Metrics>,
     reactor_thread: Mutex<Option<StdJoinHandle<()>>>,
     worker_threads: Mutex<Vec<StdJoinHandle<()>>>,
+    /// Tracks whether shutdown has been initiated, to make shutdown() idempotent.
+    shutdown_initiated: std::sync::atomic::AtomicBool,
 }
 
 impl RuntimeInner {
@@ -199,6 +201,7 @@ impl Builder {
             metrics,
             reactor_thread: Mutex::new(Some(reactor_thread)),
             worker_threads: Mutex::new(Vec::with_capacity(self.workers)),
+            shutdown_initiated: std::sync::atomic::AtomicBool::new(false),
         });
 
         // Start worker threads.
@@ -318,7 +321,18 @@ impl Runtime {
     }
 
     /// Graceful shutdown: signal all components and wait for threads.
+    ///
+    /// This method is idempotent — calling it multiple times (explicitly
+    /// or via `Drop`) is safe and only performs shutdown once.
     pub fn shutdown(&self) {
+        // Only perform shutdown once.
+        if self
+            .inner
+            .shutdown_initiated
+            .swap(true, Ordering::AcqRel)
+        {
+            return;
+        }
         self.inner.reactor.shutdown();
         self.inner.queue.shutdown();
         self.inner.blocking.shutdown();
@@ -331,7 +345,15 @@ impl Runtime {
         }
         self.inner.blocking.join();
     }
+}
 
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+impl Runtime {
     /// Get the inner handle for sharing with free functions.
     pub(crate) fn inner(&self) -> Arc<RuntimeInner> {
         self.inner.clone()

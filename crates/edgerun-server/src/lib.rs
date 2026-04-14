@@ -160,6 +160,8 @@ mod smtp_config {
         pub queue_data_root: Option<PathBuf>,
         /// DNS server for MX lookups in outbound relay.
         pub relay_dns_server: String,
+        /// If set, uses MaildirStore for persistent local mailbox storage.
+        pub maildir_root: Option<PathBuf>,
     }
 
     impl Default for SmtpConfig {
@@ -172,6 +174,7 @@ mod smtp_config {
                 local_domains: vec!["edgerun.mail".to_string()],
                 queue_data_root: None,
                 relay_dns_server: "8.8.8.8:53".to_string(),
+                maildir_root: None,
             }
         }
     }
@@ -412,7 +415,16 @@ impl Server {
                 relay_dns_server: config.relay_dns_server,
                 ..Default::default()
             };
-            let srv = edgerun_smtp::SmtpServer::with_memory_store(smtp_config)?;
+
+            let srv = if let Some(ref maildir_root) = config.maildir_root {
+                // Use persistent MaildirStore
+                let store = edgerun_smtp::server::MaildirStore::new(maildir_root)?;
+                let handler = std::sync::Arc::new(store);
+                edgerun_smtp::server::SmtpServer::new(smtp_config, handler)?
+            } else {
+                // Fallback to in-memory store
+                edgerun_smtp::SmtpServer::with_memory_store(smtp_config)?
+            };
             Some(srv)
         } else {
             None
