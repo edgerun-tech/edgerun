@@ -370,25 +370,50 @@ impl MailIndex {
 
     /// Get messages due for delivery.
     pub async fn dequeue_due(&self, now: i64, max_batch: usize) -> Vec<MailMessageRecord> {
-        let mut messages = self.messages.write().await;
-        let mut retry_queue = self.retry_queue.write().await;
-        let mut due = Vec::new();
+        // Read both maps — guards are dropped immediately after.
+        let messages: Vec<(String, MailMessageRecord)> = {
+            let m = self.messages.read().await;
+            m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        };
 
-        retry_queue.retain(|entry| {
+        let retry_entries: Vec<RetryEntry> = {
+            let rq = self.retry_queue.read().await;
+            rq.iter().cloned().collect()
+        };
+
+        // Determine which entries are due
+        let mut due_ids = Vec::new();
+        for entry in &retry_entries {
             if entry.next_retry_time <= now || entry.next_retry_time == 0 {
-                if let Some(msg) = messages.get(&entry.message_id) {
+                if let Some((_id, msg)) = messages.iter().find(|(id, _)| id == &entry.message_id) {
                     if matches!(msg.status, MailStatus::Queued | MailStatus::Retrying) {
-                        due.push(msg.clone());
-                        if due.len() >= max_batch {
-                            return true;
+                        due_ids.push(entry.message_id.clone());
+                        if due_ids.len() >= max_batch {
+                            break;
                         }
                     }
                 }
-                false
-            } else {
-                true
             }
-        });
+        }
+
+        // Collect the actual messages, updating their status
+        let mut due = Vec::new();
+        {
+            let mut msgs = self.messages.write().await;
+            for id in &due_ids {
+                if let Some(msg) = msgs.get_mut(id) {
+                    msg.status = MailStatus::Sending;
+                    msg.updated_at = now_secs();
+                    due.push(msg.clone());
+                }
+            }
+        }
+
+        // Remove processed entries from retry queue
+        {
+            let mut rq = self.retry_queue.write().await;
+            rq.retain(|e| !due_ids.contains(&e.message_id));
+        }
 
         due
     }

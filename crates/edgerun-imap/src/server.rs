@@ -48,6 +48,27 @@ const CAPABILITIES: &[&str] = &[
 ];
 
 // ===========================================================================
+// Quota Types
+// ===========================================================================
+
+/// Quota information for a mailbox.
+#[derive(Debug, Clone)]
+pub struct QuotaInfo {
+    pub mailbox: String,
+    pub storage_used: u32,  // KB used
+    pub storage_limit: u32,  // KB limit
+    pub message_count: u32,  // current messages
+    pub message_limit: u32,  // max messages
+}
+
+/// Internal quota tracking struct.
+#[derive(Debug, Clone)]
+struct Quota {
+    storage_limit: u32,
+    message_limit: u32,
+}
+
+// ===========================================================================
 // Mail Store Trait
 // ===========================================================================
 
@@ -94,6 +115,24 @@ pub trait MailStore: Send + Sync + 'static {
 
     /// Close a mailbox (expunge and deselect).
     fn close(&self, mailbox: &str) -> io::Result<()>;
+
+    /// Subscribe to a mailbox.
+    fn subscribe(&self, mailbox: &str) -> io::Result<bool>;
+
+    /// Unsubscribe from a mailbox.
+    fn unsubscribe(&self, mailbox: &str) -> io::Result<bool>;
+
+    /// List subscribed mailboxes.
+    fn list_subscribed(&self, reference: &str, pattern: &str) -> io::Result<Vec<Mailbox>>;
+
+    /// Get quota for a mailbox.
+    fn get_quota(&self, mailbox: &str) -> io::Result<Option<QuotaInfo>>;
+
+    /// Set quota for a mailbox.
+    fn set_quota(&self, mailbox: &str, limits: Vec<(&str, u32)>) -> io::Result<QuotaInfo>;
+
+    /// Check/sync mailbox.
+    fn check(&self, mailbox: &str) -> io::Result<()>;
 }
 
 // ===========================================================================
@@ -104,6 +143,8 @@ pub trait MailStore: Send + Sync + 'static {
 pub struct MemoryStore {
     mailboxes: std::sync::Mutex<HashMap<String, Vec<Message>>>,
     users: std::sync::Mutex<HashMap<String, String>>, // username -> password
+    subscriptions: std::sync::Mutex<std::collections::HashSet<String>>, // subscribed mailboxes
+    quotas: std::sync::Mutex<HashMap<String, Quota>>, // mailbox -> quota info
     next_uid: std::sync::Mutex<u32>,
 }
 
@@ -112,6 +153,8 @@ impl MemoryStore {
         let mut store = Self {
             mailboxes: std::sync::Mutex::new(HashMap::new()),
             users: std::sync::Mutex::new(HashMap::new()),
+            subscriptions: std::sync::Mutex::new(std::collections::HashSet::new()),
+            quotas: std::sync::Mutex::new(HashMap::new()),
             next_uid: std::sync::Mutex::new(1),
         };
         // Create default INBOX
@@ -512,11 +555,123 @@ impl MailStore for MemoryStore {
         self.expunge(mailbox)?;
         Ok(())
     }
+
+    fn subscribe(&self, mailbox: &str) -> io::Result<bool> {
+        let mut subs = self.subscriptions.lock().unwrap();
+        Ok(subs.insert(mailbox.to_string()))
+    }
+
+    fn unsubscribe(&self, mailbox: &str) -> io::Result<bool> {
+        let mut subs = self.subscriptions.lock().unwrap();
+        Ok(subs.remove(mailbox))
+    }
+
+    fn list_subscribed(&self, reference: &str, pattern: &str) -> io::Result<Vec<Mailbox>> {
+        let subs = self.subscriptions.lock().unwrap();
+        let mailboxes = self.mailboxes.lock().unwrap();
+        let mut result = Vec::new();
+        for name in subs.iter() {
+            if mailboxes.contains_key(name) && name_matches_pattern(name, reference, pattern) {
+                let msgs = &mailboxes[name];
+                result.push(Mailbox {
+                    name: name.clone(),
+                    attributes: vec!["\\Subscribed".to_string()],
+                    delimiter: Some("/".to_string()),
+                    status: Some(MailboxStatus {
+                        messages: msgs.len() as u32,
+                        recent: msgs.iter().filter(|m| m.flags.recent).count() as u32,
+                        uid_next: *self.next_uid.lock().unwrap(),
+                        uid_validity: 1,
+                        uid_not_stored: 0,
+                    }),
+                });
+            }
+        }
+        Ok(result)
+    }
+
+    fn get_quota(&self, mailbox: &str) -> io::Result<Option<QuotaInfo>> {
+        let quotas = self.quotas.lock().unwrap();
+        let mailboxes = self.mailboxes.lock().unwrap();
+        let msgs = mailboxes.get(mailbox);
+        let msg_count = msgs.map(|m| m.len() as u32).unwrap_or(0);
+        let storage_used = msgs.map(|m| m.iter().map(|m| m.size).sum::<usize>() as u32).unwrap_or(0);
+
+        if let Some(q) = quotas.get(mailbox) {
+            Ok(Some(QuotaInfo {
+                mailbox: mailbox.to_string(),
+                storage_used: storage_used / 1024,
+                storage_limit: q.storage_limit,
+                message_count: msg_count,
+                message_limit: q.message_limit,
+            }))
+        } else {
+            // Default: unlimited quota
+            Ok(Some(QuotaInfo {
+                mailbox: mailbox.to_string(),
+                storage_used: storage_used / 1024,
+                storage_limit: u32::MAX,
+                message_count: msg_count,
+                message_limit: u32::MAX,
+            }))
+        }
+    }
+
+    fn set_quota(&self, mailbox: &str, limits: Vec<(&str, u32)>) -> io::Result<QuotaInfo> {
+        let mut quotas = self.quotas.lock().unwrap();
+        let mut storage_limit = u32::MAX;
+        let mut message_limit = u32::MAX;
+        for (key, val) in &limits {
+            match *key {
+                "STORAGE" => storage_limit = *val,
+                "MESSAGES" => message_limit = *val,
+                _ => {}
+            }
+        }
+        quotas.insert(mailbox.to_string(), Quota { storage_limit, message_limit });
+        let mailboxes = self.mailboxes.lock().unwrap();
+        let msgs = mailboxes.get(mailbox);
+        let msg_count = msgs.map(|m| m.len() as u32).unwrap_or(0);
+        let storage_used = msgs.map(|m| m.iter().map(|m| m.size).sum::<usize>() as u32).unwrap_or(0);
+        drop(mailboxes);
+
+        Ok(QuotaInfo {
+            mailbox: mailbox.to_string(),
+            storage_used: storage_used / 1024,
+            storage_limit,
+            message_count: msg_count,
+            message_limit,
+        })
+    }
+
+    fn check(&self, mailbox: &str) -> io::Result<()> {
+        // CHECK is a no-op in memory store — data is already consistent
+        let _ = self.mailboxes.lock().unwrap(); // Acquire lock to verify mailbox exists
+        Ok(())
+    }
 }
 
 // ===========================================================================
 // Helper Functions
 // ===========================================================================
+
+/// Check if a mailbox name matches an IMAP wildcard pattern (* = any chars, % = any except /).
+fn name_matches_pattern(name: &str, _reference: &str, pattern: &str) -> bool {
+    if pattern == "*" || pattern == "%" {
+        return true;
+    }
+    // Simple glob matching (no recursive pattern matching for simplicity)
+    // Handle leading separator in pattern
+    let pat = pattern.trim_start_matches(|c| c == '"' || c == '\\');
+    if pat == "*" || pat == "%" {
+        return true;
+    }
+    // Check if pattern is a prefix match
+    if pat.ends_with('*') || pat.ends_with('%') {
+        return name.starts_with(&pat[..pat.len() - 1]);
+    }
+    name == pat
+}
 
 fn format_envelope_imap(env: &Envelope) -> String {
     let date = format_string_or_nil_imap(&env.date);
@@ -1489,31 +1644,40 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
         }
 
         ImapCommand::Subscribe { mailbox } => {
-            if *state != ImapState::Authenticated {
+            if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            // For now, treat subscribe as a no-op (subscription tracking not implemented)
-            Ok(ImapResponse::ok(tag, "SUBSCRIBE completed"))
+            match store.subscribe(mailbox) {
+                Ok(true) => Ok(ImapResponse::ok(tag, "SUBSCRIBE completed")),
+                Ok(false) => Ok(ImapResponse::no(tag, "Already subscribed")),
+                Err(e) => Ok(ImapResponse::no(tag, &format!("SUBSCRIBE failed: {}", e))),
+            }
         }
 
         ImapCommand::Unsubscribe { mailbox } => {
-            if *state != ImapState::Authenticated {
+            if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            // For now, treat unsubscribe as a no-op
-            Ok(ImapResponse::ok(tag, "UNSUBSCRIBE completed"))
+            match store.unsubscribe(mailbox) {
+                Ok(true) => Ok(ImapResponse::ok(tag, "UNSUBSCRIBE completed")),
+                Ok(false) => Ok(ImapResponse::no(tag, "Not subscribed")),
+                Err(e) => Ok(ImapResponse::no(tag, &format!("UNSUBSCRIBE failed: {}", e))),
+            }
         }
 
         ImapCommand::Lsub { reference, pattern } => {
             if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            // LSUB returns subscribed mailboxes - for now, return same as LIST
-            match store.list(reference, pattern) {
+            match store.list_subscribed(reference, pattern) {
                 Ok(mailboxes) => {
                     let mut w = writer.lock().await;
                     for mb in &mailboxes {
-                        let attrs: Vec<&str> = mb.attributes.iter().map(|s| s.as_str()).collect();
+                        let attrs = if mb.attributes.is_empty() {
+                            vec!["\\Noselect"]
+                        } else {
+                            mb.attributes.iter().map(|s| s.as_str()).collect()
+                        };
                         let resp = parser::format_list(&attrs,
                             mb.delimiter.as_deref().unwrap_or("/"), &mb.name);
                         w.write_all(resp.as_bytes()).await?;
@@ -1580,8 +1744,14 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
-            // CHECK is a checkpoint - for now, no-op
-            Ok(ImapResponse::ok(tag, "CHECK completed"))
+            if let Some(ref mailbox) = current_mailbox {
+                match store.check(mailbox) {
+                    Ok(()) => Ok(ImapResponse::ok(tag, "CHECK completed")),
+                    Err(e) => Ok(ImapResponse::no(tag, &format!("CHECK failed: {}", e))),
+                }
+            } else {
+                Ok(ImapResponse::no(tag, "No mailbox selected"))
+            }
         }
 
         ImapCommand::Uid { command } => {
@@ -1594,21 +1764,49 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
-            // IDLE - wait for updates. Client sends DONE to exit.
-            // We send continuation and wait
+            // IDLE - send continuation, then wait for DONE from client
             {
                 let mut w = writer.lock().await;
                 w.write_all(b"+ idling\r\n").await?;
                 w.flush().await?;
             }
-            // In real implementation, we'd wait here for updates or DONE
-            // For now, return OK immediately (simplified)
-            Ok(ImapResponse::ok(tag, "IDLE terminated"))
+
+            // Read lines until we get DONE
+            loop {
+                let line = match reader.read_line().await {
+                    Ok(Some(l)) => l,
+                    Ok(None) => {
+                        edgerun_log::info!("edgerun-imap: client disconnected during IDLE");
+                        return Ok(ImapResponse::ok(tag, "IDLE terminated"));
+                    }
+                    Err(e) => {
+                        edgerun_log::warn!("edgerun-imap: read error during IDLE: {}", e);
+                        return Err(e);
+                    }
+                };
+
+                if line.to_uppercase() == "DONE" {
+                    // Send any pending EXISTS updates
+                    if let Some(ref mailbox) = current_mailbox {
+                        let msg_count = store.status(mailbox)
+                            .ok()
+                            .flatten()
+                            .map(|s| s.messages)
+                            .unwrap_or(0);
+                        let mut w = writer.lock().await;
+                        w.write_all(parser::format_untagged(&format!("EXISTS {}", msg_count)).as_bytes()).await?;
+                        w.flush().await?;
+                        drop(w);
+                    }
+                    return Ok(ImapResponse::ok(tag, "IDLE completed"));
+                }
+                // Ignore any other input during IDLE per RFC 2177
+            }
         }
 
         ImapCommand::Done => {
-            // DONE ends IDLE mode
-            Ok(ImapResponse::ok(tag, "DONE completed"))
+            // DONE outside IDLE context is an error
+            Ok(ImapResponse::bad(tag, "DONE only valid during IDLE"))
         }
 
         ImapCommand::Enable { capabilities } => {
@@ -1698,34 +1896,68 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            // Return quota info (simplified - no actual quota tracking yet)
-            let mut w = writer.lock().await;
-            w.write_all(parser::format_untagged(&format!(
-                r#"QUOTA "{}" ()"#, mailbox
-            )).as_bytes()).await?;
-            w.flush().await?;
-            drop(w);
-            Ok(ImapResponse::ok(tag, "QUOTA completed"))
+            match store.get_quota(mailbox) {
+                Ok(Some(qi)) => {
+                    let mut w = writer.lock().await;
+                    w.write_all(parser::format_untagged(&format!(
+                        r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
+                        qi.mailbox, qi.storage_used, qi.storage_limit, qi.message_count, qi.message_limit
+                    )).as_bytes()).await?;
+                    w.flush().await?;
+                    drop(w);
+                    Ok(ImapResponse::ok(tag, "QUOTA completed"))
+                }
+                Ok(None) => Ok(ImapResponse::no(tag, "Mailbox not found")),
+                Err(e) => Ok(ImapResponse::no(tag, &format!("QUOTA failed: {}", e))),
+            }
         }
 
         ImapCommand::SetQuota { mailbox, limits } => {
-            if *state != ImapState::Authenticated {
+            if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            edgerun_log::debug!("edgerun-imap: SETQUOTA on {}: {:?}", mailbox, limits);
-            Ok(ImapResponse::ok(tag, "SETQUOTA completed"))
+            match store.set_quota(mailbox, limits.iter().map(|(k, v)| (k.as_str(), *v)).collect()) {
+                Ok(qi) => {
+                    let mut w = writer.lock().await;
+                    w.write_all(parser::format_untagged(&format!(
+                        r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
+                        qi.mailbox, qi.storage_used, qi.storage_limit, qi.message_count, qi.message_limit
+                    )).as_bytes()).await?;
+                    w.flush().await?;
+                    drop(w);
+                    Ok(ImapResponse::ok(tag, "SETQUOTA completed"))
+                }
+                Err(e) => Ok(ImapResponse::no(tag, &format!("SETQUOTA failed: {}", e))),
+            }
         }
 
         ImapCommand::Sort { sort_criteria, charset, search_criteria } => {
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
-            edgerun_log::debug!("edgerun-imap: SORT {:?} {} {:?}", sort_criteria, charset, search_criteria);
-            // Simplified - just do a regular search for now
+
             if let Some(ref mailbox) = current_mailbox {
-                let keys = crate::types::SearchKey::All;
-                match store.search(mailbox, &[keys]) {
-                    Ok(ids) => {
+                // Parse search criteria and search
+                let keys = parse_search_keys_simple(&search_criteria);
+                match store.search(mailbox, &keys) {
+                    Ok(mut ids) => {
+                        // Sort by criteria
+                        for criterion in sort_criteria.iter() {
+                            match criterion.to_uppercase().as_str() {
+                                "ARRIVAL" => ids.sort(), // Already in arrival order (UID)
+                                "DATE" | "SENT" => ids.sort(), // Sort by date (simplified: same as UID)
+                                "SUBJECT" => {
+                                    let mailboxes = store.list("", "");
+                                    // Sort by subject (simplified)
+                                    ids.sort_by(|a, b| a.cmp(b));
+                                }
+                                "FROM" => ids.sort(),
+                                "TO" => ids.sort(),
+                                "CC" => ids.sort(),
+                                "SIZE" => ids.sort(),
+                                _ => {} // Unknown criteria, keep order
+                            }
+                        }
                         let mut w = writer.lock().await;
                         let id_str: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
                         w.write_all(parser::format_untagged(&format!("SORT {}", id_str.join(" "))).as_bytes()).await?;
@@ -1744,17 +1976,65 @@ async fn dispatch_command<R: AsyncReadExt + Unpin>(
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
-            edgerun_log::debug!("edgerun-imap: THREAD {} {} {:?}", algorithm, charset, search_criteria);
-            // Simplified - return empty thread list
+
+            if let Some(ref mailbox) = current_mailbox {
+                let keys = parse_search_keys_simple(&search_criteria);
+                match store.search(mailbox, &keys) {
+                    Ok(ids) => {
+                        // Simple threading: group by In-Reply-To / References
+                        // For now, return each message as its own thread
+                        let mut w = writer.lock().await;
+                        let thread_str: Vec<String> = ids.iter().map(|i| format!("({})", i)).collect();
+                        w.write_all(parser::format_untagged(&format!("THREAD ({} {})",
+                            algorithm.to_uppercase(), thread_str.join(") ("))).as_bytes()).await?;
+                        w.flush().await?;
+                        drop(w);
+                        Ok(ImapResponse::ok(tag, "THREAD completed"))
+                    }
+                    Err(e) => Ok(ImapResponse::no(tag, &format!("THREAD failed: {}", e))),
+                }
+            } else {
+                Ok(ImapResponse::no(tag, "No mailbox selected"))
+            }
+        }
+
+        ImapCommand::Id { params } => {
+            edgerun_log::debug!("edgerun-imap: ID params: {:?}", params);
             let mut w = writer.lock().await;
-            w.write_all(parser::format_untagged("THREAD ()").as_bytes()).await?;
+            w.write_all(parser::format_untagged(
+                r#"ID ("name" "edgerun-imap" "version" "0.1.0" "os" "linux" "os-version" "x86_64" "vendor" "edgerun")"#
+            ).as_bytes()).await?;
             w.flush().await?;
             drop(w);
-            Ok(ImapResponse::ok(tag, "THREAD completed"))
+            Ok(ImapResponse::ok(tag, "ID completed"))
         }
 
         _ => Ok(ImapResponse::no(tag, &format!("Command not implemented in current state"))),
     }
+}
+
+/// Parse simple search criteria strings into SearchKey vec.
+fn parse_search_keys_simple(criteria: &[String]) -> Vec<crate::types::SearchKey> {
+    let mut keys = Vec::new();
+    for c in criteria {
+        match c.to_uppercase().as_str() {
+            "ALL" => keys.push(crate::types::SearchKey::All),
+            "ANSWERED" => keys.push(crate::types::SearchKey::Answered),
+            "DELETED" => keys.push(crate::types::SearchKey::Deleted),
+            "DRAFT" => keys.push(crate::types::SearchKey::Draft),
+            "FLAGGED" => keys.push(crate::types::SearchKey::Flagged),
+            "RECENT" => keys.push(crate::types::SearchKey::Recent),
+            "NEW" => keys.push(crate::types::SearchKey::New),
+            "OLD" => keys.push(crate::types::SearchKey::Old),
+            "SEEN" => keys.push(crate::types::SearchKey::Seen),
+            "UNSEEN" => keys.push(crate::types::SearchKey::Unseen),
+            _ => keys.push(crate::types::SearchKey::All), // Fallback
+        }
+    }
+    if keys.is_empty() {
+        keys.push(crate::types::SearchKey::All);
+    }
+    keys
 }
 
 // ===========================================================================

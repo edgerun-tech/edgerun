@@ -146,7 +146,7 @@ pub use imap_config::ImapConfig;
 
 #[cfg(feature = "smtp")]
 mod smtp_config {
-    
+    use std::path::PathBuf;
 
     #[derive(Clone)]
     pub struct SmtpConfig {
@@ -154,6 +154,12 @@ mod smtp_config {
         pub domain_name: String,
         pub max_message_size: usize,
         pub smtps: bool,
+        /// Local domains for mail delivery routing.
+        pub local_domains: Vec<String>,
+        /// If set, enables outbound relay with persistent queue at this path.
+        pub queue_data_root: Option<PathBuf>,
+        /// DNS server for MX lookups in outbound relay.
+        pub relay_dns_server: String,
     }
 
     impl Default for SmtpConfig {
@@ -163,6 +169,9 @@ mod smtp_config {
                 domain_name: "edgerun.mail".to_string(),
                 max_message_size: 35_882_577,
                 smtps: false,
+                local_domains: vec!["edgerun.mail".to_string()],
+                queue_data_root: None,
+                relay_dns_server: "8.8.8.8:53".to_string(),
             }
         }
     }
@@ -398,6 +407,9 @@ impl Server {
                     ..Default::default()
                 },
                 smtps: config.smtps,
+                local_domains: config.local_domains,
+                queue_data_root: config.queue_data_root,
+                relay_dns_server: config.relay_dns_server,
                 ..Default::default()
             };
             let srv = edgerun_smtp::SmtpServer::with_memory_store(smtp_config)?;

@@ -14,6 +14,7 @@ use crate::protocol::read_smtp_line;
 use crate::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::server::rate_limit::RateLimiter;
+use crate::relay::{MailIndex, OutboundRelay, DeliveryWorker, DeliveryWorkerConfig};
 use crate::types::command::{extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret};
 use crate::types::response::EnhancedStatusCode;
 use crate::types::{
@@ -40,6 +41,13 @@ pub struct SmtpServerConfig {
     pub tls_cert: Option<CertificateAndKey>,
     /// Per-IP rate limiter. If None, no rate limiting is applied.
     pub rate_limiter: Option<std::sync::Arc<RateLimiter>>,
+    /// Local domains that this server delivers mail for.
+    /// Recipients with domains NOT in this list are queued for outbound relay.
+    pub local_domains: Vec<String>,
+    /// Path for the outbound mail queue. If None, no outbound relay.
+    pub queue_data_root: Option<std::path::PathBuf>,
+    /// DNS server for MX lookups in outbound relay.
+    pub relay_dns_server: String,
 }
 
 impl Default for SmtpServerConfig {
@@ -53,6 +61,9 @@ impl Default for SmtpServerConfig {
             #[cfg(feature = "tls")]
             tls_cert: None,
             rate_limiter: None,
+            local_domains: vec!["edgerun.mail".to_string()],
+            queue_data_root: None,
+            relay_dns_server: "8.8.8.8:53".to_string(),
         }
     }
 }
@@ -163,6 +174,11 @@ pub struct SmtpServer {
     listener: Arc<edgerun_rt::AsyncTcpListener>,
     handler: Arc<dyn MailHandler>,
     config: SmtpServerConfig,
+    /// Outbound mail queue. If present, recipients not matching local_domains
+    /// are queued here for relay delivery.
+    queue: Option<Arc<MailIndex>>,
+    /// Outbound relay for DNS MX lookup + SMTP delivery to remote MTAs.
+    relay: Option<OutboundRelay>,
 }
 
 impl SmtpServer {
@@ -173,6 +189,8 @@ impl SmtpServer {
             listener,
             handler,
             config,
+            queue: None,
+            relay: None,
         })
     }
 
@@ -199,6 +217,31 @@ impl SmtpServer {
     }
 
     pub async fn run(&self, shutdown: CancellationToken) -> io::Result<()> {
+        // Initialize outbound queue if configured
+        let queue: Option<Arc<MailIndex>> = if let Some(ref data_root) = self.config.queue_data_root {
+            let idx = Arc::new(MailIndex::open(data_root).await?);
+            edgerun_log::info!("edgerun-smtp: outbound mail queue initialized at {:?}", data_root);
+            Some(idx)
+        } else {
+            None
+        };
+
+        let relay = queue.as_ref().map(|_| {
+            let mut r = OutboundRelay::new(&self.config.domain);
+            r.dns_server = self.config.relay_dns_server.clone();
+            r
+        });
+
+        // Spawn delivery worker if queue + relay configured
+        if let (Some(ref q), Some(relay)) = (&queue, relay) {
+            let worker_config = DeliveryWorkerConfig::default();
+            let worker = DeliveryWorker::new(worker_config, relay, Arc::clone(q));
+            let shutdown = shutdown.clone();
+            edgerun_rt::spawn(async move {
+                worker.run(shutdown).await;
+            });
+        }
+
         while !shutdown.is_cancelled() {
             match self.listener.accept().await {
                 Ok((stream, peer)) => {
@@ -226,10 +269,11 @@ impl SmtpServer {
                     let shutdown = shutdown.clone();
                     let peer_ip = peer.ip();
                     let rate_limiter = config.rate_limiter.clone();
+                    let queue = queue.clone();
 
                     edgerun_log::info!("edgerun-smtp: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        let result = handle_connection(stream, peer, handler, config, shutdown).await;
+                        let result = handle_connection(stream, peer, handler, config, shutdown, queue).await;
                         // Release rate limit slot on disconnect
                         if let Some(ref limiter) = rate_limiter {
                             limiter.release(peer_ip).await;
@@ -283,6 +327,7 @@ async fn handle_connection(
     handler: Arc<dyn MailHandler>,
     config: SmtpServerConfig,
     _shutdown: CancellationToken,
+    queue: Option<Arc<MailIndex>>,
 ) -> io::Result<()> {
     // Unwrap the Arc — we need the owned AsyncTcpStream for the transport.
     // The accept loop only has one reference here, so this succeeds.
@@ -457,38 +502,86 @@ async fn handle_connection(
                 command_count += 1;
                 let peer_ip_str = peer.ip().to_string();
 
-                let delivery_ok = match handler.accept_mail(&envelope) {
-                    Ok(()) => {
-                        edgerun_log::info!(
-                            "edgerun-smtp: mail accepted from {} to {:?}",
-                            envelope.from, envelope.recipients,
-                        );
-                        send_response(
-                            &mut transport,
-                            &SmtpResponse::ok("OK: queued")
-                                .with_enhanced(EnhancedStatusCode::QUEUED),
-                        )
-                        .await?;
-                        true
+                // Route: local recipients → handler, remote → queue
+                let (local_recipients, remote_recipients) = route_recipients(
+                    &envelope.recipients,
+                    &config.local_domains,
+                );
+
+                let delivery_ok = if !local_recipients.is_empty() {
+                    // Deliver local recipients
+                    let mut local_envelope = envelope.clone();
+                    local_envelope.recipients = local_recipients;
+                    match handler.accept_mail(&local_envelope) {
+                        Ok(()) => {
+                            edgerun_log::info!(
+                                "edgerun-smtp: mail delivered locally to {:?}",
+                                local_envelope.recipients,
+                            );
+                            true
+                        }
+                        Err(e) => {
+                            edgerun_log::error!("edgerun-smtp: local delivery failed: {}", e);
+                            send_dsn_bounce(&handler, &local_envelope, &config, &e.to_string());
+                            false
+                        }
                     }
-                    Err(e) => {
-                        edgerun_log::error!("edgerun-smtp: delivery failed: {}", e);
-                        send_dsn_bounce(&handler, &envelope, &config, &e.to_string());
-                        send_response(
-                            &mut transport,
-                            &SmtpResponse::transient_failure("Delivery failed"),
-                        )
-                        .await?;
+                } else {
+                    true // no local recipients is not an error
+                };
+
+                let queued_ok = if !remote_recipients.is_empty() {
+                    if let Some(ref q) = queue {
+                        // Queue for outbound relay
+                        let message_id = generate_message_id();
+                        match q.enqueue_message(
+                            &message_id,
+                            &envelope.from,
+                            remote_recipients,
+                            envelope.data.clone(),
+                            8, // max retries
+                        ).await {
+                            Ok(()) => {
+                                edgerun_log::info!(
+                                    "edgerun-smtp: mail queued for remote delivery (id={})",
+                                    message_id,
+                                );
+                                true
+                            }
+                            Err(e) => {
+                                edgerun_log::error!("edgerun-smtp: queue failed: {}", e);
+                                false
+                            }
+                        }
+                    } else {
+                        edgerun_log::warn!("edgerun-smtp: remote recipients but no queue configured");
                         false
                     }
+                } else {
+                    true // no remote recipients is not an error
                 };
-                if delivery_ok {
+
+                if delivery_ok && queued_ok {
+                    send_response(
+                        &mut transport,
+                        &SmtpResponse::ok("OK: queued")
+                            .with_enhanced(EnhancedStatusCode::QUEUED),
+                    )
+                    .await?;
                     let handler_clone = Arc::clone(&handler);
                     let envelope_clone = envelope.clone();
                     let config_clone = config.clone();
                     edgerun_rt::spawn(async move {
                         evaluate_and_notify_auth(&handler_clone, &envelope_clone, &config_clone, &peer_ip_str).await;
                     });
+                } else {
+                    if !delivery_ok || !queued_ok {
+                        send_response(
+                            &mut transport,
+                            &SmtpResponse::transient_failure("Delivery failed"),
+                        )
+                        .await?;
+                    }
                 }
                 envelope.reset();
                 envelope.authenticated_identity = auth_identity.clone();
@@ -1184,4 +1277,56 @@ async fn evaluate_and_notify_auth(
             edgerun_log::warn!("edgerun-email-auth: evaluation failed: {}", e);
         }
     }
+}
+
+// ===========================================================================
+// Routing helpers
+// ===========================================================================
+
+/// Split recipients into local and remote based on configured local domains.
+fn route_recipients(
+    recipients: &[String],
+    local_domains: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let mut local = Vec::new();
+    let mut remote = Vec::new();
+
+    for addr in recipients {
+        let domain = extract_domain_from_address(addr);
+        let is_local = local_domains.iter().any(|d| {
+            d.eq_ignore_ascii_case(&domain)
+                || addr.contains(&format!("@{}", d))
+        });
+
+        if is_local {
+            local.push(addr.clone());
+        } else {
+            remote.push(addr.clone());
+        }
+    }
+
+    (local, remote)
+}
+
+fn extract_domain_from_address(address: &str) -> String {
+    let address = address.trim();
+    let address = address.strip_prefix('<').unwrap_or(address);
+    let address = address.strip_suffix('>').unwrap_or(address);
+    if let Some(at_pos) = address.rfind('@') {
+        address[at_pos + 1..].to_string()
+    } else {
+        address.to_string()
+    }
+}
+
+/// Generate a unique message ID for the outbound queue.
+fn generate_message_id() -> String {
+    use std::sync::atomic::{AtomicI64, Ordering};
+    static COUNTER: AtomicI64 = AtomicI64::new(0);
+    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("edgerun-{}-{}", now, id)
 }
