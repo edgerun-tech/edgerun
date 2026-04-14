@@ -128,13 +128,16 @@ pub use tftp_config::TftpConfig;
 
 #[cfg(feature = "imap")]
 mod imap_config {
-    
+    use std::path::PathBuf;
 
     #[derive(Clone)]
     pub struct ImapConfig {
         pub bind_addr: String,
         pub domain_name: String,
         pub imaps: bool,
+        /// If set, uses MaildirImapStore for persistent local mailbox storage.
+        /// Must point to the same Maildir root that SMTP writes to.
+        pub maildir_root: Option<PathBuf>,
     }
 
     impl Default for ImapConfig {
@@ -143,6 +146,7 @@ mod imap_config {
                 bind_addr: "0.0.0.0:143".to_string(),
                 domain_name: "edgerun.mail".to_string(),
                 imaps: false,
+                maildir_root: None,
             }
         }
     }
@@ -412,7 +416,14 @@ impl Server {
                 imaps: config.imaps,
                 ..Default::default()
             };
-            let srv = edgerun_email::imap::ImapServer::new(imap_config)?;
+            let srv = if let Some(ref maildir_root) = config.maildir_root {
+                // Use MaildirImapStore — reads same Maildir that SMTP writes to
+                let store = edgerun_email::imap::MaildirImapStore::new(maildir_root)?;
+                edgerun_email::imap::ImapServer::with_store(imap_config, std::sync::Arc::new(store))?
+            } else {
+                // Fallback to in-memory store
+                edgerun_email::imap::ImapServer::new(imap_config)?
+            };
             Some(srv)
         } else {
             None
