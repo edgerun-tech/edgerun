@@ -13,7 +13,14 @@
 //! ```text
 //! SMTP (delivery) → {root}/{user}/new/ → IMAP (fetch)
 //! ```
+//!
+//! ## Unified server framework
+//! The `server` module provides a generic TCP listener with:
+//! - Shared TLS upgrade (STARTTLS) via `AsyncTlsStream::client/server()`
+//! - Per-connection spawn with idle timeout + command limits
+//! - `MailProtocol` trait for protocol-specific command dispatch
 
 pub mod imap;
 pub mod lmtp;
+pub mod server;
 pub mod smtp;
