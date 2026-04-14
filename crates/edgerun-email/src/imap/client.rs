@@ -16,6 +16,7 @@ use edgerun_rt::{
 #[cfg(feature = "tls")]
 use edgerun_tls::AsyncTlsStream;
 
+use crate::server::read_line;
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult};
 use crate::imap::types::{Envelope, FetchAttr, Flags, Mailbox, MailboxStatus, SearchKey};
 

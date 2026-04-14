@@ -837,17 +837,8 @@ fn digest_for_yubikey_algorithm(
 }
 
 fn encode_tlv(tag: u8, value: &[u8]) -> Result<Vec<u8>, YubiKeyError> {
-    let mut out = Vec::with_capacity(2 + value.len());
-    out.push(tag);
-    if value.len() <= 0x7f {
-        out.push(value.len() as u8);
-    } else if value.len() <= 0xff {
-        out.extend_from_slice(&[0x81, value.len() as u8]);
-    } else {
-        return Err(YubiKeyError::Provider("TLV value too long".into()));
-    }
-    out.extend_from_slice(value);
-    Ok(out)
+    edgerun_encoding::tlv::encode_tlv(tag, value)
+        .map_err(|e| YubiKeyError::Provider(format!("TLV encode failed: {e:?}").into()))
 }
 
 fn build_general_authenticate_sign_apdu(
@@ -923,39 +914,8 @@ fn parse_general_authenticate_signature(bytes: &[u8]) -> Result<Vec<u8>, YubiKey
 }
 
 fn parse_tlv_map(bytes: &[u8]) -> Result<Vec<(u8, Vec<u8>)>, YubiKeyError> {
-    let mut offset = 0usize;
-    let mut out = Vec::new();
-    while offset < bytes.len() {
-        if offset + 2 > bytes.len() {
-            return Err(YubiKeyError::Provider("short TLV header".into()));
-        }
-        let tag = bytes[offset];
-        offset += 1;
-        let len_byte = bytes[offset];
-        offset += 1;
-        let len = if len_byte & 0x80 == 0 {
-            len_byte as usize
-        } else {
-            let count = (len_byte & 0x7f) as usize;
-            if count == 0 || count > 2 || offset + count > bytes.len() {
-                return Err(YubiKeyError::Provider(
-                    "unsupported TLV length encoding".into(),
-                ));
-            }
-            let mut value = 0usize;
-            for &b in &bytes[offset..offset + count] {
-                value = (value << 8) | b as usize;
-            }
-            offset += count;
-            value
-        };
-        if offset + len > bytes.len() {
-            return Err(YubiKeyError::Provider("short TLV value".into()));
-        }
-        out.push((tag, bytes[offset..offset + len].to_vec()));
-        offset += len;
-    }
-    Ok(out)
+    edgerun_encoding::tlv::parse_tlv_map(bytes)
+        .map_err(|e| YubiKeyError::Provider(format!("TLV parse failed: {e:?}").into()))
 }
 
 fn parse_piv_algorithm(id: u8) -> Option<YubiKeySignatureAlgorithm> {
