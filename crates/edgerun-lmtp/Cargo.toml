@@ -10,3 +10,5 @@ description = "LMTP server (RFC 2033) — local mail delivery protocol"
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-smtp = { path = "../edgerun-smtp" }
+edgerun-email-auth = { path = "../edgerun-email-auth" }
+edgerun-dns = { path = "../edgerun-dns" }

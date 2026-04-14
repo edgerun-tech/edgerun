@@ -1302,6 +1302,8 @@ dependencies = [
 name = "edgerun-lmtp"
 version = "0.1.0"
 dependencies = [
+ "edgerun-dns",
+ "edgerun-email-auth",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-smtp",

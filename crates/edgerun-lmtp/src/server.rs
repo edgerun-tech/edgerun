@@ -20,6 +20,7 @@ use edgerun_smtp::types::{
     SmtpResponseCode, SmtpState,
 };
 use edgerun_smtp::server::{MailHandler, MemoryMailStore};
+use edgerun_email_auth::EmailAuthEvaluator;
 
 // ===========================================================================
 // Server Configuration
@@ -105,6 +106,51 @@ enum ControlFlow {
     Quit,
 }
 
+/// Evaluate SPF/DKIM/DMARC and notify the handler.
+async fn evaluate_and_notify_auth(
+    handler: &Arc<dyn MailHandler>,
+    envelope: &MailEnvelope,
+    domain: &str,
+    peer_ip: &str,
+) {
+    // Extract header From address
+    let data_str = String::from_utf8_lossy(&envelope.data);
+    let headers_str = if let Some(pos) = data_str.find("\r\n\r\n") {
+        data_str[..pos].as_bytes()
+    } else {
+        data_str.as_bytes()
+    };
+
+    // Parse From: header
+    let header_from = edgerun_smtp::types::headers::get_from_address(headers_str)
+        .unwrap_or_default();
+
+    // Get a DNS client for evaluation
+    let mut dns_client = match edgerun_dns::client::DnsClient::new("8.8.8.8:53") {
+        Ok(c) => c,
+        Err(e) => {
+            edgerun_log::warn!("edgerun-email-auth: failed to create DNS client: {}", e);
+            return;
+        }
+    };
+
+    let mut evaluator = EmailAuthEvaluator::new(&mut dns_client);
+    match evaluator
+        .evaluate(peer_ip, &envelope.from, &header_from, headers_str, &envelope.data)
+        .await
+    {
+        Ok(auth_results) => {
+            // Log the results
+            let header_value = auth_results.to_header_value(domain);
+            edgerun_log::info!("edgerun-lmtp: Authentication-Results: {}", header_value);
+            handler.on_mail_received(envelope, &auth_results);
+        }
+        Err(e) => {
+            edgerun_log::warn!("edgerun-email-auth: evaluation failed: {}", e);
+        }
+    }
+}
+
 async fn handle_connection(
     stream: Arc<AsyncTcpStream>,
     peer: SocketAddr,
@@ -168,6 +214,8 @@ async fn handle_connection(
                 // End of data — deliver per-recipient (RFC 2033 §3.3)
                 command_count += 1;
                 in_data_phase = false;
+                let peer_ip_str = peer.ip().to_string();
+                let domain = config.domain.clone();
 
                 for recipient in &envelope.recipients {
                     // Create a single-recipient envelope for delivery
@@ -188,6 +236,16 @@ async fn handle_connection(
                                         "edgerun-lmtp: delivered to {}",
                                         recipient,
                                     );
+                                    // Evaluate SPF/DKIM/DMARC in background (first recipient only)
+                                    if recipient == &envelope.recipients[0] {
+                                        let handler_clone = Arc::clone(&handler);
+                                        let envelope_clone = envelope.clone();
+                                        let domain_clone = domain.clone();
+                                        let peer_ip_clone = peer_ip_str.clone();
+                                        edgerun_rt::spawn(async move {
+                                            evaluate_and_notify_auth(&handler_clone, &envelope_clone, &domain_clone, &peer_ip_clone).await;
+                                        });
+                                    }
                                 }
                                 Err(e) => {
                                     send_response(
