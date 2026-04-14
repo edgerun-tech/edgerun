@@ -509,7 +509,7 @@ impl SmtpClient {
     /// formatted as `\0<authcid>\0<passwd>` (RFC 4616).
     pub async fn auth_plain(&mut self, credentials: &str) -> io::Result<()> {
         // Encode credentials as base64.
-        let encoded = self.base64_encode(credentials.as_bytes());
+        let encoded = edgerun_encoding::base64::standard_encode(credentials.as_bytes());
         let response = self.send_command(&format!("AUTH PLAIN {}", encoded)).await?;
         if !response.code.is_success() {
             return Err(io::Error::new(
@@ -519,34 +519,6 @@ impl SmtpClient {
         }
         edgerun_log::info!("edgerun-smtp-client: AUTH PLAIN successful");
         Ok(())
-    }
-
-    /// Minimal base64 encoder (RFC 4648).
-    fn base64_encode(&self, input: &[u8]) -> String {
-        const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut result = String::new();
-        let mut i = 0;
-        while i < input.len() {
-            let b0 = input[i] as u32;
-            let b1 = if i + 1 < input.len() { input[i + 1] as u32 } else { 0 };
-            let b2 = if i + 2 < input.len() { input[i + 2] as u32 } else { 0 };
-            let triple = (b0 << 16) | (b1 << 8) | b2;
-
-            result.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
-            result.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
-            if i + 1 < input.len() {
-                result.push(TABLE[((triple >> 6) & 0x3F) as usize] as char);
-            } else {
-                result.push('=');
-            }
-            if i + 2 < input.len() {
-                result.push(TABLE[(triple & 0x3F) as usize] as char);
-            } else {
-                result.push('=');
-            }
-            i += 3;
-        }
-        result
     }
 
     /// Check if the server supports a specific ESMTP extension.

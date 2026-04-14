@@ -20,6 +20,7 @@
 //! - Per-connection spawn with idle timeout + command limits
 //! - `MailProtocol` trait for protocol-specific command dispatch
 
+pub mod command_middleware;
 pub mod imap;
 pub mod lmtp;
 pub mod server;
