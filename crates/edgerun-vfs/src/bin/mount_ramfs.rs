@@ -165,7 +165,9 @@ fn delete_file(dst: &Path) -> std::io::Result<()> {
 
 /// Check if path is a git operation
 fn is_git_path(path: &Path) -> bool {
-    path.as_os_str().to_string_lossy().contains(".git/")
+    let s = path.as_os_str().to_string_lossy();
+    // Match .git/ as a path component, .git at end of path component, or exact .git
+    s.contains(".git/") || s.ends_with("/.git") || s == ".git"
 }
 
 /// Handle all signals with proper shutdown
@@ -399,7 +401,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // Check git - sync directly if git path
                         if is_git_path(rel) {
                             if let Some(data) = task.data {
-                                if let Ok(_) = write_file(&dst, &data) {
+                                if write_file(&dst, &data).is_ok() {
                                     total_synced += 1;
                                     total_bytes += data.len();
                                 }
@@ -408,7 +410,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         } else if git_aware_sync.should_persist(rel) {
                             if let Some(data) = task.data {
-                                if let Ok(_) = write_file(&dst, &data) {
+                                if write_file(&dst, &data).is_ok() {
                                     total_synced += 1;
                                     total_bytes += data.len();
                                 }
@@ -486,4 +488,43 @@ fn get_ram_disk_size(path: &Path) -> f64 {
         })
         .map(|b| b as f64 / (1024.0 * 1024.0))
         .unwrap_or(0.0)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_git_path_exact_git() {
+        assert!(is_git_path(Path::new(".git")));
+        assert!(is_git_path(Path::new(".git/HEAD")));
+        assert!(is_git_path(Path::new(".git/config")));
+        assert!(is_git_path(Path::new(".git/objects/pack/foo.pack")));
+        assert!(is_git_path(Path::new(".git/refs/heads/main")));
+    }
+
+    #[test]
+    fn test_is_git_path_nested() {
+        assert!(is_git_path(Path::new("foo/.git")));
+        assert!(is_git_path(Path::new("foo/.git/HEAD")));
+        assert!(is_git_path(Path::new("foo/bar/.git/config")));
+        assert!(is_git_path(Path::new("nested/repo/.git/objects/pack/foo.pack")));
+    }
+
+    #[test]
+    fn test_is_git_path_false_positives() {
+        // Should NOT match .github, .gitignore, etc.
+        assert!(!is_git_path(Path::new(".github/workflows/ci.yml")));
+        assert!(!is_git_path(Path::new(".gitignore")));
+        assert!(!is_git_path(Path::new(".gitattributes")));
+        assert!(!is_git_path(Path::new("myproject.git")));
+        assert!(!is_git_path(Path::new("git情")));
+    }
+
+    #[test]
+    fn test_is_git_path_regular_files() {
+        assert!(!is_git_path(Path::new("src/main.rs")));
+        assert!(!is_git_path(Path::new("Cargo.toml")));
+        assert!(!is_git_path(Path::new("target/debug/main")));
+        assert!(!is_git_path(Path::new("foo/bar/baz.txt")));
+    }
 }

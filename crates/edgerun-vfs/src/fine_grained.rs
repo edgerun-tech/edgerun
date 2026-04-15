@@ -108,7 +108,7 @@ impl FineGrainedVFS {
             }
             Ok(local_count)
         }
-        Ok(walk_impl(root, callback)?)
+        walk_impl(root, callback)
     }
 
     fn compute_hash(content: &[u8]) -> String {

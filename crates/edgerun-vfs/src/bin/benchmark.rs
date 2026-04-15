@@ -27,7 +27,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         eprintln!("Usage: benchmark <path-to-codebase>");
-        eprintln!("");
+        eprintln!();
         eprintln!("Benchmarks VFS vs disk I/O with real-world patterns.");
         eprintln!("Use your actual project directory for realistic results.");
         std::process::exit(1);
@@ -61,7 +61,7 @@ fn main() {
     println!("  1. LOAD COST (the price of going in-memory)");
     println!("----------------------------------------------------------------");
 
-    let _warmup = {
+    {
         let vfs = VirtualFileSystem::load(path).unwrap();
         let _ = vfs.files().count();
         drop(vfs)
