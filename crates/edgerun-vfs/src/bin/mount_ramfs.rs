@@ -165,7 +165,7 @@ fn delete_file(dst: &Path) -> std::io::Result<()> {
 
 /// Check if path is a git operation
 fn is_git_path(path: &Path) -> bool {
-    path.starts_with(".git")
+    path.as_os_str().to_string_lossy().contains(".git")
 }
 
 /// Handle all signals with proper shutdown
