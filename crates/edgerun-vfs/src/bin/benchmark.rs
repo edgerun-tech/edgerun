@@ -745,7 +745,7 @@ fn main() {
         let overhead = vfs_size.saturating_sub(raw_size);
         println!(
             "  Overhead per file:       {} bytes",
-            overhead / stats.file_count
+            stats.file_count.checked_div(overhead).unwrap_or(0)
         );
     }
     println!("  Files loaded:            {}", stats.file_count);

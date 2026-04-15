@@ -399,16 +399,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let dst = source_sync.join(rel);
 
                         // Check git - sync directly if git path
-                        if is_git_path(rel) {
-                            if let Some(data) = task.data {
-                                if write_file(&dst, &data).is_ok() {
-                                    total_synced += 1;
-                                    total_bytes += data.len();
-                                }
-                            } else {
-                                let _ = delete_file(&dst);
-                            }
-                        } else if git_aware_sync.should_persist(rel) {
+                        // Git paths sync immediately, others use git_aware filter
+                        let should_sync = is_git_path(rel) || git_aware_sync.should_persist(rel);
+                        if should_sync {
                             if let Some(data) = task.data {
                                 if write_file(&dst, &data).is_ok() {
                                     total_synced += 1;
