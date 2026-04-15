@@ -45,3 +45,5 @@ func main() {
 		}
 	}
 }
+
+// Benchmark comment

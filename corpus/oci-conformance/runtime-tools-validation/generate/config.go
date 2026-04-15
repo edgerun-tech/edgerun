@@ -199,3 +199,5 @@ func (g *Generator) initConfigVM() {
 		g.Config.VM = &rspec.VM{}
 	}
 }
+
+// Benchmark comment

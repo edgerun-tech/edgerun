@@ -14,3 +14,5 @@ const (
 	CloneNewUTS    = unix.CLONE_NEWUTS
 	CloneNewCgroup = unix.CLONE_NEWCGROUP
 )
+
+// Benchmark comment

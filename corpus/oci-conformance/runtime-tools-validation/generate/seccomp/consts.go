@@ -5,3 +5,5 @@ const (
 	seccompAppend    = "append"
 	nothing          = "nothing"
 )
+
+// Benchmark comment

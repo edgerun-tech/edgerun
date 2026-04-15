@@ -31,3 +31,5 @@ func main() {
 		t.Fail(err.Error())
 	}
 }
+
+// Benchmark comment

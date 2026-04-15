@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edgerun Agent - AI Coding Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e; color: #eee; height: 100vh; display: flex;
+    }
+    #app { display: flex; width: 100%; height: 100%; }
+    #sidebar { width: 300px; background: #16213e; border-right: 1px solid #0f3460; display: flex; flex-direction: column; }
+    #main { flex: 1; display: flex; flex-direction: column; }
+    .panel { background: #1f2937; border-radius: 8px; margin: 10px; }
+    .panel-header { padding: 12px 16px; border-bottom: 1px solid #374151; font-weight: 600; }
+    .panel-title { font-size: 14px; }
+    .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .msg { padding: 12px 16px; border-radius: 8px; max-width: 90%; font-size: 14px; line-height: 1.5; }
+    .msg-user { background: #3b82f6; align-self: flex-end; }
+    .msg-assistant { background: #1f2937; align-self: flex-start; border: 1px solid #374151; }
+    .msg-error { background: #7f1d1d; align-self: flex-start; }
+    .input-area { padding: 16px; border-top: 1px solid #374151; display: flex; gap: 8px; }
+    .input { 
+      flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #374151; 
+      background: #1f2937; color: #eee; font-size: 14px; resize: none;
+    }
+    .btn { padding: 12px 20px; background: #3b82f6; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 600; }
+    .btn:hover { background: #2563eb; }
+    .btn:disabled { background: #6b7280; cursor: not-allowed; }
+    .thinking { color: #9ca3af; font-style: italic; font-size: 12px; }
+    .tools-list { padding: 10px; font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <div class="panel" style="margin: 10px;">
+        <div class="panel-header">
+          <span class="panel-title">🤖 Edgerun Agent</span>
+        </div>
+        <div class="tools-list" id="toolsList">
+          Loading tools...
+        </div>
+      </div>
+    </div>
+    <div id="main">
+      <div class="panel" style="flex: 1; display: flex; flex-direction: column; margin: 10px 10px 0 10px;">
+        <div class="panel-header">
+          <span class="panel-title">💬 Chat</span>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="input-area">
+          <textarea class="input" id="input" rows="2" placeholder="Ask me to write code, debug, or write tests..."></textarea>
+          <button class="btn" id="sendBtn">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let nextId = 1;
+    const messages = [];
+    const pendingRequests = new Map();
+    let chatBusy = false;
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+      
+      ws.onopen = () => {
+        console.log('Connected to agent');
+        ws.send(JSON.stringify({ type: 'client_ready' }));
+        loadTools();
+      };
+      
+      ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'response' || msg.type === 'response_error') {
+          const pending = pendingRequests.get(msg.id);
+          if (pending) {
+            pendingRequests.delete(msg.id);
+            pending.resolve(msg);
+          }
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('Disconnected, reconnecting...');
+        setTimeout(connect, 2000);
+      };
+    }
+
+    function wsRequest(action, payload) {
+      return new Promise((resolve, reject) => {
+        const id = nextId++;
+        pendingRequests.set(id, { resolve, reject });
+        ws.send(JSON.stringify({ type: 'request', id, action, payload }));
+        setTimeout(() => {
+          if (pendingRequests.has(id)) {
+            pendingRequests.delete(id);
+            reject(new Error('Timeout'));
+          }
+        }, 30000);
+      });
+    }
+
+    async function loadTools() {
+      try {
+        const resp = await wsRequest('get_tools', {});
+        document.getElementById('toolsList').textContent = 
+          'Available tools: ' + resp.result.tools.map(t => t.name).join(', ');
+      } catch (e) {
+        document.getElementById('toolsList').textContent = 'Failed to load tools';
+      }
+    }
+
+    function addMessage(text, role) {
+      const div = document.createElement('div');
+      div.className = `msg msg-${role}`;
+      div.textContent = text;
+      document.getElementById('messages').appendChild(div);
+      div.scrollIntoView();
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('input');
+      const text = input.value.trim();
+      if (!text || chatBusy) return;
+      
+      input.value = '';
+      chatBusy = true;
+      document.getElementById('sendBtn').disabled = true;
+      
+      addMessage(text, 'user');
+      addMessage('Thinking...', 'assistant');
+      const thinkingMsg = messages[messages.length - 1];
+      
+      try {
+        const resp = await wsRequest('chat', { message: text, session_id: null });
+        const lastMsg = document.querySelector('.msg-assistant:last-child');
+        if (lastMsg) lastMsg.textContent = resp.result.reply;
+      } catch (e) {
+        addMessage('Error: ' + e.message, 'error');
+      }
+      
+      chatBusy = false;
+      document.getElementById('sendBtn').disabled = false;
+    }
+
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+    document.getElementById('input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    connect();
+  </script>
+</body>
+</html>
+// Benchmark comment

@@ -164,3 +164,5 @@ func main() {
 
 	t.AutoPlan()
 }
+
+// Benchmark comment

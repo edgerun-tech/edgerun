@@ -1,9 +1,8 @@
 //! Async HTTP/1.1 implementation (RFC 9112)
 //!
-//! This module provides HTTP/1.1 client and server built on top of
-//! [`edgerun_rt`] async primitives.
+//! This module provides HTTP/1.1 server built on top of
+//! [`edgerun_rt`] async primitives. The client is in the unified `HttpClient`.
 
-pub mod client;
 pub mod server;
 pub mod handler;
 pub mod body;
@@ -18,7 +17,6 @@ pub mod range;
 pub mod chunked;
 pub mod pool;
 
-pub use client::Client;
 pub use server::{Server, BoundServer};
 #[cfg(feature = "tls")]
 pub use server::{TlsServer, TlsBoundServer};

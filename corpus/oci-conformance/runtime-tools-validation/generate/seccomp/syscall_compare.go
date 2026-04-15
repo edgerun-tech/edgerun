@@ -122,3 +122,5 @@ func neitherHasArgs(config1, config2 *rspec.LinuxSyscall) bool {
 func firstParamOnlyHasArgs(config1, config2 *rspec.LinuxSyscall) bool {
 	return !hasArguments(config1) && hasArguments(config2)
 }
+
+// Benchmark comment

@@ -1,0 +1,21 @@
+# Environment and local config files to persist
+.env
+.env.local
+*.env
+
+# Local configs
+config.local.toml
+settings.local.json
+*.local.*
+
+# Database files
+*.db
+*.sqlite
+
+# IDE settings (if not in git)
+.vscode/settings.json
+.idea/workspace.xml
+
+// benchmark edit
+// benchmark edit
+// benchmark edit

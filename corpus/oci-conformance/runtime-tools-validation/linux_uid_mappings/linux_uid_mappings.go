@@ -17,3 +17,5 @@ func main() {
 		util.Fatal(err)
 	}
 }
+
+// Benchmark comment

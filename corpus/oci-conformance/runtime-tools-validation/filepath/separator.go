@@ -7,3 +7,5 @@ func Separator(os string) rune {
 	}
 	return '/'
 }
+
+// Benchmark comment

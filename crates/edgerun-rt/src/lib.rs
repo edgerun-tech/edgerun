@@ -81,7 +81,7 @@ pub use metrics::RuntimeMetrics;
 pub use trace::{Span, EnterGuard};
 
 // I/O traits and extensions.
-pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt, Take, poll_fn, PollFn, Lines, ReadLineFut};
+pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt, Take, poll_fn, PollFn, ReadLineFut};
 
 // TCP.
 pub use tcp::{

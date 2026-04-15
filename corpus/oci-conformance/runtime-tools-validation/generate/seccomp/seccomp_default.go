@@ -603,3 +603,5 @@ func DefaultProfile(rs *rspec.Spec) *rspec.LinuxSeccomp {
 		Syscalls:      syscalls,
 	}
 }
+
+// Benchmark comment

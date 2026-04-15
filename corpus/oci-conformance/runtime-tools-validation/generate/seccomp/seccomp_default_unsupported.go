@@ -13,3 +13,5 @@ const (
 	CloneNewUTS    = 0x4000000
 	CloneNewCgroup = 0x02000000
 )
+
+// Benchmark comment

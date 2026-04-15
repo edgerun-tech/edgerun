@@ -71,3 +71,5 @@ func parseOperator(operator string) (rspec.LinuxSeccompOperator, error) {
 	}
 	return o, nil
 }
+
+// Benchmark comment

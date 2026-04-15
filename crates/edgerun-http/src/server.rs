@@ -23,8 +23,11 @@ use crate::{Request, Response, StatusCode};
 use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncWrite, AsyncWriteExt, sleep, spawn, timeout, CancellationToken};
 use edgerun_encoding::base64::base64url_decode;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
+use std::io;
 
 /// TLS certificate for the server.
 pub type TlsCertificate = edgerun_tls::certificate_gen::CertificateAndKey;
@@ -355,10 +358,19 @@ where
         let request = Request::new(method, uri, headers, body);
         let is_head = request.method().as_str() == "HEAD";
         let response = handler.handle(request).await;
+        
         write_response_head(&mut reader, &response, is_head).await?;
 
         let skip_body = is_head || response.status().as_u16() == 204 || response.status().as_u16() == 304 || response.status().is_informational();
-        if !skip_body && !response.body().is_empty() { reader.get_mut().write_all(response.body()).await?; }
+        let is_streaming = response.is_streaming();
+        if !skip_body {
+            if is_streaming && !response.body().is_empty() {
+                write_chunk(reader.get_mut(), response.body()).await?;
+                let _ = reader.get_mut().flush().await;
+            } else if !response.body().is_empty() {
+                reader.get_mut().write_all(response.body()).await?;
+            }
+        }
 
         current_line = match timeout(ka_timeout, reader.read_line_max(max_request_size)).await { Ok(Ok(Some(line))) => line, _ => break };
     }
@@ -386,10 +398,12 @@ where
     stream.write_all(b"\r\n").await?;
     stream.flush().await?;
 
-    let mut rdwr = stream;
+    let mut writer = stream;
     let mut encoder = Encoder::new();
     let mut decoder = Decoder::new();
     let mut server = Http2Server::new();
+    let server_settings = server.server_settings.to_entries();
+    let server_sf = crate::http2::frame::SettingsFrame::new(server_settings);
 
     if !settings_payload.is_empty() && settings_payload.len() % 6 == 0 {
         let mut offset = 0;
@@ -403,13 +417,14 @@ where
 
     let server_settings = server.server_settings.to_entries();
     let server_sf = crate::http2::frame::SettingsFrame::new(server_settings);
-    write_frame( write_frame( &server_sf.to_frame()).await?;mut rdwr.stream, write_frame( &server_sf.to_frame()).await?;server_sf.to_frame()).await?;
+    write_frame(&mut &mut writer, &server_sf.to_frame()).await?;
 
     let mut expecting_continuation: Option<(u32, Vec<u8>, bool)> = None;
     let mut pending_body_data: std::collections::HashMap<u32, Vec<u8>> = std::collections::HashMap::new();
-    let mut frame_count: u64 = 0;
+let mut frame_count: u64 = 0;
     let mut client_settings_received = false;
     let mut upgrade_request_processed = false;
+    let mut action = FrameAction::None;
 
     loop {
         frame_count += 1;
@@ -417,10 +432,10 @@ where
             server.cleanup_closed_streams();
         }
 
-        let frame = match timeout(idle_timeout, read_frame( server.max_frame_size)).await {
+        let frame = match timeout(idle_timeout, read_frame(&mut writer, server.max_frame_size)).await {
             Ok(Ok(Ok(f))) => f,
             Ok(Ok(Err((stream_id, error_code)))) => {
-                write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, b"Frame too large").await;
+                write_goaway(&mut &mut writer, server.last_processed_stream_id, error_code, b"Frame too large").await;
                 break;
             }
             Ok(Err(_)) => break,
@@ -444,28 +459,28 @@ where
 
             let settings_frame = match crate::http2::frame::SettingsFrame::from_frame(&frame) {
                 Ok(sf) => sf,
-                Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad SETTINGS").await; break; }
+                Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad SETTINGS").await; break; }
             };
             let settings_sf = crate::http2::frame::SettingsFrame::new(server.server_settings.to_entries());
-            write_frame( write_frame( &settings_sf.to_frame()).await?;mut rdwr.stream, write_frame( &settings_sf.to_frame()).await?;settings_sf.to_frame()).await?;
+            write_frame(&mut &mut writer, &settings_sf.to_frame()).await?;
             match server.apply_client_settings(&settings_frame) {
                 FrameAction::WriteFrames(frames) => {
-                    for f in &frames { write_frame( write_frame( f)mut rdwr.stream, f).await?; }
+                    for f in &frames { write_frame(&mut &mut writer, f).await?; }
                     decoder.set_max_table_size(server.client_settings.header_table_size as usize);
                 }
-                FrameAction::Goaway { error_code, debug_data, .. } => { write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, &debug_data).await; break; }
+                FrameAction::Goaway { error_code, debug_data, .. } => { write_goaway(&mut &mut writer, server.last_processed_stream_id, error_code, &debug_data).await; break; }
                 _ => {}
             }
             continue;
         }
 
-        if let Err(ec) = frame.validate_semantics() { write_goaway(&mut rdwr, server.last_processed_stream_id, ec, b"Semantic violation").await; break; }
+        if let Err(ec) = frame.validate_semantics() { write_goaway(&mut &mut writer, server.last_processed_stream_id, ec, b"Semantic violation").await; break; }
 
         if frame.stream_id == 1 && !upgrade_request_processed {
             if frame.frame_type == FrameType::Headers {
                 let hf = match crate::http2::frame::HeadersFrame::from_frame(&frame) {
                     Ok(hf) => hf,
-                    Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
+                    Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
                 };
 
                 let end_headers = frame.flags & flags::HEADERS_END_HEADERS != 0;
@@ -473,9 +488,9 @@ where
                     upgrade_request_processed = true;
                     let decoded_headers = match decoder.decode(&hf.header_block) {
                         Ok(h) => h,
-                        Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                        Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
                     };
-                    if let Err((ec, _)) = validate_request_headers(&decoded_headers) { write_goaway(&mut rdwr, server.last_processed_stream_id, ec, b"Invalid headers").await; break; }
+                    if let Err((ec, _)) = validate_request_headers(&decoded_headers) { write_goaway(&mut &mut writer, server.last_processed_stream_id, ec, b"Invalid headers").await; break; }
 
                     let uri = if target.starts_with("http://") || target.starts_with("https://") {
                         Uri::parse(target).unwrap_or_else(|_| Uri::parse("http://localhost/").unwrap())
@@ -505,7 +520,7 @@ where
                     resp_frames.push(crate::http2::frame::HeadersFrame::new(1, resp_header_block, response.body().is_empty()).to_frame());
                     if !response.body().is_empty() { resp_frames.push(crate::http2::frame::DataFrame::new(1, response.body().to_vec(), true).to_frame()); }
 
-                    for f in &resp_frames { write_frame( write_frame( f)mut rdwr.stream, f).await?; }
+                    for f in &resp_frames { write_frame(&mut &mut writer, f).await?; }
                     if let Some(s) = server.stream_manager.get_stream_mut(1) { let _ = s.half_close_local(); }
                     server.half_close_remote(1);
                     continue;
@@ -538,14 +553,14 @@ where
                 server.handle_priority(&pf)
             }
             FrameType::Goaway => { server.handle_goaway(); break; }
-            FrameType::PushPromise => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"No push").await; break; }
+            FrameType::PushPromise => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"No push").await; break; }
             FrameType::Data => {
                 let end_stream = frame.flags & flags::DATA_END_STREAM != 0;
                 let sid = frame.stream_id;
                 let body_entry = pending_body_data.entry(sid).or_default();
                 if body_entry.len() + frame.payload.len() > 100 * 1024 * 1024 {
                     pending_body_data.remove(&sid);
-                    write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Body too large").await;
+                    write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Body too large").await;
                     break;
                 }
                 body_entry.extend_from_slice(&frame.payload);
@@ -554,7 +569,7 @@ where
                     if let Some(headers) = server.pending_headers.remove(&sid) {
                         let body = pending_body_data.remove(&sid).unwrap_or_default();
                         server.update_last_stream(sid);
-                        process_request_with_body(sid, &headers, body, &mut decoder, &mut encoder, &mut server, &handler).await;
+                        action = process_request_with_body(sid, &headers, body, &mut decoder, &mut encoder, &mut server, &handler).await;
                     } else {
                         pending_body_data.remove(&sid);
                     }
@@ -564,9 +579,9 @@ where
             FrameType::Headers => {
                 let hf = match crate::http2::frame::HeadersFrame::from_frame(&frame) {
                     Ok(hf) => hf,
-                    Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
+                    Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
                 };
-                if hf.stream_id == 0 || hf.stream_id % 2 == 0 { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Invalid stream").await; break; }
+                if hf.stream_id == 0 || hf.stream_id % 2 == 0 { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Invalid stream").await; break; }
 
                 server.update_last_stream(hf.stream_id);
                 let _ = server.stream_manager.get_or_create_stream(hf.stream_id);
@@ -574,28 +589,32 @@ where
 
                 let end_headers = frame.flags & flags::HEADERS_END_HEADERS != 0;
                 if hf.end_stream && end_headers {
-                    process_request(hf.stream_id, &hf.header_block, &mut decoder, &mut encoder, &mut server, &handler).await
+                    action = process_request(hf.stream_id, &hf.header_block, &mut decoder, &mut encoder, &mut server, &handler).await;
+                    FrameAction::None
                 } else if end_headers && !hf.end_stream {
                     let headers = match decoder.decode(&hf.header_block) {
                         Ok(h) => h,
-                        Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                        Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
                     };
-                    if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
-                    else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
-                    else { server.pending_headers.insert(hf.stream_id, headers); FrameAction::None }
+                    if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut &mut writer, hf.stream_id, ec).await; }
+                    else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut &mut writer, hf.stream_id, ec).await; }
+                    else { server.pending_headers.insert(hf.stream_id, headers); }
+                    FrameAction::None
                 } else if !end_headers {
                     if hf.header_block.len() > 65535 {
-                        write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
+                        write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
                         break;
                     }
                     expecting_continuation = Some((hf.stream_id, hf.header_block.clone(), hf.end_stream));
                     FrameAction::None
-                } else { FrameAction::None }
+                } else {
+                    FrameAction::None
+                }
             }
             FrameType::Continuation => {
                 if let Some((stream_id, ref mut block, headers_end_stream)) = expecting_continuation {
                     if block.len() + frame.payload.len() > 65535 {
-                        write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
+                        write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
                         break;
                     }
                     block.extend_from_slice(&frame.payload);
@@ -608,9 +627,9 @@ where
                         if stream_id == 1 && !upgrade_request_processed {
                             let decoded_headers = match decoder.decode(&block) {
                                 Ok(h) => h,
-                                Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                                Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
                             };
-                            if let Err((ec, _)) = validate_request_headers(&decoded_headers) { write_goaway(&mut rdwr, server.last_processed_stream_id, ec, b"Invalid headers").await; break; }
+                            if let Err((ec, _)) = validate_request_headers(&decoded_headers) { write_goaway(&mut &mut writer, server.last_processed_stream_id, ec, b"Invalid headers").await; break; }
 
                             let uri = if target.starts_with("http://") || target.starts_with("https://") {
                                 Uri::parse(target).unwrap_or_else(|_| Uri::parse("http://localhost/").unwrap())
@@ -640,7 +659,7 @@ where
                             resp_frames.push(crate::http2::frame::HeadersFrame::new(1, resp_header_block, response.body().is_empty()).to_frame());
                             if !response.body().is_empty() { resp_frames.push(crate::http2::frame::DataFrame::new(1, response.body().to_vec(), true).to_frame()); }
 
-                            for f in &resp_frames { write_frame( write_frame( f)mut rdwr.stream, f).await?; }
+                            for f in &resp_frames { write_frame(&mut &mut writer, f).await?; }
                             if let Some(s) = server.stream_manager.get_stream_mut(1) { let _ = s.half_close_local(); }
                             server.half_close_remote(1);
                             upgrade_request_processed = true;
@@ -654,24 +673,24 @@ where
                         } else {
                             let headers = match decoder.decode(&block) {
                                 Ok(h) => h,
-                                Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                                Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
                             };
-                            if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut rdwr, stream_id, ec).await; }
-                            else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, stream_id, ec).await; }
+                            if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut &mut writer, stream_id, ec).await; }
+                            else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut &mut writer, stream_id, ec).await; }
                             else { server.pending_headers.insert(stream_id, headers); }
                             FrameAction::None
                         }
                     } else {
                         FrameAction::None
                     }
-                } else { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Unexpected CONTINUATION").await; break; }
+                } else { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Unexpected CONTINUATION").await; break; }
             }
             _ => {
                 if expecting_continuation.is_some() {
                     match frame.frame_type {
                         FrameType::Data | FrameType::PushPromise | FrameType::Goaway
                         | FrameType::Ping | FrameType::Settings | FrameType::WindowUpdate => {
-                            write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Frame during CONTINUATION").await;
+                            write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Frame during CONTINUATION").await;
                             break;
                         }
                         _ => {}
@@ -682,8 +701,8 @@ where
         };
 
         match action {
-            FrameAction::WriteFrames(frames) => { for f in &frames { if write_frame( write_frame( f)mut rdwr.stream, f).await.is_err() { break; } } }
-            FrameAction::Goaway { last_stream_id, error_code, debug_data } => { write_goaway(&mut rdwr, last_stream_id, error_code, &debug_data).await; break; }
+            FrameAction::WriteFrames(frames) => { for f in &frames { if write_frame(&mut &mut writer, f).await.is_err() { break; } } }
+            FrameAction::Goaway { last_stream_id, error_code, debug_data } => { write_goaway(&mut &mut writer, last_stream_id, error_code, &debug_data).await; break; }
             FrameAction::CloseConnection => break,
             FrameAction::None => {}
         }
@@ -730,20 +749,24 @@ where
     }
     eprintln!("[DEBUG] Pre-read {} buffered bytes", buffered_data.len());
     
-    
+    let mut writer = reader.into_inner();
     let mut encoder = Encoder::new();
     let mut decoder = Decoder::new();
     let mut server = Http2Server::new();
+    let server_settings = server.server_settings.to_entries();
+    let server_sf = crate::http2::frame::SettingsFrame::new(server_settings);
     let mut expecting_continuation: Option<(u32, Vec<u8>, bool)> = None;
     let mut pending_body_data: std::collections::HashMap<u32, Vec<u8>> = std::collections::HashMap::new();
-    let mut frame_count: u64 = 0;
+let mut frame_count: u64 = 0;
     let mut client_settings_received = false;
+    let mut upgrade_request_processed = false;
+    let mut action = FrameAction::None;
 
     // RFC 9113 §3.4: Server connection preface
     // After consuming the client connection preface, the server MUST send its own SETTINGS frame
     eprintln!("[DEBUG] Sending server connection preface SETTINGS: type={}, flags={:#x}, stream={}, len={}", 
         server_sf.to_frame().frame_type as u8, server_sf.to_frame().flags, server_sf.to_frame().stream_id, server_sf.to_frame().payload.len());
-    write_frame( write_frame( &server_sf.to_frame()).await?;mut rdwr.stream, write_frame( &server_sf.to_frame()).await?;server_sf.to_frame()).await?;
+    write_frame(&mut &mut writer, &server_sf.to_frame()).await?;
 
     loop {
         frame_count += 1;
@@ -752,12 +775,12 @@ where
             server.cleanup_closed_streams();
         }
 
-        let frame = match timeout(idle_timeout, read_frame( server.max_frame_size)).await {
+        let frame = match timeout(idle_timeout, read_frame(&mut writer, server.max_frame_size)).await {
             Ok(Ok(Ok(f))) => {
                 f
             }
             Ok(Ok(Err((stream_id, error_code)))) => {
-                write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, b"Frame too large").await;
+                write_goaway(&mut &mut writer, server.last_processed_stream_id, error_code, b"Frame too large").await;
                 break;
             }
             Ok(Err(_)) => break,
@@ -782,22 +805,21 @@ where
 
             let settings_frame = match crate::http2::frame::SettingsFrame::from_frame(&frame) {
                 Ok(sf) => sf,
-                Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad SETTINGS").await; break; }
+                Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad SETTINGS").await; break; }
             };
-            write_frame( &mut rdwr.stream, &server_sf.to_frame()).await?;
-                    for f in &frames { 
-                        eprintln!("[DEBUG] Writing frame: type={}, flags={:#x}, stream={}, len={}", f.frame_type as u8, f.flags, f.stream_id, f.payload.len());
-                        write_frame( &mut rdwr.stream, f).await?;
-                    for f in &frames { 
+            write_frame( &mut &mut writer, &server_sf.to_frame()).await?;
+            match server.apply_client_settings(&settings_frame) {
+                FrameAction::WriteFrames(frames) => {
+                    for f in &frames { write_frame(&mut &mut writer, f).await?; }
                     decoder.set_max_table_size(server.client_settings.header_table_size as usize);
                 }
-                FrameAction::Goaway { error_code, debug_data, .. } => { write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, &debug_data).await; break; }
+                FrameAction::Goaway { error_code, debug_data, .. } => { write_goaway(&mut &mut writer, server.last_processed_stream_id, error_code, &debug_data).await; break; }
                 _ => {}
             }
             continue;
         }
 
-        if let Err(ec) = frame.validate_semantics() { write_goaway(&mut rdwr, server.last_processed_stream_id, ec, b"Semantic violation").await; break; }
+        if let Err(ec) = frame.validate_semantics() { write_goaway(&mut &mut writer, server.last_processed_stream_id, ec, b"Semantic violation").await; break; }
 
         let action = match frame.frame_type {
             FrameType::Ping => server.handle_ping(&frame),
@@ -819,14 +841,14 @@ where
                 server.handle_priority(&pf)
             }
             FrameType::Goaway => { server.handle_goaway(); break; }
-            FrameType::PushPromise => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"No push").await; break; }
+            FrameType::PushPromise => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"No push").await; break; }
             FrameType::Data => {
                 let end_stream = frame.flags & flags::DATA_END_STREAM != 0;
                 let sid = frame.stream_id;
                 let body_entry = pending_body_data.entry(sid).or_default();
                 if body_entry.len() + frame.payload.len() > 100 * 1024 * 1024 {
                     pending_body_data.remove(&sid);
-                    write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Body too large").await;
+                    write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Body too large").await;
                     break;
                 }
                 body_entry.extend_from_slice(&frame.payload);
@@ -836,7 +858,7 @@ where
                     if let Some(headers) = server.pending_headers.remove(&sid) {
                         let body = pending_body_data.remove(&sid).unwrap_or_default();
                         server.update_last_stream(sid);
-                        process_request_with_body(sid, &headers, body, &mut decoder, &mut encoder, &mut server, &handler).await;
+                        action = process_request_with_body(sid, &headers, body, &mut decoder, &mut encoder, &mut server, &handler).await;
                     } else {
                         // DATA arrived with END_STREAM but no headers — discard body
                         pending_body_data.remove(&sid);
@@ -847,9 +869,9 @@ where
             FrameType::Headers => {
                 let hf = match crate::http2::frame::HeadersFrame::from_frame(&frame) {
                     Ok(hf) => hf,
-                    Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
+                    Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
                 };
-                if hf.stream_id == 0 || hf.stream_id % 2 == 0 { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Invalid stream").await; break; }
+                if hf.stream_id == 0 || hf.stream_id % 2 == 0 { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Invalid stream").await; break; }
 
                 server.update_last_stream(hf.stream_id);
                 let _ = server.stream_manager.get_or_create_stream(hf.stream_id);
@@ -857,28 +879,32 @@ where
 
                 let end_headers = frame.flags & flags::HEADERS_END_HEADERS != 0;
                 if hf.end_stream && end_headers {
-                    process_request(hf.stream_id, &hf.header_block, &mut decoder, &mut encoder, &mut server, &handler).await
+                    action = process_request(hf.stream_id, &hf.header_block, &mut decoder, &mut encoder, &mut server, &handler).await;
+                    FrameAction::None
                 } else if end_headers && !hf.end_stream {
                     let headers = match decoder.decode(&hf.header_block) {
                         Ok(h) => h,
-                        Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                        Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
                     };
-                    if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
-                    else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
-                    else { server.pending_headers.insert(hf.stream_id, headers); FrameAction::None }
+                    if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut &mut writer, hf.stream_id, ec).await; }
+                    else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut &mut writer, hf.stream_id, ec).await; }
+                    else { server.pending_headers.insert(hf.stream_id, headers); }
+                    FrameAction::None
                 } else if !end_headers {
                     if hf.header_block.len() > max_header_size {
-                        write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
+                        write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
                         break;
                     }
                     expecting_continuation = Some((hf.stream_id, hf.header_block.clone(), hf.end_stream));
                     FrameAction::None
-                } else { FrameAction::None }
+                } else {
+                    FrameAction::None
+                }
             }
             FrameType::Continuation => {
                 if let Some((stream_id, ref mut block, headers_end_stream)) = expecting_continuation {
                     if block.len() + frame.payload.len() > max_header_size {
-                        write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
+                        write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;
                         break;
                     }
                     block.extend_from_slice(&frame.payload);
@@ -894,14 +920,14 @@ where
                             // Headers complete but need body — store as pending
                             let headers = match decoder.decode(&block) {
                                 Ok(h) => h,
-                                Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                                Err(_) => { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
                             };
-                            if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut rdwr, stream_id, ec).await; FrameAction::None }
-                            else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, stream_id, ec).await; FrameAction::None }
+                            if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut &mut writer, stream_id, ec).await; FrameAction::None }
+                            else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut &mut writer, stream_id, ec).await; FrameAction::None }
                             else { server.pending_headers.insert(stream_id, headers); FrameAction::None }
                         }
                     } else { FrameAction::None }
-                } else { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Unexpected CONTINUATION").await; break; }
+                } else { write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Unexpected CONTINUATION").await; break; }
             }
             _ => {
                 // RFC 7540 §6.10: During a CONTINUATION sequence, only HEADERS,
@@ -911,7 +937,7 @@ where
                     match frame.frame_type {
                         FrameType::Data | FrameType::PushPromise | FrameType::Goaway
                         | FrameType::Ping | FrameType::Settings | FrameType::WindowUpdate => {
-                            write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Frame during CONTINUATION").await;
+                            write_goaway(&mut &mut writer, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Frame during CONTINUATION").await;
                             break;
                         }
                         _ => {}
@@ -922,8 +948,8 @@ where
         };
 
         match action {
-            FrameAction::WriteFrames(frames) => { for f in &frames { if write_frame( write_frame( f)mut rdwr.stream, f).await.is_err() { break; } } }
-            FrameAction::Goaway { last_stream_id, error_code, debug_data } => { write_goaway(&mut rdwr, last_stream_id, error_code, &debug_data).await; break; }
+            FrameAction::WriteFrames(frames) => { for f in &frames { if write_frame(&mut &mut writer, f).await.is_err() { break; } } }
+            FrameAction::Goaway { last_stream_id, error_code, debug_data } => { write_goaway(&mut &mut writer, last_stream_id, error_code, &debug_data).await; break; }
             FrameAction::CloseConnection => break,
             FrameAction::None => {}
         }
@@ -1065,10 +1091,23 @@ where S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         reader.write_all(value.as_str().as_bytes()).await?;
         reader.write_all(b"\r\n").await?;
     }
-    if !response.headers().contains_key("Content-Length") {
+    let is_streaming = response.is_streaming();
+    if is_streaming {
+        reader.write_all(b"Transfer-Encoding: chunked\r\n").await?;
+    } else if !response.headers().contains_key("Content-Length") {
         let cl = if is_head { 0 } else { response.body().len() };
         reader.write_all(format!("Content-Length: {}\r\n", cl).as_bytes()).await?;
     }
+    reader.write_all(b"\r\n").await?;
+    Ok(())
+}
+
+async fn write_chunk<S>(reader: &mut S, data: &[u8]) -> std::io::Result<()>
+where S: AsyncWrite + Unpin {
+    use std::io::Write;
+    let hex = format!("{:X}\r\n", data.len());
+    reader.write_all(hex.as_bytes()).await?;
+    reader.write_all(data).await?;
     reader.write_all(b"\r\n").await?;
     Ok(())
 }

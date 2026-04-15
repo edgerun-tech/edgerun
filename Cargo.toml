@@ -80,6 +80,8 @@ members = [
   "crates/edgerun-virtual-disk",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
+  "crates/edgerun-agent",
+  "crates/edgerun-vfs",
 ]
 
 [workspace.package]

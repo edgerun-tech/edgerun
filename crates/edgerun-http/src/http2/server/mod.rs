@@ -200,8 +200,6 @@ impl Http2Server {
     /// memory growth from streams that have been closed but not removed.
     pub fn cleanup_closed_streams(&mut self) {
         self.stream_manager.cleanup_closed();
-        // Also clear the closed_stream_ids tracking set
-        self.closed_stream_ids.clear();
     }
 }
 

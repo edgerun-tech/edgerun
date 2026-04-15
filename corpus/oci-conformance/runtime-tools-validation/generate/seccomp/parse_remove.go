@@ -50,3 +50,5 @@ func RemoveAllMatchingRules(config *rspec.LinuxSeccomp, seccompAction rspec.Linu
 
 	return nil
 }
+
+// Benchmark comment

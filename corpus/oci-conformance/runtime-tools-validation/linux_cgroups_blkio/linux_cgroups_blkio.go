@@ -70,3 +70,5 @@ func main() {
 		}
 	}
 }
+
+// Benchmark comment

@@ -195,7 +195,6 @@ impl HttpClient {
             }
             HttpVersion::Http3 => self.execute_http3(request).await,
             HttpVersion::Best => {
-                // Try HTTP/2 first (most servers support it), fall back to HTTP/1.1
                 match self.execute_http2(request).await {
                     Ok(r) => Ok(r),
                     Err(_) => self.execute_http1(request).await,
@@ -205,11 +204,7 @@ impl HttpClient {
     }
 
     /// Execute an HTTP/1.1 request using the connection pool.
-    ///
-    /// The pool reuses TCP+TLS connections across requests to the same host,
-    /// eliminating connect + TLS handshake overhead for keep-alive servers.
     async fn execute_http1(&self, request: &Request) -> Result<Response> {
-        // Build an http1::Request from the top-level Request
         let uri_str = request.uri().to_string();
         let mut h1_req = crate::http1::Request::builder()
             .method(request.method().clone())
@@ -225,10 +220,8 @@ impl HttpClient {
 
         let h1_req = h1_req.build()?;
 
-        // Use the connection pool via Arc<Mutex<>> — no lock held across await
         let h1_resp = ConnectionPool::execute_async(&self.inner.pool, &h1_req).await?;
 
-        // Convert http1::Response → crate::Response
         let mut headers = HeaderMap::new();
         for (k, v) in h1_resp.headers().iter() {
             let _ = headers.insert(k.as_str(), v.as_str());
@@ -238,9 +231,6 @@ impl HttpClient {
     }
 
     /// Execute an HTTP/3 request via QUIC.
-    ///
-    /// Performs DNS resolution, QUIC+TLS handshake, HTTP/3 connection preface,
-    /// request/response exchange, redirect following, and decompression.
     async fn execute_http3(&self, request: &Request) -> Result<Response> {
         use crate::http3::connection::Http3Connection;
         use crate::http1::compression;
@@ -269,7 +259,6 @@ impl HttpClient {
             let cur_query = cur_uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
             let path_and_query = format!("{}{}", cur_path, cur_query);
 
-            // Establish HTTP/3 connection
             let server_addr = if cur_port == 443 {
                 cur_host.to_string()
             } else {
@@ -306,7 +295,6 @@ impl HttpClient {
                 Error::ProtocolError("No response received".to_string())
             })?;
 
-            // Check for redirect
             if self.inner.follow_redirects && status.is_redirection() && resp_redirect_count < self.inner.max_redirects as usize {
                 if let Some(location) = resp_headers.get("location") {
                     let loc = location.as_str();
@@ -339,9 +327,6 @@ impl HttpClient {
 
     async fn execute_http2(&self, request: &Request) -> Result<Response> {
         let h2_resp = Http2Pool::execute_async(&self.inner.h2_pool, request).await?;
-
-        // Convert http2::HttpResponse → crate::Response
-        // The headers are already crate::HeaderMap
         Ok(Response::from_parts(h2_resp.status, h2_resp.headers, h2_resp.body))
     }
 }

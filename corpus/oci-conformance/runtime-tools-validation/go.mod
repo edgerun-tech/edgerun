@@ -27,3 +27,5 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+// Benchmark comment

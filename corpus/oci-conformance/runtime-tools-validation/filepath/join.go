@@ -7,3 +7,5 @@ func Join(os string, elem ...string) string {
 	sep := Separator(os)
 	return Clean(os, strings.Join(elem, string(sep)))
 }
+
+// Benchmark comment

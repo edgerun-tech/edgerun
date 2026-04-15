@@ -180,3 +180,5 @@ func main() {
 		}
 	}
 }
+
+// Benchmark comment

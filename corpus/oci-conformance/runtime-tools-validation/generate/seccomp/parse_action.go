@@ -135,3 +135,5 @@ func (s SyscallOpts) argsAreEmpty() bool {
 		s.ValueTwo == "" &&
 		s.Operator == "")
 }
+
+// Benchmark comment

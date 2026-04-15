@@ -1887,3 +1887,5 @@ func (g *Generator) SetWindowsServicing(servicing bool) {
 	g.initConfigWindows()
 	g.Config.Windows.Servicing = servicing
 }
+
+// Benchmark comment

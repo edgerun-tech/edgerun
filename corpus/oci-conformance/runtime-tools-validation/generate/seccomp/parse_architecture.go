@@ -54,3 +54,5 @@ func parseArch(arch string) (rspec.Arch, error) {
 	}
 	return a, nil
 }
+
+// Benchmark comment

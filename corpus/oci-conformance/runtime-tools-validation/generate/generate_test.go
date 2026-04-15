@@ -155,3 +155,5 @@ func TestMultipleEnvCaching(t *testing.T) {
 	g.AddMultipleProcessEnv([]string{})
 	assert.Equal(t, []string(nil), g.Config.Process.Env)
 }
+
+// Benchmark comment
