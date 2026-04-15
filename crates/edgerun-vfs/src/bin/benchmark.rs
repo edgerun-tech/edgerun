@@ -223,14 +223,28 @@ fn main() {
         .cloned()
         .collect();
 
+    // VFS edit: use temp copies to avoid corrupting the project
+    let tmp_vfs_edit = std::env::temp_dir().join("edgerun-vfs-bench-vfs-edit");
+    let _ = std::fs::remove_dir_all(&tmp_vfs_edit);
+    std::fs::create_dir_all(&tmp_vfs_edit).unwrap();
+    for path in &edit_paths {
+        let src = vfs.root().join(path);
+        let dst = tmp_vfs_edit.join(path);
+        if let Some(parent) = dst.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        let _ = std::fs::copy(&src, &dst);
+    }
+    let mut vfs_for_edit = VirtualFileSystem::load(&tmp_vfs_edit).unwrap();
     let start = Instant::now();
     for path in &edit_paths {
-        let _ = vfs.edit(path, |content| {
+        let _ = vfs_for_edit.edit(path, |content| {
             content.push_str("\n// benchmark edit");
             Ok(())
         });
     }
     let vfs_edit_time = start.elapsed();
+    let _ = std::fs::remove_dir_all(&tmp_vfs_edit);
 
     // Disk edit: use temp copies to avoid corrupting the project
     let tmp_edit = std::env::temp_dir().join("edgerun-vfs-bench-edit");
