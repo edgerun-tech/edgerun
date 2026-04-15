@@ -123,6 +123,16 @@ mod tftp_config {
         pub provider: Arc<dyn edgerun_tftp::server::FileProvider>,
         pub blksize: u16,
     }
+
+    impl TftpConfig {
+        pub fn new(provider: Arc<dyn edgerun_tftp::server::FileProvider>) -> Self {
+            Self {
+                bind_addr: "0.0.0.0:69".to_string(),
+                provider,
+                blksize: 512,
+            }
+        }
+    }
 }
 #[cfg(feature = "tftp")]
 pub use tftp_config::TftpConfig;
