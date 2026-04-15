@@ -1,0 +1,44 @@
+[Unit]
+Description=Edgerun Virtual Filesystem Daemon
+Documentation=https://github.com/edgerun/edgerun-vfs
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i
+
+# Load configuration
+Environment="EDGEVFS_CONFIG=/etc/edgerun-vfs/config.toml"
+
+# Main daemon executable
+ExecStart=/usr/bin/edgerun-vfs-daemon --config /etc/edgerun-vfs/config.toml
+
+# Restart on failure
+Restart=always
+RestartSec=5
+
+# Resource limits
+# Adjust based on your RAM
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+# Allow writing to user directories
+ReadWritePaths=/home/%i
+ReadOnlyPaths=/etc /usr
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=edgerun-vfs
+
+[Install]
+WantedBy=multi-user.target

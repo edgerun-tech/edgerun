@@ -1,0 +1,34 @@
+# Edgerun VFS Configuration
+# Load directories into RAM, persist git-tracked files + .edgekeep entries
+
+# Maximum RAM usage in MB
+max_ram_mb = 8192
+
+# Working directories to load
+[[workspace]]
+path = "/home/ken/edgerun_reference_core"
+name = "edgerun"
+
+[[workspace]]
+path = "/home/ken/projects/my-app"
+name = "my-app"
+
+# Directories that are always volatile (never persisted)
+# These are typically build artifacts
+volatile_dirs = [
+    "target",
+    "node_modules", 
+    "dist",
+    "build",
+    ".next",
+    "vendor"
+]
+
+# Auto-persist settings
+[persist]
+# Enable auto-persist on file write
+auto_persist = true
+# Batch writes for performance (milliseconds)
+batch_delay_ms = 10
+# Maximum batch size
+batch_size = 100
