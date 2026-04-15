@@ -5,9 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use rayon::prelude::*;
 use tree_sitter::{Language, Parser, Tree};
 
 /// Supported languages and their tree-sitter grammars

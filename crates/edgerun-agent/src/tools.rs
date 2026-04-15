@@ -6,8 +6,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process;
-use std::sync::Arc;
-use edgerun_rt::sync::RwLock;
 use crate::vfs::SharedVFS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

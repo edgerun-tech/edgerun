@@ -402,7 +402,7 @@ impl VirtualFileSystem {
     }
 
     /// Get changed files since load
-    pub fn changes(&self) -> Changeset {
+    pub fn changes(&self) -> Changeset<'_> {
         let mut added = Vec::new();
         let mut modified = Vec::new();
         let removed: Vec<&PathBuf> = self.deleted.iter().collect();

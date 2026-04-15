@@ -61,7 +61,7 @@ impl Agent {
         Self { client, context, executor }
     }
 
-    pub fn with_vfs(mut self, vfs: SharedVFS) -> Self {
+    pub fn with_vfs(self, vfs: SharedVFS) -> Self {
         let executor = Arc::new(
             Arc::try_unwrap(self.executor)
                 .unwrap_or_else(|arc| (*arc).clone())
@@ -80,7 +80,7 @@ impl Agent {
     }
 
     pub async fn chat(&self, message: &str) -> Result<ChatResponse, String> {
-        let (code_ctx, history) = {
+        let (code_ctx, _history) = {
             let ctx = self.context.read();
             (ctx.budget.code_context.clone(), ctx.budget.history.clone())
         };

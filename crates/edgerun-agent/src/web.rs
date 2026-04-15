@@ -1,7 +1,7 @@
 //! Web server for the agent UI.
 
 use crate::agent::Agent;
-use crate::client::{ChatRequest, StreamChunk, TabbyClient};
+use crate::client::{ChatRequest, TabbyClient};
 use crate::vfs::SharedVFS;
 use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_json::Value;

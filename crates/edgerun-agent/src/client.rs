@@ -1,11 +1,9 @@
 //! TabbyAPI client for code generation, debugging, and testing.
 
-use edgerun_http::{HttpClient, Request, StatusCode};
+use edgerun_http::HttpClient;
 use edgerun_json::{from_str, to_string};
-use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncWriteExt, TcpSocket};
-use serde::{Deserialize, Serialize};
+use edgerun_rt::{AsyncWriteExt, TcpSocket};
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
@@ -61,6 +59,7 @@ struct CompletionResponse {
 struct Choice {
     text: String,
     #[serde(default)]
+    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 

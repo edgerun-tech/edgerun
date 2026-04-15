@@ -3,7 +3,7 @@
 //! Devstral-small-2:24b has 32k context window (~24k chars conservative).
 //! We need to be extremely efficient with context allocation.
 
-use edgerun_json::{from_str, json, Value};
+use edgerun_json::from_str;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 

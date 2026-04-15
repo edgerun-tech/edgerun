@@ -23,7 +23,7 @@ enum Backend {
 
 impl EmbeddingModel {
     /// Load embedding model with automatic backend selection
-    pub fn load(model_path: &Path) -> Result<Self, String> {
+    pub fn load(_model_path: &Path) -> Result<Self, String> {
         // Try NPU acceleration first (ONNX Runtime)
         #[cfg(feature = "ml-acceleration")]
         {

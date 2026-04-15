@@ -3,7 +3,6 @@
 //! Run with: cargo run --bin benchmark -- /path/to/codebase
 
 use edgerun_agent::vfs::VirtualFileSystem;
-use std::path::Path;
 use std::time::Instant;
 
 fn main() {
