@@ -27,9 +27,9 @@ impl std::fmt::Debug for TabbyClient {
 }
 
 #[derive(Debug, serde::Serialize)]
-struct CompletionRequest {
-    prompt: String,
+struct ChatCompletionRequest {
     model: String,
+    messages: Vec<ChatMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,19 +38,29 @@ struct CompletionRequest {
     stream: Option<bool>,
 }
 
+#[derive(Debug, serde::Serialize, Clone)]
+struct ChatMessage {
+    role: String,
+    content: String,
+}
+
 #[derive(Debug, serde::Deserialize, Clone)]
-struct CompletionResponse {
-    choices: Vec<Choice>,
+struct ChatCompletionResponse {
+    choices: Vec<ChatChoice>,
     #[serde(default)]
     usage: Option<Usage>,
 }
 
 #[derive(Debug, serde::Deserialize, Clone)]
-struct Choice {
-    text: String,
+struct ChatChoice {
+    message: ChatMessageResponse,
     #[serde(default)]
-    #[allow(dead_code)]
     finish_reason: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, Clone)]
+struct ChatMessageResponse {
+    content: String,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
@@ -97,19 +107,31 @@ impl TabbyClient {
         self
     }
 
-    fn build_completion_request(&self, request: ChatRequest, _stream: bool) -> CompletionRequest {
-        let system = request.system_prompt.unwrap_or_else(|| {
-            "You are an expert coding assistant. Generate clean, idiomatic Rust code.".to_string()
+    fn build_chat_request(&self, request: &ChatRequest) -> ChatCompletionRequest {
+        let system = request.system_prompt.clone().unwrap_or_else(|| {
+            "You are a helpful coding assistant with shell access.".to_string()
         });
 
-        let prompt = match request.context {
-            Some(ctx) => format!("{}\n\nContext:\n{}\n\nUser: {}", system, ctx, request.message),
-            None => format!("{}\n\nUser: {}", system, request.message),
+        let mut messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: system,
+            }
+        ];
+
+        let user_content = match &request.context {
+            Some(ctx) => format!("Context:\n{}\n\nUser: {}", ctx, request.message),
+            None => format!("User: {}", request.message),
         };
 
-        CompletionRequest {
-            prompt,
+        messages.push(ChatMessage {
+            role: "user".to_string(),
+            content: user_content,
+        });
+
+        ChatCompletionRequest {
             model: self.model.clone(),
+            messages,
             max_tokens: request.max_tokens.or(self.max_tokens),
             temperature: request.temperature,
             stream: Some(false),
@@ -141,7 +163,7 @@ impl TabbyClient {
     }
 
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, String> {
-        let req = self.build_completion_request(request, false);
+        let req = self.build_chat_request(&request);
         let json_body = to_string(&req).map_err(|e| format!("Serialize error: {}", e))?;
 
         let mut last_err = String::new();
@@ -155,7 +177,7 @@ impl TabbyClient {
             let json_body = json_body.clone();
 
             let body = match edgerun_rt::spawn_blocking(move || {
-                http_request_sync(&base_url, "/v1/completions", &json_body)
+                http_request_sync(&base_url, "/v1/chat/completions", &json_body)
             }).await {
                 Ok(Ok(body)) => body,
                 Ok(Err(e)) => {
@@ -168,22 +190,8 @@ impl TabbyClient {
                 }
             };
 
-            // Check for HTTP error in body
-            if let Ok(val) = from_str::<edgerun_json::Value>(&body) {
-                if let Some(detail) = val.get("detail") {
-                    let status = detail.get("loc")
-                        .and_then(|l| l.as_array())
-                        .and_then(|a| a.first())
-                        .and_then(|v| v.as_str());
-                    
-                    if status == Some("body") {
-                        return Err(format!("API validation error: {}", body));
-                    }
-                }
-            }
-
             // Try to parse as JSON
-            let result: CompletionResponse = match from_str(&body) {
+            let result: ChatCompletionResponse = match from_str(&body) {
                 Ok(r) => r,
                 Err(e) => {
                     if body.starts_with("<!") || body.starts_with("<html") {
@@ -196,7 +204,7 @@ impl TabbyClient {
             let reply = result
                 .choices
                 .first()
-                .map(|c| c.text.clone())
+                .map(|c| c.message.content.clone())
                 .unwrap_or_default();
 
             return Ok(ChatResponse {
