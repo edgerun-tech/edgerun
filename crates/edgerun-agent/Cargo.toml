@@ -27,5 +27,9 @@ tempfile = "3"
 [lints]
 workspace = true
 [[bin]]
+name = "edgerun-agent"
+path = "src/main.rs"
+
+[[bin]]
 name = "benchmark"
 path = "src/bin/benchmark.rs"
