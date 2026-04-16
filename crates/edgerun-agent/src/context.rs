@@ -1,15 +1,9 @@
-//! Context management for 32k token budget.
-//!
-//! Devstral-small-2:24b has 32k context window (~24k chars conservative).
-//! We need to be extremely efficient with context allocation.
+//! Context management for token budget tracking.
 
-use edgerun_json::from_str;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-const MAX_TOKENS: usize = 32768;
-const TOKEN_TO_CHAR_RATIO: usize = 4;
-const MAX_CHARS: usize = MAX_TOKENS * TOKEN_TO_CHAR_RATIO;
+const MAX_CONTEXT_CHARS: usize = 128000;
 
 #[derive(Debug, Clone, Default)]
 pub struct ContextBudget {
@@ -30,17 +24,17 @@ impl ContextBudget {
     }
 
     pub fn with_code_context(mut self, context: &str) -> Self {
-        self.code_context = Self::truncate(context, 15000);
+        self.code_context = Self::truncate(context, 50000);
         self
     }
 
     pub fn with_task(mut self, task: &str) -> Self {
-        self.task = Self::truncate(task, 2000);
+        self.task = Self::truncate(task, 4000);
         self
     }
 
     pub fn with_history(mut self, history: &str) -> Self {
-        self.history = Self::truncate(history, 4000);
+        self.history = Self::truncate(history, 30000);
         self
     }
 
@@ -48,7 +42,7 @@ impl ContextBudget {
         if s.len() > max_chars {
             format!(
                 "{}...[truncated {} chars]",
-                &s[..max_chars - 20],
+                &s[..max_chars.saturating_sub(20)],
                 s.len() - max_chars + 20
             )
         } else {
@@ -61,34 +55,7 @@ impl ContextBudget {
     }
 
     pub fn fits(&self) -> bool {
-        self.total_chars() <= MAX_CHARS
-    }
-
-    pub fn to_prompt(&self) -> String {
-        let mut parts = Vec::new();
-
-        if !self.system.is_empty() {
-            parts.push(self.system.clone());
-        }
-
-        if !self.code_context.is_empty() {
-            parts.push(format!("## Code Context\n{}", self.code_context));
-        }
-
-        if !self.task.is_empty() {
-            parts.push(format!("## Task\n{}", self.task));
-        }
-
-        if !self.history.is_empty() {
-            parts.push(format!("## Conversation History\n{}", self.history));
-        }
-
-        parts.join("\n\n")
-    }
-
-    pub fn compress(&mut self) {
-        self.code_context = Self::truncate(&self.code_context, 8000);
-        self.history = Self::truncate(&self.history, 2000);
+        self.total_chars() <= MAX_CONTEXT_CHARS
     }
 }
 
@@ -104,7 +71,7 @@ pub struct CodeSummary {
 
 impl CodeSummary {
     pub fn from_graph_json(graph_json: &str) -> Self {
-        let graph: edgerun_json::Value = match from_str(graph_json) {
+        let graph: edgerun_json::Value = match edgerun_json::from_str(graph_json) {
             Ok(v) => v,
             Err(_) => return Self::default(),
         };
@@ -179,28 +146,22 @@ impl CodeSummary {
             self.file_count, self.func_count, self.edge_count
         );
 
-        ctx.push_str("## Languages\n");
-        for (lang, count) in &self.languages {
-            ctx.push_str(&format!("- {}: {} functions\n", lang, count));
+        if !self.languages.is_empty() {
+            ctx.push_str("## Languages\n");
+            for (lang, count) in &self.languages {
+                ctx.push_str(&format!("- {}: {} functions\n", lang, count));
+            }
+            ctx.push('\n');
         }
-        ctx.push('\n');
 
         if !self.top_functions.is_empty() {
-            ctx.push_str("## Top 10 Most-Connected Functions\n");
+            ctx.push_str("## Most-Connected Functions\n");
             for (func, connections) in &self.top_functions {
                 let display_name = func.rsplit("::").next().unwrap_or(func);
                 ctx.push_str(&format!(
                     "- {} ({} connections)\n",
                     display_name, connections
                 ));
-            }
-            ctx.push('\n');
-        }
-
-        if !self.top_files.is_empty() {
-            ctx.push_str("## Files with Most Functions\n");
-            for (file, count) in &self.top_files {
-                ctx.push_str(&format!("- {} ({} functions)\n", file, count));
             }
         }
 
@@ -254,7 +215,7 @@ impl ConversationHistory {
         }
     }
 
-    pub fn to_context(&self) -> String {
+    pub fn to_string(&self) -> String {
         self.messages
             .iter()
             .map(|m| {
@@ -281,12 +242,22 @@ mod tests {
     #[test]
     fn test_budget_truncation() {
         let budget = ContextBudget::new()
-            .with_system("a".repeat(3000).as_str())
-            .with_code_context("b".repeat(20000).as_str())
-            .with_task("c".repeat(3000).as_str());
+            .with_system(&"a".repeat(3000))
+            .with_code_context(&"b".repeat(60000))
+            .with_task(&"c".repeat(5000));
 
-        assert!(budget.total_chars() <= MAX_CHARS);
+        assert!(budget.total_chars() <= MAX_CONTEXT_CHARS);
+    }
+
+    #[test]
+    fn test_conversation_history() {
+        let mut history = ConversationHistory::new(3);
+        history.add(MessageRole::User, "hello".to_string());
+        history.add(MessageRole::Assistant, "hi".to_string());
+        history.add(MessageRole::User, "how are you".to_string());
+        history.add(MessageRole::Assistant, "fine".to_string());
+
+        assert_eq!(history.messages.len(), 3);
+        assert!(history.to_string().contains("how are you"));
     }
 }
-
-// Benchmark comment

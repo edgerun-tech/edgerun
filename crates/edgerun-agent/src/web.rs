@@ -1,8 +1,7 @@
-//! Web server for the agent UI.
+//! Web server for the agent API.
 
 use crate::agent::Agent;
-use crate::client::{ChatRequest, TabbyClient};
-use crate::vfs::SharedVFS;
+use crate::client::{ChatRequest, ChatResponse, TabbyClient};
 use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_json::Value;
 use std::path::PathBuf;
@@ -16,7 +15,12 @@ pub struct WebServer {
 }
 
 impl WebServer {
-    pub fn new(static_dir: &str, project_root: &str, tabby_url: &str, model: &str) -> Self {
+    pub fn new(
+        static_dir: &str,
+        project_root: &str,
+        tabby_url: &str,
+        model: &str,
+    ) -> Self {
         Self {
             agent: Arc::new(Agent::new(tabby_url, model, project_root)),
             static_dir: PathBuf::from(static_dir),
@@ -25,11 +29,11 @@ impl WebServer {
         }
     }
 
-    pub fn with_vfs(mut self, vfs: SharedVFS) -> Self {
+    pub fn with_allowed_commands(mut self, commands: Vec<String>) -> Self {
         self.agent = Arc::new(
             Arc::try_unwrap(self.agent)
                 .unwrap_or_else(|arc| (*arc).clone())
-                .with_vfs(vfs)
+                .with_allowed_commands(commands),
         );
         self
     }
@@ -62,8 +66,18 @@ impl Clone for AgentHandler {
     }
 }
 
+fn json_response(status: StatusCode, body: &str) -> Response {
+    Response::new(status)
+        .with_header("Content-Type", "application/json")
+        .with_header("Access-Control-Allow-Origin", "*")
+        .with_body(body.as_bytes().to_vec())
+}
+
 impl Handler for AgentHandler {
-    fn handle(&self, req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    fn handle(
+        &self,
+        req: Request,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
         let agent = self.agent.clone();
         let static_dir = self.static_dir.clone();
         let tabby_url = self.tabby_url.clone();
@@ -77,68 +91,61 @@ impl Handler for AgentHandler {
                 let json = edgerun_json::json!({
                     "status": "ok",
                     "model": model,
-                    "tabby_url": tabby_url
+                    "tabby_url": tabby_url,
+                    "allowed_commands": agent.get_allowed_commands(),
                 });
-                return Response::new(StatusCode::new(200).unwrap())
-                    .with_header("Content-Type", "application/json")
-                    .with_body(json.to_string().as_bytes().to_vec());
+                return json_response(StatusCode::new(200).unwrap(), &json.to_string());
+            }
+
+            if method == "GET" && path == "/commands" {
+                let json = edgerun_json::json!({
+                    "commands": agent.get_allowed_commands(),
+                });
+                return json_response(StatusCode::new(200).unwrap(), &json.to_string());
             }
 
             if method == "POST" && path == "/chat" {
                 let body = req.body().and_then(|b| std::str::from_utf8(b).ok()).unwrap_or("");
                 if let Ok(payload) = edgerun_json::from_str::<Value>(body) {
-                    let message = payload.get("message").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_default();
+                    let message = payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
 
-                    match agent.chat_with_tools(&message).await {
-                        Ok(resp) => {
-                            let json = edgerun_json::json!({ "reply": resp.reply });
-                            return Response::new(StatusCode::new(200).unwrap())
-                                .with_header("Content-Type", "application/json")
-                                .with_body(json.to_string().as_bytes().to_vec());
-                        }
-                        Err(e) => {
-                            return Response::new(StatusCode::new(500).unwrap())
-                                .with_body(e.as_bytes().to_vec());
-                        }
-                    }
-                }
-            }
+                    let use_tools = payload
+                        .get("use_tools")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
 
-            if method == "POST" && path == "/chat/stream" {
-                let body = req.body().and_then(|b| std::str::from_utf8(b).ok()).unwrap_or("");
-                if let Ok(payload) = edgerun_json::from_str::<Value>(body) {
-                    let message = payload.get("message").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_default();
-                    let context = payload.get("context").and_then(|v| v.as_str()).map(|s| s.to_string());
-                    let system_prompt = payload.get("system_prompt").and_then(|v| v.as_str()).map(|s| s.to_string());
-                    let max_tokens = payload.get("max_tokens").and_then(|v| v.as_u64()).map(|v| v as u32);
-                    let temperature = payload.get("temperature").and_then(|v| v.as_f64()).map(|v| v as f32);
-
-                    let client = TabbyClient::new(&self.tabby_url, &self.model);
-                    let request = ChatRequest {
-                        message,
-                        context,
-                        system_prompt,
-                        max_tokens,
-                        temperature,
+                    let result = if use_tools {
+                        agent.chat_with_tools(&message).await
+                    } else {
+                        agent.chat(&message).await
                     };
 
-                    // Use non-streaming for now until streaming is fixed
-                    match client.chat(request).await {
+                    match result {
                         Ok(resp) => {
-                            let json = edgerun_json::json!({ "reply": resp.reply });
-                            return Response::new(StatusCode::new(200).unwrap())
-                                .with_header("Content-Type", "application/json")
-                                .with_body(json.to_string().as_bytes().to_vec());
+                            let json = edgerun_json::json!({
+                                "reply": resp.reply,
+                                "error": resp.error.unwrap_or_default(),
+                            });
+                            json_response(StatusCode::new(200).unwrap(), &json.to_string())
                         }
                         Err(e) => {
-                            return Response::new(StatusCode::new(500).unwrap())
-                                .with_body(e.as_bytes().to_vec());
+                            let json = edgerun_json::json!({"error": e});
+                            json_response(StatusCode::new(500).unwrap(), &json.to_string())
                         }
                     }
+                } else {
+                    let json = edgerun_json::json!({"error": "Invalid JSON body"});
+                    json_response(StatusCode::new(400).unwrap(), &json.to_string())
                 }
+            } else if method == "POST" && path == "/chat" {
+                unreachable!()
+            } else {
+                Self::serve_static(&static_dir, &path).await
             }
-
-            Self::serve_static(&static_dir, &path).await
         })
     }
 }
@@ -149,22 +156,28 @@ impl AgentHandler {
 
         let mut file_path = static_dir.clone();
         for component in path.trim_start_matches('/').split('/') {
+            if component == ".." {
+                return Response::not_found();
+            }
             file_path = file_path.join(component);
         }
 
-        if file_path.exists() && file_path.is_file() {
+        if file_path.exists() && file_path.is_file() && file_path.starts_with(static_dir) {
             match std::fs::read(&file_path) {
                 Ok(data) => {
-                    let content_type = if path.ends_with(".html") {
-                        "text/html"
-                    } else if path.ends_with(".js") {
-                        "application/javascript"
-                    } else if path.ends_with(".css") {
-                        "text/css"
-                    } else if path.ends_with(".json") {
-                        "application/json"
-                    } else {
-                        "text/plain"
+                    let content_type = match file_path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                    {
+                        "html" => "text/html",
+                        "js" => "application/javascript",
+                        "css" => "text/css",
+                        "json" => "application/json",
+                        "png" => "image/png",
+                        "svg" => "image/svg+xml",
+                        "ico" => "image/x-icon",
+                        _ => "text/plain",
                     };
                     Response::new(StatusCode::new(200).unwrap())
                         .with_header("Content-Type", content_type)
@@ -177,4 +190,3 @@ impl AgentHandler {
         }
     }
 }
-// Benchmark comment
