@@ -1,8 +1,9 @@
 //! TabbyAPI client with retry logic.
 
-use edgerun_http::HttpClient;
 use edgerun_json::{from_str, to_string};
-use std::time::Duration;
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::time::{Duration, Instant};
 
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
 const MAX_RETRIES: u32 = 2;
@@ -96,7 +97,7 @@ impl TabbyClient {
         self
     }
 
-    fn build_completion_request(&self, request: ChatRequest, stream: bool) -> CompletionRequest {
+    fn build_completion_request(&self, request: ChatRequest, _stream: bool) -> CompletionRequest {
         let system = request.system_prompt.unwrap_or_else(|| {
             "You are an expert coding assistant. Generate clean, idiomatic Rust code.".to_string()
         });
@@ -111,17 +112,88 @@ impl TabbyClient {
             model: self.model.clone(),
             max_tokens: request.max_tokens.or(self.max_tokens),
             temperature: request.temperature,
-            stream: Some(stream),
+            stream: Some(false),
+        }
+    }
+
+    fn parse_url(&self) -> Result<(String, u16), String> {
+        let url = &self.base_url;
+        let url = url.trim_start_matches("http://").trim_start_matches("https://");
+        
+        if let Some(colon) = url.find(':') {
+            let host = &url[..colon];
+            let port: u16 = url[colon+1..].parse().map_err(|_| "Invalid port")?;
+            Ok((host.to_string(), port))
+        } else {
+            Ok((url.to_string(), 80))
+        }
+    }
+
+    fn http_request(&self, path: &str, body: &str) -> Result<String, String> {
+        let (host, port) = self.parse_url()?;
+        
+        let addr = format!("{}:{}", host, port);
+        let mut stream = TcpStream::connect(&addr).map_err(|e| format!("Connection failed: {}: {}", addr, e))?;
+        
+        stream.set_read_timeout(Some(Duration::from_secs(DEFAULT_TIMEOUT_SECS))).ok();
+
+        let request = format!(
+            "POST {} HTTP/1.1\r\n\
+            Host: {}:{}\r\n\
+            Content-Type: application/json\r\n\
+            Content-Length: {}\r\n\
+            Connection: close\r\n\
+            \r\n\
+            {}",
+            path, host, port,
+            body.len(),
+            body
+        );
+
+        stream.write_all(request.as_bytes()).map_err(|e| format!("Write failed: {}", e))?;
+        
+        let mut response = Vec::new();
+        let mut buf = [0u8; 8192];
+        let deadline = Instant::now() + Duration::from_secs(DEFAULT_TIMEOUT_SECS);
+        
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            stream.set_read_timeout(Some(remaining)).ok();
+            
+            match stream.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => response.extend_from_slice(&buf[..n]),
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        break;
+                    }
+                    continue;
+                }
+                Ok(_) | Err(_) => break,
+            }
+        }
+
+        let response = String::from_utf8_lossy(&response);
+        
+        // Find body start (after headers)
+        if let Some(pos) = response.find("\r\n\r\n") {
+            let headers = &response[..pos];
+            let body = &response[pos + 4..];
+            
+            // Check for chunked encoding
+            if headers.to_lowercase().contains("transfer-encoding: chunked") {
+                return Err("Chunked encoding not supported".to_string());
+            }
+            
+            Ok(body.to_string())
+        } else {
+            Err("Invalid response".to_string())
         }
     }
 
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, String> {
         let req = self.build_completion_request(request, false);
         let json_body = to_string(&req).map_err(|e| format!("Serialize error: {}", e))?;
-
-        let client = HttpClient::new()
-            .with_connect_timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-            .with_read_timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS));
 
         let mut last_err = String::new();
 
@@ -130,25 +202,32 @@ impl TabbyClient {
                 edgerun_rt::sleep(Duration::from_millis(RETRY_DELAY_MS * attempt as u64)).await;
             }
 
-            match client
-                .post_json(&format!("{}/v1/completions", self.base_url), &json_body)
-                .await
-            {
-                Ok(response) => {
-                    if !response.status().is_success() {
-                        let status = response.status();
-                        let body = String::from_utf8_lossy(response.body()).to_string();
-                        last_err = format!("API error {}: {}", status.as_u16(), body);
-                        if status.as_u16() >= 500 {
-                            continue;
+            match self.http_request("/v1/completions", &json_body) {
+                Ok(body) => {
+                    // Check for HTTP error in body
+                    if let Ok(val) = from_str::<edgerun_json::Value>(&body) {
+                        if let Some(detail) = val.get("detail") {
+                            let status = detail.get("loc")
+                                .and_then(|l| l.as_array())
+                                .and_then(|a| a.first())
+                                .and_then(|v| v.as_str());
+                            
+                            if status == Some("body") || status == Some("body") {
+                                return Err(format!("API validation error: {}", body));
+                            }
                         }
-                        return Err(last_err);
                     }
 
-                    let body_str = String::from_utf8_lossy(response.body()).to_string();
-                    let result: CompletionResponse = match from_str(&body_str) {
+                    // Try to parse as JSON
+                    let result: CompletionResponse = match from_str(&body) {
                         Ok(r) => r,
-                        Err(e) => return Err(format!("Failed to parse response: {}", e)),
+                        Err(e) => {
+                            // Check if it's an HTTP error response
+                            if body.starts_with("<!") || body.starts_with("<html") {
+                                return Err(format!("HTTP error: {}", body));
+                            }
+                            return Err(format!("Failed to parse response: {} - body: {}", e, &body[..body.len().min(500)]));
+                        }
                     };
 
                     let reply = result
@@ -164,7 +243,7 @@ impl TabbyClient {
                     });
                 }
                 Err(e) => {
-                    last_err = format!("Request failed: {}", e);
+                    last_err = e;
                     continue;
                 }
             }
@@ -174,21 +253,8 @@ impl TabbyClient {
     }
 
     pub async fn health_check(&self) -> Result<String, String> {
-        let client = HttpClient::new()
-            .with_connect_timeout(Duration::from_secs(5))
-            .with_read_timeout(Duration::from_secs(5));
-
-        match client.get(&format!("{}/v1/models", self.base_url)).await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    Ok("ok".to_string())
-                } else {
-                    Err(format!(
-                        "Health check failed: status {}",
-                        response.status().as_u16()
-                    ))
-                }
-            }
+        match self.http_request("/v1/models", "") {
+            Ok(_) => Ok("ok".to_string()),
             Err(e) => Err(format!("Health check failed: {}", e)),
         }
     }

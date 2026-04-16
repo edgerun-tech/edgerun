@@ -238,6 +238,7 @@ impl ConnectionPool {
                 .method(current_method.clone())
                 .uri(&current_uri)
                 .body(request.body().map(|b| b.to_vec()).unwrap_or_default())
+                .with_headers(request.headers().clone())
                 .build()?;
 
             let uri = req.uri();

@@ -73,12 +73,36 @@ fn main() {
 
     rt.block_on(async move {
         let shutdown = edgerun_rt::CancellationToken::new();
-        let shutdown_signal = shutdown.clone();
 
-        let _ctrlc = edgerun_rt::spawn(async move {
-            edgerun_rt::ctrl_c().await;
-            println!("\nShutting down...");
-            shutdown_signal.cancel();
+        // Monitor for shutdown signals (SIGTERM, SIGHUP, SIGQUIT)
+        let shutdown_signal = shutdown.clone();
+        let _signal_monitor = edgerun_rt::spawn(async move {
+            use edgerun_rt::{Signal, SignalKind, yieldnow};
+
+            let sigterm = Signal::new(SignalKind::terminate());
+            let sighup = Signal::new(SignalKind::hangup());
+            let sigquit = Signal::new(SignalKind::quit());
+
+            if let (Ok(mut t), Ok(mut h), Ok(mut q)) = (sigterm, sighup, sigquit) {
+                loop {
+                    yieldnow().await;
+                    if t.recv().await.is_ok() {
+                        println!("\nSIGTERM received, shutting down...");
+                        shutdown_signal.cancel();
+                        return;
+                    }
+                    if h.recv().await.is_ok() {
+                        println!("\nSIGHUP received, shutting down...");
+                        shutdown_signal.cancel();
+                        return;
+                    }
+                    if q.recv().await.is_ok() {
+                        println!("\nSIGQUIT received, shutting down...");
+                        shutdown_signal.cancel();
+                        return;
+                    }
+                }
+            }
         });
 
         let server = edgerun_server::Server::new().with_http(handler, &addr);
@@ -97,4 +121,6 @@ fn main() {
             }
         }
     });
+
+    println!("Shutdown complete.");
 }

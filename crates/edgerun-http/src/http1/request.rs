@@ -33,22 +33,22 @@ impl Request {
     /// Supports both HTTP/1.0 and HTTP/1.1.
     pub fn from_http(raw: &str) -> Result<Self> {
         // Find the end of the request line
-        let line_end = raw.find("\r\n").ok_or_else(|| {
-            crate::Error::InvalidRequest("No request line".to_string())
-        })?;
+        let line_end = raw
+            .find("\r\n")
+            .ok_or_else(|| crate::Error::InvalidRequest("No request line".to_string()))?;
 
         // Parse request line: METHOD SP REQUEST-TARGET SP HTTP-VERSION
         let request_line = &raw[..line_end];
         let mut parts = request_line.splitn(3, ' ');
-        let method_str = parts.next().ok_or_else(|| {
-            crate::Error::InvalidRequest("Empty request line".to_string())
-        })?;
-        let target = parts.next().ok_or_else(|| {
-            crate::Error::InvalidRequest("No request target".to_string())
-        })?;
-        let version_str = parts.next().ok_or_else(|| {
-            crate::Error::InvalidRequest("No HTTP version".to_string())
-        })?;
+        let method_str = parts
+            .next()
+            .ok_or_else(|| crate::Error::InvalidRequest("Empty request line".to_string()))?;
+        let target = parts
+            .next()
+            .ok_or_else(|| crate::Error::InvalidRequest("No request target".to_string()))?;
+        let version_str = parts
+            .next()
+            .ok_or_else(|| crate::Error::InvalidRequest("No HTTP version".to_string()))?;
 
         let method: Method = method_str.parse().map_err(crate::Error::InvalidRequest)?;
         let uri = Uri::parse(target).map_err(crate::Error::InvalidRequest)?;
@@ -86,8 +86,9 @@ impl Request {
                     break;
                 }
                 Some(end) => {
-                    let line = std::str::from_utf8(&bytes[pos..end])
-                        .map_err(|_| crate::Error::InvalidRequest("Invalid UTF-8 in headers".to_string()))?;
+                    let line = std::str::from_utf8(&bytes[pos..end]).map_err(|_| {
+                        crate::Error::InvalidRequest("Invalid UTF-8 in headers".to_string())
+                    })?;
 
                     if let Some(colon) = line.find(':') {
                         let name = line[..colon].trim();
@@ -110,12 +111,15 @@ impl Request {
         let transfer_encoding = headers
             .get("transfer-encoding")
             .map(|v| v.as_str().to_lowercase());
-        let is_chunked = transfer_encoding.as_deref().map_or(false, |v| v.contains("chunked"));
+        let is_chunked = transfer_encoding
+            .as_deref()
+            .map_or(false, |v| v.contains("chunked"));
 
         let body = if is_chunked {
             super::chunked::parse_chunked_body(remaining)?
         } else if let Some(cl) = headers.get("content-length") {
-            let len = cl.as_str()
+            let len = cl
+                .as_str()
                 .parse::<usize>()
                 .ok()
                 .unwrap_or(remaining.len())
@@ -187,7 +191,8 @@ impl Request {
             self.method.as_str(),
             self.uri.request_target(),
             self.version.as_str()
-        ).into_bytes();
+        )
+        .into_bytes();
 
         // Add Host header if not present
         if !self.headers.contains_key("Host") {
@@ -195,9 +200,15 @@ impl Request {
                 if let Some(port) = self.uri.port() {
                     let default_port = if self.uri.is_https() { 443 } else { 80 };
                     if port != default_port {
-                        let _ = std::io::Write::write_fmt(&mut request, format_args!("Host: {}:{}\r\n", host, port));
+                        let _ = std::io::Write::write_fmt(
+                            &mut request,
+                            format_args!("Host: {}:{}\r\n", host, port),
+                        );
                     } else {
-                        let _ = std::io::Write::write_fmt(&mut request, format_args!("Host: {}\r\n", host));
+                        let _ = std::io::Write::write_fmt(
+                            &mut request,
+                            format_args!("Host: {}\r\n", host),
+                        );
                     }
                 }
             }
@@ -206,7 +217,10 @@ impl Request {
         // Add Content-Length if body present and not set
         if self.body.is_some() && !self.headers.contains_key("Content-Length") {
             let len = self.body.as_ref().map(|b| b.len()).unwrap_or(0);
-            let _ = std::io::Write::write_fmt(&mut request, format_args!("Content-Length: {}\r\n", len));
+            let _ = std::io::Write::write_fmt(
+                &mut request,
+                format_args!("Content-Length: {}\r\n", len),
+            );
         }
 
         // Add Connection header based on version default if not present
@@ -235,12 +249,7 @@ impl Request {
 
 impl fmt::Display for Request {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {}",
-            self.method,
-            self.uri
-        )
+        write!(f, "{} {}", self.method, self.uri)
     }
 }
 
@@ -286,7 +295,17 @@ impl RequestBuilder {
 
     /// Add a header. Panics if the name or value is invalid.
     pub fn header(mut self, name: &str, value: &str) -> Self {
-        self.headers.insert(name, value).expect("Invalid header name or value");
+        self.headers
+            .insert(name, value)
+            .expect("Invalid header name or value");
+        self
+    }
+
+    /// Set headers from another HeaderMap
+    pub fn with_headers(mut self, headers: HeaderMap) -> Self {
+        for (name, value) in headers.iter() {
+            let _ = self.headers.insert(name.as_str(), value.as_str());
+        }
         self
     }
 
