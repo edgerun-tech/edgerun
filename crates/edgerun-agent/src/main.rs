@@ -19,6 +19,8 @@ struct Cli {
     static_dir: Option<String>,
     #[arg(long, value_delimiter = ',')]
     commands: Option<Vec<String>>,
+    #[arg(long, default_value = "30")]
+    timeout_secs: u64,
 }
 
 fn main() {
@@ -34,9 +36,10 @@ fn main() {
     println!("edgerun-agent starting...");
     println!("  TabbyAPI: {}", cli.tabby_url);
     println!("  Model:    {}", cli.model);
-    println!("  Project:  {}", cli.project);
+    println!("  Project:  {}", std::fs::canonicalize(&cli.project).unwrap_or_else(|_| cli.project.clone().into()).display());
     println!("  Static:   {}", static_dir);
     println!("  Address:  {}", addr);
+    println!("  Timeout:  {}s per command", cli.timeout_secs);
 
     let commands = cli.commands.unwrap_or_else(|| {
         [
@@ -44,7 +47,7 @@ fn main() {
             "cargo", "rustc", "rustfmt", "clippy-driver",
             "git", "diff", "echo", "mkdir", "cp", "mv",
             "curl", "jq", "sort", "uniq", "awk", "sed",
-            "tree", "which", "env", "pwd",
+            "tree", "which", "env", "pwd", "test",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -62,9 +65,21 @@ fn main() {
     .with_allowed_commands(commands);
     let handler = web_server.into_handler();
 
-    let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap();
+    let rt = edgerun_rt::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(8)
+        .build()
+        .expect("Failed to create runtime");
+
     rt.block_on(async move {
         let shutdown = edgerun_rt::CancellationToken::new();
+        let shutdown_signal = shutdown.clone();
+
+        let _ctrlc = edgerun_rt::spawn(async move {
+            edgerun_rt::ctrl_c().await;
+            println!("\nShutting down...");
+            shutdown_signal.cancel();
+        });
 
         let server = edgerun_server::Server::new().with_http(handler, &addr);
 

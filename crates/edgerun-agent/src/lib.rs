@@ -14,4 +14,5 @@ pub mod web;
 pub use agent::Agent;
 pub use analyzer::{analyze_directory, graph_to_json, ProgramGraph};
 pub use client::{ChatRequest, ChatResponse, TabbyClient};
+pub use context::truncate_str;
 pub use tools::ToolExecutor;

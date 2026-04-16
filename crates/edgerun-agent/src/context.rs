@@ -5,6 +5,22 @@ use std::collections::VecDeque;
 
 const MAX_CONTEXT_CHARS: usize = 128000;
 
+pub fn truncate_str(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        return s.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    let suffix = format!("...[truncated, {} chars total]", s.len());
+    let mut result = s[..end].to_string();
+    if result.len() + suffix.len() <= max_bytes {
+        result.push_str(&suffix);
+    }
+    result
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ContextBudget {
     pub system: String,
@@ -19,35 +35,23 @@ impl ContextBudget {
     }
 
     pub fn with_system(mut self, system: &str) -> Self {
-        self.system = Self::truncate(system, 2000);
+        self.system = truncate_str(system, 2000);
         self
     }
 
     pub fn with_code_context(mut self, context: &str) -> Self {
-        self.code_context = Self::truncate(context, 50000);
+        self.code_context = truncate_str(context, 50000);
         self
     }
 
     pub fn with_task(mut self, task: &str) -> Self {
-        self.task = Self::truncate(task, 4000);
+        self.task = truncate_str(task, 4000);
         self
     }
 
     pub fn with_history(mut self, history: &str) -> Self {
-        self.history = Self::truncate(history, 30000);
+        self.history = truncate_str(history, 30000);
         self
-    }
-
-    fn truncate(s: &str, max_chars: usize) -> String {
-        if s.len() > max_chars {
-            format!(
-                "{}...[truncated {} chars]",
-                &s[..max_chars.saturating_sub(20)],
-                s.len() - max_chars + 20
-            )
-        } else {
-            s.to_string()
-        }
     }
 
     pub fn total_chars(&self) -> usize {
@@ -238,6 +242,23 @@ impl ConversationHistory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_truncate_str_ascii() {
+        let s = "abcdefghij".repeat(100);
+        let truncated = truncate_str(&s, 500);
+        assert!(truncated.len() <= 600);
+        assert!(truncated.starts_with("abcdefghij"));
+        assert!(truncated.len() < s.len());
+    }
+
+    #[test]
+    fn test_truncate_str_utf8() {
+        let s: String = "日本語".repeat(1000);
+        let truncated = truncate_str(&s, 500);
+        // Must be valid UTF-8 (no char boundary issues)
+        assert!(std::str::from_utf8(truncated.as_bytes()).is_ok());
+    }
 
     #[test]
     fn test_budget_truncation() {
