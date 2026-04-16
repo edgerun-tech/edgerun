@@ -1,8 +1,4 @@
-//! Shell-based tool system with dynamic command allowlist.
-//!
-//! Commands are executed via spawn_blocking to avoid blocking the async runtime.
-//! Each command has a configurable timeout. Shell metacharacters are rejected
-//! to prevent injection attacks.
+//! Shell tool executor — strict allowlist, no shell metacharacters, bounded output.
 
 use std::collections::HashSet;
 use std::process;
@@ -11,7 +7,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_COMMAND_TIMEOUT_SECS: u64 = 30;
-const MAX_OUTPUT_BYTES: usize = 50_000;
+const MAX_OUTPUT_CHARS: usize = 3000;
+const MAX_STDERR_CHARS: usize = 500;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
@@ -56,6 +53,10 @@ impl ToolExecutor {
         self
     }
 
+    pub fn timeout_secs(&self) -> u64 {
+        self.timeout.as_secs()
+    }
+
     fn default_commands() -> HashSet<String> {
         [
             "cat", "head", "tail", "ls", "find", "grep", "rg", "wc",
@@ -84,18 +85,12 @@ impl ToolExecutor {
         }
 
         if command.contains(SHELL_META_CHARS) {
-            return Err(format!(
-                "Command contains forbidden shell metacharacters. Use simple commands without chaining, pipes, or substitution."
-            ));
+            return Err("Shell metacharacters forbidden. Use one command per line.".to_string());
         }
 
         let base_cmd = Self::extract_base_cmd(command);
         if !self.allowed_commands.contains(base_cmd) {
-            return Err(format!(
-                "Command '{}' not allowed. Allowed: {}",
-                base_cmd,
-                self.allowed_commands.iter().cloned().collect::<Vec<_>>().join(", ")
-            ));
+            return Err(format!("Command '{}' not allowed.", base_cmd));
         }
 
         Ok(())
@@ -113,13 +108,13 @@ impl ToolExecutor {
 
         let cmd = shell_command.to_string();
         let project_root = self.project_root.clone();
-        let timeout_duration = self.timeout;
+        let timeout = self.timeout;
 
         let handle = edgerun_rt::spawn_blocking(move || {
-            run_shell_command_sync(&cmd, &project_root)
+            run_command_sync(&cmd, &project_root)
         });
 
-        let timeout_result = edgerun_rt::timeout(timeout_duration, handle).await;
+        let timeout_result = edgerun_rt::timeout(timeout, handle).await;
 
         match timeout_result {
             Ok(result) => match result {
@@ -134,10 +129,7 @@ impl ToolExecutor {
             Err(_) => ToolResult {
                 success: false,
                 output: String::new(),
-                error: Some(format!(
-                    "Command timed out after {}s",
-                    timeout_duration.as_secs()
-                )),
+                error: Some(format!("Timed out ({}s)", timeout.as_secs())),
                 timed_out: true,
             },
         }
@@ -154,14 +146,14 @@ impl ToolExecutor {
             .iter()
             .map(|cmd| ToolDefinition {
                 name: cmd.clone(),
-                description: format!("Execute '{}' command", cmd),
+                description: format!("Run {}", cmd),
                 example: format!("$ {} ...", cmd),
             })
             .collect()
     }
 }
 
-fn run_shell_command_sync(command: &str, project_root: &str) -> ToolResult {
+fn run_command_sync(command: &str, project_root: &str) -> ToolResult {
     let output = process::Command::new("sh")
         .arg("-c")
         .arg(command)
@@ -173,35 +165,23 @@ fn run_shell_command_sync(command: &str, project_root: &str) -> ToolResult {
 
     match output {
         Ok(o) => {
-            let stdout = String::from_utf8_lossy(&o.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&o.stderr).to_string();
+            let stdout = truncate_output(&String::from_utf8_lossy(&o.stdout), MAX_OUTPUT_CHARS);
+            let success = o.status.success();
 
-            let output_truncated = if stdout.len() > MAX_OUTPUT_BYTES {
-                truncate_str(&stdout, MAX_OUTPUT_BYTES)
-            } else {
-                stdout
-            };
-
-            if o.status.success() {
+            if success {
+                let stderr = String::from_utf8_lossy(&o.stderr);
                 ToolResult {
                     success: true,
-                    output: output_truncated,
-                    error: if stderr.is_empty() {
-                        None
-                    } else {
-                        Some(truncate_str(&stderr, 2000))
-                    },
+                    output: stdout,
+                    error: if stderr.is_empty() { None } else { Some(truncate_output(&stderr, MAX_STDERR_CHARS)) },
                     timed_out: false,
                 }
             } else {
+                let stderr = truncate_output(&String::from_utf8_lossy(&o.stderr), MAX_STDERR_CHARS);
                 ToolResult {
                     success: false,
-                    output: output_truncated,
-                    error: Some(format!(
-                        "Exit {}: {}",
-                        o.status.code().unwrap_or(-1),
-                        truncate_str(&stderr, 2000)
-                    )),
+                    output: stdout,
+                    error: Some(format!("exit {}: {}", o.status.code().unwrap_or(-1), stderr)),
                     timed_out: false,
                 }
             }
@@ -209,21 +189,34 @@ fn run_shell_command_sync(command: &str, project_root: &str) -> ToolResult {
         Err(e) => ToolResult {
             success: false,
             output: String::new(),
-            error: Some(format!("Failed to execute: {}", e)),
+            error: Some(format!("Failed: {}", e)),
             timed_out: false,
         },
     }
 }
 
-fn truncate_str(s: &str, max_bytes: usize) -> String {
-    if s.len() <= max_bytes {
+fn truncate_output(s: &str, max_chars: usize) -> String {
+    if s.len() <= max_chars {
         return s.to_string();
     }
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
+    // Take first N lines that fit, then report total
+    let mut result = String::new();
+    let mut lines_taken = 0;
+    for line in s.lines() {
+        if result.len() + line.len() + 1 > max_chars - 30 {
+            break;
+        }
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(line);
+        lines_taken += 1;
     }
-    format!("{}...[truncated]", &s[..end])
+    let total_lines = s.lines().count();
+    if lines_taken < total_lines {
+        result.push_str(&format!("\n... ({} more lines)", total_lines - lines_taken));
+    }
+    result
 }
 
 impl Default for ToolExecutor {
