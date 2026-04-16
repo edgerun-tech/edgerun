@@ -116,9 +116,8 @@ impl TabbyClient {
         }
     }
 
-    fn parse_url(&self) -> Result<(String, u16), String> {
-        let url = &self.base_url;
-        let url = url.trim_start_matches("http://").trim_start_matches("https://");
+    fn parse_url(base_url: &str) -> Result<(String, u16), String> {
+        let url = base_url.trim_start_matches("http://").trim_start_matches("https://");
         
         if let Some(colon) = url.find(':') {
             let host = &url[..colon];
@@ -129,65 +128,15 @@ impl TabbyClient {
         }
     }
 
-    fn http_request(&self, path: &str, body: &str) -> Result<String, String> {
-        let (host, port) = self.parse_url()?;
+    pub async fn health_check(&self) -> Result<String, String> {
+        let base_url = self.base_url.clone();
         
-        let addr = format!("{}:{}", host, port);
-        let mut stream = TcpStream::connect(&addr).map_err(|e| format!("Connection failed: {}: {}", addr, e))?;
-        
-        stream.set_read_timeout(Some(Duration::from_secs(DEFAULT_TIMEOUT_SECS))).ok();
-
-        let request = format!(
-            "POST {} HTTP/1.1\r\n\
-            Host: {}:{}\r\n\
-            Content-Type: application/json\r\n\
-            Content-Length: {}\r\n\
-            Connection: close\r\n\
-            \r\n\
-            {}",
-            path, host, port,
-            body.len(),
-            body
-        );
-
-        stream.write_all(request.as_bytes()).map_err(|e| format!("Write failed: {}", e))?;
-        
-        let mut response = Vec::new();
-        let mut buf = [0u8; 8192];
-        let deadline = Instant::now() + Duration::from_secs(DEFAULT_TIMEOUT_SECS);
-        
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            stream.set_read_timeout(Some(remaining)).ok();
-            
-            match stream.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => response.extend_from_slice(&buf[..n]),
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        break;
-                    }
-                    continue;
-                }
-                Ok(_) | Err(_) => break,
-            }
-        }
-
-        let response = String::from_utf8_lossy(&response);
-        
-        // Find body start (after headers)
-        if let Some(pos) = response.find("\r\n\r\n") {
-            let headers = &response[..pos];
-            let body = &response[pos + 4..];
-            
-            // Check for chunked encoding
-            if headers.to_lowercase().contains("transfer-encoding: chunked") {
-                return Err("Chunked encoding not supported".to_string());
-            }
-            
-            Ok(body.to_string())
-        } else {
-            Err("Invalid response".to_string())
+        match edgerun_rt::spawn_blocking(move || {
+            http_request_sync(&base_url, "/v1/models", "")
+        }).await {
+            Ok(Ok(_)) => Ok("ok".to_string()),
+            Ok(Err(e)) => Err(format!("Health check failed: {}", e)),
+            Err(_) => Err("Health check failed: thread panic".to_string()),
         }
     }
 
@@ -202,61 +151,122 @@ impl TabbyClient {
                 edgerun_rt::sleep(Duration::from_millis(RETRY_DELAY_MS * attempt as u64)).await;
             }
 
-            match self.http_request("/v1/completions", &json_body) {
-                Ok(body) => {
-                    // Check for HTTP error in body
-                    if let Ok(val) = from_str::<edgerun_json::Value>(&body) {
-                        if let Some(detail) = val.get("detail") {
-                            let status = detail.get("loc")
-                                .and_then(|l| l.as_array())
-                                .and_then(|a| a.first())
-                                .and_then(|v| v.as_str());
-                            
-                            if status == Some("body") || status == Some("body") {
-                                return Err(format!("API validation error: {}", body));
-                            }
-                        }
-                    }
+            let base_url = self.base_url.clone();
+            let json_body = json_body.clone();
 
-                    // Try to parse as JSON
-                    let result: CompletionResponse = match from_str(&body) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            // Check if it's an HTTP error response
-                            if body.starts_with("<!") || body.starts_with("<html") {
-                                return Err(format!("HTTP error: {}", body));
-                            }
-                            return Err(format!("Failed to parse response: {} - body: {}", e, &body[..body.len().min(500)]));
-                        }
-                    };
-
-                    let reply = result
-                        .choices
-                        .first()
-                        .map(|c| c.text.clone())
-                        .unwrap_or_default();
-
-                    return Ok(ChatResponse {
-                        reply: reply.trim().to_string(),
-                        usage: result.usage,
-                        error: None,
-                    });
-                }
-                Err(e) => {
+            let body = match edgerun_rt::spawn_blocking(move || {
+                http_request_sync(&base_url, "/v1/completions", &json_body)
+            }).await {
+                Ok(Ok(body)) => body,
+                Ok(Err(e)) => {
                     last_err = e;
                     continue;
                 }
+                Err(_) => {
+                    last_err = "Thread panicked".to_string();
+                    continue;
+                }
+            };
+
+            // Check for HTTP error in body
+            if let Ok(val) = from_str::<edgerun_json::Value>(&body) {
+                if let Some(detail) = val.get("detail") {
+                    let status = detail.get("loc")
+                        .and_then(|l| l.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|v| v.as_str());
+                    
+                    if status == Some("body") {
+                        return Err(format!("API validation error: {}", body));
+                    }
+                }
             }
+
+            // Try to parse as JSON
+            let result: CompletionResponse = match from_str(&body) {
+                Ok(r) => r,
+                Err(e) => {
+                    if body.starts_with("<!") || body.starts_with("<html") {
+                        return Err(format!("HTTP error: {}", body));
+                    }
+                    return Err(format!("Failed to parse response: {} - body: {}", e, &body[..body.len().min(500)]));
+                }
+            };
+
+            let reply = result
+                .choices
+                .first()
+                .map(|c| c.text.clone())
+                .unwrap_or_default();
+
+            return Ok(ChatResponse {
+                reply: reply.trim().to_string(),
+                usage: result.usage,
+                error: None,
+            });
         }
 
         Err(format!("All {} retries failed: {}", MAX_RETRIES, last_err))
     }
+}
 
-    pub async fn health_check(&self) -> Result<String, String> {
-        match self.http_request("/v1/models", "") {
-            Ok(_) => Ok("ok".to_string()),
-            Err(e) => Err(format!("Health check failed: {}", e)),
+fn http_request_sync(base_url: &str, path: &str, body: &str) -> Result<String, String> {
+    let (host, port) = TabbyClient::parse_url(base_url)?;
+    
+    let addr = format!("{}:{}", host, port);
+    let mut stream = TcpStream::connect(&addr).map_err(|e| format!("Connection failed: {}: {}", addr, e))?;
+    
+    stream.set_read_timeout(Some(Duration::from_secs(DEFAULT_TIMEOUT_SECS))).ok();
+
+    let request = format!(
+        "POST {} HTTP/1.1\r\n\
+        Host: {}:{}\r\n\
+        Content-Type: application/json\r\n\
+        Content-Length: {}\r\n\
+        Connection: close\r\n\
+        \r\n\
+        {}",
+        path, host, port,
+        body.len(),
+        body
+    );
+
+    stream.write_all(request.as_bytes()).map_err(|e| format!("Write failed: {}", e))?;
+    
+    let mut response = Vec::new();
+    let mut buf = [0u8; 8192];
+    let deadline = Instant::now() + Duration::from_secs(DEFAULT_TIMEOUT_SECS);
+    
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        stream.set_read_timeout(Some(remaining)).ok();
+        
+        match stream.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => response.extend_from_slice(&buf[..n]),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    break;
+                }
+                continue;
+            }
+            Ok(_) | Err(_) => break,
         }
+    }
+
+    let response = String::from_utf8_lossy(&response);
+    
+    if let Some(pos) = response.find("\r\n\r\n") {
+        let headers = &response[..pos];
+        let body = &response[pos + 4..];
+        
+        if headers.to_lowercase().contains("transfer-encoding: chunked") {
+            return Err("Chunked encoding not supported".to_string());
+        }
+        
+        Ok(body.to_string())
+    } else {
+        Err("Invalid response".to_string())
     }
 }
 

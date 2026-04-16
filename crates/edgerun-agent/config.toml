@@ -1,0 +1,25 @@
+# Edgerun Agent Configuration
+# Reload on change is automatic
+
+[server]
+host = "0.0.0.0"
+port = 8081
+
+[tabby]
+url = "http://10.10.10.1:5001"
+model = "/home/ken/models/Devstral-Small-2-24B-Instruct-2512-exl3-4.5bpw-optimized"
+
+[agent]
+project = "/home/ken/edgerun_reference_core"
+timeout_secs = 30
+temperature = 0.9
+max_tokens = 512
+
+# Allowed shell commands
+commands = [
+    "cat", "head", "tail", "ls", "find", "grep", "rg", "wc",
+    "cargo", "rustc", "rustfmt", "clippy-driver",
+    "git", "diff", "echo", "mkdir", "cp", "mv",
+    "curl", "jq", "sort", "uniq", "awk", "sed",
+    "tree", "which", "env", "pwd", "test",
+]

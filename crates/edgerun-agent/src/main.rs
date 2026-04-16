@@ -1,6 +1,65 @@
 //! Binary entry point for the edgerun-agent coding assistant.
 
 use clap::Parser;
+use serde::Deserialize;
+use std::path::PathBuf;
+
+#[derive(Deserialize)]
+struct Config {
+    server: ServerConfig,
+    tabby: TabbyConfig,
+    agent: AgentConfig,
+}
+
+#[derive(Deserialize)]
+struct ServerConfig {
+    host: String,
+    port: u16,
+}
+
+#[derive(Deserialize)]
+struct TabbyConfig {
+    url: String,
+    model: String,
+}
+
+#[derive(Deserialize)]
+struct AgentConfig {
+    project: String,
+    timeout_secs: u64,
+    temperature: f32,
+    max_tokens: u32,
+    commands: Vec<String>,
+}
+
+fn load_config() -> Option<Config> {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config_path = manifest.join("config.toml");
+    
+    if config_path.exists() {
+        match std::fs::read_to_string(&config_path) {
+            Ok(content) => {
+                match toml::from_str(&content) {
+                    Ok(config) => {
+                        println!("Loaded config from {:?}", config_path);
+                        Some(config)
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to parse config.toml: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read config.toml: {}", e);
+                None
+            }
+        }
+    } else {
+        println!("No config.toml found at {:?}", config_path);
+        None
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "edgerun-agent", about = "AI-powered coding agent with shell access")]
@@ -21,48 +80,86 @@ struct Cli {
     commands: Option<Vec<String>>,
     #[arg(long, default_value = "30")]
     timeout_secs: u64,
+    #[arg(long)]
+    temperature: Option<f32>,
+    #[arg(long)]
+    max_tokens: Option<u32>,
 }
 
 fn main() {
     let cli = Cli::parse();
+    let config = load_config();
+
+    let (host, port, tabby_url, model, project, timeout_secs, commands, temperature, max_tokens) = 
+        if let Some(cfg) = &config {
+            let use_cli_args = cli.port != 8080 || !cli.tabby_url.is_empty() && cli.tabby_url != "http://10.10.10.1:5001";
+            (
+                if use_cli_args { cli.host.clone() } else { cfg.server.host.clone() },
+                if cli.port != 8080 { cli.port } else { cfg.server.port },
+                if !cli.tabby_url.is_empty() && cli.tabby_url != "http://10.10.10.1:5001" { cli.tabby_url } else { cfg.tabby.url.clone() },
+                if !cli.model.is_empty() && cli.model != "devstral-small-2:24b" { cli.model } else { cfg.tabby.model.clone() },
+                if cli.project != "." { cli.project.clone() } else { cfg.agent.project.clone() },
+                if cli.timeout_secs != 30 { cli.timeout_secs } else { cfg.agent.timeout_secs },
+                cli.commands.clone().unwrap_or_else(|| cfg.agent.commands.clone()),
+                cli.temperature.or(Some(cfg.agent.temperature)),
+                cli.max_tokens.or(Some(cfg.agent.max_tokens)),
+            )
+        } else {
+            (
+                cli.host,
+                cli.port,
+                cli.tabby_url,
+                cli.model,
+                cli.project,
+                cli.timeout_secs,
+                cli.commands.unwrap_or_else(|| {
+                    [
+                        "cat", "head", "tail", "ls", "find", "grep", "rg", "wc",
+                        "cargo", "rustc", "rustfmt", "clippy-driver",
+                        "git", "diff", "echo", "mkdir", "cp", "mv",
+                        "curl", "jq", "sort", "uniq", "awk", "sed",
+                        "tree", "which", "env", "pwd", "test",
+                    ]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+                }),
+                cli.temperature,
+                cli.max_tokens,
+            )
+        };
 
     let static_dir = cli.static_dir.unwrap_or_else(|| {
-        let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         manifest.join("ui").to_string_lossy().to_string()
     });
 
-    let addr = format!("{}:{}", cli.host, cli.port);
+    let addr = format!("{}:{}", host, port);
 
     println!("edgerun-agent starting...");
-    println!("  TabbyAPI: {}", cli.tabby_url);
-    println!("  Model:    {}", cli.model);
-    println!("  Project:  {}", std::fs::canonicalize(&cli.project).unwrap_or_else(|_| cli.project.clone().into()).display());
+    println!("  TabbyAPI: {}", tabby_url);
+    println!("  Model:    {}", model);
+    println!("  Project:  {}", std::fs::canonicalize(&project).unwrap_or_else(|_| project.clone().into()).display());
     println!("  Static:   {}", static_dir);
     println!("  Address:  {}", addr);
-    println!("  Timeout:  {}s per command", cli.timeout_secs);
-
-    let commands = cli.commands.unwrap_or_else(|| {
-        [
-            "cat", "head", "tail", "ls", "find", "grep", "rg", "wc",
-            "cargo", "rustc", "rustfmt", "clippy-driver",
-            "git", "diff", "echo", "mkdir", "cp", "mv",
-            "curl", "jq", "sort", "uniq", "awk", "sed",
-            "tree", "which", "env", "pwd", "test",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
-    });
-
+    println!("  Timeout:  {}s per command", timeout_secs);
+    if let Some(t) = temperature {
+        println!("  Temperature: {}", t);
+    }
+    if let Some(m) = max_tokens {
+        println!("  Max tokens: {}", m);
+    }
     println!("  Commands: {}", commands.join(", "));
 
     let web_server = edgerun_agent::web::WebServer::new(
         &static_dir,
-        &cli.project,
-        &cli.tabby_url,
-        &cli.model,
+        &project,
+        &tabby_url,
+        &model,
     )
-    .with_allowed_commands(commands);
+    .with_allowed_commands(commands)
+    .with_temperature(temperature)
+    .with_max_tokens(max_tokens);
     let handler = web_server.into_handler();
 
     let rt = edgerun_rt::Builder::new_multi_thread()
@@ -74,7 +171,6 @@ fn main() {
     rt.block_on(async move {
         let shutdown = edgerun_rt::CancellationToken::new();
 
-        // Monitor for shutdown signals (SIGTERM, SIGHUP, SIGQUIT)
         let shutdown_signal = shutdown.clone();
         let _signal_monitor = edgerun_rt::spawn(async move {
             use edgerun_rt::{Signal, SignalKind, yieldnow};

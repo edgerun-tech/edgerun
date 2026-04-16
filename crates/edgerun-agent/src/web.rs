@@ -11,6 +11,8 @@ pub struct WebServer {
     tabby_url: String,
     model: String,
     project_root: String,
+    temperature: Option<f32>,
+    max_tokens: Option<u32>,
 }
 
 impl WebServer {
@@ -26,17 +28,38 @@ impl WebServer {
             tabby_url: tabby_url.to_string(),
             model: model.to_string(),
             project_root: project_root.to_string(),
+            temperature: None,
+            max_tokens: None,
         }
     }
 
     pub fn with_allowed_commands(self, commands: Vec<String>) -> Self {
-        let agent = (*self.agent).clone().with_allowed_commands(commands);
+        let agent = (*self.agent).clone()
+            .with_allowed_commands(commands)
+            .with_temperature(self.temperature.unwrap_or(0.7))
+            .with_max_tokens(self.max_tokens.unwrap_or(2048));
         Self {
             agent: Arc::new(agent),
             static_dir: self.static_dir,
             tabby_url: self.tabby_url,
             model: self.model,
             project_root: self.project_root,
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+        }
+    }
+
+    pub fn with_temperature(self, temperature: Option<f32>) -> Self {
+        Self {
+            temperature,
+            ..self
+        }
+    }
+
+    pub fn with_max_tokens(self, max_tokens: Option<u32>) -> Self {
+        Self {
+            max_tokens,
+            ..self
         }
     }
 
@@ -46,6 +69,8 @@ impl WebServer {
             static_dir: self.static_dir,
             tabby_url: self.tabby_url,
             model: self.model,
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
         }
     }
 }
@@ -55,6 +80,8 @@ struct AgentHandler {
     static_dir: PathBuf,
     tabby_url: String,
     model: String,
+    temperature: Option<f32>,
+    max_tokens: Option<u32>,
 }
 
 impl Clone for AgentHandler {
@@ -64,6 +91,8 @@ impl Clone for AgentHandler {
             static_dir: self.static_dir.clone(),
             tabby_url: self.tabby_url.clone(),
             model: self.model.clone(),
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
         }
     }
 }

@@ -20,6 +20,21 @@ struct AgentInner {
     history: Mutex<ConversationHistory>,
     executor: ToolExecutor,
     project_map: String,
+    temperature: f32,
+    max_tokens: u32,
+}
+
+impl Clone for AgentInner {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            history: Mutex::new(ConversationHistory::new(MAX_HISTORY_TURNS * 2)),
+            executor: self.executor.clone(),
+            project_map: self.project_map.clone(),
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+        }
+    }
 }
 
 impl Agent {
@@ -31,6 +46,8 @@ impl Agent {
                 history: Mutex::new(ConversationHistory::new(MAX_HISTORY_TURNS * 2)),
                 executor: ToolExecutor::new(project_root),
                 project_map,
+                temperature: 0.7,
+                max_tokens: 2048,
             }),
         }
     }
@@ -43,6 +60,26 @@ impl Agent {
                 history: Mutex::new(ConversationHistory::new(MAX_HISTORY_TURNS * 2)),
                 executor,
                 project_map: self.inner.project_map.clone(),
+                temperature: self.inner.temperature,
+                max_tokens: self.inner.max_tokens,
+            }),
+        }
+    }
+    
+    pub fn with_temperature(self, temperature: f32) -> Self {
+        Self {
+            inner: Arc::new(AgentInner {
+                temperature,
+                ..(*self.inner).clone()
+            }),
+        }
+    }
+    
+    pub fn with_max_tokens(self, max_tokens: u32) -> Self {
+        Self {
+            inner: Arc::new(AgentInner {
+                max_tokens,
+                ..(*self.inner).clone()
             }),
         }
     }
@@ -64,8 +101,8 @@ impl Agent {
                     message: continuation.clone(),
                     context: if iteration == 0 { Some(system.clone()) } else { None },
                     system_prompt: None,
-                    max_tokens: Some(2048),
-                    temperature: Some(0.3),
+                    max_tokens: Some(self.inner.max_tokens),
+                    temperature: Some(self.inner.temperature),
                 })
                 .await?;
 
@@ -129,34 +166,10 @@ impl Prompts {
     fn system_with_context(project_map: &str, commands: Vec<String>) -> String {
         let cmd_list = commands.join(", ");
         format!(
-            "You are a coding assistant. You have shell access.\n\
-\n\
-PROJECT:\n{}\n\
-\n\
-COMMANDS: {}\n\
-\n\
-WORKFLOW — EXPLORE, UNDERSTAND, FIX:\n\
-1. Read files with cat or grep. grep is faster for large codebases.\n\
-2. Use cargo check/build/test to verify.\n\
-3. Give a clear answer or proposed fix.\n\
-\n\
-EXAMPLES:\n\
-User: why does my build fail?\n\
-$ cargo build 2>&1 | grep error\n$ grep -n \"unused\" src/main.rs\n\
-Turns out: unused variable in line 42. Remove it.\n\
-\n\
-User: how is my code structured?\n\
-$ find src -name \"*.rs\" | head -20\n$ grep -rn \"pub fn\" src/ | head -10\n\
-You have: main.rs, lib.rs, 5 modules. Key entry: pub fn main() in main.rs.\n\
-\n\
-RULES:\n\
-- One $ command per line, no chaining.\n\
-- grep patterns must be quoted: grep 'pattern' not grep pattern\n\
-- Run cargo commands from project root\n\
-- Be specific: cite file names and line numbers\n\
-- If stuck, try cargo check first\n\
-- When you know the answer, say it. Don't keep running commands.",
-            project_map, cmd_list
+            "You are a coding assistant. Run shell commands with $ prefix.\n\
+Commands: {}\n\
+Project:\n{}",
+            cmd_list, project_map
         )
     }
 }
