@@ -26,3 +26,6 @@ tempfile = "3"
 
 [lints]
 workspace = true
+[[bin]]
+name = "benchmark"
+path = "src/bin/benchmark.rs"

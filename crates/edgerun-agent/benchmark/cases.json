@@ -1,0 +1,110 @@
+[
+  {
+    "id": "explore_files",
+    "task": "What files are in this project? List the source files.",
+    "fixture": "simple_project",
+    "type": "exploration",
+    "expected_patterns": ["lib.rs", "main.rs", "Cargo.toml"],
+    "required": true,
+    "timeout_secs": 60
+  },
+  {
+    "id": "count_functions",
+    "task": "How many public functions are defined in lib.rs?",
+    "fixture": "simple_project",
+    "type": "counting",
+    "expected_patterns": ["[5-8]"],
+    "description": "Should find 5-8 public functions",
+    "required": true,
+    "timeout_secs": 60
+  },
+  {
+    "id": "find_test_functions",
+    "task": "How many test functions are defined in lib.rs?",
+    "fixture": "simple_project",
+    "type": "counting",
+    "expected_patterns": ["4", "tests"],
+    "description": "Should find 4 test functions",
+    "required": true,
+    "timeout_secs": 60
+  },
+  {
+    "id": "explain_parse_line",
+    "task": "What does the parse_line function do?",
+    "fixture": "simple_project",
+    "type": "explanation",
+    "expected_patterns": ["split", "parse", "Option", "colon"],
+    "required": true,
+    "timeout_secs": 60
+  },
+  {
+    "id": "find_error_handling",
+    "task": "Find all error handling in lib.rs (Result, unwrap, expect, etc.)",
+    "fixture": "simple_project",
+    "type": "search",
+    "expected_patterns": ["Result", "unwrap", "ok?"],
+    "description": "Should identify error handling patterns",
+    "required": true,
+    "timeout_secs": 60
+  },
+  {
+    "id": "build_simple",
+    "task": "Run cargo check on this project and report any errors.",
+    "fixture": "simple_project",
+    "type": "build",
+    "expected_patterns": ["Finished", "error"],
+    "inverted_patterns": ["error[E"],
+    "description": "Simple project should build cleanly",
+    "required": true,
+    "timeout_secs": 90
+  },
+  {
+    "id": "build_broken",
+    "task": "Run cargo check on this project. What errors does it report?",
+    "fixture": "broken_project",
+    "type": "build",
+    "expected_patterns": ["error"],
+    "description": "Broken project should have compile errors",
+    "required": true,
+    "timeout_secs": 90
+  },
+  {
+    "id": "count_errors_broken",
+    "task": "How many distinct error types does cargo check report in this project?",
+    "fixture": "broken_project",
+    "type": "counting",
+    "expected_patterns": ["[2-5]"],
+    "description": "Should identify 2-5 distinct errors",
+    "required": true,
+    "timeout_secs": 90
+  },
+  {
+    "id": "find_unused_vars",
+    "task": "Find the unused variable in this project.",
+    "fixture": "broken_project",
+    "type": "search",
+    "expected_patterns": ["unused", "broken_function"],
+    "required": true,
+    "timeout_secs": 60
+  },
+  {
+    "id": "explain_test_pattern",
+    "task": "Explain how the tests in lib.rs work.",
+    "fixture": "simple_project",
+    "type": "explanation",
+    "expected_patterns": ["assert", "Config", "process", "parse_line"],
+    "required": false,
+    "timeout_secs": 60
+  },
+  {
+    "id": "build_and_test",
+    "task": "Run cargo build and cargo test on this project. Report results.",
+    "fixture": "simple_project",
+    "type": "build",
+    "expected_patterns": ["Finished", "test"],
+    "inverted_patterns": ["FAILED"],
+    "description": "Both build and tests should pass",
+    "required": true,
+    "timeout_secs": 120
+  }
+]
