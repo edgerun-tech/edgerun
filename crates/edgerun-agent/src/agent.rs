@@ -1,15 +1,4 @@
-//! AI-powered coding agent for 32K-context models.
-//!
-//! Token budget (~32K tokens ≈ ~100K chars, 1 token ≈ 3.2 chars):
-//!   System + tools:  ~300 chars   (~100 tokens)
-//!   Last exchange:   ~3000 chars  (~900 tokens)
-//!   Tool output:     ~3000 chars  (~900 tokens)
-//!   Model response:  ~8000 chars  (~2500 tokens)
-//!   Overhead/buffer: ~2000 chars
-//!   Total per turn:  ~16K chars   (~5K tokens) — leaves headroom for 2-3 turns
-//!
-//! Key design: never repeat what the model already said. Each iteration
-//! only sends fresh information (tool output), not the model's own reply.
+//! Coding agent optimized for 32K context — shell tool, project-aware, token-efficient.
 
 use crate::client::{ChatRequest, ChatResponse, TabbyClient};
 use crate::context::ConversationHistory;
@@ -17,10 +6,9 @@ use crate::tools::ToolExecutor;
 use std::sync::{Arc, Mutex};
 
 const MAX_TOOL_ITERATIONS: usize = 6;
-const CONTEXT_CHAR_BUDGET: usize = 24000; // ~7.5K tokens, leaves 24.5K for model output
-const MAX_TOOL_OUTPUT_CHARS: usize = 3000;
-const MAX_HISTORY_CHARS: usize = 6000; // ~2K tokens
-const MAX_MODEL_REPLY_CHARS: usize = 4000; // ~1.2K tokens max to echo back
+const MAX_HISTORY_TURNS: usize = 4;
+const MAX_TOOL_OUTPUT_CHARS: usize = 1500;
+const MAX_TURNS_TO_SHOW: usize = 2;
 
 #[derive(Clone)]
 pub struct Agent {
@@ -31,15 +19,18 @@ struct AgentInner {
     client: TabbyClient,
     history: Mutex<ConversationHistory>,
     executor: ToolExecutor,
+    project_map: String,
 }
 
 impl Agent {
     pub fn new(tabby_url: &str, model: &str, project_root: &str) -> Self {
+        let project_map = build_project_map(project_root);
         Self {
             inner: Arc::new(AgentInner {
                 client: TabbyClient::new(tabby_url, model),
-                history: Mutex::new(ConversationHistory::new(8)),
+                history: Mutex::new(ConversationHistory::new(MAX_HISTORY_TURNS * 2)),
                 executor: ToolExecutor::new(project_root),
+                project_map,
             }),
         }
     }
@@ -49,49 +40,11 @@ impl Agent {
         Self {
             inner: Arc::new(AgentInner {
                 client: self.inner.client.clone(),
-                history: Mutex::new(ConversationHistory::new(8)),
+                history: Mutex::new(ConversationHistory::new(MAX_HISTORY_TURNS * 2)),
                 executor,
+                project_map: self.inner.project_map.clone(),
             }),
         }
-    }
-
-    pub async fn chat(&self, message: &str) -> Result<ChatResponse, String> {
-        let system = Prompts::system();
-        let history = {
-            let hist = self.inner.history.lock().unwrap();
-            let s = hist.to_string();
-            if s.len() > MAX_HISTORY_CHARS {
-                crate::context::truncate_str(&s, MAX_HISTORY_CHARS)
-            } else {
-                s
-            }
-        };
-
-        let mut prompt = system.to_string();
-        if !history.is_empty() {
-            prompt.push_str(&format!("\n\n{}", history));
-        }
-        prompt.push_str(&format!("\n\nUser: {}", message));
-
-        let response = self
-            .inner
-            .client
-            .chat(ChatRequest {
-                message: message.to_string(),
-                context: Some(prompt),
-                system_prompt: None,
-                max_tokens: Some(2048),
-                temperature: Some(0.7),
-            })
-            .await?;
-
-        {
-            let mut hist = self.inner.history.lock().unwrap();
-            hist.add(crate::context::MessageRole::User, message.to_string());
-            hist.add(crate::context::MessageRole::Assistant, response.reply.clone());
-        }
-
-        Ok(response)
     }
 
     pub async fn chat_with_tools(&self, message: &str) -> Result<ChatResponse, String> {
@@ -100,30 +53,19 @@ impl Agent {
             hist.add(crate::context::MessageRole::User, message.to_string());
         }
 
-        let system = Prompts::system();
-        let allowed = self.inner.executor.get_allowed_commands();
-        let mut current_prompt = format!(
-            "{}\n\nAvailable commands: {}\n\nUser: {}",
-            system,
-            allowed.join(", "),
-            message,
-        );
+        let system = Prompts::system_with_context(&self.inner.project_map, self.inner.executor.get_allowed_commands());
+        let mut continuation = message.to_string();
 
         for iteration in 0..MAX_TOOL_ITERATIONS {
-            // Trim prompt to budget
-            if current_prompt.len() > CONTEXT_CHAR_BUDGET {
-                current_prompt = crate::context::truncate_str(&current_prompt, CONTEXT_CHAR_BUDGET);
-            }
-
             let response = self
                 .inner
                 .client
                 .chat(ChatRequest {
-                    message: current_prompt.clone(),
-                    context: None,
+                    message: continuation.clone(),
+                    context: if iteration == 0 { Some(system.clone()) } else { None },
                     system_prompt: None,
                     max_tokens: Some(2048),
-                    temperature: Some(if iteration == 0 { 0.3 } else { 0.2 }),
+                    temperature: Some(0.3),
                 })
                 .await?;
 
@@ -132,44 +74,40 @@ impl Agent {
             if tool_commands.is_empty() {
                 {
                     let mut hist = self.inner.history.lock().unwrap();
-                    hist.add(crate::context::MessageRole::User, message.to_string());
                     hist.add(crate::context::MessageRole::Assistant, response.reply.clone());
                 }
                 return Ok(response);
             }
 
-            let mut tool_sections = Vec::new();
+            let mut results = Vec::new();
             for cmd in &tool_commands {
-                let result = self.inner.executor.execute_shell(cmd).await;
-                let output = if result.timed_out {
-                    format!("[TIMEOUT after {}s]", self.inner.executor.timeout_secs())
-                } else if !result.success {
-                    truncate_first_lines(&result.error.unwrap_or_default(), 15)
-                } else if result.output.is_empty() {
-                    "(no output)".to_string()
+                let raw = self.inner.executor.execute(cmd).await;
+                let output = self.inner.executor.format_output(cmd, &raw);
+                let truncated = if output.len() > MAX_TOOL_OUTPUT_CHARS {
+                    crate::context::truncate_str(&output, MAX_TOOL_OUTPUT_CHARS)
                 } else {
-                    truncate_first_lines(&result.output, 40)
+                    output
                 };
-                tool_sections.push(format!("$ {}\n{}", cmd, output));
+                results.push(format!("$ {}\n{}", cmd, truncated));
             }
 
-            let tool_output = tool_sections.join("\n\n");
+            let tool_output = results.join("\n\n");
 
             if iteration + 1 >= MAX_TOOL_ITERATIONS {
-                current_prompt = format!(
-                    "Tool output:\n{}\n\nProvide your final answer now.",
+                continuation = format!(
+                    "Results:\n{}\n\nFinal answer only — no more commands.",
                     tool_output
                 );
             } else {
-                current_prompt = format!(
-                    "Tool output:\n{}\n\nContinue ($ command) or give final answer.",
+                continuation = format!(
+                    "Results:\n{}\n\nContinue ($ cmd) or give final answer.",
                     tool_output
                 );
             }
         }
 
         Ok(ChatResponse {
-            reply: "I reached the tool execution limit. Please ask again with a simpler task.".to_string(),
+            reply: "Command limit reached. Try a more specific question.".to_string(),
             usage: None,
             error: Some("Max tool iterations exceeded".to_string()),
         })
@@ -188,29 +126,145 @@ impl Agent {
 struct Prompts;
 
 impl Prompts {
-    fn system() -> &'static str {
-        "You are a coding assistant with shell access. Run commands with $ prefix or in ```bash blocks. Rules: one command per line, no chaining/pipes/substitution. Be brief."
+    fn system_with_context(project_map: &str, commands: Vec<String>) -> String {
+        let cmd_list = commands.join(", ");
+        format!(
+            "You are a coding assistant. You have shell access.\n\
+\n\
+PROJECT:\n{}\n\
+\n\
+COMMANDS: {}\n\
+\n\
+WORKFLOW — EXPLORE, UNDERSTAND, FIX:\n\
+1. Read files with cat or grep. grep is faster for large codebases.\n\
+2. Use cargo check/build/test to verify.\n\
+3. Give a clear answer or proposed fix.\n\
+\n\
+EXAMPLES:\n\
+User: why does my build fail?\n\
+$ cargo build 2>&1 | grep error\n$ grep -n \"unused\" src/main.rs\n\
+Turns out: unused variable in line 42. Remove it.\n\
+\n\
+User: how is my code structured?\n\
+$ find src -name \"*.rs\" | head -20\n$ grep -rn \"pub fn\" src/ | head -10\n\
+You have: main.rs, lib.rs, 5 modules. Key entry: pub fn main() in main.rs.\n\
+\n\
+RULES:\n\
+- One $ command per line, no chaining.\n\
+- grep patterns must be quoted: grep 'pattern' not grep pattern\n\
+- Run cargo commands from project root\n\
+- Be specific: cite file names and line numbers\n\
+- If stuck, try cargo check first\n\
+- When you know the answer, say it. Don't keep running commands.",
+            project_map, cmd_list
+        )
     }
 }
 
-/// Truncate output to first N non-empty lines, keeping totals short.
-fn truncate_first_lines(output: &str, max_lines: usize) -> String {
-    let lines: Vec<&str> = output.lines().take(max_lines).collect();
-    let mut result = lines.join("\n");
-    let total_lines = output.lines().count();
-    if total_lines > max_lines {
-        result.push_str(&format!("\n... ({} more lines)", total_lines - max_lines));
+fn build_project_map(project_root: &str) -> String {
+    let mut parts = Vec::new();
+
+    // Language
+    if std::path::Path::new(&format!("{}/Cargo.toml", project_root)).exists() {
+        let cargo_info = std::fs::read_to_string(&format!("{}/Cargo.toml", project_root))
+            .ok()
+            .and_then(|c| {
+                let name = c.lines()
+                    .find(|l| l.trim().starts_with("name = "))
+                    .map(|l| l.split('"').nth(1).unwrap_or("?").to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let deps = c.lines().filter(|l| l.contains(" = {")).count();
+                Some((name, deps))
+            });
+
+        if let Some((name, deps)) = cargo_info {
+            parts.push(format!("Language: Rust | Project: {} | Dependencies: {}", name, deps));
+        }
     }
-    if result.len() > MAX_TOOL_OUTPUT_CHARS {
-        result = crate::context::truncate_str(&result, MAX_TOOL_OUTPUT_CHARS);
+
+    // File count
+    let file_count = count_source_files(project_root);
+    parts.push(format!("Files: {} source files", file_count));
+
+    // Git branch
+    let git_branch = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(project_root)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().to_string().into())
+        .filter(|s| !s.is_empty() && s != "HEAD");
+
+    if let Some(branch) = git_branch {
+        parts.push(format!("Git branch: {}", branch));
     }
-    result
+
+    if parts.is_empty() {
+        "Project: (unknown)".to_string()
+    } else {
+        parts.join(" | ")
+    }
+}
+
+fn count_source_files(project_root: &str) -> usize {
+    let exts = ["rs", "toml", "md", "txt"];
+    let mut count = 0;
+
+    fn walk(dir: &std::path::Path, exts: &[&str], count: &mut usize, depth: usize) {
+        if depth > 4 { return; }
+
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+
+            if name_str.starts_with('.')
+                || name_str == "target"
+                || name_str == "node_modules"
+                || name_str == "dist"
+                || name_str == "build"
+            {
+                continue;
+            }
+
+            if path.is_dir() {
+                walk(&path, exts, count, depth + 1);
+            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if exts.contains(&ext) {
+                    *count += 1;
+                }
+            }
+        }
+    }
+
+    walk(std::path::Path::new(project_root), &exts, &mut count, 0);
+    count
+}
+
+
+fn extract_cmd_from_line(line: &str) -> Option<String> {
+    // Match $ followed by a command, with optional leading text
+    // e.g. "Try: $ ls src" or "$ cargo test" or "  $ echo hello"
+    if let Some(dollar_pos) = line.find("$ ") {
+        let after_dollar = &line[dollar_pos + 2..];
+        let cmd = after_dollar.trim();
+        if !cmd.is_empty() && !cmd.starts_with('#') {
+            return Some(cmd.to_string());
+        }
+    }
+    None
 }
 
 fn extract_shell_commands(response: &str) -> Vec<String> {
     let mut commands = Vec::new();
     let mut in_code_block = false;
-    let mut code_block_lang = String::new();
+    let mut lang = String::new();
 
     for line in response.lines() {
         let trimmed = line.trim();
@@ -218,15 +272,15 @@ fn extract_shell_commands(response: &str) -> Vec<String> {
         if trimmed.starts_with("```") {
             if in_code_block {
                 in_code_block = false;
-                code_block_lang.clear();
+                lang.clear();
             } else {
                 in_code_block = true;
-                code_block_lang = trimmed.trim_start_matches('`').trim().to_lowercase();
+                lang = trimmed.trim_start_matches('`').trim().to_lowercase();
             }
             continue;
         }
 
-        if in_code_block && (code_block_lang.is_empty() || code_block_lang == "sh" || code_block_lang == "bash") {
+        if in_code_block && (lang.is_empty() || lang == "sh" || lang == "bash" || lang == "text") {
             let cmd = trimmed.trim();
             if !cmd.is_empty() && !cmd.starts_with('#') {
                 commands.push(cmd.to_string());
@@ -234,10 +288,10 @@ fn extract_shell_commands(response: &str) -> Vec<String> {
             continue;
         }
 
-        if !in_code_block && trimmed.starts_with("$ ") {
-            let cmd = trimmed[2..].trim().to_string();
-            if !cmd.is_empty() {
-                commands.push(cmd);
+        if !in_code_block {
+            let cmd = extract_cmd_from_line(trimmed);
+            if let Some(c) = cmd {
+                commands.push(c);
             }
         }
     }
@@ -256,12 +310,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_dollar_commands() {
-        assert_eq!(extract_shell_commands("$ cargo check\nDone"), vec!["cargo check"]);
+    fn test_extract_dollar() {
+        assert_eq!(extract_shell_commands("$ grep 'fn' src/lib.rs\nDone"), vec!["grep 'fn' src/lib.rs"]);
     }
 
     #[test]
-    fn test_extract_code_block_commands() {
+    fn test_extract_code_block() {
         assert_eq!(
             extract_shell_commands("```bash\ncargo test\nls src/\n```"),
             vec!["cargo test", "ls src/"]
@@ -269,23 +323,18 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_mixed() {
+        let r = "Try: $ ls src\nOr:\n```bash\ncargo build\n```\nThen $ cargo test";
+        assert_eq!(extract_shell_commands(r), vec!["ls src", "cargo build", "cargo test"]);
+    }
+
+    #[test]
     fn test_extract_skips_comments() {
-        assert_eq!(
-            extract_shell_commands("```sh\n# comment\ncargo build\n```"),
-            vec!["cargo build"]
-        );
+        assert_eq!(extract_shell_commands("```sh\n# comment\ncargo build\n```"), vec!["cargo build"]);
     }
 
     #[test]
-    fn test_extract_skips_other_code_blocks() {
+    fn test_extract_skips_rust() {
         assert!(extract_shell_commands("```rust\nfn main() {}\n```").is_empty());
-    }
-
-    #[test]
-    fn test_truncate_first_lines() {
-        let long = (1..=100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
-        let truncated = truncate_first_lines(&long, 10);
-        assert!(truncated.contains("line 10"));
-        assert!(truncated.contains("90 more lines"));
     }
 }

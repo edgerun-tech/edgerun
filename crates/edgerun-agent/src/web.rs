@@ -140,16 +140,7 @@ impl Handler for AgentHandler {
                         return json_response(StatusCode::new(400).unwrap(), &json.to_string());
                     }
 
-                    let use_tools = payload
-                        .get("use_tools")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(true);
-
-                    let result = if use_tools {
-                        agent.chat_with_tools(&message).await
-                    } else {
-                        agent.chat(&message).await
-                    };
+                    let result = agent.chat_with_tools(&message).await;
 
                     match result {
                         Ok(resp) => {
