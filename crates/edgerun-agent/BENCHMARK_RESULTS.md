@@ -6,7 +6,7 @@
 - **RAM**: 64 GB
 - **Storage**: NVMe SSD
 - **OS**: Linux
-- **Codebase**: edgerun_reference_core (2194 files, 62.81 MB)
+- **Codebase**: edgerun_core (2194 files, 62.81 MB)
 
 ---
 

@@ -33,7 +33,7 @@ Starting edgerun-agent...
   TabbyAPI: http://10.10.10.1:5001
   Model: devstral-small-2:24b
   Project: /path/to/your/codebase
-  Static: /home/ken/edgerun_reference_core/crates/edgerun-agent/ui
+  Static: /home/ken/edgerun_core/crates/edgerun-agent/ui
   Address: 0.0.0.0:8080
 Loading filesystem into memory...
   Files: 12345

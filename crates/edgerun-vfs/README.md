@@ -139,7 +139,7 @@ These were removed as redundant/unused implementations:
 
 ## Performance
 
-Benchmarked on the full edgerun_reference_core workspace (24,017 files / 1.98 GB):
+Benchmarked on the full edgerun_core workspace (24,017 files / 1.98 GB):
 
 | Metric | Value |
 |--------|-------|

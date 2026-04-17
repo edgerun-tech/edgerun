@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn test_real_workspace_gitignore() {
-        let workspace = Path::new("/home/ken/edgerun_reference_core");
+        let workspace = Path::new("/home/ken/edgerun_core");
         if !workspace.exists() {
             return;
         }

@@ -1,7 +1,7 @@
 [Unit]
 Description=edgerun Init Daemon (PID 1)
-Documentation=file:///home/ken/edgerun_reference_core/docs/machine_daemon.md
-Documentation=file:///home/ken/edgerun_reference_core/docs/production.md
+Documentation=file:///home/ken/edgerun_core/docs/machine_daemon.md
+Documentation=file:///home/ken/edgerun_core/docs/production.md
 After=
 DefaultDependencies=no
 

@@ -1,7 +1,7 @@
 # edgerun Reference Core: Implementation Status & Gap Analysis
 
 **Last updated:** 2026-04-10  
-**Project:** edgerun_reference_core  
+**Project:** edgerun_core  
 **Status:** Active development — core protocol functional, security hardening in progress
 
 ---

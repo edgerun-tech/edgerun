@@ -1,7 +1,7 @@
 # Edgerun Reference Core: Implementation Status & Gap Analysis
 
 **Last updated:** 2026-04-12
-**Project:** edgerun_reference_core
+**Project:** edgerun_core
 **Status:** Active development — core protocol, crypto, storage, mesh, hardware signing, and most hardware I/O are functional.
 
 ---
