@@ -1,0 +1,14 @@
+[package]
+name = "edgerun-mail-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Webmail frontend for edgerun email server"
+
+[dependencies]
+edgerun-http = { path = "../edgerun-http" }
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

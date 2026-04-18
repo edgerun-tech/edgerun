@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-quectel-ec200a = { path = "../edgerun-quectel-ec200a" }
 
 [lints]
 workspace = true

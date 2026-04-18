@@ -26,10 +26,12 @@
 pub mod spf;
 pub mod dkim;
 pub mod dmarc;
+pub mod sign;
 
 pub use dkim::{DkimResult, DkimSignature, DkimStatus};
 pub use dmarc::{DmarcPolicy, DmarcResult, DmarcStatus};
 pub use spf::SpfResult;
+pub use sign::DkimSigner;
 
 use std::io;
 

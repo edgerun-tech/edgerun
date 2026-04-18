@@ -103,6 +103,10 @@ pub struct ConfigState {
     pub dhcpv6_pools: Vec<crate::types::Dhcpv6PoolSpec>,
     /// TFTP server configs.
     pub tftp_servers: Vec<crate::types::TftpServerSpec>,
+    /// SMTP server configs.
+    pub smtp_servers: Vec<crate::types::SmtpServerSpec>,
+    /// IMAP server configs.
+    pub imap_servers: Vec<crate::types::ImapServerSpec>,
 }
 
 impl ConfigState {
@@ -123,6 +127,8 @@ impl ConfigState {
                 ConfigResource::Dhcpv6Server(spec) => state.dhcpv6_servers.push(spec.clone()),
                 ConfigResource::Dhcpv6Pool(spec) => state.dhcpv6_pools.push(spec.clone()),
                 ConfigResource::TftpServer(spec) => state.tftp_servers.push(spec.clone()),
+                ConfigResource::SmtpServer(spec) => state.smtp_servers.push(spec.clone()),
+                ConfigResource::ImapServer(spec) => state.imap_servers.push(spec.clone()),
             }
         }
 

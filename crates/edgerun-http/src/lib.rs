@@ -98,12 +98,14 @@ pub mod request;
 pub mod response;
 pub mod server;
 pub mod client;
+pub mod static_handler;
 
 pub use handler::{Handler, into_handler, into_handler_async, SyncHandler, AsyncHandler};
 pub use request::{Request, RequestBuilder};
 pub use response::Response;
 pub use server::{HttpServer, BoundHttpServer, TlsCertificate};
 pub use client::{HttpClient, HttpVersion};
+pub use static_handler::{StaticHandler, serve_static};
 
 // ---------------------------------------------------------------------------
 // Middleware system

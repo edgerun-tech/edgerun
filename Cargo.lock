@@ -1208,6 +1208,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-log",
  "edgerun-rt",
+ "rand",
  "rsa",
  "sha2",
  "signature 2.2.0",
@@ -1430,6 +1431,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-mail-web"
+version = "0.1.0"
+dependencies = [
+ "edgerun-http",
+ "edgerun-log",
+ "edgerun-rt",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "edgerun-mesh"
 version = "0.1.0"
 dependencies = [
@@ -1531,6 +1543,7 @@ name = "edgerun-network-interface"
 version = "0.1.0"
 dependencies = [
  "edgerun-capabilities",
+ "edgerun-quectel-ec200a",
 ]
 
 [[package]]
@@ -1676,6 +1689,10 @@ version = "0.1.0"
 dependencies = [
  "bytes",
 ]
+
+[[package]]
+name = "edgerun-quectel-ec200a"
+version = "0.1.0"
 
 [[package]]
 name = "edgerun-remote-capability"
@@ -3033,6 +3050,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
+ "libc",
  "rand_chacha",
  "rand_core 0.6.4",
 ]

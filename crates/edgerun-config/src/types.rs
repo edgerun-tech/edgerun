@@ -114,6 +114,8 @@ pub enum ConfigResource {
     Dhcpv6Server(Dhcpv6ServerSpec),
     Dhcpv6Pool(Dhcpv6PoolSpec),
     TftpServer(TftpServerSpec),
+    SmtpServer(SmtpServerSpec),
+    ImapServer(ImapServerSpec),
 }
 
 impl ConfigResource {
@@ -131,6 +133,8 @@ impl ConfigResource {
             Self::Dhcpv6Server(_) => "unnamed-dhcpv6",
             Self::Dhcpv6Pool(r) => &r.name,
             Self::TftpServer(_) => "unnamed-tftp",
+            Self::SmtpServer(r) => &r.hostname,
+            Self::ImapServer(r) => &r.hostname,
         }
     }
 
@@ -148,6 +152,8 @@ impl ConfigResource {
             Self::Dhcpv6Server(_) => "Dhcpv6Server",
             Self::Dhcpv6Pool(_) => "Dhcpv6Pool",
             Self::TftpServer(_) => "TftpServer",
+            Self::SmtpServer(_) => "SmtpServer",
+            Self::ImapServer(_) => "ImapServer",
         }
     }
 }
@@ -514,6 +520,73 @@ pub struct TftpServerSpec {
     /// Allow writes.
     #[serde(default)]
     pub allow_writes: bool,
+}
+
+// ---------------------------------------------------------------------------
+// SMTP Server spec
+// ---------------------------------------------------------------------------
+
+/// SMTP server configuration.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SmtpServerSpec {
+    /// Server hostname (for EHLO/HELO).
+    pub hostname: String,
+    /// TCP bind address (default: "0.0.0.0:25").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bind_address: Option<String>,
+    /// Enable SMTPS on port 465.
+    #[serde(default)]
+    pub smtps: bool,
+    /// Enable STARTTLS on port 587.
+    #[serde(default)]
+    pub starttls: bool,
+    /// Maximum message size in bytes (default: 35MB).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_message_size: Option<usize>,
+    /// Local domains for mail delivery.
+    #[serde(default)]
+    pub local_domains: Vec<String>,
+    /// Maildir root for storing messages.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub maildir_root: Option<String>,
+    /// Enable outbound relay/queue.
+    #[serde(default)]
+    pub relay_enabled: bool,
+    /// Queue data directory for outbound mail.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_dir: Option<String>,
+    /// DNS server for MX lookups (default: "8.8.8.8:53").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dns_server: Option<String>,
+    /// DKIM signing domain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dkim_domain: Option<String>,
+    /// DKIM selector.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dkim_selector: Option<String>,
+    /// Path to DKIM private key file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dkim_key_path: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// IMAP Server spec
+// ---------------------------------------------------------------------------
+
+/// IMAP server configuration.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ImapServerSpec {
+    /// Server hostname (for CAPABILITY).
+    pub hostname: String,
+    /// TCP bind address (default: "0.0.0.0:143").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bind_address: Option<String>,
+    /// Enable IMAPS on port 993.
+    #[serde(default)]
+    pub imaps: bool,
+    /// Maildir root for storing messages (should match SMTP).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub maildir_root: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

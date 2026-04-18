@@ -12,6 +12,7 @@ edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-crypto = { path = "../edgerun-crypto" }
+rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
 rsa = { version = "0.9", default-features = false, features = ["sha2"] }
