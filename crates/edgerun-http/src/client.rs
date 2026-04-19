@@ -149,37 +149,55 @@ impl HttpClient {
     }
 
     pub async fn get(&self, uri: &str) -> Result<Response> {
-        let request = Request::builder().method(Method::GET).uri(uri).build()?;
-        self.execute(&request).await
+        self.request(Method::GET, uri, None).await
     }
 
-    pub async fn post(&self, uri: &str, body: &[u8]) -> Result<Response> {
-        let request = Request::builder().method(Method::POST).uri(uri).body(body.to_vec()).build()?;
-        self.execute(&request).await
+    pub async fn post(&self, uri: &str, body: impl Into<Vec<u8>>) -> Result<Response> {
+        self.request(Method::POST, uri, Some(body.into())).await
     }
 
     pub async fn post_json(&self, uri: &str, json: &str) -> Result<Response> {
-        let request = Request::builder().method(Method::POST).uri(uri).json_body(json).build()?;
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .json_body(json)
+            .build()?;
         self.execute(&request).await
     }
 
-    pub async fn put(&self, uri: &str, body: &[u8]) -> Result<Response> {
-        let request = Request::builder().method(Method::PUT).uri(uri).body(body.to_vec()).build()?;
-        self.execute(&request).await
+    pub async fn put(&self, uri: &str, body: impl Into<Vec<u8>>) -> Result<Response> {
+        self.request(Method::PUT, uri, Some(body.into())).await
     }
 
     pub async fn delete(&self, uri: &str) -> Result<Response> {
-        let request = Request::builder().method(Method::DELETE).uri(uri).build()?;
+        self.request(Method::DELETE, uri, None).await
+    }
+
+    pub async fn patch(&self, uri: &str, body: impl Into<Vec<u8>>) -> Result<Response> {
+        self.request(Method::PATCH, uri, Some(body.into())).await
+    }
+
+    pub async fn head(&self, uri: &str) -> Result<Response> {
+        self.request(Method::HEAD, uri, None).await
+    }
+
+    pub async fn options(&self, uri: &str) -> Result<Response> {
+        self.request(Method::OPTIONS, uri, None).await
+    }
+
+    /// Generic request with any method.
+    pub async fn request(&self, method: Method, uri: &str, body: Option<Vec<u8>>) -> Result<Response> {
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .body(body.unwrap_or_default())
+            .build()?;
         self.execute(&request).await
     }
 
-    pub async fn patch(&self, uri: &str, body: &[u8]) -> Result<Response> {
-        let request = Request::builder().method(Method::PATCH).uri(uri).body(body.to_vec()).build()?;
-        self.execute(&request).await
-    }
-
+    /// Execute a custom request.
     pub async fn execute(&self, request: &Request) -> Result<Response> {
-        match self.inner.version {
+        match self.inner().version {
             HttpVersion::Http1 => self.execute_http1(request).await,
             HttpVersion::Http2 | HttpVersion::Http2OrHttp1 => {
                 match self.execute_http2(request).await {
