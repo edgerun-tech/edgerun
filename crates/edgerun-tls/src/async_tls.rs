@@ -169,9 +169,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let hash = Hasher::Sha256;
         let transcript_hash = hash.hash(&transcript);
 
-        let mut ks = Tls13KeySchedule::new(hash.clone());
+let mut ks = Tls13KeySchedule::new(hash.clone());
         ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
-
         let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
         let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
 
@@ -190,7 +189,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let app_transcript_hash = hash.hash(&transcript);
 
         // 5. Send client Finished
-        async_send_client_finished(&mut stream, &mut _write_cipher, &ks, &transcript, &hash).await?;
+        async_send_client_finished(&mut stream, &mut _write_cipher, &ks, &transcript, &hash, &transcript_hash).await?;
 
         // 6. Derive application keys
         ks.advance_to_master();
@@ -767,9 +766,11 @@ async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
     ks: &Tls13KeySchedule,
     transcript: &[u8],
     hash: &Hasher,
+    handshake_transcript_hash: &[u8],
 ) -> Result<()> {
     let full_transcript_hash = hash.hash(transcript);
-    let client_hs_secret = ks.client_handshake_traffic_secret(&full_transcript_hash);
+    let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
+    
     let finished_key = hash.expand_label(&client_hs_secret, "finished", &[], hash.len());
     let verify_data = match hash {
         Hasher::Sha256 => hmac_sha256(&finished_key, &full_transcript_hash),
@@ -868,8 +869,9 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
             return Err(TlsError::HandshakeFailure(format!("Expected Finished (type 20), got {}", hs_type)));
         }
         let transcript_hash = hash.hash(transcript);
+        // Use handshake_transcript_hash (same as client used) for both key derivation and verification
         let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
-        let expected_verify = compute_client_finished_verify_data(&client_hs_secret, &transcript_hash, hash);
+        let expected_verify = compute_client_finished_verify_data(&client_hs_secret, handshake_transcript_hash, hash);
         if plaintext.len() < 4 + expected_verify.len() {
             return Err(TlsError::Protocol("Client Finished verification data too short".into()));
         }
