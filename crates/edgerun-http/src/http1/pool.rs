@@ -27,7 +27,6 @@ use edgerun_rt::{
     AsyncTcpStream, BufReader, ConnectFuture, timeout as rt_timeout,
 };
 
-#[cfg(feature = "tls")]
 use edgerun_tls::async_tls::AsyncTlsStream;
 use edgerun_tls::SessionCache;
 
@@ -58,7 +57,6 @@ enum PooledConn {
     /// Plain TCP connection.
     Plain(BufReader<Arc<AsyncTcpStream>>),
     /// TLS-wrapped connection.
-    #[cfg(feature = "tls")]
     Tls(BufReader<AsyncTlsStream<Arc<AsyncTcpStream>>>),
 }
 
@@ -67,7 +65,6 @@ impl PooledConn {
     async fn read_line(&mut self) -> std::io::Result<Option<String>> {
         match self {
             PooledConn::Plain(r) => r.read_line().await,
-            #[cfg(feature = "tls")]
             PooledConn::Tls(r) => r.read_line().await,
         }
     }
@@ -76,7 +73,6 @@ impl PooledConn {
     async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             PooledConn::Plain(r) => r.read(buf).await,
-            #[cfg(feature = "tls")]
             PooledConn::Tls(r) => r.read(buf).await,
         }
     }
@@ -88,7 +84,6 @@ impl PooledConn {
                 r.get_mut().write_all(data).await?;
                 r.get_mut().flush().await
             }
-            #[cfg(feature = "tls")]
             PooledConn::Tls(r) => {
                 r.get_mut().write_all(data).await?;
                 r.get_mut().flush().await
@@ -542,23 +537,13 @@ impl ConnectionPool {
         session_cache: &SessionCache,
     ) -> Result<PooledConn> {
         if is_https {
-            #[cfg(feature = "tls")]
-            {
-                let stream = Self::resolve_and_connect_static(
-                    connect_timeout, dns_timeout, host, port,
-                ).await?;
-                let tls = AsyncTlsStream::client(stream, host, &[], Some(&session_cache)).await
-                    .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
-                let reader = BufReader::new(tls);
-                Ok(PooledConn::Tls(reader))
-            }
-            #[cfg(not(feature = "tls"))]
-            {
-                let _ = (connect_timeout, dns_timeout, host, port, session_cache);
-                Err(Error::ProtocolError(
-                    "HTTPS requires the `tls` feature on edgerun-http".to_string(),
-                ))
-            }
+            let stream = Self::resolve_and_connect_static(
+                connect_timeout, dns_timeout, host, port,
+            ).await?;
+            let tls = AsyncTlsStream::client(stream, host, &[], Some(&session_cache)).await
+                .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
+            let reader = BufReader::new(tls);
+            Ok(PooledConn::Tls(reader))
         } else {
             let stream = Self::resolve_and_connect_static(
                 connect_timeout, dns_timeout, host, port,

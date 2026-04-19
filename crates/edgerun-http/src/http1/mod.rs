@@ -3,7 +3,6 @@
 //! This module provides HTTP/1.1 server built on top of
 //! [`edgerun_rt`] async primitives. The client is in the unified `HttpClient`.
 
-pub mod server;
 pub mod handler;
 pub mod body;
 pub mod request;
@@ -17,9 +16,6 @@ pub mod range;
 pub mod chunked;
 pub mod pool;
 
-pub use server::{Server, BoundServer};
-#[cfg(feature = "tls")]
-pub use server::{TlsServer, TlsBoundServer};
 pub use handler::{Handler, into_handler, into_handler_async};
 pub use body::{Body, BodyReader, BodySender, AsyncBodyReader};
 pub use edgerun_rt::BufReader;

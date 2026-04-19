@@ -14,7 +14,6 @@ use edgerun_rt::{
 };
 use edgerun_rt::sync::Mutex;
 
-#[cfg(feature = "tls")]
 use edgerun_tls::async_tls::AsyncTlsStream;
 use edgerun_tls::SessionCache;
 
@@ -248,28 +247,17 @@ impl Http2Pool {
         port: u16,
         session_cache: &SessionCache,
     ) -> Result<AsyncClient> {
-        #[cfg(not(feature = "tls"))]
-        {
-            let _ = (connect_timeout, dns_timeout, host, port, session_cache);
-            return Err(Error::ProtocolError(
-                "HTTP/2 requires TLS feature on edgerun-http".into(),
-            ));
-        }
+        let stream = Self::resolve_and_connect_static(
+            connect_timeout, dns_timeout, host, port,
+        ).await?;
 
-        #[cfg(feature = "tls")]
-        {
-            let stream = Self::resolve_and_connect_static(
-                connect_timeout, dns_timeout, host, port,
-            ).await?;
+        let tls = AsyncTlsStream::client(stream, host, &[b"h2"], Some(session_cache)).await
+            .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
 
-            let tls = AsyncTlsStream::client(stream, host, &[b"h2"], Some(session_cache)).await
-                .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
+        let client = AsyncClient::new(tls).await
+            .map_err(|e| Error::ProtocolError(format!("HTTP/2 connection failed: {e:?}")))?;
 
-            let client = AsyncClient::new(tls).await
-                .map_err(|e| Error::ProtocolError(format!("HTTP/2 connection failed: {e:?}")))?;
-
-            Ok(client)
-        }
+        Ok(client)
     }
 
     async fn resolve_and_connect_static(

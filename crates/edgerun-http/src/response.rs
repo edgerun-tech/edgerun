@@ -61,6 +61,9 @@ impl Response {
     pub fn body(&self) -> &[u8] {
         &self.body
     }
+    pub fn body_as_string(&self) -> Option<String> {
+        String::from_utf8(self.body.clone()).ok()
+    }
     pub fn trailers(&self) -> &HeaderMap {
         &self.trailers
     }

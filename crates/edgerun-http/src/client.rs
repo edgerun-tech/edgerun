@@ -181,13 +181,7 @@ impl HttpClient {
     pub async fn execute(&self, request: &Request) -> Result<Response> {
         match self.inner.version {
             HttpVersion::Http1 => self.execute_http1(request).await,
-            HttpVersion::Http2 => {
-                match self.execute_http2(request).await {
-                    Ok(r) => Ok(r),
-                    Err(_) => self.execute_http1(request).await,
-                }
-            }
-            HttpVersion::Http2OrHttp1 => {
+            HttpVersion::Http2 | HttpVersion::Http2OrHttp1 => {
                 match self.execute_http2(request).await {
                     Ok(r) => Ok(r),
                     Err(_) => self.execute_http1(request).await,
@@ -195,9 +189,14 @@ impl HttpClient {
             }
             HttpVersion::Http3 => self.execute_http3(request).await,
             HttpVersion::Best => {
-                match self.execute_http2(request).await {
+                match self.execute_http3(request).await {
                     Ok(r) => Ok(r),
-                    Err(_) => self.execute_http1(request).await,
+                    Err(_) => {
+                        match self.execute_http2(request).await {
+                            Ok(r) => Ok(r),
+                            Err(_) => self.execute_http1(request).await,
+                        }
+                    }
                 }
             }
         }

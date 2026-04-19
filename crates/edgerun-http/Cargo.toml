@@ -12,7 +12,6 @@ categories = ["network-programming", "web-programming"]
 
 [features]
 default = []
-tls = []
 
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls" }
