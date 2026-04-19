@@ -254,6 +254,7 @@ impl HttpClient {
 
         let uri = request.uri();
         if !uri.is_https() {
+            edgerun_log::debug!("HTTP/3: only supports HTTPS, falling back");
             return Err(Error::ProtocolError(
                 "HTTP/3 only supports HTTPS scheme".to_string()
             ));
@@ -263,6 +264,8 @@ impl HttpClient {
             Error::ProtocolError("HTTP/3 requires host in URI".to_string())
         })?.to_string();
         let port = uri.port().unwrap_or(443);
+
+        edgerun_log::debug!("HTTP/3: connecting to {}:{}", host, port);
 
         let mut resp_redirect_count = 0;
         let mut current_request = request.clone();
@@ -343,7 +346,13 @@ impl HttpClient {
     }
 
     async fn execute_http2(&self, request: &Request) -> Result<Response> {
-        let h2_resp = Http2Pool::execute_async(&self.inner.h2_pool, request).await?;
+        let uri = request.uri();
+        edgerun_log::debug!("HTTP/2: connecting to {}", uri);
+        let h2_resp = Http2Pool::execute_async(&self.inner.h2_pool, request).await
+            .map_err(|e| {
+                edgerun_log::debug!("HTTP/2 failed: {}", e);
+                e
+            })?;
         Ok(Response::from_parts(h2_resp.status, h2_resp.headers, h2_resp.body))
     }
 }
