@@ -772,9 +772,10 @@ async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
     let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
     
     let finished_key = hash.expand_label(&client_hs_secret, "finished", &[], hash.len());
+    // RFC 8446 §4.4.3: verify_data uses hash of all handshake messages including Finished
     let verify_data = match hash {
-        Hasher::Sha256 => hmac_sha256(&finished_key, &handshake_transcript_hash),
-        Hasher::Sha384 => hmac_sha384(&finished_key, &handshake_transcript_hash),
+        Hasher::Sha256 => hmac_sha256(&finished_key, &full_transcript_hash),
+        Hasher::Sha384 => hmac_sha384(&finished_key, &full_transcript_hash),
     };
     let finished_msg = build_finished_message(&verify_data);
     let finished_ct = write_cipher.encrypt(22, &finished_msg);
@@ -869,9 +870,10 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
             return Err(TlsError::HandshakeFailure(format!("Expected Finished (type 20), got {}", hs_type)));
         }
         let transcript_hash = hash.hash(transcript);
-        // Use handshake_transcript_hash (same as client used) for both key derivation and verification
+        // RFC 8446 §4.4.3: verify_data is computed from hash of all handshake messages
+        // including the Finished being verified.
         let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
-        let expected_verify = compute_client_finished_verify_data(&client_hs_secret, handshake_transcript_hash, hash);
+        let expected_verify = compute_client_finished_verify_data(&client_hs_secret, &transcript_hash, hash);
         if plaintext.len() < 4 + expected_verify.len() {
             return Err(TlsError::Protocol("Client Finished verification data too short".into()));
         }
