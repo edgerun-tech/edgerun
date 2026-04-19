@@ -773,8 +773,8 @@ async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
     
     let finished_key = hash.expand_label(&client_hs_secret, "finished", &[], hash.len());
     let verify_data = match hash {
-        Hasher::Sha256 => hmac_sha256(&finished_key, &full_transcript_hash),
-        Hasher::Sha384 => hmac_sha384(&finished_key, &full_transcript_hash),
+        Hasher::Sha256 => hmac_sha256(&finished_key, &handshake_transcript_hash),
+        Hasher::Sha384 => hmac_sha384(&finished_key, &handshake_transcript_hash),
     };
     let finished_msg = build_finished_message(&verify_data);
     let finished_ct = write_cipher.encrypt(22, &finished_msg);
