@@ -84,6 +84,11 @@ pub struct Tls13KeySchedule {
 }
 
 impl Tls13KeySchedule {
+    /// Get current secret for debugging
+    pub fn debug_secret(&self) -> &[u8] {
+        &self.secret
+    }
+
     /// Start from a zero salt (early secret derivation)
     pub fn new(hash: Hasher) -> Self {
         let zero = vec![0u8; hash.len()];

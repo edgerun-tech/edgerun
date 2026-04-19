@@ -27,6 +27,20 @@ impl Handler for EchoHandler {
     }
 }
 
+fn h2spec_test_server(port: u16) {
+    let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
+    rt.block_on(async move {
+        let cert = gen_cert(&["127.0.0.1", "localhost"]).expect("gen cert");
+        let server = HttpServer::new(EchoHandler)
+            .with_tls(cert)
+            .bind(format!("127.0.0.1:{}", port))
+            .await
+            .expect("server bind");
+        eprintln!("HTTP/2 test server listening on port {}", port);
+        server.serve().await.expect("serve");
+    });
+}
+
 #[test]
 fn test_http_plain() {
     let port = next_port();
@@ -118,5 +132,41 @@ fn test_https_tls() {
                 // We can't cancel the task easily but we know it hung
             }
         }
+    });
+}
+
+#[test]
+fn test_https_h2() {
+    let port = next_port();
+    println!("\n[https_h2] Port {}", port);
+    
+    let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
+    rt.block_on(async move {
+        let cert = gen_cert(&["127.0.0.1", "localhost"]).expect("gen cert");
+        let server = HttpServer::new(EchoHandler)
+            .with_tls(cert)
+            .bind(format!("127.0.0.1:{}", port))
+            .await
+            .expect("server bind");
+        println!("  [1] Server bound");
+        
+        let server_task = spawn(async move {
+            match server.serve().await {
+                Ok(()) => eprintln!("  [SVR] serve done"),
+                Err(e) => eprintln!("  [SVR] serve error: {}", e),
+            }
+        });
+        
+        sleep(Duration::from_millis(100)).await;
+        println!("  [2] Client connecting with HTTP/2...");
+        
+        let client = HttpClient::new().version(HttpVersion::Http2);
+        match client.get(&format!("https://127.0.0.1:{}/", port)).await {
+            Ok(resp) => println!("  [3] Got response: {}", resp.status().as_u16()),
+            Err(e) => eprintln!("  [3] ERROR: {}", e),
+        }
+        
+        sleep(Duration::from_millis(100)).await;
+        server_task.abort();
     });
 }

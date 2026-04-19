@@ -204,19 +204,15 @@ where
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("TLS handshake failed: {e}")))?;
 
-        let alpn = tls_stream.alpn_protocol();
+let alpn = tls_stream.alpn_protocol();
         edgerun_log::debug!("TLS accepted, ALPN: {:?}", alpn.map(|b| std::str::from_utf8(b)));
 
-        // When TLS is established, use the negotiated ALPN protocol to
-        // determine the HTTP version.
-        // Per RFC 9113 §3.4, the client connection preface
-        // "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" (24 bytes) is always sent —
-        // even over TLS. We must consume the entire preface before reading frames.
+        // When TLS is established, use ALPN or detect via preface
         let negotiated_h2 = alpn == Some(b"h2");
+        let mut reader = BufReader::new(tls_stream);
+        
         if negotiated_h2 {
             edgerun_log::debug!("Negotiated HTTP/2 via ALPN, reading preface...");
-            let mut reader = BufReader::new(tls_stream);
-            // The BufReader is fresh — the full 24-byte preface is still in the stream.
             let mut discard = [0u8; 24];
             match reader.get_mut().read_exact(&mut discard).await {
                 Ok(()) => {
@@ -226,11 +222,18 @@ where
                     return Err(e);
                 }
             }
-            // Pass skip_preface=true since we already consumed it above.
             handle_http2(reader, handler, http2_idle_timeout, max_request_size, true).await
         } else {
-            edgerun_log::debug!("Negotiated HTTP/1.1, handling as plain HTTP...");
-            handle_connection_inner(tls_stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
+            // No ALPN or TLS without h2 - detect HTTP/2 by reading first line
+            let first_line = match timeout(Duration::from_secs(5), reader.read_line()).await {
+                Ok(Ok(Some(line))) => line,
+                _ => return Ok(()),
+            };
+            if first_line.starts_with("PRI * HTTP/2.0") {
+                handle_http2(reader, handler, http2_idle_timeout, max_request_size, false).await
+            } else {
+                handle_http1_line(reader, first_line, handler, keep_alive, max_request_size, http2_idle_timeout).await
+            }
         }
     } else {
         handle_connection_inner(stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
