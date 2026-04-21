@@ -15,7 +15,6 @@ edgerun-input = { path = "../edgerun-input" }
 
 # Android logging via logcat (android_logger writes to __android_log_print)
 android_log-sys = { version = "0.3", optional = true }
-log = { version = "0.4", optional = true }
 
 # NDK bindings (FFI to Android native libraries)
 ndk-sys = { version = "0.6", optional = true }
@@ -36,7 +35,6 @@ android-real = [
     "dep:ndk-context",
     "dep:once_cell",
     "dep:android_log-sys",
-    "dep:log",
 ]
 
 [lints]

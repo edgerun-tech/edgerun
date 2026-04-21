@@ -3,8 +3,6 @@
 //! HPACK spec.
 
 #[macro_use] extern crate log;
-#[cfg(feature="interop_tests")]
-extern crate rustc_serialize;
 
 use std::fmt;
 use std::iter;

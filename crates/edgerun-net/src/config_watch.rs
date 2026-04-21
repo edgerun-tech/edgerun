@@ -75,7 +75,7 @@ impl ConfigWatcher {
                 } else if path.exists() {
                     let _ = inotify.watches().add(path, WatchMask::MODIFY);
                     if let Some(parent) = path.parent() {
-                        let mask = WatchMask::new(WatchMask::CREATE.0 | WatchMask::DELETE.0);
+                        let mask = WatchMask::CREATE | WatchMask::DELETE;
                         let _ = inotify.watches().add(parent, mask);
                     }
                 }
@@ -86,7 +86,7 @@ impl ConfigWatcher {
                 match inotify.read_events(&mut buffer) {
                     Ok(events) => {
                         for event in events {
-                            let mask = WatchMask::new(WatchMask::MODIFY.0 | WatchMask::CREATE.0 | WatchMask::DELETE.0);
+                    let mask = WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE;
                             if event.mask.contains(mask) {
                                 if let Some(name) = &event.name {
                                     if name.to_string_lossy().ends_with(".yaml") || name.to_string_lossy().ends_with(".yml") {

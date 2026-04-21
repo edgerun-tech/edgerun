@@ -1,4 +1,4 @@
-use clap::Parser;
+use edgerun_clap::Parser;
 use std::fs;
 use std::path::PathBuf;
 use std::process;
