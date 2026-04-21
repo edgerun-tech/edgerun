@@ -12,8 +12,12 @@ use edgerun_edit::project::{walk_rs, Project};
 
 fn temp_dir() -> PathBuf {
     // Each call gets a unique directory under /tmp
-    let uuid = uuid::Uuid::new_v4().to_string();
-    let dir = std::env::temp_dir().join(format!("edgerun_edit_test_{uuid}"));
+    let id = std::process::id() as u64;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    let dir = std::env::temp_dir().join(format!("edgerun_edit_test_{id}_{ts}"));
     fs::create_dir_all(&dir).unwrap();
     dir
 }

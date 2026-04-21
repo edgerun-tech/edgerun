@@ -8,4 +8,4 @@ pub mod derive;
 pub mod cli;
 
 #[cfg(feature = "std")]
-pub use cli::{Arg, ArgGroup, Command, Parser};
+pub use cli::{Arg, ArgGroup, ArgMatches, Command, FromArgMatches, Parser};

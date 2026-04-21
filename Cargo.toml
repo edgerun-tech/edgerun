@@ -27,6 +27,7 @@ members = [
   "crates/edgerun-dhcpv6",
   "crates/edgerun-dns",
   "crates/edgerun-drm-display",
+  "crates/edgerun-display",
   "crates/edgerun-e2e-capability",
   "crates/edgerun-edit",
   "crates/edgerun-encoding",
@@ -88,7 +89,6 @@ members = [
   "crates/edgerun-virtual-disk",
   "crates/edgerun-wifi",
 "crates/edgerun-yubikey",
-  "crates/edgerun-agent",
   "crates/edgerun-vfs",
   "crates/edgerun-clap",
 ]

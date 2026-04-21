@@ -129,7 +129,6 @@ jobs:
           - "--features serde"
           - "--features serde,raw_value"
           - "--features serde,indexmap"
-          - "--features serde,schemars"
           - "--features serde,ts-rs"
         include:
           # Alloc-only build can't run tests (test code uses std traits)
@@ -144,8 +143,6 @@ jobs:
             test_cmd: "cargo test --features serde,raw_value"
           - features: "--features serde,indexmap"
             test_cmd: "cargo test --features serde,indexmap"
-          - features: "--features serde,schemars"
-            test_cmd: "cargo test --features serde,schemars"
           - features: "--features serde,ts-rs"
             test_cmd: "cargo test --features serde,ts-rs"
       fail-fast: false

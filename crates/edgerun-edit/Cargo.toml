@@ -20,6 +20,3 @@ edgerun-json = { workspace = true }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-uuid = { version = "1", features = ["v4"] }

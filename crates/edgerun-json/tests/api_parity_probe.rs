@@ -16,135 +16,91 @@ fn extract_public_items(source_dir: &Path) -> BTreeSet<(String, String)> {
         return items;
     }
 
-    for entry in walkdir::WalkDir::new(source_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "rs"))
-    {
-        let content = match fs::read_to_string(entry.path()) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
+    fn walk_dir(dir: &Path, items: &mut BTreeSet<(String, String)>) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk_dir(&path, items);
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    if let Ok(content) = fs::read_to_string(&path) {
+                        let module = path
+                            .strip_prefix(source_dir)
+                            .ok()
+                            .and_then(|p| p.parent())
+                            .map(|p| p.to_string_lossy().replace('/', "::"))
+                            .unwrap_or_default();
 
-        let module = entry
-            .path()
-            .strip_prefix(source_dir)
-            .ok()
-            .and_then(|p| p.parent())
-            .map(|p| p.to_string_lossy().replace('/', "::"))
-            .unwrap_or_default();
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            // Skip comments and empty
-            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.is_empty() {
-                continue;
-            }
-
-            // pub fn name
-            if let Some(name) = trimmed
-                .strip_prefix("pub fn ")
-                .map(|s| s.split('(').next().unwrap_or(s).trim())
-                .filter(|s| !s.is_empty() && s.chars().next().unwrap().is_ascii_alphabetic())
-            {
-                items.insert((module.clone(), format!("fn {name}")));
-            }
-
-            // pub struct name
-            if let Some(name) = trimmed
-                .strip_prefix("pub struct ")
-                .map(|s| {
-                    s.split('<')
-                        .next()
-                        .unwrap_or(s)
-                        .split('{')
-                        .next()
-                        .unwrap_or(s)
-                        .trim()
-                })
-                .filter(|s| !s.is_empty())
-            {
-                items.insert((module.clone(), format!("struct {name}")));
-            }
-
-            // pub enum name
-            if let Some(name) = trimmed
-                .strip_prefix("pub enum ")
-                .map(|s| {
-                    s.split('<')
-                        .next()
-                        .unwrap_or(s)
-                        .split('{')
-                        .next()
-                        .unwrap_or(s)
-                        .trim()
-                })
-                .filter(|s| !s.is_empty())
-            {
-                items.insert((module.clone(), format!("enum {name}")));
-            }
-
-            // pub type name
-            if let Some(name) = trimmed
-                .strip_prefix("pub type ")
-                .map(|s| s.split('=').next().unwrap_or(s).trim())
-                .filter(|s| !s.is_empty())
-            {
-                items.insert((module.clone(), format!("type {name}")));
-            }
-
-            // pub use X as Y / pub use X
-            if trimmed.starts_with("pub use ") {
-                // Extract the exported name
-                if let Some(after_use) = trimmed.strip_prefix("pub use ") {
-                    // Handle "pub use foo::bar;" or "pub use foo::bar as baz;"
-                    let parts: Vec<&str> = after_use.split(" as ").collect();
-                    let name = if parts.len() == 2 {
-                        parts[1].trim().trim_end_matches(';').trim()
-                    } else {
-                        after_use
-                            .split("::")
-                            .last()
-                            .unwrap_or("")
-                            .trim_end_matches(';')
-                            .trim()
-                    };
-                    if !name.is_empty() && name.chars().next().unwrap().is_ascii_alphabetic() {
-                        items.insert((module.clone(), format!("use {name}")));
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.is_empty() {
+                                continue;
+                            }
+                            if let Some(name) = trimmed
+                                .strip_prefix("pub fn ")
+                                .map(|s| s.split('(').next().unwrap_or(s).trim())
+                                .filter(|s| !s.is_empty() && s.chars().next().unwrap().is_ascii_alphabetic())
+                            {
+                                items.insert((module.clone(), format!("fn {name}")));
+                            }
+                            if let Some(name) = trimmed
+                                .strip_prefix("pub struct ")
+                                .map(|s| s.split('<').next().unwrap_or(s).split('{').next().unwrap_or(s).trim())
+                                .filter(|s| !s.is_empty())
+                            {
+                                items.insert((module.clone(), format!("struct {name}")));
+                            }
+                            if let Some(name) = trimmed
+                                .strip_prefix("pub enum ")
+                                .map(|s| s.split('<').next().unwrap_or(s).split('{').next().unwrap_or(s).trim())
+                                .filter(|s| !s.is_empty())
+                            {
+                                items.insert((module.clone(), format!("enum {name}")));
+                            }
+                            if let Some(name) = trimmed
+                                .strip_prefix("pub type ")
+                                .map(|s| s.split('=').next().unwrap_or(s).trim())
+                                .filter(|s| !s.is_empty())
+                            {
+                                items.insert((module.clone(), format!("type {name}")));
+                            }
+                            if trimmed.starts_with("pub use ") {
+                                if let Some(after_use) = trimmed.strip_prefix("pub use ") {
+                                    let parts: Vec<&str> = after_use.split(" as ").collect();
+                                    let name = if parts.len() == 2 {
+                                        parts[1].trim().trim_end_matches(';').trim()
+                                    } else {
+                                        after_use.split("::").last().unwrap_or("").trim_end_matches(';').trim()
+                                    };
+                                    if !name.is_empty() && name.chars().next().unwrap().is_ascii_alphabetic() {
+                                        items.insert((module.clone(), format!("use {name}")));
+                                    }
+                                }
+                            }
+                            if let Some(name) = trimmed
+                                .strip_prefix("pub mod ")
+                                .map(|s| s.split('{').next().unwrap_or(s).split(';').next().unwrap_or(s).trim())
+                                .filter(|s| !s.is_empty())
+                            {
+                                items.insert((module.clone(), format!("mod {name}")));
+                            }
+                            if trimmed.starts_with("macro_rules!") {
+                                if let Some(name) = trimmed
+                                    .strip_prefix("macro_rules! ")
+                                    .map(|s| s.split('(').next().unwrap_or(s).trim())
+                                    .filter(|s| !s.is_empty())
+                                {
+                                    items.insert((module.clone(), format!("macro {name}")));
+                                }
+                            }
+                        }
                     }
-                }
-            }
-
-            // pub mod name - track re-exported modules
-            if let Some(name) = trimmed
-                .strip_prefix("pub mod ")
-                .map(|s| {
-                    s.split('{')
-                        .next()
-                        .unwrap_or(s)
-                        .split(';')
-                        .next()
-                        .unwrap_or(s)
-                        .trim()
-                })
-                .filter(|s| !s.is_empty())
-            {
-                items.insert((module.clone(), format!("mod {name}")));
-            }
-
-            // macro_rules! name (at crate level)
-            if trimmed.starts_with("macro_rules!") {
-                if let Some(name) = trimmed
-                    .strip_prefix("macro_rules! ")
-                    .map(|s| s.split('(').next().unwrap_or(s).trim())
-                    .filter(|s| !s.is_empty())
-                {
-                    items.insert((module.clone(), format!("macro {name}")));
                 }
             }
         }
     }
+
+    walk_dir(source_dir, &mut items);
 
     items
 }
