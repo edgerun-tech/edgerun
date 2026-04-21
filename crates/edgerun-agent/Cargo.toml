@@ -5,18 +5,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# Edgerun workspace crates
-edgerun-server = { path = "../edgerun-server" }
-edgerun-http = { path = "../edgerun-http" }
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-json = { workspace = true, features = ["serde"] }
-
-# Serialization
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+edgerun-config = { path = "../edgerun-config" }
 
 # CLI
-clap = { version = "4", features = ["derive"] }
+edgerun-clap = { path = "../edgerun-clap" }
 
 # Code analysis
 tree-sitter = "0.22"

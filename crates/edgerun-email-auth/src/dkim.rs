@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io;
 
 use crate::DnsQuery;
+use edgerun_encoding::base64;
 use sha2::{Digest, Sha256};
 
 /// Result of a DKIM verification.
@@ -123,10 +124,10 @@ fn parse_dkim_tag_list(s: &str) -> io::Result<DkimSignature> {
         .map(|h| h.split(':').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
-    let signature = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, tags.get("b").map(|s| s.as_str()).unwrap_or(""))
+    let signature = base64::standard_decode(tags.get("b").map(|s| s.as_str()).unwrap_or(""))
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid DKIM signature: {}", e)))?;
 
-    let body_hash = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, tags.get("bh").map(|s| s.as_str()).unwrap_or(""))
+    let body_hash = base64::standard_decode(tags.get("bh").map(|s| s.as_str()).unwrap_or(""))
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid DKIM body hash: {}", e)))?;
 
     let length = tags.get("l").and_then(|l| l.parse::<usize>().ok());
@@ -348,7 +349,7 @@ fn format_dkim_signature_header_for_canon(sig: &DkimSignature) -> String {
     if !sig.header_list.is_empty() {
         parts.push(format!("h={}", sig.header_list.join(":")));
     }
-    parts.push(format!("bh={}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &sig.body_hash)));
+    parts.push(format!("bh={}", base64::standard_encode(&sig.body_hash)));
     parts.push("b=".to_string());
 
     format!("DKIM-Signature: {}", parts.join("; "))
@@ -376,7 +377,7 @@ fn parse_dkim_key_record(record: &str) -> io::Result<Vec<u8>> {
         ));
     }
 
-    base64::Engine::decode(&base64::engine::general_purpose::STANDARD, pub_key_b64)
+    base64::standard_decode(pub_key_b64)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid DKIM key: {}", e)))
 }
 

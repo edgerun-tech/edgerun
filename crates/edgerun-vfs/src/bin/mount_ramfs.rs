@@ -16,24 +16,30 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use clap::Parser;
 use edgerun_vfs::GitAwarePersist;
-use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use edgerun_inotify::{Inotify, WatchMask};
 use rayon::ThreadPoolBuilder;
 
 const LOCK_FILE: &str = "/var/run/edgerun-vfs.lock";
 const UNCLEAN_SHUTDOWN_FILE: &str = "/var/run/edgerun-vfs.unclean";
 
-#[derive(Parser)]
-#[command(name = "edgerun-vfs-mount")]
-#[command(about = "Mount directory in RAM with async write-back caching")]
 struct Cli {
     source: PathBuf,
     mount_point: PathBuf,
-    #[arg(long, default_value = "16G")]
     ram_size: String,
-    #[arg(long, default_value = "4")]
     sync_workers: usize,
+}
+
+impl Cli {
+    fn from_args() -> Self {
+        let args: Vec<_> = std::env::args().collect();
+        Self {
+            source: args.get(1).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(".")),
+            mount_point: args.get(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp/edgerun-vfs")),
+            ram_size: args.get(3).cloned().unwrap_or_else(|| "16G".to_string()),
+            sync_workers: args.get(4).and_then(|s| s.parse().ok()).unwrap_or(4),
+        }
+    }
 }
 
 struct WriteTask {
@@ -169,7 +175,7 @@ fn is_git_path(path: &Path) -> bool {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let cli = Cli::from_args();
 
     if unsafe { libc::getuid() } != 0 {
         eprintln!("Error: Must run as root (sudo)");
@@ -299,29 +305,23 @@ fn main() {
 
     // Spawn filesystem watcher
     let watch_ram = ram_disk.clone();
-    let watch_for_watcher = watch_ram.clone();
     std::thread::spawn(move || {
-        let mut watcher = RecommendedWatcher::new(
-            move |res: Result<notify::Event, notify::Error>| {
-                if let Ok(event) = res {
-                    match event.kind {
-                        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_) => {
-                            // File watcher just keeps running, no mpsc needed
-                        }
-                        _ => {}
-                    }
+        let mut inotify = Inotify::init().expect("Failed to create inotify");
+        let watches = inotify.watches();
+        
+        let mask = WatchMask::CREATE | WatchMask::MODIFY | WatchMask::DELETE | WatchMask::MOVED_FROM | WatchMask::MOVED_TO;
+        let _ = watches.add(&watch_ram, mask).expect("Failed to watch path");
+        
+        let mut buf = [0u8; 65536];
+        loop {
+            let events = inotify.read_events(&mut buf);
+            if let Ok(events) = events {
+                for _event in events {
+                    // File watcher just keeps running, no mpsc needed
                 }
-            },
-            Config::default(),
-        )
-        .expect("Failed to create file watcher");
-
-        watcher
-            .watch(&watch_for_watcher, RecursiveMode::Recursive)
-            .expect("Failed to start watching");
-
-        // Keep watcher alive - it will be dropped when thread ends
-        std::thread::sleep(std::time::Duration::from_secs(86400));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
     });
 
     // Spawn sync workers

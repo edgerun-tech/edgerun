@@ -3,6 +3,7 @@
 
 use crate::types::*;
 use std::collections::HashMap;
+use edgerun_json::JsonValue;
 
 // ---------------------------------------------------------------------------
 // dnsmasq.conf → ConfigResource
@@ -187,11 +188,11 @@ pub fn import_corefile(corefile: &str) -> Result<Vec<ConfigResource>, ImportErro
             let mut records: Vec<ZoneRecord> = host_entries.iter()
                 .map(|(name, ip)| ZoneRecord {
                     name: name.clone(), record_type: "A".to_string(), ttl: None,
-                    value: serde_yaml::Value::String(ip.clone()),
+                    value: edgerun_json::JsonValue::String(ip.clone()),
                 }).collect();
             records.push(ZoneRecord {
                 name: "@".to_string(), record_type: "NS".to_string(), ttl: None,
-                value: serde_yaml::Value::String(format!("ns1.{}", zone)),
+                value: edgerun_json::JsonValue::String(format!("ns1.{}", zone)),
             });
             resources.push(ConfigResource::DnsZone(DnsZoneSpec {
                 origin: zone.to_string(),

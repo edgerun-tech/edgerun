@@ -15,11 +15,8 @@ edgerun-dns = { path = "../edgerun-dns" }
 edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
 edgerun-config = { path = "../edgerun-config" }
 edgerun-log = { path = "../edgerun-log" }
-clap = { version = "4", features = ["derive"] }
+edgerun-inotify = { path = "../edgerun-inotify" }
 signal-hook = "0.3"
-inotify = "0.11"
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
 
 [lints]
 workspace = true

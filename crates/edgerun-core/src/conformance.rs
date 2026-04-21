@@ -14,57 +14,45 @@ use crate::validators::{
     validate_stream_append_case, validate_trust_case, FixtureVerifier,
 };
 
-// ===========================================================================
-// YAML parsing via serde_yaml
-// ===========================================================================
-
-/// Convert a `serde_yaml::Value` into the internal `Value` type.
-fn yaml_value_to_value(v: serde_yaml::Value) -> Value {
+fn yaml_value_to_value(v: edgerun_json::yaml::YamlValue) -> Value {
     match v {
-        serde_yaml::Value::Null => Value::Null,
-        serde_yaml::Value::Bool(b) => Value::Bool(b),
-        serde_yaml::Value::Number(n) => {
+        edgerun_json::yaml::YamlValue::Null => Value::Null,
+        edgerun_json::yaml::YamlValue::Bool(b) => Value::Bool(b),
+        edgerun_json::yaml::YamlValue::Number(n) => {
             if let Some(i) = n.as_i64() {
                 Value::Int(i)
             } else {
                 Value::String(n.to_string())
             }
         }
-        serde_yaml::Value::String(s) => Value::String(s),
-        serde_yaml::Value::Sequence(seq) => {
+        edgerun_json::yaml::YamlValue::String(s) => Value::String(s),
+        edgerun_json::yaml::YamlValue::Array(seq) => {
             Value::Seq(seq.into_iter().map(yaml_value_to_value).collect())
         }
-        serde_yaml::Value::Mapping(map) => {
+        edgerun_json::yaml::YamlValue::Mapping(map) => {
             let mut result = BTreeMap::new();
             for (k, v) in map {
-                if let Some(key) = k.as_str() {
-                    result.insert(key.to_string(), yaml_value_to_value(v));
-                }
+                result.insert(k, yaml_value_to_value(v));
             }
             Value::Map(result)
         }
-        serde_yaml::Value::Tagged(tagged) => yaml_value_to_value(tagged.value),
+        edgerun_json::yaml::YamlValue::Tagged(tagged) => yaml_value_to_value(*tagged.value),
     }
 }
 
-/// Parse a YAML string into a `BTreeMap<String, Value>`.
 fn parse_yaml_full(text: &str) -> BTreeMap<String, Value> {
-    match serde_yaml::from_str::<serde_yaml::Value>(text) {
-        Ok(serde_yaml::Value::Mapping(map)) => {
+    match edgerun_json::yaml::from_yaml_str(text) {
+        Ok(edgerun_json::yaml::YamlValue::Mapping(map)) => {
             let mut result = BTreeMap::new();
             for (k, v) in map {
-                if let Some(key) = k.as_str() {
-                    result.insert(key.to_string(), yaml_value_to_value(v));
-                }
+                result.insert(k, yaml_value_to_value(v));
             }
             result
         }
         Ok(_) => BTreeMap::new(),
         Err(_) => BTreeMap::new(),
     }
-}
-
-// ===========================================================================
+}// ===========================================================================
 // Test verifier — checks signature structure (real verification in tests)
 // ===========================================================================
 

@@ -4,7 +4,6 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rsa::{
     pkcs1::EncodeRsaPublicKey,
     pkcs8::DecodePrivateKey,
@@ -12,6 +11,7 @@ use rsa::{
     RsaPrivateKey,
 };
 use edgerun_crypto::OsRng;
+use edgerun_encoding::base64;
 use sha2::{Digest, Sha256};
 
 pub struct DkimSigner {
@@ -65,7 +65,7 @@ impl DkimSigner {
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("failed to encode public key: {}", e)))
             .unwrap();
 
-        let base64_key = BASE64.encode(public_key_der.as_bytes());
+        let base64_key = base64::standard_encode(public_key_der.as_bytes());
 
         format!(
             "v=DKIM1; k=rsa; p={}",
@@ -86,7 +86,7 @@ impl DkimSigner {
 
         let canonical_body = canonicalize_body(body)?;
         let body_hash = Sha256::digest(&canonical_body);
-        let body_hash_b64 = BASE64.encode(body_hash);
+        let body_hash_b64 = base64::standard_encode(&body_hash);
 
         let mut signed_header_names = Vec::new();
         let unfolded = unfold_headers(&headers_str);
@@ -127,7 +127,7 @@ impl DkimSigner {
         let hash = Sha256::digest(&sign_data);
         let signing_key = rsa::pkcs1v15::SigningKey::<Sha256>::new((*self.private_key).clone());
         let signature = rsa::signature::Signer::sign(&signing_key, &hash);
-        let signature_b64 = BASE64.encode(signature.to_bytes());
+        let signature_b64 = base64::standard_encode(signature.to_bytes().as_ref());
 
         let final_header = format!(
             "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={}; h={}; bh={}; b={}",

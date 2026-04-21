@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-clap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Zero-dependency drop-in replacement for clap crate"
+
+[features]
+default = ["std"]
+std = ["edgerun-json/std"]
+alloc = []
+
+[dependencies]
+edgerun-json = { path = "../edgerun-json", features = ["alloc", "serde"] }
+serde = { version = "1", features = ["derive"], optional = true }
+
+[lints]
+workspace = true

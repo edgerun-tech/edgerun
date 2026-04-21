@@ -29,6 +29,8 @@ mod parser;
 mod projector;
 mod importers;
 
+pub use edgerun_json;
+
 // Explicit public API — no glob re-exports
 pub use types::{
     API_VERSION, ResourceMetadata, Resource, ConfigResource,

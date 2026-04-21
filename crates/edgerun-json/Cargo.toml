@@ -12,13 +12,17 @@ categories = ["encoding", "parser-implementations"]
 rust-version = "1.70"
 
 [features]
-default = ["std"]
+default = ["alloc"]
 std = []
 alloc = []
 indexmap = []
 raw_value = ["serde"]
 preserve_order = ["indexmap"]
 serde = ["dep:serde_crate"]
+# Enable YAML serialization/deserialization (requires serde)
+yaml = ["serde"]
+# Enable TOML serialization/deserialization (requires serde)
+toml = ["serde"]
 # Compatibility testing feature - allows using this crate as serde_json drop-in
 compat_test = []
 # Enable serde_json comparison benchmarks (pulls in serde_json from crates.io)

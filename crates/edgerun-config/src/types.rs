@@ -89,13 +89,17 @@ impl<T> Resource<T> {
 
 impl<T: serde::Serialize + serde::de::DeserializeOwned> Resource<T> {
     /// Serialize to YAML string.
-    pub fn to_yaml(&self) -> Result<String, serde_yaml::Error> {
-        serde_yaml::to_string(self)
+    pub fn to_yaml(&self) -> Result<String, edgerun_json::yaml::YamlError> {
+        let json = edgerun_json::to_value(self).map_err(|_| edgerun_json::yaml::YamlError::IoError("serialization error".to_string()))?;
+        let yaml = edgerun_json::yaml::to_yaml_string(&edgerun_json::yaml::json_to_yaml(json));
+        yaml
     }
 
     /// Parse from YAML string.
-    pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml::Error> {
-        serde_yaml::from_str(yaml)
+    pub fn from_yaml(yaml: &str) -> Result<Self, edgerun_json::yaml::YamlError> {
+        let yaml_value = edgerun_json::yaml::from_yaml_str(yaml)?;
+        let json = edgerun_json::yaml::yaml_to_json(yaml_value);
+        edgerun_json::from_value(json).map_err(|_| edgerun_json::yaml::YamlError::IoError("deserialization error".to_string()))
     }
 }
 
@@ -246,7 +250,7 @@ pub struct ZoneRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttl: Option<u32>,
     /// Record value — type-specific.
-    pub value: serde_yaml::Value,
+    pub value: edgerun_json::JsonValue,
 }
 
 /// DNSSEC configuration for a zone.

@@ -387,8 +387,7 @@ mod tests {
         let digest = sha256(b"");
         assert_eq!(
             digest,
-            hex::decode("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-                .unwrap()
+            edgerun_encoding::hex::hex_to_bytes("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").unwrap()
         );
     }
 
@@ -408,8 +407,7 @@ mod tests {
         let mac = hmac_sha256(key, data);
         assert_eq!(
             mac,
-            hex::decode("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
-                .unwrap()
+            edgerun_encoding::hex::hex_to_bytes("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843").unwrap()
         );
     }
 

@@ -2,6 +2,7 @@
 resolver = "2"
 
 members = [
+  "crates/edgerun-inotify",
   "crates/edgerun-alsa-microphone",
   "crates/edgerun-alsa-speaker",
   "crates/edgerun-amd-xdna",
@@ -86,12 +87,11 @@ members = [
   "crates/edgerun-v4l2-camera",
   "crates/edgerun-virtual-disk",
   "crates/edgerun-wifi",
-  "crates/edgerun-yubikey",
+"crates/edgerun-yubikey",
   "crates/edgerun-agent",
-"crates/edgerun-vfs",
-  "crates/edgerun-esp",
- ]
-exclude = ["crates/edgerun-esp"]
+  "crates/edgerun-vfs",
+  "crates/edgerun-clap",
+]
 
 [workspace.package]
 edition = "2021"
@@ -134,6 +134,7 @@ edgerun-stream = { path = "crates/edgerun-stream" }
 edgerun-http = { path = "crates/edgerun-http" }
 edgerun-node = { path = "crates/edgerun-node" }
 edgerun-hardware-signing = { path = "crates/edgerun-hardware-signing" }
+edgerun-capabilities = { path = "crates/edgerun-capabilities" }
 edgerun-mesh = { path = "crates/edgerun-mesh" }
 edgerun-mesh-link = { path = "crates/edgerun-mesh-link" }
 edgerun-mesh-session = { path = "crates/edgerun-mesh-session" }
@@ -155,12 +156,12 @@ edgerun-encoding = { path = "crates/edgerun-encoding" }
 edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json
 edgerun-json = { path = "crates/edgerun-json", features = ["serde"] }
-# Cross-workspace browser deps (edgerun-browser reference repo)
-edgerun-display = { path = "../edgerun-browser/crates/edgerun-display" }
-edgerun-gpu = { path = "../edgerun-browser/crates/edgerun-gpu" }
-edgerun-wgpu = { path = "../edgerun-browser/crates/edgerun-wgpu" }
-edgerun-rasterizer = { path = "../edgerun-browser/crates/edgerun-rasterizer" }
-edgerun-css-cascade = { path = "../edgerun-browser/crates/edgerun-css-cascade" }
+# Browser deps
+edgerun-display = { path = "crates/edgerun-display" }
+edgerun-gpu = { path = "crates/edgerun-gpu" }
+# edgerun-wgpu = { path = "crates/edgerun-wgpu" }
+# edgerun-rasterizer = { path = "crates/edgerun-rasterizer" }
+# edgerun-css-cascade = { path = "crates/edgerun-css-cascade" }
 # Compression libraries for HTTP content-encoding
 flate2 = "1"
 brotli = "8"

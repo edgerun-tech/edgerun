@@ -128,6 +128,7 @@ struct SendWaiter<T> {
 }
 
 unsafe impl<T: Send> Send for Inner<T> {}
+unsafe impl<T: Send> Sync for Inner<T> {}
 
 struct Node<T> {
     slot_idx: usize,
@@ -384,7 +385,7 @@ impl<T: Unpin> std::future::Future for SendFut<T> {
                     this.waiter_ptr = ptr::null_mut();
                     return std::task::Poll::Ready(Ok(()));
                 }
-                unsafe { (*this.waiter_ptr).waker = cx.waker().clone(); }
+                (*this.waiter_ptr).waker = cx.waker().clone();
             }
         }
 

@@ -1,6 +1,6 @@
 //! Binary entry point for the edgerun-agent coding assistant.
 
-use clap::Parser;
+use edgerun_config::yaml;
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -34,29 +34,29 @@ struct AgentConfig {
 
 fn load_config() -> Option<Config> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let config_path = manifest.join("config.toml");
+    let config_path = manifest.join("config.yaml");
     
     if config_path.exists() {
         match std::fs::read_to_string(&config_path) {
             Ok(content) => {
-                match toml::from_str(&content) {
+                match yaml::from_str(&content) {
                     Ok(config) => {
                         println!("Loaded config from {:?}", config_path);
                         Some(config)
                     }
                     Err(e) => {
-                        eprintln!("Failed to parse config.toml: {}", e);
+                        eprintln!("Failed to parse config.yaml: {}", e);
                         None
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Failed to read config.toml: {}", e);
+                eprintln!("Failed to read config.yaml: {}", e);
                 None
             }
         }
     } else {
-        println!("No config.toml found at {:?}", config_path);
+        println!("No config.yaml found at {:?}", config_path);
         None
     }
 }

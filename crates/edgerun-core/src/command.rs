@@ -229,7 +229,7 @@ pub fn validate_command(
         );
     };
 
-    if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as _ {
+    if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
         // SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 1
         return reject(
             ReasonCode::CryptoInvalid,
@@ -482,7 +482,7 @@ fn validate_delegation_chain(
                 empty_map(),
             ));
         };
-        if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as _ {
+        if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
             return Err(reject(
                 ReasonCode::CryptoInvalid,
                 Value::String("unsupported delegation signature algorithm".into()),
@@ -988,7 +988,7 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
         );
     };
 
-    if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as _ {
+    if sig.algorithm != crate::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
         return reject(
             ReasonCode::CryptoInvalid,
             Value::String(format!(

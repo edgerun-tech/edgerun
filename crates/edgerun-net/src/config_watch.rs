@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use inotify::{Inotify, WatchMask};
+use edgerun_inotify::{Inotify, WatchMask};
 
 /// Watches config files and signals when they change.
 pub struct ConfigWatcher {
@@ -58,8 +58,6 @@ impl ConfigWatcher {
                         for path in &paths {
                             if let Ok(meta) = std::fs::metadata(path) {
                                 if let Ok(modified) = meta.modified() {
-                                    // Just trigger on every poll — the reload logic
-                                    // will check if content actually changed
                                     changed.store(true, Ordering::SeqCst);
                                 }
                             }
@@ -72,22 +70,25 @@ impl ConfigWatcher {
             // Add watches for all paths
             for path in &paths {
                 if path.is_dir() {
-                    let _ = inotify.watches().add(path, WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE);
+                    let mask = WatchMask::new(WatchMask::MODIFY.0 | WatchMask::CREATE.0 | WatchMask::DELETE.0);
+                    let _ = inotify.watches().add(path, mask);
                 } else if path.exists() {
                     let _ = inotify.watches().add(path, WatchMask::MODIFY);
                     if let Some(parent) = path.parent() {
-                        let _ = inotify.watches().add(parent, WatchMask::CREATE | WatchMask::DELETE);
+                        let mask = WatchMask::new(WatchMask::CREATE.0 | WatchMask::DELETE.0);
+                        let _ = inotify.watches().add(parent, mask);
                     }
                 }
             }
 
             let mut buffer = [0; 1024];
             while !stop.load(Ordering::SeqCst) {
-                match inotify.read_events_blocking(&mut buffer) {
-                    Ok(mut events) => {
+                match inotify.read_events(&mut buffer) {
+                    Ok(events) => {
                         for event in events {
-                            if event.mask.intersects(inotify::EventMask::MODIFY | inotify::EventMask::CREATE | inotify::EventMask::DELETE) {
-                                if let Some(name) = event.name {
+                            let mask = WatchMask::new(WatchMask::MODIFY.0 | WatchMask::CREATE.0 | WatchMask::DELETE.0);
+                            if event.mask.contains(mask) {
+                                if let Some(name) = &event.name {
                                     if name.to_string_lossy().ends_with(".yaml") || name.to_string_lossy().ends_with(".yml") {
                                         edgerun_log::info!("edgerun-net: config change detected: {:?}", name);
                                         changed.store(true, Ordering::SeqCst);
@@ -150,7 +151,7 @@ mod tests {
         writeln!(f, "changed: true").unwrap();
         drop(f);
 
-        // Wait for inotify to trigger (up to 2 seconds)
+        // Wait for watcher to trigger (up to 2 seconds)
         for _ in 0..20 {
             thread::sleep(Duration::from_millis(100));
             if clone.take_changed() {

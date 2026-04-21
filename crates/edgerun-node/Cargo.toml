@@ -35,9 +35,7 @@ android-hardware = [
 all-hardware = [
     "hardware",
     # GPU / display
-    "dep:edgerun-gpu",
     "dep:edgerun-linux-gpu",
-    "dep:edgerun-display",
     "dep:edgerun-drm-display",
     # Input / biometrics
     "dep:edgerun-fingerprint",
@@ -109,9 +107,7 @@ edgerun-speaker = { path = "../edgerun-speaker", optional = true }
 edgerun-audio-liveliness = { path = "../edgerun-audio-liveliness", optional = true }
 
 # GPU / display
-edgerun-gpu = { workspace = true, optional = true }
 edgerun-linux-gpu = { path = "../edgerun-linux-gpu", optional = true }
-edgerun-display = { workspace = true, optional = true }
 edgerun-drm-display = { path = "../edgerun-drm-display", optional = true }
 
 # Input / biometrics

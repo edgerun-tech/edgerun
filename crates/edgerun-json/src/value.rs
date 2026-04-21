@@ -29,6 +29,8 @@ use alloc::borrow::ToOwned;
 use alloc::string::ToString;
 
 #[cfg(not(feature = "std"))]
+use alloc::format;
+#[cfg(not(feature = "std"))]
 use alloc::string::String;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
@@ -581,6 +583,7 @@ where
     }
 }
 
+#[cfg(feature = "std")]
 impl<K, V> From<std::collections::HashMap<K, V>> for JsonValue
 where
     K: Into<String> + Eq + std::hash::Hash,
@@ -596,6 +599,7 @@ where
     }
 }
 
+#[cfg(feature = "std")]
 impl<K, V> From<std::collections::BTreeMap<K, V>> for JsonValue
 where
     K: Into<String> + Ord,

@@ -15,7 +15,7 @@ syn = { version = "2", features = ["full", "parsing", "extra-traits", "printing"
 proc-macro2 = "1"
 quote = "1"
 prettyplease = "0.2"
-clap = { version = "4", features = ["derive"] }
+edgerun-clap = { path = "../edgerun-clap" }
 edgerun-json = { workspace = true }
 
 [lints]
