@@ -195,6 +195,43 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 std::process::exit(1);
             }
         }
+        "encrypted" => {
+            let key_path = signer_config
+                .encrypted_key_path
+                .as_ref()
+                .expect("encrypted signer requires encrypted_key_path");
+            let passphrase_env = signer_config
+                .passphrase_env
+                .as_deref()
+                .unwrap_or("EDGERUN_KEY_PASSPHRASE");
+
+            let passphrase = std::env::var(passphrase_env).unwrap_or_else(|_| {
+                eprintln!(
+                    "error: encrypted signer requires the passphrase env var '{}' to be set.",
+                    passphrase_env
+                );
+                eprintln!("Set it with: export {}='your-passphrase'", passphrase_env);
+                std::process::exit(1);
+            });
+
+            let encrypted_data = std::fs::read(key_path).unwrap_or_else(|e| {
+                eprintln!(
+                    "error: failed to read encrypted key file '{}': {}",
+                    key_path, e
+                );
+                std::process::exit(1);
+            });
+
+            let signing_key = edgerun_crypto::decrypt_signing_key(&encrypted_data, &passphrase).unwrap_or_else(|e| {
+                eprintln!(
+                    "error: failed to decrypt key with passphrase from '{}' (wrong passphrase?)",
+                    passphrase_env
+                );
+                std::process::exit(1);
+            });
+
+            Arc::new(SyncSoftwareSigner::new(signing_key))
+        }
         other => {
             eprintln!("error: unknown signer type: {}", other);
             std::process::exit(1);

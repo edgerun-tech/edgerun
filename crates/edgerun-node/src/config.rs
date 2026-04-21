@@ -16,6 +16,8 @@ pub struct SignerConfig {
     pub private_key_hex: Option<String>,
     pub handle: Option<String>,
     pub slot: Option<String>,
+    pub encrypted_key_path: Option<String>,
+    pub passphrase_env: Option<String>,
 }
 
 pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
@@ -35,6 +37,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
     let mut private_key_hex = Option::<String>::None;
     let mut handle = Option::<String>::None;
     let mut slot = Option::<String>::None;
+    let mut encrypted_key_path = Option::<String>::None;
+    let mut passphrase_env = Option::<String>::None;
 
     for line in yaml.lines() {
         let trimmed = line.trim();
@@ -58,6 +62,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
                     "private_key_hex" => private_key_hex = Some(unquote(&val.1)),
                     "handle" => handle = Some(unquote(&val.1)),
                     "slot" => slot = Some(unquote(&val.1)),
+                    "encrypted_key_path" => encrypted_key_path = Some(unquote(&val.1)),
+                    "passphrase_env" => passphrase_env = Some(unquote(&val.1)),
                     _ => {}
                 }
             }
@@ -83,6 +89,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
             private_key_hex,
             handle,
             slot,
+            encrypted_key_path,
+            passphrase_env,
         });
     }
 

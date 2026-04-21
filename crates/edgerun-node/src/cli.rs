@@ -23,7 +23,7 @@ use crate::config::NodeConfig;
 use crate::config::parse_config;
 use crate::signer::load_signer_from_config;
 use crate::daemon::cmd_run;
-use crate::init_cmd::cmd_init;
+use crate::init_cmd::{cmd_init, cmd_init_encrypted};
 use crate::status_cmd::cmd_status;
 
 /// Parsed CLI arguments.
@@ -32,6 +32,12 @@ pub enum Command {
         config: PathBuf,
         name: Option<String>,
         software: bool,
+    },
+    InitEncrypted {
+        config: PathBuf,
+        key_file: PathBuf,
+        name: Option<String>,
+        passphrase: Option<String>,
     },
     Run {
         config: PathBuf,
@@ -73,6 +79,27 @@ pub fn parse_args() -> Result<Command, String> {
                 i += 1;
             }
             Ok(Command::Init { config, name, software })
+        }
+        "init-encrypted" => {
+            let mut config = PathBuf::from("node.yaml");
+            let mut key_file = PathBuf::from("node.key.enc");
+            let mut name = None;
+            let mut passphrase = None;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--config" => { i += 1; config = PathBuf::from(&args[i]); }
+                    "--key-file" => { i += 1; key_file = PathBuf::from(&args[i]); }
+                    "--name" => { i += 1; name = Some(args[i].clone()); }
+                    "--passphrase" => { i += 1; passphrase = Some(args[i].clone()); }
+                    "--help" | "-h" => {
+                        return Err("Usage: edgerund init-encrypted [--config path] [--key-file path] [--name name] [--passphrase phrase]".into());
+                    }
+                    other => return Err(format!("unknown option: {}", other)),
+                }
+                i += 1;
+            }
+            Ok(Command::InitEncrypted { config, key_file, name, passphrase })
         }
         "run" => {
             let mut config = PathBuf::from("node.yaml");
@@ -130,6 +157,9 @@ pub fn main() {
     match cmd {
         Command::Init { config, name, software } => {
             cmd_init(&config, name, software);
+        }
+        Command::InitEncrypted { config, key_file, name, passphrase } => {
+            cmd_init_encrypted(&config, &key_file, name, passphrase);
         }
         Command::Run { config, listen, health_port, log_level, init_mode } => {
             // Initialize structured logging

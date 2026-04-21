@@ -205,6 +205,83 @@ pub fn aes256_gcm_decrypt(key: &[u8; 32], nonce: &[u8; 12], ciphertext_and_tag: 
 }
 
 // ---------------------------------------------------------------------------
+// Encrypted key file utilities
+// ---------------------------------------------------------------------------
+
+const ENCRYPTED_KEY_MAGIC: &[u8; 4] = b"EDG1";
+const ENCRYPTED_KEY_VERSION: u8 = 1;
+const ENCRYPTED_KEY_SALT_LEN: usize = 16;
+const ENCRYPTED_KEY_NONCE_LEN: usize = 12;
+const PBKDF2_ITERATIONS: u32 = 100_000;
+
+pub fn encrypt_signing_key(key: &p256::ecdsa::SigningKey, passphrase: &str) -> Vec<u8> {
+    use hmac::Mac;
+    use pbkdf2::pbkdf2_hmac_array;
+    use aes_gcm::{aead::Aead, KeyInit, Nonce};
+
+    let mut salt = [0u8; ENCRYPTED_KEY_SALT_LEN];
+    getrandom::fill(&mut salt).expect("random generation failed");
+
+    let mut nonce = [0u8; ENCRYPTED_KEY_NONCE_LEN];
+    getrandom::fill(&mut nonce).expect("random generation failed");
+
+    let derived_key: [u8; 32] = pbkdf2_hmac_array::<sha2::Sha256, 32>(passphrase.as_bytes(), &salt, PBKDF2_ITERATIONS);
+
+    let cipher = Aes256Gcm::new_from_slice(&derived_key).expect("valid AES-256 key");
+    let nonce = Nonce::from(nonce);
+    let key_bytes = key.to_bytes();
+    let ciphertext = cipher.encrypt(&nonce, key_bytes.as_ref()).expect("encryption ok");
+
+    let mut result = Vec::with_capacity(4 + 1 + ENCRYPTED_KEY_SALT_LEN + ENCRYPTED_KEY_NONCE_LEN + ciphertext.len());
+    result.extend_from_slice(ENCRYPTED_KEY_MAGIC);
+    result.push(ENCRYPTED_KEY_VERSION);
+    result.extend_from_slice(&salt);
+    result.extend_from_slice(&nonce);
+    result.extend_from_slice(&ciphertext);
+    result
+}
+
+pub fn decrypt_signing_key(encrypted_data: &[u8], passphrase: &str) -> Result<p256::ecdsa::SigningKey, CryptoError> {
+    use hmac::Mac;
+    use pbkdf2::pbkdf2_hmac_array;
+    use aes_gcm::{aead::Aead, KeyInit, Nonce};
+
+    if encrypted_data.len() < 4 + 1 + ENCRYPTED_KEY_SALT_LEN + ENCRYPTED_KEY_NONCE_LEN + 16 {
+        return Err(CryptoError::DecryptionFailed);
+    }
+
+    let magic = &encrypted_data[0..4];
+    if magic != ENCRYPTED_KEY_MAGIC {
+        return Err(CryptoError::DecryptionFailed);
+    }
+
+    let version = encrypted_data[4];
+    if version != ENCRYPTED_KEY_VERSION {
+        return Err(CryptoError::DecryptionFailed);
+    }
+
+    let salt = &encrypted_data[5..5 + ENCRYPTED_KEY_SALT_LEN];
+    let nonce = &encrypted_data[5 + ENCRYPTED_KEY_SALT_LEN..5 + ENCRYPTED_KEY_SALT_LEN + ENCRYPTED_KEY_NONCE_LEN];
+    let ciphertext = &encrypted_data[5 + ENCRYPTED_KEY_SALT_LEN + ENCRYPTED_KEY_NONCE_LEN..];
+
+    let derived_key: [u8; 32] = pbkdf2_hmac_array::<sha2::Sha256, 32>(passphrase.as_bytes(), salt, PBKDF2_ITERATIONS);
+
+    let cipher = Aes256Gcm::new_from_slice(&derived_key).map_err(|_| CryptoError::DecryptionFailed)?;
+    let mut nonce_arr = [0u8; 12];
+    nonce_arr.copy_from_slice(nonce);
+    let nonce = Nonce::from(nonce_arr);
+    let plaintext = cipher.decrypt(&nonce, ciphertext).map_err(|_| CryptoError::DecryptionFailed)?;
+
+    if plaintext.len() != 32 {
+        return Err(CryptoError::DecryptionFailed);
+    }
+
+    let mut key_bytes = [0u8; 32];
+    key_bytes.copy_from_slice(&plaintext);
+    p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).map_err(|_| CryptoError::DecryptionFailed)
+}
+
+// ---------------------------------------------------------------------------
 // PEM / DER encoding utilities
 // ---------------------------------------------------------------------------
 

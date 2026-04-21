@@ -2,6 +2,7 @@ use edgerun_hardware_signing::NodeID;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+use edgerun_crypto::{Aead, KeyInit};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -96,7 +97,9 @@ impl MeshSession {
         nonce_bytes[4..].copy_from_slice(&self.nonce_counter.to_be_bytes());
         self.nonce_counter = self.nonce_counter.wrapping_add(1);
 
-        let ciphertext = self.cipher.encrypt(&nonce_bytes, plaintext).expect("AES-GCM encrypt failed");
+        use edgerun_crypto::Nonce;
+        let nonce = Nonce::from(nonce_bytes);
+        let ciphertext = self.cipher.encrypt(&nonce, plaintext).expect("AES-GCM encrypt failed");
 
         let mut out = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
         out.extend_from_slice(&nonce_bytes);
@@ -129,8 +132,10 @@ impl MeshSession {
         let nonce_arr: [u8; 12] = nonce_bytes.try_into().unwrap();
         let payload = &ciphertext[NONCE_SIZE..];
 
+        use edgerun_crypto::Nonce;
+        let nonce = Nonce::from(nonce_arr);
         self.cipher
-            .decrypt(&nonce_arr, payload)
+            .decrypt(&nonce, payload)
             .map_err(|_| SessionError::DecryptionFailed)
     }
 

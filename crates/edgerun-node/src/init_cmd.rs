@@ -221,6 +221,89 @@ pub fn detect_yubikey_device() -> Result<edgerun_yubikey::LinuxUsbYubiKeyInfo, S
         .ok_or_else(|| "no YubiKey devices found on USB bus".into())
 }
 
+pub fn cmd_init_encrypted(path: &PathBuf, key_path: &PathBuf, name: Option<String>, passphrase: Option<String>) {
+    let passphrase = passphrase.unwrap_or_else(|| {
+        eprintln!("error: --passphrase is required for encrypted key generation");
+        eprintln!("Usage: edgerund init-encrypted --config <path> --key-file <path> --passphrase <passphrase>");
+        std::process::exit(1);
+    });
+
+    if passphrase.len() < 8 {
+        eprintln!("error: passphrase must be at least 8 characters");
+        std::process::exit(1);
+    }
+
+    eprintln!("Generating ECDSA P-256 signing key...");
+    let mut key_bytes = [0u8; 32];
+    edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
+    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).unwrap_or_else(|e| {
+        eprintln!("error: failed to create signing key: {}", e);
+        std::process::exit(1);
+    });
+
+    let verifying_key = signing_key.verifying_key();
+    let encoded = verifying_key.to_encoded_point(false);
+    let mut node_id_bytes = [0u8; 64];
+    node_id_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+    let node_id = NodeID(node_id_bytes);
+
+    eprintln!("Encrypting key with AES-256-GCM (PBKDF2 100k iterations)...");
+    let encrypted_data = edgerun_crypto::encrypt_signing_key(&signing_key, &passphrase);
+
+    eprintln!("Writing encrypted key to: {}", key_path.display());
+    std::fs::write(key_path, &encrypted_data).unwrap_or_else(|e| {
+        eprintln!("error: failed to write encrypted key file: {}", e);
+        std::process::exit(1);
+    });
+
+    let signer_block = format!(
+        r#"signer:
+  type: "encrypted"
+  public_key_hex: "{node_id_hex}"
+  encrypted_key_path: "{key_path_str}"
+  passphrase_env: "EDGERUN_KEY_PASSPHRASE"
+"#,
+        node_id_hex = node_id.to_hex(),
+        key_path_str = key_path.display(),
+    );
+
+    let node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
+    let stream_id = format!("stream-{}", node_id.short());
+
+    let config_yaml = format!(
+        r#"# edgerun Node Configuration
+stream_id: "{stream_id}"
+name: "{node_name}"
+controllers: []
+trust_nodes: []
+initial_grants: []
+{signer_block}metadata:
+  environment: "production"
+"#
+    );
+
+    fs::write(path, &config_yaml).unwrap_or_else(|e| {
+        eprintln!("error: failed to write config to {}: {}", path.display(), e);
+        std::process::exit(1);
+    });
+
+    println!();
+    println!("Node identity generated:");
+    println!("  NodeID:     {}", node_id.to_hex());
+    println!("  Short ID:   {}", node_id.short());
+    println!("  Stream ID:  {}", stream_id);
+    println!("  Name:       {}", node_name);
+    println!("  Signer:     encrypted (AES-256-GCM + PBKDF2)");
+    println!("  Key file:   {}", key_path.display());
+    println!("  Config:     {}", path.display());
+    println!();
+    println!("To start the node, set the passphrase and run:");
+    println!("  export EDGERUN_KEY_PASSPHRASE='{}'", passphrase);
+    println!("  edgerund run --config {} --listen 0.0.0.0:8080", path.display());
+    println!();
+    println!("IMPORTANT: Keep the key file safe. Without the passphrase, the key cannot be recovered.");
+}
+
 /// Scans TPM persistent handles to find the first unused one.
 pub fn find_available_tpm_handle(start: u32, end: u32) -> Result<u32, String> {
     let mut tpm = edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
