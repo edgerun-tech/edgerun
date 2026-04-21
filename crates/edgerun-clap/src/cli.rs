@@ -138,17 +138,6 @@ impl ArgMatches {
     }
 }
 
-pub struct Parser;
-
-#[cfg(feature = "std")]
-impl Parser {
-    pub fn parse<T: FromArgMatches>() -> T {
-        let cmd = T::command();
-        let matches = cmd.get_matches();
-        T::from(&matches)
-    }
-}
-
 pub trait FromArgMatches {
     fn command() -> Command;
     fn from(matches: &ArgMatches) -> Self;
@@ -162,4 +151,17 @@ impl ArgGroup {
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into() }
     }
+}
+
+pub trait Parser: Sized {
+    fn command() -> Command;
+    fn parse() -> Self {
+        let matches = Self::command().get_matches();
+        Self::from(&matches)
+    }
+    fn from(matches: &ArgMatches) -> Self;
+}
+
+pub trait Subcommand: Sized {
+    fn name() -> &'static str;
 }

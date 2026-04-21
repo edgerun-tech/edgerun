@@ -56,16 +56,52 @@
 use std::path::PathBuf;
 use std::process;
 
-use clap::{Parser, Subcommand};
+use edgerun_clap::Parser;
 
-/// edgerun-net — Unified DNS + DHCP server
-#[derive(Parser, Debug)]
-#[command(name = "edgerun-net")]
-#[command(about = "One binary replaces dnsmasq + BIND + CoreDNS + ISC DHCP + Kea")]
-#[command(version)]
 struct Cli {
-    #[command(subcommand)]
     command: Commands,
+}
+
+enum Commands {
+    Serve { config: PathBuf, hot_reload: bool, foreground: bool },
+    Validate { config: PathBuf },
+    ImportDnsmasq { input: PathBuf, output: Option<PathBuf> },
+    ImportCorefile { input: PathBuf, output: Option<PathBuf> },
+}
+
+impl Parser for Cli {
+    fn command() -> edgerun_clap::cli::Command {
+        edgerun_clap::cli::Command::new("edgerun-net")
+            .about("One binary replaces dnsmasq + BIND + CoreDNS + ISC DHCP + Kea")
+    }
+
+    fn from(matches: &edgerun_clap::cli::ArgMatches) -> Self {
+        let sub = matches.positional.first().cloned().unwrap_or_default();
+        let command = match sub.as_str() {
+            "serve" => Commands::Serve {
+                config: matches.get_one::<PathBuf>("config").unwrap_or(PathBuf::from("/etc/edgerun/net.yaml")),
+                hot_reload: matches.contains_id("hot-reload"),
+                foreground: true,
+            },
+            "validate" => Commands::Validate {
+                config: matches.get_one::<PathBuf>("config").unwrap_or(PathBuf::new()),
+            },
+            "import-dnsmasq" => Commands::ImportDnsmasq {
+                input: matches.get_one::<PathBuf>("input").unwrap_or(PathBuf::new()),
+                output: matches.get_one::<PathBuf>("output"),
+            },
+            "import-corefile" => Commands::ImportCorefile {
+                input: matches.get_one::<PathBuf>("input").unwrap_or(PathBuf::new()),
+                output: matches.get_one::<PathBuf>("output"),
+            },
+            _ => Commands::Serve {
+                config: PathBuf::from("/etc/edgerun/net.yaml"),
+                hot_reload: false,
+                foreground: true,
+            },
+        };
+        Cli { command }
+    }
 }
 
 #[derive(Subcommand, Debug)]

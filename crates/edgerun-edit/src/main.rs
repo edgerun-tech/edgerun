@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use edgerun_clap::{Arg, Command, FromArgMatches, Parser};
+use edgerun_clap::{Arg, Command, Parser};
 use edgerun_edit::start_server;
 
 struct Cli {
@@ -15,7 +15,7 @@ struct Cli {
     host: String,
 }
 
-impl FromArgMatches for Cli {
+impl Parser for Cli {
     fn command() -> Command {
         Command::new("edgerun-edit")
             .about("AST-level Rust code editor HTTP server")
@@ -32,7 +32,7 @@ impl FromArgMatches for Cli {
 }
 
 fn main() {
-    let cli = Parser::parse::<Cli>();
+    let cli = Cli::parse();
     let addr = format!("{}:{}", cli.host, cli.port);
     let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {

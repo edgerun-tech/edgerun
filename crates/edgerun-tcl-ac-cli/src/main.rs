@@ -14,63 +14,71 @@ struct SavedState {
     char_handle: Option<u16>,
 }
 
-#[derive(Parser)]
-#[command(name = "tcl-ac", about = "TCL Air Conditioner Control CLI")]
 enum Command {
-    Scan {
-        #[arg(short, long, help = "Timeout in seconds")]
-        timeout: Option<u8>,
-    },
-    Connect {
-        #[arg(help = "Device MAC address (e.g. AA:BB:CC:DD:EE:FF)")]
-        address: String,
-    },
-    Pair {
-        #[arg(help = "Device MAC address (e.g. AA:BB:CC:DD:EE:FF)")]
-        address: String,
-    },
+    Scan { timeout: Option<u8> },
+    Connect { address: String },
+    Pair { address: String },
     Status,
-    Power {
-        #[arg(long = "on", help = "Turn on")]
-        power_on: bool,
-        #[arg(long = "off", help = "Turn off")]
-        power_off: bool,
-    },
-    Temp {
-        #[arg(value_name = "TEMP", help = "Temperature (16-31)")]
-        temperature: i8,
-    },
-    Mode {
-        #[arg(value_name = "MODE", help = "cool|heat|auto|dry|fan|eco")]
-        mode: String,
-    },
-    Fan {
-        #[arg(value_name = "SPEED", help = "auto|low|medium|high|turbo|quiet")]
-        speed: String,
-    },
-    Swing {
-        #[arg(long = "on", help = "Enable swing")]
-        swing_on: bool,
-        #[arg(long = "off", help = "Disable swing")]
-        swing_off: bool,
-    },
-    Eco {
-        #[arg(long = "on", help = "Enable eco mode")]
-        eco_on: bool,
-        #[arg(long = "off", help = "Disable eco mode")]
-        eco_off: bool,
-    },
-    Full {
-        #[arg(long, help = "Power state")]
-        power: Option<bool>,
-        #[arg(long, help = "Temperature (16-31)")]
-        temp: Option<i8>,
-        #[arg(long, help = "Mode: cool|heat|auto|dry|fan|eco")]
-        mode: Option<String>,
-        #[arg(long, help = "Fan speed: auto|low|medium|high|turbo|quiet")]
-        fan: Option<String>,
-    },
+    Power { power_on: bool, power_off: bool },
+    Temp { temperature: i8 },
+    Mode { mode: String },
+    Fan { speed: String },
+    Swing { swing_on: bool, swing_off: bool },
+    Eco { eco_on: bool, eco_off: bool },
+    Full { power: Option<bool>, temp: Option<i8>, mode: Option<String>, fan: Option<String> },
     Disconnect,
+}
+
+impl Parser for Command {
+    fn command() -> edgerun_clap::cli::Command {
+        edgerun_clap::cli::Command::new("tcl-ac")
+            .about("TCL Air Conditioner Control CLI")
+    }
+
+    fn from(matches: &edgerun_clap::cli::ArgMatches) -> Self {
+        let sub = matches.positional.first().cloned().unwrap_or_default();
+        match sub.as_str() {
+            "scan" => Command::Scan {
+                timeout: matches.get_one::<u8>("timeout"),
+            },
+            "connect" => Command::Connect {
+                address: matches.get_one::<String>("address").unwrap_or_default(),
+            },
+            "pair" => Command::Pair {
+                address: matches.get_one::<String>("address").unwrap_or_default(),
+            },
+            "status" => Command::Status,
+            "power" => Command::Power {
+                power_on: matches.contains_id("on"),
+                power_off: matches.contains_id("off"),
+            },
+            "temp" => Command::Temp {
+                temperature: matches.get_one::<i8>("temperature").unwrap_or(25),
+            },
+            "mode" => Command::Mode {
+                mode: matches.get_one::<String>("mode").unwrap_or_default(),
+            },
+            "fan" => Command::Fan {
+                speed: matches.get_one::<String>("speed").unwrap_or_default(),
+            },
+            "swing" => Command::Swing {
+                swing_on: matches.contains_id("on"),
+                swing_off: matches.contains_id("off"),
+            },
+            "eco" => Command::Eco {
+                eco_on: matches.contains_id("on"),
+                eco_off: matches.contains_id("off"),
+            },
+            "full" => Command::Full {
+                power: matches.get_one::<bool>("power"),
+                temp: matches.get_one::<i8>("temp"),
+                mode: matches.get_one::<String>("mode"),
+                fan: matches.get_one::<String>("fan"),
+            },
+            "disconnect" => Command::Disconnect,
+            _ => Command::Status,
+        }
+    }
 }
 
 fn main() {

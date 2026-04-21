@@ -973,8 +973,18 @@ dependencies = [
 name = "edgerun-clap"
 version = "0.1.0"
 dependencies = [
+ "edgerun-clap-derive",
  "edgerun-json",
  "serde",
+]
+
+[[package]]
+name = "edgerun-clap-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1487,6 +1497,7 @@ dependencies = [
 name = "edgerun-net"
 version = "0.1.0"
 dependencies = [
+ "edgerun-clap",
  "edgerun-config",
  "edgerun-dhcpv6",
  "edgerun-dns",

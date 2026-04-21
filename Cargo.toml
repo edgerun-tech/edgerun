@@ -91,6 +91,7 @@ members = [
 "crates/edgerun-yubikey",
   "crates/edgerun-vfs",
   "crates/edgerun-clap",
+  "crates/edgerun-clap-derive",
 ]
 
 [workspace.package]

@@ -75,7 +75,7 @@ impl ConfigWatcher {
                 } else if path.exists() {
                     let _ = inotify.watches().add(path, WatchMask::MODIFY);
                     if let Some(parent) = path.parent() {
-                        let mask = WatchMask::CREATE | WatchMask::DELETE;
+                        let mask = WatchMask::new(WatchMask::CREATE.0 | WatchMask::DELETE.0);
                         let _ = inotify.watches().add(parent, mask);
                     }
                 }

@@ -1,0 +1,18 @@
+[package]
+name = "edgerun-clap-derive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Derive macros for edgerun-clap"
+
+[lib]
+proc_macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "parsing", "extra-traits", "printing"] }
+
+[lints]
+workspace = true
