@@ -10,6 +10,8 @@ use edgerun_json::Value;
 pub struct Command {
     name: String,
     about: Option<String>,
+    version: Option<String>,
+    author: Option<String>,
     args: Vec<Arg>,
     subcommands: Vec<Command>,
 }
@@ -19,6 +21,8 @@ impl Command {
         Self {
             name: name.into(),
             about: None,
+            version: None,
+            author: None,
             args: Vec::new(),
             subcommands: Vec::new(),
         }
@@ -26,6 +30,16 @@ impl Command {
 
     pub fn about(mut self, about: impl Into<String>) -> Self {
         self.about = Some(about.into());
+        self
+    }
+
+    pub fn version(mut self, version: impl Into<String>) -> Self {
+        self.version = Some(version.into());
+        self
+    }
+
+    pub fn author(mut self, author: impl Into<String>) -> Self {
+        self.author = Some(author.into());
         self
     }
 
@@ -50,8 +64,36 @@ impl Command {
                 let key = arg.trim_start_matches('-');
                 if let Some(a) = self.args.iter().find(|a| a.long.as_deref() == Some(key) || a.short.map(|s| s.to_string() == key).unwrap_or(false)) {
                     i += 1;
-                    if i < args.len() && !args[i].starts_with('-') {
-                        matches.map.insert(a.name.clone(), Value::String(args[i].clone()));
+                    if let Some(num) = a.num_args {
+                        let mut values = Vec::new();
+                        for _ in 0..num {
+                            if i < args.len() && !args[i].starts_with('-') {
+                                if let Some(delimiter) = a.value_delimiter {
+                                    values.extend(args[i].split(delimiter).map(String::from));
+                                } else {
+                                    values.push(args[i].clone());
+                                }
+                                i += 1;
+                            }
+                        }
+                        if !values.is_empty() {
+                            if values.len() == 1 {
+                                matches.map.insert(a.name.clone(), Value::String(values[0].clone()));
+                            } else {
+                                matches.map.insert(a.name.clone(), Value::Array(values.into_iter().map(Value::String).collect()));
+                            }
+                        }
+                    } else if i < args.len() && !args[i].starts_with('-') {
+                        if let Some(delimiter) = a.value_delimiter {
+                            let values: Vec<_> = args[i].split(delimiter).map(String::from).collect();
+                            if values.len() == 1 {
+                                matches.map.insert(a.name.clone(), Value::String(values[0].clone()));
+                            } else {
+                                matches.map.insert(a.name.clone(), Value::Array(values.into_iter().map(Value::String).collect()));
+                            }
+                        } else {
+                            matches.map.insert(a.name.clone(), Value::String(args[i].clone()));
+                        }
                         i += 1;
                     } else {
                         matches.map.insert(a.name.clone(), Value::Bool(true));
@@ -73,6 +115,9 @@ pub struct Arg {
     long: Option<String>,
     help: Option<String>,
     default_value: Option<String>,
+    num_args: Option<usize>,
+    value_delimiter: Option<char>,
+    is_subcommand: bool,
 }
 
 impl Arg {
@@ -83,6 +128,9 @@ impl Arg {
             long: None,
             help: None,
             default_value: None,
+            num_args: None,
+            value_delimiter: None,
+            is_subcommand: false,
         }
     }
 
@@ -103,6 +151,21 @@ impl Arg {
 
     pub fn default_value(mut self, default: impl Into<String>) -> Self {
         self.default_value = Some(default.into());
+        self
+    }
+
+    pub fn num_args(mut self, n: usize) -> Self {
+        self.num_args = Some(n);
+        self
+    }
+
+    pub fn value_delimiter(mut self, d: char) -> Self {
+        self.value_delimiter = Some(d);
+        self
+    }
+
+    pub fn subcommand(mut self) -> Self {
+        self.is_subcommand = true;
         self
     }
 }
@@ -129,6 +192,30 @@ impl ArgMatches {
             Value::String(s) => s.parse().ok(),
             Value::Number(n) => n.to_string().parse().ok(),
             Value::Bool(b) => if *b { Some(T::from_str("true").ok()?) } else { None },
+            _ => None,
+        })
+    }
+
+    pub fn get_many<T: core::str::FromStr>(&self, name: &str) -> Option<alloc::vec::Vec<T>>
+    where
+        T: core::str::FromStr,
+        <T as core::str::FromStr>::Err: core::fmt::Debug,
+    {
+        self.map.get(name).and_then(|v| match v {
+            Value::Array(arr) => {
+                let mut result = alloc::vec::Vec::new();
+                for item in arr {
+                    if let Value::String(s) = item {
+                        if let Ok(parsed) = s.parse::<T>() {
+                            result.push(parsed);
+                        }
+                    }
+                }
+                if result.is_empty() { None } else { Some(result) }
+            }
+            Value::String(s) => {
+                s.parse::<T>().ok().map(|v| alloc::vec![v])
+            }
             _ => None,
         })
     }
