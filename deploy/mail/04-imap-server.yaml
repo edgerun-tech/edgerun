@@ -1,0 +1,14 @@
+---
+apiVersion: edgerun.io/v1alpha1
+kind: ImapServer
+metadata:
+  name: mail
+  namespace: edgerun-mail
+spec:
+  hostname: mail.edgerun.tech
+  bind_address: "0.0.0.0:143"
+  imaps: true
+  maildir_root: /var/lib/edgerun/mail/maildirs
+  # TLS certificate from edgerun-storage credential
+  tls_cert_ref: ref+storage://mail/tls-cert
+  tls_key_ref: ref+storage://mail/tls-key

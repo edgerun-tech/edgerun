@@ -10,6 +10,9 @@ use crate::smtp::client::SmtpClient;
 use crate::server::read_line;
 use crate::smtp::types::MailEnvelope;
 
+#[cfg(feature = "dkim")]
+use edgerun_email_auth::sign::DkimSigner;
+
 // ===========================================================================
 // OutboundRelay
 // ===========================================================================
@@ -24,6 +27,8 @@ pub struct OutboundRelay {
     pub max_message_size: usize,
     /// Connection timeout for remote SMTP.
     pub connect_timeout: Duration,
+    #[cfg(feature = "dkim")]
+    pub dkim_signer: Option<DkimSigner>,
 }
 
 impl OutboundRelay {
@@ -33,7 +38,15 @@ impl OutboundRelay {
             dns_server: "8.8.8.8:53".to_string(),
             max_message_size: 35_882_577, // 34 MB
             connect_timeout: Duration::from_secs(30),
+            #[cfg(feature = "dkim")]
+            dkim_signer: None,
         }
+    }
+
+    #[cfg(feature = "dkim")]
+    pub fn with_dkim_signer(mut self, signer: DkimSigner) -> Self {
+        self.dkim_signer = Some(signer);
+        self
     }
 
     /// Attempt to deliver a message to a single recipient via their domain's MX.
@@ -134,8 +147,29 @@ impl OutboundRelay {
         client.rcpt_to(&format!("<{}>", recipient)).await
             .map_err(|e| format!("RCPT TO rejected: {}", e))?;
 
+        // DKIM sign the message if configured
+        let message_data = if let Some(ref signer) = self.dkim_signer {
+            match signer.sign(&envelope.data, &[]) {
+                Ok(signature) => {
+                    let mut signed = envelope.data.clone();
+                    if !signed.ends_with(b"\r\n") {
+                        signed.push(b'\r');
+                        signed.push(b'\n');
+                    }
+                    signed.extend(signature.as_bytes());
+                    signed
+                }
+                Err(e) => {
+                    edgerun_log::warn!("DKIM signing failed: {}, sending unsigned", e);
+                    envelope.data.clone()
+                }
+            }
+        } else {
+            envelope.data.clone()
+        };
+
         // DATA
-        client.data(&envelope.data).await
+        client.data(&message_data).await
             .map_err(|e| format!("DATA rejected: {}", e))?;
 
         // QUIT

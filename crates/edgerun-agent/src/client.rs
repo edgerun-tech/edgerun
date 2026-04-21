@@ -258,7 +258,7 @@ fn http_request_sync(base_url: &str, path: &str, body: &str) -> Result<String, S
                 }
                 continue;
             }
-            Ok(_) | Err(_) => break,
+            Err(_) => break,
         }
     }
 

@@ -99,6 +99,18 @@ impl DynamicTable {
         self.size
     }
 
+    /// Returns the maximum size of the dynamic table.
+    #[allow(dead_code)]
+    fn get_max_table_size(&self) -> usize {
+        self.max_size
+    }
+
+    /// Returns a vector of all headers in the dynamic table.
+    #[allow(dead_code)]
+    fn to_vec(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        self.table.iter().map(|(n, v)| (n.clone(), v.clone())).collect()
+    }
+
     /// Returns an `Iterator` through the headers stored in the `DynamicTable`.
     ///
     /// The iterator will yield elements of type `(&[u8], &[u8])`,

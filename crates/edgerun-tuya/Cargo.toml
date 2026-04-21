@@ -1,0 +1,21 @@
+[package]
+name = "edgerun-tuya"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-json = { path = "../edgerun-json", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[[bin]]
+name = "tuya-discover"
+path = "src/bin/tuya-discover.rs"
+
+[[bin]]
+name = "tuya-control"
+path = "src/bin/tuya-control.rs"
+
+[lints]
+workspace = true

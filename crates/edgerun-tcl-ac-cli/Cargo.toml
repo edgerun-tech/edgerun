@@ -1,0 +1,23 @@
+[package]
+name = "edgerun-tcl-ac-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "tcl-ac"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-tcl-ac = { path = "../edgerun-tcl-ac" }
+edgerun-matter = { path = "../edgerun-matter" }
+edgerun-bluetooth-gatt = { path = "../edgerun-bluetooth-gatt" }
+edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth" }
+edgerun-capabilities = { path = "../edgerun-capabilities" }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+edgerun-json = { path = "../edgerun-json", features = ["serde"] }
+
+[lints]
+workspace = true

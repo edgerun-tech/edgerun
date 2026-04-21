@@ -31,6 +31,12 @@ pub use capability_signature::{
     sign_invocation, sign_request, sign_grant, sign_result, sign_revocation,
     verify_invocation, verify_request, verify_grant, verify_result, verify_revocation,
 };
+pub use adapters::{
+    BluetoothConnectionRemoteAdapter, BluetoothRemoteAdapter,
+    CameraRemoteAdapter, PairedCameraRemoteAdapter,
+    InputRemoteAdapter, MicrophoneRemoteAdapter,
+    SpeakerRemoteAdapter, WifiControlRemoteAdapter, WifiRemoteAdapter,
+};
 
 #[cfg(test)]
 mod tests;

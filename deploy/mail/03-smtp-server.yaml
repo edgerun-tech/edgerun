@@ -1,0 +1,25 @@
+---
+apiVersion: edgerun.io/v1alpha1
+kind: SmtpServer
+metadata:
+  name: mail
+  namespace: edgerun-mail
+spec:
+  hostname: mail.edgerun.tech
+  bind_address: "0.0.0.0:25"
+  smtps: true
+  starttls: true
+  max_message_size: 35882577
+  local_domains:
+    - edgerun.tech
+  maildir_root: /var/lib/edgerun/mail/maildirs
+  relay_enabled: true
+  queue_dir: /var/lib/edgerun/mail/queue
+  dns_server: "127.0.0.1:53"
+  dkim_domain: edgerun.tech
+  dkim_selector: mail
+  # DKIM private key from edgerun-storage credential (namespace: mail, name: dkim-private-key)
+  dkim_key_ref: ref+storage://mail/dkim-private-key
+  # TLS certificate from edgerun-storage credential (namespace: mail, name: tls-cert)
+  tls_cert_ref: ref+storage://mail/tls-cert
+  tls_key_ref: ref+storage://mail/tls-key

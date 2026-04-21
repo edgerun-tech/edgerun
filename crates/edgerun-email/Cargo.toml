@@ -13,6 +13,7 @@ path = "src/bin/edgerun-mailq.rs"
 [features]
 default = []
 tls = ["dep:edgerun-tls"]
+dkim = ["dep:edgerun-email-auth"]
 
 [lints]
 workspace = true
@@ -21,7 +22,7 @@ workspace = true
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
-edgerun-email-auth = { path = "../edgerun-email-auth" }
+edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }
 edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-encoding = { path = "../edgerun-encoding" }

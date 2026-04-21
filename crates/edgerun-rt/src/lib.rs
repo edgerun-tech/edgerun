@@ -39,7 +39,7 @@ mod yield_now;
 mod join;
 pub use join::join_internal;
 mod select;
-pub use select::select_internal;
+pub use select::{select_internal, select_2, select_3, select_4, Select2Enum};
 mod cancellation;
 mod unix;
 mod unix_dgram;

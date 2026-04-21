@@ -567,6 +567,12 @@ pub struct SmtpServerSpec {
     /// Path to DKIM private key file.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dkim_key_path: Option<String>,
+    /// TLS certificate (PEM format).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_cert: Option<String>,
+    /// TLS private key (PEM format).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_key: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -587,6 +593,12 @@ pub struct ImapServerSpec {
     /// Maildir root for storing messages (should match SMTP).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub maildir_root: Option<String>,
+    /// TLS certificate (PEM format).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_cert: Option<String>,
+    /// TLS private key (PEM format).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_key: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

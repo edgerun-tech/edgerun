@@ -12,15 +12,15 @@ pub struct MailWebHandler {
 }
 
 struct MailApiHandler {
-    imap_host: String,
-    imap_port: u16,
+    _imap_host: String,
+    _imap_port: u16,
 }
 
 impl MailWebHandler {
     pub fn new(static_root: std::path::PathBuf, imap_host: String, imap_port: u16) -> Self {
         Self {
             static_handler: edgerun_http::StaticHandler::new(static_root),
-            api_handler: Arc::new(MailApiHandler { imap_host, imap_port }),
+            api_handler: Arc::new(MailApiHandler { _imap_host: imap_host, _imap_port: imap_port }),
         }
     }
 }
@@ -43,7 +43,7 @@ impl Handler for MailWebHandler {
     }
 }
 
-async fn handle_api(handler: &MailApiHandler, path: &str) -> Response {
+async fn handle_api(_handler: &MailApiHandler, path: &str) -> Response {
     match path {
         "login" => {
             Response::new(StatusCode::OK)

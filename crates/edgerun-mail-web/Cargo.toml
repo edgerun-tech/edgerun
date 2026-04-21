@@ -10,5 +10,3 @@ description = "Webmail frontend for edgerun email server"
 edgerun-http = { path = "../edgerun-http" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"

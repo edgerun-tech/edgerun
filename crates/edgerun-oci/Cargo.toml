@@ -9,7 +9,7 @@ description = "OCI container runtime and registry client — pull, push, login, 
 [dependencies]
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 edgerun-crypto.workspace = true
-edgerun-http = { path = "../edgerun-http", features = ["tls"] }
+edgerun-http = { path = "../edgerun-http" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }

@@ -18,7 +18,7 @@ ignore = "0.4"
 clap = { version = "4", features = ["derive"] }
 libc = "0.2"
 notify = "6"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "fs"] }
+edgerun-rt = { path = "../edgerun-rt" }
 
 [dev-dependencies]
 tempfile = "3"
@@ -29,7 +29,7 @@ name = "mount_ramfs"
 path = "src/bin/mount_ramfs.rs"
 
 [[bin]]
-name = "benchmark"
+name = "vfs-benchmark"
 path = "src/bin/benchmark.rs"
 
 [[bench]]

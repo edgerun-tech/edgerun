@@ -1,5 +1,5 @@
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
+    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 use edgerun_quectel_ec200a::DtaNetwork;
@@ -28,4 +28,68 @@ impl CapabilityProvider for DtaNetworkInterface {
             Vec::new(),
         )
     }
+}
+
+/// Network interface kinds
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NetworkInterfaceKind {
+    Ethernet,
+    Wireless,
+    Loopback,
+    Bridge,
+    Virtual,
+    Vlan,
+    Tunnel,
+    Unknown,
+}
+
+/// Network link states
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NetworkLinkState {
+    Up,
+    Down,
+    Dormant,
+    LowerLayerDown,
+    NotPresent,
+    Testing,
+    Unknown,
+}
+
+/// Network admin states
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NetworkAdminState {
+    Up,
+    Down,
+    Unknown,
+}
+
+/// Network interface information
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NetworkInterfaceInfo {
+    pub provider: String,
+    pub interface_name: String,
+    pub kind: NetworkInterfaceKind,
+    pub mac_address: Option<String>,
+    pub mtu: Option<u32>,
+    pub admin_state: NetworkAdminState,
+    pub link_state: NetworkLinkState,
+}
+
+/// Network interface controller trait
+pub trait NetworkInterfaceController: CapabilityProvider {
+    fn interface_info(&self) -> Result<NetworkInterfaceInfo, CapabilityError>;
+    fn set_admin_state(&self, state: NetworkAdminState) -> Result<NetworkAdminState, CapabilityError>;
+}
+
+/// Create a default network interface descriptor
+pub fn default_network_interface_descriptor(provider: &str, interface_name: &str) -> CapabilityDescriptor {
+    capability_descriptor(
+        provider,
+        interface_name,
+        CapabilityRole::Communication,
+        &[CapabilityModality::Radio],
+        &[CapabilityEventKind::State],
+        &[CapabilityOperation::Query, CapabilityOperation::Control],
+        Vec::new(),
+    )
 }

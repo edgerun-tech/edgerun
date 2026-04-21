@@ -1,0 +1,95 @@
+---
+apiVersion: edgerun.io/v1alpha1
+kind: DnsZone
+metadata:
+  name: edgerun.tech
+  namespace: edgerun-dns
+spec:
+  origin: edgerun.tech
+  soa:
+    mname: ns1.edgerun.tech
+    rname: admin.edgerun.tech
+    serial: 2025041803
+    refresh: 3600
+    retry: 900
+    expire: 604800
+    minimum: 86400
+  records:
+    # NS records for delegation
+    - name: "@"
+      type: NS
+      value: ns1.edgerun.tech
+      ttl: 86400
+    - name: "@"
+      type: NS
+      value: ns2.edgerun.tech
+      ttl: 86400
+    # A records
+    - name: "@"
+      type: A
+      value: 172.245.67.49
+      ttl: 3600
+    - name: mail
+      type: A
+      value: 172.245.67.49
+      ttl: 3600
+    - name: ns1
+      type: A
+      value: 172.245.67.49
+      ttl: 3600
+    - name: ns2
+      type: A
+      value: 172.245.67.49
+      ttl: 3600
+    # MX record - mail server priority 0
+    - name: "@"
+      type: MX
+      value: "0 mail.edgerun.tech"
+      ttl: 3600
+    # SPF - only this server can send email
+    - name: "@"
+      type: TXT
+      value: "v=spf1 mx -all"
+      ttl: 3600
+    # DMARC - quarantine failures
+    - name: _dmarc
+      type: TXT
+      value: "v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@edgerun.tech"
+      ttl: 3600
+
+---
+apiVersion: edgerun.io/v1alpha1
+kind: DnsZone
+metadata:
+  name: nodes.edgerun.tech
+  namespace: edgerun-dns
+spec:
+  origin: nodes.edgerun.tech
+  soa:
+    mname: ns1.edgerun.tech
+    rname: admin.edgerun.tech
+    serial: 2025041801
+    refresh: 3600
+    retry: 900
+    expire: 604800
+    minimum: 86400
+  records:
+    # NS records - nodes domain points to same mail server
+    - name: "@"
+      type: NS
+      value: ns1.edgerun.tech
+      ttl: 86400
+    - name: "@"
+      type: NS
+      value: ns2.edgerun.tech
+      ttl: 86400
+    # MX for node addresses
+    - name: "@"
+      type: MX
+      value: "0 mail.edgerun.tech"
+      ttl: 3600
+    # SPF - node addresses must sign (no direct SMTP)
+    - name: "@"
+      type: TXT
+      value: "v=spf1 -all"
+      ttl: 3600

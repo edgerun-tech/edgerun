@@ -149,6 +149,9 @@ mod imap_config {
         /// If set, uses MaildirImapStore for persistent local mailbox storage.
         /// Must point to the same Maildir root that SMTP writes to.
         pub maildir_root: Option<PathBuf>,
+        /// TLS certificate and key for IMAPS/STARTTLS.
+        #[cfg(feature = "tls")]
+        pub tls_cert: Option<edgerun_tls::CertificateAndKey>,
     }
 
     impl Default for ImapConfig {
@@ -158,6 +161,8 @@ mod imap_config {
                 domain_name: "edgerun.mail".to_string(),
                 imaps: false,
                 maildir_root: None,
+                #[cfg(feature = "tls")]
+                tls_cert: None,
             }
         }
     }
@@ -175,6 +180,7 @@ mod smtp_config {
         pub domain_name: String,
         pub max_message_size: usize,
         pub smtps: bool,
+        pub starttls: bool,
         /// Local domains for mail delivery routing.
         pub local_domains: Vec<String>,
         /// If set, enables outbound relay with persistent queue at this path.
@@ -183,6 +189,15 @@ mod smtp_config {
         pub relay_dns_server: String,
         /// If set, uses MaildirStore for persistent local mailbox storage.
         pub maildir_root: Option<PathBuf>,
+        /// DKIM signing domain.
+        pub dkim_domain: Option<String>,
+        /// DKIM selector.
+        pub dkim_selector: Option<String>,
+        /// Path to DKIM private key.
+        pub dkim_key_path: Option<PathBuf>,
+        /// TLS certificate and key for SMTPS/STARTTLS.
+        #[cfg(feature = "tls")]
+        pub tls_cert: Option<edgerun_tls::CertificateAndKey>,
     }
 
     impl Default for SmtpConfig {
@@ -192,10 +207,16 @@ mod smtp_config {
                 domain_name: "edgerun.mail".to_string(),
                 max_message_size: 35_882_577,
                 smtps: false,
+                starttls: true,
                 local_domains: vec!["edgerun.mail".to_string()],
                 queue_data_root: None,
                 relay_dns_server: "8.8.8.8:53".to_string(),
                 maildir_root: None,
+                dkim_domain: None,
+                dkim_selector: None,
+                dkim_key_path: None,
+                #[cfg(feature = "tls")]
+                tls_cert: None,
             }
         }
     }
@@ -439,6 +460,8 @@ impl Server {
                 bind_addr: config.bind_addr,
                 domain_name: config.domain_name,
                 imaps: config.imaps,
+                #[cfg(feature = "tls")]
+                tls_cert: config.tls_cert,
                 ..Default::default()
             };
             let mut srv = if let Some(ref maildir_root) = config.maildir_root {
@@ -463,9 +486,12 @@ impl Server {
                     ..Default::default()
                 },
                 smtps: config.smtps,
+                starttls: config.starttls,
                 local_domains: config.local_domains,
                 queue_data_root: config.queue_data_root,
                 relay_dns_server: config.relay_dns_server,
+                #[cfg(feature = "tls")]
+                tls_cert: config.tls_cert,
                 ..Default::default()
             };
 

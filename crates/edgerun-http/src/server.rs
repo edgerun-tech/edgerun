@@ -784,6 +784,7 @@ let mut frame_count: u64 = 0;
             server.cleanup_closed_streams();
         }
 
+        eprintln!("[DEBUG] Waiting for frame...");
         let frame = match timeout(idle_timeout, read_frame(&mut writer, server.max_frame_size)).await {
             Ok(Ok(Ok(f))) => {
                 f
@@ -799,6 +800,7 @@ let mut frame_count: u64 = 0;
             }
         };
 
+        eprintln!("[DEBUG] Received frame: type={}, stream={}", frame.frame_type as u8, frame.stream_id);
         if frame.frame_type == FrameType::Settings {
             let is_ack = frame.flags & 0x1 != 0;
             eprintln!("[DEBUG] Received SETTINGS: length={}, flags={:#x}, is_ack={}", frame.payload.len(), frame.flags, is_ack);
@@ -871,7 +873,10 @@ let mut frame_count: u64 = 0;
                     } else {
                         // DATA arrived with END_STREAM but no headers — discard body
                         pending_body_data.remove(&sid);
+                        action = FrameAction::None;
                     }
+                } else {
+                    action = FrameAction::None;
                 }
                 FrameAction::None
             }

@@ -2,6 +2,7 @@
 
 use std::io;
 use std::path::Path;
+use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rsa::{
@@ -13,12 +14,10 @@ use rsa::{
 use edgerun_crypto::OsRng;
 use sha2::{Digest, Sha256};
 
-const DEFAULT_SELECTOR: &str = "mail";
-
 pub struct DkimSigner {
     selector: String,
     domain: String,
-    private_key: RsaPrivateKey,
+    private_key: Arc<RsaPrivateKey>,
 }
 
 impl DkimSigner {
@@ -26,7 +25,7 @@ impl DkimSigner {
         Self {
             selector,
             domain,
-            private_key,
+            private_key: Arc::new(private_key),
         }
     }
 
@@ -64,7 +63,7 @@ impl DkimSigner {
         let public_key = self.private_key.to_public_key();
         let public_key_der = public_key.to_pkcs1_der()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("failed to encode public key: {}", e)))
-            .unwrap(); // unwrap safe for in-memory key
+            .unwrap();
 
         let base64_key = BASE64.encode(public_key_der.as_bytes());
 
@@ -85,48 +84,71 @@ impl DkimSigner {
     pub fn sign(&self, headers: &[u8], body: &[u8]) -> io::Result<String> {
         let headers_str = String::from_utf8_lossy(headers);
 
-        let canonical_headers = canonicalize_headers(headers_str.as_bytes())?;
         let canonical_body = canonicalize_body(body)?;
-
         let body_hash = Sha256::digest(&canonical_body);
         let body_hash_b64 = BASE64.encode(body_hash);
 
         let mut signed_header_names = Vec::new();
         let unfolded = unfold_headers(&headers_str);
         for line in unfolded.lines() {
-            if let Some(name) = line.split(':').next() {
-                let name_lower = name.to_lowercase();
+            if let Some(name) = line.split_once(':') {
+                let name_lower = name.0.to_lowercase();
                 if !signed_header_names.contains(&name_lower) {
                     signed_header_names.push(name_lower);
                 }
             }
         }
 
-        let signed_header_names_str = signed_header_names.join(" ");
-        let dkim_header = format_dkim_header(
-            &self.selector,
-            &self.domain,
-            &signed_header_names_str,
-            &body_hash_b64,
+        signed_header_names.push("dkim-signature".to_string());
+        let signed_header_names_str = signed_header_names.join(":");
+
+        let dkim_header = format!(
+            "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={}; h={}; bh={}; b=",
+            self.domain,
+            self.selector,
+            signed_header_names_str,
+            body_hash_b64
         );
 
-        let mut sign_data = canonical_headers.clone();
-        sign_data.extend(dkim_header.as_bytes());
+        let mut headers_with_dkim = headers_str.as_bytes().to_vec();
+        if !headers_with_dkim.ends_with(b"\r\n") {
+            headers_with_dkim.push(b'\r');
+            headers_with_dkim.push(b'\n');
+        }
+        headers_with_dkim.extend(dkim_header.as_bytes());
+        headers_with_dkim.push(b'\r');
+        headers_with_dkim.push(b'\n');
+
+        let canonical_headers = canonicalize_headers(headers_with_dkim.as_slice())?;
+
+        let mut sign_data = canonical_headers;
+        sign_data.extend(canonical_body);
 
         let hash = Sha256::digest(&sign_data);
-        let signing_key = rsa::pkcs1v15::SigningKey::<Sha256>::new(self.private_key.clone());
+        let signing_key = rsa::pkcs1v15::SigningKey::<Sha256>::new((*self.private_key).clone());
         let signature = rsa::signature::Signer::sign(&signing_key, &hash);
         let signature_b64 = BASE64.encode(signature.to_bytes());
 
         let final_header = format!(
-            "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={}; h={}; b={}",
+            "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={}; h={}; bh={}; b={}",
             self.domain,
             self.selector,
             signed_header_names_str,
+            body_hash_b64,
             signature_b64
         );
 
         Ok(final_header)
+    }
+}
+
+impl Clone for DkimSigner {
+    fn clone(&self) -> Self {
+        Self {
+            selector: self.selector.clone(),
+            domain: self.domain.clone(),
+            private_key: Arc::clone(&self.private_key),
+        }
     }
 }
 
@@ -208,11 +230,4 @@ fn unfold_headers(s: &str) -> String {
     }
 
     result
-}
-
-fn format_dkim_header(selector: &str, domain: &str, header_list: &str, body_hash: &str) -> String {
-    format!(
-        "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={}; h={}; bh={};\r\n",
-        domain, selector, header_list, body_hash
-    )
 }

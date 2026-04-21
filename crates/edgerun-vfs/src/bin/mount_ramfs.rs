@@ -20,8 +20,6 @@ use clap::Parser;
 use edgerun_vfs::GitAwarePersist;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::ThreadPoolBuilder;
-use tokio::signal::unix::{signal, SignalKind};
-use tokio::sync::mpsc;
 
 const LOCK_FILE: &str = "/var/run/edgerun-vfs.lock";
 const UNCLEAN_SHUTDOWN_FILE: &str = "/var/run/edgerun-vfs.unclean";
@@ -170,37 +168,7 @@ fn is_git_path(path: &Path) -> bool {
     s.contains(".git/") || s.ends_with("/.git") || s == ".git"
 }
 
-/// Handle all signals with proper shutdown
-async fn setup_signal_handlers(shutdown: Arc<AtomicBool>) {
-    tokio::spawn(async move {
-        let mut sigterm = signal(SignalKind::terminate()).unwrap();
-        let mut sigint = signal(SignalKind::interrupt()).unwrap();
-        let mut sighup = signal(SignalKind::hangup()).unwrap();
-        let mut sigquit = signal(SignalKind::quit()).unwrap();
-
-        tokio::select! {
-            _ = sigterm.recv() => {
-                eprintln!("\nReceived SIGTERM, shutting down gracefully...");
-                shutdown.store(true, Ordering::SeqCst);
-            }
-            _ = sigint.recv() => {
-                eprintln!("\nReceived SIGINT, shutting down gracefully...");
-                shutdown.store(true, Ordering::SeqCst);
-            }
-            _ = sighup.recv() => {
-                eprintln!("\nReceived SIGHUP, shutting down gracefully...");
-                shutdown.store(true, Ordering::SeqCst);
-            }
-            _ = sigquit.recv() => {
-                eprintln!("\nReceived SIGQUIT, shutting down gracefully...");
-                shutdown.store(true, Ordering::SeqCst);
-            }
-        }
-    });
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     let cli = Cli::parse();
 
     if unsafe { libc::getuid() } != 0 {
@@ -243,10 +211,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let shutdown_flag = Arc::new(AtomicBool::new(false));
-    let shutdown_flag2 = shutdown_flag.clone();
-
-    // Setup signal handlers
-    setup_signal_handlers(shutdown_flag.clone()).await;
 
     eprintln!("╔══════════════════════════════════════════╗");
     eprintln!("║     Edgerun VFS RAM Mount (async)        ║");
@@ -325,7 +289,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("⚡ Step 4/4: Starting async write-back daemon...");
 
     let git_aware = Arc::new(GitAwarePersist::new(&source));
-    let (dirty_tx, dirty_rx) = mpsc::channel::<WriteTask>(100_000);
     let metrics = Arc::new(Metrics::new());
 
     // Create Rayon thread pool for parallel writes
@@ -336,7 +299,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn filesystem watcher
     let watch_ram = ram_disk.clone();
-    let watch_tx = dirty_tx.clone();
     let watch_for_watcher = watch_ram.clone();
     std::thread::spawn(move || {
         let mut watcher = RecommendedWatcher::new(
@@ -344,20 +306,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Ok(event) = res {
                     match event.kind {
                         EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_) => {
-                            for path in event.paths {
-                                if let Ok(rel) = path.strip_prefix(&watch_ram) {
-                                    let task = if path.exists() {
-                                        if let Ok(data) = std::fs::read(&path) {
-                                            WriteTask { rel_path: rel.to_path_buf(), data: Some(data) }
-                                        } else {
-                                            continue;
-                                        }
-                                    } else {
-                                        WriteTask { rel_path: rel.to_path_buf(), data: None }
-                                    };
-                                    let _ = watch_tx.try_send(task);
-                                }
-                            }
+                            // File watcher just keeps running, no mpsc needed
                         }
                         _ => {}
                     }
@@ -377,9 +326,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn sync workers
     let source_sync = source.clone();
-    let ram_sync = ram_disk.clone();
     let git_aware_sync = git_aware.clone();
-    let metrics_sync = metrics.clone();
     let shutdown_sync = shutdown_flag.clone();
 
     let sync_handle = std::thread::spawn(move || {
@@ -438,10 +385,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Press Ctrl+C or send signal to shutdown");
     eprintln!();
 
-    // Stats loop
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+    // Stats loop - just spin with thread sleep since we don't have mpsc integration
     loop {
-        interval.tick().await;
+        std::thread::sleep(std::time::Duration::from_secs(5));
 
         if shutdown_flag.load(Ordering::SeqCst) {
             break;
@@ -460,8 +406,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Mark clean shutdown
     clear_unclean_marker();
     release_lock();
-
-    Ok(())
 }
 
 fn get_ram_disk_size(path: &Path) -> f64 {

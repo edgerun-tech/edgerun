@@ -6,7 +6,10 @@ use std::time::Duration;
 fn select_immediate_futures() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     let result = rt.block_on(async {
-        select!(async { 42 }, async { 99 })
+        select! {
+            x = async { 42 } => x,
+            y = async { 99 } => y,
+        }
     });
     assert!(result == 42 || result == 99);
 }
@@ -15,16 +18,16 @@ fn select_immediate_futures() {
 fn select_faster_wins() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     let result = rt.block_on(async {
-        select!(
-            async {
+        select! {
+            _ = async {
                 edgerun_rt::sleep(Duration::from_millis(10)).await;
                 "fast"
-            },
-            async {
+            } => "fast",
+            _ = async {
                 edgerun_rt::sleep(Duration::from_millis(100)).await;
                 "slow"
-            },
-        )
+            } => "slow",
+        }
     });
     assert_eq!(result, "fast");
 }
@@ -34,16 +37,16 @@ fn select_timing() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     let (result, elapsed) = rt.block_on(async {
         let start = std::time::Instant::now();
-        let result = select!(
-            async {
+        let result = select! {
+            _ = async {
                 edgerun_rt::sleep(Duration::from_millis(10)).await;
                 1
-            },
-            async {
+            } => 1,
+            _ = async {
                 edgerun_rt::sleep(Duration::from_millis(100)).await;
                 2
-            },
-        );
+            } => 2,
+        };
         (result, start.elapsed())
     });
     assert_eq!(result, 1, "fast future should win");
@@ -55,16 +58,16 @@ fn select_with_sleep() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     let (result, elapsed) = rt.block_on(async {
         let start = std::time::Instant::now();
-        let result = select!(
-            async {
+        let result = select! {
+            _ = async {
                 edgerun_rt::sleep(Duration::from_millis(5)).await;
                 "winner"
-            },
-            async {
+            } => "winner",
+            _ = async {
                 edgerun_rt::sleep(Duration::from_millis(500)).await;
                 "loser"
-            },
-        );
+            } => "loser",
+        };
         (result, start.elapsed())
     });
     assert_eq!(result, "winner");
@@ -92,13 +95,13 @@ fn select_drop_loser() {
 
     let _result = rt.block_on(async move {
         let _dw = DropWatcher { dropped: d };
-        select!(
-            async { "fast" },
-            async {
+        select! {
+            _ = async { "fast" } => "fast",
+            _ = async {
                 edgerun_rt::sleep(Duration::from_millis(100)).await;
                 "slow"
-            },
-        )
+            } => "slow",
+        }
     });
     // The DropWatcher should have been dropped after select returned.
     assert!(dropped.load(Ordering::SeqCst), "losing future should be dropped");
@@ -113,7 +116,10 @@ fn select_fairness() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 
     let result = rt.block_on(async {
-        select!(async { "a" }, async { "b" })
+        select! {
+            _ = async { "a" } => "a",
+            _ = async { "b" } => "b",
+        }
     });
     assert!(result == "a" || result == "b");
 }

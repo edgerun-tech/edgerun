@@ -36,10 +36,10 @@ fn mpsc_debug_single_worker() {
         loop {
             // Use select with timeout.
             use edgerun_rt::select;
-            let got = select!(
-                async { rx.recv().await },
-                async { edgerun_rt::sleep(Duration::from_secs(5)).await; None },
-            );
+            let got = select! {
+                _m = async { rx.recv().await } => _m,
+                _ = async { edgerun_rt::sleep(Duration::from_secs(5)).await; None } => None,
+            };
             match got {
                 Some(_) => { received += 1; }
                 None => break,

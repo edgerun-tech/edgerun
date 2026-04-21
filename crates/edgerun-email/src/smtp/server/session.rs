@@ -39,7 +39,10 @@ pub struct SmtpServerConfig {
     pub bind_addr: String,
     pub domain: String,
     pub limits: ServerLimits,
+    /// Enable SMTPS on port 465 (implicit TLS).
     pub smtps: bool,
+    /// Enable STARTTLS on port 587.
+    pub starttls: bool,
     /// Comma-separated list of supported AUTH mechanisms (e.g. "PLAIN,LOGIN").
     pub auth_mechanisms: Vec<String>,
     #[cfg(feature = "tls")]
@@ -53,6 +56,9 @@ pub struct SmtpServerConfig {
     pub queue_data_root: Option<std::path::PathBuf>,
     /// DNS server for MX lookups in outbound relay.
     pub relay_dns_server: String,
+    /// DKIM signer for signing outbound mail.
+    #[cfg(feature = "dkim")]
+    pub dkim_signer: Option<edgerun_email_auth::sign::DkimSigner>,
 }
 
 impl Default for SmtpServerConfig {
@@ -62,6 +68,7 @@ impl Default for SmtpServerConfig {
             domain: "edgerun.mail".to_string(),
             limits: ServerLimits::default(),
             smtps: false,
+            starttls: true,
             auth_mechanisms: vec!["PLAIN".to_string(), "LOGIN".to_string()],
             #[cfg(feature = "tls")]
             tls_cert: None,
@@ -69,6 +76,8 @@ impl Default for SmtpServerConfig {
             local_domains: vec!["edgerun.mail".to_string()],
             queue_data_root: None,
             relay_dns_server: "8.8.8.8:53".to_string(),
+            #[cfg(feature = "dkim")]
+            dkim_signer: None,
         }
     }
 }
@@ -266,6 +275,10 @@ impl SmtpServer {
         let relay = queue.as_ref().map(|_| {
             let mut r = OutboundRelay::new(&self.config.domain);
             r.dns_server = self.config.relay_dns_server.clone();
+            #[cfg(feature = "dkim")]
+            if let Some(ref signer) = self.config.dkim_signer {
+                r.dkim_signer = Some(signer.clone());
+            }
             r
         });
 
@@ -574,6 +587,26 @@ async fn handle_connection(
                     // Deliver local recipients
                     let mut local_envelope = envelope.clone();
                     local_envelope.recipients = local_recipients;
+
+                    // DKIM sign local delivery if configured
+                    #[cfg(feature = "dkim")]
+                    if let Some(ref signer) = config.dkim_signer {
+                        match signer.sign(&envelope.data, &[]) {
+                            Ok(signature) => {
+                                let mut signed_data = envelope.data.clone();
+                                if !signed_data.ends_with(b"\r\n") {
+                                    signed_data.push(b'\r');
+                                    signed_data.push(b'\n');
+                                }
+                                signed_data.extend(signature.as_bytes());
+                                local_envelope.data = signed_data;
+                            }
+                            Err(e) => {
+                                edgerun_log::warn!("edgerun-smtp: local DKIM signing failed: {}, delivering unsigned", e);
+                            }
+                        }
+                    }
+
                     match handler.accept_mail(&local_envelope) {
                         Ok(()) => {
                             edgerun_log::info!(
@@ -925,7 +958,7 @@ async fn handle_command(
             }
 
             #[cfg(feature = "tls")]
-            if !transport.is_tls() && config.tls_cert.is_some() {
+            if config.starttls && !transport.is_tls() && config.tls_cert.is_some() {
                 lines.push("STARTTLS".to_string());
             }
 

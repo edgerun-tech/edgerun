@@ -24,5 +24,6 @@ pub mod command_middleware;
 pub mod imap;
 pub mod lmtp;
 pub mod middleware_impls;
+pub mod node_address;
 pub mod server;
 pub mod smtp;
