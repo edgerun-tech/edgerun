@@ -30,6 +30,8 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use edgerun_crypto::{KeyInit, Aead, AeadInPlace};
+
 use crate::error::StorageError;
 
 /// Configuration for the blob store.
@@ -133,7 +135,7 @@ impl BlobStore {
         // Encrypt
         let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
         let ciphertext = cipher
-            .encrypt(nonce, plaintext)
+            .encrypt(nonce.into(), plaintext)
             .map_err(|e| StorageError::Encryption(format!("AES-GCM encryption failed: {}", e)))?;
 
         // Write to filesystem: [nonce (12 bytes)][ciphertext]
@@ -206,9 +208,9 @@ impl BlobStore {
             ));
         }
         let nonce: [u8; 12] = nonce.try_into().expect("nonce length checked above");
-        let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
+let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
         cipher
-            .decrypt(&nonce, ciphertext.as_ref())
+            .decrypt((&nonce).into(), ciphertext.as_ref())
             .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))
     }
 }

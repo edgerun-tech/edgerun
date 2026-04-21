@@ -9,7 +9,7 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use edgerun_crypto::AesGcmCipher;
+use edgerun_crypto::{AesGcmCipher, KeyInit, AeadInPlace};
 use edgerun_crypto::aes_gcm;
 
 use std::collections::HashMap;
@@ -156,7 +156,7 @@ impl PacketProtection {
 
         // Use the AEAD with AAD (the unprotected packet header)
         let mut buffer = plaintext.to_vec();
-        let tag = self.write_aead.encrypt_in_place_detached(&nonce, header, &mut buffer)
+        let tag = self.write_aead.encrypt_in_place_detached((&nonce).into(), header, &mut buffer)
             .map_err(|e| format!("AEAD encrypt failed: {:?}", e))?;
 
         // GCM output = ciphertext || tag (16 bytes)
@@ -179,7 +179,7 @@ impl PacketProtection {
         let tag = aes_gcm::Tag::from_slice(&ciphertext_and_tag[tag_start..]);
         let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
 
-        self.read_aead.decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
+        self.read_aead.decrypt_in_place_detached((&nonce).into(), header, &mut buffer, tag)
             .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
 
         Ok(buffer)

@@ -98,6 +98,8 @@ pub use aes_gcm::{
     Aes128Gcm, Aes256Gcm, Key, Nonce,
 };
 
+pub use aes_gcm::{Aes256Gcm as AesGcmCipher};
+
 // Signature traits
 pub use signature::{Signer, Verifier};
 pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
@@ -349,92 +351,11 @@ pub fn generate_self_signed_pem(hostnames: &[&str]) -> Result<(String, String), 
 }
 
 // ---------------------------------------------------------------------------
-// Unified AEAD cipher enum
+
+// ---------------------------------------------------------------------------
+// PKCS#10 Certificate Signing Request (CSR)
 // ---------------------------------------------------------------------------
 
-/// Unified AEAD cipher supporting AES-128-GCM and AES-256-GCM.
-///
-/// Use instead of duplicating the `Aes128Gcm | Aes256Gcm` enum pattern across
-/// crates (edgerun-tls, edgerun-http).
-pub enum AesGcmCipher {
-    Aes128Gcm(Aes128Gcm),
-    Aes256Gcm(Aes256Gcm),
-}
+pub mod csr;
 
-impl AesGcmCipher {
-    /// Construct from a key. The key length determines the cipher: 16 bytes → AES-128, 32 bytes → AES-256.
-    pub fn new_from_slice(key: &[u8]) -> Result<Self, CryptoError> {
-        match key.len() {
-            16 => {
-                let k: [u8; 16] = key.try_into().map_err(|_| CryptoError::InvalidKeyLength { expected: 16, actual: key.len() })?;
-                Ok(AesGcmCipher::Aes128Gcm(Aes128Gcm::new(&k.into())))
-            }
-            32 => {
-                let k: [u8; 32] = key.try_into().map_err(|_| CryptoError::InvalidKeyLength { expected: 32, actual: key.len() })?;
-                Ok(AesGcmCipher::Aes256Gcm(Aes256Gcm::new(&k.into())))
-            }
-            other => Err(CryptoError::InvalidKeyLength { expected: 0, actual: other }),
-        }
-    }
-
-    /// Encrypt plaintext with the given nonce. Returns ciphertext + tag.
-    pub fn encrypt(&self, nonce: &[u8; 12], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        use aes_gcm::aead::Aead;
-        let nonce = Nonce::from(*nonce);
-        match self {
-            AesGcmCipher::Aes128Gcm(c) => c.encrypt(&nonce, plaintext).map_err(|_| CryptoError::EncryptionFailed),
-            AesGcmCipher::Aes256Gcm(c) => c.encrypt(&nonce, plaintext).map_err(|_| CryptoError::EncryptionFailed),
-        }
-    }
-
-    /// Decrypt ciphertext with the given nonce. Returns plaintext.
-    pub fn decrypt(&self, nonce: &[u8; 12], ciphertext_and_tag: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        use aes_gcm::aead::Aead;
-        let nonce = Nonce::from(*nonce);
-        match self {
-            AesGcmCipher::Aes128Gcm(c) => c.decrypt(&nonce, ciphertext_and_tag).map_err(|_| CryptoError::DecryptionFailed),
-            AesGcmCipher::Aes256Gcm(c) => c.decrypt(&nonce, ciphertext_and_tag).map_err(|_| CryptoError::DecryptionFailed),
-        }
-    }
-
-    /// Encrypt in-place with detached tag. `buffer` is extended with ciphertext.
-    /// Returns the tag. `aad` is additional authenticated data.
-    pub fn encrypt_in_place_detached(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        buffer: &mut Vec<u8>,
-    ) -> Result<aes_gcm::Tag, CryptoError> {
-        use aes_gcm::aead::AeadInPlace;
-        use aes_gcm::Nonce as NonceInner;
-        let nonce = NonceInner::from(*nonce);
-        match self {
-            AesGcmCipher::Aes128Gcm(c) => c.encrypt_in_place_detached(&nonce, aad, buffer)
-                .map_err(|_| CryptoError::EncryptionFailed),
-            AesGcmCipher::Aes256Gcm(c) => c.encrypt_in_place_detached(&nonce, aad, buffer)
-                .map_err(|_| CryptoError::EncryptionFailed),
-        }
-    }
-
-    /// Decrypt in-place with detached tag. Returns Ok(()) on success.
-    pub fn decrypt_in_place_detached(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        buffer: &mut Vec<u8>,
-        tag: &aes_gcm::Tag,
-    ) -> Result<(), CryptoError> {
-        use aes_gcm::aead::AeadInPlace;
-        use aes_gcm::Nonce as NonceInner;
-        let nonce = NonceInner::from(*nonce);
-        match self {
-            AesGcmCipher::Aes128Gcm(c) => c.decrypt_in_place_detached(&nonce, aad, buffer, tag)
-                .map_err(|_| CryptoError::DecryptionFailed),
-            AesGcmCipher::Aes256Gcm(c) => c.decrypt_in_place_detached(&nonce, aad, buffer, tag)
-                .map_err(|_| CryptoError::DecryptionFailed),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests;
+pub use csr::{generate_csr_p256, generate_csr_pem};

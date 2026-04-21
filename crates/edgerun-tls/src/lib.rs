@@ -36,6 +36,7 @@ pub mod key_exchange;
 pub mod prf;
 pub mod record;
 pub mod server;
+pub mod tls_alpn;
 pub mod session_cache;
 
 pub use async_tls::{AsyncTlsStream, AsyncTlsServerStream};
@@ -50,6 +51,7 @@ pub use certificate_gen::{
     signing_key_from_pem,
     signing_key_to_pem,
 };
+pub use tls_alpn::ACME_TLS_ALPN_PROTOCOL;
 
 /// TLS error types
 #[derive(Debug)]

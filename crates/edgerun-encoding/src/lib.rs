@@ -42,3 +42,12 @@ pub mod rfc3339;
 pub mod string_field;
 pub mod tlv;
 pub mod varint;
+
+pub use base64::{
+    standard_encode,
+    standard_decode,
+    standard_encode_wrapped,
+    base64url_nopad_encode,
+    base64url_encode,
+    base64url_decode,
+};
