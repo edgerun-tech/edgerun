@@ -70,12 +70,12 @@ impl ConfigWatcher {
             // Add watches for all paths
             for path in &paths {
                 if path.is_dir() {
-                    let mask = WatchMask::new(WatchMask::MODIFY.0 | WatchMask::CREATE.0 | WatchMask::DELETE.0);
+                    let mask = WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE;
                     let _ = inotify.watches().add(path, mask);
                 } else if path.exists() {
                     let _ = inotify.watches().add(path, WatchMask::MODIFY);
                     if let Some(parent) = path.parent() {
-                        let mask = WatchMask::new(WatchMask::CREATE.0 | WatchMask::DELETE.0);
+                        let mask = WatchMask::CREATE | WatchMask::DELETE;
                         let _ = inotify.watches().add(parent, mask);
                     }
                 }

@@ -277,11 +277,14 @@ impl NetServer {
                         let mut main_pool = LeasePool::new();
                         for (_name, scope_pool) in scopes_map {
                             // Copy addresses from scope to main pool
-                            for addr in &scope_pool.available_addresses {
-                                main_pool.available_addresses.push(*addr);
+                            if let Ok(start) = scope_pool.range_start.parse() {
+                                if let Ok(end) = scope_pool.range_end.parse() {
+                                    main_pool.available_addresses.push(start);
+                                    main_pool.available_addresses.push(end);
+                                }
                             }
-                            for (prefix, len) in &scope_pool.available_prefixes {
-                                main_pool.available_prefixes.push((*prefix, *len));
+                            if scope_pool.prefix_length > 0 {
+                                main_pool.available_prefixes.push((std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), scope_pool.prefix_length));
                             }
                         }
                         
@@ -346,7 +349,30 @@ fn build_scopes_from_config(config: &ConfigState, server_idx: usize) -> Result<V
     let scopes_map = config.build_dhcp_scopes(server_idx)
         .map_err(|e| format!("config error: {}", e))?;
 
-    Ok(scopes_map.into_values().collect())
+    let mut scopes = Vec::new();
+    for (_, pool) in scopes_map {
+        let start: std::net::Ipv4Addr = pool.range_start.parse()
+            .map_err(|e| format!("invalid range_start: {}", e))?;
+        let end: std::net::Ipv4Addr = pool.range_end.parse()
+            .map_err(|e| format!("invalid range_end: {}", e))?;
+        let mask: std::net::Ipv4Addr = pool.subnet_mask.parse()
+            .map_err(|e| format!("invalid subnet_mask: {}", e))?;
+        
+        let router: std::net::Ipv4Addr = pool.subnet_mask.parse()
+            .unwrap_or(start);
+        
+        let scope = DhcpScope::new(
+            &pool.name,
+            start,
+            end,
+            mask,
+            router,
+            vec![router],
+            3600,
+        );
+        scopes.push(scope);
+    }
+    Ok(scopes)
 }
 
 #[cfg(test)]

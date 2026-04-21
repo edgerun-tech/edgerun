@@ -71,28 +71,62 @@ enum Commands {
 
 impl Parser for Cli {
     fn command() -> edgerun_clap::cli::Command {
-        edgerun_clap::cli::Command::new("edgerun-net")
-            .about("One binary replaces dnsmasq + BIND + CoreDNS + ISC DHCP + Kea")
+        let mut cmd = edgerun_clap::cli::Command::new("edgerun-net")
+            .about("One binary replaces dnsmasq + BIND + CoreDNS + ISC DHCP + Kea");
+        
+        // Add serve subcommand
+        cmd = cmd.subcommand(
+            edgerun_clap::cli::Command::new("serve")
+                .about("Start all DNS and DHCP servers")
+                .arg(edgerun_clap::cli::Arg::new("config").short('c').long("config").default_value("/etc/edgerun/net.yaml"))
+                .arg(edgerun_clap::cli::Arg::new("hot-reload").long("hot-reload"))
+                .arg(edgerun_clap::cli::Arg::new("foreground").long("foreground").default_value("true"))
+        );
+        
+        // Add validate subcommand
+        cmd = cmd.subcommand(
+            edgerun_clap::cli::Command::new("validate")
+                .about("Validate a config file without starting services")
+                .arg(edgerun_clap::cli::Arg::new("config").short('c').long("config"))
+        );
+        
+        // Add import-dnsmasq subcommand
+        cmd = cmd.subcommand(
+            edgerun_clap::cli::Command::new("import-dnsmasq")
+                .about("Convert dnsmasq.conf to edgerun YAML")
+                .arg(edgerun_clap::cli::Arg::new("input").short('i').long("input"))
+                .arg(edgerun_clap::cli::Arg::new("output").short('o').long("output"))
+        );
+        
+        // Add import-corefile subcommand
+        cmd = cmd.subcommand(
+            edgerun_clap::cli::Command::new("import-corefile")
+                .about("Convert CoreDNS Corefile to edgerun YAML")
+                .arg(edgerun_clap::cli::Arg::new("input").short('i').long("input"))
+                .arg(edgerun_clap::cli::Arg::new("output").short('o').long("output"))
+        );
+        
+        cmd
     }
 
     fn from(matches: &edgerun_clap::cli::ArgMatches) -> Self {
         let sub = matches.positional.first().cloned().unwrap_or_default();
         let command = match sub.as_str() {
             "serve" => Commands::Serve {
-                config: matches.get_one::<PathBuf>("config").unwrap_or(PathBuf::from("/etc/edgerun/net.yaml")),
+                config: matches.get_one::<String>("config").map(PathBuf::from).unwrap_or(PathBuf::from("/etc/edgerun/net.yaml")),
                 hot_reload: matches.contains_id("hot-reload"),
                 foreground: true,
             },
             "validate" => Commands::Validate {
-                config: matches.get_one::<PathBuf>("config").unwrap_or(PathBuf::new()),
+                config: matches.get_one::<String>("config").map(PathBuf::from).unwrap_or(PathBuf::new()),
             },
             "import-dnsmasq" => Commands::ImportDnsmasq {
-                input: matches.get_one::<PathBuf>("input").unwrap_or(PathBuf::new()),
-                output: matches.get_one::<PathBuf>("output"),
+                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or(PathBuf::new()),
+                output: matches.get_one::<String>("output").map(PathBuf::from),
             },
             "import-corefile" => Commands::ImportCorefile {
-                input: matches.get_one::<PathBuf>("input").unwrap_or(PathBuf::new()),
-                output: matches.get_one::<PathBuf>("output"),
+                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or(PathBuf::new()),
+                output: matches.get_one::<String>("output").map(PathBuf::from),
             },
             _ => Commands::Serve {
                 config: PathBuf::from("/etc/edgerun/net.yaml"),
@@ -102,53 +136,6 @@ impl Parser for Cli {
         };
         Cli { command }
     }
-}
-
-#[derive(Subcommand, Debug)]
-enum Commands {
-    /// Start all DNS and DHCP servers
-    Serve {
-        /// Path to K8s-style YAML config file
-        #[arg(short, long, default_value = "/etc/edgerun/net.yaml")]
-        config: PathBuf,
-
-        /// Watch config files and reload on changes
-        #[arg(long)]
-        hot_reload: bool,
-
-        /// Run in foreground (default)
-        #[arg(long, default_value = "true")]
-        foreground: bool,
-    },
-
-    /// Validate a config file without starting services
-    Validate {
-        /// Path to config file to validate
-        #[arg(short, long)]
-        config: PathBuf,
-    },
-
-    /// Convert dnsmasq.conf to edgerun YAML
-    ImportDnsmasq {
-        /// Path to dnsmasq.conf
-        #[arg(short, long)]
-        input: PathBuf,
-
-        /// Output YAML file (default: stdout)
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
-
-    /// Convert CoreDNS Corefile to edgerun YAML
-    ImportCorefile {
-        /// Path to Corefile
-        #[arg(short, long)]
-        input: PathBuf,
-
-        /// Output YAML file (default: stdout)
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
 }
 
 fn main() {

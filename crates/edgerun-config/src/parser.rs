@@ -183,6 +183,34 @@ impl ConfigState {
         }
         Ok(())
     }
+
+    pub fn build_dhcp_scopes(&self, server_idx: usize) -> Result<std::collections::HashMap<String, crate::types::DhcpPoolSpec>, ConfigError> {
+        let mut scopes = std::collections::HashMap::new();
+        if server_idx >= self.dhcp_servers.len() {
+            return Ok(scopes);
+        }
+        let server = &self.dhcp_servers[server_idx];
+        for pool_name in &server.pools {
+            if let Some(pool) = self.dhcp_pools.iter().find(|p| p.name == *pool_name) {
+                scopes.insert(pool.name.clone(), pool.clone());
+            }
+        }
+        Ok(scopes)
+    }
+
+    pub fn build_dhcpv6_scopes(&self, server_idx: usize) -> Result<std::collections::HashMap<String, crate::types::Dhcpv6PoolSpec>, ConfigError> {
+        let mut scopes = std::collections::HashMap::new();
+        if server_idx >= self.dhcpv6_servers.len() {
+            return Ok(scopes);
+        }
+        let server = &self.dhcpv6_servers[server_idx];
+        for pool_name in &server.pools {
+            if let Some(pool) = self.dhcpv6_pools.iter().find(|p| p.name == *pool_name) {
+                scopes.insert(pool.name.clone(), pool.clone());
+            }
+        }
+        Ok(scopes)
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
