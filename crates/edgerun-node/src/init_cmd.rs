@@ -5,7 +5,7 @@ use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_yubikey::YubiKeySigningKey;
 
-use crate::config::parse_config;
+use crate::config::{parse_config, NodeConfig};
 
 pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
     let has_tpm = PathBuf::from("/dev/tpmrm0").exists();
@@ -438,22 +438,42 @@ pub fn cmd_provision(config_path: &PathBuf, pin: &str, password: Option<String>,
 
     let target = target_addr.unwrap_or_else(|| "127.0.0.1:35630".to_string());
     eprintln!("Connecting to {}...", target);
-    eprintln!("Sending provisioning data with PIN: {}", pin);
 
-    let provisioning_data = format!(
-        "{{\"pin\":\"{}\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
-        pin,
-        passphrase,
-        signer_config.public_key_hex
-    );
-
-    eprintln!("TODO: implement TCP provisioning protocol to {}", target);
-    eprintln!("Provisioning data prepared: {} bytes", provisioning_data.len());
-    eprintln!();
-    eprintln!("On the node, ensure it is running in provisioning mode,");
-    eprintln!("then complete the provisioning handshake.");
+    if let Err(e) = provision_sync(&target, pin, &passphrase, &signer_config.public_key_hex) {
+        eprintln!("error: provisioning failed: {}", e);
+        std::process::exit(1);
+    }
 
     eprintln!("\nPassword will be required on every boot.");
+}
+
+fn provision_sync(target: &str, pin: &str, passphrase: &str, node_id: &str) -> Result<(), String> {
+    use std::net::TcpStream;
+    use std::io::{Read, Write};
+
+    let mut stream = TcpStream::connect(target).map_err(|e| e.to_string())?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).map_err(|e| e.to_string())?;
+
+    let payload = format!(
+        "{{\"type\":\"provision\",\"pin\":\"{}\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
+        pin,
+        passphrase,
+        node_id
+    );
+
+    stream.write_all(payload.as_bytes()).map_err(|e| e.to_string())?;
+    stream.flush().map_err(|e| e.to_string())?;
+
+    let mut buf = [0u8; 256];
+    let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
+
+    if n > 0 {
+        let response = String::from_utf8_lossy(&buf[..n]);
+        eprintln!("Response: {}", response);
+    }
+
+    eprintln!("Provisioning request sent.");
+    Ok(())
 }
 
 pub fn cmd_unlock(config_path: &PathBuf, password: Option<String>, target_addr: Option<String>) {
@@ -465,6 +485,11 @@ pub fn cmd_unlock(config_path: &PathBuf, password: Option<String>, target_addr: 
         eprintln!("error: invalid config: {}", e);
         std::process::exit(1);
     });
+
+    let Some(signer_config) = &config.signer else {
+        eprintln!("error: no signer in config");
+        std::process::exit(1);
+    };
 
     let passphrase = password.unwrap_or_else(|| {
         eprintln!("Enter password: ");
@@ -481,8 +506,39 @@ pub fn cmd_unlock(config_path: &PathBuf, password: Option<String>, target_addr: 
     let target = target_addr.unwrap_or_else(|| "127.0.0.1:35630".to_string());
     eprintln!("Sending unlock to {}...", target);
 
-    eprintln!("TODO: implement TCP unlock protocol to {}", target);
-    eprintln!("Node should transition from LOCKED to ACTIVE state.");
+    if let Err(e) = unlock_sync(&target, &passphrase, &signer_config.public_key_hex) {
+        eprintln!("error: unlock failed: {}", e);
+        std::process::exit(1);
+    }
+
+    eprintln!("Unlock request sent.");
+}
+
+fn unlock_sync(target: &str, passphrase: &str, node_id: &str) -> Result<(), String> {
+    use std::net::TcpStream;
+    use std::io::{Read, Write};
+
+    let mut stream = TcpStream::connect(target).map_err(|e| e.to_string())?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).map_err(|e| e.to_string())?;
+
+    let payload = format!(
+        "{{\"type\":\"unlock\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
+        passphrase,
+        node_id
+    );
+
+    stream.write_all(payload.as_bytes()).map_err(|e| e.to_string())?;
+    stream.flush().map_err(|e| e.to_string())?;
+
+    let mut buf = [0u8; 256];
+    let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
+
+    if n > 0 {
+        let response = String::from_utf8_lossy(&buf[..n]);
+        eprintln!("Response: {}", response);
+    }
+
+    Ok(())
 }
 
 /// Scans TPM persistent handles to find the first unused one.
