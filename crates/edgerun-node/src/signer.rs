@@ -232,11 +232,50 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
 
             Arc::new(SyncSoftwareSigner::new(signing_key))
         }
+        "provisioned" => {
+            let passphrase_env = signer_config
+                .passphrase_env
+                .as_deref()
+                .unwrap_or("EDGERUN_KEY_PASSPHRASE");
+
+            let passphrase = std::env::var(passphrase_env).unwrap_or_else(|_| {
+                eprintln!(
+                    "error: provisioned signer requires passphrase env var '{}' to be set.",
+                    passphrase_env
+                );
+                eprintln!("Set it with: export {}='your-passphrase'", passphrase_env);
+                std::process::exit(1);
+            });
+
+            if passphrase.len() < 8 {
+                eprintln!("error: passphrase must be at least 8 characters");
+                std::process::exit(1);
+            }
+
+            let signing_key = derive_signing_key_from_passphrase(&passphrase, &signer_config.public_key_hex)
+                .unwrap_or_else(|e| {
+                    eprintln!("error: failed to derive signing key: {}", e);
+                    std::process::exit(1);
+                });
+
+            Arc::new(SyncSoftwareSigner::new(signing_key))
+        }
         other => {
             eprintln!("error: unknown signer type: {}", other);
             std::process::exit(1);
         }
     }
+}
+
+const PBKDF2_ITERATIONS: u32 = 100_000;
+
+fn derive_signing_key_from_passphrase(passphrase: &str, public_key_hex: &str) -> Result<SigningKey, String> {
+    use edgerun_crypto::pbkdf2::pbkdf2_hmac_array;
+    use edgerun_crypto::sha2::Sha256;
+
+    let salt = format!("edgerun:provisioned:{}", public_key_hex);
+    let derived: [u8; 32] = pbkdf2_hmac_array::<Sha256, 32>(passphrase.as_bytes(), salt.as_bytes(), PBKDF2_ITERATIONS);
+    SigningKey::from_bytes(&derived.into()).map_err(|e| e.to_string())
 }
 
 pub fn parse_signing_key_hex(key_hex: &str) -> SigningKey {

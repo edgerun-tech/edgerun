@@ -9,6 +9,13 @@ pub struct NodeConfig {
     pub signer: Option<SignerConfig>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum SignerState {
+    Provisioning,
+    Locked,
+    Active,
+}
+
 #[derive(Clone, Debug)]
 pub struct SignerConfig {
     pub signer_type: String,
@@ -18,6 +25,8 @@ pub struct SignerConfig {
     pub slot: Option<String>,
     pub encrypted_key_path: Option<String>,
     pub passphrase_env: Option<String>,
+    pub state: Option<SignerState>,
+    pub pairing_pin: Option<String>,
 }
 
 pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
@@ -39,6 +48,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
     let mut slot = Option::<String>::None;
     let mut encrypted_key_path = Option::<String>::None;
     let mut passphrase_env = Option::<String>::None;
+    let mut signer_state = Option::<SignerState>::None;
+    let mut pairing_pin = Option::<String>::None;
 
     for line in yaml.lines() {
         let trimmed = line.trim();
@@ -64,6 +75,15 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
                     "slot" => slot = Some(unquote(&val.1)),
                     "encrypted_key_path" => encrypted_key_path = Some(unquote(&val.1)),
                     "passphrase_env" => passphrase_env = Some(unquote(&val.1)),
+                    "state" => {
+                        signer_state = match val.1.as_str() {
+                            "provisioning" => Some(SignerState::Provisioning),
+                            "locked" => Some(SignerState::Locked),
+                            "active" => Some(SignerState::Active),
+                            _ => None,
+                        };
+                    }
+                    "pairing_pin" => pairing_pin = Some(unquote(&val.1)),
                     _ => {}
                 }
             }
@@ -91,6 +111,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
             slot,
             encrypted_key_path,
             passphrase_env,
+            state: signer_state,
+            pairing_pin,
         });
     }
 

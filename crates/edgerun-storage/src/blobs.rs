@@ -56,6 +56,9 @@ pub enum BlobKeySource {
         unseal_fn: std::sync::Arc<dyn Fn(&[u8]) -> Result<[u8; 32], crate::error::StorageError> + Send + Sync>,
         seal_fn: std::sync::Arc<dyn Fn(&[u8; 32]) -> Result<Vec<u8>, crate::error::StorageError> + Send + Sync>,
     },
+    /// Password-derived: derive the key from a passphrase via PBKDF2.
+    /// Used for provisioned nodes where the key is derived from the user's password.
+    Password { passphrase: String },
 }
 
 impl std::fmt::Debug for BlobKeySource {
@@ -66,6 +69,7 @@ impl std::fmt::Debug for BlobKeySource {
                 .field("private_key_bytes", &format!("[{} bytes]", private_key_bytes.len()))
                 .finish(),
             Self::HardwareSealed { .. } => f.debug_struct("HardwareSealed").finish(),
+            Self::Password { .. } => f.debug_struct("Password").finish(),
         }
     }
 }
@@ -97,6 +101,9 @@ impl BlobStore {
             }
             BlobKeySource::HardwareSealed { unseal_fn, seal_fn } => {
                 load_or_create_sealed_key(&config.blob_dir, &*unseal_fn, &*seal_fn)?
+            }
+            BlobKeySource::Password { passphrase } => {
+                derive_blob_key_from_passphrase(&passphrase)
             }
         };
 
@@ -253,6 +260,17 @@ fn load_blob_recipients(blob_dir: &Path, blob_id: &str) -> Vec<Vec<u8>> {
 fn derive_blob_key_from_private_key(private_key_bytes: &[u8]) -> [u8; 32] {
     let hk = edgerun_core::crypto::HkdfSha256::new(None, private_key_bytes);
     hk.expand(b"edgerun:v0:blob-key", 32).try_into().unwrap()
+}
+
+const BLOB_KEY_PBKDF2_ITERATIONS: u32 = 100_000;
+
+fn derive_blob_key_from_passphrase(passphrase: &str) -> [u8; 32] {
+    use edgerun_crypto::pbkdf2::pbkdf2_hmac_array;
+    use edgerun_crypto::sha2::Sha256;
+
+    let salt = b"edgerun:v0:blob-key-password";
+    let derived: [u8; 32] = pbkdf2_hmac_array::<Sha256, 32>(passphrase.as_bytes(), salt, BLOB_KEY_PBKDF2_ITERATIONS);
+    derived
 }
 
 // ---------------------------------------------------------------------------

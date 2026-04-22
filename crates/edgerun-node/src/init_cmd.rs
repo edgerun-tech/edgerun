@@ -5,6 +5,8 @@ use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_yubikey::YubiKeySigningKey;
 
+use crate::config::parse_config;
+
 pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
     let has_tpm = PathBuf::from("/dev/tpmrm0").exists();
     let has_yubikey = check_yubikey_available();
@@ -302,6 +304,185 @@ initial_grants: []
     println!("  edgerund run --config {} --listen 0.0.0.0:8080", path.display());
     println!();
     println!("IMPORTANT: Keep the key file safe. Without the passphrase, the key cannot be recovered.");
+}
+
+const PIN_CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+pub fn generate_pairing_pin() -> String {
+    let mut pin = String::with_capacity(8);
+    for _ in 0..8 {
+        let mut byte = [0u8; 1];
+        edgerun_crypto::getrandom::fill(&mut byte).expect("getrandom failed");
+        let idx = (byte[0] as usize) % PIN_CHARSET.len();
+        pin.push(PIN_CHARSET[idx] as char);
+    }
+    pin
+}
+
+pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Option<String>) {
+    let mut key_bytes = [0u8; 32];
+    edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
+    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).unwrap_or_else(|e| {
+        eprintln!("error: failed to create signing key: {}", e);
+        std::process::exit(1);
+    });
+    let verifying_key = signing_key.verifying_key();
+    let encoded = verifying_key.to_encoded_point(false);
+    let mut node_id_bytes = [0u8; 64];
+    node_id_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+    let node_id = NodeID(node_id_bytes);
+
+    let pairing_pin = generate_pairing_pin();
+    let stream_id = format!("stream-{}", node_id.short());
+    let node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
+    let controller_list = controller.map(|c| vec![c]).unwrap_or_default();
+    let controller_str = if controller_list.is_empty() {
+        String::new()
+    } else {
+        format!("controllers: [{}]", controller_list.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
+    };
+
+    let signer_block = format!(
+        r#"signer:
+  type: "provisioned"
+  public_key_hex: "{node_id_hex}"
+  state: "provisioning"
+  pairing_pin: "{pin}"
+  passphrase_env: "EDGERUN_KEY_PASSPHRASE"
+"#,
+        node_id_hex = node_id.to_hex(),
+        pin = pairing_pin,
+    );
+
+    let config_yaml = format!(
+        r#"# edgerun Node Configuration (provisioning mode)
+# Run `edgerund run --config <config>` to start in provisioning mode
+stream_id: "{stream_id}"
+name: "{node_name}"
+{controller_config}
+# TODO: add more configuration here
+# trust_nodes: []
+# allowed_peers: []
+# bootstrap_peers: []
+{signer_block}
+metadata:
+  environment: "production"
+"#,
+        stream_id = stream_id,
+        node_name = node_name,
+        controller_config = controller_str,
+        signer_block = signer_block,
+    );
+
+    fs::write(path, &config_yaml).unwrap_or_else(|e| {
+        eprintln!("error: failed to write config to {}: {}", path.display(), e);
+        std::process::exit(1);
+    });
+
+    eprintln!();
+    eprintln!("Node PUBLIC KEY:");
+    eprintln!("  {}", node_id.to_hex());
+    eprintln!();
+    eprintln!("PAIRING PIN: {}", pairing_pin);
+    eprintln!();
+    eprintln!("Configuration saved to: {}", path.display());
+    eprintln!();
+    eprintln!("FROM YOUR LAPTOP, run:");
+    eprintln!("  edgerund provision --config {} --pin {}", path.display(), pairing_pin);
+    eprintln!();
+    eprintln!("The node is now advertising in provisioning mode.");
+    eprintln!("Once provisioned, the password will be required on boot.");
+}
+
+pub fn cmd_provision(config_path: &PathBuf, pin: &str, password: Option<String>, target_addr: Option<String>) {
+    let yaml = fs::read_to_string(config_path).unwrap_or_else(|e| {
+        eprintln!("error: failed to read config: {}", e);
+        std::process::exit(1);
+    });
+    let config = parse_config(&yaml).unwrap_or_else(|e| {
+        eprintln!("error: invalid config: {}", e);
+        std::process::exit(1);
+    });
+
+    let Some(signer_config) = &config.signer else {
+        eprintln!("error: no signer in config");
+        std::process::exit(1);
+    };
+
+    if signer_config.signer_type != "provisioned" {
+        eprintln!("error: signer type must be 'provisioned'");
+        std::process::exit(1);
+    }
+
+    let Some(config_pin) = &signer_config.pairing_pin else {
+        eprintln!("error: no pairing pin in config");
+        std::process::exit(1);
+    };
+
+    if pin != config_pin {
+        eprintln!("error: PIN mismatch");
+        std::process::exit(1);
+    }
+
+    let passphrase = password.unwrap_or_else(|| {
+        eprintln!("Enter password: ");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).expect("read failed");
+        input.trim().to_string()
+    });
+
+    if passphrase.len() < 8 {
+        eprintln!("error: password must be at least 8 characters");
+        std::process::exit(1);
+    }
+
+    let target = target_addr.unwrap_or_else(|| "127.0.0.1:35630".to_string());
+    eprintln!("Connecting to {}...", target);
+    eprintln!("Sending provisioning data with PIN: {}", pin);
+
+    let provisioning_data = format!(
+        "{{\"pin\":\"{}\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
+        pin,
+        passphrase,
+        signer_config.public_key_hex
+    );
+
+    eprintln!("TODO: implement TCP provisioning protocol to {}", target);
+    eprintln!("Provisioning data prepared: {} bytes", provisioning_data.len());
+    eprintln!();
+    eprintln!("On the node, ensure it is running in provisioning mode,");
+    eprintln!("then complete the provisioning handshake.");
+
+    eprintln!("\nPassword will be required on every boot.");
+}
+
+pub fn cmd_unlock(config_path: &PathBuf, password: Option<String>, target_addr: Option<String>) {
+    let yaml = fs::read_to_string(config_path).unwrap_or_else(|e| {
+        eprintln!("error: failed to read config: {}", e);
+        std::process::exit(1);
+    });
+    let config = parse_config(&yaml).unwrap_or_else(|e| {
+        eprintln!("error: invalid config: {}", e);
+        std::process::exit(1);
+    });
+
+    let passphrase = password.unwrap_or_else(|| {
+        eprintln!("Enter password: ");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).expect("read failed");
+        input.trim().to_string()
+    });
+
+    if passphrase.len() < 8 {
+        eprintln!("error: password must be at least 8 characters");
+        std::process::exit(1);
+    }
+
+    let target = target_addr.unwrap_or_else(|| "127.0.0.1:35630".to_string());
+    eprintln!("Sending unlock to {}...", target);
+
+    eprintln!("TODO: implement TCP unlock protocol to {}", target);
+    eprintln!("Node should transition from LOCKED to ACTIVE state.");
 }
 
 /// Scans TPM persistent handles to find the first unused one.
