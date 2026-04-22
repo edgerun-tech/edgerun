@@ -248,24 +248,28 @@ pub use lmtp_config::LmtpConfig;
 
 #[cfg(feature = "proxy")]
 mod proxy_config {
-    use super::*;
+    use std::time::Duration;
 
     #[derive(Clone)]
     pub struct ProxyConfig {
         pub bind_addr: String,
         pub socks5_bind_addr: Option<String>,
         pub upstream_proxy: Option<String>,
+        pub connect_timeout: Duration,
+        pub tunnel_buffer_size: usize,
     }
 
-impl Default for ProxyConfig {
-    fn default() -> Self {
-        Self {
-            bind_addr: "0.0.0.0:8080".to_string(),
-            socks5_bind_addr: None,
-            upstream_proxy: None,
+    impl Default for ProxyConfig {
+        fn default() -> Self {
+            Self {
+                bind_addr: "0.0.0.0:8080".to_string(),
+                socks5_bind_addr: None,
+                upstream_proxy: None,
+                connect_timeout: Duration::from_secs(30),
+                tunnel_buffer_size: 64 * 1024,
+            }
         }
     }
-}
 }
 #[cfg(feature = "proxy")]
 pub use proxy_config::ProxyConfig;
@@ -480,6 +484,8 @@ impl Server {
                 bind_addr: config.bind_addr,
                 socks5_bind_addr: config.socks5_bind_addr,
                 upstream_proxy: config.upstream_proxy,
+                connect_timeout: config.connect_timeout,
+                tunnel_buffer_size: config.tunnel_buffer_size,
             });
             Some(srv)
         } else {
