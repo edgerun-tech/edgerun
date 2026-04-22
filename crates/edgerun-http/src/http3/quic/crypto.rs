@@ -9,7 +9,7 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use edgerun_crypto::{AesGcmCipher, KeyInit, AeadInPlace};
+use edgerun_crypto::{AeadCipher, KeyInit, AeadInPlace};
 use edgerun_crypto::aes_gcm;
 
 use std::collections::HashMap;
@@ -119,9 +119,9 @@ impl ProtectionKeys {
 /// QUIC packet protection engine
 pub struct PacketProtection {
     /// Encryption AEAD
-    write_aead: AesGcmCipher,
+    write_aead: AeadCipher,
     /// Decryption AEAD
-    read_aead: AesGcmCipher,
+    read_aead: AeadCipher,
     /// Write IV
     write_iv: Vec<u8>,
     /// Read IV
@@ -133,8 +133,10 @@ pub struct PacketProtection {
 impl PacketProtection {
     /// Create from protection keys
     pub fn new(keys: &ProtectionKeys) -> Self {
-        let write_aead = AesGcmCipher::new_from_slice(&keys.write_key).expect("valid write key");
-        let read_aead = AesGcmCipher::new_from_slice(&keys.read_key).expect("valid read key");
+        let write_aead = AeadCipher::new_from_key(&keys.write_key)
+            .expect("valid write key");
+        let read_aead = AeadCipher::new_from_key(&keys.read_key)
+            .expect("valid read key");
 
         PacketProtection {
             write_aead,
@@ -156,7 +158,7 @@ impl PacketProtection {
 
         // Use the AEAD with AAD (the unprotected packet header)
         let mut buffer = plaintext.to_vec();
-        let tag = self.write_aead.encrypt_in_place_detached((&nonce).into(), header, &mut buffer)
+        let tag = self.write_aead.encrypt_in_place_detached(&nonce, header, &mut buffer)
             .map_err(|e| format!("AEAD encrypt failed: {:?}", e))?;
 
         // GCM output = ciphertext || tag (16 bytes)
@@ -179,7 +181,7 @@ impl PacketProtection {
         let tag = aes_gcm::Tag::from_slice(&ciphertext_and_tag[tag_start..]);
         let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
 
-        self.read_aead.decrypt_in_place_detached((&nonce).into(), header, &mut buffer, tag)
+        self.read_aead.decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
             .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
 
         Ok(buffer)

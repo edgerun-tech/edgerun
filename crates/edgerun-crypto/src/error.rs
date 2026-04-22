@@ -7,6 +7,8 @@ use std::fmt;
 pub enum CryptoError {
     /// Invalid key length for the requested cipher.
     InvalidKeyLength { expected: usize, actual: usize },
+    /// Invalid key bytes.
+    InvalidKey,
     /// Encryption failed.
     EncryptionFailed,
     /// Decryption failed.
@@ -31,6 +33,7 @@ impl fmt::Display for CryptoError {
             CryptoError::InvalidKeyLength { expected, actual } => {
                 write!(f, "invalid key length: expected {expected}, got {actual}")
             }
+            CryptoError::InvalidKey => write!(f, "invalid key"),
             CryptoError::EncryptionFailed => write!(f, "encryption failed"),
             CryptoError::DecryptionFailed => write!(f, "decryption failed"),
             CryptoError::InvalidPem(msg) => write!(f, "invalid PEM: {msg}"),

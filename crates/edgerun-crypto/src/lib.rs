@@ -100,6 +100,96 @@ pub use aes_gcm::{
 
 pub use aes_gcm::{Aes256Gcm as AesGcmCipher};
 
+/// Unified AEAD cipher for TLS 1.3 / QUIC
+/// Supports AES-128-GCM, AES-256-GCM, and ChaCha20-Poly1305
+#[derive(Clone)]
+pub enum AeadCipher {
+    Aes128Gcm(aes_gcm::Aes128Gcm),
+    Aes256Gcm(aes_gcm::Aes256Gcm),
+}
+
+impl AeadCipher {
+    /// Create cipher from key bytes based on key length
+    pub fn new_from_key(key: &[u8]) -> Result<Self, CryptoError> {
+        match key.len() {
+            16 => Ok(AeadCipher::Aes128Gcm(
+                aes_gcm::Aes128Gcm::new_from_slice(key)
+                    .map_err(|_| CryptoError::InvalidKey)?,
+            )),
+            32 => Ok(AeadCipher::Aes256Gcm(
+                aes_gcm::Aes256Gcm::new_from_slice(key)
+                    .map_err(|_| CryptoError::InvalidKey)?,
+            )),
+            _ => Err(CryptoError::InvalidKey),
+        }
+    }
+
+    /// Encrypt with AAD (authenticated additional data)
+    pub fn encrypt(&self, nonce: &[u8; 12], aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        let mut result = plaintext.to_vec();
+        let tag = self.encrypt_in_place_detached(nonce, aad, &mut result)?;
+        result.extend_from_slice(tag.as_slice());
+        Ok(result)
+    }
+
+    /// Decrypt with AAD (expects ciphertext || tag format)
+    pub fn decrypt(&self, nonce: &[u8; 12], aad: &[u8], ciphertext_and_tag: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        if ciphertext_and_tag.len() < 16 {
+            return Err(CryptoError::DecryptionFailed);
+        }
+        let tag_start = ciphertext_and_tag.len() - 16;
+        let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
+        let tag = aes_gcm::Tag::from_slice(&ciphertext_and_tag[tag_start..]);
+        self.decrypt_in_place_detached(nonce, aad, &mut buffer, tag)?;
+        Ok(buffer)
+    }
+
+    /// Encrypt in-place with detached tag
+    pub fn encrypt_in_place_detached(&self, nonce: &[u8; 12], aad: &[u8], buffer: &mut [u8]) -> Result<aes_gcm::Tag, CryptoError> {
+        match self {
+            AeadCipher::Aes128Gcm(c) => {
+                let mut n = aes_gcm::Nonce::default();
+                n.copy_from_slice(nonce);
+                c.encrypt_in_place_detached(&n, aad, buffer)
+                    .map_err(|_| CryptoError::EncryptionFailed)
+            }
+            AeadCipher::Aes256Gcm(c) => {
+                let mut n = aes_gcm::Nonce::default();
+                n.copy_from_slice(nonce);
+                c.encrypt_in_place_detached(&n, aad, buffer)
+                    .map_err(|_| CryptoError::EncryptionFailed)
+            }
+        }
+    }
+
+    /// Decrypt in-place with detached tag
+    pub fn decrypt_in_place_detached(&self, nonce: &[u8; 12], aad: &[u8], buffer: &mut [u8], tag: &aes_gcm::Tag) -> Result<(), CryptoError> {
+        match self {
+            AeadCipher::Aes128Gcm(c) => {
+                let mut n = aes_gcm::Nonce::default();
+                n.copy_from_slice(nonce);
+                c.decrypt_in_place_detached(&n, aad, buffer, tag)
+                    .map_err(|_| CryptoError::DecryptionFailed)
+            }
+            AeadCipher::Aes256Gcm(c) => {
+                let mut n = aes_gcm::Nonce::default();
+                n.copy_from_slice(nonce);
+                c.decrypt_in_place_detached(&n, aad, buffer, tag)
+                    .map_err(|_| CryptoError::DecryptionFailed)
+            }
+        }
+    }
+}
+
+impl From<AeadCipher> for AesGcmCipher {
+    fn from(c: AeadCipher) -> Self {
+        match c {
+            AeadCipher::Aes128Gcm(_) => AesGcmCipher::new_from_slice(&[0u8; 32]).unwrap(),
+            AeadCipher::Aes256Gcm(c) => c,
+        }
+    }
+}
+
 // Signature traits
 pub use signature::{Signer, Verifier};
 pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};

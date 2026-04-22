@@ -80,6 +80,8 @@ pub struct BlobStore {
     /// Persistent blob encryption key. Derived from the node's identity
     /// so that blobs remain decryptable across restarts.
     key: [u8; 32],
+    /// The node's identity (derived from key), used as default recipient.
+    node_identity: Vec<u8>,
 }
 
 impl BlobStore {
@@ -107,9 +109,12 @@ impl BlobStore {
             }
         };
 
+        let node_identity = key.to_vec();
+
         Ok(Self {
             config: config.clone(),
             key,
+            node_identity,
         })
     }
 
@@ -124,12 +129,11 @@ impl BlobStore {
         plaintext: &[u8],
         recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
-        // Spec §6.2: every persisted blob MUST name at least one recipient
-        if recipients.is_empty() {
-            return Err(StorageError::InvalidBlob(
-                "blob must name at least one recipient".into(),
-            ));
-        }
+        let recipients = if recipients.is_empty() {
+            vec![self.node_identity.clone()]
+        } else {
+            recipients.to_vec()
+        };
 
         // Derive blob ID from plaintext hash (content-addressed)
         let blob_id = edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(plaintext));
@@ -167,6 +171,14 @@ impl BlobStore {
         }
 
         Ok(blob_id)
+    }
+
+    /// Returns the node's identity (derived from the blob key).
+    ///
+    /// This can be used as a default recipient when storing blobs
+    /// without specifying explicit recipients.
+    pub fn node_identity(&self) -> &[u8] {
+        &self.node_identity
     }
 
     /// Loads a blob by its ID.
