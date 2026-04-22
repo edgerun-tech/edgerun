@@ -13,7 +13,7 @@ fn main() {
 
     // Rootless detection and re-exec (only for container commands)
     let is_container_cmd = args.first().map(|s| {
-        matches!(s.as_str(), "create" | "start" | "exec" | "delete" | "kill" | "pause" | "resume" | "update" | "state" | "ps" | "events")
+        matches!(s.as_str(), "create" | "start" | "exec" | "delete" | "kill" | "pause" | "resume" | "update" | "state" | "ps" | "events" | "checkpoint" | "restore")
     }).unwrap_or(false);
 
     if is_container_cmd && unsafe { libc::geteuid() } != 0 && std::env::var("_ERT_ROOTLESS_CHILD").is_err() {
@@ -38,6 +38,8 @@ fn main() {
         "update" => cli::cmd_update(&opts, &cmd_args),
         "pause" => cli::cmd_pause(&opts, &cmd_args),
         "resume" => cli::cmd_resume(&opts, &cmd_args),
+        "checkpoint" => cli::cmd_checkpoint(&opts, &cmd_args),
+        "restore" => cli::cmd_restore(&opts, &cmd_args),
         "events" => cli::cmd_events(&opts, &cmd_args),
         "ps" => cli::cmd_ps(&opts, &cmd_args),
         "features" => cli::cmd_features(&opts, &cmd_args),
