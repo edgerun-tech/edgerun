@@ -52,7 +52,7 @@ message ChunkEntry {
 message ChunkManifest {
   uint32 manifest_version = 1;
   edgerun.v0.common.ObjectRef object = 2;
-  optional edgerun.v0.common.RepresentationRef representation = 3;
+  edgerun.v0.common.RepresentationRef representation = 3;
   uint32 chunk_count = 4;
   uint64 total_stored_size = 5;
   repeated ChunkEntry chunk_entries = 6;

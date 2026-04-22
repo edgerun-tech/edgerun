@@ -70,6 +70,7 @@ members = [
   "crates/edgerun-power",
   "crates/edgerun-quectel-ec200a",
   "crates/edgerun-proto",
+  "crates/edgerun-proxy",
   "crates/edgerun-qpack",
   "crates/edgerun-remote-capability",
   "crates/edgerun-rt",
@@ -131,6 +132,7 @@ function_casts_as_integer = "allow"
 # Core edgerun crates
 edgerun-core = { path = "crates/edgerun-core" }
 edgerun-proto = { path = "crates/edgerun-proto" }
+edgerun-proxy = { path = "crates/edgerun-proxy" }
 edgerun-storage = { path = "crates/edgerun-storage" }
 edgerun-stream = { path = "crates/edgerun-stream" }
 edgerun-http = { path = "crates/edgerun-http" }

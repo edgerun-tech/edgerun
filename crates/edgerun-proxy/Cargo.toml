@@ -1,0 +1,14 @@
+[package]
+name = "edgerun-proxy"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP proxy server with CONNECT support for HTTPS tunneling"
+
+[dependencies]
+edgerun-http = { path = "../edgerun-http" }
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+tokio = { version = "1", features = ["net", "io-util", "rt-multi-thread", "macros"] }
+
+[features]
+default = []
