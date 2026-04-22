@@ -116,19 +116,23 @@ pub(crate) async fn handle_provisioning_connection(
             return Err("password too short".into());
         }
 
-        let response = r#"{"status":"ok","message":"provisioning_accepted"}"#;
+        let response = r#"{"status":"provisioning_accepted"}"#;
         stream.write_all(response.as_bytes()).await.map_err(|e| e.to_string())?;
 
-        edgerun_log::info!("Node {} will now generate genesis with password-protected key", &public_key_hex[..16]);
+        edgerun_log::info!("Node {} provisioning accepted, genesis will be encrypted with password", &public_key_hex[..16]);
 
         Ok(())
     } else if msg_type == "complete" {
-        let config_hex = read_json_field(&request, "config").unwrap_or_default();
+        let password = read_json_field(&request, "password").unwrap_or_default();
 
-        let response = r#"{"status":"ok","message":"genesis_completed"}"#;
+        if password.len() < 8 {
+            return Err("password too short".into());
+        }
+
+        let response = r#"{"status":"genesis_completed"}"#;
         stream.write_all(response.as_bytes()).await.map_err(|e| e.to_string())?;
 
-        edgerun_log::info!("Node {} genesis completed", &public_key_hex[..16]);
+        edgerun_log::info!("Node {} genesis completed and encrypted with password", &public_key_hex[..16]);
 
         Ok(())
     } else if msg_type == "unlock" {
@@ -138,10 +142,10 @@ pub(crate) async fn handle_provisioning_connection(
             return Err("password too short".into());
         }
 
-        let response = r#"{"status":"ok","message":"unlock accepted}""#;
+        let response = r#"{"status":"unlock_accepted"}"#;
         stream.write_all(response.as_bytes()).await.map_err(|e| e.to_string())?;
 
-        edgerun_log::info!("Unlock accepted for node {}", &public_key_hex[..16]);
+        edgerun_log::info!("Unlock accepted for node {}, will decrypt private key with password", &public_key_hex[..16]);
 
         Ok(())
     } else {
