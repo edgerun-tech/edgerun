@@ -24,6 +24,7 @@ use crate::peer_reconnect::run_peer_reconnection;
 use crate::session;
 use crate::store_task::{run_store_task};
 use crate::tcp_server::{SessionContext, run_tcp_listener, handle_tcp_connection, encode_tcp_frame, perform_session_handshake_as_initiator};
+use crate::provisioning_listener::run_provisioning_listener;
 use crate::types::{StoreRequest, StoreResponse};
 use crate::workload_policy;
 
@@ -653,6 +654,22 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         edgerun_log::info!("TCP listener started");
     } else {
         edgerun_log::info!("running mesh-only (no TCP listener)");
+    }
+
+    // --- Provisioning listener ---
+    if let Some(ref signer_cfg) = config.signer {
+        if signer_cfg.signer_type == "provisioned" {
+            if signer_cfg.state.as_ref() == Some(&config::SignerState::Provisioning) {
+                let provision_cancel = cancel.child_token();
+                let _provision_handle = edgerun_rt::spawn(run_provisioning_listener(
+                    node_id,
+                    signer_cfg.public_key_hex.clone(),
+                    signer_cfg.pairing_pin.clone(),
+                    provision_cancel,
+                ));
+                edgerun_log::info!("Provisioning listener started on :35630");
+            }
+        }
     }
 
     // --- Bootstrap peer connections ---

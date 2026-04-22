@@ -42,8 +42,10 @@ mod signer;
 mod status_cmd;
 mod store_task;
 mod tcp_server;
-mod types;
 
+mod provisioning_listener;
+
+mod types;
 use command_dispatch::sign_event_envelope;
 
 fn main() {
