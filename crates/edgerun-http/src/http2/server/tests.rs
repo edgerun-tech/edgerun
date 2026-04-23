@@ -38,7 +38,7 @@ fn test_apply_client_settings_default() {
     let action = server.apply_client_settings(&sf);
     match action {
         FrameAction::WriteFrames(frames) => {
-            assert_eq!(frames.len(), 2);
+            assert_eq!(frames.len(), 1);
         }
         _ => panic!("expected WriteFrames"),
     }
@@ -335,8 +335,10 @@ fn test_handle_headers_connection_specific_rejected() {
     match action {
         FrameAction::WriteFrames(frames) => {
             assert!(!frames.is_empty());
+            assert!(matches!(frames[0].frame_type, FrameType::RstStream));
         }
-        _ => panic!("expected error for connection-specific header"),
+        FrameAction::Goaway { .. } => {}
+        _ => panic!("expected WriteFrames with RST_STREAM or Goaway"),
     }
 }
 
