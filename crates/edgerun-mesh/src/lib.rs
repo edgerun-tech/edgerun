@@ -9,6 +9,7 @@ pub mod benchmark;
 pub mod discovery;
 pub mod router;
 pub mod router_benchmark;
+pub mod mesh_payload;
 
 mod frame_types;
 mod frame;
@@ -35,3 +36,4 @@ mod tests;
 
 pub use discovery::DiscoveryPacket;
 pub use router::MeshRouter;
+pub use mesh_payload::{MetricsReportPayload, DeploymentMetrics, MigrationOrderPayload, MigrationCompletePayload};

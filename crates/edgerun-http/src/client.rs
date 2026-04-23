@@ -41,6 +41,7 @@ struct ClientInner {
 }
 
 /// Unified HTTP client.
+#[derive(Clone)]
 pub struct HttpClient {
     inner: Arc<ClientInner>,
 }

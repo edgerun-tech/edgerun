@@ -435,7 +435,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                         }
                     }
                 }
-                FrameType::Discovery | FrameType::RouteAdv => {
+                FrameType::Discovery | FrameType::RouteAdv | FrameType::MetricsReport | FrameType::MigrationOrder | FrameType::MigrationComplete => {
                     // Already processed by link.pump()
                 }
                 FrameType::Unknown(_) => {}

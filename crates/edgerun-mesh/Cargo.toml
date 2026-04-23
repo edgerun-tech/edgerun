@@ -8,8 +8,9 @@ publish.workspace = true
 [dependencies]
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-crypto.workspace = true
-
 edgerun-core = { path = "../edgerun-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = "0.11"
 
 [lints]
 workspace = true

@@ -313,7 +313,7 @@ impl MeshLink {
                             router.process_discovery(frame.header.src, &packet, current_unix_secs());
                     }
                 }
-                FrameType::Data | FrameType::RouteAdv | FrameType::HandshakeInit | FrameType::HandshakeAccept => {
+                FrameType::Data | FrameType::RouteAdv | FrameType::HandshakeInit | FrameType::HandshakeAccept | FrameType::MetricsReport | FrameType::MigrationOrder | FrameType::MigrationComplete => {
                     // Queue for capability/handshake dispatcher delivery
                     self.inbound_data_frames.push_back(frame);
                 }

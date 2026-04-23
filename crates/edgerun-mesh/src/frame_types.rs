@@ -15,20 +15,14 @@ use super::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum FrameType {
-    /// Capability invocation, result, or session control payload.
-    /// Encrypted through the session layer.
     Data = 0,
-    /// Discovery hello — advertises this node's identity and routing table.
     Discovery = 1,
-    /// Route advertisement — piggybacked on data frames or sent standalone.
     RouteAdv = 2,
-    /// ECDH handshake init — sent by the initiator to start a session.
-    /// Signed but NOT encrypted (no session exists yet).
     HandshakeInit = 3,
-    /// ECDH handshake accept — sent by the responder to complete a session.
-    /// Signed but NOT encrypted (session is being established).
     HandshakeAccept = 4,
-    /// Unknown or unsupported frame type.
+    MetricsReport = 5,
+    MigrationOrder = 6,
+    MigrationComplete = 7,
     Unknown(u8),
 }
 
@@ -41,6 +35,9 @@ impl FrameType {
             2 => Self::RouteAdv,
             3 => Self::HandshakeInit,
             4 => Self::HandshakeAccept,
+            5 => Self::MetricsReport,
+            6 => Self::MigrationOrder,
+            7 => Self::MigrationComplete,
             other => Self::Unknown(other),
         }
     }
