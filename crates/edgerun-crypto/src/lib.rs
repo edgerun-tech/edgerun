@@ -270,6 +270,76 @@ pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
 }
 
 // ---------------------------------------------------------------------------
+// Cipher suites (shared between TLS 1.3 and QUIC)
+// ---------------------------------------------------------------------------
+
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CipherSuite {
+    TLS_AES_128_GCM_SHA256,
+    TLS_AES_256_GCM_SHA384,
+    TLS_CHACHA20_POLY1305_SHA256,
+}
+
+impl CipherSuite {
+    pub fn client_default() -> Vec<Self> {
+        vec![
+            CipherSuite::TLS_AES_128_GCM_SHA256,
+            CipherSuite::TLS_AES_256_GCM_SHA384,
+        ]
+    }
+
+    pub fn to_wire(self) -> u16 {
+        match self {
+            CipherSuite::TLS_AES_128_GCM_SHA256 => 0x1301,
+            CipherSuite::TLS_AES_256_GCM_SHA384 => 0x1302,
+            CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => 0x1303,
+        }
+    }
+
+    pub fn from_wire(value: u16) -> Result<Self, CryptoError> {
+        match value {
+            0x1301 => Ok(CipherSuite::TLS_AES_128_GCM_SHA256),
+            0x1302 => Ok(CipherSuite::TLS_AES_256_GCM_SHA384),
+            0x1303 => Ok(CipherSuite::TLS_CHACHA20_POLY1305_SHA256),
+            _ => Err(CryptoError::CipherSuiteError(format!("Unsupported: 0x{:04x}", value))),
+        }
+    }
+
+    pub fn key_len(self) -> usize {
+        match self {
+            CipherSuite::TLS_AES_128_GCM_SHA256 => 16,
+            CipherSuite::TLS_AES_256_GCM_SHA384 | CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => 32,
+        }
+    }
+
+    pub const fn iv_len(&self) -> usize {
+        12
+    }
+
+    pub const fn tag_len(&self) -> usize {
+        16
+    }
+
+    pub fn hash_len(self) -> usize {
+        match self {
+            CipherSuite::TLS_AES_128_GCM_SHA256 | CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => 32,
+            CipherSuite::TLS_AES_256_GCM_SHA384 => 48,
+        }
+    }
+}
+
+impl std::fmt::Display for CipherSuite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CipherSuite::TLS_AES_128_GCM_SHA256 => write!(f, "TLS_AES_128_GCM_SHA256"),
+            CipherSuite::TLS_AES_256_GCM_SHA384 => write!(f, "TLS_AES_256_GCM_SHA384"),
+            CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => write!(f, "TLS_CHACHA20_POLY1305_SHA256"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Convenience AEAD helpers
 // ---------------------------------------------------------------------------
 

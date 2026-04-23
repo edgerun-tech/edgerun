@@ -7,7 +7,8 @@
 //!
 //! All messages after ServerHello are encrypted.
 
-use crate::cipher::{CipherSuite, NamedGroup};
+use edgerun_crypto::CipherSuite;
+use crate::cipher::NamedGroup;
 use crate::Result;
 use crate::TlsError;
 use std::io::Read;
@@ -316,7 +317,7 @@ impl ServerHello {
         }
         let cs = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
         let cipher_suite = CipherSuite::from_wire(cs)
-            .map_err(|e| TlsError::HandshakeFailure(e))?;
+            .map_err(|e| TlsError::HandshakeFailure(e.to_string()))?;
         pos += 2;
 
         // Legacy compression

@@ -4,7 +4,8 @@
 //! all relevant extensions: SNI, key_share, supported_versions,
 //! supported_groups, and signature_algorithms.
 
-use crate::cipher::{CipherSuite, NamedGroup};
+use crate::cipher::NamedGroup;
+use edgerun_crypto::CipherSuite;
 use crate::{Result, TlsError};
 
 /// Parsed ClientHello from the wire format (RFC 8446 §4.1.2).

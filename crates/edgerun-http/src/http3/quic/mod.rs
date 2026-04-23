@@ -16,6 +16,7 @@ pub use transport::QuicTransport;
 
 use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 
+use edgerun_crypto::CipherSuite;
 use edgerun_rt::AsyncUdpSocket;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::Arc;
@@ -969,7 +970,7 @@ impl QuicConnection {
 
         // Create new protection with updated keys
         let new_keys = crypto::ProtectionKeys::new(
-            crypto::AeadAlgorithm::Aes128Gcm,
+            CipherSuite::TLS_AES_128_GCM_SHA256,
             next_key.clone(),
             next_iv.clone(),
             next_key,

@@ -7,11 +7,11 @@
 //!
 //! The AEAD nonce is computed as: nonce = write_iv XOR (sequence_number as 12 bytes)
 
-use edgerun_crypto::{AesGcmCipher, KeyInit, AeadInPlace};
+use edgerun_crypto::{AeadCipher, KeyInit, AeadInPlace};
 
 /// TLS record layer for encryption/decryption
 pub struct RecordCipher {
-    cipher: AesGcmCipher,
+    cipher: AeadCipher,
     /// 96-bit nonce base (write_iv)
     iv: [u8; 12],
     /// Sequence number for record ordering
@@ -29,7 +29,7 @@ impl RecordCipher {
         let mut iv_arr = [0u8; 12];
         iv_arr.copy_from_slice(iv);
 
-        let cipher = AesGcmCipher::new_from_slice(key).map_err(|e| crate::TlsError::Cipher(e.to_string()))?;
+        let cipher = AeadCipher::new_from_key(key).map_err(|e| crate::TlsError::Cipher(e.to_string()))?;
 
         Ok(RecordCipher {
             cipher,

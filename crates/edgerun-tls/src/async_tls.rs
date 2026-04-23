@@ -24,7 +24,8 @@ use std::task::{Context, Poll};
 use crate::alert::{Alert, AlertLevel};
 use crate::certificate::Certificate;
 use crate::certificate_gen::CertificateAndKey;
-use crate::cipher::{CipherSuite, NamedGroup};
+use edgerun_crypto::CipherSuite;
+use crate::cipher::NamedGroup;
 use crate::handshake::{ClientHelloBuilder, ServerHello};
 use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::prf::{
