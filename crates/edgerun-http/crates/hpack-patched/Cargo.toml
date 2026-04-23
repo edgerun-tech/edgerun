@@ -12,6 +12,7 @@
 [package]
 name = "hpack-patched"
 version = "0.3.0"
+edition = "2015"
 authors = ["Marko Lalic <marko.lalic@gmail.com>"]
 exclude = ["fixtures/*"]
 description = "A library implementing HPACK coding. Patched from the original crate."
