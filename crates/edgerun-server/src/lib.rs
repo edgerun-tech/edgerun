@@ -246,6 +246,34 @@ mod lmtp_config {
 #[cfg(feature = "lmtp")]
 pub use lmtp_config::LmtpConfig;
 
+#[cfg(feature = "proxy")]
+mod proxy_config {
+    use std::time::Duration;
+
+    #[derive(Clone)]
+    pub struct ProxyConfig {
+        pub bind_addr: String,
+        pub socks5_bind_addr: Option<String>,
+        pub upstream_proxy: Option<String>,
+        pub connect_timeout: Duration,
+        pub tunnel_buffer_size: usize,
+    }
+
+    impl Default for ProxyConfig {
+        fn default() -> Self {
+            Self {
+                bind_addr: "0.0.0.0:8080".to_string(),
+                socks5_bind_addr: None,
+                upstream_proxy: None,
+                connect_timeout: Duration::from_secs(30),
+                tunnel_buffer_size: 64 * 1024,
+            }
+        }
+    }
+}
+#[cfg(feature = "proxy")]
+pub use proxy_config::ProxyConfig;
+
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
@@ -265,6 +293,8 @@ pub struct Server {
     smtp: Option<SmtpConfig>,
     #[cfg(feature = "lmtp")]
     lmtp: Option<LmtpConfig>,
+    #[cfg(feature = "proxy")]
+    proxy: Option<ProxyConfig>,
     connection_middleware: Vec<Arc<dyn ConnectionMiddleware>>,
 }
 
@@ -293,6 +323,8 @@ impl Server {
             smtp: None,
             #[cfg(feature = "lmtp")]
             lmtp: None,
+            #[cfg(feature = "proxy")]
+            proxy: None,
             connection_middleware: Vec::new(),
         }
     }
@@ -378,6 +410,12 @@ impl Server {
         self
     }
 
+    #[cfg(feature = "proxy")]
+    pub fn with_proxy(mut self, config: ProxyConfig) -> Self {
+        self.proxy = Some(config);
+        self
+    }
+
     /// Build and bind all protocol listeners.
     pub async fn build(self) -> std::io::Result<BoundServer> {
         let http_bound = if let Some(h) = self.http {
@@ -435,6 +473,20 @@ impl Server {
                 timeout_secs: 5,
             };
             let srv = edgerun_tftp::TftpServer::new(tftp_config, config.provider)?;
+            Some(srv)
+        } else {
+            None
+        };
+
+        #[cfg(feature = "proxy")]
+        let proxy_server = if let Some(config) = self.proxy {
+            let srv = edgerun_proxy::ProxyServer::new(edgerun_proxy::ProxyConfig {
+                bind_addr: config.bind_addr,
+                socks5_bind_addr: config.socks5_bind_addr,
+                upstream_proxy: config.upstream_proxy,
+                connect_timeout: config.connect_timeout,
+                tunnel_buffer_size: config.tunnel_buffer_size,
+            });
             Some(srv)
         } else {
             None
@@ -539,6 +591,8 @@ impl Server {
             smtp: smtp_server,
             #[cfg(feature = "lmtp")]
             lmtp: lmtp_server,
+            #[cfg(feature = "proxy")]
+            proxy: proxy_server,
             connection_middleware,
         })
     }
@@ -563,6 +617,8 @@ pub struct BoundServer {
     smtp: Option<edgerun_email::smtp::SmtpServer>,
     #[cfg(feature = "lmtp")]
     lmtp: Option<edgerun_email::lmtp::LmtpServer>,
+    #[cfg(feature = "proxy")]
+    proxy: Option<edgerun_proxy::ProxyServer>,
     /// Compiled connection middleware chain.
     /// If empty, connections go directly to protocol handlers.
     #[allow(dead_code)]
@@ -646,6 +702,15 @@ impl BoundServer {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
                 lmtp.run(token).await
+            }));
+        }
+
+        // Proxy
+        #[cfg(feature = "proxy")]
+        if let Some(proxy) = self.proxy.take() {
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                proxy.run(token).await
             }));
         }
 

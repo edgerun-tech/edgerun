@@ -9,7 +9,7 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use edgerun_crypto::{AesGcmCipher, KeyInit, AeadInPlace};
+use edgerun_crypto::{AeadCipher, KeyInit, AeadInPlace, CipherSuite};
 use edgerun_crypto::aes_gcm;
 
 use std::collections::HashMap;
@@ -25,47 +25,9 @@ pub enum CryptoPhase {
     Application,
 }
 
-/// AEAD algorithm
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AeadAlgorithm {
-    Aes128Gcm,
-    Aes256Gcm,
-    ChaCha20Poly1305,
-}
-
-impl AeadAlgorithm {
-    fn key_len(self) -> usize {
-        match self {
-            AeadAlgorithm::Aes128Gcm => 16,
-            AeadAlgorithm::Aes256Gcm => 32,
-            AeadAlgorithm::ChaCha20Poly1305 => 32,
-        }
-    }
-
-    fn tag_len(&self) -> usize {
-        // All AEAD algorithms produce 16-byte tags
-        16
-    }
-
-    /// Check if this is a ChaCha20 cipher suite.
-    pub fn is_chacha20(self) -> bool {
-        matches!(self, AeadAlgorithm::ChaCha20Poly1305)
-    }
-
-    /// Check if this is an AES cipher suite.
-    pub fn is_aes(self) -> bool {
-        !self.is_chacha20()
-    }
-
-    /// Preferred cipher suite for the client (RFC 9001 §5.3).
-    ///
-    /// ChaCha20 is preferred when there's no AES hardware acceleration.
-    /// AES-128-GCM is preferred when AES-NI is available.
-    pub fn preferred() -> Self {
-        // In production, check for AES-NI:
-        // if std::is_x86_feature_detected!("aes") { Aes128Gcm } else { ChaCha20Poly1305 }
-        // For now, default to AES-128-GCM.
-        AeadAlgorithm::Aes128Gcm
+impl CryptoPhase {
+    pub fn preferred() -> CipherSuite {
+        CipherSuite::TLS_AES_128_GCM_SHA256
     }
 }
 
@@ -73,7 +35,7 @@ impl AeadAlgorithm {
 #[derive(Clone)]
 pub struct ProtectionKeys {
     /// AEAD algorithm
-    pub algorithm: AeadAlgorithm,
+    pub algorithm: CipherSuite,
     /// Write (encrypt) key
     pub write_key: Vec<u8>,
     /// Write IV (for nonce derivation)
@@ -87,7 +49,7 @@ pub struct ProtectionKeys {
 impl ProtectionKeys {
     /// Create from raw key material
     pub fn new(
-        algorithm: AeadAlgorithm,
+        algorithm: CipherSuite,
         write_key: Vec<u8>,
         write_iv: Vec<u8>,
         read_key: Vec<u8>,
@@ -104,10 +66,10 @@ impl ProtectionKeys {
 
     /// Create test keys (all zeros) for unit testing
     pub fn test_keys() -> Self {
-        let key_len = AeadAlgorithm::Aes128Gcm.key_len();
+        let key_len = CipherSuite::TLS_AES_128_GCM_SHA256.key_len();
         let iv_len = 12;
         ProtectionKeys {
-            algorithm: AeadAlgorithm::Aes128Gcm,
+            algorithm: CipherSuite::TLS_AES_128_GCM_SHA256,
             write_key: vec![0u8; key_len],
             write_iv: vec![0u8; iv_len],
             read_key: vec![0u8; key_len],
@@ -119,9 +81,9 @@ impl ProtectionKeys {
 /// QUIC packet protection engine
 pub struct PacketProtection {
     /// Encryption AEAD
-    write_aead: AesGcmCipher,
+    write_aead: AeadCipher,
     /// Decryption AEAD
-    read_aead: AesGcmCipher,
+    read_aead: AeadCipher,
     /// Write IV
     write_iv: Vec<u8>,
     /// Read IV
@@ -133,8 +95,10 @@ pub struct PacketProtection {
 impl PacketProtection {
     /// Create from protection keys
     pub fn new(keys: &ProtectionKeys) -> Self {
-        let write_aead = AesGcmCipher::new_from_slice(&keys.write_key).expect("valid write key");
-        let read_aead = AesGcmCipher::new_from_slice(&keys.read_key).expect("valid read key");
+        let write_aead = AeadCipher::new_from_key(&keys.write_key)
+            .expect("valid write key");
+        let read_aead = AeadCipher::new_from_key(&keys.read_key)
+            .expect("valid read key");
 
         PacketProtection {
             write_aead,
@@ -156,7 +120,7 @@ impl PacketProtection {
 
         // Use the AEAD with AAD (the unprotected packet header)
         let mut buffer = plaintext.to_vec();
-        let tag = self.write_aead.encrypt_in_place_detached((&nonce).into(), header, &mut buffer)
+        let tag = self.write_aead.encrypt_in_place_detached(&nonce, header, &mut buffer)
             .map_err(|e| format!("AEAD encrypt failed: {:?}", e))?;
 
         // GCM output = ciphertext || tag (16 bytes)
@@ -179,7 +143,7 @@ impl PacketProtection {
         let tag = aes_gcm::Tag::from_slice(&ciphertext_and_tag[tag_start..]);
         let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
 
-        self.read_aead.decrypt_in_place_detached((&nonce).into(), header, &mut buffer, tag)
+        self.read_aead.decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
             .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
 
         Ok(buffer)

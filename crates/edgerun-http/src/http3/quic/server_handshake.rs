@@ -18,7 +18,8 @@
 //! ```
 
 use edgerun_crypto::getrandom;
-use edgerun_tls::cipher::{CipherSuite, NamedGroup};
+use edgerun_crypto::CipherSuite;
+use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use edgerun_tls::prf::{
     Hasher, Tls13KeySchedule, TrafficKeys,
@@ -33,7 +34,7 @@ use edgerun_tls::server::message_builder::{
 };
 use edgerun_tls::certificate_gen::CertificateAndKey;
 
-use super::crypto::{AeadAlgorithm, ProtectionKeys};
+use super::crypto::ProtectionKeys;
 use super::ConnectionId;
 
 /// 0-RTT early data state (RFC 9001 §4.6).
@@ -156,7 +157,7 @@ impl QuicTlsServerHandshaker {
     pub fn initial_keys(&self, client_dcid: &[u8]) -> ProtectionKeys {
         let (write, read) = quic_initial_server_keys(client_dcid, 16, 12, &self.hasher);
         ProtectionKeys::new(
-            AeadAlgorithm::Aes128Gcm,
+            CipherSuite::TLS_AES_128_GCM_SHA256,
             write.write_key,
             write.write_iv,
             read.write_key,
@@ -281,7 +282,7 @@ impl QuicTlsServerHandshaker {
         let read = quic_traffic_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
 
         Ok(ProtectionKeys::new(
-            AeadAlgorithm::Aes128Gcm,
+            CipherSuite::TLS_AES_128_GCM_SHA256,
             write.write_key,
             write.write_iv,
             read.write_key,
@@ -395,21 +396,21 @@ impl QuicTlsServerHandshaker {
 
         Ok(ServerHandshakeResult {
             initial_keys: ProtectionKeys::new(
-                AeadAlgorithm::Aes128Gcm,
+                CipherSuite::TLS_AES_128_GCM_SHA256,
                 init_write.write_key,
                 init_write.write_iv,
                 init_read.write_key,
                 init_read.write_iv,
             ),
             handshake_keys: ProtectionKeys::new(
-                AeadAlgorithm::Aes128Gcm,
+                CipherSuite::TLS_AES_128_GCM_SHA256,
                 hs_write.write_key,
                 hs_write.write_iv,
                 hs_read.write_key,
                 hs_read.write_iv,
             ),
             app_keys: ProtectionKeys::new(
-                AeadAlgorithm::Aes128Gcm,
+                CipherSuite::TLS_AES_128_GCM_SHA256,
                 app_write.write_key,
                 app_write.write_iv,
                 app_read.write_key,
@@ -420,7 +421,7 @@ impl QuicTlsServerHandshaker {
                 let read_keys = quic_traffic_keys(secret, self.cipher_suite.key_len(), 12, &self.hasher);
                 // Server would write 0-RTT response using the same secret (same direction)
                 ProtectionKeys::new(
-                    AeadAlgorithm::Aes128Gcm,
+                    CipherSuite::TLS_AES_128_GCM_SHA256,
                     read_keys.write_key.clone(),
                     read_keys.write_iv.clone(),
                     read_keys.write_key,

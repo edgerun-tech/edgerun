@@ -187,7 +187,8 @@ mod tests {
             .unwrap(),
         );
         let index = Arc::new(FileIndex::open(&data_root).unwrap());
-        CredentialStore::new(blobs, index)
+        let node_identity = blobs.node_identity().to_vec();
+        CredentialStore::new(blobs, index, node_identity)
     }
 
     // -- Basic CRUD --

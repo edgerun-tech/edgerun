@@ -1,5 +1,6 @@
 //! CLI argument parsing and command dispatch for ert.
 
+mod checkpoint;
 mod create;
 mod delete;
 mod events;
@@ -9,6 +10,7 @@ mod kill;
 mod pause;
 mod ps;
 mod resume;
+mod restore;
 mod spec;
 mod start;
 mod state;
@@ -20,6 +22,7 @@ mod registry_login;
 mod registry_logout;
 mod run;
 
+pub use checkpoint::cmd_checkpoint;
 pub use create::cmd_create;
 pub use delete::cmd_delete;
 pub use events::cmd_events;
@@ -29,6 +32,7 @@ pub use kill::cmd_kill;
 pub use pause::cmd_pause;
 pub use ps::cmd_ps;
 pub use resume::cmd_resume;
+pub use restore::cmd_restore;
 pub use spec::cmd_spec;
 pub use start::cmd_start;
 pub use state::cmd_state;
@@ -153,6 +157,8 @@ pub fn print_usage() {
     eprintln!("  update <container-id>     Update container resource limits");
     eprintln!("  pause <container-id>      Pause the container (cgroup freeze)");
     eprintln!("  resume <container-id>     Resume the container (cgroup unfreeze)");
+    eprintln!("  checkpoint <container-id>  Checkpoint a running container");
+    eprintln!("  restore <container-id>     Restore a checkpointed container");
     eprintln!("  events <container-id>     Stream cgroup stats");
     eprintln!("  ps <container-id>         List processes in the container");
     eprintln!("  features                  Output supported features");

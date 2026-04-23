@@ -1672,6 +1672,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-proxy"
+version = "0.1.0"
+dependencies = [
+ "edgerun-log",
+ "edgerun-rt",
+]
+
+[[package]]
 name = "edgerun-qpack"
 version = "0.1.0"
 dependencies = [
@@ -1738,6 +1746,7 @@ dependencies = [
  "edgerun-email-auth",
  "edgerun-http",
  "edgerun-log",
+ "edgerun-proxy",
  "edgerun-rt",
  "edgerun-tftp",
  "edgerun-tls",

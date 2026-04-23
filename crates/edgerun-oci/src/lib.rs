@@ -23,6 +23,7 @@ use std::collections::HashMap;
 pub mod bundle;
 pub mod cgroups;
 pub mod config_builder;
+pub mod criu;
 pub mod ebpf_devices;
 pub mod ebpf_netcls;
 pub mod error;

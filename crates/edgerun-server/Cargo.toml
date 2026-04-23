@@ -15,6 +15,7 @@ edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }
 edgerun-dns = { path = "../edgerun-dns", optional = true }
 edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
 edgerun-tftp = { path = "../edgerun-tftp", optional = true }
+edgerun-proxy = { path = "../edgerun-proxy", optional = true }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-log = { path = "../edgerun-log" }
@@ -27,4 +28,5 @@ lmtp = ["dep:edgerun-email"]
 dns = ["dep:edgerun-dns"]
 dhcp = ["dep:edgerun-dhcp"]
 tftp = ["dep:edgerun-tftp"]
+proxy = ["dep:edgerun-proxy"]
 tls = []

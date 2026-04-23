@@ -1,0 +1,12 @@
+[package]
+name = "edgerun-proxy"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP proxy server with CONNECT support for HTTPS tunneling"
+
+[dependencies]
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+
+[features]
+default = []

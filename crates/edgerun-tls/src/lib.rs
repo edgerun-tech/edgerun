@@ -123,6 +123,7 @@ pub use crate::prf::{hmac_sha256, hmac_sha384};
 mod tests {
     use super::*;
     use crate::handshake::ClientHelloBuilder;
+    use edgerun_crypto::CipherSuite;
     use crate::cipher::NamedGroup;
     use crate::server::ClientHello;
     use crate::certificate_gen::generate_self_signed;
