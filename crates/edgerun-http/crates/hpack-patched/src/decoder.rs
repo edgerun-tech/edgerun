@@ -130,7 +130,7 @@ fn decode_integer(buf: &[u8], prefix_size: u8)
 /// Returns the decoded string in a newly allocated `Vec` and the number of
 /// bytes consumed from the given buffer.
 fn decode_string<'a>(buf: &'a [u8]) -> Result<(Cow<'a, [u8]>, usize), DecoderError> {
-    let (len, consumed) = decode_integer(buf, 7)?;
+    let (len, consumed) = try!(decode_integer(buf, 7));
     debug!("decode_string: Consumed = {}, len = {}", consumed, len);
     if consumed + len > buf.len() {
         return Err(
@@ -240,8 +240,6 @@ pub enum DecoderError {
     /// size mandated to the decoder by the protocol. (by perfroming changes
     /// made by SizeUpdate blocks).
     InvalidMaxDynamicSize,
-    /// RFC 7541: Size update after header field
-    SizeUpdateAfterHeaderField,
 }
 
 /// The result returned by the `decode` method of the `Decoder`.
@@ -303,7 +301,6 @@ impl<'a> Decoder<'a> {
     pub fn decode_with_cb<F>(&mut self, buf: &[u8], mut cb: F) -> Result<(), DecoderError>
             where F: FnMut(Cow<[u8]>, Cow<[u8]>) {
         let mut current_octet_index = 0;
-        let mut saw_header_field = false;
 
         while current_octet_index < buf.len() {
             // At this point we are always at the beginning of the next block
@@ -314,18 +311,16 @@ impl<'a> Decoder<'a> {
             let buffer_leftover = &buf[current_octet_index..];
             let consumed = match FieldRepresentation::new(initial_octet) {
                 FieldRepresentation::Indexed => {
-                    saw_header_field = true;
                     let ((name, value), consumed) =
-                        self.decode_indexed(buffer_leftover)?;
+                        try!(self.decode_indexed(buffer_leftover));
                     cb(Cow::Borrowed(name), Cow::Borrowed(value));
 
                     consumed
                 },
                 FieldRepresentation::LiteralWithIncrementalIndexing => {
-                    saw_header_field = true;
                     let ((name, value), consumed) = {
-                        let ((name, value), consumed) = 
-                            self.decode_literal(buffer_leftover, true)?;
+                        let ((name, value), consumed) = try!(
+                            self.decode_literal(buffer_leftover, true));
                         cb(Cow::Borrowed(&name), Cow::Borrowed(&value));
 
                         // Since we are to add the decoded header to the header table, we need to
@@ -345,9 +340,8 @@ impl<'a> Decoder<'a> {
                     consumed
                 },
                 FieldRepresentation::LiteralWithoutIndexing => {
-                    saw_header_field = true;
                     let ((name, value), consumed) =
-                        self.decode_literal(buffer_leftover, false)?;
+                        try!(self.decode_literal(buffer_leftover, false));
                     cb(name, value);
 
                     consumed
@@ -358,15 +352,13 @@ impl<'a> Decoder<'a> {
                     // representation received here. We don't care about this
                     // for now.
                     let ((name, value), consumed) =
-                        self.decode_literal(buffer_leftover, false)?;
+                        try!(self.decode_literal(buffer_leftover, false));
                     cb(name, value);
 
                     consumed
                 },
                 FieldRepresentation::SizeUpdate => {
-                    if saw_header_field {
-                        return Err(DecoderError::SizeUpdateAfterHeaderField);
-                    }
+                    // Handle the dynamic table size update...
                     self.update_max_dynamic_size(buffer_leftover)?
                 }
             };
@@ -388,7 +380,7 @@ impl<'a> Decoder<'a> {
     pub fn decode(&mut self, buf: &[u8]) -> DecoderResult {
         let mut header_list = Vec::new();
 
-        self.decode_with_cb(buf, |n, v| header_list.push((n.into_owned(), v.into_owned())))?;
+        try!(self.decode_with_cb(buf, |n, v| header_list.push((n.into_owned(), v.into_owned()))));
 
         Ok(header_list)
     }
@@ -396,10 +388,10 @@ impl<'a> Decoder<'a> {
     /// Decodes an indexed header representation.
     fn decode_indexed(&self, buf: &[u8])
             -> Result<((&[u8], &[u8]), usize), DecoderError> {
-        let (index, consumed) = decode_integer(buf, 7)?;
+        let (index, consumed) = try!(decode_integer(buf, 7));
         debug!("Decoding indexed: index = {}, consumed = {}", index, consumed);
 
-        let (name, value) = self.get_from_table(index)?;
+        let (name, value) = try!(self.get_from_table(index));
 
         Ok(((name, value), consumed))
     }
@@ -422,28 +414,28 @@ impl<'a> Decoder<'a> {
     /// - index: whether or not the decoded value should be indexed (i.e.
     ///   included in the dynamic table).
     fn decode_literal<'b>(&'b self, buf: &'b [u8], index: bool)
-            -> Result<((Cow<'b, [u8]>, Cow<'b, [u8]>), usize), DecoderError> {
+            -> Result<((Cow<[u8]>, Cow<[u8]>), usize), DecoderError> {
         let prefix = if index {
             6
         } else {
             4
         };
-        let (table_index, mut consumed) = decode_integer(buf, prefix)?;
+        let (table_index, mut consumed) = try!(decode_integer(buf, prefix));
 
         // First read the name appropriately
         let name = if table_index == 0 {
             // Read name string as literal
-            let (name, name_len) = decode_string(&buf[consumed..])?;
+            let (name, name_len) = try!(decode_string(&buf[consumed..]));
             consumed += name_len;
             name
         } else {
             // Read name indexed from the table
-            let (name, _) = self.get_from_table(table_index)?;
+            let (name, _) = try!(self.get_from_table(table_index));
             Cow::Borrowed(name)
         };
 
         // Now read the value as a literal...
-        let (value, value_len) = decode_string(&buf[consumed..])?;
+        let (value, value_len) = try!(decode_string(&buf[consumed..]));
         consumed += value_len;
 
         Ok(((name, value), consumed))
@@ -1362,5 +1354,216 @@ mod tests {
         let mut decoder = Decoder::new();
         let hex_dump = &[0x3f];
         let _ = decoder.decode(hex_dump);
+    }
+}
+
+/// The module defines interop tests between this HPACK decoder
+/// and some other encoder implementations, based on their results
+/// published at
+/// [http2jp/hpack-test-case](https://github.com/http2jp/hpack-test-case)
+#[cfg(feature="interop_tests")]
+#[cfg(test)]
+mod interop_tests {
+    use std::io::Read;
+    use std::fs::{self, File};
+    use std::path::{Path, PathBuf};
+    use std::collections::HashMap;
+
+    use rustc_serialize::Decoder as JsonDecoder;
+    use rustc_serialize::{Decodable, json};
+    use rustc_serialize::hex::FromHex;
+
+    use super::Decoder;
+
+    /// Defines the structure of a single part of a story file. We only care
+    /// about the bytes and corresponding headers and ignore the rest.
+    struct TestFixture {
+        wire_bytes: Vec<u8>,
+        headers: Vec<(Vec<u8>, Vec<u8>)>,
+    }
+
+    /// Defines the structure corresponding to a full story file. We only
+    /// care about the cases for now.
+    #[derive(RustcDecodable)]
+    struct TestStory {
+        cases: Vec<TestFixture>,
+    }
+
+    /// A custom implementation of the `rustc_serialize::Decodable` trait for
+    /// `TestFixture`s. This is necessary for two reasons:
+    ///
+    ///  - The original story files store the raw bytes as a hex-encoded
+    ///    *string*, so we convert it to a `Vec<u8>` at parse time
+    ///  - The original story files store the list of headers as an array of
+    ///    objects, where each object has a single key. We convert this to a
+    ///    more natural representation of a `Vec` of two-tuples.
+    ///
+    /// For an example of the test story JSON structure check the
+    /// `test_story_parser_sanity_check` test function or one of the fixtures
+    /// in the directory `fixtures/hpack/interop`.
+    impl Decodable for TestFixture {
+        fn decode<D: JsonDecoder>(d: &mut D) -> Result<Self, D::Error> {
+            d.read_struct("root", 0, |d| Ok(TestFixture {
+                wire_bytes: try!(d.read_struct_field("wire", 0, |d| {
+                    // Read the `wire` field...
+                    Decodable::decode(d).and_then(|res: String| {
+                        // If valid, parse out the octets from the String by
+                        // considering it a hex encoded byte sequence.
+                        Ok(res.from_hex().unwrap())
+                    })
+                })),
+                headers: try!(d.read_struct_field("headers", 0, |d| {
+                    // Read the `headers` field...
+                    d.read_seq(|d, len| {
+                        // ...since it's an array, we step into the sequence
+                        // and read each element.
+                        let mut ret: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+                        for i in (0..len) {
+                            // Individual elements are encoded as a simple
+                            // JSON object with one key: value pair.
+                            let header: HashMap<String, String> = try!(
+                                d.read_seq_elt(i, |d| Decodable::decode(d)));
+                            // We convert it to a tuple, which is a more
+                            // natural representation of headers.
+                            for (name, value) in header.into_iter() {
+                                ret.push((
+                                    name.as_bytes().to_vec(),
+                                    value.as_bytes().to_vec()
+                                ));
+                            }
+                        }
+                        Ok(ret)
+                    })
+                })),
+            }))
+        }
+    }
+
+    /// Tests that the `TestStory` can be properly read out of a JSON encoded
+    /// string. Sanity check for the `Decodable` implementation.
+    #[test]
+    fn test_story_parser_sanity_check() {
+        let raw_json = stringify!(
+            {
+              "cases": [
+                {
+                  "seqno": 0,
+                  "wire": "82864188f439ce75c875fa5784",
+                  "headers": [
+                    {
+                      ":method": "GET"
+                    },
+                    {
+                      ":scheme": "http"
+                    },
+                    {
+                      ":authority": "yahoo.co.jp"
+                    },
+                    {
+                      ":path": "/"
+                    }
+                  ]
+                },
+                {
+                  "seqno": 1,
+                  "wire": "8286418cf1e3c2fe8739ceb90ebf4aff84",
+                  "headers": [
+                    {
+                      ":method": "GET"
+                    },
+                    {
+                      ":scheme": "http"
+                    },
+                    {
+                      ":authority": "www.yahoo.co.jp"
+                    },
+                    {
+                      ":path": "/"
+                    }
+                  ]
+                }
+              ],
+              "draft": 9
+            }
+        );
+
+        let decoded: TestStory = json::decode(raw_json).unwrap();
+
+        assert_eq!(decoded.cases.len(), 2);
+        assert_eq!(decoded.cases[0].wire_bytes, vec![
+            0x82, 0x86, 0x41, 0x88, 0xf4, 0x39, 0xce, 0x75, 0xc8, 0x75, 0xfa,
+            0x57, 0x84
+        ]);
+        assert_eq!(decoded.cases[0].headers, vec![
+            (b":method".to_vec(), b"GET".to_vec()),
+            (b":scheme".to_vec(), b"http".to_vec()),
+            (b":authority".to_vec(), b"yahoo.co.jp".to_vec()),
+            (b":path".to_vec(), b"/".to_vec()),
+        ]);
+    }
+
+    /// A helper function that performs an interop test for a given story file.
+    ///
+    /// It does so by first decoding the JSON representation of the story into
+    /// a `TestStory` struct. After this, each subsequent block of headers is
+    /// passed to the same decoder instance (since each story represents one
+    /// coder context). The result returned by the decoder is compared to the
+    /// headers stored for that particular block within the story file.
+    fn test_story(story_file_name: PathBuf) {
+        // Set up the story by parsing the given file
+        let story: TestStory = {
+            let mut file = File::open(&story_file_name).unwrap();
+            let mut raw_story = String::new();
+            file.read_to_string(&mut raw_story).unwrap();
+            json::decode(&raw_story).unwrap()
+        };
+        // Set up the decoder
+        let mut decoder = Decoder::new();
+
+        // Now check whether we correctly decode each case
+        for case in story.cases.iter() {
+            let decoded = decoder.decode(&case.wire_bytes).unwrap();
+            assert_eq!(decoded, case.headers);
+        }
+    }
+
+    /// Tests a full fixture set, provided a path to a directory containing a
+    /// number of story files (and no other file types).
+    ///
+    /// It calls the `test_story` function for each file found in the given
+    /// directory.
+    fn test_fixture_set(fixture_dir: &str) {
+        let files = fs::read_dir(&Path::new(fixture_dir)).unwrap();
+
+        for fixture in files {
+            let file_name = fixture.unwrap().path();
+            debug!("Testing fixture: {:?}", file_name);
+            test_story(file_name);
+        }
+    }
+
+    #[test]
+    fn test_nghttp2_interop() {
+        test_fixture_set("fixtures/hpack/interop/nghttp2");
+    }
+
+    #[test]
+    fn test_nghttp2_change_table_size_interop() {
+        test_fixture_set("fixtures/hpack/interop/nghttp2-change-table-size");
+    }
+
+    #[test]
+    fn test_go_hpack_interop() {
+        test_fixture_set("fixtures/hpack/interop/go-hpack");
+    }
+
+    #[test]
+    fn test_node_http2_hpack_interop() {
+        test_fixture_set("fixtures/hpack/interop/node-http2-hpack");
+    }
+
+    #[test]
+    fn test_haskell_http2_linear_huffman() {
+        test_fixture_set("fixtures/hpack/interop/haskell-http2-linear-huffman");
     }
 }

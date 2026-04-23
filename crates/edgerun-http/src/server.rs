@@ -359,7 +359,10 @@ where
         }
 
         let frame = match timeout(idle_timeout, read_frame(&mut rdwr, server.max_frame_size)).await {
-            Ok(Ok(Ok(f))) => f,
+            Ok(Ok(Ok(f))) => {
+                eprintln!("[h2] Server got frame: type={}, stream={}", f.frame_type as u8, f.stream_id);
+                f
+            }
             Ok(Ok(Err((stream_id, error_code)))) => {
                 write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, b"Frame too large").await;
                 break;
@@ -438,6 +441,7 @@ where
                 }
             }
             FrameType::Headers => {
+                eprintln!("[h2] HEADERS frame payload len = {}", frame.payload.len());
                 let hf = match crate::http2::frame::HeadersFrame::from_frame(&frame) {
                     Ok(hf) => hf,
                     Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
@@ -453,11 +457,18 @@ where
                     let action = process_request(hf.stream_id, &hf.header_block, &mut decoder, &mut encoder, &mut server, &handler).await;
                     action
                 } else if end_headers && !hf.end_stream {
-                    let headers = match decoder.decode(&hf.header_block) {
+let headers = match decoder.decode(&hf.header_block) {
                         Ok(h) => h,
-                        Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; }
+                        Err(e) => { 
+                            eprintln!("[h2] HPACK decode error: {:?}", e);
+                            write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; 
+                        }
                     };
-                    if let Err((ec, _)) = validate_request_headers(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
+                    eprintln!("[h2] Decoded {} headers", headers.len());
+                    if let Err((ec, _)) = validate_request_headers(&headers) { 
+                        eprintln!("[h2] validate_request_headers error: {:?}", ec);
+                        write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None 
+                    }
                     else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
                     else { server.pending_headers.insert(hf.stream_id, headers); FrameAction::None }
                 } else if !end_headers {

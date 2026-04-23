@@ -134,6 +134,7 @@ impl AsyncClient {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
+        // Send client connection preface + SETTINGS
         stream.write_all(CONNECTION_PREFACE).await?;
 
         let client_settings = Settings::new();
@@ -141,20 +142,19 @@ impl AsyncClient {
         stream.write_all(&settings_frame.to_frame().to_bytes()).await?;
         stream.flush().await?;
 
-        let mut preface_buf = [0u8; 24];
-        stream.read_exact(&mut preface_buf).await?;
-        if preface_buf != CONNECTION_PREFACE {
+        // Read server SETTINGS frame per RFC 9113 §3.4
+        let (server_settings_frame, _) = read_frame_async(&mut stream, client_settings.max_frame_size).await?;
+        if server_settings_frame.frame_type != FrameType::Settings {
             return Err(Http2Error::ProtocolViolation(
-                "Invalid server connection preface".into(),
+                "Expected server SETTINGS frame".into(),
             ));
         }
-
-        let (server_settings_frame, _) = read_frame_async(&mut stream, client_settings.max_frame_size).await?;
         let server_settings = Settings::from_entries(
             &SettingsFrame::from_frame(&server_settings_frame)?.entries,
         )?;
         let max_frame_size = server_settings.max_frame_size;
 
+        // Send SETTINGS ACK
         let ack_frame = SettingsFrame::ack();
         stream.write_all(&ack_frame.to_frame().to_bytes()).await?;
         stream.flush().await?;

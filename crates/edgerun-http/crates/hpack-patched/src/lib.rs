@@ -3,6 +3,9 @@
 //! HPACK spec.
 
 #[macro_use] extern crate log;
+#[cfg(feature = "interop_tests")]
+#[allow(unused_imports)]
+extern crate rustc_serialize;
 
 use std::fmt;
 use std::iter;
@@ -97,18 +100,6 @@ impl DynamicTable {
         self.size
     }
 
-    /// Returns the maximum size of the dynamic table.
-    #[allow(dead_code)]
-    fn get_max_table_size(&self) -> usize {
-        self.max_size
-    }
-
-    /// Returns a vector of all headers in the dynamic table.
-    #[allow(dead_code)]
-    fn to_vec(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
-        self.table.iter().map(|(n, v)| (n.clone(), v.clone())).collect()
-    }
-
     /// Returns an `Iterator` through the headers stored in the `DynamicTable`.
     ///
     /// The iterator will yield elements of type `(&[u8], &[u8])`,
@@ -116,7 +107,7 @@ impl DynamicTable {
     /// slices are borrowed from their representations in the `DynamicTable`
     /// internal implementation, which means that it is possible only to
     /// iterate through the headers, not mutate them.
-    fn iter(&self) -> DynamicTableIter<'_> {
+    fn iter(&self) -> DynamicTableIter {
         DynamicTableIter {
             inner: self.table.iter(),
         }
@@ -131,6 +122,11 @@ impl DynamicTable {
         self.max_size = new_max_size;
         // Make the table size fit within the new constraints.
         self.consolidate_table();
+    }
+
+    /// Returns the maximum size of the table in octets.
+    fn get_max_table_size(&self) -> usize {
+        self.max_size
     }
 
     /// Add a new header to the dynamic table.
@@ -181,6 +177,16 @@ impl DynamicTable {
         self.table.len()
     }
 
+    /// Converts the current state of the table to a `Vec`
+    fn to_vec(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut ret: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+        for elem in self.table.iter() {
+            ret.push(elem.clone());
+        }
+
+        ret
+    }
+
     /// Returns a reference to the header at the given index, if found in the
     /// dynamic table.
     fn get(&self, index: usize) -> Option<&(Vec<u8>, Vec<u8>)> {
@@ -216,7 +222,7 @@ struct HeaderTableIter<'a> {
     inner: iter::Chain<
             iter::Map<
                 slice::Iter<'a, (&'a [u8], &'a [u8])>,
-                fn(&'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8])>,
+                fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8])>,
             DynamicTableIter<'a>>,
 }
 
@@ -272,7 +278,7 @@ impl<'a> HeaderTable<'a> {
         HeaderTableIter {
             inner: self.static_table.iter()
                                     .map(static_table_mapper as
-                                            fn(&'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8]))
+                                            fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8]))
                                     .chain(self.dynamic_table.iter()),
         }
     }

@@ -195,7 +195,6 @@ fn client_http1_explicit() {
 }
 
 #[test]
-#[ignore] // HTTP/2 over TLS
 fn client_http2_explicit() {
     use edgerun_tls::generate_self_signed as gen_cert;
 
