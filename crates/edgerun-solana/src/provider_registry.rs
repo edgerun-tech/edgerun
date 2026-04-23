@@ -4,6 +4,7 @@
 
 use std::sync::{Arc, mpsc};
 use crate::solana_types::{Pubkey, AccountMeta, Instruction};
+use crate::signers::Signer;
 use edgerun_http::HttpClient;
 use edgerun_json::{json, JsonValue};
 
@@ -238,6 +239,31 @@ impl ProviderClient {
                     && p.memory_bytes >= required_memory
             })
             .max_by_key(|p| p.uptime_percent.saturating_sub(p.slash_count * 100))
+    }
+
+    pub async fn send_instruction_signed<S: Signer>(
+        &self,
+        instruction: Instruction,
+        signer_pubkey: &Pubkey,
+        signer: &S,
+    ) -> Result<String, SolanaError> {
+        let msg = crate::deployment::serialize_transaction_message(signer_pubkey, &[instruction.clone()]);
+        let signature = signer.sign(&msg).map_err(|e| SolanaError::Signing(e.to_string()))?;
+        let tx_bytes = crate::deployment::serialize_transaction(signer_pubkey, &[instruction], &signature);
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "sendTransaction",
+            "params": [
+                crate::deployment::base64_encode(&tx_bytes),
+                { "encoding": "base64", "preflightCommitment": "processed" }
+            ]
+        });
+        let resp = self.rpc_call(payload)?;
+        resp["result"]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| SolanaError::Rpc("no result in response".to_string()))
     }
 }
 

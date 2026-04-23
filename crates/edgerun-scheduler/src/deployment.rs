@@ -173,4 +173,48 @@ mod tests {
     fn test_manager_creation() {
         let _ = DeploymentManager::new();
     }
+
+    #[test]
+    fn test_mark_running() {
+        let mut dm = DeploymentManager::new();
+        dm.create_local(DeploymentHandle {
+            on_chain_address: [0u8; 32],
+            name: "test-deployment".to_string(),
+            provider: [0u8; 32],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4_000_000_000,
+            status: DeploymentStatus::Created,
+            deposit: 1_000_000_000,
+            burn_rate: 100,
+            spent: 0,
+            assigned: false,
+        });
+        
+        dm.mark_running("test-deployment");
+        let d = dm.get("test-deployment").unwrap();
+        assert!(matches!(d.status, DeploymentStatus::Running));
+    }
+
+    #[test]
+    fn test_set_error() {
+        let mut dm = DeploymentManager::new();
+        dm.create_local(DeploymentHandle {
+            on_chain_address: [0u8; 32],
+            name: "test-deployment".to_string(),
+            provider: [0u8; 32],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4_000_000_000,
+            status: DeploymentStatus::Running,
+            deposit: 1_000_000_000,
+            burn_rate: 100,
+            spent: 0,
+            assigned: false,
+        });
+        
+        dm.set_error("test-deployment", "Container crashed");
+        let d = dm.get("test-deployment").unwrap();
+        assert!(matches!(d.status, DeploymentStatus::Disputed));
+    }
 }

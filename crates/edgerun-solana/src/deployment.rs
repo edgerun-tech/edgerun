@@ -177,7 +177,7 @@ impl DeploymentClient {
         )
     }
 
-    pub fn send_instruction_sync(
+pub fn send_instruction_sync(
         &self,
         instruction: Instruction,
         signer_pubkey: &Pubkey,
@@ -199,42 +199,7 @@ impl DeploymentClient {
             .ok_or_else(|| SolanaError::Rpc("no result in response".to_string()))
     }
 
-    pub fn post_report(
-        &self,
-        deployment_pubkey: &Pubkey,
-        provider_pubkey: &Pubkey,
-        cpu_cores_used: u32,
-        memory_bytes_used: u64,
-        storage_bytes_used: u64,
-        network_bytes_sent: u64,
-        container_count: u32,
-    ) -> Result<String, SolanaError> {
-        let instruction = self.report_metrics_instruction(
-            deployment_pubkey, provider_pubkey, cpu_cores_used,
-            memory_bytes_used, storage_bytes_used, network_bytes_sent, container_count,
-        );
-        self.send_instruction_sync(instruction, provider_pubkey)
-    }
-
-    pub async fn post_report_signed<S: Signer>(
-        &self,
-        deployment_pubkey: &Pubkey,
-        provider_pubkey: &Pubkey,
-        signer: &S,
-        cpu_cores_used: u32,
-        memory_bytes_used: u64,
-        storage_bytes_used: u64,
-        network_bytes_sent: u64,
-        container_count: u32,
-    ) -> Result<String, SolanaError> {
-        let instruction = self.report_metrics_instruction(
-            deployment_pubkey, provider_pubkey, cpu_cores_used,
-            memory_bytes_used, storage_bytes_used, network_bytes_sent, container_count,
-        );
-        self.send_instruction_signed(instruction, provider_pubkey, signer).await
-    }
-
-    async fn send_instruction_signed<S: Signer>(
+    pub async fn send_instruction_signed<S: Signer>(
         &self,
         instruction: Instruction,
         signer_pubkey: &Pubkey,
@@ -258,6 +223,24 @@ impl DeploymentClient {
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| SolanaError::Rpc("no result in response".to_string()))
+    }
+
+    pub async fn post_report_signed<S: Signer>(
+        &self,
+        deployment_pubkey: &Pubkey,
+        provider_pubkey: &Pubkey,
+        signer: &S,
+        cpu_cores_used: u32,
+        memory_bytes_used: u64,
+        storage_bytes_used: u64,
+        network_bytes_sent: u64,
+        container_count: u32,
+    ) -> Result<String, SolanaError> {
+        let instruction = self.report_metrics_instruction(
+            deployment_pubkey, provider_pubkey, cpu_cores_used,
+            memory_bytes_used, storage_bytes_used, network_bytes_sent, container_count,
+        );
+        self.send_instruction_signed(instruction, provider_pubkey, signer).await
     }
 
     pub fn calculate_burn_rate(
@@ -308,7 +291,7 @@ impl HttpRuntime {
     }
 }
 
-fn serialize_transaction(signer: &Pubkey, instructions: &[Instruction], signature: &[u8; 64]) -> Vec<u8> {
+pub fn serialize_transaction(signer: &Pubkey, instructions: &[Instruction], signature: &[u8; 64]) -> Vec<u8> {
     use std::io::Write;
     let mut buf = Vec::new();
     buf.write_all(&(1u32).to_le_bytes()).unwrap();
@@ -344,7 +327,7 @@ fn serialize_transaction(signer: &Pubkey, instructions: &[Instruction], signatur
     buf
 }
 
-fn serialize_transaction_message(signer: &Pubkey, instructions: &[Instruction]) -> Vec<u8> {
+pub fn serialize_transaction_message(signer: &Pubkey, instructions: &[Instruction]) -> Vec<u8> {
     use std::io::Write;
     let mut buf = Vec::new();
     buf.write_all(&(1u32).to_le_bytes()).unwrap();
@@ -379,7 +362,7 @@ fn serialize_transaction_message(signer: &Pubkey, instructions: &[Instruction]) 
     buf
 }
 
-fn base64_encode(data: &[u8]) -> String {
+pub fn base64_encode(data: &[u8]) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut result = String::new();
     for chunk in data.chunks(3) {

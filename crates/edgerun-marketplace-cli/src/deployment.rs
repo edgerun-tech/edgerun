@@ -1,4 +1,5 @@
 use edgerun_solana::{DeploymentClient, solana_types::Pubkey};
+use edgerun_solana::signers::Ed25519Signer;
 use edgerun_solana::types::pricing;
 
 pub enum DeploymentCommand {
@@ -174,7 +175,7 @@ pub fn parse_deployment_command() -> DeploymentCommand {
     }
 }
 
-pub async fn handle(cmd: DeploymentCommand, rpc_url: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn handle(cmd: DeploymentCommand, rpc_url: String, signer: Option<Ed25519Signer>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = DeploymentClient::new(&rpc_url)?;
 
     match &cmd {
@@ -195,6 +196,24 @@ pub async fn handle(cmd: DeploymentCommand, rpc_url: String) -> Result<(), Box<d
             println!("Resources: {} cores, {} bytes RAM, {} bytes storage", cpu_cores, memory_bytes, storage_bytes);
             println!("Initial deposit: {} lamports", deposit);
             println!("Burn rate: {} lamports/sec", burn_rate);
+
+            if let Some(ref signer) = signer {
+                let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
+                let mut name_bytes = [0u8; 64];
+                if let Some(ref n) = name {
+                    let bytes = n.as_bytes();
+                    name_bytes[..bytes.len().min(64)].copy_from_slice(&bytes[..bytes.len().min(64)]);
+                }
+                let ix = client.initialize_instruction(
+                    &dep_pubkey, &owner_pubkey, name_bytes, [0u8; 32], *containers,
+                    *cpu_cores, *memory_bytes, *storage_bytes, 100, *deposit, burn_rate
+                );
+                let tx_sig = client.send_instruction_signed(ix, &owner_pubkey, signer).await?;
+                println!("Transaction sent: {}", tx_sig);
+            } else {
+                println!("\nNote: No keypair loaded. To send this transaction:");
+                println!("  export SOLANA_KEYPAIR=/path/to/keypair");
+            }
             Ok(())
         }
         DeploymentCommand::Get { deployment } => {
@@ -219,19 +238,53 @@ pub async fn handle(cmd: DeploymentCommand, rpc_url: String) -> Result<(), Box<d
             Ok(())
         }
         DeploymentCommand::Start { deployment, owner } => {
-            println!("Start instruction created for {}", deployment);
+            let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
+            let owner_pubkey = match owner {
+                Some(o) => o.parse().unwrap_or_default(),
+                None => Pubkey::default(),
+            };
+            if let Some(ref signer) = signer {
+                let ix = client.start_instruction(&dep_pubkey, &owner_pubkey);
+                let tx_sig = client.send_instruction_signed(ix, &owner_pubkey, signer).await?;
+                println!("Transaction sent: {}", tx_sig);
+            } else {
+                println!("Start instruction created for {}", deployment);
+            }
             Ok(())
         }
         DeploymentCommand::Stop { deployment, owner } => {
-            println!("Stop instruction created for {}", deployment);
+            let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
+            let owner_pubkey = match owner {
+                Some(o) => o.parse().unwrap_or_default(),
+                None => Pubkey::default(),
+            };
+            if let Some(ref signer) = signer {
+                let ix = client.stop_instruction(&dep_pubkey, &owner_pubkey);
+                let tx_sig = client.send_instruction_signed(ix, &owner_pubkey, signer).await?;
+                println!("Transaction sent: {}", tx_sig);
+            } else {
+                println!("Stop instruction created for {}", deployment);
+            }
             Ok(())
         }
         DeploymentCommand::Report { deployment, provider, cpu_cores, memory_bytes, storage_bytes, network_bytes, containers } => {
+            let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
+            let prov_pubkey: Pubkey = provider.parse().unwrap_or_default();
             println!("=== Report Metrics ===");
             println!("Deployment: {}", deployment);
             println!("Provider: {}", provider);
             println!("Metrics: {} cores, {} bytes RAM, {} bytes storage, {} bytes net",
                 cpu_cores, memory_bytes, storage_bytes, network_bytes);
+
+            if let Some(ref signer) = signer {
+                let ix = client.report_metrics_instruction(
+                    &dep_pubkey, &prov_pubkey, *cpu_cores, *memory_bytes, *storage_bytes, *network_bytes, *containers
+                );
+                let tx_sig = client.send_instruction_signed(ix, &prov_pubkey, signer).await?;
+                println!("Transaction sent: {}", tx_sig);
+            } else {
+                println!("\nNote: No keypair loaded. To report metrics, load a keypair.");
+            }
             Ok(())
         }
         DeploymentCommand::BurnRate { cpu_cores, memory_bytes, storage_bytes, network_mbps } => {

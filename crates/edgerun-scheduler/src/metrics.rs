@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use edgerun_mesh::mesh_payload::{MetricsReportPayload, DeploymentMetrics as MeshDeploymentMetrics};
+use edgerun_mesh::mesh_payload::MetricsReportPayload;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderMetrics {
@@ -148,10 +148,86 @@ impl Default for MetricsReceiver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_metrics_creation() {
         let metrics = ProviderMetrics::new([0u8; 32]);
         assert!(metrics.timestamp > 0);
+        assert_eq!(metrics.cpu_cores_available, 0);
+    }
+
+    #[test]
+    fn test_metrics_from_mesh_payload() {
+        use edgerun_mesh::mesh_payload::MetricsReportPayload;
+        
+        let payload = MetricsReportPayload {
+            timestamp: 1000,
+            cpu_cores_used: 2,
+            cpu_cores_available: 4,
+            memory_bytes_used: 4_000_000_000,
+            memory_bytes_available: 8_000_000_000,
+            storage_bytes_used: 5_000_000_000,
+            storage_bytes_available: 10_000_000_000,
+            network_bytes_sent: 1000,
+            network_bytes_received: 500,
+            container_count: 2,
+            deployments: vec![],
+        };
+        
+        let node_id = [1u8; 32];
+        let metrics = ProviderMetrics::from_mesh_payload(node_id, &payload);
+        
+        assert_eq!(metrics.node_id, node_id);
+        assert_eq!(metrics.timestamp, 1000);
+        assert_eq!(metrics.cpu_cores_used, 2);
+        assert_eq!(metrics.memory_bytes_used, 4_000_000_000);
+        assert_eq!(metrics.container_count, 2);
+    }
+
+    #[test]
+    fn test_cpu_utilization() {
+        let metrics = ProviderMetrics {
+            node_id: [0u8; 32],
+            timestamp: 0,
+            cpu_cores_used: 2,
+            cpu_cores_available: 4,
+            memory_bytes_used: 0,
+            memory_bytes_available: 8_000_000_000,
+            storage_bytes_used: 0,
+            storage_bytes_available: 0,
+            network_bytes_sent: 0,
+            network_bytes_received: 0,
+            container_count: 0,
+            active_deployments: 0,
+        };
+        
+        assert!((metrics.cpu_utilization() - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_memory_utilization() {
+        let metrics = ProviderMetrics {
+            node_id: [0u8; 32],
+            timestamp: 0,
+            cpu_cores_used: 0,
+            cpu_cores_available: 4,
+            memory_bytes_used: 4_000_000_000,
+            memory_bytes_available: 8_000_000_000,
+            storage_bytes_used: 0,
+            storage_bytes_available: 0,
+            network_bytes_sent: 0,
+            network_bytes_received: 0,
+            container_count: 0,
+            active_deployments: 0,
+        };
+        
+        assert!((metrics.memory_utilization() - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_zero_utilization() {
+        let metrics = ProviderMetrics::new([0u8; 32]);
+        assert_eq!(metrics.cpu_utilization(), 0.0);
+        assert_eq!(metrics.memory_utilization(), 0.0);
     }
 }

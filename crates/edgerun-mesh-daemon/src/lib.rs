@@ -32,6 +32,10 @@ pub use edgerun_mesh_capability::OutboundQueue;
 /// Receives (sender NodeID, decrypted payload bytes).
 pub type CommandHandler = Box<dyn FnMut(NodeID, Vec<u8>) + Send>;
 
+/// Callback type for handling metrics frames from mesh peers.
+/// Receives (sender NodeID, frame_type, payload bytes).
+pub type MetricsHandler = Box<dyn FnMut(NodeID, FrameType, Vec<u8>) + Send>;
+
 // ---------------------------------------------------------------------------
 // Daemon configuration
 // ---------------------------------------------------------------------------
@@ -81,6 +85,8 @@ pub struct MeshDaemon<P: RemoteCapabilityProvider> {
     /// Optional callback for decrypted frames that are not capability envelopes.
     /// Used by the node to receive CommandEnvelope payloads over mesh.
     command_handler: Option<CommandHandler>,
+    /// Optional callback for metrics frames (MetricsReport, MigrationOrder, MigrationComplete).
+    metrics_handler: Option<MetricsHandler>,
     /// Shared stop flag — allows stopping the daemon from another thread.
     stop_signal: Arc<AtomicBool>,
 }
@@ -105,6 +111,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             outbound: Arc::new(Mutex::new(VecDeque::new())),
             pending_handshakes: HashMap::new(),
             command_handler: None,
+            metrics_handler: None,
             stop_signal: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -132,6 +139,17 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
         F: FnMut(NodeID, Vec<u8>) + Send + 'static,
     {
         self.command_handler = Some(Box::new(handler));
+        self
+    }
+
+    /// Sets a callback for mesh metrics frames (MetricsReport, MigrationOrder, MigrationComplete).
+    ///
+    /// This is used by the scheduler to receive provider metrics reported over mesh.
+    pub fn with_metrics_handler<F>(mut self, handler: F) -> Self
+    where
+        F: FnMut(NodeID, FrameType, Vec<u8>) + Send + 'static,
+    {
+        self.metrics_handler = Some(Box::new(handler));
         self
     }
 
@@ -435,8 +453,16 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                         }
                     }
                 }
-                FrameType::Discovery | FrameType::RouteAdv | FrameType::MetricsReport | FrameType::MigrationOrder | FrameType::MigrationComplete => {
+                FrameType::Discovery | FrameType::RouteAdv => {
                     // Already processed by link.pump()
+                }
+                FrameType::MetricsReport | FrameType::MigrationOrder | FrameType::MigrationComplete => {
+                    if let Some(ref mut handler) = self.metrics_handler {
+                        let src = frame.header.src;
+                        let ft = frame.header.frame_type;
+                        handler(src, ft, frame.payload);
+                        processed_any = true;
+                    }
                 }
                 FrameType::Unknown(_) => {}
             }

@@ -9,6 +9,7 @@ pub mod mesh_handler;
 
 pub use provider::{ProviderManager, ProviderInfo};
 pub use deployment::{DeploymentManager, DeploymentHandle};
+pub use edgerun_solana::DeploymentStatus;
 pub use metrics::{MetricsReceiver, ProviderMetrics};
 pub use error::SchedulerError;
 
@@ -113,10 +114,121 @@ impl Default for Scheduler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::provider::ProviderInfo;
+    use crate::deployment::DeploymentHandle;
+    use crate::metrics::{ProviderMetrics, MetricsReceiver};
+    use crate::{Scheduler, DeploymentStatus};
     
     #[test]
     fn test_scheduler_creation() {
-        let _ = Scheduler::new();
+        let scheduler = Scheduler::new();
+        assert!(!scheduler.is_shutdown());
+    }
+
+    #[test]
+    fn test_add_provider() {
+        let mut scheduler = Scheduler::new();
+        let mut info = ProviderInfo::new([1u8; 32], "test-provider");
+        info.cpu_cores_available = 4;
+        info.memory_bytes_available = 8_000_000_000;
+        info.storage_bytes_available = 100_000_000_000;
+        info.network_mbps = 1000;
+        info.is_online = true;
+        
+        scheduler.add_provider(info);
+        let providers = scheduler.get_providers();
+        assert_eq!(providers.len(), 1);
+    }
+
+    #[test]
+    fn test_select_provider() {
+        let mut scheduler = Scheduler::new();
+        let mut info = ProviderInfo::new([1u8; 32], "test-provider");
+        info.cpu_cores_available = 4;
+        info.memory_bytes_available = 8_000_000_000;
+        info.storage_bytes_available = 100_000_000_000;
+        info.network_mbps = 1000;
+        info.is_online = true;
+        
+        scheduler.add_provider(info);
+        
+        let selected = scheduler.select_provider(2, 4_000_000_000);
+        assert!(selected.is_some());
+        assert_eq!(selected.unwrap().cpu_cores_available, 4);
+    }
+
+    #[test]
+    fn test_assign_deployment() {
+        let mut scheduler = Scheduler::new();
+        let mut info = ProviderInfo::new([1u8; 32], "test-provider");
+        info.cpu_cores_available = 4;
+        info.memory_bytes_available = 8_000_000_000;
+        info.is_online = true;
+        scheduler.add_provider(info.clone());
+        
+        let node_id: [u8; 32] = info.node_id;
+        scheduler.deployment_manager.create_local(DeploymentHandle {
+            on_chain_address: [0u8; 32],
+            name: "test".to_string(),
+            provider: [0u8; 32],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4_000_000_000,
+            status: DeploymentStatus::Running,
+            deposit: 1_000_000_000,
+            burn_rate: 100,
+            spent: 0,
+            assigned: false,
+        });
+        
+        let result = scheduler.assign_deployment("test", &node_id, 2, 4_000_000_000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_register_metrics() {
+        let mut scheduler = Scheduler::new();
+        let metrics = ProviderMetrics {
+            node_id: [1u8; 32],
+            timestamp: 1000,
+            cpu_cores_used: 2,
+            cpu_cores_available: 4,
+            memory_bytes_used: 4_000_000_000,
+            memory_bytes_available: 8_000_000_000,
+            storage_bytes_used: 5_000_000_000,
+            storage_bytes_available: 10_000_000_000,
+            network_bytes_sent: 1000,
+            network_bytes_received: 500,
+            container_count: 2,
+            active_deployments: 1,
+        };
+        
+        let result = scheduler.register_provider_metrics(metrics);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_metrics_aggregation() {
+        let receiver = MetricsReceiver::new();
+        let metrics = ProviderMetrics {
+            node_id: [1u8; 32],
+            timestamp: 1000,
+            cpu_cores_used: 2,
+            cpu_cores_available: 4,
+            memory_bytes_used: 4_000_000_000,
+            memory_bytes_available: 8_000_000_000,
+            storage_bytes_used: 5_000_000_000,
+            storage_bytes_available: 10_000_000_000,
+            network_bytes_sent: 1000,
+            network_bytes_received: 500,
+            container_count: 2,
+            active_deployments: 1,
+        };
+        
+        receiver.receive(metrics.clone()).unwrap();
+        
+        let aggregated = receiver.aggregate_metrics(&[1u8; 32]);
+        assert!(aggregated.is_some());
+        assert_eq!(aggregated.unwrap().cpu_cores_used, 2);
     }
 }
