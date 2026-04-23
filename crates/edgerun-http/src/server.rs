@@ -216,18 +216,14 @@ where
                 Ok(()) => {
                     // Check if connection preface is valid
                     if preface_bytes != H2_PREFACE {
-                        eprintln!("[h2] Invalid connection preface: {:?}", &preface_bytes[..preface_bytes.len().min(24)]);
                         // Send GOAWAY with PROTOCOL_ERROR before closing
                         let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Invalid connection preface".to_vec()).to_frame();
                         let _ = reader.get_mut().write_all(&goaway.to_bytes()).await;
                         let _ = reader.get_mut().flush().await;
-                        // RFC 9113 §3.5: MUST close the TCP connection
                         return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid HTTP/2 connection preface"));
                     }
-                    eprintln!("[h2] Preface validated successfully");
                 }
                 Err(e) => {
-                    eprintln!("[h2] Preface read FAILED: {:?} - sending GOAWAY", e);
                     // RFC 9113 §3.5: If we can't read preface, send GOAWAY and close
                     let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Connection error".to_vec()).to_frame();
                     let _ = reader.get_mut().write_all(&goaway.to_bytes()).await;
@@ -346,7 +342,6 @@ where
         
         // Check if it matches "PRI * HTTP/2.0\r\n"
         if !preface_bytes.starts_with(b"PRI * HTTP/2.0\r\n") || preface_bytes.len() < 17 {
-            eprintln!("[h2] Invalid HTTP/2 connection preface: {:?}", first_line_preface);
             // RFC 9113 §3.5: Must respond with GOAWAY and close.
             let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Invalid connection preface".to_vec()).to_frame();
             let mut rdwr = reader.into_inner();
@@ -477,7 +472,6 @@ where
                 }
             }
             FrameType::Headers => {
-                eprintln!("[h2] HEADERS frame payload len = {}", frame.payload.len());
                 let hf = match crate::http2::frame::HeadersFrame::from_frame(&frame) {
                     Ok(hf) => hf,
                     Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad HEADERS").await; break; }
@@ -579,7 +573,9 @@ where
         };
 
         match action {
-            FrameAction::WriteFrames(frames) => { for f in &frames { if write_frame(&mut rdwr, f).await.is_err() { break; } } }
+            FrameAction::WriteFrames(frames) => { 
+                for f in &frames { if write_frame(&mut rdwr, f).await.is_err() { break; } } 
+            }
             FrameAction::Goaway { last_stream_id, error_code, debug_data } => { write_goaway(&mut rdwr, last_stream_id, error_code, &debug_data).await; break; }
             FrameAction::CloseConnection => break,
             FrameAction::None => {}
