@@ -439,7 +439,7 @@ controllers: []
 "#;
         let result = NodeConfig::from_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("stream_id"));
+        assert!(result.unwrap_err().to_string().contains("stream_id"));
     }
 
     #[test]
@@ -615,7 +615,7 @@ trust_nodes: []
         let result = node.process_command(&command);
         assert!(result.is_err());
         // Should be rejected for structural reasons
-        let err_msg = result.unwrap_err().to_lowercase();
+        let err_msg = result.unwrap_err().to_string().to_lowercase();
         assert!(err_msg.contains("structural") || err_msg.contains("reject"));
     }
 

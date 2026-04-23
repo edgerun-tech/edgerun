@@ -1893,9 +1893,9 @@ mod tests {
     fn test_store() -> NodeStore {
         let root = tmp_data_root();
         let private_key = [0xBBu8; 32];
-        let vk = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes((&private_key).into())
-            .unwrap()
-            .verifying_key();
+        let binding = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes((&private_key).into())
+            .unwrap();
+        let vk = binding.verifying_key();
         let encoded = vk.to_encoded_point(false);
         let mut node_identity = [0u8; 64];
         node_identity.copy_from_slice(&encoded.as_bytes()[1..65]);
@@ -2100,7 +2100,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let command = make_command(
             vec![], // empty command_id -> structural reject
@@ -2148,7 +2148,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let command = make_command(
             vec![1, 2, 3],
@@ -2195,7 +2195,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let mut command = make_command(
             vec![1, 2, 3],
@@ -2243,7 +2243,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         // Issuer is NOT in controllers and has no delegation chain
         let command = make_command(
@@ -2294,7 +2294,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         // Command with the controller as command_id (extract_identity_from_command uses command_id)
         let new_ctrl = vec![10, 20, 30];
@@ -2347,7 +2347,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         // Empty command_id -> extract_identity returns empty
         let command = make_command(
@@ -2398,7 +2398,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let command = make_command(
             ctrl_to_remove.clone(),
@@ -2447,7 +2447,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let new_ctrl = vec![42, 42, 42];
         let command = make_command(
@@ -2497,7 +2497,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let command = make_command(
             vec![1, 2, 3],
@@ -2546,7 +2546,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let command = make_command(
             vec![1, 2, 3],
@@ -2595,7 +2595,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let command = make_command(
             vec![1, 2, 3],
@@ -2643,7 +2643,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         // Use an unknown command type
         let command = make_command(
@@ -2695,7 +2695,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         // Build a delegation record and encode as payload
         let delegation = DelegationRecord {
@@ -2773,7 +2773,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         // Build a revocation record and encode as payload
         let revocation = RevocationRecord {
@@ -2848,7 +2848,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let mut command = make_command(
             vec![1, 2, 3],
@@ -2903,7 +2903,7 @@ mod tests {
             event_metadata: None,
             signature: None,
         };
-        store.append_event(&genesis).unwrap();
+        store.append_event_blocking(genesis).unwrap();
 
         let command = make_command(
             vec![1, 2, 3],
