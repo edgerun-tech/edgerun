@@ -9,8 +9,7 @@ edgerun-config = { path = "../edgerun-config" }
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
-solana-sdk = "4.0.0-beta.7"
-borsh = "1.6"
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 parking_lot = "0.12"
+bincode = "1.3"

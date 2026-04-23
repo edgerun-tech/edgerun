@@ -5,6 +5,7 @@ pub mod deployment;
 pub mod metrics;
 pub mod chain;
 pub mod error;
+pub mod mesh_handler;
 
 pub use provider::{ProviderManager, ProviderInfo};
 pub use deployment::{DeploymentManager, DeploymentHandle};

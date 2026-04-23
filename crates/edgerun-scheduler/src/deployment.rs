@@ -139,6 +139,18 @@ pub fn sync_all(&mut self) {
         
         (cpu_cost + memory_cost + storage_cost + network_cost) / 3600
     }
+    
+    pub fn mark_running(&mut self, name: &str) {
+        if let Some(d) = self.deployments.get_mut(name) {
+            d.status = DeploymentStatus::Running;
+        }
+    }
+    
+    pub fn set_error(&mut self, name: &str, _error: &str) {
+        if let Some(d) = self.deployments.get_mut(name) {
+            d.status = DeploymentStatus::Disputed;
+        }
+    }
 }
 
 impl Default for DeploymentManager {
