@@ -453,24 +453,26 @@ where
                 if let Some(s) = server.stream_manager.get_stream_mut(hf.stream_id) { let _ = s.open(); }
 
                 let end_headers = frame.flags & flags::HEADERS_END_HEADERS != 0;
-                if hf.end_stream && end_headers {
-                    let action = process_request(hf.stream_id, &hf.header_block, &mut decoder, &mut encoder, &mut server, &handler).await;
-                    action
-                } else if end_headers && !hf.end_stream {
-let headers = match decoder.decode(&hf.header_block) {
+                if end_headers {
+                    // END_HEADERS is set — decode and process headers
+                    let headers = match decoder.decode(&hf.header_block) {
                         Ok(h) => h,
                         Err(e) => { 
-                            eprintln!("[h2] HPACK decode error: {:?}", e);
                             write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::COMPRESSION_ERROR.to_u32(), b"HPACK error").await; break; 
                         }
                     };
-                    eprintln!("[h2] Decoded {} headers", headers.len());
                     if let Err((ec, _)) = validate_request_headers(&headers) { 
-                        eprintln!("[h2] validate_request_headers error: {:?}", ec);
                         write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None 
                     }
                     else if let Err((ec, _)) = validate_header_name_case(&headers) { write_rst_stream(&mut rdwr, hf.stream_id, ec).await; FrameAction::None }
-                    else { server.pending_headers.insert(hf.stream_id, headers); FrameAction::None }
+                    else if hf.end_stream {
+                        // No body — process now
+                        let action = process_request(hf.stream_id, &hf.header_block, &mut decoder, &mut encoder, &mut server, &handler).await;
+                        action
+                    } else {
+                        // Body may come later — store headers
+                        server.pending_headers.insert(hf.stream_id, headers); FrameAction::None 
+                    }
                 } else if !end_headers {
                     if hf.header_block.len() > max_header_size {
                         write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32(), b"Header block too large").await;

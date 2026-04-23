@@ -204,7 +204,8 @@ impl AsyncClient {
             state.register_stream_callbacks(stream_id, response_tx, body_tx);
         }
 
-        let end_stream = body.is_none();
+        // END_STREAM = true when body is empty (not when body is None - that means different thing)
+        let end_stream = body.as_ref().map_or(true, |b| b.is_empty());
         let msg = OutgoingFrame::SendHeaders {
             stream_id,
             headers: headers.to_vec(),
