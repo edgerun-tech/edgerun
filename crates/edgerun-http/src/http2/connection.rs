@@ -234,6 +234,8 @@ impl<S: Read + Write> Connection<S> {
                 let cont_frame = ContinuationFrame::from_frame(frame)?;
                 self.process_continuation(&cont_frame)?;
             }
+            // RFC 9113 §4.1: unknown frame types MUST be ignored
+            FrameType::Extension => {}
         }
 
         Ok(())

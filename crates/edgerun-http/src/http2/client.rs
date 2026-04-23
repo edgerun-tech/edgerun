@@ -868,6 +868,8 @@ where
         FrameType::PushPromise | FrameType::Priority => {
             // Ignore — client doesn't support push
         }
+        // RFC 9113 §4.1: unknown frame types MUST be ignored
+        FrameType::Extension => {}
     }
 
     Ok(())

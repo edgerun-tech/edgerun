@@ -47,6 +47,8 @@ pub enum FrameType {
     WindowUpdate = 0x8,
     /// CONTINUATION frame (0x9)
     Continuation = 0x9,
+    /// Extension frame for unknown types (RFC 9113 §4.1: MUST ignore)
+    Extension = 0xFF,
 }
 
 impl FrameType {
@@ -63,7 +65,8 @@ impl FrameType {
             0x7 => Some(FrameType::Goaway),
             0x8 => Some(FrameType::WindowUpdate),
             0x9 => Some(FrameType::Continuation),
-            _ => None,
+            // RFC 9113 §4.1: unknown frame types MUST be ignored
+            _ => Some(FrameType::Extension),
         }
     }
 }
@@ -359,6 +362,8 @@ impl Frame {
                     return Err(ErrorCode::PROTOCOL_ERROR.to_u32());
                 }
             }
+            // RFC 9113 §4.1: unknown frame types MUST be ignored - no validation needed
+            FrameType::Extension => {}
         }
 
         Ok(())

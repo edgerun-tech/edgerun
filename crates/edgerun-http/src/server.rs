@@ -209,19 +209,34 @@ where
         if negotiated_h2 {
             eprintln!("[h2] TLS+ALPN=h2 detected, entering HTTP/2 path");
             let mut reader = BufReader::new(tls_stream);
-            // The BufReader is fresh — the full 24-byte preface is still in the stream.
-            let mut discard = [0u8; 24];
-            match reader.get_mut().read_exact(&mut discard).await {
+            // The BufReader is fresh — the full 24-byte preface may be in the stream.
+            // RFC 9113 §3.5: If preface is invalid, MUST respond with GOAWAY and close.
+            let mut preface_bytes = vec![0u8; 24];
+            match reader.get_mut().read_exact(&mut preface_bytes).await {
                 Ok(()) => {
-                    eprintln!("[h2] Preface consumed: {:?}", std::str::from_utf8(&discard));
+                    // Check if connection preface is valid
+                    if preface_bytes != H2_PREFACE {
+                        eprintln!("[h2] Invalid connection preface: {:?}", &preface_bytes[..preface_bytes.len().min(24)]);
+                        // Send GOAWAY with PROTOCOL_ERROR before closing
+                        let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Invalid connection preface".to_vec()).to_frame();
+                        let _ = reader.get_mut().write_all(&goaway.to_bytes()).await;
+                        let _ = reader.get_mut().flush().await;
+                        // RFC 9113 §3.5: MUST close the TCP connection
+                        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid HTTP/2 connection preface"));
+                    }
+                    eprintln!("[h2] Preface validated successfully");
                 }
                 Err(e) => {
-                    eprintln!("[h2] Preface read FAILED: {:?}", e);
+                    eprintln!("[h2] Preface read FAILED: {:?} - sending GOAWAY", e);
+                    // RFC 9113 §3.5: If we can't read preface, send GOAWAY and close
+                    let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Connection error".to_vec()).to_frame();
+                    let _ = reader.get_mut().write_all(&goaway.to_bytes()).await;
+                    let _ = reader.get_mut().flush().await;
                     return Err(e);
                 }
             }
-            // Pass skip_preface=true since we already consumed it above.
-            handle_http2(reader, handler, http2_idle_timeout, max_request_size, true).await
+            // Pass skip_preface=true since we already consumed and validated it above.
+            handle_http2(reader, handler, http2_idle_timeout, max_request_size, true, None).await
         } else {
             handle_connection_inner(tls_stream, handler, keep_alive, max_request_size, http2_idle_timeout).await
         }
@@ -242,7 +257,7 @@ where
     };
 
     if first_line.starts_with("PRI * HTTP/2.0") {
-        handle_http2(reader, handler, http2_idle_timeout, max_request_size, false).await
+        handle_http2(reader, handler, http2_idle_timeout, max_request_size, false, Some(first_line)).await
     } else {
         handle_http1_line(reader, first_line, handler, keep_alive, max_request_size).await
     }
@@ -314,15 +329,33 @@ where
 /// When `skip_preface` is true (TLS+ALPN=h2 path), the preface was already
 /// consumed by the caller — go straight to the frame loop.
 /// When false (h2c upgrade path), consume the remaining preface bytes first.
-async fn handle_http2<S>(mut reader: BufReader<S>, handler: Arc<dyn Handler>, idle_timeout: Duration, max_header_size: usize, skip_preface: bool) -> std::io::Result<()>
+async fn handle_http2<S>(mut reader: BufReader<S>, handler: Arc<dyn Handler>, idle_timeout: Duration, max_header_size: usize, skip_preface: bool, first_line: Option<String>) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     eprintln!("[h2] handle_http2 entered, skip_preface={}", skip_preface);
-    // Consume remaining buffered data (rest of HTTP/2 connection preface)
+    // RFC 9113 §3.4: Server MUST validate the connection preface.
     // The preface is "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" (24 bytes).
-    // read_line() reads "PRI * HTTP/2.0\r\n" (17 bytes), leaving 7 bytes in buffer.
+    // When skip_preface=false (plaintext HTTP/2), we already read "PRI * HTTP/2.0\r\n" via read_line().
+    // We need to validate it and consume the remaining 7 bytes.
     if !skip_preface {
+        // RFC 9113 §3.4: Server MUST validate the connection preface.
+        // first_line contains "PRI * HTTP/2.0\r\n" (or partial/invalid data)
+        let first_line_preface = first_line.as_ref().expect("first_line required when skip_preface=false");
+        let preface_bytes = first_line_preface.as_bytes();
+        
+        // Check if it matches "PRI * HTTP/2.0\r\n"
+        if !preface_bytes.starts_with(b"PRI * HTTP/2.0\r\n") || preface_bytes.len() < 17 {
+            eprintln!("[h2] Invalid HTTP/2 connection preface: {:?}", first_line_preface);
+            // RFC 9113 §3.5: Must respond with GOAWAY and close.
+            let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Invalid connection preface".to_vec()).to_frame();
+            let mut rdwr = reader.into_inner();
+            let _ = rdwr.write_all(&goaway.to_bytes()).await;
+            let _ = rdwr.flush().await;
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid HTTP/2 connection preface"));
+        }
+
+        // Now consume remaining 7 bytes (\r\nSM\r\n\r\n) from buffer
         let remaining_preface = H2_PREFACE.len() - 17;
 
         // First consume from buffer, then read remaining from stream if needed
@@ -390,7 +423,10 @@ where
             continue;
         }
 
-        if let Err(ec) = frame.validate_semantics() { write_goaway(&mut rdwr, server.last_processed_stream_id, ec, b"Semantic violation").await; break; }
+        // RFC 9113 §4.1: skip semantic validation for unknown frame types
+        if !matches!(frame.frame_type, FrameType::Extension) {
+            if let Err(ec) = frame.validate_semantics() { write_goaway(&mut rdwr, server.last_processed_stream_id, ec, b"Semantic violation").await; break; }
+        }
 
         let action = match frame.frame_type {
             FrameType::Ping => server.handle_ping(&frame),
@@ -512,9 +548,16 @@ where
                 } else { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Unexpected CONTINUATION").await; break; }
             }
             _ => {
+                // RFC 9113 §4.1: frame types that are not understood MUST be ignored.
+                // Don't send RST_STREAM, GOAWAY, or any response - just ignore the frame.
+                if matches!(frame.frame_type, FrameType::Extension) {
+                    eprintln!("[h2] Ignoring unknown frame type");
+                }
+
                 // RFC 7540 §6.10: During a CONTINUATION sequence, only HEADERS,
                 // PRIORITY, RST_STREAM, and CONTINUATION may be received.
                 // WINDOW_UPDATE, DATA, SETTINGS, PING, GOAWAY, PUSH_PROMISE are forbidden.
+                // RFC 9113 §4.1: unknown frame types are ignored entirely.
                 if expecting_continuation.is_some() {
                     match frame.frame_type {
                         FrameType::Data | FrameType::PushPromise | FrameType::Goaway
@@ -522,10 +565,16 @@ where
                             write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Frame during CONTINUATION").await;
                             break;
                         }
-                        _ => {}
+                        FrameType::Extension => {
+                            // RFC 9113 §4.1: ignore unknown frame types even during CONTINUATION
+                            eprintln!("[h2] Ignoring unknown frame during CONTINUATION");
+                            FrameAction::None
+                        }
+                        _ => FrameAction::None
                     }
+                } else {
+                    FrameAction::None
                 }
-                FrameAction::None
             }
         };
 
