@@ -92,18 +92,9 @@ impl Http2Server {
             }
         } else {
             let stream_exists = self.stream_manager.get_stream(wu.stream_id).is_some();
-            // Accept WINDOW_UPDATE on recently-closed streams (RFC 7540 §5.1)
+            // Accept WINDOW_UPDATE on recently-closed or idle streams (RFC 7540 §5.1)
             if !stream_exists && !self.is_closed_stream(wu.stream_id) {
-                let was_seen = wu.stream_id <= self.last_processed_stream_id;
-                if !was_seen {
-                    self.goaway_sent = true;
-                    return response::send_goaway(
-                        self.last_processed_stream_id,
-                        ErrorCode::PROTOCOL_ERROR.to_u32(),
-                        b"WINDOW_UPDATE on idle stream",
-                    );
-                }
-                // Stream was seen but cleaned up — silently accept
+                // Silently accept - RFC allows WINDOW_UPDATE on idle streams
             }
             if let Some(s) = self.stream_manager.get_stream_mut(wu.stream_id) {
                 if wu.window_increment as i64 > FlowController::MAX_WINDOW_SIZE - s.remote_window {
@@ -127,17 +118,9 @@ impl Http2Server {
         };
         let sid = rst.stream_id;
         let stream_exists = self.stream_manager.get_stream(sid).is_some();
-        // Accept RST_STREAM on recently-closed streams — silently ignore
+        // Accept RST_STREAM on recently-closed or idle streams (RFC 7540 §5.1)
         if !stream_exists && !self.is_closed_stream(sid) {
-            let was_seen = sid <= self.last_processed_stream_id;
-            if !was_seen {
-                self.goaway_sent = true;
-                return response::send_goaway(
-                    self.last_processed_stream_id,
-                    ErrorCode::PROTOCOL_ERROR.to_u32(),
-                    b"RST_STREAM on idle stream",
-                );
-            }
+            // Silently accept - RFC allows RST_STREAM on idle streams
         }
         if let Some(s) = self.stream_manager.get_stream_mut(sid) {
             s.close();
@@ -165,15 +148,11 @@ impl Http2Server {
             );
         }
 
-        // PRIORITY on recently-closed streams is silently accepted (RFC 7540 §6.3)
+        // PRIORITY on recently-closed or idle streams is silently accepted (RFC 7540 §6.3)
         if !self.stream_manager.get_stream(frame.stream_id).is_some()
             && !self.is_closed_stream(frame.stream_id)
         {
-            let was_seen = frame.stream_id <= self.last_processed_stream_id;
-            if !was_seen {
-                // Stream is idle — PRIORITY implicitly creates it in idle state
-                // but we don't need to create it since PRIORITY is advisory only
-            }
+            // Silently accept - RFC allows PRIORITY on idle streams
         }
 
         FrameAction::None

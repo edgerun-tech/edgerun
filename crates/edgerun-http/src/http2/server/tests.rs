@@ -137,11 +137,10 @@ fn test_handle_window_update_stream_not_yet_created() {
     let mut server = Http2Server::new();
     let wu = WindowUpdateFrame::new(3, 200).to_frame();
     let action = server.handle_window_update(&wu);
+    // RFC 7540 §5.1 allows WINDOW_UPDATE on idle streams - accept silently
     match action {
-        FrameAction::Goaway { error_code, .. } => {
-            assert_eq!(error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
-        }
-        _ => panic!("expected Goaway for WINDOW_UPDATE on idle stream"),
+        FrameAction::None => {}
+        _ => panic!("expected None for WINDOW_UPDATE on idle stream"),
     }
 }
 
