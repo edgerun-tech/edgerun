@@ -30,15 +30,13 @@ impl Default for Pubkey {
 impl std::str::FromStr for Pubkey {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() != 44 {
-            return Err("base58 key must be 44 chars");
-        }
         let decoded = bs58::decode(s).into_vec().map_err(|_| "bs58 decode failed")?;
-        if decoded.len() != 33 {
-            return Err("decoded key must be 33 bytes");
+        if decoded.len() != 32 {
+            eprintln!("DEBUG: decoded {} bytes from '{}'", decoded.len(), s);
+            return Err("decoded key must be 32 bytes");
         }
         let mut arr = [0u8; 32];
-        arr.copy_from_slice(&decoded[1..33]);
+        arr.copy_from_slice(&decoded);
         Ok(Self(arr))
     }
 }

@@ -1,0 +1,11 @@
+[package]
+name = "mock-solana-rpc"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "mock-solana-rpc"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }

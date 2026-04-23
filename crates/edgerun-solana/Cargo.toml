@@ -12,6 +12,7 @@ edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-crypto = { path = "../edgerun-crypto" }
+base58 = "0.2.0"
 
 [dev-dependencies]
 mockall = "0.13"

@@ -51,7 +51,7 @@ fn frame_type_from_u8_known_values() {
 
 #[test]
 fn frame_type_from_u8_unknown_values() {
-    assert_eq!(FrameType::from_u8(5), FrameType::Unknown(5));
+    assert_eq!(FrameType::from_u8(8), FrameType::Unknown(8));
     assert_eq!(FrameType::from_u8(99), FrameType::Unknown(99));
     assert_eq!(FrameType::from_u8(255), FrameType::Unknown(255));
 }

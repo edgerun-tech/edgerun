@@ -20,15 +20,15 @@ pub use types::{Provider, Deployment, ProviderStatus, DeploymentStatus};
 
 use crate::solana_types::Pubkey;
 
-const PROVIDER_REGISTRY_PROGRAM_ID: &str = "EgRPRoGiVa7pBq7f9VTvJfJqLQKxVTuKpPQqM8dFLPer";
-const DEPLOYMENT_PROGRAM_ID: &str = "DePLoYMtGaqDqLxU1vA3KqLQKxVTuKpPQqM8dFLPer";
+const PROVIDER_REGISTRY_PROGRAM_ID: &str = " AY54i54WDK4zrJrWVn3D6x6qZbeGHfLB8LP3T7DA2zT"; // fake test
+const DEPLOYMENT_PROGRAM_ID: &str = " AY54i54WDK4zrJrWVn3D6x6qZbeGHfLB8LP3T7DA2zU"; // fake test
 
 pub fn provider_registry_program_id() -> Pubkey {
-    PROVIDER_REGISTRY_PROGRAM_ID.parse().unwrap()
+    PROVIDER_REGISTRY_PROGRAM_ID.trim().parse().unwrap()
 }
 
 pub fn deployment_program_id() -> Pubkey {
-    DEPLOYMENT_PROGRAM_ID.parse().unwrap()
+    DEPLOYMENT_PROGRAM_ID.trim().parse().unwrap()
 }
 
 #[cfg(test)]
