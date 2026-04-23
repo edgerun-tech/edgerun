@@ -218,16 +218,24 @@ where
                     if preface_bytes != H2_PREFACE {
                         // Send GOAWAY with PROTOCOL_ERROR before closing
                         let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Invalid connection preface".to_vec()).to_frame();
-                        let _ = reader.get_mut().write_all(&goaway.to_bytes()).await;
+                        let goaway_bytes = goaway.to_bytes();
+                        let _ = reader.get_mut().write_all(&goaway_bytes).await;
                         let _ = reader.get_mut().flush().await;
+                        // Give time for GOAWAY to be sent before closing
+                        sleep(Duration::from_millis(50)).await;
+                        // Close the write side of the connection
+                        let _ = reader.get_mut().shutdown().await;
                         return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid HTTP/2 connection preface"));
                     }
                 }
                 Err(e) => {
                     // RFC 9113 §3.5: If we can't read preface, send GOAWAY and close
                     let goaway = crate::http2::frame::GoawayFrame::new(0, 0x1, b"Connection error".to_vec()).to_frame();
-                    let _ = reader.get_mut().write_all(&goaway.to_bytes()).await;
+                    let goaway_bytes = goaway.to_bytes();
+                    let _ = reader.get_mut().write_all(&goaway_bytes).await;
                     let _ = reader.get_mut().flush().await;
+                    sleep(Duration::from_millis(50)).await;
+                    let _ = reader.get_mut().shutdown().await;
                     return Err(e);
                 }
             }
