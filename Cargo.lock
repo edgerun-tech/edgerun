@@ -1450,6 +1450,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-marketplace-cli"
+version = "0.1.0"
+dependencies = [
+ "edgerun-clap",
+ "edgerun-log",
+ "edgerun-rt",
+ "edgerun-solana",
+ "mockall",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "edgerun-matter"
 version = "0.1.0"
 dependencies = [

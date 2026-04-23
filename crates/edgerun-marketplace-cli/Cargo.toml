@@ -1,0 +1,20 @@
+[package]
+name = "edgerun-marketplace-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "edgerun-marketplace"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-solana = { path = "../edgerun-solana" }
+edgerun-clap = { path = "../edgerun-clap" }
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[dev-dependencies]
+mockall = "0.13"

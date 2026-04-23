@@ -401,7 +401,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
-#[proc_macro_derive(Subcommand)]
+#[proc_macro_derive(Subcommand, attributes(command))]
 pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;

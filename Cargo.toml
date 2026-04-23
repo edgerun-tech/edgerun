@@ -96,6 +96,7 @@ members = [
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
   "crates/edgerun-scheduler",
+  "crates/edgerun-marketplace-cli",
 ]
 
 [workspace.package]
