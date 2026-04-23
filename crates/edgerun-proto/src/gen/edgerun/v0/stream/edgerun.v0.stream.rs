@@ -35,10 +35,6 @@ pub struct EventEnvelope {
     #[prost(message, optional, tag = "16")]
     pub signature: ::core::option::Option<super::common::Signature>,
 }
-impl ::prost::Name for EventEnvelope {
-const NAME: &'static str = "EventEnvelope";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.EventEnvelope".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.EventEnvelope".into() }}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeGenesisPayload {
     #[prost(uint32, tag = "1")]
@@ -60,10 +56,6 @@ pub struct NodeGenesisPayload {
     #[prost(message, optional, tag = "9")]
     pub genesis_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for NodeGenesisPayload {
-const NAME: &'static str = "NodeGenesisPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.NodeGenesisPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.NodeGenesisPayload".into() }}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CommandEnvelope {
     #[prost(uint32, tag = "1")]
@@ -107,10 +99,6 @@ pub mod command_envelope {
         InlinePayload(::prost::alloc::vec::Vec<u8>),
     }
 }
-impl ::prost::Name for CommandEnvelope {
-const NAME: &'static str = "CommandEnvelope";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CommandEnvelope".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CommandEnvelope".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CommandSentPayload {
     #[prost(uint32, tag = "1")]
@@ -122,10 +110,6 @@ pub struct CommandSentPayload {
     #[prost(message, optional, tag = "4")]
     pub send_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for CommandSentPayload {
-const NAME: &'static str = "CommandSentPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CommandSentPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CommandSentPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CommandResultPayload {
     #[prost(uint32, tag = "1")]
@@ -145,10 +129,6 @@ pub struct CommandResultPayload {
     #[prost(message, optional, tag = "8")]
     pub result_object: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for CommandResultPayload {
-const NAME: &'static str = "CommandResultPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CommandResultPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CommandResultPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ActionLifecyclePayload {
     #[prost(uint32, tag = "1")]
@@ -168,10 +148,6 @@ pub struct ActionLifecyclePayload {
     #[prost(message, optional, tag = "8")]
     pub action_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for ActionLifecyclePayload {
-const NAME: &'static str = "ActionLifecyclePayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.ActionLifecyclePayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.ActionLifecyclePayload".into() }}
 // ===========================================================================
 // Secret service payloads
 //
@@ -201,10 +177,6 @@ pub struct SecretPutPayload {
     #[prost(string, tag = "6")]
     pub secret_blob_id: ::prost::alloc::string::String,
 }
-impl ::prost::Name for SecretPutPayload {
-const NAME: &'static str = "SecretPutPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.SecretPutPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.SecretPutPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SecretDeletePayload {
     #[prost(uint32, tag = "1")]
@@ -219,10 +191,6 @@ pub struct SecretDeletePayload {
     #[prost(string, tag = "5")]
     pub reason: ::prost::alloc::string::String,
 }
-impl ::prost::Name for SecretDeletePayload {
-const NAME: &'static str = "SecretDeletePayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.SecretDeletePayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.SecretDeletePayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CollectionCreatedPayload {
     #[prost(uint32, tag = "1")]
@@ -234,10 +202,6 @@ pub struct CollectionCreatedPayload {
     #[prost(string, tag = "3")]
     pub label: ::prost::alloc::string::String,
 }
-impl ::prost::Name for CollectionCreatedPayload {
-const NAME: &'static str = "CollectionCreatedPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CollectionCreatedPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CollectionCreatedPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CollectionDeletedPayload {
     #[prost(uint32, tag = "1")]
@@ -248,10 +212,6 @@ pub struct CollectionDeletedPayload {
     #[prost(uint32, tag = "3")]
     pub items_removed: u32,
 }
-impl ::prost::Name for CollectionDeletedPayload {
-const NAME: &'static str = "CollectionDeletedPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CollectionDeletedPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CollectionDeletedPayload".into() }}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum EventType {

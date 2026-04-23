@@ -9,6 +9,7 @@ use crate::sync::Mutex;
 use std::task::Context;
 
 type PollFn = Box<dyn FnMut(&mut Context<'_>) -> bool + Send>;
+type PollFnLocal = Box<dyn FnMut(&mut Context<'_>) -> bool>;
 /// Callback invoked when a task panics. Sets the JoinHandle result to Err(JoinError).
 type PanicFn = Box<dyn FnOnce() + Send>;
 

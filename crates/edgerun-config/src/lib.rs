@@ -37,6 +37,16 @@ pub use types::{
     DnsServerSpec, DnsZoneSpec, SoaRecord, ZoneRecord, DnssecConfig,
     DnsForwarderSpec, ForwardingRuleSpec, TlsConfigSpec, RateLimitSpec,
     DhcpServerSpec, DhcpReservation, DhcpPoolSpec, TftpServerSpec,
+    NodeSpec, NodeTaint,
+    ContainerSpec, ContainerRestartPolicy, Container, PodTemplateSpec, PodSpec,
+    ContainerPort, VolumeMount, EnvVar, ResourceRequirements,
+    SecretSpec, SecretType,
+    PeerSpec, PeerEndpoint,
+    GatewaySpec, GatewayListener, GatewayTlsConfig,
+    ServiceSpec, ServicePort, ServiceAffinity,
+    HttpRouteSpec, HttpRouteRule, HttpRouteMatch, HttpRouteHeaderMatch, HttpRouteBackend,
+    TcpRouteSpec, TcpRouteBackend,
+    TlsRouteSpec, TlsRouteBackend,
 };
 pub use parser::{parse_config_file, parse_and_validate, to_yaml_all, ConfigState, ConfigError};
 pub use projector::{ConfigEvent, ConfigOp, ConfigProjector};

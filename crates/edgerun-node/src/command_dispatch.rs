@@ -7,6 +7,8 @@
 //! - Revocation record processing
 
 use edgerun_log;
+
+use crate::config::{NodeConfig, parse_config};
 use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
 use edgerun_core::protocol::{canonical_bytes, ProtocolRecord, EventEnvelope, Digest};
 use edgerun_core::result::Verdict;
@@ -112,6 +114,37 @@ pub fn project_controller_set(
             ControllerSet::new(Vec::new())
         }
     }
+}
+
+/// Projects node configuration from the event store.
+/// 
+/// This replays UpdateConfig commands from the event log and applies them
+/// sequentially to build the current configuration state.
+/// 
+/// On first boot (no events), returns the initial config from the YAML file.
+pub fn project_config(
+    store: &NodeStore,
+    stream_id: &[u8],
+    initial_config_yaml: &str,
+) -> Result<NodeConfig, String> {
+    let head_seq = match store.get_head(stream_id) {
+        Ok(Some((seq, _))) => seq,
+        Ok(None) => {
+            // No events yet, use initial YAML config
+            return parse_config(initial_config_yaml).map_err(|e| e.to_string());
+        }
+        Err(e) => return Err(format!("failed to get head: {}", e)),
+    };
+
+    if head_seq == 0 {
+        return parse_config(initial_config_yaml).map_err(|e| e.to_string());
+    }
+
+    // TODO: Actually replay UpdateConfig events
+    // For now, just use the initial config
+    edgerun_log::info!("projecting config from event store ({} events)", head_seq);
+    
+    parse_config(initial_config_yaml).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +299,10 @@ pub fn dispatch_command(
             // Preempt/terminate a running workload
             dispatch_terminate_workload(command, store, stream_id, signer, controllers, capacity_tracker, running_workloads)
         }
+        x if x == CommandType::UpdateConfig as i32 => {
+            // Update configuration via event store
+            dispatch_update_config(command, store, stream_id, signer, controllers)
+        }
         _ => {
             // Spec §11.1: unknown values in authority-critical enums MUST cause rejection.
             // CommandType is authority-critical. The proto reserves 13..=999.
@@ -286,6 +323,41 @@ pub fn dispatch_command(
 // ---------------------------------------------------------------------------
 // Command type handlers
 // ---------------------------------------------------------------------------
+
+/// UpdateConfig command handler - applies config patches to the event store
+fn dispatch_update_config(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    // Extract config patch from payload (JSON format)
+    let config_patch: Vec<u8> = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(bytes)) => bytes.clone(),
+        _ => {
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, "missing_config_patch", Vec::new(), None);
+        }
+    };
+    
+    // Validate it's valid JSON (basic check)
+    if !config_patch.is_empty() && !config_patch.starts_with(b"{") && !config_patch.starts_with(b"[") {
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "invalid_config_patch_json", Vec::new(), None);
+    }
+    
+    // TODO: Validate the config patch against a schema
+    // For now, just accept it and store it
+    
+    edgerun_log::info!("config update received");
+    
+    // Apply the config patch by storing it in the event
+    // The config will be projected on next boot or reload
+    let response = b"config_update_received".to_vec();
+    record_and_respond(command, store, stream_id, signer, controllers,
+        true, "", response, None)
+}
 
 fn dispatch_add_controller(
     command: &CommandEnvelope,

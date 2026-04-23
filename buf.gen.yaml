@@ -5,9 +5,13 @@ managed:
     - file_option: go_package_prefix
       value: edgerun-codegen/gen/go/edgerun/v0
 plugins:
-  # Go protobuf types
   - local: protoc-gen-go
     out: gen/go
     opt:
       - paths=source_relative
+    strategy: all
+  - plugin: buf.build/protocolbuffers/prost:v0.14.1
+    out: crates/edgerun-proto/src/gen
+    opt:
+      - enable_type_names
     strategy: all

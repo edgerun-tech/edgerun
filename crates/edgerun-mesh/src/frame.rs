@@ -44,6 +44,9 @@ impl MeshFrameHeader {
             FrameType::RouteAdv => 2,
             FrameType::HandshakeInit => 3,
             FrameType::HandshakeAccept => 4,
+            FrameType::MetricsReport => 5,
+            FrameType::MigrationOrder => 6,
+            FrameType::MigrationComplete => 7,
             FrameType::Unknown(v) => v,
         };
         buf

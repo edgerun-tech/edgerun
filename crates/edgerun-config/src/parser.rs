@@ -50,6 +50,26 @@ pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError>
                 .map(ConfigResource::DhcpPool),
             "TftpServer" => deserialize_resource::<crate::types::TftpServerSpec>(spec)
                 .map(ConfigResource::TftpServer),
+            "Node" => deserialize_resource::<crate::types::NodeSpec>(spec)
+                .map(ConfigResource::Node),
+            "Container" => deserialize_resource::<crate::types::ContainerSpec>(spec)
+                .map(ConfigResource::Container),
+            "Deployment" => deserialize_resource::<crate::types::DeploymentSpec>(spec)
+                .map(ConfigResource::Deployment),
+            "Secret" => deserialize_resource::<crate::types::SecretSpec>(spec)
+                .map(ConfigResource::Secret),
+            "Peer" => deserialize_resource::<crate::types::PeerSpec>(spec)
+                .map(ConfigResource::Peer),
+            "Gateway" => deserialize_resource::<crate::types::GatewaySpec>(spec)
+                .map(ConfigResource::Gateway),
+            "Service" => deserialize_resource::<crate::types::ServiceSpec>(spec)
+                .map(ConfigResource::Service),
+            "HttpRoute" => deserialize_resource::<crate::types::HttpRouteSpec>(spec)
+                .map(ConfigResource::HttpRoute),
+            "TcpRoute" => deserialize_resource::<crate::types::TcpRouteSpec>(spec)
+                .map(ConfigResource::TcpRoute),
+            "TlsRoute" => deserialize_resource::<crate::types::TlsRouteSpec>(spec)
+                .map(ConfigResource::TlsRoute),
             _ => continue,
         };
         
@@ -127,6 +147,16 @@ pub struct ConfigState {
     pub tftp_servers: Vec<crate::types::TftpServerSpec>,
     pub smtp_servers: Vec<crate::types::SmtpServerSpec>,
     pub imap_servers: Vec<crate::types::ImapServerSpec>,
+    pub nodes: Vec<crate::types::NodeSpec>,
+    pub containers: Vec<crate::types::ContainerSpec>,
+    pub deployments: Vec<crate::types::DeploymentSpec>,
+    pub secrets: Vec<crate::types::SecretSpec>,
+    pub peers: Vec<crate::types::PeerSpec>,
+    pub gateways: Vec<crate::types::GatewaySpec>,
+    pub services: Vec<crate::types::ServiceSpec>,
+    pub http_routes: Vec<crate::types::HttpRouteSpec>,
+    pub tcp_routes: Vec<crate::types::TcpRouteSpec>,
+    pub tls_routes: Vec<crate::types::TlsRouteSpec>,
 }
 
 impl ConfigState {
@@ -147,6 +177,16 @@ impl ConfigState {
                 ConfigResource::TftpServer(spec) => state.tftp_servers.push(spec.clone()),
                 ConfigResource::SmtpServer(spec) => state.smtp_servers.push(spec.clone()),
                 ConfigResource::ImapServer(spec) => state.imap_servers.push(spec.clone()),
+                ConfigResource::Node(spec) => state.nodes.push(spec.clone()),
+                ConfigResource::Container(spec) => state.containers.push(spec.clone()),
+                ConfigResource::Deployment(spec) => state.deployments.push(spec.clone()),
+                ConfigResource::Secret(spec) => state.secrets.push(spec.clone()),
+                ConfigResource::Peer(spec) => state.peers.push(spec.clone()),
+                ConfigResource::Gateway(spec) => state.gateways.push(spec.clone()),
+                ConfigResource::Service(spec) => state.services.push(spec.clone()),
+                ConfigResource::HttpRoute(spec) => state.http_routes.push(spec.clone()),
+                ConfigResource::TcpRoute(spec) => state.tcp_routes.push(spec.clone()),
+                ConfigResource::TlsRoute(spec) => state.tls_routes.push(spec.clone()),
             }
         }
         state.validate()?;

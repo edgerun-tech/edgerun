@@ -65,7 +65,7 @@ members = [
   "crates/edgerun-node",
   "crates/edgerun-npu",
   "crates/edgerun-oauth",
-  "crates/edgerun-oci",
+"crates/edgerun-oci",
   "crates/edgerun-pci",
   "crates/edgerun-power",
   "crates/edgerun-quectel-ec200a",
@@ -73,6 +73,7 @@ members = [
   "crates/edgerun-proxy",
   "crates/edgerun-qpack",
   "crates/edgerun-remote-capability",
+  "crates/edgerun-solana",
   "crates/edgerun-rt",
   "crates/edgerun-secret-service",
   "crates/edgerun-server",
@@ -90,10 +91,11 @@ members = [
   "crates/edgerun-v4l2-camera",
   "crates/edgerun-virtual-disk",
   "crates/edgerun-wifi",
-"crates/edgerun-yubikey",
+  "crates/edgerun-yubikey",
   "crates/edgerun-vfs",
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
+  "crates/edgerun-scheduler",
 ]
 
 [workspace.package]

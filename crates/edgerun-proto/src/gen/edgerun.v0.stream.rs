@@ -267,11 +267,11 @@ pub enum EventType {
     CapabilityRevoked = 9,
     DelegationCreated = 10,
     RevocationCreated = 11,
-    /// Secret service events
     SecretPut = 12,
     SecretDelete = 13,
     CollectionCreated = 14,
     CollectionDeleted = 15,
+    CommandReceived = 16,
 }
 impl EventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -296,6 +296,7 @@ impl EventType {
             Self::SecretDelete => "EVENT_TYPE_SECRET_DELETE",
             Self::CollectionCreated => "EVENT_TYPE_COLLECTION_CREATED",
             Self::CollectionDeleted => "EVENT_TYPE_COLLECTION_DELETED",
+            Self::CommandReceived => "EVENT_TYPE_COMMAND_RECEIVED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -312,6 +313,7 @@ impl EventType {
             "EVENT_TYPE_CAPABILITY_GRANTED" => Some(Self::CapabilityGranted),
             "EVENT_TYPE_CAPABILITY_REVOKED" => Some(Self::CapabilityRevoked),
             "EVENT_TYPE_DELEGATION_CREATED" => Some(Self::DelegationCreated),
+            "EVENT_TYPE_COMMAND_RECEIVED" => Some(Self::CommandReceived),
             "EVENT_TYPE_REVOCATION_CREATED" => Some(Self::RevocationCreated),
             "EVENT_TYPE_SECRET_PUT" => Some(Self::SecretPut),
             "EVENT_TYPE_SECRET_DELETE" => Some(Self::SecretDelete),
@@ -398,6 +400,7 @@ pub enum CommandType {
     CreateDelegation = 10,
     CreateRevocation = 11,
     StoreAndForward = 12,
+    UpdateConfig = 13,
     PutSecret = 1001,
     DeleteSecret = 1002,
     ListSecrets = 1003,
@@ -422,6 +425,7 @@ impl CommandType {
             Self::CreateDelegation => "COMMAND_TYPE_CREATE_DELEGATION",
             Self::CreateRevocation => "COMMAND_TYPE_CREATE_REVOCATION",
             Self::StoreAndForward => "COMMAND_TYPE_STORE_AND_FORWARD",
+            Self::UpdateConfig => "COMMAND_TYPE_UPDATE_CONFIG",
             Self::PutSecret => "COMMAND_TYPE_PUT_SECRET",
             Self::DeleteSecret => "COMMAND_TYPE_DELETE_SECRET",
             Self::ListSecrets => "COMMAND_TYPE_LIST_SECRETS",
@@ -443,6 +447,7 @@ impl CommandType {
             "COMMAND_TYPE_CREATE_DELEGATION" => Some(Self::CreateDelegation),
             "COMMAND_TYPE_CREATE_REVOCATION" => Some(Self::CreateRevocation),
             "COMMAND_TYPE_STORE_AND_FORWARD" => Some(Self::StoreAndForward),
+            "COMMAND_TYPE_UPDATE_CONFIG" => Some(Self::UpdateConfig),
             "COMMAND_TYPE_PUT_SECRET" => Some(Self::PutSecret),
             "COMMAND_TYPE_DELETE_SECRET" => Some(Self::DeleteSecret),
             "COMMAND_TYPE_LIST_SECRETS" => Some(Self::ListSecrets),
