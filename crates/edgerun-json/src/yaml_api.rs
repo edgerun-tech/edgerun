@@ -510,7 +510,7 @@ pub struct YamlDeserializer<'a> {
 }
 
 impl<'a> YamlDeserializer<'a> {
-    pub fn from_str(input: &'a str) -> Self {
+    pub fn parse(input: &'a str) -> Self {
         YamlDeserializer {
             input,
             offset: 0,

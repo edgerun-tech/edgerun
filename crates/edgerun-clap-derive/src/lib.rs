@@ -104,16 +104,12 @@ fn parse_global_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<St
                                 value_tokens.extend([tokens.next().unwrap()]);
                             }
                             if ident_str == "version" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Str(s) = lit {
-                                        version = Some(s.value());
-                                    }
+                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
+                                    version = Some(s.value());
                                 }
                             } else if ident_str == "author" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Str(s) = lit {
-                                        author = Some(s.value());
-                                    }
+                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
+                                    author = Some(s.value());
                                 }
                             }
                         }
@@ -148,10 +144,8 @@ fn parse_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<String>) 
                                 value_tokens.extend([tokens.next().unwrap()]);
                             }
                             if ident_str == "name" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Str(s) = lit {
-                                        name = Some(s.value());
-                                    }
+                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
+                                    name = Some(s.value());
                                 }
                             } else if ident_str == "name" || ident_str == "about" {
                                 if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {

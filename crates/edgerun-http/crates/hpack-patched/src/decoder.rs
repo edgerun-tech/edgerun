@@ -255,11 +255,17 @@ pub struct Decoder<'a> {
     header_table: HeaderTable<'a>,
 }
 
+impl<'a> Default for Decoder<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Represents a decoder of HPACK encoded headers. Maintains the state
 /// necessary to correctly decode subsequent HPACK blocks.
 impl<'a> Decoder<'a> {
     /// Creates a new `Decoder` with all settings set to default values.
-    pub fn new() -> Decoder<'a> {
+    pub fn new() -> Self {
         Decoder::with_static_table(STATIC_TABLE)
     }
 

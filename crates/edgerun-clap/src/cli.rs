@@ -191,7 +191,6 @@ impl ArgMatches {
 
     pub fn get_one<T: core::str::FromStr>(&self, name: &str) -> Option<T>
     where
-        T: core::str::FromStr,
         <T as core::str::FromStr>::Err: core::fmt::Debug,
     {
         self.map.get(name).and_then(|v| match v {
@@ -204,7 +203,6 @@ impl ArgMatches {
 
     pub fn get_many<T: core::str::FromStr>(&self, name: &str) -> Option<alloc::vec::Vec<T>>
     where
-        T: core::str::FromStr,
         <T as core::str::FromStr>::Err: core::fmt::Debug,
     {
         self.map.get(name).and_then(|v| match v {

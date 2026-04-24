@@ -12,7 +12,7 @@ struct RawDoc {
 pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError> {
     let mut resources = Vec::new();
     
-    for doc_result in YamlDeserializer::from_str(yaml) {
+    for doc_result in YamlDeserializer::parse(yaml) {
         let doc = match doc_result {
             Ok(d) => d,
             Err(e) => return Err(ConfigError::ParseError(e.to_string())),

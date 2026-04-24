@@ -8,7 +8,7 @@ pub use linux::{L2capSocket, AttProtocol};
 pub use client::LinuxGattClient;
 pub use error::{GattError, GattResult};
 pub use async_ext::{AsyncL2capSocket, AsyncAttProtocol};
-pub use hci::{HciConnection, HciConnectionPool};
+pub use hci::{HciConnection, HciConnectionPool, LeConnParams};
 
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
@@ -63,9 +63,7 @@ impl GattUuid {
 
     pub fn from_hex(hex: &str) -> Option<Self> {
         let cleaned = hex.replace('-', "").to_lowercase();
-        if cleaned.len() == 4 && cleaned.chars().all(|c| c.is_ascii_hexdigit()) {
-            Some(Self(cleaned))
-        } else if cleaned.len() == 32 && cleaned.chars().all(|c| c.is_ascii_hexdigit()) {
+        if (cleaned.len() == 4 || cleaned.len() == 32) && cleaned.chars().all(|c| c.is_ascii_hexdigit()) {
             Some(Self(cleaned))
         } else {
             None

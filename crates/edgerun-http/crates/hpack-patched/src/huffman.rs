@@ -52,10 +52,14 @@ pub struct HuffmanDecoder {
     eos_codepoint: (u32, u8),
 }
 
+impl Default for HuffmanDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HuffmanDecoder {
-    /// Constructs a new `HuffmanDecoder` using the given table of
-    /// (code point, code length) tuples to represent the Huffman code.
-    fn from_table(table: &[(u32, u8)]) -> HuffmanDecoder {
+    fn from_table(table: &[(u32, u8)]) -> Self {
         if table.len() != 257 {
             panic!("Invalid Huffman code table. It must define exactly 257 symbols.");
         }
@@ -69,14 +73,12 @@ impl HuffmanDecoder {
             let subtable = decoder_table.get_mut(&code_len).unwrap();
             let huff_symbol = HuffmanCodeSymbol::new(symbol);
             if let HuffmanCodeSymbol::EndOfString = huff_symbol {
-                // We also remember the code point of the EOS for easier
-                // reference later on.
                 eos_codepoint = Some((code, code_len));
             };
             subtable.insert(code, huff_symbol);
         }
 
-        HuffmanDecoder {
+        Self {
             table: decoder_table,
             eos_codepoint: eos_codepoint.unwrap(),
         }
@@ -84,7 +86,7 @@ impl HuffmanDecoder {
 
     /// Constructs a new HuffmanDecoder with the default Huffman code table, as
     /// defined in the HPACK-draft-10, Appendix B.
-    pub fn new() -> HuffmanDecoder {
+    pub fn new() -> Self {
         HuffmanDecoder::from_table(HUFFMAN_CODE_TABLE)
     }
 

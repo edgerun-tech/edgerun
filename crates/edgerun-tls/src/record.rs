@@ -105,8 +105,8 @@ impl RecordCipher {
         let tag = edgerun_crypto::aes_gcm::Tag::from(tag_bytes);
         buffer.truncate(tag_offset);
 
-        let nonce_arr: [u8; 12] = nonce.try_into().map_err(|_| "invalid nonce length")?;
-        self.cipher.decrypt_in_place_detached((&nonce_arr), &aad, &mut buffer, &tag)
+        let nonce_bytes: [u8; 12] = nonce.try_into().map_err(|_| "invalid nonce length")?;
+        self.cipher.decrypt_in_place_detached(&nonce_bytes, &aad, &mut buffer, &tag)
             .map_err(|e| format!("AEAD decryption failed: {:?}", e))?;
 
         // Last byte is the real ContentType (RFC 8446 §5.4)

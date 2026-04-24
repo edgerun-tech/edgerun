@@ -1950,7 +1950,7 @@ impl FingerprintReader for GoodixFingerprintReader {
         let progress = self
             .enroll_live_sample()
             .map_err(|e| FingerprintError::Provider(e.to_string()))?;
-        let samples_collected = if progress.duplicate.duplicate { 1 } else { 1 };
+        let samples_collected = 1;
         Ok(FingerprintEnrollProgress {
             session: FingerprintEnrollmentSession {
                 session_id: session_id.to_string(),

@@ -92,7 +92,7 @@ impl VirtualAddressSpace {
         self.inserted
     }
 
-    pub fn drop(&mut self) {
+    pub fn mark_dropped(&mut self) {
         self.dropped += 1;
         self.delta -= 1;
     }
@@ -180,7 +180,7 @@ mod tests {
             let mut vas = VirtualAddressSpace::default();
             vas.add();
             (1..*count).for_each(|_| { vas.add(); });
-            (0..*count - 1).for_each(|_| vas.drop());
+            (0..*count - 1).for_each(|_| vas.mark_dropped());
 
             assert_eq!(vas.relative_base(*count, count - 1), Err(Error::RelativeIndex(count - 1)), "{:?}", vas);
         }
@@ -204,7 +204,7 @@ mod tests {
             let mut vas = VirtualAddressSpace::default();
             (0..*count - 1).for_each(|_| { vas.add(); });
             vas.add();
-            (0..*count - 1).for_each(|_| { vas.drop(); });
+            (0..*count - 1).for_each(|_| { vas.mark_dropped(); });
 
             assert_eq!(vas.relative_base(*count, 0), Ok(0),
                        "{:?}", vas);
@@ -261,9 +261,9 @@ mod tests {
         vas.add();
         assert_eq!(vas.index(0), Ok(1));
         vas.add();
-        vas.drop();
+        vas.mark_dropped();
         assert_eq!(vas.index(0), Ok(2));
-        vas.drop();
+        vas.mark_dropped();
         assert_eq!(vas.index(0), Err(Error::Index(0)));
         vas.add();
         vas.add();
@@ -280,11 +280,11 @@ mod tests {
         vas.add();
         vas.add();
         assert!(!vas.evicted(1));
-        vas.drop();
+        vas.mark_dropped();
         assert!(!vas.evicted(0));
         assert!(vas.evicted(1));
         assert!(!vas.evicted(2));
-        vas.drop();
+        vas.mark_dropped();
         assert!(vas.evicted(2));
     }
 }

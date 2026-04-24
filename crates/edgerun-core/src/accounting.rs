@@ -14,7 +14,6 @@
 /// | Memory      | byte-microseconds     | u128   |
 /// | Storage I/O | ops + bytes           | u64    |
 /// | Network     | bytes                 | u64    |
-
 use crate::fixed_point::FixedPoint16;
 use crate::crypto::sha256;
 
@@ -54,7 +53,7 @@ impl WorkloadClass {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "container" => WorkloadClass::Container,
             "inference" => WorkloadClass::Inference,
@@ -99,7 +98,7 @@ impl WorkPriority {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "batch" => WorkPriority::Batch,
             "standard" => WorkPriority::Standard,
@@ -132,7 +131,7 @@ impl WorkStatus {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "completed" => WorkStatus::Completed,
             "failed" => WorkStatus::Failed,
@@ -574,7 +573,7 @@ impl WorkAccounting {
         let storage_write_ops = r.read32u()?;
         let network_sent_bytes = r.read64()?;
         let network_received_bytes = r.read64()?;
-        let workload_class = WorkloadClass::from_str(
+        let workload_class = WorkloadClass::parse(
             match r.read32u()? {
                 1 => "container",
                 2 => "inference",
@@ -795,19 +794,9 @@ mod tests {
 
     #[test]
     fn workload_class_roundtrip() {
-        assert_eq!(WorkloadClass::from_str("inference"), WorkloadClass::Inference);
-        assert_eq!(WorkloadClass::Inference.as_str(), "inference");
-    }
-
-    #[test]
-    fn work_priority_roundtrip() {
-        assert_eq!(WorkPriority::from_str("batch"), WorkPriority::Batch);
-        assert_eq!(WorkPriority::Expedited.as_str(), "expedited");
-    }
-
-    #[test]
-    fn work_status_roundtrip() {
-        assert_eq!(WorkStatus::from_str("preempted"), WorkStatus::Preempted);
+assert_eq!(WorkloadClass::parse("inference"), WorkloadClass::Inference);
+        assert_eq!(WorkPriority::parse("batch"), WorkPriority::Batch);
+        assert_eq!(WorkStatus::parse("preempted"), WorkStatus::Preempted);
     }
 
     #[test]

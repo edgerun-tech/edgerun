@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use edgerun_rt::{AsyncUdpSocket, Mutex};
 
-use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
+use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT, NetworkConfig};
 use super::lease::LeasePool;
 
 /// DHCPv4 server configuration.
@@ -186,13 +186,15 @@ impl DhcpServer {
             msg.xid,
             mac,
             ip,
-            self.config.server_ip,
-            self.config.subnet_mask,
-            self.config.router,
-            self.config.dns_servers.clone(),
-            self.config.lease_time,
-            tftp,
-            bootfile,
+            NetworkConfig {
+                server_id: self.config.server_ip,
+                subnet_mask: self.config.subnet_mask,
+                router: self.config.router,
+                dns_servers: self.config.dns_servers.clone(),
+                lease_time: self.config.lease_time,
+                tftp_server: tftp,
+                bootfile,
+            },
         );
 
         self.send_reply(&offer, msg).await
@@ -319,13 +321,15 @@ impl DhcpServer {
             msg.xid,
             mac,
             msg.ciaddr,
-            self.config.server_ip,
-            self.config.subnet_mask,
-            self.config.router,
-            self.config.dns_servers.clone(),
-            0,
-            None,
-            None,
+            NetworkConfig {
+                server_id: self.config.server_ip,
+                subnet_mask: self.config.subnet_mask,
+                router: self.config.router,
+                dns_servers: self.config.dns_servers.clone(),
+                lease_time: 0,
+                tftp_server: None,
+                bootfile: None,
+            },
         );
 
         self.send_reply(&ack, msg).await
@@ -340,13 +344,15 @@ impl DhcpServer {
             msg.xid,
             mac,
             ip,
-            self.config.server_ip,
-            self.config.subnet_mask,
-            self.config.router,
-            self.config.dns_servers.clone(),
-            self.config.lease_time,
-            tftp,
-            bootfile,
+            NetworkConfig {
+                server_id: self.config.server_ip,
+                subnet_mask: self.config.subnet_mask,
+                router: self.config.router,
+                dns_servers: self.config.dns_servers.clone(),
+                lease_time: self.config.lease_time,
+                tftp_server: tftp,
+                bootfile,
+            },
         );
         self.send_reply(&ack, msg).await
     }

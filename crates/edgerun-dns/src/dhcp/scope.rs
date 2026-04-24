@@ -11,7 +11,7 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 
 use super::lease::LeasePool;
-use super::message::{DhcpMessage, DhcpMessageType, DhcpOp, DHCP_SERVER_PORT, DHCP_CLIENT_PORT};
+use super::message::{DhcpMessage, DhcpMessageType, DhcpOp, DHCP_SERVER_PORT, DHCP_CLIENT_PORT, NetworkConfig};
 
 /// A DHCP scope (subnet-specific pool + config).
 #[derive(Debug)]
@@ -288,10 +288,15 @@ fn handle_discover(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr
     };
 
     let offer = DhcpMessage::offer(
-        msg.xid, mac, ip, server_ip, scope.subnet_mask,
-        scope.router, scope.dns_servers.clone(), scope.lease_time,
-        scope.tftp_server.map(|i| i.to_string()),
-        scope.bootfile.clone(),
+        msg.xid, mac, ip, NetworkConfig {
+            server_id: server_ip,
+            subnet_mask: scope.subnet_mask,
+            router: scope.router,
+            dns_servers: scope.dns_servers.clone(),
+            lease_time: scope.lease_time,
+            tftp_server: scope.tftp_server.map(|i| i.to_string()),
+            bootfile: scope.bootfile.clone(),
+        },
     );
 
     send_reply(&offer, msg, server_ip, socket)
@@ -302,10 +307,15 @@ fn handle_request(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr,
     let ip = msg.options.requested_ip.unwrap_or(msg.ciaddr);
 
     let ack = DhcpMessage::ack(
-        msg.xid, mac, ip, server_ip, scope.subnet_mask,
-        scope.router, scope.dns_servers.clone(), scope.lease_time,
-        scope.tftp_server.map(|i| i.to_string()),
-        scope.bootfile.clone(),
+        msg.xid, mac, ip, NetworkConfig {
+            server_id: server_ip,
+            subnet_mask: scope.subnet_mask,
+            router: scope.router,
+            dns_servers: scope.dns_servers.clone(),
+            lease_time: scope.lease_time,
+            tftp_server: scope.tftp_server.map(|i| i.to_string()),
+            bootfile: scope.bootfile.clone(),
+        },
     );
 
     send_reply(&ack, msg, server_ip, socket)
@@ -327,9 +337,15 @@ fn handle_decline(scope: &mut DhcpScope, msg: &DhcpMessage) -> Result<(), io::Er
 fn handle_inform(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr, socket: &std::net::UdpSocket) -> Result<(), io::Error> {
     let mac = msg.client_mac();
     let mut ack = DhcpMessage::ack(
-        msg.xid, mac, msg.ciaddr, server_ip, scope.subnet_mask,
-        scope.router, scope.dns_servers.clone(), 0,
-        None, None,
+        msg.xid, mac, msg.ciaddr, NetworkConfig {
+            server_id: server_ip,
+            subnet_mask: scope.subnet_mask,
+            router: scope.router,
+            dns_servers: scope.dns_servers.clone(),
+            lease_time: 0,
+            tftp_server: None,
+            bootfile: None,
+        },
     );
     ack.options.lease_time = None;
     ack.options.renewal_time = None;

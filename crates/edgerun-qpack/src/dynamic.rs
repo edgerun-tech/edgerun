@@ -381,7 +381,7 @@ impl DynamicTable {
             let field = self.fields.pop_front().ok_or(Error::MaxTableSizeReached)?; //TODO better type
             self.curr_size -= field.mem_size();
 
-            self.vas.drop();
+            self.vas.mark_dropped();
 
             if let Entry::Occupied(e) = self.name_map.entry(field.name.clone()) {
                 if self.vas.evicted(*e.get()) {

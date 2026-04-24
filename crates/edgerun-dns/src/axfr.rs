@@ -156,9 +156,7 @@ pub fn handle_update(
     // - If rtype == ANY → delete all records for this name
     // - Otherwise → add/update record
     for rr in &query.authority {
-        if rr.rclass == 0 {
-            zone.remove_name(&rr.name);
-        } else if rr.rtype == DnsRecordType::ANY {
+        if rr.rclass == 0 || rr.rtype == DnsRecordType::ANY {
             zone.remove_name(&rr.name);
         } else {
             let mut new_rr = rr.clone();

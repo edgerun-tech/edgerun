@@ -35,6 +35,32 @@ struct SockAddrHci {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct LeConnParams {
+    pub scan_interval: u16,
+    pub scan_window: u16,
+    pub peer_addr_type: u8,
+    pub conn_interval_min: u16,
+    pub conn_interval_max: u16,
+    pub conn_latency: u16,
+    pub supervision_timeout: u16,
+}
+
+impl LeConnParams {
+    pub const fn default_fast() -> Self {
+        Self {
+            scan_interval: 0x0060,
+            scan_window: 0x0030,
+            peer_addr_type: 0x01,
+            conn_interval_min: 0x0018,
+            conn_interval_max: 0x0028,
+            conn_latency: 0x0000,
+            supervision_timeout: 0x01C0,
+        }
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, Copy)]
 struct HciConnReq {
     scan_interval: u16,
@@ -142,13 +168,7 @@ impl HciConnection {
     pub fn connect_le(
         &mut self,
         peer_addr: &str,
-        peer_addr_type: u8,
-        scan_interval: u16,
-        scan_window: u16,
-        conn_interval_min: u16,
-        conn_interval_max: u16,
-        conn_latency: u16,
-        supervision_timeout: u16,
+        params: LeConnParams,
     ) -> GattResult<u16> {
         let bdaddr = reverse_bdaddr(peer_addr)
             .ok_or_else(|| GattError::InvalidAddress(peer_addr.to_string()))?;
@@ -160,16 +180,16 @@ impl HciConnection {
         req.push((self.controller_index >> 8) as u8);
 
         let conn_req = HciConnReq {
-            scan_interval,
-            scan_window,
+            scan_interval: params.scan_interval,
+            scan_window: params.scan_window,
             initiator_filter_policy: 0x00,
-            peer_addr_type,
+            peer_addr_type: params.peer_addr_type,
             peer_addr: bdaddr,
             own_addr_type: 0x00,
-            conn_interval_min,
-            conn_interval_max,
-            conn_latency,
-            supervision_timeout,
+            conn_interval_min: params.conn_interval_min,
+            conn_interval_max: params.conn_interval_max,
+            conn_latency: params.conn_latency,
+            supervision_timeout: params.supervision_timeout,
             min_ce_length: 0x0000,
             max_ce_length: 0x0000,
         };
@@ -335,16 +355,9 @@ impl HciConnectionPool {
         }
 
         let mut hci = HciConnection::new(self.controller_index)?;
-        let handle = hci.connect_le(
-            peer_addr,
-            addr_type,
-            0x0060,
-            0x0030,
-            0x0018,
-            0x0028,
-            0x0000,
-            0x01C0,
-        )?;
+        let mut params = LeConnParams::default_fast();
+        params.peer_addr_type = addr_type;
+        let handle = hci.connect_le(peer_addr, params)?;
 
         let conn = Arc::new(hci);
         let mut conns = self.connections.lock().unwrap();

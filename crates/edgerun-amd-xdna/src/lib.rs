@@ -302,8 +302,6 @@ pub fn set_power_mode(fd: RawFd, mode: u8) -> Result<(), CapabilityError> {
     Ok(())
 }
 
-/// Buffer object information (map_offset, vaddr, xdna_addr).
-
 /// Sync buffer object to/from device.
 fn sync_bo(fd: RawFd, bo_handle: u32, direction: u32, offset: u64, size: u64) -> Result<(), CapabilityError> {
     let mut sync = AmdxdnaDrmSyncBo {

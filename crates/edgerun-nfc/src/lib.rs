@@ -34,7 +34,7 @@ impl NfcTechnology {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "iso14443" | "iso14443a" | "nfc-a" | "nfca" => NfcTechnology::NfcA,
             "iso14443b" | "nfc-b" | "nfcb" => NfcTechnology::NfcB,
@@ -423,12 +423,12 @@ mod tests {
 
     #[test]
     fn nfc_technology_from_str() {
-        assert_eq!(NfcTechnology::from_str("NFC-A"), NfcTechnology::NfcA);
-        assert_eq!(NfcTechnology::from_str("iso14443a"), NfcTechnology::NfcA);
-        assert_eq!(NfcTechnology::from_str("FeliCa"), NfcTechnology::NfcF);
-        assert_eq!(NfcTechnology::from_str("iso15693"), NfcTechnology::NfcV);
-        assert_eq!(NfcTechnology::from_str("ISO-DEP"), NfcTechnology::IsoDep);
-        assert_eq!(NfcTechnology::from_str("bogus"), NfcTechnology::Unknown);
+        assert_eq!(NfcTechnology::parse("NFC-A"), NfcTechnology::NfcA);
+        assert_eq!(NfcTechnology::parse("iso14443a"), NfcTechnology::NfcA);
+        assert_eq!(NfcTechnology::parse("FeliCa"), NfcTechnology::NfcF);
+        assert_eq!(NfcTechnology::parse("iso15693"), NfcTechnology::NfcV);
+        assert_eq!(NfcTechnology::parse("ISO-DEP"), NfcTechnology::IsoDep);
+        assert_eq!(NfcTechnology::parse("bogus"), NfcTechnology::Unknown);
     }
 
     #[test]

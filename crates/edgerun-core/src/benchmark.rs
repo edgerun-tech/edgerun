@@ -11,7 +11,6 @@
 ///
 /// Total suite runtime: ~1-2 seconds on typical hardware.
 /// Network benchmarks are in `edgerun-mesh::benchmark`.
-
 use std::time::{Duration, Instant};
 
 use crate::accounting::PerformanceCertificate;

@@ -14,7 +14,7 @@ pub mod options;
 pub mod lease;
 pub mod scope;
 
-pub use message::{DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, PxeClientArch};
+pub use message::{DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, NetworkConfig, PxeClientArch};
 pub use message::{
     OPT_TFTP_SERVER_NAME, OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_NDI,
     OPT_CLIENT_MACHINE_ID, OPT_VENDOR_ENCAP, OPT_HOST_NAME,

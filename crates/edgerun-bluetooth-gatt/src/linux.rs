@@ -108,9 +108,11 @@ impl L2capSocket {
     }
 
     pub fn bind_with_addr_type(&self, addr_type: u8) -> GattResult<()> {
-        let mut l2cap_addr = SockAddrL2::default();
-        l2cap_addr.l2_bdaddr = [0u8; 6];
-        l2cap_addr.l2_bdaddr_type = addr_type;
+        let l2cap_addr = SockAddrL2 {
+            l2_bdaddr: [0u8; 6],
+            l2_bdaddr_type: addr_type,
+            ..Default::default()
+        };
 
         let rc = unsafe {
             bind(

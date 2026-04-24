@@ -216,11 +216,10 @@ impl<T> SlotPool<T> {
         }
         
         let freelist = FreeList::new(cap);
-        for i in 0..cap {
+        for (i, slot) in slots.iter_mut().enumerate() {
             let next = if i + 1 < cap { i + 1 } else { usize::MAX };
-            slots[i].next.store(next, Ordering::Relaxed);
+            slot.next.store(next, Ordering::Relaxed);
         }
-        
         Self {
             slots: UnsafeCell::new(slots.into_boxed_slice()),
             freelist,

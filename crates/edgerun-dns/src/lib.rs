@@ -68,7 +68,7 @@ pub use dot::{DotServer, DotServerConfig};
 pub use doh::{DohServer, DohServerConfig};
 
 // DHCP re-exports
-pub use dhcp::{DhcpClient, DhcpServer, DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, PxeClientArch, Lease};
+pub use dhcp::{DhcpClient, DhcpServer, DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, NetworkConfig, PxeClientArch, Lease};
 pub use dhcp::{OPT_TFTP_SERVER_NAME, OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_NDI, OPT_CLIENT_MACHINE_ID, OPT_VENDOR_ENCAP, OPT_HOST_NAME};
 
 // TFTP re-exports

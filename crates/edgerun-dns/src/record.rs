@@ -996,7 +996,7 @@ pub fn encode_domain_name_compressed(name: &str, msg: &[u8]) -> Vec<u8> {
 
     let mut buf = Vec::new();
     for i in 0..first_label {
-        let label = labels[i];
+        let label = &labels[i];
         buf.push(label.len() as u8);
         buf.extend_from_slice(label.as_bytes());
     }
@@ -1005,8 +1005,7 @@ pub fn encode_domain_name_compressed(name: &str, msg: &[u8]) -> Vec<u8> {
         let pointer = 0xC000 | (pos as u16);
         buf.extend_from_slice(&pointer.to_be_bytes());
     } else {
-        for i in first_label..labels.len() {
-            let label = labels[i];
+        for &label in &labels[first_label..] {
             buf.push(label.len() as u8);
             buf.extend_from_slice(label.as_bytes());
         }

@@ -315,6 +315,7 @@ fn infer_infrared_capability(
     if lowered.contains("ir") || lowered.contains("infrared") || lowered.contains("depth") {
         return V4l2InfraredCapability::InfraredLikely;
     }
+    #[allow(clippy::redundant_guards)]
     match pixel_format {
         CameraPixelFormat::Gray8 => V4l2InfraredCapability::MonochromeLikely,
         CameraPixelFormat::Other(v)
@@ -338,6 +339,7 @@ fn infer_stream_role(card_name: &str, pixel_format: CameraPixelFormat) -> V4l2St
     if lowered.contains("ir") || lowered.contains("infrared") {
         return V4l2StreamRole::InfraredLikely;
     }
+    #[allow(clippy::redundant_guards)]
     match pixel_format {
         CameraPixelFormat::Gray8 => V4l2StreamRole::MonochromeLikely,
         CameraPixelFormat::Mjpeg
@@ -1230,7 +1232,7 @@ fn normalized_cross_correlation(a: &[u8], b: &[u8]) -> f64 {
         return 0.0;
     }
 
-    (numerator / denominator).max(0.0).min(1.0)
+    (numerator / denominator).clamp(0.0, 1.0)
 }
 
 pub struct V4l2PairedCameraBiometricReader {
@@ -1427,7 +1429,7 @@ impl PairedCameraBiometricReader for V4l2PairedCameraBiometricReader {
             edgerun_camera_biometrics::CameraLivenessChallengeKind::PassivePresence => {
                 if challenge.require_rgb && !face_present_in_rgb {
                     false
-                } else { !(challenge.require_infrared && !face_present_in_infrared) }
+                } else { !challenge.require_infrared || face_present_in_infrared }
             }
             _ => false,
         };

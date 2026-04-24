@@ -253,7 +253,7 @@ fn normalize_owner(token: &str, origin: &str) -> String {
 fn normalize_target(token: &str, origin: &str) -> String {
     let t = token.trim_end_matches('.').trim_matches('"');
     if t == "@" || t.is_empty() { origin.to_string() }
-    else if t == origin || t.ends_with(&format!(".{}", origin)) { t.to_lowercase() }
+    else if t.ends_with(&format!(".{}", origin)) { t.to_lowercase() }
     else if t.contains('.') { t.to_lowercase() }
     else { format!("{}.{}", t.to_lowercase(), origin) }
 }

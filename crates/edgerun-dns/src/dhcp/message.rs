@@ -293,6 +293,17 @@ impl PxeClientArch {
     }
 }
 
+/// Builder for DHCP network configuration parameters.
+pub struct NetworkConfig {
+    pub server_id: Ipv4Addr,
+    pub subnet_mask: Ipv4Addr,
+    pub router: Ipv4Addr,
+    pub dns_servers: Vec<Ipv4Addr>,
+    pub lease_time: u32,
+    pub tftp_server: Option<String>,
+    pub bootfile: Option<String>,
+}
+
 impl DhcpMessage {
     /// Minimum size of a DHCP message header (236 bytes fixed + 4 byte cookie).
     pub const HEADER_SIZE: usize = 240;
@@ -501,13 +512,7 @@ impl DhcpMessage {
         xid: u32,
         mac: [u8; 6],
         yiaddr: Ipv4Addr,
-        server_id: Ipv4Addr,
-        subnet_mask: Ipv4Addr,
-        router: Ipv4Addr,
-        dns_servers: Vec<Ipv4Addr>,
-        lease_time: u32,
-        tftp_server: Option<String>,
-        bootfile: Option<String>,
+        net: NetworkConfig,
     ) -> Self {
         Self {
             op: DhcpOp::Reply,
@@ -527,15 +532,15 @@ impl DhcpMessage {
             is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Offer),
-                subnet_mask: Some(subnet_mask),
-                router: Some(router),
-                dns_servers,
-                server_id: Some(server_id),
-                lease_time: Some(lease_time),
-                renewal_time: Some(lease_time / 2),
-                rebind_time: Some(lease_time * 7 / 8),
-                tftp_server_name: tftp_server,
-                bootfile_name: bootfile,
+                subnet_mask: Some(net.subnet_mask),
+                router: Some(net.router),
+                dns_servers: net.dns_servers,
+                server_id: Some(net.server_id),
+                lease_time: Some(net.lease_time),
+                renewal_time: Some(net.lease_time / 2),
+                rebind_time: Some(net.lease_time * 7 / 8),
+                tftp_server_name: net.tftp_server,
+                bootfile_name: net.bootfile,
                 ..Default::default()
             },
         }
@@ -546,13 +551,7 @@ impl DhcpMessage {
         xid: u32,
         mac: [u8; 6],
         yiaddr: Ipv4Addr,
-        server_id: Ipv4Addr,
-        subnet_mask: Ipv4Addr,
-        router: Ipv4Addr,
-        dns_servers: Vec<Ipv4Addr>,
-        lease_time: u32,
-        tftp_server: Option<String>,
-        bootfile: Option<String>,
+        net: NetworkConfig,
     ) -> Self {
         Self {
             op: DhcpOp::Reply,
@@ -572,15 +571,15 @@ impl DhcpMessage {
             is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Ack),
-                subnet_mask: Some(subnet_mask),
-                router: Some(router),
-                dns_servers,
-                server_id: Some(server_id),
-                lease_time: Some(lease_time),
-                renewal_time: Some(lease_time / 2),
-                rebind_time: Some(lease_time * 7 / 8),
-                tftp_server_name: tftp_server,
-                bootfile_name: bootfile,
+                subnet_mask: Some(net.subnet_mask),
+                router: Some(net.router),
+                dns_servers: net.dns_servers,
+                server_id: Some(net.server_id),
+                lease_time: Some(net.lease_time),
+                renewal_time: Some(net.lease_time / 2),
+                rebind_time: Some(net.lease_time * 7 / 8),
+                tftp_server_name: net.tftp_server,
+                bootfile_name: net.bootfile,
                 ..Default::default()
             },
         }
@@ -1110,13 +1109,15 @@ mod tests {
             0xabcdef00,
             mac,
             Ipv4Addr::new(10, 0, 0, 50),
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(255, 0, 0, 0),
-            Ipv4Addr::new(10, 0, 0, 1),
-            vec![Ipv4Addr::new(1, 1, 1, 1)],
-            3600,
-            Some("10.0.0.1".to_string()),
-            Some("bootx64.efi".to_string()),
+            NetworkConfig {
+                server_id: Ipv4Addr::new(10, 0, 0, 1),
+                subnet_mask: Ipv4Addr::new(255, 0, 0, 0),
+                router: Ipv4Addr::new(10, 0, 0, 1),
+                dns_servers: vec![Ipv4Addr::new(1, 1, 1, 1)],
+                lease_time: 3600,
+                tftp_server: Some("10.0.0.1".to_string()),
+                bootfile: Some("bootx64.efi".to_string()),
+            },
         );
         let wire = msg.to_wire();
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
@@ -1227,13 +1228,15 @@ mod tests {
             0x12345678,
             [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff],
             Ipv4Addr::new(192, 168, 1, 100),
-            Ipv4Addr::new(192, 168, 1, 1),
-            Ipv4Addr::new(255, 255, 255, 0),
-            Ipv4Addr::new(192, 168, 1, 1),
-            vec![],
-            86400,
-            Some("192.168.1.1".to_string()),
-            Some("pxelinux.0".to_string()),
+            NetworkConfig {
+                server_id: Ipv4Addr::new(192, 168, 1, 1),
+                subnet_mask: Ipv4Addr::new(255, 255, 255, 0),
+                router: Ipv4Addr::new(192, 168, 1, 1),
+                dns_servers: vec![],
+                lease_time: 86400,
+                tftp_server: Some("192.168.1.1".to_string()),
+                bootfile: Some("pxelinux.0".to_string()),
+            },
         );
 
         // Convert to BOOTP response

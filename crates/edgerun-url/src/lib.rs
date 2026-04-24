@@ -134,22 +134,26 @@ fn parse_url(input: &str) -> Result<Url, ParseError> {
     };
     
     // Parse query
-    let query = if rest.starts_with('?') {
-        let end = rest[1..].find('#').unwrap_or(rest.len() - 1);
-        Some(rest[1..=end].to_string())
+    let query = if let Some(rest) = rest.strip_prefix('?') {
+        let end = rest.find('#').unwrap_or(rest.len());
+        Some(rest[..end].to_string())
     } else {
         None
     };
     let rest = if query.is_some() {
-        let end = rest[1..].find('#').unwrap_or(rest.len() - 1);
-        &rest[end..]
+        if let Some(rest) = rest.strip_prefix('?') {
+            let end = rest.find('#').unwrap_or(rest.len());
+            &rest[end..]
+        } else {
+            rest
+        }
     } else {
         rest
     };
     
     // Parse fragment
-    let fragment = if rest.starts_with('#') {
-        Some(rest[1..].to_string())
+    let fragment = if let Some(rest) = rest.strip_prefix('#') {
+        Some(rest.to_string())
     } else {
         None
     };

@@ -172,10 +172,16 @@ pub struct Encoder<'a> {
     header_table: HeaderTable<'a>,
 }
 
+impl<'a> Default for Encoder<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Encoder<'a> {
     /// Creates a new `Encoder` with a default static table, as defined by the
     /// HPACK spec (Appendix A).
-    pub fn new() -> Encoder<'a> {
+    pub fn new() -> Self {
         Encoder {
             header_table: HeaderTable::with_static_table(STATIC_TABLE),
         }
@@ -251,7 +257,7 @@ impl<'a> Encoder<'a> {
     ///
     /// - `header` - the header to be encoded
     /// - `should_index` - indicates whether the given header should be indexed, i.e.
-    ///                    inserted into the dynamic table
+    ///   inserted into the dynamic table
     /// - `buf` - The buffer into which the result is placed
     ///
     fn encode_literal<W: io::Write>(

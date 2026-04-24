@@ -4,7 +4,7 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::time::Duration;
 
-use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
+use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT, NetworkConfig};
 use super::lease::LeasePool;
 
 /// DHCPv4 server configuration.
@@ -213,13 +213,15 @@ impl DhcpServer {
             msg.xid,
             mac,
             ip,
-            self.config.server_ip,
-            self.config.subnet_mask,
-            self.config.router,
-            self.config.dns_servers.clone(),
-            self.config.lease_time,
-            tftp.clone(),
-            bootfile.clone(),
+            NetworkConfig {
+                server_id: self.config.server_ip,
+                subnet_mask: self.config.subnet_mask,
+                router: self.config.router,
+                dns_servers: self.config.dns_servers.clone(),
+                lease_time: self.config.lease_time,
+                tftp_server: tftp.clone(),
+                bootfile: bootfile.clone(),
+            },
         );
 
         // BOOTP compatibility: populate sname/file/siaddr fields (RFC 951 §4)
@@ -382,13 +384,15 @@ impl DhcpServer {
             msg.xid,
             mac,
             msg.ciaddr,
-            self.config.server_ip,
-            self.config.subnet_mask,
-            self.config.router,
-            self.config.dns_servers.clone(),
-            0, // Placeholder — will be omitted
-            None, // No PXE for INFORM
-            None,
+            NetworkConfig {
+                server_id: self.config.server_ip,
+                subnet_mask: self.config.subnet_mask,
+                router: self.config.router,
+                dns_servers: self.config.dns_servers.clone(),
+                lease_time: 0,
+                tftp_server: None,
+                bootfile: None,
+            },
         );
         // Remove lease_time from INFORM response per RFC 2131 §4.3.5
         ack.options.lease_time = None;
@@ -407,13 +411,15 @@ impl DhcpServer {
             msg.xid,
             mac,
             ip,
-            self.config.server_ip,
-            self.config.subnet_mask,
-            self.config.router,
-            self.config.dns_servers.clone(),
-            self.config.lease_time,
-            tftp.clone(),
-            bootfile.clone(),
+            NetworkConfig {
+                server_id: self.config.server_ip,
+                subnet_mask: self.config.subnet_mask,
+                router: self.config.router,
+                dns_servers: self.config.dns_servers.clone(),
+                lease_time: self.config.lease_time,
+                tftp_server: tftp.clone(),
+                bootfile: bootfile.clone(),
+            },
         );
 
         // BOOTP compatibility
