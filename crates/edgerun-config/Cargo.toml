@@ -11,8 +11,8 @@ edgerun-dns = { path = "../edgerun-dns" }
 edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
 edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-json = { path = "../edgerun-json", features = ["std", "serde", "yaml"] }
+edgerun-error.workspace = true
 serde = { version = "1", features = ["derive"] }
-thiserror = "1"
 
 [lints]
 workspace = true

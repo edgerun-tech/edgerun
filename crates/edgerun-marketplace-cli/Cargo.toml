@@ -12,8 +12,7 @@ edgerun-solana = { path = "../edgerun-solana" }
 edgerun-clap = { path = "../edgerun-clap" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 thiserror = "2.0"
 
 [dev-dependencies]

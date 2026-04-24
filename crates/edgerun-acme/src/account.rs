@@ -44,7 +44,7 @@ impl AccountKey {
     }
 
     pub fn thumbprint_b64(&self) -> String {
-        let jwk_json = serde_json::to_string(&self.jwk()).unwrap_or_default();
+        let jwk_json = edgerun_json::to_string(&self.jwk()).unwrap_or_default();
         use edgerun_crypto::Sha256;
         let mut hasher = <Sha256 as Digest>::new();
         hasher.update(jwk_json.as_bytes());

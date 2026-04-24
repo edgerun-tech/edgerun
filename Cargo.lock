@@ -112,7 +112,7 @@ dependencies = [
  "nom",
  "num-traits",
  "rusticata-macros",
- "thiserror 2.0.18",
+ "thiserror",
  "time",
 ]
 
@@ -872,9 +872,8 @@ dependencies = [
  "edgerun-secret-service",
  "log 0.4.29",
  "serde",
- "serde_json",
  "sha2",
- "thiserror 2.0.18",
+ "thiserror",
  "time",
  "url",
 ]
@@ -1046,9 +1045,8 @@ dependencies = [
  "edgerun-dhcpv6",
  "edgerun-dns",
  "edgerun-encoding",
+ "edgerun-error",
  "edgerun-json",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1124,9 +1122,8 @@ name = "edgerun-dhcpv6"
 version = "0.1.0"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-error",
  "edgerun-log",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1229,6 +1226,15 @@ dependencies = [
 [[package]]
 name = "edgerun-encoding"
 version = "0.1.0"
+
+[[package]]
+name = "edgerun-error"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "edgerun-evdev-input"
@@ -1460,13 +1466,12 @@ name = "edgerun-marketplace-cli"
 version = "0.1.0"
 dependencies = [
  "edgerun-clap",
+ "edgerun-json",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-solana",
  "mockall",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -1571,7 +1576,6 @@ dependencies = [
  "edgerun-dns",
  "edgerun-inotify",
  "edgerun-log",
- "signal-hook",
 ]
 
 [[package]]
@@ -1775,13 +1779,13 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "edgerun-config",
+ "edgerun-error",
  "edgerun-log",
  "edgerun-mesh",
  "edgerun-rt",
  "edgerun-solana",
  "parking_lot",
  "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1821,12 +1825,11 @@ dependencies = [
  "bincode",
  "bs58",
  "edgerun-crypto",
+ "edgerun-error",
  "edgerun-http",
  "edgerun-json",
  "edgerun-rt",
  "mockall",
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2624,7 +2627,7 @@ dependencies = [
  "jni-sys 0.4.1",
  "log 0.4.29",
  "simd_cesu8",
- "thiserror 2.0.18",
+ "thiserror",
  "walkdir",
  "windows-link",
 ]
@@ -3699,26 +3702,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "signal-hook"
-version = "0.3.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
-dependencies = [
- "libc",
- "signal-hook-registry",
-]
-
-[[package]]
-name = "signal-hook-registry"
-version = "1.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
-dependencies = [
- "errno",
- "libc",
-]
-
-[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3873,31 +3856,11 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "thiserror"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
-dependencies = [
- "thiserror-impl 1.0.69",
-]
-
-[[package]]
-name = "thiserror"
 version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.18",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "thiserror-impl",
 ]
 
 [[package]]
@@ -4452,7 +4415,7 @@ dependencies = [
  "oid-registry",
  "ring",
  "rusticata-macros",
- "thiserror 2.0.18",
+ "thiserror",
  "time",
 ]
 

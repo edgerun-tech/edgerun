@@ -9,7 +9,7 @@ edgerun-config = { path = "../edgerun-config" }
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
-thiserror = "2.0"
+edgerun-error = { path = "../edgerun-error" }
 serde = { version = "1.0", features = ["derive"] }
 parking_lot = "0.12"
 bincode = "1.3"

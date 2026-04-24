@@ -1,10 +1,10 @@
 //! Config file parser — reads YAML and produces typed config resources.
 
 use crate::types::ConfigResource;
-use serde::Deserialize;
+use edgerun_json::Deserialize;
 use edgerun_json::yaml::{YamlValue, YamlDeserializer};
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, edgerun_json::Deserialize)]
 struct RawDoc {
     kind: String,
     spec: YamlValue,
@@ -253,7 +253,7 @@ impl ConfigState {
     }
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, Clone, edgerun_error::Error)]
 pub enum ConfigError {
     #[error("config file is empty")]
     EmptyFile,

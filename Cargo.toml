@@ -2,6 +2,7 @@
 resolver = "2"
 
 members = [
+  "crates/edgerun-error",
   "crates/edgerun-inotify",
   "crates/edgerun-alsa-microphone",
   "crates/edgerun-alsa-speaker",
@@ -169,6 +170,8 @@ edgerun-rt = { path = "crates/edgerun-rt" }
 edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json
 edgerun-json = { path = "crates/edgerun-json", features = ["serde"] }
+edgerun-error = { path = "crates/edgerun-error" }
+serde = { version = "1", features = ["derive"] }
 # Browser deps
 edgerun-display = { path = "crates/edgerun-display" }
 edgerun-gpu = { path = "crates/edgerun-gpu" }
