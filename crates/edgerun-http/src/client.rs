@@ -198,16 +198,25 @@ impl HttpClient {
 
     /// Execute a custom request.
     pub async fn execute(&self, request: &Request) -> Result<Response> {
+        eprintln!("CLIENT: execute version={:?}", self.inner().version);
         match self.inner().version {
-            HttpVersion::Http1 => self.execute_http1(request).await,
+            HttpVersion::Http1 => {
+                eprintln!("CLIENT: using HTTP/1.1");
+                self.execute_http1(request).await
+            }
             HttpVersion::Http2 | HttpVersion::Http2OrHttp1 => {
+                eprintln!("CLIENT: using HTTP/2");
                 match self.execute_http2(request).await {
                     Ok(r) => Ok(r),
                     Err(_) => self.execute_http1(request).await,
                 }
             }
-            HttpVersion::Http3 => self.execute_http3(request).await,
+            HttpVersion::Http3 => {
+                eprintln!("CLIENT: using HTTP/3");
+                self.execute_http3(request).await
+            }
             HttpVersion::Best => {
+                eprintln!("CLIENT: using Best");
                 match self.execute_http2(request).await {
                     Ok(r) => Ok(r),
                     Err(_) => self.execute_http1(request).await,
@@ -243,12 +252,14 @@ impl HttpClient {
         Ok(Response::from_parts(h1_resp.status().clone(), headers, h1_resp.body().to_vec()))
     }
 
-    /// Execute an HTTP/3 request via QUIC.
+/// Execute an HTTP/3 request via QUIC.
     async fn execute_http3(&self, request: &Request) -> Result<Response> {
         use crate::http3::connection::Http3Connection;
         use crate::http1::compression;
 
+        eprintln!("CLIENT HTTP3: execute_http3 start");
         let uri = request.uri();
+        eprintln!("CLIENT HTTP3: got uri");
         if !uri.is_https() {
             edgerun_log::debug!("HTTP/3: only supports HTTPS, falling back");
             return Err(Error::ProtocolError(
@@ -261,6 +272,7 @@ impl HttpClient {
         })?.to_string();
         let port = uri.port().unwrap_or(443);
 
+        eprintln!("CLIENT HTTP3: host={}, port={}", host, port);
         edgerun_log::debug!("HTTP/3: connecting to {}:{}", host, port);
 
         let mut resp_redirect_count = 0;
