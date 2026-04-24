@@ -26,7 +26,7 @@ pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     let rt = edgerun_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     let image_clone = image.clone();
     let bundle_clone = bundle_path.clone();
@@ -40,8 +40,7 @@ pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
             println!("Pulled {} to {}", image_ref, path.display());
             Ok(())
         }
-        Err(e) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(e) => Err(std::io::Error::other(
             format!("pull failed: {}", e),
         )),
     }

@@ -897,8 +897,7 @@ impl FileIndex {
     }
 
     pub fn list_active_revocations(&self) -> io::Result<Vec<(String, String)>> {
-        Ok(self.revocations.read().iter()
-            .map(|(_, v)| (v.target_type.clone(), v.target_hex.clone()))
+        Ok(self.revocations.read().values().map(|v| (v.target_type.clone(), v.target_hex.clone()))
             .collect())
     }
 

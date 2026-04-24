@@ -838,7 +838,7 @@ fn digest_for_yubikey_algorithm(
 
 fn encode_tlv(tag: u8, value: &[u8]) -> Result<Vec<u8>, YubiKeyError> {
     edgerun_encoding::tlv::encode_tlv(tag, value)
-        .map_err(|e| YubiKeyError::Provider(format!("TLV encode failed: {e:?}").into()))
+        .map_err(|e| YubiKeyError::Provider(format!("TLV encode failed: {e:?}")))
 }
 
 fn build_general_authenticate_sign_apdu(
@@ -915,7 +915,7 @@ fn parse_general_authenticate_signature(bytes: &[u8]) -> Result<Vec<u8>, YubiKey
 
 fn parse_tlv_map(bytes: &[u8]) -> Result<Vec<(u8, Vec<u8>)>, YubiKeyError> {
     edgerun_encoding::tlv::parse_tlv_map(bytes)
-        .map_err(|e| YubiKeyError::Provider(format!("TLV parse failed: {e:?}").into()))
+        .map_err(|e| YubiKeyError::Provider(format!("TLV parse failed: {e:?}")))
 }
 
 fn parse_piv_algorithm(id: u8) -> Option<YubiKeySignatureAlgorithm> {

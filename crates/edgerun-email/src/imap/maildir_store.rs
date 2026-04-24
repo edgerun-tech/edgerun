@@ -379,13 +379,12 @@ impl MailStore for MaildirImapStore {
         }
 
         // Handle \Seen flag — move from new/ to cur/
-        if flags.iter().any(|f| f == "\\Seen") && matches!(action, StoreAction::Add | StoreAction::Replace) {
-            if path.parent().map(|p| p.file_name().map(|n| n == "new").unwrap_or(false)).unwrap_or(false) {
+        if flags.iter().any(|f| f == "\\Seen") && matches!(action, StoreAction::Add | StoreAction::Replace)
+            && path.parent().map(|p| p.file_name().map(|n| n == "new").unwrap_or(false)).unwrap_or(false) {
                 let filename = path.file_name().unwrap().to_string_lossy().to_string();
                 let cur_path = self.inbox_path(user).join("cur").join(&filename);
                 let _ = fs::rename(path, cur_path);
             }
-        }
 
         Ok(vec![seq_num])
     }
@@ -407,26 +406,22 @@ impl MailStore for MaildirImapStore {
             for key in keys {
                 match key {
                     SearchKey::All => {}
-                    SearchKey::Seen => {
-                        if !matches!(state, MessageState::Cur) {
+                    SearchKey::Seen
+                        if !matches!(state, MessageState::Cur) => {
                             matches = false;
                         }
-                    }
-                    SearchKey::Unseen => {
-                        if !matches!(state, MessageState::New) {
+                    SearchKey::Unseen
+                        if !matches!(state, MessageState::New) => {
                             matches = false;
                         }
-                    }
-                    SearchKey::Deleted => {
-                        if !self.is_deleted(user, path) {
+                    SearchKey::Deleted
+                        if !self.is_deleted(user, path) => {
                             matches = false;
                         }
-                    }
-                    SearchKey::Undeleted => {
-                        if self.is_deleted(user, path) {
+                    SearchKey::Undeleted
+                        if self.is_deleted(user, path) => {
                             matches = false;
                         }
-                    }
                     SearchKey::Subject(subj) => {
                         let data = fs::read(path)?;
                         let headers = Self::extract_headers(&data);

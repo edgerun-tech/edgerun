@@ -85,7 +85,7 @@ impl Scheduler {
             self.deployment_manager.assign_to_provider(name, provider_id);
             self.provider_deployments
                 .entry(*provider_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(name.to_string());
             Ok(())
         } else {

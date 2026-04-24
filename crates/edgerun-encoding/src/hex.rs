@@ -129,7 +129,7 @@ pub fn must_hex_to_bytes(value: &str) -> Vec<u8> {
 /// ```
 pub fn parse_hex_bitmap(s: &str) -> Vec<u8> {
     s.split_whitespace()
-        .filter_map(|chunk| parse_hex_int::<u8>(chunk))
+        .filter_map(parse_hex_int::<u8>)
         .collect()
 }
 

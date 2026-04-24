@@ -112,11 +112,7 @@ impl Lease {
     /// Seconds remaining until lease expiry.
     pub fn remaining_secs(&self) -> u64 {
         let elapsed = self.granted_at.elapsed().as_secs();
-        if elapsed >= self.lease_time as u64 {
-            0
-        } else {
-            self.lease_time as u64 - elapsed
-        }
+        (self.lease_time as u64).saturating_sub(elapsed)
     }
 }
 
@@ -215,10 +211,10 @@ impl LeasePool {
                 // Expired conflict — clean up
                 self.conflicts.remove(&ip_u32);
             }
-            if !self.leases.contains_key(&ip_u32) {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.leases.entry(ip_u32) {
                 let ip = u32_to_ip(ip_u32);
                 let lease = Lease::offered(mac, ip, lease_time, xid);
-                self.leases.insert(ip_u32, lease);
+                e.insert(lease);
                 self.mac_to_ip.insert(mac, ip_u32);
                 if let Some(ref cid) = client_id {
                     self.client_id_to_ip.insert(cid.clone(), ip_u32);

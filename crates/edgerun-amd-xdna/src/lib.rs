@@ -1130,7 +1130,7 @@ impl NpuDevice for AmdXdnaBackend {
             .linux
             .character_device
             .as_ref()
-            .ok_or_else(|| CapabilityError::Unsupported(
+            .ok_or(CapabilityError::Unsupported(
                 "amd-xdna device is not exposed via /dev/accel",
             ))?;
 

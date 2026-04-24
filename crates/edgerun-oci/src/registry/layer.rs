@@ -47,7 +47,7 @@ pub fn extract_layer(
     dest: &Path,
     media_type: Option<&str>,
 ) -> Result<(), RegistryError> {
-    let file = File::open(blob_path).map_err(|e| RegistryError::IoError(e))?;
+    let file = File::open(blob_path).map_err(RegistryError::IoError)?;
 
     let is_gzip = media_type
         .map(|mt| mt.contains("gzip"))
@@ -59,7 +59,7 @@ pub fn extract_layer(
 
     if is_zstd {
         let mut decoder =
-            zstd::Decoder::new(file).map_err(|e| RegistryError::IoError(e))?;
+            zstd::Decoder::new(file).map_err(RegistryError::IoError)?;
         extract_tar_secure(&mut decoder, dest)?;
     } else if is_gzip {
         let mut decoder = flate2::read::GzDecoder::new(file);
@@ -77,9 +77,9 @@ pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), Registr
     let mut archive = tar::Archive::new(reader);
     let dest = dest.canonicalize().unwrap_or(dest.to_path_buf());
 
-    for entry in archive.entries().map_err(|e| RegistryError::IoError(e))? {
-        let entry = entry.map_err(|e| RegistryError::IoError(e))?;
-        let path = entry.path().map_err(|e| RegistryError::IoError(e))?;
+    for entry in archive.entries().map_err(RegistryError::IoError)? {
+        let entry = entry.map_err(RegistryError::IoError)?;
+        let path = entry.path().map_err(RegistryError::IoError)?;
 
         // Validate: entry must resolve within dest.
         // First try canonicalize (resolves symlinks). If that fails (path doesn't
@@ -105,7 +105,7 @@ pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), Registr
 
         // Validate symlinks: target must resolve within dest
         if entry.header().entry_type() == tar::EntryType::Symlink {
-            if let Some(link_target) = entry.link_name().map_err(|e| RegistryError::IoError(e))? {
+            if let Some(link_target) = entry.link_name().map_err(RegistryError::IoError)? {
                 // If absolute, check it's within dest; if relative, resolve from entry's parent
                 let resolved = if link_target.is_absolute() {
                     dest.join(link_target.strip_prefix("/").unwrap_or(&link_target))
@@ -113,7 +113,7 @@ pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), Registr
                     entry_path.parent().unwrap_or(&dest).join(&link_target)
                 };
                 // Try canonicalize first; if target doesn't exist, check manually
-                if let Some(canonical) = resolved.canonicalize().ok() {
+                if let Ok(canonical) = resolved.canonicalize() {
                     if !canonical.starts_with(&dest) {
                         return Err(RegistryError::IoError(io::Error::new(
                             io::ErrorKind::PermissionDenied,
@@ -138,7 +138,7 @@ pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), Registr
         // Extract the entry
         // Use unpack_in which validates paths, but we already validated above
         let mut entry = entry;
-        entry.unpack_in(&dest).map_err(|e| RegistryError::IoError(e))?;
+        entry.unpack_in(&dest).map_err(RegistryError::IoError)?;
     }
 
     Ok(())
@@ -154,11 +154,11 @@ pub fn verify_blob_digest(
     blob_path: &Path,
     expected_digest: &str,
 ) -> Result<(), RegistryError> {
-    let mut file = File::open(blob_path).map_err(|e| RegistryError::IoError(e))?;
+    let mut file = File::open(blob_path).map_err(RegistryError::IoError)?;
     let mut hasher = edgerun_crypto::sha2::Sha256::new();
     let mut buf = [0u8; 65536]; // 64KB buffer
     loop {
-        let n = file.read(&mut buf).map_err(|e| RegistryError::IoError(e))?;
+        let n = file.read(&mut buf).map_err(RegistryError::IoError)?;
         if n == 0 { break; }
         hasher.update(&buf[..n]);
     }
@@ -378,23 +378,23 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> Result<(), RegistryError> {
             copy_dir_contents(&src_path, &dest_path)?;
         } else if src_path.is_symlink() {
             let target =
-                fs::read_link(&src_path).map_err(|e| RegistryError::IoError(e))?;
+                fs::read_link(&src_path).map_err(RegistryError::IoError)?;
             // Atomic symlink: create temp link, then rename
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
             let temp_path = dest.join(format!(".tmp.{:x}-{:x}", std::process::id(), n));
             let _ = fs::remove_file(&temp_path);
             symlink(&target, &temp_path)
-                .map_err(|e| RegistryError::IoError(e))?;
+                .map_err(RegistryError::IoError)?;
             fs::rename(&temp_path, &dest_path)
-                .map_err(|e| RegistryError::IoError(e))?;
+                .map_err(RegistryError::IoError)?;
         } else {
             // Atomic file copy: write to temp file, then rename
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
             let temp_path = dest.join(format!(".tmp.{:x}-{:x}", std::process::id(), n));
             fs::copy(&src_path, &temp_path)
-                .map_err(|e| RegistryError::IoError(e))?;
+                .map_err(RegistryError::IoError)?;
             fs::rename(&temp_path, &dest_path)
-                .map_err(|e| RegistryError::IoError(e))?;
+                .map_err(RegistryError::IoError)?;
         }
     }
 

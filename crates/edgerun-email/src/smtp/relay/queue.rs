@@ -195,7 +195,7 @@ impl MailIndex {
     pub async fn open(data_root: &Path) -> io::Result<Self> {
         let idx_dir = data_root.join("mail");
         spawn_blocking(move || fs::create_dir_all(&idx_dir)).await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))??;
+            .map_err(io::Error::other)??;
 
         let index = Self {
             messages: RwLock::new(HashMap::new()),
@@ -221,7 +221,7 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("messages.bin");
             move || fs::read(&path)
-        }).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        }).await.map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -238,7 +238,7 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("recipients.bin");
             move || fs::read(&path)
-        }).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        }).await.map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -252,7 +252,7 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("retry_queue.bin");
             move || fs::read(&path)
-        }).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        }).await.map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -265,7 +265,7 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("send_log.bin");
             move || fs::read(&path)
-        }).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        }).await.map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -326,7 +326,7 @@ impl MailIndex {
             fs::write(dir.join("send_log.bin"), buf)?;
 
             Ok::<_, io::Error>(())
-        }).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+        }).await.map_err(io::Error::other)?
     }
 
     pub async fn enqueue_message(&self, message_id: &str, envelope_sender: &str, recipients: Vec<String>, data: Vec<u8>, max_retries: i32) -> io::Result<()> {

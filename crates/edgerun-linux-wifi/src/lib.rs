@@ -206,7 +206,7 @@ impl Nl80211Socket {
         };
         if fd < 0 {
             return Err(CapabilityError::Provider(
-                format!("failed to create netlink socket: {}", io::Error::last_os_error()).into(),
+                format!("failed to create netlink socket: {}", io::Error::last_os_error()),
             ));
         }
 
@@ -217,7 +217,7 @@ impl Nl80211Socket {
         if unsafe { libc::bind(fd, &addr as *const _ as *const _, mem::size_of::<SockaddrNl>() as u32) } < 0 {
             unsafe { libc::close(fd) };
             return Err(CapabilityError::Provider(
-                format!("failed to bind netlink socket: {}", io::Error::last_os_error()).into(),
+                format!("failed to bind netlink socket: {}", io::Error::last_os_error()),
             ));
         }
 
@@ -241,7 +241,7 @@ impl Nl80211Socket {
         let mut msg = Vec::new();
         let hdr = NlMsghdr {
             nlmsg_len: 0, // filled in later
-            nlmsg_type: self.family_id as u16,
+            nlmsg_type: self.family_id,
             nlmsg_flags: NLM_F_REQUEST | NLM_F_ACK,
             nlmsg_seq: self.seq,
             nlmsg_pid: self.port_id,
@@ -282,7 +282,7 @@ impl Nl80211Socket {
         };
         if sent < 0 {
             return Err(CapabilityError::Provider(
-                format!("netlink send failed: {}", io::Error::last_os_error()).into(),
+                format!("netlink send failed: {}", io::Error::last_os_error()),
             ));
         }
 
@@ -297,7 +297,7 @@ impl Nl80211Socket {
         let mut msg = Vec::new();
         let hdr = NlMsghdr {
             nlmsg_len: 0,
-            nlmsg_type: self.family_id as u16,
+            nlmsg_type: self.family_id,
             nlmsg_flags: NLM_F_REQUEST | NLM_F_DUMP,
             nlmsg_seq: self.seq,
             nlmsg_pid: self.port_id,
@@ -334,7 +334,7 @@ impl Nl80211Socket {
         };
         if sent < 0 {
             return Err(CapabilityError::Provider(
-                format!("netlink send failed: {}", io::Error::last_os_error()).into(),
+                format!("netlink send failed: {}", io::Error::last_os_error()),
             ));
         }
 
@@ -361,7 +361,7 @@ impl Nl80211Socket {
             };
             if received < 0 {
                 return Err(CapabilityError::Provider(
-                    format!("netlink recv failed: {}", io::Error::last_os_error()).into(),
+                    format!("netlink recv failed: {}", io::Error::last_os_error()),
                 ));
             }
 
@@ -384,7 +384,7 @@ impl Nl80211Socket {
                     };
                     if error != 0 {
                         return Err(CapabilityError::Provider(
-                            format!("nl80211 error: {}", io::Error::from_raw_os_error(-error)).into(),
+                            format!("nl80211 error: {}", io::Error::from_raw_os_error(-error)),
                         ));
                     }
                 }
@@ -449,7 +449,7 @@ impl Nl80211Socket {
         };
         if sent < 0 {
             return Err(CapabilityError::Provider(
-                format!("netlink send failed: {}", io::Error::last_os_error()).into(),
+                format!("netlink send failed: {}", io::Error::last_os_error()),
             ));
         }
 
@@ -728,32 +728,29 @@ fn parse_bss_info(data: &[u8], attr_start: usize, msg_end: usize) -> Option<Wifi
                     ie_offset += 2 + ie_len;
                 }
             }
-            2 => {
+            2
                 // NL80211_BSS_BSSID - 6 bytes
-                if data_end - data_start >= 6 {
+                if data_end - data_start >= 6 => {
                     bssid = Some(format!(
                         "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
                         data[data_start], data[data_start + 1], data[data_start + 2],
                         data[data_start + 3], data[data_start + 4], data[data_start + 5]
                     ));
                 }
-            }
-            3 => {
+            3
                 // NL80211_BSS_FREQUENCY
-                if data_end - data_start >= 4 {
+                if data_end - data_start >= 4 => {
                     frequency = Some(u32::from_ne_bytes([
                         data[data_start], data[data_start + 1], data[data_start + 2], data[data_start + 3]
                     ]));
                 }
-            }
-            10 | 11 => {
+            10 | 11
                 // NL80211_BSS_SIGNAL_MBM or NL80211_BSS_SIGNAL_UNSPEC
-                if data_end - data_start >= 4 {
+                if data_end - data_start >= 4 => {
                     signal_mbm = Some(i32::from_ne_bytes([
                         data[data_start], data[data_start + 1], data[data_start + 2], data[data_start + 3]
                     ]));
                 }
-            }
             _ => {}
         }
 
@@ -1156,14 +1153,14 @@ pub fn nl80211_get_regulatory_domain() -> Result<(String, u8), CapabilityError> 
 pub fn nl80211_set_regulatory_domain(country_code: &str) -> Result<(), CapabilityError> {
     if country_code.len() != 2 {
         return Err(CapabilityError::InvalidRequest(
-            "country code must be exactly 2 characters (ISO 3166-1 alpha-2)".into(),
+            "country code must be exactly 2 characters (ISO 3166-1 alpha-2)",
         ));
     }
 
     // Validate ASCII letters
     if !country_code.chars().all(|c| c.is_ascii_alphabetic()) {
         return Err(CapabilityError::InvalidRequest(
-            "country code must contain only ASCII letters".into(),
+            "country code must contain only ASCII letters",
         ));
     }
 
@@ -1359,12 +1356,12 @@ fn nl80211_set_wiphy_freq(ifindex: i32, freq_mhz: u32) -> Result<(), CapabilityE
 /// Get the interface index (ifindex) for a network interface name.
 fn get_ifindex(name: &str) -> Result<i32, CapabilityError> {
     let c_name = std::ffi::CString::new(name).map_err(|e| {
-        CapabilityError::Provider(format!("invalid interface name: {}", e).into())
+        CapabilityError::Provider(format!("invalid interface name: {}", e))
     })?;
     let ifindex = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
     if ifindex == 0 {
         Err(CapabilityError::Provider(
-            format!("interface {} not found", name).into(),
+            format!("interface {} not found", name),
         ))
     } else {
         Ok(ifindex as i32)

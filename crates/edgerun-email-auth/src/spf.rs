@@ -79,7 +79,7 @@ fn evaluate_spf(record: &str, client_ip: &IpAddr, domain: &str) -> io::Result<Sp
         .collect();
 
     for mech in &mechanisms {
-        match evaluate_mechanism(*mech, client_ip, domain) {
+        match evaluate_mechanism(mech, client_ip, domain) {
             MechanismResult::Match(result) => return Ok(result),
             MechanismResult::NoMatch => continue,
             MechanismResult::Error(e) => return Err(e),
@@ -120,8 +120,7 @@ fn evaluate_mechanism(mech: &str, client_ip: &IpAddr, _domain: &str) -> Mechanis
         }
         "ip4" | "ip6" => MechanismResult::NoMatch, // Handled by "ip4:CIDR" below
         _ => {
-            if mechanism.starts_with("ip4:") {
-                let cidr = &mechanism[4..];
+            if let Some(cidr) = mechanism.strip_prefix("ip4:") {
                 match cidr.parse::<IpNetwork>() {
                     Ok(net) => {
                         if net.contains(client_ip) {
@@ -132,8 +131,7 @@ fn evaluate_mechanism(mech: &str, client_ip: &IpAddr, _domain: &str) -> Mechanis
                     }
                     Err(_) => MechanismResult::NoMatch,
                 }
-            } else if mechanism.starts_with("ip6:") {
-                let cidr = &mechanism[4..];
+            } else if let Some(cidr) = mechanism.strip_prefix("ip6:") {
                 match cidr.parse::<IpNetwork>() {
                     Ok(net) => {
                         if net.contains(client_ip) {
@@ -171,11 +169,7 @@ impl IpNetwork {
                 for i in 0..4 {
                     let bits = if prefix_bits >= (i + 1) * 8 {
                         8
-                    } else if prefix_bits > i * 8 {
-                        prefix_bits - i * 8
-                    } else {
-                        0
-                    };
+                    } else { prefix_bits.saturating_sub(i * 8) };
                     let mask: u8 = if bits == 8 { 0xFF } else if bits == 0 { 0x00 } else { 0xFFu8 << (8 - bits) };
                     if (net_bytes[i] & mask) != (ip_bytes[i] & mask) {
                         return false;
@@ -190,11 +184,7 @@ impl IpNetwork {
                 for i in 0..16 {
                     let bits = if prefix_bits >= (i + 1) * 8 {
                         8
-                    } else if prefix_bits > i * 8 {
-                        prefix_bits - i * 8
-                    } else {
-                        0
-                    };
+                    } else { prefix_bits.saturating_sub(i * 8) };
                     let mask: u8 = if bits == 8 { 0xFF } else if bits == 0 { 0x00 } else { 0xFFu8 << (8 - bits) };
                     if (net_bytes[i] & mask) != (ip_bytes[i] & mask) {
                         return false;

@@ -12,7 +12,7 @@ pub fn validate_trust_case(
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if let Some(s) = claim.get("issued_at").and_then(Value::as_str) {
-            if parse_ts(s).map_or(false, |t| t > now) {
+            if parse_ts(s).is_ok_and(|t| t > now) {
                 return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
@@ -31,7 +31,7 @@ pub fn validate_trust_case(
         // Per spec §7.1: "a claim with an absent or expired validity window
         // MUST NOT satisfy a positive assurance requirement"
         if let Some(s) = claim.get("not_before").and_then(Value::as_str) {
-            if parse_ts(s).map_or(false, |t| t > now) {
+            if parse_ts(s).is_ok_and(|t| t > now) {
                 return defer(ReasonCode::TimeInvalid, empty_map());
             }
         }
@@ -215,7 +215,7 @@ pub fn validate_trust_case(
             return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
         }
         if let Some(s) = revocation.get("effective_at").and_then(Value::as_str) {
-            if parse_ts(s).map_or(false, |t| t > now) {
+            if parse_ts(s).is_ok_and(|t| t > now) {
                 return defer(
                     ReasonCode::MissingDependency,
                     mapping([("decision", ystr("revocation_scheduled"))]),

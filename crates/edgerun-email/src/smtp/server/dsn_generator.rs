@@ -119,7 +119,7 @@ impl DsnBounce {
         Self {
             sender: sender.to_string(),
             bounce_recipient: bounce_recipient.to_string(),
-            subject: format!("Mail delivery failed: returning message to sender"),
+            subject: "Mail delivery failed: returning message to sender".to_string(),
             explanation: format!(
                 "This is the mail system at {}\r\n\r\n\
                 Your message could not be delivered to {}.\r\n\

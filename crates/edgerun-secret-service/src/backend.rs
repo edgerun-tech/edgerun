@@ -97,9 +97,9 @@ impl Backend {
         let blob_cfg = BlobStoreConfig { blob_dir: data_root.join("blobs") };
         let _ = std::fs::create_dir_all(&blob_cfg.blob_dir);
         let blobs = BlobStore::open(&blob_cfg, BlobKeySource::Software { private_key_bytes: pk.to_vec() })
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let index = FileIndex::open(&data_root)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         Ok(Self { blobs, index, record_event })
     }
@@ -148,11 +148,11 @@ impl Backend {
 
         // Store encrypted blob
         let blob_id = self.blobs.store(secret, &[])
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         // Index with metadata in description
         self.index.put_credential(&ns, key, &blob_id, Some(&description))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         // Record event in node's main stream
         let payload = SecretPutPayload {
@@ -172,15 +172,15 @@ impl Backend {
         let ns = Self::coll_to_ns(coll);
 
         let rec = self.index.get_credential(&ns, key)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let Some(rec) = rec else { return Ok(None); };
 
         let entry = self.blobs.load(&rec.blob_id)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let Some(entry) = entry else { return Ok(None); };
 
         let secret = self.blobs.decrypt(&entry.nonce, &entry.ciphertext)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         let meta = rec.description.as_deref()
             .and_then(CredentialMeta::from_json)
@@ -199,7 +199,7 @@ impl Backend {
         // Get current state for the event (before index mutation)
         let (label, existed) = {
             let rec = self.index.get_credential(&ns, key)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                .map_err(|e| io::Error::other(e.to_string()))?;
             let label = rec.as_ref()
                 .and_then(|r| r.description.as_deref())
                 .and_then(CredentialMeta::from_json)
@@ -222,7 +222,7 @@ impl Backend {
 
         // Then update the mutable index (rebuildable from events)
         let removed = self.index.delete_credential(&ns, key)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         Ok(removed)
     }
@@ -230,7 +230,7 @@ impl Backend {
     pub fn list(&self, coll: &str) -> io::Result<Vec<(String, CredentialMeta)>> {
         let ns = Self::coll_to_ns(coll);
         let creds = self.index.list_credentials(&ns)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         Ok(creds.into_iter().filter_map(|(key, desc, _ts)| {
             let meta = desc.as_deref()
@@ -254,7 +254,7 @@ impl Backend {
 
     pub fn list_collections(&self) -> io::Result<Vec<String>> {
         let namespaces = self.index.list_credential_namespaces()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         Ok(namespaces.into_iter()
             .map(|ns| format!("/org/freedesktop/secrets/collections/{}", ns))
             .collect())
@@ -262,7 +262,7 @@ impl Backend {
 
     pub fn collection_exists(&self, coll: &str) -> bool {
         let ns = Self::coll_to_ns(coll);
-        self.index.list_credential_namespaces().map_or(false, |ns_list| ns_list.contains(&ns))
+        self.index.list_credential_namespaces().is_ok_and(|ns_list| ns_list.contains(&ns))
     }
 
     /// Rebuilds the credential index from secret operation events.
@@ -279,10 +279,10 @@ impl Backend {
     pub fn rebuild_index(&mut self, events: impl Iterator<Item = (String, Vec<u8>)>) -> io::Result<usize> {
         // Clear current credential index entries
         let namespaces = self.index.list_credential_namespaces()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         for ns in &namespaces {
             let items = self.index.list_credentials(ns)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                .map_err(|e| io::Error::other(e.to_string()))?;
             for (key, _, _) in items {
                 let _ = self.index.delete_credential(ns, &key);
             }
@@ -348,12 +348,12 @@ impl Backend {
     /// Deletes a collection (records the event and removes items from index).
     pub fn delete_collection(&mut self, collection_name: &str) -> io::Result<u32> {
         let items = self.index.list_credentials(collection_name)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         let count = items.len() as u32;
 
         for (key, _, _) in &items {
             self.index.delete_credential(collection_name, key)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                .map_err(|e| io::Error::other(e.to_string()))?;
         }
 
         let payload = CollectionDeletedPayload {

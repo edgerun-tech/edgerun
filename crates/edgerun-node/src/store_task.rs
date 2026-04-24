@@ -32,7 +32,7 @@ pub fn run_store_task(
     let running_workloads = std::sync::Arc::new(crate::running_workloads::RunningWorkloads::new());
     // Initialize controller set from the node's config, then replay from
     // the persistent change log so controller state survives restarts.
-    let initial_controllers = config_controllers_from_signer(&*signer);
+    let initial_controllers = config_controllers_from_signer(signer);
     let mut controllers = command_dispatch::project_controller_set(
         &store,
         stream_id,
@@ -203,7 +203,7 @@ pub fn run_store_task(
                         continue;
                     }
                 }
-                let result = execute_query(&query, &mut store, stream_id, &responder_node_id, &*signer);
+                let result = execute_query(&query, &mut store, stream_id, &responder_node_id, signer);
                 if let Some(tx) = reply_tx {
                     let _ = tx.send(StoreResponse::Ok(result));
                 }

@@ -218,7 +218,7 @@ impl QuicTransport {
         truncated_pn: u64,
         pn_length: usize,
     ) -> Option<u64> {
-        debug_assert!(pn_length >= 1 && pn_length <= 4);
+        debug_assert!((1..=4).contains(&pn_length));
         let idx = space as usize;
         let pn_nbits = (pn_length * 8) as u64;
         let pn_win = 1u64 << pn_nbits;
@@ -331,11 +331,7 @@ impl QuicTransport {
         };
 
         if let Some(smoothed) = self.smoothed_rtt {
-            let rttvar_sample = if smoothed > adjusted_rtt {
-                smoothed - adjusted_rtt
-            } else {
-                adjusted_rtt - smoothed
-            };
+            let rttvar_sample = smoothed.abs_diff(adjusted_rtt);
             self.rttvar = self.rttvar.mul_f64(0.75) + rttvar_sample.mul_f64(0.25);
             self.smoothed_rtt = Some(
                 smoothed.mul_f64(0.875) + adjusted_rtt.mul_f64(0.125),

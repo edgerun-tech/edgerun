@@ -89,7 +89,7 @@ impl RecursiveResolver {
         }
 
         let root_addrs: Vec<Ipv4Addr> = self.root_hints.iter()
-            .flat_map(|h| h.addrs.iter().map(|a| *a))
+            .flat_map(|h| h.addrs.iter().copied())
             .collect();
         self.iterative_resolve(name_lower, qtype, root_addrs, 0).await
     }
@@ -104,13 +104,12 @@ impl RecursiveResolver {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<DnsRecord>, std::io::Error>> + Send + 'a>> {
         Box::pin(async move {
             if depth >= self.max_depth {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(std::io::Error::other(
                     "recursive resolution exceeded max depth",
                 ));
             }
             if servers.is_empty() {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "no nameservers to query"));
+                return Err(std::io::Error::other("no nameservers to query"));
             }
 
             for server in &servers {
@@ -169,7 +168,7 @@ impl RecursiveResolver {
                 }
             }
 
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "all nameservers failed"))
+            Err(std::io::Error::other("all nameservers failed"))
         })
     }
 

@@ -144,10 +144,7 @@ impl DhcpServer {
     /// Process one incoming packet. Call this from your own event loop.
     pub fn tick(&mut self) -> Result<(), io::Error> {
         let mut buf = [0u8; 1500];
-        let (n, src) = match self.socket.recv_from(&mut buf) {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+        let (n, src) = self.socket.recv_from(&mut buf)?;
 
         let msg = match DhcpMessage::from_wire(&buf[..n]) {
             Ok(m) => m,

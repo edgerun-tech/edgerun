@@ -6,7 +6,6 @@
 //! - Controller set management and projection from event log
 //! - Revocation record processing
 
-use edgerun_log;
 
 use crate::config::{NodeConfig, parse_config};
 use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
@@ -713,7 +712,7 @@ fn dispatch_execute_workload(
 
     // === PHASE 3: Run container (non-blocking) ===
     edgerun_log::info!("running: {}", image_str);
-    let container = match edgerun_oci::start_bundle(&bundle_dir) {
+    let container = match edgerun_oci::start_bundle(bundle_dir) {
         Ok(c) => c,
         Err(e) => {
             edgerun_log::warn!("run failed: {}", e);
@@ -1320,7 +1319,7 @@ fn dispatch_create_delegation(
     let recipient_hex = delegation.recipient.as_ref().map(|r| edgerun_core::util::bytes_to_hex(&r.identity_id)).unwrap_or_default();
     let expires_at = delegation.expires_at.as_ref().map(|t| t.seconds);
     let capability_bytes = delegation.capability.as_ref()
-        .map(|c| prost::Message::encode_to_vec(c))
+        .map(prost::Message::encode_to_vec)
         .unwrap_or_default();
 
     if let Err(e) = store.store_delegation(&delegation_id_hex, &issuer_hex, &recipient_hex, &edgerun_core::util::bytes_to_hex(&capability_bytes), expires_at) {
@@ -1409,7 +1408,7 @@ fn dispatch_create_revocation(
     };
 
     // Also store in the index for efficient lookup
-    if let Err(e) = store.store_revocation(&revocation_id_hex, &issuer_hex, &target_type, &target_hex, effective_at) {
+    if let Err(e) = store.store_revocation(&revocation_id_hex, &issuer_hex, target_type, &target_hex, effective_at) {
         edgerun_log::warn!("failed to index revocation: {}", e);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, "index_failed", Vec::new(), None);

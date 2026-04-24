@@ -118,14 +118,14 @@ impl Parser for Cli {
                 foreground: true,
             },
             "validate" => Commands::Validate {
-                config: matches.get_one::<String>("config").map(PathBuf::from).unwrap_or(PathBuf::new()),
+                config: matches.get_one::<String>("config").map(PathBuf::from).unwrap_or_default(),
             },
             "import-dnsmasq" => Commands::ImportDnsmasq {
-                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or(PathBuf::new()),
+                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or_default(),
                 output: matches.get_one::<String>("output").map(PathBuf::from),
             },
             "import-corefile" => Commands::ImportCorefile {
-                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or(PathBuf::new()),
+                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or_default(),
                 output: matches.get_one::<String>("output").map(PathBuf::from),
             },
             _ => Commands::Serve {

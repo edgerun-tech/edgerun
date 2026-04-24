@@ -131,7 +131,7 @@ impl EventWriter {
             })?
         })
         .await
-        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?
     }
 
     /// Synchronous version — blocks the current thread until the write completes.

@@ -281,18 +281,16 @@ fn do_pair(address: &str) {
             Ok(events) => {
                 for event in events {
                     match event {
-                        edgerun_mgmt_bluetooth::MgmtControllerEvent::DeviceConnected { device_id, .. } => {
-                            if device_id.eq_ignore_ascii_case(address) {
+                        edgerun_mgmt_bluetooth::MgmtControllerEvent::DeviceConnected { device_id, .. }
+                            if device_id.eq_ignore_ascii_case(address) => {
                                 println!("Pairing successful!");
                                 return;
                             }
-                        }
-                        edgerun_mgmt_bluetooth::MgmtControllerEvent::ConnectFailed { device_id, status, .. } => {
-                            if device_id.eq_ignore_ascii_case(address) {
+                        edgerun_mgmt_bluetooth::MgmtControllerEvent::ConnectFailed { device_id, status, .. }
+                            if device_id.eq_ignore_ascii_case(address) => {
                                 eprintln!("Pairing failed with status: 0x{:02x}", status);
                                 process::exit(1);
                             }
-                        }
                         _ => {}
                     }
                 }

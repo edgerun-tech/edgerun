@@ -175,6 +175,12 @@ pub struct ArgMatches {
     pub positional: alloc::vec::Vec<String>,
 }
 
+impl Default for ArgMatches {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArgMatches {
     pub fn new() -> Self {
         Self {

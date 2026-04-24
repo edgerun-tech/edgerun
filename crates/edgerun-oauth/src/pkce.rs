@@ -21,7 +21,7 @@ impl PkcePair {
     pub fn generate() -> std::io::Result<Self> {
         let mut code_verifier_bytes = [0u8; 32];
         getrandom::fill(&mut code_verifier_bytes).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::Other, format!("random generation failed: {e}"))
+            std::io::Error::other(format!("random generation failed: {e}"))
         })?;
         let code_verifier = base64url_nopad_encode(&code_verifier_bytes);
 

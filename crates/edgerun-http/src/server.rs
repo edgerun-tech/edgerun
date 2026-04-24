@@ -77,7 +77,7 @@ impl HttpServer {
             let cert = self.tls_cert.as_ref().unwrap().as_ref().clone();
             let h3 = crate::http3::Http3Server::bind(local_addr, cert)
                 .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                .map_err(std::io::Error::other)?;
             Some(Arc::new(h3))
         } else {
             None
@@ -144,7 +144,7 @@ impl BoundHttpServer {
             let h3_server = Arc::clone(h3_server);
             Some(spawn(async move {
                 h3_server.serve(h3_handler, h3_shutdown).await
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                    .map_err(std::io::Error::other)
             }))
         } else {
             None
@@ -198,7 +198,7 @@ where
         use edgerun_tls::async_tls::AsyncTlsServerStream;
         let tls_stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("TLS handshake failed: {e}")))?;
+            .map_err(|e| std::io::Error::other(format!("TLS handshake failed: {e}")))?;
 
         // When TLS is established, use the negotiated ALPN protocol to
         // determine the HTTP version.
@@ -279,7 +279,7 @@ where
             write_response(&mut reader, Response::text(StatusCode::new(431).unwrap(), "Request Header Fields Too Large")).await?;
             break;
         }
-        let parts: Vec<&str> = current_line.trim_end_matches(|c| c == '\r' || c == '\n').splitn(3, ' ').collect();
+        let parts: Vec<&str> = current_line.trim_end_matches(['\r', '\n']).splitn(3, ' ').collect();
         if parts.len() < 3 { break; }
         let method: Method = match parts[0].parse().map_err(|e: String| crate::Error::InvalidRequest(e)) {
             Ok(m) => m, Err(_) => break,
@@ -288,7 +288,7 @@ where
 
         let mut headers = HeaderMap::new();
         loop {
-            let hline_opt = reader.read_line_max(max_request_size).await.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            let hline_opt = reader.read_line_max(max_request_size).await.map_err(std::io::Error::other)?;
             let hline = match hline_opt { Some(s) => s, None => break };
             if hline.is_empty() { break; }
             if let Some(colon) = hline.find(':') {
@@ -390,7 +390,7 @@ where
     loop {
         frame_count += 1;
         // Periodically clean up closed streams (every 100 frames)
-        if frame_count % 100 == 0 {
+        if frame_count.is_multiple_of(100) {
             server.cleanup_closed_streams();
         }
 
@@ -626,10 +626,10 @@ async fn process_request_with_body(
     server: &mut Http2Server,
     handler: &dyn Handler,
 ) -> FrameAction {
-    if let Err((ec, _)) = validate_request_headers(&headers) {
+    if let Err((ec, _)) = validate_request_headers(headers) {
         return FrameAction::WriteFrames(vec![crate::http2::frame::RstStreamFrame::new(stream_id, ec).to_frame()]);
     }
-    if let Err((ec, _)) = validate_header_name_case(&headers) {
+    if let Err((ec, _)) = validate_header_name_case(headers) {
         return FrameAction::WriteFrames(vec![crate::http2::frame::RstStreamFrame::new(stream_id, ec).to_frame()]);
     }
 

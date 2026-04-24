@@ -132,7 +132,7 @@ fn enrich_with_corpus_hashes(
                 if let Some(Value::Map(prev_ref)) = candidate.get_mut("prev_ref") {
                     if prev_ref.contains_key("hash_fixture") {
                         if let Some(Value::Map(stream_heads)) = local_state.get("stream_heads") {
-                            for (_stream_id, head_val) in stream_heads {
+                            for head_val in stream_heads.values() {
                                 if let Value::Map(head) = head_val {
                                     if let Some(Value::String(head_hash)) = head.get("event_hash_hex") {
                                         if !prev_ref.contains_key("hash_hex") {
@@ -441,21 +441,19 @@ fn find_vector_dirs() -> Vec<PathBuf> {
     }
 
     let mut dirs = Vec::new();
-    for suite_entry in std::fs::read_dir(&corpus_path)
+    for entry in std::fs::read_dir(&corpus_path)
         .ok()
         .into_iter()
-        .flatten()
+        .flatten().flatten()
     {
-        if let Ok(entry) = suite_entry {
-            if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                let suite_dir = entry.path();
-                if let Ok(entries) = std::fs::read_dir(&suite_dir) {
-                    for case_entry in entries.flatten() {
-                        if case_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                            let case_dir = case_entry.path();
-                            if case_dir.join("manifest.yaml").exists() {
-                                dirs.push(case_dir);
-                            }
+        if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            let suite_dir = entry.path();
+            if let Ok(entries) = std::fs::read_dir(&suite_dir) {
+                for case_entry in entries.flatten() {
+                    if case_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                        let case_dir = case_entry.path();
+                        if case_dir.join("manifest.yaml").exists() {
+                            dirs.push(case_dir);
                         }
                     }
                 }

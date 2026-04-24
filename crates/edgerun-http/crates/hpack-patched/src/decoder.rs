@@ -63,12 +63,12 @@ use super::{StaticTable, HeaderTable};
 /// of bytes from the buffer that were used.
 fn decode_integer(buf: &[u8], prefix_size: u8)
         -> Result<(usize, usize), DecoderError> {
-    if prefix_size < 1 || prefix_size > 8 {
+    if !(1..=8).contains(&prefix_size) {
         return Err(
             DecoderError::IntegerDecodingError(
                 IntegerDecodingError::InvalidPrefix));
     }
-    if buf.len() < 1 {
+    if buf.is_empty() {
         return Err(
             DecoderError::IntegerDecodingError(
                 IntegerDecodingError::NotEnoughOctets));

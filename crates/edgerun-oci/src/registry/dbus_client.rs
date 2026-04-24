@@ -73,7 +73,7 @@ impl SecretClient {
             }
         }
 
-        Err(io::Error::new(io::ErrorKind::Other, "unexpected OpenSession response"))
+        Err(io::Error::other("unexpected OpenSession response"))
     }
 
     /// Trigger biometric verification to unlock the session.
@@ -148,11 +148,11 @@ impl SecretClient {
 
         if reply.mt == MType::Err {
             let err_msg = reply.body.first().and_then(Val::s).unwrap_or("store failed");
-            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+            return Err(io::Error::other(err_msg));
         }
 
         if reply.body.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::Other, "empty CreateItem response"));
+            return Err(io::Error::other("empty CreateItem response"));
         }
 
         Ok(())
@@ -182,7 +182,7 @@ impl SecretClient {
 
         if reply.mt == MType::Err {
             let err_msg = reply.body.first().and_then(Val::s).unwrap_or("search failed");
-            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+            return Err(io::Error::other(err_msg));
         }
 
         let unlocked = reply.body.first().and_then(Val::ao).unwrap_or_default();
@@ -216,7 +216,7 @@ impl SecretClient {
 
         let reply = self.send_and_recv(&search_msg)?;
         if reply.mt == MType::Err {
-            return Err(io::Error::new(io::ErrorKind::Other, "search failed"));
+            return Err(io::Error::other("search failed"));
         }
 
         let unlocked = reply.body.first().and_then(Val::ao).unwrap_or_default();
@@ -235,7 +235,7 @@ impl SecretClient {
 
         let reply = self.send_and_recv(&delete_msg)?;
         if reply.mt == MType::Err {
-            return Err(io::Error::new(io::ErrorKind::Other, "delete failed"));
+            return Err(io::Error::other("delete failed"));
         }
 
         Ok(true)
@@ -282,7 +282,7 @@ impl SecretClient {
             }
 
             let err_msg = reply.body.first().and_then(Val::s).unwrap_or("get secrets failed");
-            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+            return Err(io::Error::other(err_msg));
         }
 
         extract_first_secret(&reply)

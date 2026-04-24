@@ -129,12 +129,10 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("  Slot: 9a");
         eprintln!("  Public key: {}", node_id.to_hex());
 
-        let signer_block = format!(
-            r#"signer:
+        let signer_block = r#"signer:
   type: "yubikey"
   handle: "9a"
-"#,
-        );
+"#.to_string();
         (node_id, signer_block)
     };
 

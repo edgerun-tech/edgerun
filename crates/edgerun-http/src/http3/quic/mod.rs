@@ -153,13 +153,10 @@ impl QuicConnection {
         if let Ok(ip) = host.parse::<IpAddr>() {
             return Ok(ip);
         }
-        match host.to_socket_addrs() {
-            Ok(mut addrs) => {
-                if let Some(addr) = addrs.next() {
-                    return Ok(addr.ip());
-                }
+        if let Ok(mut addrs) = host.to_socket_addrs() {
+            if let Some(addr) = addrs.next() {
+                return Ok(addr.ip());
             }
-            Err(_) => {}
         }
         Err(format!("DNS resolution failed for {}", host))
     }

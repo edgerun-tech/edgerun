@@ -332,7 +332,7 @@ impl EvdevInputBackend {
                     continue; // EINTR, retry
                 }
                 return Err(CapabilityError::Provider(
-                    format!("poll evdev fd {}: {}", self.file.as_raw_fd(), err).into(),
+                    format!("poll evdev fd {}: {}", self.file.as_raw_fd(), err),
                 ));
             }
 
@@ -343,7 +343,7 @@ impl EvdevInputBackend {
             // Check for errors
             if pollfd.revents & (POLLERR | POLLHUP) != 0 {
                 return Err(CapabilityError::Provider(
-                    format!("evdev fd {} error/hangup", self.file.as_raw_fd()).into(),
+                    format!("evdev fd {} error/hangup", self.file.as_raw_fd()),
                 ));
             }
 
@@ -357,7 +357,7 @@ impl EvdevInputBackend {
                 Ok(0) => {
                     // EOF — device disconnected
                     return Err(CapabilityError::Provider(
-                        format!("evdev fd {} EOF (device disconnected)", self.file.as_raw_fd()).into(),
+                        format!("evdev fd {} EOF (device disconnected)", self.file.as_raw_fd()),
                     ));
                 }
                 Ok(n) => {
@@ -368,7 +368,7 @@ impl EvdevInputBackend {
                         continue; // No data yet, poll again
                     }
                     return Err(CapabilityError::Provider(
-                        format!("read evdev fd {}: {}", self.file.as_raw_fd(), e).into(),
+                        format!("read evdev fd {}: {}", self.file.as_raw_fd(), e),
                     ));
                 }
             }
@@ -413,7 +413,7 @@ impl EvdevInputBackend {
         };
         if ret < 0 {
             Err(CapabilityError::Provider(
-                format!("EVIOCGRAB failed: {}", std::io::Error::last_os_error()).into(),
+                format!("EVIOCGRAB failed: {}", std::io::Error::last_os_error()),
             ))
         } else {
             Ok(())
@@ -428,12 +428,12 @@ impl EvdevInputBackend {
         };
         if ret < 0 {
             return Err(CapabilityError::Provider(
-                format!("EVIOCGNAME failed: {}", std::io::Error::last_os_error()).into(),
+                format!("EVIOCGNAME failed: {}", std::io::Error::last_os_error()),
             ));
         }
         let len = ret as usize;
         let name = std::str::from_utf8(&buf[..len])
-            .map_err(|e| CapabilityError::Provider(format!("invalid device name: {}", e).into()))?
+            .map_err(|e| CapabilityError::Provider(format!("invalid device name: {}", e)))?
             .trim_end_matches('\0')
             .to_string();
         Ok(name)

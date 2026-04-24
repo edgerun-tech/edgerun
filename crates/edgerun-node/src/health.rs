@@ -15,7 +15,7 @@ pub async fn run_health_server(port: u16, state: HealthState) {
     use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = match edgerun_rt::AsyncTcpListener::bind(&addr) {
+    let listener = match edgerun_rt::AsyncTcpListener::bind(addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind health endpoint on {}: {}", addr, e);

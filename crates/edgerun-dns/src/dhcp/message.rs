@@ -803,7 +803,7 @@ impl DhcpOptions {
                     let mut j = 0;
                     while j + 5 <= value.len() {
                         let prefix_len = value[j];
-                        let prefix_bytes = (prefix_len + 7) / 8; // ceiling division
+                        let prefix_bytes = prefix_len.div_ceil(8); // ceiling division
                         j += 1;
                         if j + prefix_bytes as usize + 4 > value.len() { break; }
                         let prefix = value[j..j + prefix_bytes as usize].to_vec();

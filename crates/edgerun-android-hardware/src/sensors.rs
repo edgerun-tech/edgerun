@@ -127,6 +127,12 @@ mod real {
     pub struct ASensorManager;
     pub struct ASensorManagerWrapper;
     pub struct AndroidSensorProvider;
+    impl Default for AndroidSensorProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidSensorProvider { pub fn new() -> Self { Self } }
     impl CapabilityProvider for AndroidSensorProvider {
         fn descriptor(&self) -> CapabilityDescriptor {

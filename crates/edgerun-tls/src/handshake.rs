@@ -354,22 +354,20 @@ impl ServerHello {
                 pos += ext_data_len;
 
                 match ext_type {
-                    51 => {
+                    51
                         // key_share
-                        if ext_data_len >= 4 {
+                        if ext_data_len >= 4 => {
                             let _group = u16::from_be_bytes([ext_data[0], ext_data[1]]);
                             let ke_len = u16::from_be_bytes([ext_data[2], ext_data[3]]) as usize;
                             if ext_data_len >= 4 + ke_len {
                                 server_key_share = ext_data[4..4 + ke_len].to_vec();
                             }
                         }
-                    }
-                    43 => {
+                    43
                         // supported_versions
-                        if ext_data_len >= 2 {
+                        if ext_data_len >= 2 => {
                             supported_version = Some(u16::from_be_bytes([ext_data[0], ext_data[1]]));
                         }
-                    }
                     _ => {}
                 }
             }

@@ -71,9 +71,7 @@ pub enum Command {
 pub fn parse_args() -> Result<Command, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        return Err(format!(
-            "Usage: edgerund <command> [options]\n\nCommands:\n  init    Generate node identity\n  run     Start the daemon\n  status  Show node identity\n  help    Show this help"
-        ));
+        return Err("Usage: edgerund <command> [options]\n\nCommands:\n  init    Generate node identity\n  run     Start the daemon\n  status  Show node identity\n  help    Show this help".to_string());
     }
     let cmd = args[0].as_str();
     match cmd {

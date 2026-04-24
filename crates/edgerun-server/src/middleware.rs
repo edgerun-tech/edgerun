@@ -276,6 +276,12 @@ pub struct IpFilter {
     denied: Vec<String>,
 }
 
+impl Default for IpFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IpFilter {
     pub fn new() -> Self {
         Self {
@@ -398,8 +404,7 @@ impl ConnectionMiddleware for ConnectionRateLimit {
 
             entry.count += 1;
             if entry.count > max {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Err(io::Error::other(
                     format!("Connection rate limit exceeded ({} per {}s)", max, window),
                 ));
             }

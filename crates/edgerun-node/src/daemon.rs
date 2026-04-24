@@ -595,7 +595,7 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
                 _invocation: &edgerun_proto::edgerun::v0::capability::CapabilityInvocation,
                 _inline_parameters: Option<&[u8]>,
             ) -> Result<edgerun_remote_capability::RemoteInvocationResult, edgerun_capabilities::CapabilityError> {
-                Err(edgerun_capabilities::CapabilityError::Unsupported("use command_handler for mesh commands".into()))
+                Err(edgerun_capabilities::CapabilityError::Unsupported("use command_handler for mesh commands"))
             }
             fn close_session(&mut self, _close: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionClose) -> Result<(), edgerun_capabilities::CapabilityError> {
                 Ok(())
@@ -658,8 +658,8 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
 
     // --- Provisioning listener ---
     if let Some(ref signer_cfg) = config.signer {
-        if signer_cfg.signer_type == "provisioned" {
-            if signer_cfg.state.as_ref() == Some(&config::SignerState::Provisioning) {
+        if signer_cfg.signer_type == "provisioned"
+            && signer_cfg.state.as_ref() == Some(&config::SignerState::Provisioning) {
                 let provision_cancel = cancel.child_token();
                 let _provision_handle = edgerun_rt::spawn(run_provisioning_listener(
                     node_id,
@@ -669,7 +669,6 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
                 ));
                 edgerun_log::info!("Provisioning listener started on :35630");
             }
-        }
     }
 
     // --- Bootstrap peer connections ---

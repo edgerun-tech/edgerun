@@ -170,7 +170,7 @@ impl RateLimiter {
             .as_micros() as u64;
 
         let mut map = self.submissions.lock().expect("rate limit map poisoned");
-        let entries = map.entry(requester_id.to_vec()).or_insert_with(Vec::new);
+        let entries = map.entry(requester_id.to_vec()).or_default();
 
         // Prune old entries outside the window
         let cutoff = now.saturating_sub(self.window_us);

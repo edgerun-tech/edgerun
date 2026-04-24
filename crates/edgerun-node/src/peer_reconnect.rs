@@ -89,7 +89,7 @@ pub async fn run_peer_reconnection(
                         // Perform session handshake as initiator
                         let nonce = session::generate_nonce();
                         let ctx = SessionContext {
-                            node_id: node_id.clone(),
+                            node_id,
                             signer: signer.clone(),
                         };
 

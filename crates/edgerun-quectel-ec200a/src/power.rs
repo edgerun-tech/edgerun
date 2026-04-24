@@ -57,17 +57,14 @@ pub const VDD_EXT: PowerSupply = PowerSupply {
 pub const POWER_SUPPLIES: &[&PowerSupply] = &[&VBAT_BB, &VBAT_RF, &VDD_EXT];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum SleepMode {
+    #[default]
     Disabled = 0,
     LightSleep = 1,
     DeepSleep = 2,
 }
 
-impl Default for SleepMode {
-    fn default() -> Self {
-        Self::Disabled
-    }
-}
 
 pub struct PowerConfig {
     pub enable_pwrkey: bool,

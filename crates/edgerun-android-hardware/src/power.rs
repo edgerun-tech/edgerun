@@ -72,6 +72,12 @@ mod real {
     use super::*;
     pub struct BatteryInfo;
     pub struct AndroidPowerProvider;
+    impl Default for AndroidPowerProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidPowerProvider {
         pub fn new() -> Self { Self }
         pub fn get_battery_info(&self) -> Result<BatteryInfo, CapabilityError> { Ok(BatteryInfo) }

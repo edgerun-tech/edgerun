@@ -22,7 +22,7 @@ pub(crate) async fn run_provisioning_listener(
         }
     };
 
-    let listener = match edgerun_rt::AsyncTcpListener::bind(&listen_addr) {
+    let listener = match edgerun_rt::AsyncTcpListener::bind(listen_addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind provisioning on {}: {}", listen_addr, e);

@@ -90,8 +90,7 @@ impl LmtpClient {
     pub async fn mail_from(&mut self, address: &str) -> io::Result<()> {
         let response = self.send_command(&format!("MAIL FROM:<{}>", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("MAIL FROM rejected: {}", response.message),
             ));
         }
@@ -102,8 +101,7 @@ impl LmtpClient {
     pub async fn rcpt_to(&mut self, address: &str) -> io::Result<()> {
         let response = self.send_command(&format!("RCPT TO:<{}>", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("RCPT TO rejected: {}", response.message),
             ));
         }
@@ -116,8 +114,7 @@ impl LmtpClient {
     pub async fn data(&mut self, message: &[u8]) -> io::Result<Vec<SmtpResponse>> {
         let response = self.send_command("DATA").await?;
         if !response.code.is_continuation() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("DATA rejected: {}", response.message),
             ));
         }
@@ -154,7 +151,7 @@ impl LmtpClient {
     pub async fn noop(&mut self) -> io::Result<()> {
         let response = self.send_command("NOOP").await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("NOOP rejected: {}", response.message)));
+            return Err(io::Error::other(format!("NOOP rejected: {}", response.message)));
         }
         Ok(())
     }
@@ -163,7 +160,7 @@ impl LmtpClient {
     pub async fn quit(&mut self) -> io::Result<()> {
         let response = self.send_command("QUIT").await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("QUIT rejected: {}", response.message)));
+            return Err(io::Error::other(format!("QUIT rejected: {}", response.message)));
         }
         Ok(())
     }

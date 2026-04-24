@@ -90,13 +90,13 @@ pub fn benchmark_memory_bandwidth() -> u64 {
     let elapsed = start.elapsed();
     std::hint::black_box(checksum);
 
-    let mbps = (SIZE as u64)
+    
+
+    (SIZE as u64)
         .saturating_mul(1_000_000)
         .checked_div(elapsed.as_micros() as u64)
         .unwrap_or(0)
-        / (1024 * 1024);
-
-    mbps
+        / (1024 * 1024)
 }
 
 // ===========================================================================
@@ -147,7 +147,7 @@ pub fn benchmark_storage_iops() -> u64 {
             let p = std::path::PathBuf::from("/var/lib/edgerun");
             std::fs::create_dir_all(&p).ok().map(|_| p)
         })
-        .unwrap_or_else(|| std::env::temp_dir());
+        .unwrap_or_else(std::env::temp_dir);
     let _ = std::fs::create_dir_all(&base_dir);
 
     let tmp_dir = base_dir.join(format!(
@@ -168,7 +168,7 @@ pub fn benchmark_storage_iops() -> u64 {
 
     while start.elapsed() < target {
         let path = tmp_dir.join(format!("f{}", i));
-        if std::fs::write(&path, &data).is_ok() {
+        if std::fs::write(&path, data).is_ok() {
             ops += 1;
             if std::fs::read(&path).is_ok() {
                 ops += 1;
@@ -204,7 +204,7 @@ pub fn benchmark_storage_sequential() -> u64 {
             let p = std::path::PathBuf::from("/var/lib/edgerun");
             std::fs::create_dir_all(&p).ok().map(|_| p)
         })
-        .unwrap_or_else(|| std::env::temp_dir());
+        .unwrap_or_else(std::env::temp_dir);
     let _ = std::fs::create_dir_all(&base_dir);
 
     let tmp_dir = base_dir.join(format!(
@@ -261,7 +261,7 @@ pub fn benchmark_storage_event_append() -> u64 {
             let p = std::path::PathBuf::from("/var/lib/edgerun");
             std::fs::create_dir_all(&p).ok().map(|_| p)
         })
-        .unwrap_or_else(|| std::env::temp_dir());
+        .unwrap_or_else(std::env::temp_dir);
     let _ = std::fs::create_dir_all(&base_dir);
 
     let tmp_dir = base_dir.join(format!(

@@ -24,7 +24,7 @@ pub async fn run_tcp_listener(
     signer: Arc<dyn MeshSigner + Send + Sync>,
     cancel: edgerun_rt::CancellationToken,
 ) {
-    let listener = match edgerun_rt::AsyncTcpListener::bind(&listen_addr) {
+    let listener = match edgerun_rt::AsyncTcpListener::bind(listen_addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind TCP on {}: {}", listen_addr, e);
@@ -445,7 +445,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                     Ok(cmd) => cmd,
                     Err(e) => {
                         edgerun_log::warn!("FETCH_OBJECT: failed to decode proto command: {}", e);
-                        let err = format!("FETCH_OBJECT: decode failed");
+                        let err = "FETCH_OBJECT: decode failed".to_string();
                         let resp_frame = encode_tcp_frame(err.as_bytes());
                         let _ = writer.write_all(&resp_frame).await;
                         continue;
@@ -477,7 +477,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
 
                 if object_ref.object_id.is_empty() {
                     edgerun_log::warn!("FETCH_OBJECT: no object reference provided");
-                    let err_resp = format!("FETCH_OBJECT: no object reference provided");
+                    let err_resp = "FETCH_OBJECT: no object reference provided".to_string();
                     let resp_frame = encode_tcp_frame(err_resp.as_bytes());
                     let _ = writer.write_all(&resp_frame).await;
                     continue;

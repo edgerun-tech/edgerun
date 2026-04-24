@@ -45,7 +45,7 @@ fn benchmark_tpm_sign(ops_target: u64) -> Option<(u64, Duration)> {
     use edgerun_hardware_signing::{TpmHardwareKeyAdapter, HardwareSigningKey};
 
     // First, try to find an existing persistent key handle
-    let handle = find_existing_tpm_key().or_else(|| provision_tpm_key());
+    let handle = find_existing_tpm_key().or_else(provision_tpm_key);
     let handle = handle?;
 
     let tpm_key = LinuxTpmSigningKey::new("/dev/tpmrm0", TpmHandle(handle));
@@ -73,12 +73,7 @@ fn find_existing_tpm_key() -> Option<u32> {
         edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"),
     );
     // Scan persistent handles 0x8100_0001..0x8100_00FF
-    for h in (0x8100_0001..=0x8100_00FF).step_by(1) {
-        if device.read_public(edgerun_tpm::TpmHandle(h)).is_ok() {
-            return Some(h);
-        }
-    }
-    None
+    (0x8100_0001..=0x8100_00FF).step_by(1).find(|&h| device.read_public(edgerun_tpm::TpmHandle(h)).is_ok())
 }
 
 fn provision_tpm_key() -> Option<u32> {

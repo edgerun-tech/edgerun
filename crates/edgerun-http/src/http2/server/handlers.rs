@@ -149,7 +149,7 @@ impl Http2Server {
         }
 
         // PRIORITY on recently-closed or idle streams is silently accepted (RFC 7540 §6.3)
-        if !self.stream_manager.get_stream(frame.stream_id).is_some()
+        if self.stream_manager.get_stream(frame.stream_id).is_none()
             && !self.is_closed_stream(frame.stream_id)
         {
             // Silently accept - RFC allows PRIORITY on idle streams

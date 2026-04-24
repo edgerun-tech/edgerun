@@ -132,6 +132,12 @@ mod real {
     use super::*;
     pub struct AInputDevice;
     pub struct AndroidInputProvider;
+    impl Default for AndroidInputProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidInputProvider {
         pub fn new() -> Self { Self }
         pub fn set_input_queue(&mut self, _q: *mut std::ffi::c_void) {}

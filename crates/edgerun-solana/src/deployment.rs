@@ -251,9 +251,9 @@ pub fn send_instruction_sync(
     ) -> u64 {
         use crate::types::pricing;
         let cpu_hour = cpu_cores as u64 * pricing::CORE_HOUR;
-        let memory_gib = (memory_bytes + 1024 * 1024 * 1024 - 1) / (1024 * 1024 * 1024);
+        let memory_gib = memory_bytes.div_ceil(1024 * 1024 * 1024);
         let memory_hour = memory_gib * pricing::RAM_GIB_HOUR;
-        let storage_gib = (storage_bytes + 1024 * 1024 * 1024 - 1) / (1024 * 1024 * 1024);
+        let storage_gib = storage_bytes.div_ceil(1024 * 1024 * 1024);
         let storage_hour = storage_gib * pricing::STORAGE_GIB_HOUR;
         let network_hour = network_mbits as u64 * pricing::NETWORK_MBIT_HOUR;
         (cpu_hour + memory_hour + storage_hour + network_hour) / 3600

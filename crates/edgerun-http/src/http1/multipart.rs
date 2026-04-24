@@ -76,10 +76,10 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
 
         // Extract Content-Disposition
         let content_disposition = headers.get("content-disposition")
-            .ok_or_else(|| MultipartError::MissingContentDisposition)?;
+            .ok_or(MultipartError::MissingContentDisposition)?;
 
         let name = extract_param(content_disposition, "name")
-            .ok_or_else(|| MultipartError::MissingName)?;
+            .ok_or(MultipartError::MissingName)?;
         let filename = extract_param(content_disposition, "filename");
 
         // Extract Content-Type

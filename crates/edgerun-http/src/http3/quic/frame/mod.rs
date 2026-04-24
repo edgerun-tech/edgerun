@@ -61,7 +61,7 @@ impl QuicFrameType {
             0x1C => Some(QuicFrameType::ConnectionClose),
             0x1D => Some(QuicFrameType::ConnectionCloseApplication),
             0x1E => Some(QuicFrameType::HandshakeDone),
-            v if v >= 0x08 && v <= 0x0F => Some(QuicFrameType::Stream),
+            v if (0x08..=0x0F).contains(&v) => Some(QuicFrameType::Stream),
             _ => None,
         }
     }

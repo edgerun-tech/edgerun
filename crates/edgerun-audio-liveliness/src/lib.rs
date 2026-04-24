@@ -343,7 +343,7 @@ impl VoiceActivityDetector {
             return (false, 0.0, None);
         }
 
-        let rms = (sum_sq as f64 / count as f64).sqrt() as f64;
+        let rms = (sum_sq as f64 / count as f64).sqrt();
         let peak_abs = max_sample.abs() as f64;
 
         // A clap has:

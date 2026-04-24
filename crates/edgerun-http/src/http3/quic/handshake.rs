@@ -364,7 +364,7 @@ impl CertificateValidator {
         while t.len() < mask_len {
             let mut hasher = Sha256::new();
             hasher.update(seed);
-            hasher.update(&counter.to_be_bytes());
+            hasher.update(counter.to_be_bytes());
             t.extend_from_slice(&hasher.finalize());
             counter += 1;
         }
@@ -737,7 +737,7 @@ impl QuicTlsHandshaker {
                             }
 
                             // Validate certificate chain
-                            let validator = CertificateValidator::new(Some(&self.server_name()));
+                            let validator = CertificateValidator::new(Some(self.server_name()));
                             self.cert_validation = Some(validator.validate_chain(&self.server_cert_chain));
                         }
                     }

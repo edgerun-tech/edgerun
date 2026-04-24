@@ -97,7 +97,7 @@ impl Stream {
 
     /// Check if stream is server-initiated (even ID, push)
     pub fn is_server_initiated(&self) -> bool {
-        self.id % 2 == 0 && self.id > 0
+        self.id.is_multiple_of(2) && self.id > 0
     }
 
     /// Transition to Open state
@@ -195,7 +195,7 @@ impl Stream {
     /// Check if all data has been received
     pub fn is_recv_complete(&self) -> bool {
         self.end_stream_received
-            && self.content_length.map_or(true, |cl| {
+            && self.content_length.is_none_or(|cl| {
                 self.bytes_received >= cl
             })
     }
@@ -258,7 +258,7 @@ impl StreamManager {
     /// Create a server-initiated stream (for PUSH_PROMISE)
     pub fn create_server_stream(&mut self, stream_id: u32) -> Result<u32> {
         // Server streams must be even
-        if stream_id % 2 != 0 {
+        if !stream_id.is_multiple_of(2) {
             return Err(super::Http2Error::ProtocolViolation(
                 "Server stream ID must be even".to_string(),
             ));

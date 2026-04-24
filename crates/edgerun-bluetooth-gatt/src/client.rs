@@ -121,7 +121,7 @@ impl LinuxGattClient {
             .write()
             .unwrap()
             .entry(handle)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(Box::new(callback));
     }
 
@@ -163,11 +163,9 @@ impl GattClient for LinuxGattClient {
 
         *self.connection_state.write().unwrap() = GattConnectionState::Connecting;
 
-        let socket = L2capSocket::new()
-            .map_err(|e| GattError::from(e))?;
+        let socket = L2capSocket::new()?;
 
-        socket.connect_device(device_addr, addr_type_val)
-            .map_err(|e| GattError::from(e))?;
+        socket.connect_device(device_addr, addr_type_val)?;
 
         *self.device_addr.write().unwrap() = Some(device_addr.to_string());
         *self.addr_type.write().unwrap() = addr_type_val;
@@ -194,8 +192,7 @@ impl GattClient for LinuxGattClient {
     fn discover_services(&self) -> Result<Vec<GattService>, CapabilityError> {
         self.with_protocol(|proto| {
             let primary_group_type: [u8; 2] = [0x00, 0x28];
-            let data = proto.read_by_group_type(0x0001, 0xFFFF, &primary_group_type)
-                .map_err(GattError::from)?;
+            let data = proto.read_by_group_type(0x0001, 0xFFFF, &primary_group_type)?;
 
             let mut services = Vec::new();
             for (start, end, uuid) in proto.parse_read_by_group_response(&data) {
@@ -221,8 +218,7 @@ impl GattClient for LinuxGattClient {
     ) -> Result<Vec<GattCharacteristic>, CapabilityError> {
         self.with_protocol(|proto| {
             let char_type: [u8; 2] = [0x03, 0x28];
-            let data = proto.read_by_type(start, end, &char_type)
-                .map_err(GattError::from)?;
+            let data = proto.read_by_type(start, end, &char_type)?;
 
             let mut characteristics = Vec::new();
             for (handle, value) in proto.parse_read_by_type_response(&data) {
@@ -236,7 +232,7 @@ impl GattClient for LinuxGattClient {
                     uuid: char_uuid.clone(),
                     properties: props,
                     value_handle: handle,
-                    handle: handle,
+                    handle,
                     permissions: Vec::new(),
                 });
 
@@ -254,8 +250,7 @@ impl GattClient for LinuxGattClient {
 
     fn discover_descriptors(&self, char_handle: u16) -> Result<Vec<GattDescriptor>, CapabilityError> {
         self.with_protocol(|proto| {
-            let data = proto.find_information(char_handle + 1, 0xFFFF)
-                .map_err(GattError::from)?;
+            let data = proto.find_information(char_handle + 1, 0xFFFF)?;
 
             let mut descriptors = Vec::new();
             for (handle, uuid) in proto.parse_find_information_response(&data) {
@@ -279,8 +274,7 @@ impl GattClient for LinuxGattClient {
 
     fn read_value(&self, handle: u16) -> Result<Vec<u8>, CapabilityError> {
         self.with_protocol(|proto| {
-            let result = proto.read_value(handle)
-                .map_err(GattError::from)?;
+            let result = proto.read_value(handle)?;
             self.emit_event(GattEventKind::ReadResponse { handle, value: result.clone() });
             Ok(result)
         })
@@ -293,8 +287,7 @@ impl GattClient for LinuxGattClient {
         with_response: bool,
     ) -> Result<(), CapabilityError> {
         self.with_protocol(|proto| {
-            proto.write_value(handle, data, with_response)
-                .map_err(GattError::from)?;
+            proto.write_value(handle, data, with_response)?;
             if with_response {
                 self.emit_event(GattEventKind::WriteResponse { handle });
             }
@@ -311,16 +304,12 @@ impl GattClient for LinuxGattClient {
     fn read_by_type(&self, start: u16, end: u16, uuid: &GattUuid) -> Result<Vec<u8>, CapabilityError> {
         let uuid_bytes = Self::uuid_bytes(uuid)?;
         self.with_protocol(|proto| {
-            proto.read_by_type(start, end, &uuid_bytes)
-                .map_err(GattError::from)
-        })
+            proto.read_by_type(start, end, &uuid_bytes)})
     }
 
     fn write_cmd(&self, handle: u16, data: &[u8]) -> Result<(), CapabilityError> {
         self.with_protocol(|proto| {
-            proto.write_cmd(handle, data)
-                .map_err(GattError::from)
-        })
+            proto.write_cmd(handle, data)})
     }
 }
 
@@ -433,8 +422,7 @@ impl LinuxGattClient {
 
     pub fn negotiate_mtu(&self, preferred_mtu: u16) -> Result<u16, CapabilityError> {
         self.with_protocol(|proto| {
-            let negotiated = proto.exchange_mtu(preferred_mtu)
-                .map_err(GattError::from)?;
+            let negotiated = proto.exchange_mtu(preferred_mtu)?;
             *self.mtu.write().unwrap() = negotiated;
             self.emit_event(GattEventKind::MTUChanged(negotiated));
             Ok(negotiated)

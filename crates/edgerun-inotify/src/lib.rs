@@ -18,6 +18,7 @@ pub struct Inotify {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default)]
 pub struct WatchMask(u32);
 
 impl WatchMask {
@@ -40,11 +41,6 @@ impl WatchMask {
     }
 }
 
-impl Default for WatchMask {
-    fn default() -> Self {
-        WatchMask(0)
-    }
-}
 
 impl core::ops::BitOr for WatchMask {
     type Output = Self;

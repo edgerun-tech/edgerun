@@ -113,7 +113,7 @@ impl Request {
             .map(|v| v.as_str().to_lowercase());
         let is_chunked = transfer_encoding
             .as_deref()
-            .map_or(false, |v| v.contains("chunked"));
+            .is_some_and(|v| v.contains("chunked"));
 
         let body = if is_chunked {
             super::chunked::parse_chunked_body(remaining)?

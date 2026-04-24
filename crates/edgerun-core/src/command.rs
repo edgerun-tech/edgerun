@@ -426,7 +426,7 @@ fn validate_delegation_chain(
     let first = chain.first().unwrap();
     if !ctx.trusted_root_ids.is_empty() {
         let root_issuer = first.issuer.as_ref().map(|i| i.identity_id.clone());
-        if root_issuer.map_or(true, |id| !ctx.trusted_root_ids.contains(&id)) {
+        if root_issuer.is_none_or(|id| !ctx.trusted_root_ids.contains(&id)) {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String("delegation chain root issuer is not in trusted roots".into()),

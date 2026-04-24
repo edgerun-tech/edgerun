@@ -64,6 +64,12 @@ pub enum TuyaResponse {
 
 pub struct TuyaDiscovery;
 
+impl Default for TuyaDiscovery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TuyaDiscovery {
     pub fn new() -> Self {
         Self

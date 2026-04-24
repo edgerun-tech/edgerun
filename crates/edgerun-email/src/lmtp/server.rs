@@ -216,7 +216,7 @@ async fn handle_connection(
         Ok(s) => s,
         Err(_) => {
             edgerun_log::error!("edgerun-lmtp: stream has multiple references");
-            return Err(io::Error::new(io::ErrorKind::Other, "stream reference error"));
+            return Err(io::Error::other("stream reference error"));
         }
     };
 
@@ -443,7 +443,7 @@ async fn handle_command(
     lhlo_domain: &mut Option<String>,
     handler: &Arc<dyn MailHandler>,
     config: &LmtpServerConfig,
-    stream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
+    stream: &mut (impl AsyncReadExt + AsyncWriteExt),
 ) -> io::Result<ControlFlow> {
     match cmd {
         SmtpCommand::Ehlo(domain) | SmtpCommand::Helo(domain) => {
@@ -569,7 +569,7 @@ async fn handle_command(
 // ===========================================================================
 
 async fn send_response(
-    stream: &mut (impl AsyncWriteExt + Unpin),
+    stream: &mut (impl AsyncWriteExt),
     response: &SmtpResponse,
 ) -> io::Result<()> {
     let formatted = response.format();
@@ -579,7 +579,7 @@ async fn send_response(
 }
 
 async fn send_multiline_response(
-    stream: &mut (impl AsyncWriteExt + Unpin),
+    stream: &mut (impl AsyncWriteExt),
     code: SmtpResponseCode,
     lines: Vec<String>,
 ) -> io::Result<()> {

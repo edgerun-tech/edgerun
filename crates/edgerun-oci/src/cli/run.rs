@@ -54,7 +54,7 @@ pub fn cmd_run(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
         let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         let image_clone = image.clone();
         let bundle_clone = bundle_path.clone();
@@ -66,7 +66,7 @@ pub fn cmd_run(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
         });
 
         result.map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("pull failed: {}", e))
+            io::Error::other(format!("pull failed: {}", e))
         })?;
     }
 
@@ -122,7 +122,7 @@ pub fn cmd_run(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let mut status = 0i32;
     let pid = unsafe { libc::waitpid(child_pid as i32, &mut status as *mut i32, 0) };
     if pid < 0 {
-        return Err(io::Error::new(io::ErrorKind::Other, "waitpid failed"));
+        return Err(io::Error::other("waitpid failed"));
     }
 
     let exit_code = if libc::WIFEXITED(status) {
@@ -308,7 +308,7 @@ fn apply_run_overrides(spec: &mut OciSpec, opts: &RunOpts, cmd_args: &[String]) 
 fn generate_container_id(image: &ImageRef) -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-    let short = image.repository.split('/').last().unwrap_or(&image.repository);
+    let short = image.repository.split('/').next_back().unwrap_or(&image.repository);
     format!("{}-{}-{}", short, image.tag, ts)
 }
 

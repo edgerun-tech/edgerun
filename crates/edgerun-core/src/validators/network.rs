@@ -318,7 +318,7 @@ pub fn validate_network_case(
                 if parse_ts(exp)
                     .ok()
                     .zip(parse_ts(at).ok())
-                    .map_or(false, |(e, a)| e < a)
+                    .is_some_and(|(e, a)| e < a)
                 {
                     return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
                 }

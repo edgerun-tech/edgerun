@@ -53,7 +53,7 @@ impl ClientTransport {
     ) -> io::Result<ClientTransport> {
         match self {
             ClientTransport::Tls(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+                Err(io::Error::other("already using TLS"))
             }
             ClientTransport::Plain(stream) => {
                 let tls = AsyncTlsStream::client(stream, server_name, &[], None)
@@ -68,7 +68,7 @@ impl ClientTransport {
     fn server_name(&self) -> io::Result<String> {
         // We don't have direct access to the address here,
         // the caller must provide it.
-        Err(io::Error::new(io::ErrorKind::Other, "server_name required for TLS upgrade"))
+        Err(io::Error::other("server_name required for TLS upgrade"))
     }
 }
 
@@ -245,7 +245,7 @@ impl SmtpClient {
             use std::net::ToSocketAddrs;
             format!("{}:{}", host_str, port).to_socket_addrs()
         }).await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
 
         match result {
             Ok(mut addrs) => {
@@ -353,7 +353,7 @@ impl SmtpClient {
     pub async fn mail_from(&mut self, address: &str) -> io::Result<()> {
         let response = self.send_command(&format!("MAIL FROM:<{}>", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("MAIL FROM rejected: {}", response.message)));
+            return Err(io::Error::other(format!("MAIL FROM rejected: {}", response.message)));
         }
         Ok(())
     }
@@ -362,7 +362,7 @@ impl SmtpClient {
     pub async fn rcpt_to(&mut self, address: &str) -> io::Result<()> {
         let response = self.send_command(&format!("RCPT TO:<{}>", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("RCPT TO rejected: {}", response.message)));
+            return Err(io::Error::other(format!("RCPT TO rejected: {}", response.message)));
         }
         Ok(())
     }
@@ -371,7 +371,7 @@ impl SmtpClient {
     pub async fn data(&mut self, message: &[u8]) -> io::Result<()> {
         let response = self.send_command("DATA").await?;
         if !response.code.is_continuation() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("DATA rejected: {}", response.message)));
+            return Err(io::Error::other(format!("DATA rejected: {}", response.message)));
         }
 
         self.transport.write_all(message).await?;
@@ -379,7 +379,7 @@ impl SmtpClient {
 
         let response = self.read_response().await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("Message rejected: {}", response.message)));
+            return Err(io::Error::other(format!("Message rejected: {}", response.message)));
         }
         Ok(())
     }
@@ -399,8 +399,7 @@ impl SmtpClient {
         let cmd = format!("BDAT {}{}", data.len(), last_str);
         let response = self.send_command(&cmd).await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("BDAT rejected: {}", response.message),
             ));
         }
@@ -412,8 +411,7 @@ impl SmtpClient {
         if last {
             let response = self.read_response().await?;
             if !response.code.is_success() {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Err(io::Error::other(
                     format!("Message rejected: {}", response.message),
                 ));
             }
@@ -431,7 +429,7 @@ impl SmtpClient {
     pub async fn rset(&mut self) -> io::Result<()> {
         let response = self.send_command("RSET").await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("RSET rejected: {}", response.message)));
+            return Err(io::Error::other(format!("RSET rejected: {}", response.message)));
         }
         Ok(())
     }
@@ -440,7 +438,7 @@ impl SmtpClient {
     pub async fn noop(&mut self) -> io::Result<()> {
         let response = self.send_command("NOOP").await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("NOOP rejected: {}", response.message)));
+            return Err(io::Error::other(format!("NOOP rejected: {}", response.message)));
         }
         Ok(())
     }
@@ -449,7 +447,7 @@ impl SmtpClient {
     pub async fn vrfy(&mut self, address: &str) -> io::Result<String> {
         let response = self.send_command(&format!("VRFY {}", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("VRFY rejected: {}", response.message)));
+            return Err(io::Error::other(format!("VRFY rejected: {}", response.message)));
         }
         Ok(response.message.clone())
     }
@@ -468,19 +466,19 @@ impl SmtpClient {
     #[cfg(feature = "tls")]
     pub async fn starttls(&mut self) -> io::Result<()> {
         if !self.capabilities_map.contains_key("STARTTLS") {
-            return Err(io::Error::new(io::ErrorKind::Other, "Server does not support STARTTLS"));
+            return Err(io::Error::other("Server does not support STARTTLS"));
         }
 
         let response = self.send_command("STARTTLS").await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("STARTTLS rejected: {}", response.message)));
+            return Err(io::Error::other(format!("STARTTLS rejected: {}", response.message)));
         }
 
         // Extract the transport and upgrade.
         let current = match std::mem::replace(&mut self.transport, ClientTransport::placeholder()) {
             ClientTransport::Plain(s) => s,
             ClientTransport::Tls(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+                return Err(io::Error::other("already using TLS"));
             }
         };
         let server_name = self.server_name.clone();

@@ -14,7 +14,7 @@ pub fn validate_command_case(
     }
     let now = parse_ts(&string_value(local_state, "now", "1970-01-01T00:00:00Z")).unwrap_or(crate::util::DateTimeUtc::epoch());
     if let Some(s) = command.get("not_before").and_then(Value::as_str) {
-        if parse_ts(s).map_or(false, |t| t > now) {
+        if parse_ts(s).is_ok_and(|t| t > now) {
             return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
         }
     }

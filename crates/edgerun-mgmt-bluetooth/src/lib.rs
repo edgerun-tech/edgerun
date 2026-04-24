@@ -397,7 +397,7 @@ fn format_bdaddr_le(bytes: &[u8]) -> String {
 /// as used by the kernel mgmt protocol.
 fn parse_bdaddr(addr: &str) -> Result<[u8; 6], CapabilityError> {
     edgerun_encoding::hex::parse_bdaddr(addr)
-        .ok_or_else(|| CapabilityError::Provider(format!("invalid BDADDR format: {}", addr).into()))
+        .ok_or_else(|| CapabilityError::Provider(format!("invalid BDADDR format: {}", addr)))
 }
 
 fn parse_settings(bits: u32) -> MgmtControllerSettings {

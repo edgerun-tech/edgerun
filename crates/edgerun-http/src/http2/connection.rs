@@ -403,7 +403,7 @@ impl<S: Read + Write> Connection<S> {
         }
 
         // Promised stream ID must be even (server-initiated)
-        if pp_frame.promised_stream_id % 2 == 0 {
+        if pp_frame.promised_stream_id.is_multiple_of(2) {
             // Create the promised stream
             self.streams.create_server_stream(pp_frame.promised_stream_id)?;
         }

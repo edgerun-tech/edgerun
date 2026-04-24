@@ -142,6 +142,12 @@ impl Rdr {
 
 pub struct Wtr { d: Vec<u8> }
 
+impl Default for Wtr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Wtr {
     pub fn new() -> Self { Self { d: Vec::with_capacity(256) } }
     pub fn finish(self) -> Vec<u8> { self.d }
@@ -271,11 +277,11 @@ pub fn decode_msg(data: &[u8]) -> io::Result<Msg> {
     let bl = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
     let ser = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
     let hfl = u32::from_le_bytes([data[12], data[13], data[14], data[15]]) as usize;
-    let th = 16 + hfl as usize;
+    let th = 16 + hfl;
     let ah = (th + 7) & !7;
     if ah + bl > data.len() { return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "trunc")); }
 
-    let mut rdr = Rdr::new(data[16..16 + hfl as usize].to_vec());
+    let mut rdr = Rdr::new(data[16..16 + hfl].to_vec());
     let mut fields = HashMap::new();
     while rdr.rem() > 0 {
         let fc = rdr.u8()?;

@@ -474,6 +474,12 @@ mod real {
 
     pub struct AndroidBiometricProvider;
 
+    impl Default for AndroidBiometricProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidBiometricProvider {
         pub fn new() -> Self {
             Self

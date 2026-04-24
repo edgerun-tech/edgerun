@@ -89,8 +89,7 @@ impl AcmeClient {
             .map_err(|e| AcmeError::Network(e.to_string()))?;
         
         let nonce = res.headers()
-            .get("replay-nonce")
-            .and_then(|v| Some(v.as_str()))
+            .get("replay-nonce").map(|v| v.as_str())
             .map(|s| s.to_string())
             .ok_or(AcmeError::Protocol("missing replay-nonce".into()))?;
         
@@ -136,8 +135,7 @@ impl AcmeClient {
         let body = res.body().to_vec();
         
         let new_nonce = res.headers()
-            .get("replay-nonce")
-            .and_then(|v| Some(v.as_str()))
+            .get("replay-nonce").map(|v| v.as_str())
             .map(|s| s.to_string());
         
         if let Some(nonce) = new_nonce {

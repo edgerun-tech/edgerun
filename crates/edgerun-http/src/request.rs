@@ -64,7 +64,7 @@ impl Request {
         }
 
         let uri = if target.starts_with("http://") || target.starts_with("https://") {
-            Uri::parse(target).map_err(|e| crate::Error::InvalidUri(e))?
+            Uri::parse(target).map_err(crate::Error::InvalidUri)?
         } else {
             let host = headers.get("Host").map(|v| v.as_str()).unwrap_or("localhost");
             let uri_str = if target.starts_with('/') {
@@ -72,7 +72,7 @@ impl Request {
             } else {
                 format!("http://{}/{}", host, target)
             };
-            Uri::parse(&uri_str).map_err(|e| crate::Error::InvalidUri(e))?
+            Uri::parse(&uri_str).map_err(crate::Error::InvalidUri)?
         };
 
         let body = if header_end + 4 < raw.len() {
@@ -200,7 +200,7 @@ impl RequestBuilder {
         let uri_str = self.uri.ok_or_else(|| {
             crate::Error::InvalidRequest("No URI specified".to_string())
         })?;
-        let uri = Uri::parse(&uri_str).map_err(|e| crate::Error::InvalidUri(e))?;
+        let uri = Uri::parse(&uri_str).map_err(crate::Error::InvalidUri)?;
 
         let mut headers = self.headers;
         if let Some(ref body) = self.body {

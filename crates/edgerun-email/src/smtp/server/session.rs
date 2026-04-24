@@ -115,10 +115,9 @@ impl SmtpTransport {
     ) -> io::Result<SmtpTransport> {
         match self {
             SmtpTransport::Tls(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                Err(io::Error::other(
                     "already using TLS",
-                ));
+                ))
             }
             SmtpTransport::Plain(stream) => {
                 let fd = stream.into_fd();

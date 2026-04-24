@@ -65,18 +65,13 @@ impl HuffmanDecoder {
         let mut eos_codepoint: Option<(u32, u8)> = None;
 
         for (symbol, &(code, code_len)) in table.iter().enumerate() {
-            if !decoder_table.contains_key(&code_len) {
-                decoder_table.insert(code_len, HashMap::new());
-            }
+            decoder_table.entry(code_len).or_default();
             let subtable = decoder_table.get_mut(&code_len).unwrap();
             let huff_symbol = HuffmanCodeSymbol::new(symbol);
-            match huff_symbol {
-                HuffmanCodeSymbol::EndOfString => {
-                    // We also remember the code point of the EOS for easier
-                    // reference later on.
-                    eos_codepoint = Some((code, code_len));
-                },
-                _ => {}
+            if let HuffmanCodeSymbol::EndOfString = huff_symbol {
+                // We also remember the code point of the EOS for easier
+                // reference later on.
+                eos_codepoint = Some((code, code_len));
             };
             subtable.insert(code, huff_symbol);
         }
@@ -113,9 +108,9 @@ impl HuffmanDecoder {
             if self.table.contains_key(&current_len) {
                 let length_table = self.table.get(&current_len).unwrap();
                 if length_table.contains_key(&current) {
-                    let decoded_symbol = match length_table.get(&current).unwrap() {
-                        &HuffmanCodeSymbol::Symbol(symbol) => symbol,
-                        &HuffmanCodeSymbol::EndOfString => {
+                    let decoded_symbol = match *length_table.get(&current).unwrap() {
+                        HuffmanCodeSymbol::Symbol(symbol) => symbol,
+                        HuffmanCodeSymbol::EndOfString => {
                             // If the EOS symbol is detected within the stream,
                             // we need to consider it an error.
                             return Err(HuffmanDecoderError::EOSInString);
@@ -203,9 +198,7 @@ impl<'a, I> Iterator for BitIterator<'a, I>
         }
 
         // If we still have `None`, it means the buffer has been exhausted
-        if self.current_byte.is_none() {
-            return None;
-        }
+        self.current_byte?;
 
         let b = *self.current_byte.unwrap();
 
@@ -223,7 +216,7 @@ impl<'a, I> Iterator for BitIterator<'a, I>
     }
 }
 
-static HUFFMAN_CODE_TABLE: &'static [(u32, u8)] = &[
+static HUFFMAN_CODE_TABLE: &[(u32, u8)] = &[
     (0x1ff8, 13),
     (0x7fffd8, 23),
     (0xfffffe2, 28),

@@ -177,10 +177,22 @@ mod real {
     pub struct AAudioStream;
     pub struct AndroidAudioInputProvider;
     pub struct AndroidAudioOutputProvider;
+    impl Default for AndroidAudioInputProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidAudioInputProvider {
         pub fn new() -> Self { Self }
         pub fn start_capture(&mut self, _sr: i32, _ch: i32) -> Result<(), CapabilityError> { Ok(()) }
     }
+    impl Default for AndroidAudioOutputProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidAudioOutputProvider {
         pub fn new() -> Self { Self }
         pub fn start_playback(&mut self, _sr: i32, _ch: i32) -> Result<(), CapabilityError> { Ok(()) }

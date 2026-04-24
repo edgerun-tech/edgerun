@@ -72,13 +72,13 @@ impl FixedPoint16 {
     /// Multiply by a u32, returning a u32 result.
     #[inline]
     pub const fn mul_u32(self, val: u32) -> u32 {
-        ((val as u64) * (self.0 as u64) >> 16) as u32
+        (((val as u64) * (self.0 as u64)) >> 16) as u32
     }
 
     /// Multiply two fixed-point numbers.
     #[inline]
     pub const fn mul_fp(self, other: Self) -> Self {
-        Self(((self.0 as u64) * (other.0 as u64) >> 16) as u32)
+        Self((((self.0 as u64) * (other.0 as u64)) >> 16) as u32)
     }
 
     /// Divide two fixed-point numbers.

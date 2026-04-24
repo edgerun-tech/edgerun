@@ -78,7 +78,7 @@ impl NetServer {
                             Ok(new_config) => {
                                 edgerun_log::info!("edgerun-net: config parsed successfully, restarting services");
                                 // Stop all services
-                                let old = std::mem::replace(&mut services, Vec::new());
+                                let old = std::mem::take(&mut services);
                                 for svc in old {
                                     svc.stop();
                                 }

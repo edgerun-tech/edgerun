@@ -252,7 +252,7 @@ impl TclAcClient {
         let socket_guard = self.socket.read().unwrap();
         let socket = socket_guard
             .as_ref()
-            .ok_or_else(|| GattError::NotConnected)?;
+            .ok_or(GattError::NotConnected)?;
         let mut proto = AttProtocol::new(socket.clone());
         let mtu = *self.mtu.read().unwrap();
         proto.set_mtu(mtu);
@@ -492,7 +492,7 @@ impl TclAcClient {
             return state;
         }
 
-        if data.len() >= 1 {
+        if !data.is_empty() {
             state.power = data[0] == 0x01;
         }
         if data.len() >= 2 {

@@ -142,7 +142,7 @@ fn main() -> Result<(), String> {
             Command::MbxRead(root, user, path) => cmd_mbx_read(&root, &user, &path).await,
             Command::MbxAddUser(root, user, domains) => cmd_mbx_add_user(&root, &user, &domains).await,
         }
-    }).map_err(|e| format!("{}", e))?;
+    }).map_err(|e| e.to_string())?;
 
     Ok(())
 }

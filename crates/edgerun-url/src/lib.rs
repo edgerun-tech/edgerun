@@ -122,14 +122,14 @@ fn parse_url(input: &str) -> Result<Url, ParseError> {
     let path = if rest.is_empty() || rest.starts_with('?') || rest.starts_with('#') {
         String::new()
     } else if rest.starts_with('/') {
-        let end = rest.find(|c| c == '?' || c == '#').unwrap_or(rest.len());
+        let end = rest.find(['?', '#']).unwrap_or(rest.len());
         rest[1..end].to_string()
     } else {
-        let end = rest.find(|c| c == '?' || c == '#').unwrap_or(rest.len());
+        let end = rest.find(['?', '#']).unwrap_or(rest.len());
         rest[..end].to_string()
     };
     let rest = if path.is_empty() { rest } else {
-        let end = rest.find(|c| c == '?' || c == '#').unwrap_or(rest.len());
+        let end = rest.find(['?', '#']).unwrap_or(rest.len());
         &rest[end..]
     };
     

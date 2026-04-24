@@ -121,12 +121,11 @@ fn find_session_bus_address() -> Option<PathBuf> {
 fn connect_to_bus(addr: &PathBuf) -> Option<UnixStream> {
     // Abstract sockets start with \0
     let path_str = addr.to_string_lossy();
-    if path_str.starts_with('\0') {
+    if let Some(name) = path_str.strip_prefix('\0') {
         // Abstract socket — use raw address
         #[cfg(target_os = "linux")]
         {
             use std::os::linux::net::SocketAddrExt;
-            let name = &path_str[1..];
             let addr = std::os::unix::net::SocketAddr::from_abstract_name(name.as_bytes()).ok()?;
             return UnixStream::connect_addr(&addr).ok();
         }

@@ -98,7 +98,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
     ) -> Result<Self> {
         let client_random = generate_random();
         let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519)
-            .map_err(|e| TlsError::HandshakeFailure(e))?;
+            .map_err(TlsError::HandshakeFailure)?;
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
 
         // 1. Send ClientHello
@@ -251,7 +251,7 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
             Poll::Ready(Err(TlsError::Alert(_, _))) => {
                 Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
             Poll::Pending => Poll::Pending,
         }
     }
@@ -373,9 +373,9 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
                 // alert
                 if fragment.len() >= 2 {
                     let level = AlertLevel::from_wire(fragment[0])
-                        .map_err(|e| TlsError::Protocol(e))?;
+                        .map_err(TlsError::Protocol)?;
                     let alert = Alert::from_wire(fragment[1])
-                        .map_err(|e| TlsError::Protocol(e))?;
+                        .map_err(TlsError::Protocol)?;
                     if level == AlertLevel::Fatal {
                         return Poll::Ready(Err(TlsError::Alert(level, alert)));
                     }
@@ -523,7 +523,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             Poll::Ready(Err(TlsError::Alert(_, _))) => {
                 Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
             Poll::Pending => Poll::Pending,
         }
     }
@@ -643,9 +643,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 // alert
                 if fragment.len() >= 2 {
                     let level = AlertLevel::from_wire(fragment[0])
-                        .map_err(|e| TlsError::Protocol(e))?;
+                        .map_err(TlsError::Protocol)?;
                     let alert = Alert::from_wire(fragment[1])
-                        .map_err(|e| TlsError::Protocol(e))?;
+                        .map_err(TlsError::Protocol)?;
                     if level == AlertLevel::Fatal {
                         return Poll::Ready(Err(TlsError::Alert(level, alert)));
                     }
@@ -910,7 +910,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     stream.read_exact(&mut fragment).await?;
     let ch = ClientHello::parse(&fragment)?;
 
-    if !ch.supported_versions.iter().any(|&v| v == 0x0304) {
+    if !ch.supported_versions.contains(&0x0304) {
         return Err(TlsError::HandshakeFailure("Client does not support TLS 1.3".into()));
     }
 
@@ -957,7 +957,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
 
     // 2. Send ServerHello
     let key_pair = EcdhKeyPair::generate(selected_group)
-        .map_err(|e| TlsError::HandshakeFailure(e))?;
+        .map_err(TlsError::HandshakeFailure)?;
     let public_key = key_pair.public_key_bytes();
     let named_group = match selected_group {
         KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
@@ -1008,7 +1008,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     // 4. Send encrypted handshake messages
     async_server_send_encrypted_handshake(
         stream, &mut write_cipher, &mut ks, &mut transcript, &hash,
-        &handshake_transcript_hash, &cert_and_key.cert_der, &*cert_and_key.signing_key,
+        &handshake_transcript_hash, &cert_and_key.cert_der, &cert_and_key.signing_key,
         alpn_protocol.as_deref(),
     ).await?;
 

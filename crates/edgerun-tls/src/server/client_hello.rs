@@ -98,7 +98,7 @@ impl ClientHello {
         }
         let cs_len = u16::from_be_bytes([msg[pos], msg[pos + 1]]) as usize;
         pos += 2;
-        if cs_len % 2 != 0 {
+        if !cs_len.is_multiple_of(2) {
             return Err(TlsError::Protocol("ClientHello: cipher_suites length not even".into()));
         }
         if pos + cs_len > msg.len() {
@@ -157,9 +157,9 @@ impl ClientHello {
                 pos += ext_data_len;
 
                 match ext_type {
-                    0 => {
+                    0
                         // server_name (SNI) - RFC 6066
-                        if ext_data_len >= 2 {
+                        if ext_data_len >= 2 => {
                             let name_list_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
                             if ext_data.len() >= 2 + name_list_len && name_list_len >= 3 {
                                 let name_type = ext_data[2];
@@ -173,10 +173,9 @@ impl ClientHello {
                                 }
                             }
                         }
-                    }
-                    10 => {
+                    10
                         // supported_groups
-                        if ext_data_len >= 2 {
+                        if ext_data_len >= 2 => {
                             let groups_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
                             let mut gpos = 2;
                             while gpos + 1 < groups_len && gpos + 1 < ext_data.len() {
@@ -187,10 +186,9 @@ impl ClientHello {
                                 gpos += 2;
                             }
                         }
-                    }
-                    13 => {
+                    13
                         // signature_algorithms
-                        if ext_data_len >= 2 {
+                        if ext_data_len >= 2 => {
                             let sa_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
                             let mut spos = 2;
                             while spos + 1 < sa_len && spos + 1 < ext_data.len() {
@@ -199,10 +197,9 @@ impl ClientHello {
                                 spos += 2;
                             }
                         }
-                    }
-                    43 => {
+                    43
                         // supported_versions
-                        if ext_data_len >= 1 {
+                        if ext_data_len >= 1 => {
                             let _versions_len = ext_data[0] as usize;
                             let mut vpos = 1;
                             while vpos + 1 < ext_data.len() {
@@ -211,10 +208,9 @@ impl ClientHello {
                                 vpos += 2;
                             }
                         }
-                    }
-                    51 => {
+                    51
                         // key_share
-                        if ext_data_len >= 2 {
+                        if ext_data_len >= 2 => {
                             let ks_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
                             let mut kpos = 2;
                             while kpos + 3 < ks_len && kpos + 3 < ext_data.len() {
@@ -235,10 +231,9 @@ impl ClientHello {
                                 }
                             }
                         }
-                    }
-                    16 => {
+                    16
                         // application_layer_protocol_negotiation (ALPN) - RFC 7301
-                        if ext_data_len >= 2 {
+                        if ext_data_len >= 2 => {
                             let proto_list_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
                             let mut ppos = 2;
                             while ppos < ext_data.len() && ppos < 2 + proto_list_len {
@@ -253,7 +248,6 @@ impl ClientHello {
                                 }
                             }
                         }
-                    }
                     _ => {}
                 }
             }

@@ -30,7 +30,7 @@ impl Clone for DeploymentHandle {
             container_count: self.container_count,
             total_cpu_cores: self.total_cpu_cores,
             total_memory_bytes: self.total_memory_bytes,
-            status: self.status.clone(),
+            status: self.status,
             deposit: self.deposit,
             burn_rate: self.burn_rate,
             spent: self.spent,
@@ -131,9 +131,9 @@ pub fn sync_all(&mut self) {
         use edgerun_solana::types::pricing;
         
         let cpu_cost = cpu as u64 * pricing::CORE_HOUR;
-        let memory_gib = (memory + 1024*1024*1024 - 1) / (1024*1024*1024);
+        let memory_gib = memory.div_ceil(1024*1024 * 1024);
         let memory_cost = memory_gib * pricing::RAM_GIB_HOUR;
-        let storage_gib = (storage + 1024*1024*1024 - 1) / (1024*1024*1024);
+        let storage_gib = storage.div_ceil(1024*1024 * 1024);
         let storage_cost = storage_gib * pricing::STORAGE_GIB_HOUR;
         let network_cost = network as u64 * pricing::NETWORK_MBIT_HOUR;
         

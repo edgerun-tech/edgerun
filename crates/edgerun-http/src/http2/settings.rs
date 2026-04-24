@@ -106,7 +106,7 @@ impl Settings {
                     settings.initial_window_size = value;
                 }
                 setting_ids::MAX_FRAME_SIZE => {
-                    if value < 16384 || value > 16777215 {
+                    if !(16384..=16777215).contains(&value) {
                         return Err(Http2Error::ProtocolViolation(format!(
                             "Invalid MAX_FRAME_SIZE: {}",
                             value
@@ -155,24 +155,21 @@ impl Settings {
             setting_ids::HEADER_TABLE_SIZE => {
                 self.header_table_size = value;
             }
-            setting_ids::ENABLE_PUSH => {
-                if value <= 1 {
+            setting_ids::ENABLE_PUSH
+                if value <= 1 => {
                     self.enable_push = value;
                 }
-            }
             setting_ids::MAX_CONCURRENT_STREAMS => {
                 self.max_concurrent_streams = Some(value);
             }
-            setting_ids::INITIAL_WINDOW_SIZE => {
-                if value <= 2147483647 {
+            setting_ids::INITIAL_WINDOW_SIZE
+                if value <= 2147483647 => {
                     self.initial_window_size = value;
                 }
-            }
-            setting_ids::MAX_FRAME_SIZE => {
-                if value >= 16384 && value <= 16777215 {
+            setting_ids::MAX_FRAME_SIZE
+                if (16384..=16777215).contains(&value) => {
                     self.max_frame_size = value;
                 }
-            }
             setting_ids::MAX_HEADER_LIST_SIZE => {
                 self.max_header_list_size = Some(value);
             }

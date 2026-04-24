@@ -6,59 +6,47 @@ pub enum UartPort {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum BaudRate {
     Baud9600 = 9600,
     Baud19200 = 19200,
     Baud38400 = 38400,
     Baud57600 = 57600,
+    #[default]
     Baud115200 = 115200,
     Baud230400 = 230400,
     Baud460800 = 460800,
     Baud921600 = 921600,
 }
 
-impl Default for BaudRate {
-    fn default() -> Self {
-        Self::Baud115200
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum DataBits {
+    #[default]
     Bits8 = 8,
     Bits7 = 7,
 }
 
-impl Default for DataBits {
-    fn default() -> Self {
-        Self::Bits8
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum StopBits {
+    #[default]
     One = 1,
     Two = 2,
 }
 
-impl Default for StopBits {
-    fn default() -> Self {
-        Self::One
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum Parity {
+    #[default]
     None = 0,
     Odd = 1,
     Even = 2,
 }
 
-impl Default for Parity {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 pub struct UartConfig {
     pub port: UartPort,
@@ -93,31 +81,25 @@ impl UartConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum GpioMode {
+    #[default]
     Input = 0,
     Output = 1,
     Alternate = 2,
     Analog = 3,
 }
 
-impl Default for GpioMode {
-    fn default() -> Self {
-        Self::Input
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum GpioPull {
+    #[default]
     None = 0,
     Up = 1,
     Down = 2,
 }
 
-impl Default for GpioPull {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GpioState {
@@ -191,6 +173,12 @@ pub struct Interfaces {
     pub uart: UartConfig,
     pub gpio: GpioConfig,
     pub adc: AdcConfig,
+}
+
+impl Default for Interfaces {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Interfaces {

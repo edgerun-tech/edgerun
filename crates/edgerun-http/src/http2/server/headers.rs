@@ -148,7 +148,7 @@ impl Http2Server {
             }
             // Close the stream (both sides are now closed)
             if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
-                let _ = s.close();
+                s.close();
             }
             self.record_closed_stream(stream_id);
             return FrameAction::None;

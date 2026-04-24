@@ -135,7 +135,7 @@ impl OutboundRelay {
         }
 
         // MAIL FROM
-        let from_param = if envelope.data.len() > 0 {
+        let from_param = if !envelope.data.is_empty() {
             format!("<{}> SIZE={}", envelope.from, envelope.data.len())
         } else {
             format!("<{}>", envelope.from)

@@ -316,7 +316,7 @@ impl OAuthServer {
                 "authorization_code".into(),
                 "refresh_token".into(),
             ],
-            scopes_supported: scopes_list.into_iter().map(|s| crate::types::Scope(s)).collect(),
+            scopes_supported: scopes_list.into_iter().map(crate::types::Scope).collect(),
             subject_types_supported: vec!["public".into()],
             id_token_signing_alg_values_supported: vec!["ES256".into()],
             code_challenge_methods_supported: vec!["S256".into()],

@@ -147,28 +147,24 @@ impl MaildirStore {
 
         // Scan new/
         if let Ok(entries) = fs::read_dir(user_dir.join("new")) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if entry.path().is_file() {
-                        messages.push(MaildirMessage {
-                            path: entry.path(),
-                            state: MaildirState::New,
-                        });
-                    }
+            for entry in entries.flatten() {
+                if entry.path().is_file() {
+                    messages.push(MaildirMessage {
+                        path: entry.path(),
+                        state: MaildirState::New,
+                    });
                 }
             }
         }
 
         // Scan cur/
         if let Ok(entries) = fs::read_dir(user_dir.join("cur")) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if entry.path().is_file() {
-                        messages.push(MaildirMessage {
-                            path: entry.path(),
-                            state: MaildirState::Cur,
-                        });
-                    }
+            for entry in entries.flatten() {
+                if entry.path().is_file() {
+                    messages.push(MaildirMessage {
+                        path: entry.path(),
+                        state: MaildirState::Cur,
+                    });
                 }
             }
         }

@@ -17,7 +17,7 @@ impl ChainWatcher {
     }
 
     pub fn poll(&self, dm: &mut DeploymentManager) {
-        for (_, handle) in dm.iter_mut() {
+        for handle in dm.iter_mut().values_mut() {
             let pubkey = Pubkey::new_from_array(handle.on_chain_address);
             if let Ok(deployment) = self.client.get_deployment(&pubkey) {
                 handle.status = deployment.status;

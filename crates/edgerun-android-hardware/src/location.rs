@@ -60,6 +60,12 @@ mod real {
 mod real {
     use super::*;
     pub struct AndroidLocationProvider;
+    impl Default for AndroidLocationProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidLocationProvider { pub fn new() -> Self { Self } }
     impl CapabilityProvider for AndroidLocationProvider {
         fn descriptor(&self) -> CapabilityDescriptor {

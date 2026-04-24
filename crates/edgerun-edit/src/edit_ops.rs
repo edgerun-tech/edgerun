@@ -376,7 +376,7 @@ pub fn replace_fn_body(file: &mut syn::File, name: &str, new_body: &str) -> Resu
     for item in &mut file.items {
         if let syn::Item::Fn(func) = item {
             if func.sig.ident == name {
-                func.block = Box::new(body);
+                *func.block = body;
                 return Ok(true);
             }
         }
@@ -654,12 +654,10 @@ fn count_use_refs(tree: &syn::UseTree, defined: &HashSet<String>) -> usize {
             if defined.contains(&up.ident.to_string()) { count += 1; }
             count += count_use_refs(&up.tree, defined);
         }
-        syn::UseTree::Name(un) => {
-            if defined.contains(&un.ident.to_string()) { count += 1; }
-        }
-        syn::UseTree::Rename(urn) => {
-            if defined.contains(&urn.rename.to_string()) { count += 1; }
-        }
+        syn::UseTree::Name(un)
+            if defined.contains(&un.ident.to_string()) => { count += 1; }
+        syn::UseTree::Rename(urn)
+            if defined.contains(&urn.rename.to_string()) => { count += 1; }
         syn::UseTree::Group(ug) => {
             for child in &ug.items {
                 count += count_use_refs(child, defined);

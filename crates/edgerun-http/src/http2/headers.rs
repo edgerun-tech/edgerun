@@ -167,14 +167,13 @@ pub fn validate_header_name_case(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationRe
     for (name, _) in headers {
         let name_str = String::from_utf8_lossy(name);
         // Pseudo-headers always start with ':' and are lowercase by definition
-        if !name_str.starts_with(':') {
-            if name_str.to_lowercase() != name_str {
+        if !name_str.starts_with(':')
+            && name_str.to_lowercase() != name_str {
                 return Err((
                     ErrorCode::PROTOCOL_ERROR.to_u32(),
                     "header field name not lowercase",
                 ));
             }
-        }
     }
     Ok(())
 }

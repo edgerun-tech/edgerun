@@ -1147,7 +1147,7 @@ impl NodeStore {
             let mut stat = std::mem::MaybeUninit::zeroed().assume_init();
             if libc::statvfs(path_c.as_ptr(), &mut stat) == 0 {
                 let avail = stat.f_bavail * stat.f_frsize;
-                Ok(Some(avail as u64))
+                Ok(Some(avail))
             } else {
                 Err(std::io::Error::last_os_error())
             }

@@ -135,12 +135,11 @@ fn tokenize_imap(line: &str) -> Vec<String> {
             current.push(ch);
         } else if ch == '(' {
             in_paren += 1;
-            if in_paren == 1 {
-                if !current.is_empty() {
+            if in_paren == 1
+                && !current.is_empty() {
                     tokens.push(current);
                     current = String::new();
                 }
-            }
             current.push(ch);
         } else if ch == ')' {
             current.push(ch);

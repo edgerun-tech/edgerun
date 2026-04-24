@@ -9,10 +9,12 @@ use std::fmt;
 
 /// HTTP protocol version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum HttpVersion {
     /// HTTP/1.0 (RFC 1945)
     Http10,
     /// HTTP/1.1 (RFC 9112)
+    #[default]
     Http11,
 }
 
@@ -72,11 +74,6 @@ impl fmt::Display for HttpVersion {
     }
 }
 
-impl Default for HttpVersion {
-    fn default() -> Self {
-        HttpVersion::Http11
-    }
-}
 
 #[cfg(test)]
 mod tests {

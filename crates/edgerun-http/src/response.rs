@@ -50,7 +50,7 @@ impl Response {
     }
 
     pub fn status(&self) -> StatusCode {
-        self.status.clone()
+        self.status
     }
     pub fn headers(&self) -> &HeaderMap {
         &self.headers

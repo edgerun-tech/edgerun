@@ -78,23 +78,22 @@ impl Band {
 /// Network type selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum NetworkType {
     LTE = 1,
     Wcdma = 2,
     Gsm = 3,
+    #[default]
     Auto = 4,
 }
 
-impl Default for NetworkType {
-    fn default() -> Self {
-        Self::Auto
-    }
-}
 
 /// Module operating state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum State {
+    #[default]
     Unknown = 0,
     Off = 1,
     On = 2,
@@ -104,25 +103,17 @@ pub enum State {
     Connected = 6,
 }
 
-impl Default for State {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 /// DTA (Direct Terminal Access) network configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum DtaNetwork {
+    #[default]
     Disabled = 0,
     Enabled = 1,
 }
 
-impl Default for DtaNetwork {
-    fn default() -> Self {
-        Self::Disabled
-    }
-}
 
 /// EC200A module instance
 pub struct Ec200a<M: ModelVariant> {

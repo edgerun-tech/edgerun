@@ -50,11 +50,11 @@ const fn c_iowr(ty: u8, nr: u8, size: usize) -> c_int {
     // direction: READ=2, WRITE=1 => READ|WRITE = 3
     ((3u32 << 30)
         | ((ty as u32) << 8)
-        | ((nr as u32) << 0)
+        | (nr as u32)
         | ((size as u32) << 16)) as c_int
 }
 const fn c_io(ty: u8, nr: u8) -> c_int {
-    ((0u32 << 30) | ((ty as u32) << 8) | ((nr as u32) << 0)) as c_int
+    (((ty as u32) << 8) | (nr as u32)) as c_int
 }
 
 use std::os::raw::c_int;
@@ -104,7 +104,8 @@ const SNDRV_PCM_HW_PARAMS_SIZE: usize = std::mem::size_of::<SndPcmHwParams>();
 
 impl SndPcmHwParams {
     fn any() -> Self {
-        let params = Self {
+        
+        Self {
             flags: 0,
             masks: [SndMask {
                 bits: [u32::MAX; SNDRV_MASK_WORDS],
@@ -131,8 +132,7 @@ impl SndPcmHwParams {
             fifo_size: 0,
             sync: [0; 16],
             reserved: [0; 48],
-        };
-        params
+        }
     }
 
     fn set_mask_value(&mut self, mask_index: usize, value: u32) {
@@ -382,7 +382,7 @@ impl AlsaMicrophoneBackend {
 
         // Read audio frames
         let mut buf = vec![0u8; total_bytes];
-        let read_frames = ioctl_pcm_readi_frames(fd, buf.as_mut_ptr().cast(), frames as u64)
+        let read_frames = ioctl_pcm_readi_frames(fd, buf.as_mut_ptr().cast(), frames)
             .map_err(|e| {
                 CapabilityError::Provider(format!("readi_frames {}: {}", self.device_path, e))
             })?;

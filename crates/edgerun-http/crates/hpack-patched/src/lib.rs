@@ -40,7 +40,7 @@ impl<'a> Iterator for DynamicTableIter<'a> {
 
     fn next(&mut self) -> Option<(&'a [u8], &'a [u8])> {
         match self.inner.next() {
-            Some(ref header) => Some((&header.0, &header.1)),
+            Some(header) => Some((&header.0, &header.1)),
             None => None,
         }
     }
@@ -90,7 +90,7 @@ impl DynamicTable {
         DynamicTable {
             table: VecDeque::new(),
             size: 0,
-            max_size: max_size,
+            max_size,
         }
     }
 
@@ -263,7 +263,7 @@ impl<'a> HeaderTable<'a> {
     /// the given static table.
     pub fn with_static_table(static_table: StaticTable<'a>) -> HeaderTable<'a> {
         HeaderTable {
-            static_table: static_table,
+            static_table,
             dynamic_table: DynamicTable::new(),
         }
     }
@@ -324,7 +324,7 @@ impl<'a> HeaderTable<'a> {
             let dynamic_index = real_index - self.static_table.len();
             if dynamic_index < self.dynamic_table.len() {
                 match self.dynamic_table.get(dynamic_index) {
-                    Some(&(ref name, ref value)) => {
+                    Some((name, value)) => {
                         Some((name, value))
                     },
                     None => None
@@ -372,16 +372,13 @@ impl<'a> HeaderTable<'a> {
 
         // Finally, if there's no header with a matching name and value,
         // return one that matched only the name, if that *was* found.
-        match matching_name {
-            Some(i) => Some((i, false)),
-            None => None,
-        }
+        matching_name.map(|i| (i, false))
     }
 }
 
 /// The table represents the static header table defined by the HPACK spec.
 /// (HPACK, Appendix A)
-static STATIC_TABLE: &'static [(&'static [u8], &'static [u8])] = &[
+static STATIC_TABLE: &[(&[u8], &[u8])] = &[
   (b":authority", b""),
   (b":method", b"GET"),
   (b":method", b"POST"),

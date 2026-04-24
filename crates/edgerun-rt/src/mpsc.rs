@@ -58,7 +58,7 @@ impl<T> Inner<T> {
     fn wake_receiver(&self) {
         let waker = self.recv_waker.swap(ptr::null_mut(), Ordering::AcqRel);
         if !waker.is_null() {
-            unsafe { (*waker).clone().wake() };
+            unsafe { (*waker).wake_by_ref() };
         }
     }
 
@@ -85,7 +85,7 @@ impl<T> Inner<T> {
                         self.waiters_tail.store(head, Ordering::Release);
                     }
                     (*head).slot_idx.store(slot_idx, Ordering::Release);
-                    (*head).waker.clone().wake();
+                    (*head).waker.wake_by_ref();
                     return true;
                 }
             }

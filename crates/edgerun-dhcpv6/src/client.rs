@@ -173,15 +173,12 @@ impl Dhcpv6Client {
     fn wait_for(&self, expected_types: &[Dhcpv6MsgType], xid: TransactionId, deadline: &Instant) -> Option<Dhcpv6Message> {
         while Instant::now() < *deadline {
             let mut buf = [0u8; 1500];
-            match self.socket.recv_from(&mut buf) {
-                Ok((n, _)) => {
-                    if let Ok(msg) = Dhcpv6Message::from_wire(&buf[..n]) {
-                        if msg.transaction_id == xid && expected_types.contains(&msg.msg_type) {
-                            return Some(msg);
-                        }
+            if let Ok((n, _)) = self.socket.recv_from(&mut buf) {
+                if let Ok(msg) = Dhcpv6Message::from_wire(&buf[..n]) {
+                    if msg.transaction_id == xid && expected_types.contains(&msg.msg_type) {
+                        return Some(msg);
                     }
                 }
-                Err(_) => {}
             }
         }
         None
@@ -216,8 +213,7 @@ impl Dhcpv6Client {
         for opt in &reply.options {
             if let Some((status, msg)) = opt.status() {
                 if status != StatusCode::Success {
-                    return Err(io::Error::new(io::ErrorKind::Other,
-                        format!("DHCPv6 error: {} ({})", status.as_str(), msg)));
+                    return Err(io::Error::other(format!("DHCPv6 error: {} ({})", status.as_str(), msg)));
                 }
             }
         }

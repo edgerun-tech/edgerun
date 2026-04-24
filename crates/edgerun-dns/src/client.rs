@@ -234,8 +234,7 @@ impl DnsClient {
         }
 
         if response.header.response_code != DnsResponseCode::NoError {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!(
                     "DNS error: {}",
                     response.header.response_code.as_str()

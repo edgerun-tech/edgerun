@@ -130,7 +130,7 @@ impl ImapTransport {
     ) -> io::Result<ImapTransport> {
         match self {
             ImapTransport::Tls(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+                Err(io::Error::other("already using TLS"))
             }
             ImapTransport::Plain(stream) => {
                 let fd = stream.into_fd();
@@ -872,7 +872,7 @@ fn name_matches_pattern(name: &str, _reference: &str, pattern: &str) -> bool {
     }
     // Simple glob matching (no recursive pattern matching for simplicity)
     // Handle leading separator in pattern
-    let pat = pattern.trim_start_matches(|c| c == '"' || c == '\\');
+    let pat = pattern.trim_start_matches(['"', '\\']);
     if pat == "*" || pat == "%" {
         return true;
     }
@@ -985,7 +985,7 @@ pub fn parse_envelope_from_rfc822(data: &[u8]) -> Envelope {
     // First, unfold headers per RFC 5322 §2.2.3: continuation lines start with whitespace
     let mut unfolded = String::with_capacity(raw.len());
     for line in raw.lines() {
-        if line.starts_with(|c| c == ' ' || c == '\t') && !unfolded.is_empty() {
+        if line.starts_with([' ', '\t']) && !unfolded.is_empty() {
             // Continuation line — append to previous line
             unfolded.push(' ');
             unfolded.push_str(line.trim());
@@ -1083,7 +1083,7 @@ fn unfold_encoded_word(s: &str) -> String {
                             i += 1;
                         } else if bytes[i] == b'=' && i + 2 < bytes.len() {
                             if let Ok(val) = u8::from_str_radix(
-                                &std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("00"), 16
+                                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("00"), 16
                             ) {
                                 decoded.push(val);
                             }
@@ -1504,7 +1504,7 @@ async fn handle_connection(
         Ok(s) => s,
         Err(_) => {
             edgerun_log::error!("edgerun-imap: non-exclusive Arc for connection");
-            return Err(io::Error::new(io::ErrorKind::Other, "connection reference error"));
+            return Err(io::Error::other("connection reference error"));
         }
     };
 
@@ -1531,9 +1531,7 @@ async fn handle_connection(
     let _ = imaps;
 
     // Send greeting
-    let greeting = parser::format_greeting(&CAPABILITIES.iter()
-        .map(|s| *s)
-        .collect::<Vec<_>>());
+    let greeting = parser::format_greeting(CAPABILITIES);
     transport.write_all(greeting.as_bytes()).await?;
     transport.flush().await?;
 
@@ -1622,7 +1620,7 @@ async fn handle_connection(
         if !command_middleware.is_empty() {
             let session = SessionExtensions::new();
             session.insert(ImapConnState {
-                state: state.clone(),
+                state,
                 mailbox: current_mailbox.clone(),
                 authenticated_user: authenticated_user.clone(),
             }).await;
@@ -1696,7 +1694,7 @@ async fn read_imap_line(transport: &mut ImapTransport) -> io::Result<Option<Stri
             return Ok(Some(String::from_utf8_lossy(&buf).to_string()));
         }
         if byte[0] == b'\n' {
-            if buf.ends_with(&[b'\r']) {
+            if buf.ends_with(b"\r") {
                 buf.pop();
             }
             return Ok(Some(String::from_utf8_lossy(&buf).to_string()));
@@ -1733,9 +1731,7 @@ async fn dispatch_command(
     match cmd {
         ImapCommand::Capability => {
             // Send untagged capability list
-            let cap_resp = parser::format_capability(&CAPABILITIES.iter()
-                .map(|s| *s)
-                .collect::<Vec<_>>());
+            let cap_resp = parser::format_capability(CAPABILITIES);
             transport.write_all(cap_resp.as_bytes()).await?;
             transport.flush().await?;
 
@@ -2381,7 +2377,7 @@ async fn dispatch_command(
             }
 
             if let Some(ref mailbox) = current_mailbox {
-                let keys = parse_search_keys_simple(&search_criteria);
+                let keys = parse_search_keys_simple(search_criteria);
                 // Parse sort criteria with optional REVERSE prefix
                 let parsed_criteria: Vec<(String, bool)> = sort_criteria.iter().map(|c| {
                     let upper = c.to_uppercase();
@@ -2413,7 +2409,7 @@ async fn dispatch_command(
             }
 
             if let Some(ref mailbox) = current_mailbox {
-                let keys = parse_search_keys_simple(&search_criteria);
+                let keys = parse_search_keys_simple(search_criteria);
                 match store.search(mailbox, &keys) {
                     Ok(ids) => {
                         // Simple threading: group by In-Reply-To / References
@@ -2442,7 +2438,7 @@ async fn dispatch_command(
             Ok(ImapResponse::ok(tag, "ID completed"))
         }
 
-        _ => Ok(ImapResponse::no(tag, &format!("Command not implemented in current state"))),
+        _ => Ok(ImapResponse::no(tag, "Command not implemented in current state")),
     }
 }
 

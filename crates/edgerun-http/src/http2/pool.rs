@@ -282,7 +282,7 @@ impl Http2Pool {
         ).await {
             if let Ok(Ok(mut addrs)) = result {
                 let mut ipv4_fallback = None;
-                while let Some(addr) = addrs.next() {
+                for addr in addrs.by_ref() {
                     match addr.ip() {
                         IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, &addr).await,
                         IpAddr::V4(_) => {

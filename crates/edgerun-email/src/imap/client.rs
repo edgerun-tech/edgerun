@@ -193,7 +193,7 @@ impl ImapClient {
             use std::net::ToSocketAddrs;
             format!("{}:{}", host_str, port).to_socket_addrs()
         }).await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
 
         match result {
             Ok(mut addrs) => {
@@ -234,8 +234,7 @@ impl ImapClient {
             ImapResponse::Tagged { result: ImapResult::Ok, message, .. } => {
                 // Re-parse capabilities from untagged responses
                 for line in &self.untagged {
-                    if line.starts_with("* CAPABILITY ") {
-                        let cap_str = &line[13..];
+                    if let Some(cap_str) = line.strip_prefix("* CAPABILITY ") {
                         self.capabilities = cap_str.split_whitespace()
                             .map(|s| s.to_string())
                             .collect();
@@ -243,12 +242,12 @@ impl ImapClient {
                     }
                 }
                 if self.capabilities.is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::Other, message));
+                    return Err(io::Error::other(message));
                 }
                 Ok(())
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -260,7 +259,7 @@ impl ImapClient {
         match resp {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => {}
             ImapResponse::Tagged { message, .. } => {
-                return Err(io::Error::new(io::ErrorKind::Other, format!("STARTTLS rejected: {}", message)));
+                return Err(io::Error::other(format!("STARTTLS rejected: {}", message)));
             }
             _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -269,7 +268,7 @@ impl ImapClient {
         let current = match std::mem::replace(&mut self.transport, ImapTransport::placeholder()) {
             ImapTransport::Plain(s) => s,
             ImapTransport::Tls(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "already using TLS"));
+                return Err(io::Error::other("already using TLS"));
             }
         };
 
@@ -311,7 +310,7 @@ impl ImapClient {
                     ImapResult::Ok
                 };
 
-                let message = line.splitn(3, |c| c == ' ')
+                let message = line.splitn(3, ' ')
                     .last()
                     .unwrap_or("")
                     .to_string();
@@ -357,7 +356,7 @@ impl ImapClient {
                 } else {
                     ImapResult::Bad
                 };
-                let message = line.splitn(3, |c| c == ' ').last().unwrap_or("").to_string();
+                let message = line.splitn(3, ' ').last().unwrap_or("").to_string();
                 return Ok(ImapResponse::Tagged { tag, result, message });
             }
         }
@@ -422,7 +421,7 @@ impl ImapClient {
                 Ok(status)
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -441,7 +440,7 @@ impl ImapClient {
                 Ok(mailboxes)
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -477,7 +476,7 @@ impl ImapClient {
                 Ok(results)
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -536,7 +535,7 @@ impl ImapClient {
                 Ok(results)
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -595,7 +594,7 @@ impl ImapClient {
                 Ok(seqs)
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -618,7 +617,7 @@ impl ImapClient {
                 Ok(seqs)
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -635,7 +634,7 @@ impl ImapClient {
                 Ok(uid.unwrap_or(0))
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -646,7 +645,7 @@ impl ImapClient {
         match resp {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => Ok(()),
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -681,7 +680,7 @@ impl ImapClient {
                 Ok(status)
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -695,7 +694,7 @@ impl ImapClient {
                 Ok(())
             }
             ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::Other, message))
+                Err(io::Error::other(message))
             }
             _ => Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected response")),
         }
@@ -739,7 +738,7 @@ fn parse_fetch_response(line: &str) -> Option<(u32, HashMap<String, String>)> {
         if let Some(&value) = parts.peek() {
             if value.starts_with('(') {
                 let mut val_parts = vec![value];
-                while let Some(v) = parts.next() {
+                for v in parts.by_ref() {
                     val_parts.push(v);
                     if v.ends_with(')') { break; }
                 }

@@ -28,10 +28,10 @@ impl Response {
 
     /// Create a 101 Switching Protocols response for upgrades
     pub fn switching_protocols() -> Self {
-        let resp = Response::new(
+        
+        Response::new(
             StatusCode::new(101).expect("101 is a valid status code")
-        );
-        resp
+        )
     }
 
     /// Create a response from parts.
@@ -162,7 +162,7 @@ impl Response {
         let transfer_encoding = headers
             .get("transfer-encoding")
             .map(|v| v.as_str().to_lowercase());
-        let is_chunked = transfer_encoding.as_deref().map_or(false, |v| v.contains("chunked"));
+        let is_chunked = transfer_encoding.as_deref().is_some_and(|v| v.contains("chunked"));
 
         let (body, trailers) = if is_chunked {
             super::chunked::parse_chunked_body_with_trailers(remaining)?

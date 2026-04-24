@@ -113,7 +113,7 @@ pub fn encode_integer_into<W: io::Write>(
     value -= mask;
     while value >= 128 {
         writer.write_all(&[((value % 128) + 128) as u8])?;
-        value = value / 128;
+        value /= 128;
     }
     writer.write_all(&[value as u8])?;
     Ok(())
@@ -267,8 +267,8 @@ impl<'a> Encoder<'a> {
         };
 
         buf.write_all(&[mask])?;
-        self.encode_string_literal(&header.0, buf)?;
-        self.encode_string_literal(&header.1, buf)?;
+        self.encode_string_literal(header.0, buf)?;
+        self.encode_string_literal(header.1, buf)?;
         Ok(())
     }
 
@@ -304,7 +304,7 @@ impl<'a> Encoder<'a> {
 
         encode_integer_into(header.0, prefix, mask, buf)?;
         // So far, we rely on just one strategy for encoding string literals.
-        self.encode_string_literal(&header.1, buf)?;
+        self.encode_string_literal(header.1, buf)?;
         Ok(())
     }
 

@@ -91,8 +91,8 @@ impl<T: serde::Serialize + serde::de::DeserializeOwned> Resource<T> {
     /// Serialize to YAML string.
     pub fn to_yaml(&self) -> Result<String, edgerun_json::yaml::YamlError> {
         let json = edgerun_json::to_value(self).map_err(|_| edgerun_json::yaml::YamlError::IoError("serialization error".to_string()))?;
-        let yaml = edgerun_json::yaml::to_yaml_string(&edgerun_json::yaml::json_to_yaml(json));
-        yaml
+        
+        edgerun_json::yaml::to_yaml_string(&edgerun_json::yaml::json_to_yaml(json))
     }
 
     /// Parse from YAML string.
@@ -1481,7 +1481,9 @@ pub struct SecretSpec {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub enum SecretType {
+    #[default]
     Opaque,
     ServiceAccountToken,
     DockerConfigJson,
@@ -1489,11 +1491,6 @@ pub enum SecretType {
     BootstrapToken,
 }
 
-impl Default for SecretType {
-    fn default() -> Self {
-        SecretType::Opaque
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Default helpers

@@ -129,6 +129,12 @@ mod real {
     use super::*;
     pub struct Camera2Session;
     pub struct AndroidCameraProvider;
+    impl Default for AndroidCameraProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidCameraProvider {
         pub fn new() -> Self { Self }
         pub fn init(&mut self) -> Result<(), CapabilityError> { Ok(()) }

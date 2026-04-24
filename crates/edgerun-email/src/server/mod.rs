@@ -79,7 +79,7 @@ impl Transport {
     pub async fn upgrade_tls(self, server_name: &str) -> io::Result<Self> {
         match self {
             Transport::Tls(_) => {
-                Err(io::Error::new(io::ErrorKind::Other, "already using TLS"))
+                Err(io::Error::other("already using TLS"))
             }
             Transport::Plain(stream) => {
                 let tls = AsyncTlsStream::client(stream, server_name, &[], None)
@@ -237,6 +237,12 @@ pub struct ProtocolState {
     pub last_activity: std::time::Instant,
 }
 
+impl Default for ProtocolState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProtocolState {
     pub fn new() -> Self {
         Self {
@@ -353,7 +359,7 @@ async fn handle_connection<P: MailProtocol>(
         Ok(s) => s,
         Err(_) => {
             edgerun_log::error!("edgerun-mail: stream has multiple references");
-            return Err(io::Error::new(io::ErrorKind::Other, "stream reference error"));
+            return Err(io::Error::other("stream reference error"));
         }
     };
 

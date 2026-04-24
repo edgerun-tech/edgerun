@@ -426,7 +426,7 @@ impl Http3Server {
 
         // Build long header for Initial
         let mut header = Vec::new();
-        header.push(0x0C | 0x00); // Long header, Initial type (0x00), fixed bits
+        header.push(0x0C); // Long header, Initial type (0x00), fixed bits
         header.extend_from_slice(&0x00000001u32.to_be_bytes()); // Version
         header.push(client_dcid.len() as u8);
         header.extend_from_slice(client_dcid);

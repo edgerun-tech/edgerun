@@ -231,7 +231,7 @@ pub fn resolve(
                 if let Some(cname_records) = zone.resolve(&rname, DnsRecordType::CNAME) {
                     for rr in &cname_records {
                         if let DnsRecordData::CNAME(target) = &rr.data {
-                            let target_records = resolve(&target, qtype, zones);
+                            let target_records = resolve(target, qtype, zones);
                             if !target_records.is_empty() {
                                 let mut all = cname_records.clone();
                                 all.extend(target_records);

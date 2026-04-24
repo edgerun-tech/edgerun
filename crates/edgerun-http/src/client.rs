@@ -15,17 +15,16 @@ use std::time::Duration;
 
 /// HTTP protocol preference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum HttpVersion {
     Http1,
     Http2,
     Http3,
+    #[default]
     Best,
     Http2OrHttp1,
 }
 
-impl Default for HttpVersion {
-    fn default() -> Self { HttpVersion::Best }
-}
 
 /// Shared state for the HTTP client — the connection pool.
 /// Wrapped in Arc so HttpClient is cheaply cloneable.
@@ -249,7 +248,7 @@ impl HttpClient {
             let _ = headers.insert(k.as_str(), v.as_str());
         }
 
-        Ok(Response::from_parts(h1_resp.status().clone(), headers, h1_resp.body().to_vec()))
+        Ok(Response::from_parts(h1_resp.status(), headers, h1_resp.body().to_vec()))
     }
 
 /// Execute an HTTP/3 request via QUIC.
@@ -344,7 +343,7 @@ impl HttpClient {
 
             let body = if self.inner.auto_decompress {
                 compression::decompress_body(&body, &resp_headers)
-                    .unwrap_or_else(|| body)
+                    .unwrap_or(body)
             } else {
                 body
             };

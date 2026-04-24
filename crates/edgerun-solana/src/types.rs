@@ -3,20 +3,19 @@ use crate::solana_types::Pubkey;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ProviderStatus {
+    #[default]
     Active = 0,
     Paused = 1,
     Slashed = 2,
 }
 
-impl Default for ProviderStatus {
-    fn default() -> Self {
-        ProviderStatus::Active
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum DeploymentStatus {
+    #[default]
     Created = 0,
     Running = 1,
     Paused = 2,
@@ -24,11 +23,6 @@ pub enum DeploymentStatus {
     Disputed = 4,
 }
 
-impl Default for DeploymentStatus {
-    fn default() -> Self {
-        DeploymentStatus::Created
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Provider {
@@ -104,11 +98,11 @@ pub mod collateral {
     pub const PER_MBIT: u64 = 5_000_000;
 
     pub fn calculate_minimum(cpu_cores: u32, memory_bytes: u64, storage_bytes: u64, network_mbits: u32) -> u64 {
-        let ram_gib = (memory_bytes + 1024 * 1024 * 1024 - 1) / (1024 * 1024 * 1024);
-        let storage_gib = (storage_bytes + 1024 * 1024 * 1024 - 1) / (1024 * 1024 * 1024);
+        let ram_gib = memory_bytes.div_ceil(1024 * 1024 * 1024);
+        let storage_gib = storage_bytes.div_ceil(1024 * 1024 * 1024);
         PER_CORE * cpu_cores as u64
-            + PER_GIB_RAM * ram_gib as u64
-            + PER_GIB_STORAGE * storage_gib as u64
+            + PER_GIB_RAM * ram_gib
+            + PER_GIB_STORAGE * storage_gib
             + PER_MBIT * network_mbits as u64
     }
 }

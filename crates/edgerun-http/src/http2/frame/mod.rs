@@ -296,10 +296,10 @@ impl Frame {
                 if self.stream_id != 0 {
                     return Err(ErrorCode::PROTOCOL_ERROR.to_u32());
                 }
-                if is_ack && self.payload.len() != 0 {
+                if is_ack && !self.payload.is_empty() {
                     return Err(ErrorCode::FRAME_SIZE_ERROR.to_u32());
                 }
-                if !is_ack && self.payload.len() % 6 != 0 {
+                if !is_ack && !self.payload.len().is_multiple_of(6) {
                     return Err(ErrorCode::FRAME_SIZE_ERROR.to_u32());
                 }
             }
@@ -316,7 +316,7 @@ impl Frame {
                         self.payload[2],
                         self.payload[3],
                     ]) & 0x7FFFFFFF;
-                    if promised == 0 || promised % 2 == 0 {
+                    if promised == 0 || promised.is_multiple_of(2) {
                         return Err(ErrorCode::PROTOCOL_ERROR.to_u32());
                     }
                 }

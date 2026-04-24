@@ -22,7 +22,7 @@ pub mod stream_types {
 
 /// Stream ID helpers
 pub fn is_client_initiated_bidi(id: u64) -> bool {
-    id % 4 == 0
+    id.is_multiple_of(4)
 }
 
 pub fn is_server_initiated_bidi(id: u64) -> bool {

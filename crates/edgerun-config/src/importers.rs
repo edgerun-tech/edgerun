@@ -42,7 +42,7 @@ pub fn import_dnsmasq(conf: &str) -> Result<Vec<ConfigResource>, ImportError> {
             }
             "dhcp-leaseTime" => {} // handled via spec default
             "server" => upstreams.push(value.to_string()),
-            "domain" => { if domain_name.is_none() { domain_name = Some(value.to_string()); } }
+            "domain" if domain_name.is_none() => { domain_name = Some(value.to_string()); }
             "tftp-root" => { tftp_root = Some(value.to_string()); tftp_enabled = true; }
             "enable-tftp" => tftp_enabled = true,
             _ => {}
@@ -164,12 +164,11 @@ pub fn import_corefile(corefile: &str) -> Result<Vec<ConfigResource>, ImportErro
                         } else { i += 1; }
                     }
                 }
-                "tls" => {
-                    if plugin.args.len() >= 2 {
+                "tls"
+                    if plugin.args.len() >= 2 => {
                         tls_cert = Some(plugin.args[0].clone());
                         tls_key = Some(plugin.args[1].clone());
                     }
-                }
                 "bind" => { if let Some(a) = plugin.args.first() { bind_addr = Some(a.clone()); } }
                 _ => {}
             }

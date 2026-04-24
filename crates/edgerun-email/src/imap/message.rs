@@ -197,12 +197,12 @@ impl ImapCommand {
                 Ok(Self::Unsubscribe { mailbox: args[0].clone() })
             }
             "LIST" => {
-                let reference = args.get(0).cloned().unwrap_or_default();
+                let reference = args.first().cloned().unwrap_or_default();
                 let pattern = args.get(1).cloned().unwrap_or_default();
                 Ok(Self::List { reference, pattern })
             }
             "LSUB" => {
-                let reference = args.get(0).cloned().unwrap_or_default();
+                let reference = args.first().cloned().unwrap_or_default();
                 let pattern = args.get(1).cloned().unwrap_or_default();
                 Ok(Self::Lsub { reference, pattern })
             }
@@ -223,12 +223,11 @@ impl ImapCommand {
             "SEARCH" => {
                 let mut idx = 0;
                 let mut charset = None;
-                if idx < args.len() && args[idx].to_uppercase() == "CHARSET" {
-                    if idx + 1 < args.len() {
+                if idx < args.len() && args[idx].to_uppercase() == "CHARSET"
+                    && idx + 1 < args.len() {
                         charset = Some(args[idx + 1].clone());
                         idx += 2;
                     }
-                }
                 // Remaining args are search keys
                 let keys = parse_search_keys(&args[idx..]);
                 Ok(Self::Search { charset, keys })

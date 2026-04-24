@@ -26,7 +26,7 @@ impl Signer for Ed25519Signer {
     fn sign(&self, message: &[u8]) -> Result<[u8; 64], SigningError> {
         use edgerun_crypto::Signer;
         let sig = self.key.sign(message);
-        let bytes: [u8; 64] = sig.to_bytes().into();
+        let bytes: [u8; 64] = sig.to_bytes();
         Ok(bytes)
     }
 

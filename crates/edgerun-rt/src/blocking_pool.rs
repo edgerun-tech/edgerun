@@ -281,7 +281,7 @@ impl BlockingPool {
         F: FnOnce() + Send + 'static,
     {
         let tx_guard = self.inner.tx.lock();
-        let tx = (&*tx_guard).as_ref().ok_or(PoolError::Shutdown)?;
+        let tx = (*tx_guard).as_ref().ok_or(PoolError::Shutdown)?;
 
         let inner = Arc::clone(&self.inner);
         tx.send(Box::new(move || {

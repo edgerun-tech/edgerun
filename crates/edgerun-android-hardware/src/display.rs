@@ -53,6 +53,12 @@ mod real {
     use super::*;
     pub struct ANativeWindowSurface;
     pub struct AndroidDisplayProvider;
+    impl Default for AndroidDisplayProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AndroidDisplayProvider {
         pub fn new() -> Self { Self }
         pub fn set_surface(&mut self, _w: *mut std::ffi::c_void) {}

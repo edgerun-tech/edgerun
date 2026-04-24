@@ -242,7 +242,7 @@ impl ConnectionPool {
 
             let host = uri.host()
                 .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
-            let port = uri.port().unwrap_or_else(|| if is_https { 443 } else { 80 });
+            let port = uri.port().unwrap_or(if is_https { 443 } else { 80 });
 
             let response = self.execute_single(&req, host, port, is_https, is_head).await?;
 
@@ -267,7 +267,7 @@ impl ConnectionPool {
                 let body = response.body();
                 if let Some(decompressed) = compression::decompress_body(body, response.headers()) {
                     return Ok(Response::from_parts(
-                        response.status().clone(),
+                        response.status(),
                         response.headers().clone(),
                         decompressed,
                     ));
@@ -309,7 +309,7 @@ impl ConnectionPool {
 
             let host = uri.host()
                 .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
-            let port = uri.port().unwrap_or_else(|| if is_https { 443 } else { 80 });
+            let port = uri.port().unwrap_or(if is_https { 443 } else { 80 });
 
             let response = Self::execute_single_async(pool, &req, host, port, is_https, is_head).await?;
 
@@ -334,7 +334,7 @@ impl ConnectionPool {
                 let body = response.body();
                 if let Some(decompressed) = compression::decompress_body(body, response.headers()) {
                     return Ok(Response::from_parts(
-                        response.status().clone(),
+                        response.status(),
                         response.headers().clone(),
                         decompressed,
                     ));
@@ -540,7 +540,7 @@ impl ConnectionPool {
             let stream = Self::resolve_and_connect_static(
                 connect_timeout, dns_timeout, host, port,
             ).await?;
-            let tls = AsyncTlsStream::client(stream, host, &[], Some(&session_cache)).await
+            let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache)).await
                 .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
             let reader = BufReader::new(tls);
             Ok(PooledConn::Tls(reader))
@@ -587,7 +587,7 @@ impl ConnectionPool {
         ).await {
             if let Ok(Ok(mut addrs)) = result {
                 let mut ipv4_fallback = None;
-                while let Some(addr) = addrs.next() {
+                for addr in addrs.by_ref() {
                     match addr.ip() {
                         IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, &addr).await,
                         IpAddr::V4(_) => {
@@ -661,7 +661,7 @@ impl ConnectionPool {
     /// Read an HTTP/1.1 response from a pooled connection.
     async fn read_response(conn: &mut PooledConn, is_head: bool) -> Result<Response> {
         let status_line = conn.read_line().await
-            .map_err(|e| Error::Network(e))?
+            .map_err(Error::Network)?
             .ok_or_else(|| Error::InvalidResponse("Unexpected EOF reading status line".to_string()))?;
 
         let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
@@ -671,12 +671,12 @@ impl ConnectionPool {
         let status_code = parts[1].parse::<u16>()
             .map_err(|_| Error::InvalidResponse("Invalid status code".to_string()))?;
         let status = StatusCode::new(status_code)
-            .map_err(|e| Error::InvalidResponse(e))?;
+            .map_err(Error::InvalidResponse)?;
 
         let mut headers = HeaderMap::new();
         loop {
             let line = conn.read_line().await
-                .map_err(|e| Error::Network(e))?
+                .map_err(Error::Network)?
                 .ok_or_else(|| Error::InvalidResponse("Unexpected EOF reading headers".to_string()))?;
             if line.is_empty() { break; }
             if let Some(colon) = line.find(':') {
@@ -696,7 +696,7 @@ impl ConnectionPool {
         // Read body
         let is_chunked = headers.get("transfer-encoding")
             .map(|v| v.as_str().to_lowercase())
-            .map_or(false, |v| v.contains("chunked"));
+            .is_some_and(|v| v.contains("chunked"));
 
         let content_length = headers.get("content-length")
             .and_then(|v| v.as_str().parse::<usize>().ok());
@@ -708,7 +708,7 @@ impl ConnectionPool {
             let mut total = 0;
             while total < len {
                 let n = conn.read(&mut buf[total..]).await
-                    .map_err(|e| Error::Network(e))?;
+                    .map_err(Error::Network)?;
                 if n == 0 { break; }
                 total += n;
             }
@@ -732,7 +732,7 @@ impl ConnectionPool {
             loop {
                 let mut byte = [0u8; 1];
                 let n = conn.read(&mut byte).await
-                    .map_err(|e| Error::Network(e))?;
+                    .map_err(Error::Network)?;
                 if n == 0 {
                     return Err(Error::InvalidResponse("unexpected EOF reading chunk size".into()));
                 }
@@ -751,8 +751,8 @@ impl ConnectionPool {
                 // Drain trailer headers until blank line
                 loop {
                     let line = conn.read_line().await
-                        .map_err(|e| Error::Network(e))?;
-                    if line.map_or(true, |l| l.is_empty()) { break; }
+                        .map_err(Error::Network)?;
+                    if line.is_none_or(|l| l.is_empty()) { break; }
                 }
                 break;
             }
@@ -763,7 +763,7 @@ impl ConnectionPool {
             while remaining > 0 {
                 let to_read = remaining.min(buf.len());
                 let n = conn.read(&mut buf[..to_read]).await
-                    .map_err(|e| Error::Network(e))?;
+                    .map_err(Error::Network)?;
                 if n == 0 { break; }
                 body.extend_from_slice(&buf[..n]);
                 remaining -= n;

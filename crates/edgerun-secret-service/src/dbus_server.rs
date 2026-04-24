@@ -203,7 +203,7 @@ impl Server {
     /// Creates a new session. The session starts locked — Unlock must be called
     /// with successful biometric verification before secrets can be retrieved.
     fn open_session(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let _algorithm = msg.body.get(0).and_then(Val::s).unwrap_or("plain");
+        let _algorithm = msg.body.first().and_then(Val::s).unwrap_or("plain");
         let _input = msg.body.get(1); // Variant input (ignored for now)
 
         let path = self.sessions.create_session(client);
@@ -221,7 +221,7 @@ impl Server {
 
     /// CreateCollection (IN Dict<String,Variant> properties, IN String alias, OUT ObjectPath collection, OUT ObjectPath prompt)
     fn create_collection(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let properties = msg.body.get(0).and_then(Val::dict_ss).unwrap_or_default();
+        let properties = msg.body.first().and_then(Val::dict_ss).unwrap_or_default();
         let _alias = msg.body.get(1).and_then(Val::s).unwrap_or("");
 
         let label = properties.iter()
@@ -249,7 +249,7 @@ impl Server {
     /// happens at Unlock/GetSecret time. Items that don't match the search
     /// are simply not returned.
     fn search_items(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let attrs = msg.body.get(0).and_then(Val::dict_ss).unwrap_or_default();
+        let attrs = msg.body.first().and_then(Val::dict_ss).unwrap_or_default();
         let attr_pairs: Vec<(String, String)> = attrs.into_iter().collect();
 
         let mut unlocked = Vec::new();
@@ -277,7 +277,7 @@ impl Server {
     /// Triggers biometric verification. If successful, all requested objects
     /// are unlocked and returned. If biometrics are not available, returns an error.
     fn unlock(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let objects = msg.body.get(0).and_then(Val::ao).unwrap_or_default();
+        let objects = msg.body.first().and_then(Val::ao).unwrap_or_default();
 
         // Run biometric verification
         if !self.verifier.is_available() {
@@ -314,7 +314,7 @@ impl Server {
     /// Clears biometric verification state on the session. Subsequent
     /// GetSecrets/GetSecret calls will fail until Unlock is called again.
     fn lock(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let objects = msg.body.get(0).and_then(Val::ao).unwrap_or_default();
+        let objects = msg.body.first().and_then(Val::ao).unwrap_or_default();
 
         // Lock all sessions for this client
         self.sessions.lock_client(client);
@@ -333,7 +333,7 @@ impl Server {
     /// Requires the session to be biometrically verified. Returns only
     /// unlocked (verified) items. Locked items are silently omitted.
     fn get_secrets(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let item_paths = msg.body.get(0).and_then(Val::ao).unwrap_or_default();
+        let item_paths = msg.body.first().and_then(Val::ao).unwrap_or_default();
         let session_path = msg.body.get(1).and_then(Val::o).unwrap_or("");
 
         // Look up the session
@@ -386,7 +386,7 @@ impl Server {
 
     /// ReadAlias (IN String name, OUT ObjectPath collection)
     fn read_alias(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let name = msg.body.get(0).and_then(Val::s).unwrap_or("");
+        let name = msg.body.first().and_then(Val::s).unwrap_or("");
         let collection = self.aliases.get(name)
             .cloned()
             .unwrap_or_else(|| "/".into());
@@ -398,7 +398,7 @@ impl Server {
 
     /// SetAlias (IN String name, IN ObjectPath collection)
     fn set_alias(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let name = msg.body.get(0).and_then(Val::s).unwrap_or("");
+        let name = msg.body.first().and_then(Val::s).unwrap_or("");
         let collection = msg.body.get(1).and_then(Val::o).unwrap_or("");
 
         if name.is_empty() || collection.is_empty() {
@@ -434,7 +434,7 @@ impl Server {
     fn create_item(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
         let coll = msg.path().unwrap_or("");
 
-        let properties = msg.body.get(0).and_then(Val::dict_ss).unwrap_or_default();
+        let properties = msg.body.first().and_then(Val::dict_ss).unwrap_or_default();
         let label = properties.iter()
             .find(|(k, _)| k == "org.freedesktop.Secret.Item.Label")
             .map(|(_, v)| v.as_str())
@@ -505,7 +505,7 @@ impl Server {
 
     /// GetSecret (IN ObjectPath session, OUT Secret secret)
     fn get_secret(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let session_path = msg.body.get(0).and_then(Val::o).unwrap_or("");
+        let session_path = msg.body.first().and_then(Val::o).unwrap_or("");
         let item_path = msg.path().unwrap_or("");
 
         let Some(session) = self.sessions.get(session_path) else {
@@ -586,7 +586,7 @@ impl Server {
     }
 
     fn properties_get_all(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let _iface = msg.body.get(0).and_then(Val::s).unwrap_or("");
+        let _iface = msg.body.first().and_then(Val::s).unwrap_or("");
         // Return empty dict for now
         Msg::ret(ser, client).body(vec![Val::Dict(vec![])], "a{sv}")
     }

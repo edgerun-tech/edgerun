@@ -119,11 +119,7 @@ fn credentials_from_json(s: &str) -> Result<Credentials, String> {
 
     let expiry_date = if let Some(exp) = value.get("expiry_date").and_then(|v| v.as_u64()) {
         Some(exp)
-    } else if let Some(ei) = value.get("expires_in").and_then(|v| v.as_u64()) {
-        Some(now + ei)
-    } else {
-        None
-    };
+    } else { value.get("expires_in").and_then(|v| v.as_u64()).map(|ei| now + ei) };
 
     Ok(Credentials {
         access_token,

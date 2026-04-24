@@ -76,7 +76,7 @@ impl SessionManager {
         let their_pub = PublicKey::from_sec1_bytes(&accept.ephemeral_pub)
             .map_err(|_| SessionError::InvalidEcdhPublicKey)?;
         let shared = our_secret.diffie_hellman(&their_pub);
-        let session_key = derive_session_key(&*shared.raw_secret_bytes());
+        let session_key = derive_session_key(shared.raw_secret_bytes());
 
         let session = MeshSession::new(accept.responder, session_key);
         self.sessions.insert(accept.responder, session);
@@ -105,7 +105,7 @@ impl SessionManager {
         ephemeral_pub.copy_from_slice(our_pub_bytes);
 
         let shared = our_secret.diffie_hellman(&their_pub);
-        let session_key = derive_session_key(&*shared.raw_secret_bytes());
+        let session_key = derive_session_key(shared.raw_secret_bytes());
 
         let session = MeshSession::new(init.initiator, session_key);
         self.sessions.insert(init.initiator, session);

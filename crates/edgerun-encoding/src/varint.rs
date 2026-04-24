@@ -106,7 +106,7 @@ where
     let mut shift: u32 = 0;
 
     loop {
-        let b = iter.next().ok_or_else(|| {
+        let b = iter.next().ok_or({
             if shift == 0 {
                 VarintError::UnexpectedEof
             } else {

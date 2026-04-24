@@ -392,7 +392,7 @@ impl Buf for std::io::Cursor<Vec<u8>> {
     }
 }
 
-impl<'a> Buf for std::io::Cursor<&'a Vec<u8>> {
+impl Buf for std::io::Cursor<&Vec<u8>> {
     #[inline]
     fn remaining(&self) -> usize {
         let pos = self.position() as usize;
@@ -416,7 +416,7 @@ impl<'a> Buf for std::io::Cursor<&'a Vec<u8>> {
     }
 }
 
-impl<'a, 'b> Buf for &'a mut std::io::Cursor<&'b mut Vec<u8>> {
+impl Buf for &mut std::io::Cursor<&mut Vec<u8>> {
     #[inline]
     fn remaining(&self) -> usize {
         let pos = self.position() as usize;

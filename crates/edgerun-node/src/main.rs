@@ -14,7 +14,6 @@
 //! The node's private key NEVER leaves secure hardware. The config file only
 //! stores the public key (NodeID) and a reference to the hardware key handle.
 //! No `.key` file is ever written.
-use edgerun_log;
 
 // Existing modules
 mod capabilities;

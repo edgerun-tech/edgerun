@@ -49,7 +49,7 @@ pub async fn send_bounce(
     config: &BounceConfig,
 ) -> Result<(), String> {
     // Skip if sender is empty (bounce to empty = loop)
-    if envelope_sender.is_empty() || envelope_sender == "<>" || envelope_sender == "" {
+    if envelope_sender.is_empty() || envelope_sender == "<>" || envelope_sender.is_empty() {
         edgerun_log::warn!("edgerun-smtp: skipping bounce — empty envelope sender");
         return Ok(());
     }

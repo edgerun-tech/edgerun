@@ -185,8 +185,8 @@ impl DeliveryWorker {
 
     /// Calculate exponential backoff with jitter.
     fn calculate_backoff(&self, attempt: i32) -> Duration {
-        let base = self.config.min_retry_interval.as_secs() as u64;
-        let max = self.config.max_retry_interval.as_secs() as u64;
+        let base = self.config.min_retry_interval.as_secs();
+        let max = self.config.max_retry_interval.as_secs();
 
         // Exponential: base * 2^(attempt-1), capped at max
         let delay = base.saturating_mul(1 << (attempt as u32).min(20));

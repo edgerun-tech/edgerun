@@ -316,7 +316,7 @@ impl RegistryClient {
         let resp = client.execute(&request).await.map_err(|e| RegistryError::HttpError(e.to_string()))?;
 
         let value = parse_json_bytes(resp.body())
-            .map_err(|e| RegistryError::ParseError(e))?;
+            .map_err(RegistryError::ParseError)?;
 
         self.token = if let edgerun_json::JsonValue::Object(fields) = &value {
             fields.iter()
@@ -408,11 +408,11 @@ impl RegistryClient {
             }
             let request2 = builder2.build()?;
             let resp2 = client.execute(&request2).await.map_err(|e| RegistryError::HttpError(e.to_string()))?;
-            parse_manifest(resp2.body()).map_err(|e| RegistryError::ParseError(e))
+            parse_manifest(resp2.body()).map_err(RegistryError::ParseError)
         } else if resp.status().as_u16() >= 400 {
             Err(RegistryError::HttpStatus(resp.status().as_u16()))
         } else {
-            parse_manifest(resp.body()).map_err(|e| RegistryError::ParseError(e))
+            parse_manifest(resp.body()).map_err(RegistryError::ParseError)
         }
     }
 
@@ -424,7 +424,7 @@ impl RegistryClient {
         digest: &str,
     ) -> Result<SingleManifest, RegistryError> {
         let body = self.fetch_blob(registry, repository, digest).await?;
-        parse_single_manifest(&body).map_err(|e| RegistryError::ParseError(e))
+        parse_single_manifest(&body).map_err(RegistryError::ParseError)
     }
 
     /// Fetch a single blob by digest.
@@ -545,7 +545,7 @@ impl RegistryClient {
         let n = body.len() as u64;
         self.bytes_downloaded += n;
 
-        std::fs::write(dest, &body).map_err(|e| RegistryError::IoError(e))
+        std::fs::write(dest, &body).map_err(RegistryError::IoError)
     }
 
     // ------------------------------------------------------------------
@@ -631,7 +631,7 @@ fn create_tar_from_dir(dir: &Path) -> std::io::Result<Vec<u8>> {
     builder.append_dir_all(".", dir)?;
     builder.finish()?;
     drop(builder);
-    Ok(encoder.finish()?)
+    encoder.finish()
 }
 
 #[cfg(test)]

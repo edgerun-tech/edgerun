@@ -108,7 +108,7 @@ impl From<Http2Error> for std::io::Error {
     fn from(err: Http2Error) -> Self {
         match err {
             Http2Error::Io(err) => err,
-            other => std::io::Error::new(std::io::ErrorKind::Other, other.to_string()),
+            other => std::io::Error::other(other.to_string()),
         }
     }
 }

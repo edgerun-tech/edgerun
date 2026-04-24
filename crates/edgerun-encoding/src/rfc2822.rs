@@ -52,7 +52,7 @@ pub fn format_rfc2822_utc(unix_secs: u64) -> String {
         31, if is_leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
     ];
     let mut month = 0usize;
-    let mut day = doy as i64;
+    let mut day = doy;
     for (i, &md) in month_days.iter().enumerate() {
         if day < md as i64 {
             month = i;
@@ -79,7 +79,7 @@ pub fn format_rfc2822_utc(unix_secs: u64) -> String {
 // ---------------------------------------------------------------------------
 
 fn is_leap_year(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 fn days_in_year(year: u64) -> u64 {

@@ -69,7 +69,7 @@ pub fn execute_query(
             match store.list_stream_heads() {
                 Ok(heads) => {
                     for (stream_id_hex, seq, hash) in heads {
-                        if max_results.map_or(false, |m| event_refs.len() >= m) {
+                        if max_results.is_some_and(|m| event_refs.len() >= m) {
                             completeness = ResultCompleteness::Partial as i32;
                             break;
                         }
@@ -103,7 +103,7 @@ pub fn execute_query(
                     });
 
                     for (stream_id_hex, head_seq, _hash) in &heads {
-                        if max_results.map_or(false, |m| event_refs.len() >= m) {
+                        if max_results.is_some_and(|m| event_refs.len() >= m) {
                             completeness = ResultCompleteness::Partial as i32;
                             break;
                         }
@@ -121,7 +121,7 @@ pub fn execute_query(
                                 max_results.map(|m| m - event_refs.len()),
                             );
                             event_refs.extend(filtered);
-                            if max_results.map_or(false, |m| event_refs.len() >= m) {
+                            if max_results.is_some_and(|m| event_refs.len() >= m) {
                                 completeness = ResultCompleteness::Partial as i32;
                             }
                         } else {
@@ -130,7 +130,7 @@ pub fn execute_query(
                             let to_seq = *head_seq;
                             if let Ok(events) = store.list_event_range(stream_id_hex, from_seq, to_seq) {
                                 for (seq, hash, _ver) in events {
-                                    if max_results.map_or(false, |m| event_refs.len() >= m) {
+                                    if max_results.is_some_and(|m| event_refs.len() >= m) {
                                         completeness = ResultCompleteness::Partial as i32;
                                         break;
                                     }
@@ -196,7 +196,7 @@ pub fn execute_query(
             match store.list_snapshots() {
                 Ok(snaps) => {
                     for (sid, oid_hex, _vt, _ph, _pa, _c, _bh) in &snaps {
-                        if max_results.map_or(false, |m| snapshot_refs.len() >= m) {
+                        if max_results.is_some_and(|m| snapshot_refs.len() >= m) {
                             completeness = ResultCompleteness::Partial as i32;
                             break;
                         }
@@ -224,7 +224,7 @@ pub fn execute_query(
             match store.list_stream_heads() {
                 Ok(heads) => {
                     for (stream_id_hex, seq, hash) in heads {
-                        if max_results.map_or(false, |m| event_refs.len() >= m) {
+                        if max_results.is_some_and(|m| event_refs.len() >= m) {
                             completeness = ResultCompleteness::Partial as i32;
                             break;
                         }
@@ -250,7 +250,7 @@ pub fn execute_query(
             // Return stream heads as events and snapshot refs
             if let Ok(heads) = store.list_stream_heads() {
                 for (stream_id_hex, seq, hash) in heads {
-                    if max_results.map_or(false, |m| event_refs.len() >= m) {
+                    if max_results.is_some_and(|m| event_refs.len() >= m) {
                         completeness = ResultCompleteness::Partial as i32;
                         break;
                     }
@@ -266,7 +266,7 @@ pub fn execute_query(
             }
             if let Ok(snaps) = store.list_snapshots() {
                 for (sid, oid_hex, _vt, _ph, _pa, _c, _bh) in &snaps {
-                    if max_results.map_or(false, |m| snapshot_refs.len() >= m) {
+                    if max_results.is_some_and(|m| snapshot_refs.len() >= m) {
                         completeness = ResultCompleteness::Partial as i32;
                         break;
                     }

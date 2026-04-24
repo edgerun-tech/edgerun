@@ -62,7 +62,7 @@ impl SettingsFrame {
             ));
         }
 
-        if frame.payload.len() % 6 != 0 {
+        if !frame.payload.len().is_multiple_of(6) {
             return Err(Http2Error::FrameParse(
                 "SETTINGS payload length not multiple of 6".to_string(),
             ));

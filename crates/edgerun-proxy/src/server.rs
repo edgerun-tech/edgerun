@@ -320,9 +320,7 @@ async fn handle_socks5(socket: Arc<AsyncTcpStream>, _addr: SocketAddr, config: P
     socket.write_all(&[SOCKS5_VERSION, method]).await?;
     
     if method == 0x02 {
-        if let Err(e) = authenticate_socks5(&mut socket, &config).await {
-            return Err(e);
-        }
+        authenticate_socks5(&mut socket, &config).await?
     }
 
     let n = socket.read(&mut buffer).await?;

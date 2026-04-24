@@ -26,12 +26,11 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--port" | "-p" => {
-                if i + 1 < args.len() {
+            "--port" | "-p"
+                if i + 1 < args.len() => {
                     if let Ok(p) = args[i + 1].parse() { port = p; }
                     i += 1;
                 }
-            }
             "--tls" => { tls = true; }
             "--http3" | "--h3" => { http3 = true; }
             _ => {}

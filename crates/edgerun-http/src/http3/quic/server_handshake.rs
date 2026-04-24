@@ -48,6 +48,12 @@ pub struct EarlyDataState {
     pub data: Option<Vec<u8>>,
 }
 
+impl Default for EarlyDataState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EarlyDataState {
     pub fn new() -> Self {
         EarlyDataState {
