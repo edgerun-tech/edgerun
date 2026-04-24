@@ -205,8 +205,7 @@ impl Server {
         let has_biometrics = self.verifier.is_available();
 
         // Output: variant with available modalities info
-        let mut info_map = Vec::new();
-        info_map.push((Val::S("has-biometrics".into()), Val::Var(Box::new(Val::B(has_biometrics)))));
+        let info_map = vec![(Val::S("has-biometrics".into()), Val::Var(Box::new(Val::B(has_biometrics))))];
 
         Msg::ret(ser, client).body(vec![
             Val::Var(Box::new(Val::Dict(info_map))),

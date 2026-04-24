@@ -22,11 +22,12 @@ impl RstStreamFrame {
 
     /// Convert to generic Frame
     pub fn to_frame(&self) -> Frame {
-        let mut payload = Vec::with_capacity(4);
-        payload.push((self.error_code >> 24) as u8);
-        payload.push((self.error_code >> 16) as u8);
-        payload.push((self.error_code >> 8) as u8);
-        payload.push(self.error_code as u8);
+        let payload = vec![
+            (self.error_code >> 24) as u8,
+            (self.error_code >> 16) as u8,
+            (self.error_code >> 8) as u8,
+            self.error_code as u8,
+        ];
 
         Frame::new(FrameType::RstStream, 0, self.stream_id, payload)
     }

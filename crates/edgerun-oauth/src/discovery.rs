@@ -163,8 +163,7 @@ impl JwksDocument {
     pub fn to_json(&self) -> String {
         use edgerun_json::{JsonValue, Map, to_string};
         let keys_arr: Vec<JsonValue> = self.keys.iter().map(|k| k.raw.clone()).collect();
-        let mut obj = Vec::new();
-        obj.push(("keys".into(), JsonValue::Array(keys_arr)));
+        let obj = vec![("keys".into(), JsonValue::Array(keys_arr))];
         let val = JsonValue::Object(Map::from_iter(obj));
         to_string(&val).unwrap_or_else(|_| "{}".into())
     }

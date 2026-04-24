@@ -339,22 +339,21 @@ impl OAuthServer {
         let point = vk.to_encoded_point(false);
         let raw = point.as_bytes();
 
-        let mut fields = Vec::new();
-        fields.push(("kty".into(), JsonValue::String("EC".into())));
-        fields.push(("crv".into(), JsonValue::String("P-256".into())));
-        fields.push(("alg".into(), JsonValue::String("ES256".into())));
-        fields.push(("use".into(), JsonValue::String("sig".into())));
-        fields.push(("kid".into(), JsonValue::String(self.signing_key_id.clone())));
-        fields.push(("x".into(), JsonValue::String(base64url_nopad_encode(&raw[1..33]))));
-        fields.push(("y".into(), JsonValue::String(base64url_nopad_encode(&raw[33..65]))));
+        let fields = vec![
+            ("kty".into(), JsonValue::String("EC".into())),
+            ("crv".into(), JsonValue::String("P-256".into())),
+            ("alg".into(), JsonValue::String("ES256".into())),
+            ("use".into(), JsonValue::String("sig".into())),
+            ("kid".into(), JsonValue::String(self.signing_key_id.clone())),
+            ("x".into(), JsonValue::String(base64url_nopad_encode(&raw[1..33]))),
+            ("y".into(), JsonValue::String(base64url_nopad_encode(&raw[33..65])))];
 
         let jwk_json = to_string(&JsonValue::Object(Map::from_iter(fields)))
             .unwrap_or_else(|_| "{}".into());
         let jwk_raw: JsonValue = from_str(&jwk_json).unwrap_or(JsonValue::Object(Map::new()));
 
         let keys_arr = vec![jwk_raw];
-        let mut obj = Vec::new();
-        obj.push(("keys".into(), JsonValue::Array(keys_arr)));
+        let obj = vec![("keys".into(), JsonValue::Array(keys_arr))];
         let doc_json = to_string(&JsonValue::Object(Map::from_iter(obj)))
             .unwrap_or_else(|_| "{}".into());
 
@@ -423,13 +422,14 @@ impl OAuthServer {
 
         self.device_store.store(grant);
 
-        let mut fields = Vec::new();
-        fields.push(("device_code".into(), JsonValue::String(device_code)));
-        fields.push(("user_code".into(), JsonValue::String(user_code)));
-        fields.push(("verification_uri".into(), JsonValue::String(verification_uri)));
-        fields.push(("verification_uri_complete".into(), JsonValue::String(verification_uri_complete)));
-        fields.push(("expires_in".into(), JsonValue::from(expires_in)));
-        fields.push(("interval".into(), JsonValue::from(interval)));
+        let fields = vec![
+            ("device_code".into(), JsonValue::String(device_code)),
+            ("user_code".into(), JsonValue::String(user_code)),
+            ("verification_uri".into(), JsonValue::String(verification_uri)),
+            ("verification_uri_complete".into(), JsonValue::String(verification_uri_complete)),
+            ("expires_in".into(), JsonValue::from(expires_in)),
+            ("interval".into(), JsonValue::from(interval)),
+        ];
 
         let val = JsonValue::Object(Map::from_iter(fields));
         let json = to_string(&val).unwrap_or_else(|_| "{}".into());
@@ -845,14 +845,15 @@ impl OAuthServer {
         );
         let header_b64 = base64url_nopad_encode(header_json.as_bytes());
 
-        let mut payload_fields = Vec::new();
-        payload_fields.push(("iss".into(), JsonValue::String(self.config.issuer.clone())));
-        payload_fields.push(("sub".into(), JsonValue::String(client_id.to_string())));
-        payload_fields.push(("aud".into(), JsonValue::String(client_id.to_string())));
-        payload_fields.push(("exp".into(), JsonValue::from(now + self.config.access_token_ttl_secs)));
-        payload_fields.push(("iat".into(), JsonValue::from(now)));
-        payload_fields.push(("scope".into(), JsonValue::String(scopes.join(" "))));
-        payload_fields.push(("at_hash".into(), JsonValue::String(at_hash)));
+        let payload_fields = vec![
+            ("iss".into(), JsonValue::String(self.config.issuer.clone())),
+            ("sub".into(), JsonValue::String(client_id.to_string())),
+            ("aud".into(), JsonValue::String(client_id.to_string())),
+            ("exp".into(), JsonValue::from(now + self.config.access_token_ttl_secs)),
+            ("iat".into(), JsonValue::from(now)),
+            ("scope".into(), JsonValue::String(scopes.join(" "))),
+            ("at_hash".into(), JsonValue::String(at_hash)),
+        ];
 
         let payload_json = to_string(&JsonValue::Object(Map::from_iter(payload_fields)))
             .map_err(|e| OAuthError::JsonError(e.to_string()))?;
@@ -892,11 +893,12 @@ impl OAuthServer {
         id_token: Option<&str>,
         expires_in: u64,
     ) -> Response {
-        let mut fields = Vec::new();
-        fields.push(("access_token".into(), JsonValue::String(access_token.to_string())));
-        fields.push(("token_type".into(), JsonValue::String("Bearer".into())));
-        fields.push(("expires_in".into(), JsonValue::from(expires_in)));
-        fields.push(("refresh_token".into(), JsonValue::String(refresh_token.to_string())));
+        let mut fields = vec![
+            ("access_token".into(), JsonValue::String(access_token.to_string())),
+            ("token_type".into(), JsonValue::String("Bearer".into())),
+            ("expires_in".into(), JsonValue::from(expires_in)),
+            ("refresh_token".into(), JsonValue::String(refresh_token.to_string())),
+        ];
         if let Some(idt) = id_token {
             fields.push(("id_token".into(), JsonValue::String(idt.to_string())));
         }
@@ -907,9 +909,10 @@ impl OAuthServer {
     }
 
     fn oauth_error(&self, error: &str, desc: &str, status: u16) -> Response {
-        let mut fields = Vec::new();
-        fields.push(("error".into(), JsonValue::String(error.to_string())));
-        fields.push(("error_description".into(), JsonValue::String(desc.to_string())));
+        let fields = vec![
+            ("error".into(), JsonValue::String(error.to_string())),
+            ("error_description".into(), JsonValue::String(desc.to_string())),
+        ];
         let val = JsonValue::Object(Map::from_iter(fields));
         let json = to_string(&val).unwrap_or_else(|_| "{}".into());
         Response::json(StatusCode::new(status).unwrap(), &json)

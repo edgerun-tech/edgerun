@@ -583,11 +583,12 @@ impl DnsRecordData {
             (DnsRecordType::LOC, DnsRecordData::LOC {
                 version, size, horiz_pre, vert_pre, latitude, longitude, altitude,
             }) => {
-                let mut buf = Vec::new();
-                buf.push(*version);
-                buf.push(*size as u8);
-                buf.push(*horiz_pre as u8);
-                buf.push(*vert_pre as u8);
+                let mut buf = vec![
+                *version,
+                *size as u8,
+                *horiz_pre as u8,
+                *vert_pre as u8,
+            ];
                 buf.extend_from_slice(&latitude.to_be_bytes());
                 buf.extend_from_slice(&longitude.to_be_bytes());
                 buf.extend_from_slice(&altitude.to_be_bytes());

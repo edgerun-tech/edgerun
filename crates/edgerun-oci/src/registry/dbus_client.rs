@@ -116,15 +116,16 @@ impl SecretClient {
         let ser = self.serial;
 
         // Build properties dict
-        let mut props = Vec::new();
-        props.push((
-            Val::S("org.freedesktop.Secret.Item.Label".into()),
-            Val::S(label.clone()),
-        ));
-        props.push((
-            Val::S("org.freedesktop.Secret.Item.Attribute.host".into()),
-            Val::S(registry_host.to_string()),
-        ));
+        let props = vec![
+            (
+                Val::S("org.freedesktop.Secret.Item.Label".into()),
+                Val::S(label.clone()),
+            ),
+            (
+                Val::S("org.freedesktop.Secret.Item.Attribute.host".into()),
+                Val::S(registry_host.to_string()),
+            ),
+        ];
 
         // Build secret struct: (oa{sv}ays)
         let session = self.session_path.clone().unwrap_or_default();

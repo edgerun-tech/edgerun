@@ -308,11 +308,12 @@ pub struct DeviceAuthorizationRequest {
 impl DeviceAuthorizationRequest {
     /// Encode as `application/x-www-form-urlencoded` body.
     pub fn to_form_body(&self) -> String {
-        let mut parts = Vec::new();
-        parts.push(url_encode("client_id", &self.client_id));
-        parts.push(url_encode("scope", &self.scope));
-        parts.push(url_encode("code_challenge", &self.code_challenge));
-        parts.push(url_encode("code_challenge_method", &self.code_challenge_method));
+        let parts = vec![
+            url_encode("client_id", &self.client_id),
+            url_encode("scope", &self.scope),
+            url_encode("code_challenge", &self.code_challenge),
+            url_encode("code_challenge_method", &self.code_challenge_method),
+        ];
         parts.join("&")
     }
 }
