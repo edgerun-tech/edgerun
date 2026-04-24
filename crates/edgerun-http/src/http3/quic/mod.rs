@@ -286,16 +286,9 @@ impl QuicConnection {
             payload,
         );
 
-        let packet_bytes = pkt.to_bytes();
-
-        // Use reusable function to get AAD + encrypted payload split
-        let (aad, encrypted) = match packet::get_long_header_payload_offset(&packet_bytes) {
-            Ok(offset) => (
-                packet_bytes[..offset].to_vec(),
-                packet_bytes[offset..].to_vec(),
-            ),
-            Err(e) => return Err(format!("Get payload offset failed: {}", e)),
-        };
+        // Use header_to_bytes_aad() directly - single source of truth for AAD
+        let aad = pkt.header_to_bytes_aad();
+        let encrypted = pkt.payload.clone();
 
         let send_bytes = if let Some(ref mut prot) = self.initial_protection {
             prot.protect(&aad, &encrypted)

@@ -381,6 +381,11 @@ pub fn get_packet_number_length(first_byte: u8) -> usize {
     if first_byte & 0x03 == 0 { 4 } else { (first_byte & 0x03) as usize }
 }
 
+/// Get AAD for AEAD - use this instead of manual parsing
+pub fn get_packet_aad(packet: &QuicPacket) -> Vec<u8> {
+    packet.header_to_bytes_aad()
+}
+
 /// Get byte offset where payload starts in a long-header packet
 pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     if data.len() < 6 {

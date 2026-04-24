@@ -44,7 +44,7 @@ use std::sync::Arc;
 use super::connection::Http3Connection;
 use super::quic::QuicTlsServerHandshaker;
 use super::quic::crypto::PacketProtection;
-use super::quic::packet::{QuicPacket, PacketType, get_long_header_payload_offset};
+use super::quic::packet::{QuicPacket, PacketType};
 use super::quic::frame::QuicFrame;
 use super::quic::QuicConnection;
 use super::quic::ConnectionId;
@@ -206,11 +206,13 @@ impl Http3Server {
         let first_byte = data[0];
         eprintln!("DEBUG: first={:02x} data[:20]={:02x?}", first_byte, &data[..20]);
 
-        // Use reusable function to split AAD from encrypted payload
-        let (aad, encrypted_payload) = match get_long_header_payload_offset(data) {
-            Ok(offset) => (data[..offset].to_vec(), data[offset..].to_vec()),
-            Err(e) => return Err(format!("Get payload offset failed: {}", e)),
-        };
+        // Parse packet to get header_to_bytes_aad()
+        let (pkt, _) = QuicPacket::from_bytes(data)
+            .map_err(|e| format!("Parse packet failed: {}", e))?;
+        
+        // Use header_to_bytes_aad() - same method as client
+        let aad = pkt.header_to_bytes_aad();
+        let encrypted_payload = data[aad.len()..].to_vec();
 
         eprintln!("DEBUG: aad_len={}, encrypted_len={}", aad.len(), encrypted_payload.len());
 
