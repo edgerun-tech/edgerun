@@ -115,8 +115,8 @@ case $CMD in
     
     if ! git diff --cached --quiet; then
       git commit -m "release: v${V} (${TYPE})"
-      git tag -s "v${V}" -m "Release v${V}"
-      echo "Created v${V}"
+      git tag -a "v${V}" -m "Release v${V}"
+      echo "Created v${V} (use 'git push origin v${V}' to publish)"
     else
       echo "No changes"
     fi
