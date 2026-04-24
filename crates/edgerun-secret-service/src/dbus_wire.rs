@@ -25,7 +25,7 @@ pub fn consume_one(sig: &str) -> io::Result<(String, &str)> {
         }
         b'(' => {
             let mut d = 1; let mut end = 0;
-            for (i, &b) in sig[1..].as_bytes().iter().enumerate() {
+            for (i, &b) in sig.as_bytes()[1..].iter().enumerate() {
                 if b == b'(' { d += 1; }
                 if b == b')' { d -= 1; if d == 0 { end = i + 2; break; } }
             }
@@ -261,7 +261,7 @@ pub fn encode_msg(msg: &Msg) -> Vec<u8> {
     out.extend_from_slice(&msg.ser.to_le_bytes());
     out.extend_from_slice(&(hfd.len() as u32).to_le_bytes());
     out.extend_from_slice(&hfd);
-    for _ in 0..pad { out.push(0); }
+    out.extend(std::iter::repeat(0).take(pad));
     out.extend_from_slice(&bdata);
     out
 }

@@ -1451,7 +1451,6 @@ fn generate_message_id() -> String {
 // ===========================================================================
 
 /// Typed data that middleware can store/retrieve from the session.
-
 /// The EHLO/HELO domain the client identified itself with.
 #[derive(Clone)]
 pub struct EhloDomain(pub Option<String>);

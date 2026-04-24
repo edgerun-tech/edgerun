@@ -199,7 +199,7 @@ fn is_dkim_aligned(dkim: &[DkimResult], header_from: &str, policy: &DmarcPolicy)
 
             let aligned = match policy.adkim.as_str() {
                 "s" => sig_domain == header_from || sig_domain == &header_domain,
-                "r" | _ => sig_org == header_domain,
+                _ => sig_org == header_domain,
             };
 
             if aligned {

@@ -577,19 +577,17 @@ impl ConnectionPool {
             return Self::connect_sock_static(connect_timeout, &SocketAddr::new(ip, port)).await;
         }
 
-        let host_str = host.to_string();
         if let Ok(result) = rt_timeout(
             dns_timeout,
             edgerun_rt::spawn_blocking(move || {
                 use std::net::ToSocketAddrs;
                 format!("{}:443", host_str).to_socket_addrs()
             })
-        ).await {
-            if let Ok(Ok(mut addrs)) = result {
+        ).await.map_ok(|addrs| {
                 let mut ipv4_fallback = None;
                 for addr in addrs.by_ref() {
                     match addr.ip() {
-                        IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, &addr).await,
+                        IpAddr::V6(_) => return Some(addr),
                         IpAddr::V4(_) => {
                             if ipv4_fallback.is_none() {
                                 ipv4_fallback = Some(addr);
@@ -597,9 +595,10 @@ impl ConnectionPool {
                         }
                     }
                 }
-                if let Some(addr) = ipv4_fallback {
-                    return Self::connect_sock_static(connect_timeout, &addr).await;
-                }
+                ipv4_fallback
+        }) {
+            if let Some(addr) = result {
+                return Self::connect_sock_static(connect_timeout, &addr).await;
             }
         }
 
@@ -785,7 +784,9 @@ impl ConnectionPool {
         if let Some((scheme, rest)) = current.split_once("://") {
             if let Some((host_port, path)) = rest.split_once('/') {
                 if location.starts_with('/') {
-                    return format!("{}://{}/{}", scheme, host_port, &location[1..]);
+                    if let Some(stripped) = location.strip_prefix('/') {
+                        return format!("{}://{}/{}", scheme, host_port, stripped);
+                    }
                 }
                 let base = path.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
                 return format!("{}://{}{}/{}", scheme, host_port, base, location);

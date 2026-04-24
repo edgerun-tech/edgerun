@@ -9,7 +9,6 @@
 /// - `benchmark_router_lookup`: Mesh router next-hop lookup rate (ops/s)
 ///
 /// Total runtime: ~1-2 seconds.
-
 use std::time::{Duration, Instant};
 
 use crate::{MeshFrame, MeshFrameHeader, FrameType, NodeID};

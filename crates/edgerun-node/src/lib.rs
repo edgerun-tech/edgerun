@@ -82,10 +82,10 @@ impl NodeConfig {
         for line in yaml.lines() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
-            if trimmed.starts_with("- ") {
+            if let Some(stripped) = trimmed.strip_prefix("- ") {
                 // List item continuation
                 if let Some(ref mut list) = current_list {
-                    list.push(unquote(trimmed[2..].trim()));
+                    list.push(unquote(stripped.trim()));
                 }
                 continue;
             }

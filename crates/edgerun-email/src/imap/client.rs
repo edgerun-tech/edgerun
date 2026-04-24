@@ -297,8 +297,8 @@ impl ImapClient {
             if line.starts_with("* ") {
                 self.untagged.push(line.clone());
                 edgerun_log::debug!("edgerun-imap: untagged: {}", line);
-            } else if line.starts_with("+ ") {
-                return Ok(ImapResponse::continuation(&line[2..]));
+            } else if let Some(stripped) = line.strip_prefix("+ ") {
+                return Ok(ImapResponse::continuation(stripped));
             } else if line.starts_with(&tag) {
                 let result = if line.contains(" OK ") {
                     ImapResult::Ok
@@ -346,8 +346,8 @@ impl ImapClient {
 
             if line.starts_with("* ") {
                 self.untagged.push(line.clone());
-            } else if line.starts_with("+ ") {
-                return Ok(ImapResponse::continuation(&line[2..]));
+            } else if let Some(stripped) = line.strip_prefix("+ ") {
+                return Ok(ImapResponse::continuation(stripped));
             } else if line.starts_with(&tag) {
                 let result = if line.contains(" OK ") {
                     ImapResult::Ok
@@ -524,8 +524,8 @@ impl ImapClient {
             ImapResponse::Tagged { result: ImapResult::Ok, .. } => {
                 let mut results = Vec::new();
                 for line in &self.untagged {
-                    if line.starts_with("* SEARCH") {
-                        for num in line[8..].split_whitespace() {
+                    if let Some(stripped) = line.strip_prefix("* SEARCH") {
+                        for num in stripped.split_whitespace() {
                             if let Ok(n) = num.parse::<u32>() {
                                 results.push(n);
                             }

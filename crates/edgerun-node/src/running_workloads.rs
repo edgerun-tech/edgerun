@@ -12,7 +12,6 @@
 ///   detects the exit, does cleanup once, and unregisters.
 /// - A `kill_requested` AtomicBool provides a lock-free signal from
 ///   `terminate()` to the background thread.
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::RwLock;

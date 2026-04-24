@@ -1,7 +1,6 @@
 /// Router lookup benchmark for the edgerun mesh.
 ///
 /// Measures next-hop routing table lookups with a realistic peer table.
-
 use std::time::{Duration, Instant};
 
 use edgerun_hardware_signing::NodeID;

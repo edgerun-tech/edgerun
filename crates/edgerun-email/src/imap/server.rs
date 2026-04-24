@@ -2381,8 +2381,8 @@ async fn dispatch_command(
                 // Parse sort criteria with optional REVERSE prefix
                 let parsed_criteria: Vec<(String, bool)> = sort_criteria.iter().map(|c| {
                     let upper = c.to_uppercase();
-                    if upper.starts_with("REVERSE ") {
-                        (upper["REVERSE ".len()..].to_string(), true)
+                    if let Some(stripped) = upper.strip_prefix("REVERSE ") {
+                        (stripped.to_string(), true)
                     } else {
                         (upper, false)
                     }

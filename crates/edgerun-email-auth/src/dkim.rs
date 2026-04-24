@@ -227,7 +227,7 @@ fn canonicalize_body(body: &[u8], canon: Option<&str>) -> io::Result<Vec<u8>> {
             }
             Ok(result)
         }
-        "relaxed" | _ => {
+        _ => {
             // Default is relaxed for body
             // Remove trailing whitespace, empty lines at end
             let text = String::from_utf8_lossy(body);
@@ -268,7 +268,7 @@ fn canonicalize_headers(headers: &[u8], sig: &DkimSignature, header_list: &[Stri
 
     match header_canon {
         "simple" => Ok(result.into_bytes()),
-        "relaxed" | _ => {
+        _ => {
             // Relaxed: lowercase header names, strip leading/trailing whitespace
             let relaxed = result
                 .split("\r\n")

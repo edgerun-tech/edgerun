@@ -6,7 +6,6 @@
 /// PerformanceCertificate multipliers.
 ///
 /// Zero external dependencies — uses only stdlib atomics and time.
-
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 

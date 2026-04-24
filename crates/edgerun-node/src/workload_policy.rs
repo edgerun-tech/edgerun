@@ -9,7 +9,6 @@
 /// Policy state is projected from the immutable event log — this module
 /// only defines the validation logic. The caller is responsible for
 /// projecting the current policy from committed events.
-
 use std::collections::HashSet;
 
 /// Policy for validating workload image references.

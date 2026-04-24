@@ -517,13 +517,13 @@ pub fn synthesize_nsec3_chain(
 
     // Build (hash, name, types) tuples
     let mut entries: Vec<(String, String, Vec<DnsRecordType>)> = names.iter()
-        .filter_map(|name| {
+        .map(|name| {
             // For each name, collect its record types
             // We need the zone data to do this, so caller must provide types
             let hash = nsec3_hash_owner(name, salt, iterations);
             let b32 = nsec3_base32hex(&hash);
             let nsec3_name = format!("{}.{}", b32, zone_origin);
-            Some((nsec3_name, name.clone(), Vec::new()))
+            (nsec3_name, name.clone(), Vec::new())
         })
         .collect();
 

@@ -232,7 +232,7 @@ impl Backend {
         let creds = self.index.list_credentials(&ns)
             .map_err(|e| io::Error::other(e.to_string()))?;
 
-        Ok(creds.into_iter().filter_map(|(key, desc, _ts)| {
+        Ok(creds.into_iter().map(|(key, desc, _ts)| {
             let meta = desc.as_deref()
                 .and_then(CredentialMeta::from_json)
                 .unwrap_or_else(|| CredentialMeta {
@@ -240,7 +240,7 @@ impl Backend {
                     attributes: HashMap::new(),
                     created_us: 0,
                 });
-            Some((key, meta))
+            (key, meta)
         }).collect())
     }
 

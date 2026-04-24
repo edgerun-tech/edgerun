@@ -3,7 +3,6 @@
 /// Tracks total hardware capacity and currently-allocated resources
 /// across running workloads. New workloads are rejected if they would
 /// exceed available capacity.
-
 use std::sync::RwLock;
 
 /// Hardware capacity discovered at node boot.
