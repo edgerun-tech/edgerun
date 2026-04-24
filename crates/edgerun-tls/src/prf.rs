@@ -380,6 +380,48 @@ mod tests {
     }
 
     #[test]
+    fn test_quic_client_server_keys_are_inverses() {
+        // Client and server should use inverses - client's write = server's read
+        let hash = Hasher::Sha256;
+        let dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
+        
+        let (client_write, client_read) = quic_initial_client_keys(&dcid, 16, 12, &hash);
+        let (server_write, server_read) = quic_initial_server_keys(&dcid, 16, 12, &hash);
+        
+        // Verify the inverse relationship
+        assert_eq!(client_write.write_key, server_read.write_key);
+        assert_eq!(client_write.write_iv, server_read.write_iv);
+        assert_eq!(server_write.write_key, client_read.write_key);
+        assert_eq!(server_write.write_iv, client_read.write_iv);
+    }
+
+    #[test]
+    fn test_key_bytes_are_deterministic() {
+        // Same DCID should always produce same keys
+        let hash = Hasher::Sha256;
+        let dcid = vec![0x5b, 0x6c, 0x2f, 0xd6, 0xcc, 0xe0, 0x29, 0x1c];
+        
+        let (a, _) = quic_initial_client_keys(&dcid, 16, 12, &hash);
+        let (b, _) = quic_initial_client_keys(&dcid, 16, 12, &hash);
+        
+        assert_eq!(a.write_key, b.write_key);
+        assert_eq!(a.write_iv, b.write_iv);
+    }
+
+    #[test]
+    fn test_different_dcid_produces_different_keys() {
+        let hash = Hasher::Sha256;
+        
+        let dcid1 = vec![0x5b, 0x6c, 0x2f, 0xd6, 0xcc, 0xe0, 0x29, 0x1c];
+        let dcid2 = vec![0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11];
+        
+        let (a, _) = quic_initial_client_keys(&dcid1, 16, 12, &hash);
+        let (b, _) = quic_initial_client_keys(&dcid2, 16, 12, &hash);
+        
+        assert_ne!(a.write_key, b.write_key);
+    }
+
+    #[test]
     fn test_quic_traffic_keys_derive() {
         let hash = Hasher::Sha256;
         let secret = vec![0xCD; 32];

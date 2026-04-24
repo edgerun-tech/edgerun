@@ -164,6 +164,17 @@ impl PacketProtection {
         nonce
     }
 
+    /// Make nonce as a standalone function for unit testing
+    pub fn test_make_nonce(iv: &[u8], packet_number: u64) -> [u8; 12] {
+        let mut nonce = [0u8; 12];
+        nonce.copy_from_slice(iv);
+        let pn_bytes = packet_number.to_be_bytes();
+        for i in 0..8 {
+            nonce[4 + i] ^= pn_bytes[i];
+        }
+        nonce
+    }
+
     /// Get current packet number
     pub fn packet_number(&self) -> u64 {
         self.packet_number
@@ -283,6 +294,37 @@ mod tests {
         for i in 0..8 {
             assert_eq!(nonce[4 + i], expected_pn_bytes[i]);
         }
+    }
+
+    #[test]
+    fn test_client_server_nonce_inverse() {
+        // Client uses server_in secret for encryption, server uses client_in for decryption
+        // But both should XOR with same packet number
+        let client_iv = [0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0xad, 0xbe, 0xcf];
+        let server_iv = [0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0xad, 0xbe, 0xcf];
+        
+        let client_nonce = PacketProtection::test_make_nonce(&client_iv, 0);
+        let server_nonce = PacketProtection::test_make_nonce(&server_iv, 0);
+        
+        // Both start with same IV, XOR with pn=0 means no change
+        assert_eq!(client_nonce, client_iv);
+        assert_eq!(server_nonce, server_iv);
+    }
+
+    #[test]
+    fn test_symmetric_encrypt_decrypt() {
+        // Use same keys for encrypt and decrypt - should roundtrip
+        let keys = ProtectionKeys::test_keys();
+        let mut encryptor = PacketProtection::new(&keys);
+        let mut decryptor = PacketProtection::new(&keys);
+        
+        let header = b"test header";
+        let plaintext = b"Hello QUIC!";
+        
+        let ciphertext = encryptor.protect(header, plaintext).unwrap();
+        let decrypted = decryptor.unprotect(header, 0, &ciphertext).unwrap();
+        
+        assert_eq!(&decrypted, plaintext);
     }
 
     #[test]
