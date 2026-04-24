@@ -273,11 +273,9 @@ pub struct JwsHeader {
 }
 
 pub fn base64url_encode(data: &[u8]) -> String {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.encode(data)
+    edgerun_encoding::base64url_nopad_encode(data)
 }
 
 pub fn base64url_decode(data: &str) -> Result<Vec<u8>, &'static str> {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.decode(data).map_err(|_| "invalid base64url")
+    edgerun_encoding::base64url_decode(data).map_err(|_| "invalid base64url")
 }

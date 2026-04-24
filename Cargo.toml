@@ -166,6 +166,7 @@ edgerun-tls = { path = "crates/edgerun-tls" }
 edgerun-email = { path = "crates/edgerun-email" }
 edgerun-log = { path = "crates/edgerun-log" }
 edgerun-rt = { path = "crates/edgerun-rt" }
+parking_lot = "0.12"
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json

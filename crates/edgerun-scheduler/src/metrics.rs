@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use edgerun_rt::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
 
@@ -72,13 +72,13 @@ impl ProviderMetrics {
 }
 
 pub struct MetricsReceiver {
-    history: parking_lot::RwLock<Vec<ProviderMetrics>>,
+    history: RwLock<Vec<ProviderMetrics>>,
 }
 
 impl MetricsReceiver {
     pub fn new() -> Self {
         Self {
-            history: parking_lot::RwLock::new(Vec::new()),
+            history: RwLock::new(Vec::new()),
         }
     }
     
