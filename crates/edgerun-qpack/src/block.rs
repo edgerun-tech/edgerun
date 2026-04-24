@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut};
+use edgerun_encoding::buf::{Buf, BufMut};
 
 use super::{parse_error::ParseError, prefix_int, prefix_string};
 

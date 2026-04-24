@@ -1,14 +1,13 @@
-//! QPACK Huffman coding — thin wrapper around `httlib-huffman`.
+//! QPACK Huffman coding — wrapper around `hpack_patched` Huffman encoder/decoder.
 //!
 //! QPACK (RFC 9204) uses the exact same canonical Huffman code table
-//! as HPACK (RFC 7541 Appendix B), so `httlib-huffman` works directly.
+//! as HPACK (RFC 7541 Appendix B), so `hpack_patched` works directly.
+
+use hpack_patched::huffman;
 
 /// Encode plaintext using HPACK/QPACK Huffman coding.
 pub fn encode(input: &[u8]) -> Vec<u8> {
-    let mut output = Vec::with_capacity(input.len());
-    httlib_huffman::encode(input, &mut output)
-        .expect("Huffman encoding should never fail");
-    output
+    hpack_patched::huffman::encode(input)
 }
 
 /// Decode HPACK/QPACK Huffman-coded bytes into plaintext.
@@ -16,9 +15,9 @@ pub fn encode(input: &[u8]) -> Vec<u8> {
 /// Returns `Err` if the Huffman data is malformed (invalid codes,
 /// invalid padding, or EOS symbol in the middle of the stream).
 pub fn decode(input: &[u8]) -> Result<Vec<u8>, String> {
-    let mut output = Vec::with_capacity(input.len());
-    httlib_huffman::decode(input, &mut output, httlib_huffman::DecoderSpeed::ThreeBits)
-        .map(|_| output)
+    let mut decoder = hpack_patched::huffman::HuffmanDecoder::new();
+    decoder
+        .decode(input)
         .map_err(|e| format!("Huffman decode error: {:?}", e))
 }
 

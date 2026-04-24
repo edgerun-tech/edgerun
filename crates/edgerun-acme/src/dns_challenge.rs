@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use edgerun_dns::zone::DnsZone;
 use edgerun_dns::record::DnsRecordType;
-use sha2::{Sha256, Digest};
+use edgerun_crypto::{Sha256, Digest};
 use edgerun_encoding::base64url_nopad_encode;
 
 use crate::account::AccountKey;

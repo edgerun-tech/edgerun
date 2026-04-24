@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut};
+use edgerun_encoding::buf::{Buf, BufMut};
 use std::{convert::TryInto, fmt, io::Cursor, num::TryFromIntError};
 
 use super::{

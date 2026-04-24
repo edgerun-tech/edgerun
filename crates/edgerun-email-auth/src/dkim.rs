@@ -5,7 +5,8 @@ use std::io;
 
 use crate::DnsQuery;
 use edgerun_encoding::base64;
-use sha2::{Digest, Sha256};
+use edgerun_crypto::sha2::{Sha256, Digest};
+use edgerun_crypto::rsa;
 
 /// Result of a DKIM verification.
 #[derive(Debug, Clone)]
@@ -205,7 +206,7 @@ pub async fn verify_signature<D: DnsQuery>(
     let rsa_key = RsaPublicKey::from_public_key_der(&public_key)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid RSA key: {}", e)))?;
 
-    let verifying_key = rsa::Pkcs1v15Sign::new::<sha2::Sha256>();
+    let verifying_key = edgerun_crypto::rsa::Pkcs1v15Sign::new::<Sha256>();
     rsa_key
         .verify(verifying_key, &hash, &sig.signature)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("signature verification failed: {}", e)))?;

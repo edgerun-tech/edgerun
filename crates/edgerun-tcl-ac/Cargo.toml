@@ -9,11 +9,9 @@ publish.workspace = true
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-bluetooth-gatt = { path = "../edgerun-bluetooth-gatt" }
 edgerun-matter = { path = "../edgerun-matter" }
+edgerun-crypto = { path = "../edgerun-crypto" }
 aes = "0.8"
 cbc = { version = "0.1", features = ["alloc"] }
-hkdf = "0.12"
-sha2 = "0.10"
-rand = "0.8"
 
 [lints]
 workspace = true

@@ -1,17 +1,11 @@
 use std::fmt;
 
-use bytes::{Buf, BufMut};
+use edgerun_encoding::buf::{Buf, BufMut};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
     Overflow,
     UnexpectedEnd,
-}
-
-impl From<bytes::TryGetError> for Error {
-    fn from(_: bytes::TryGetError) -> Self {
-        Error::UnexpectedEnd
-    }
 }
 
 impl std::fmt::Display for Error {
@@ -25,7 +19,7 @@ impl std::fmt::Display for Error {
 
 pub fn decode<B: Buf>(size: u8, buf: &mut B) -> Result<(u8, u64), Error> {
     assert!(size <= 8);
-    let mut first = buf.try_get_u8()?;
+    let mut first = buf.get_u8_result().map_err(|_| Error::UnexpectedEnd)?;
 
     // NOTE: following casts to u8 intend to trim the most significant bits, they are used as a
     //       workaround for shiftoverflow errors when size == 8.
@@ -41,7 +35,7 @@ pub fn decode<B: Buf>(size: u8, buf: &mut B) -> Result<(u8, u64), Error> {
     let mut value = mask as u64;
     let mut power = 0usize;
     loop {
-        let byte = buf.try_get_u8()? as u64;
+        let byte = buf.get_u8_result().map_err(|_| Error::UnexpectedEnd)? as u64;
         value += (byte & 127) << power;
         power += 7;
 

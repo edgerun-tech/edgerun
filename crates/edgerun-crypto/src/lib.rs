@@ -191,7 +191,7 @@ impl From<AeadCipher> for AesGcmCipher {
 }
 
 // Signature traits
-pub use signature::{Signer, Verifier};
+pub use signature::Signer;
 pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 
 // DER
@@ -362,6 +362,33 @@ pub fn aes256_gcm_decrypt(key: &[u8; 32], nonce: &[u8; 12], ciphertext_and_tag: 
     let cipher = Aes256Gcm::new_from_slice(key).expect("valid AES-256 key");
     let nonce = Nonce::from(*nonce);
     cipher.decrypt(&nonce, ciphertext_and_tag).map_err(|_| CryptoError::DecryptionFailed)
+}
+
+// ---------------------------------------------------------------------------
+// RSA-PSS convenience (for TLS handshake)
+// ---------------------------------------------------------------------------
+
+pub use rsa::signature::Verifier;
+
+/// Verify an RSA-PSS signature with SHA-256.
+///
+/// This is a convenience wrapper that handles the RSA math internally.
+pub fn rsa_pss_verify(n: &[u8], e: &[u8], signature: &[u8], msg_hash: &[u8]) -> Result<bool, CryptoError> {
+    use rsa::pkcs1v15::VerifyingKey;
+    use rsa::RsaPublicKey;
+    use rsa::pkcs1::DecodeRsaPublicKey;
+    use rsa::pkcs1v15::Signature as RsaSignature;
+
+    let pk = RsaPublicKey::new(
+        rsa::BigUint::from_bytes_be(n),
+        rsa::BigUint::from_bytes_be(e),
+    ).map_err(|_| CryptoError::InvalidKey)?;
+
+    let sig = RsaSignature::try_from(signature)
+        .map_err(|_| CryptoError::SignatureVerificationFailed)?;
+
+    let vk = VerifyingKey::<Sha256>::new(pk);
+    Ok(vk.verify(msg_hash, &sig).is_ok())
 }
 
 // ---------------------------------------------------------------------------

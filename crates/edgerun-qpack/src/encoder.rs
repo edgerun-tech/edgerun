@@ -1,6 +1,6 @@
 use std::{cmp, io::Cursor};
 
-use bytes::{Buf, BufMut};
+use edgerun_encoding::buf::{Buf, BufMut};
 
 use super::{
     HeaderField,

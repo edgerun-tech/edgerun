@@ -1,4 +1,4 @@
-use sha2::{Sha256, Digest};
+use edgerun_crypto::{Sha256, Digest};
 
 use edgerun_encoding::base64url_nopad_encode;
 

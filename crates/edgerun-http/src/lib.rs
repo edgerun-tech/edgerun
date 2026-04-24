@@ -114,6 +114,17 @@ pub mod middleware;
 pub use middleware::{Extensions, Middleware, Next, Chain, middleware_fn, FnMiddleware};
 
 // ---------------------------------------------------------------------------
+// Connection middleware system (gated by feature)
+// ---------------------------------------------------------------------------
+#[cfg(feature = "connection-middleware")]
+pub mod connection_middleware;
+#[cfg(feature = "connection-middleware")]
+pub use connection_middleware::{
+    ConnectionChain, ConnectionHandler, ConnectionMiddleware,
+    PassThroughHandler, MiddlewareAdapter,
+};
+
+// ---------------------------------------------------------------------------
 // Client middleware system
 // ---------------------------------------------------------------------------
 pub mod client_middleware;

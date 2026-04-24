@@ -246,7 +246,6 @@ impl CertificateValidator {
         use edgerun_crypto::rsa::RsaPublicKey;
         use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
         use edgerun_crypto::rsa::traits::PublicKeyParts;
-        use num_bigint::BigUint;
 
         // RSA SPKI OID: 1.2.840.113549.1.1.1
         // In DER: 0x06 0x09 0x2A 0x86 0x48 0x86 0xF7 0x0D 0x01 0x01 0x01
@@ -274,86 +273,17 @@ impl CertificateValidator {
             Err(_) => return false,
         };
 
-        let n = BigUint::from_bytes_be(&rsa_pk.n().to_bytes_be());
-        let e = BigUint::from_bytes_be(&rsa_pk.e().to_bytes_be());
-        let k = rsa_pk.n().bits().div_ceil(8);
-
-        // Verify RSA-PSS signature with SHA-256
-        let sig_int = BigUint::from_bytes_be(signature);
-
-        if sig_int >= n {
-            return false;
+        // Verify using edgerun-crypto's RSA-PSS verification
+        use edgerun_crypto::rsa_pss_verify;
+        match rsa_pss_verify(
+            &rsa_pk.n().to_bytes_be(),
+            &rsa_pk.e().to_bytes_be(),
+            signature,
+            transcript_hash,
+        ) {
+            Ok(result) => result,
+            Err(_) => false,
         }
-
-        // m = s^e mod n
-        let m = sig_int.modpow(&e, &n);
-        let m_bytes = m.to_bytes_be();
-
-        // Pad to k bytes
-        let mut em = vec![0u8; k];
-        let start = k - m_bytes.len();
-        em[start..].copy_from_slice(&m_bytes);
-
-        // Verify PSS padding (RFC 8017 §9.1.2)
-        Self::verify_pss_padding(&em, transcript_hash, k * 8)
-    }
-
-    /// Verify RSA-PSS padding (RFC 8017 §9.1.2).
-    fn verify_pss_padding(em: &[u8], msg_hash: &[u8], em_bits: usize) -> bool {
-        let em_len = em.len();
-        if em_len < 22 || em[em_len - 1] != 0xBC {
-            return false;
-        }
-
-        // SHA-256 hash length
-        let h_len = 32;
-        // Salt length (same as hash length for TLS)
-        let s_len = 32;
-
-        let masked_db = &em[..em_len - h_len - 1];
-        let hash = &em[em_len - h_len - s_len - 1..em_len - s_len - 1];
-        let salt = &em[em_len - s_len - 1..em_len - 1];
-
-        // Compute DBMask = MGF1(hash, emLen - hLen - 1)
-        let db_mask = Self::mgf1_sha256(hash, em_len - h_len - 1);
-
-        // Unmask DB
-        let mut db = vec![0u8; masked_db.len()];
-        for (i, (&a, &b)) in masked_db.iter().zip(db_mask.iter()).enumerate() {
-            db[i] = a ^ b;
-        }
-
-        // Clear top bits
-        let top_bits = 8 * em_len - em_bits;
-        if top_bits > 0 {
-            db[0] &= 0xFF >> top_bits;
-        }
-
-        // DB = PS || 0x01 || salt
-        // PS is all zeros
-        let ps_len = em_len - h_len - s_len - 2;
-        for i in 0..ps_len {
-            if db[i] != 0 {
-                return false;
-            }
-        }
-        if db[ps_len] != 0x01 {
-            return false;
-        }
-        let extracted_salt = &db[ps_len + 1..];
-        if extracted_salt != salt {
-            return false;
-        }
-
-        // Compute H' = Hash(8*0x00 || mHash || salt)
-        use edgerun_crypto::sha2::{Sha256, Digest};
-        let mut hasher = Sha256::new();
-        hasher.update([0u8; 8]);
-        hasher.update(msg_hash);
-        hasher.update(salt);
-        let h_prime = hasher.finalize();
-
-        h_prime.as_slice() == hash
     }
 
     /// MGF1 with SHA-256 (RFC 8017 Appendix B.2.1).

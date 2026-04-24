@@ -15,7 +15,6 @@ edgerun-dns.workspace = true
 edgerun-encoding.workspace = true
 edgerun-secret-service.workspace = true
 edgerun-url.workspace = true
-sha2 = { workspace = true }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 serde = { version = "1", features = ["derive"] }
 edgerun-error.workspace = true

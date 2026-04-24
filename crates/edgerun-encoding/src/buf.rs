@@ -39,6 +39,11 @@ pub trait Buf {
         }
     }
 
+    /// Read a single byte, returning an error if the buffer is empty.
+    fn get_u8_result(&mut self) -> Result<u8, ()> {
+        self.try_get_u8().ok_or(())
+    }
+
     /// Copy bytes from the buffer without advancing the read position.
     fn copy_to_bytes(&mut self, len: usize) -> alloc::vec::Vec<u8> {
         let bytes = self.chunk()[..len].to_vec();

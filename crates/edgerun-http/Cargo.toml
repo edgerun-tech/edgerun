@@ -12,6 +12,7 @@ categories = ["network-programming", "web-programming"]
 
 [features]
 default = []
+connection-middleware = []
 
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls" }
@@ -21,11 +22,8 @@ edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
 edgerun-encoding = { path = "../edgerun-encoding" }
 hpack-patched = { path = "crates/hpack-patched" }
-httlib-huffman = "0.3"
 flate2.workspace = true
 brotli.workspace = true
-sha2.workspace = true
-num-bigint.workspace = true
 edgerun-qpack = { path = "../edgerun-qpack" }
 
 [dev-dependencies]

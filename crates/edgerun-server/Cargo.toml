@@ -2,14 +2,14 @@
 name = "edgerun-server"
 version = "0.1.0"
 edition = "2024"
-description = "Unified multi-protocol server: HTTP/1.1, HTTP/2, HTTP/3, DNS, DHCP, TFTP"
+description = "Unified multi-protocol server: HTTP, SMTP, IMAP, LMTP, DNS, DHCP, TFTP, Proxy"
 
 [[bin]]
 name = "http-server"
 path = "src/bin/http-server.rs"
 
 [dependencies]
-edgerun-http = { path = "../edgerun-http" }
+edgerun-http = { path = "../edgerun-http", features = ["connection-middleware"] }
 edgerun-email = { path = "../edgerun-email", optional = true }
 edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }
 edgerun-dns = { path = "../edgerun-dns", optional = true }

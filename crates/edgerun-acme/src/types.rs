@@ -65,7 +65,7 @@ pub enum Jwk {
 
 impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
-        use sha2::{Sha256, Digest};
+        use edgerun_crypto::{Sha256, Digest};
         let jwk_json = edgerun_json::to_string(self).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());

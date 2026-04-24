@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::num::TryFromIntError;
 
-use bytes::{Buf, BufMut};
+use edgerun_encoding::buf::{Buf, BufMut};
 
 pub use self::bitwin::BitWindow;
 

@@ -10,9 +10,9 @@ use rsa::{
     signature::SignatureEncoding,
     RsaPrivateKey,
 };
-use edgerun_crypto::OsRng;
+use edgerun_crypto::{OsRng, Digest as CryptoDigest};
 use edgerun_encoding::base64;
-use sha2::{Digest, Sha256};
+use edgerun_crypto::sha2::Sha256;
 
 pub struct DkimSigner {
     selector: String,

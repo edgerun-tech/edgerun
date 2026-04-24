@@ -58,6 +58,7 @@ impl<T> Inner<T> {
     fn wake_receiver(&self) {
         let waker = self.recv_waker.swap(ptr::null_mut(), Ordering::AcqRel);
         if !waker.is_null() {
+            eprintln!("[wake_receiver] waking receiver");
             unsafe { (*waker).wake_by_ref() };
         }
     }
@@ -76,13 +77,16 @@ impl<T> Inner<T> {
                 if head == tail && next.is_null() {
                     return false;
                 }
-                
+
                 let new_head = if next.is_null() { tail } else { next };
                 
                 if self.waiters_head.compare_exchange(head, new_head, Ordering::AcqRel, Ordering::Acquire).is_ok() {
                     self.waiter_count.fetch_sub(1, Ordering::AcqRel);
                     if next.is_null() {
                         self.waiters_tail.store(head, Ordering::Release);
+                    }
+                    if new_head == head {
+                        self.waiters_tail.store(ptr::null_mut(), Ordering::Release);
                     }
                     (*head).slot_idx.store(slot_idx, Ordering::Release);
                     (*head).waker.wake_by_ref();

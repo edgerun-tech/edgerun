@@ -1,7 +1,10 @@
 //! Unified multi-protocol server.
 //!
-//! Supports HTTP/1.1, HTTP/2, HTTP/3, DNS, DHCP, and TFTP — all with
-//! shared graceful shutdown via [`CancellationToken`].
+//! Supports HTTP/1.1, HTTP/2, HTTP/3, DNS, DHCP, SMTP, IMAP, LMTP, TFTP, and Proxy
+//! — all with shared graceful shutdown via [`CancellationToken`].
+//!
+//! For HTTP types ([`Handler`], [`Request`], [`Response`], etc.), import from
+//! [`edgerun_http`] directly.
 //!
 //! # Example
 //! ```no_run
@@ -26,24 +29,22 @@
 //! server.run(shutdown).await
 //! # }
 //! ```
+//!
+//! [`edgerun_http`]: https://docs.rs/edgerun-http
 
 use edgerun_rt::CancellationToken;
 use std::sync::Arc;
 use std::time::Duration;
 
-// Re-export key types.
-pub use edgerun_http::handler::Handler;
-pub use edgerun_http::middleware::{Chain, Extensions, Middleware, Next, middleware_fn};
-pub use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
-pub use edgerun_http::{Request, Response, StatusCode};
-
-pub mod middleware;
-pub use middleware::{
-    ConnectionChain, ConnectionHandler, ConnectionMiddleware, NextConnection,
-    connection_fn, FnConnectionMiddleware, PassThroughHandler, MiddlewareAdapter,
-    ConnectionInterceptorAdapter,
-    IpFilter, ConnectionLogger, ConnectionRateLimit,
+use edgerun_http::handler::Handler;
+use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
+use edgerun_http::connection_middleware::{
+    ConnectionChain, ConnectionHandler, ConnectionMiddleware,
+    PassThroughHandler, MiddlewareAdapter,
 };
+
+pub mod connection_interceptor_adapter;
+use connection_interceptor_adapter::ConnectionInterceptorAdapter;
 
 // ---------------------------------------------------------------------------
 // Optional protocol configs (gated by feature flags)
@@ -493,14 +494,14 @@ impl Server {
         };
 
         // Build connection middleware chain
-        let connection_middleware = if self.connection_middleware.is_empty() {
-            Arc::new(PassThroughHandler) as Arc<dyn ConnectionHandler>
+        let connection_middleware: Arc<dyn ConnectionHandler> = if self.connection_middleware.is_empty() {
+            Arc::new(PassThroughHandler)
         } else {
             let chain = self.connection_middleware.into_iter().fold(
                 ConnectionChain::new(PassThroughHandler),
-                |chain, mw| chain.with(MiddlewareAdapter(mw)),
+                |chain, mw| chain.with(MiddlewareAdapter::new(mw)),
             );
-            Arc::new(chain.build()) as Arc<dyn ConnectionHandler>
+            chain.build()
         };
         let connection_interceptor = Arc::new(ConnectionInterceptorAdapter::new(
             Arc::clone(&connection_middleware),

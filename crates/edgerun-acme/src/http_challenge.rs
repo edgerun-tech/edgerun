@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use sha2::{Sha256, Digest};
+use edgerun_crypto::{Sha256, Digest};
 
 use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_encoding::base64url_nopad_encode;

@@ -164,6 +164,54 @@ impl HuffmanDecoder {
     }
 }
 
+/// Encode bytes using HPACK Huffman coding.
+///
+/// Returns the encoded bytes with proper padding.
+pub fn encode(input: &[u8]) -> Vec<u8> {
+    if input.is_empty() {
+        return Vec::new();
+    }
+    
+    let mut result = Vec::with_capacity(input.len());
+    let mut bits: u32 = 0;
+    let mut bit_count: u8 = 0;
+    
+    for &byte in input {
+        let code = HUFFMAN_CODE_TABLE[byte as usize];
+        bits = (bits << code.1) | code.0;
+        bit_count += code.1;
+        
+        while bit_count >= 8 {
+            bit_count -= 8;
+            let shift = 32 - bit_count;
+            result.push((bits >> shift) as u8);
+        }
+    }
+    
+    // Add EOS (256) and remaining bits
+    if bit_count > 0 {
+        let eos = HUFFMAN_CODE_TABLE[256];
+        bits = (bits << eos.1) | eos.0;
+        bit_count += eos.1;
+        
+        while bit_count >= 8 {
+            bit_count -= 8;
+            let shift = 32 - bit_count;
+            result.push((bits >> shift) as u8);
+        }
+        
+        // Padding: fill remaining bits with 1s, MSB first
+        if bit_count > 0 {
+            let padding_bits = 8 - bit_count;
+            let pad_mask = !((1u32 << padding_bits) - 1);
+            let last = ((bits << padding_bits) | (pad_mask & ((1 << padding_bits) - 1))) as u8;
+            result.push(last);
+        }
+    }
+    
+    result
+}
+
 /// A helper struct that represents an iterator over individual bits of all
 /// bytes found in a wrapped Iterator over bytes.
 /// Bits are represented as `bool`s, where `true` corresponds to a set bit and

@@ -5,10 +5,8 @@ use edgerun_bluetooth_gatt::{
     GattDescriptor, GattError, GattProperty, GattService, GattUuid, L2capSocket,
 };
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
-use hkdf::Hkdf;
-use sha2::{Sha256, Digest};
+use edgerun_crypto::{sha256, hkdf_sha256, OsRng, RngCore};
 use std::sync::{RwLock, Mutex};
-use rand::Rng;
 
 pub const TCL_SERVICE_UUID: &str = "0000f100-0000-1000-8000-00805f9b34fb";
 pub const TCL_WRITE_CHAR_UUID: &str = "0000ff01-0000-1000-8000-00805f9b34fb";
@@ -264,10 +262,10 @@ impl TclAcClient {
         combined[..32].copy_from_slice(local_random);
         combined[32..].copy_from_slice(remote_random);
 
-        let hk = Hkdf::<Sha256>::new(Some(BASE_KEY), &combined);
-        let mut okm = [0u8; 16];
-        hk.expand(&[], &mut okm).expect("HKDF expand failed");
-        okm
+        let okm = hkdf_sha256(Some(BASE_KEY), &combined, &[], 16);
+        let mut key = [0u8; 16];
+        key.copy_from_slice(&okm);
+        key
     }
 
     fn perform_key_exchange(&self) -> Result<(), CapabilityError> {
@@ -276,8 +274,8 @@ impl TclAcClient {
             guard.ok_or_else(|| CapabilityError::Provider("write characteristic not found".into()))?
         };
 
-        let mut rng = rand::thread_rng();
-        let local_random: [u8; 32] = rng.gen();
+        let mut local_random: [u8; 32] = [0; 32];
+        OsRng.fill_bytes(&mut local_random);
 
         let encrypted_random = self.encrypt_payload(&local_random);
         let send_data = self.build_protocol_packet(CMD_SEND_APP_RANDOM, &encrypted_random);
@@ -350,7 +348,7 @@ impl TclAcClient {
         packet[3] = (payload_len & 0xFF) as u8;
         packet[4..4+payload_len].copy_from_slice(payload);
 
-        let sha = sha2::Sha256::digest(payload);
+        let sha = sha256(payload);
         packet[4+payload_len..4+payload_len+32].copy_from_slice(&sha);
 
         let crc = Self::calculate_crc8(&packet[..total_len-1]);

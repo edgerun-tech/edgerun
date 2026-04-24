@@ -27,6 +27,8 @@ pub enum CryptoError {
     Io(std::io::Error),
     /// Cipher suite error.
     CipherSuiteError(String),
+    /// Signature verification failed.
+    SignatureVerificationFailed,
 }
 
 impl fmt::Display for CryptoError {
@@ -47,6 +49,7 @@ impl fmt::Display for CryptoError {
             CryptoError::KeyParseError(msg) => write!(f, "key parse error: {msg}"),
             CryptoError::Io(e) => write!(f, "I/O error: {e}"),
             CryptoError::CipherSuiteError(msg) => write!(f, "cipher suite error: {msg}"),
+            CryptoError::SignatureVerificationFailed => write!(f, "signature verification failed"),
         }
     }
 }

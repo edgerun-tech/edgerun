@@ -187,8 +187,7 @@ edgerun-gpu = { path = "crates/edgerun-gpu" }
 # Compression libraries for HTTP content-encoding
 flate2 = "1"
 brotli = "8"
-sha2 = "0.10"
-num-bigint = "0.4"
+sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
 prost = { version = "0.14", default-features = false, features = ["derive"] }
 prost-types = "0.14"
