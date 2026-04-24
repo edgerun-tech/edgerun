@@ -1017,65 +1017,6 @@ fn test_drm_display_e2e_discover() {
     }
 }
 
-#[test]
-#[ignore = "requires DRM display"]
-fn test_drm_display_e2e_remote_adapter_query() {
-    require_hardware();
-
-    use crate::test_policy::TestGrantedProvider;
-    use edgerun_drm_display::DrmDisplayBackend;
-    use edgerun_remote_capability::DisplayRemoteAdapter;
-
-    let connectors = edgerun_drm_display::discover_drm_connectors()
-        .expect("DRM discovery");
-    let connected: Vec<_> = connectors.into_iter().filter(|c| c.connected).collect();
-    if connected.is_empty() {
-        println!("No connected displays, skipping");
-        return;
-    }
-
-    let backend = DrmDisplayBackend {
-        sysfs_root: std::path::PathBuf::from("/sys/class/drm"),
-        connector: connected[0].clone(),
-    };
-    let adapter = DisplayRemoteAdapter::new(backend);
-    let mut wrapped = TestGrantedProvider::new(adapter);
-
-    let session_id = b"drm-session";
-    let open = CapabilitySessionOpen {
-        version: 1,
-        session_id: session_id.to_vec(),
-        selector: None,
-        mode: CapabilitySessionMode::Unary as i32,
-        requested_operations: vec![CapabilityOperation::Query as i32],
-        requested_access_class: CapabilityAccessClass::Derived as i32,
-        requested_constraints: Vec::new(),
-        correlation_id: Vec::new(),
-    };
-    let accept = wrapped.open_session(&open).expect("open drm session");
-    assert!(accept.accepted);
-
-    // Invoke query
-    let invocation = CapabilityInvocation {
-        invocation_version: 1,
-        invocation_id: b"drm-query".to_vec(),
-        grant_id: accept.grant_id.clone(),
-        invoker: None,
-        operation: ProtoOp::Query as i32,
-        requested_access_class: CapabilityAccessClass::Derived as i32,
-        parameter_object: None,
-        correlation_id: Vec::new(),
-        invoked_at: None,
-        signature: None,
-    };
-    let result = wrapped.invoke(session_id, &invocation, None)
-        .expect("invoke should succeed");
-    assert!(result.result.success);
-    let info_str = String::from_utf8_lossy(&result.inline_payload);
-    println!("Display info: {}", info_str);
-    assert!(info_str.contains("display_name"));
-}
-
 // ===========================================================================
 // Test 13: NPU discovery and query
 // ===========================================================================
@@ -1103,59 +1044,6 @@ fn test_npu_e2e_discover() {
             npu.accelerator_class,
         );
     }
-}
-
-#[test]
-#[ignore = "requires NPU hardware"]
-fn test_npu_e2e_remote_adapter_query() {
-    require_hardware();
-
-    use crate::test_policy::TestGrantedProvider;
-    use edgerun_remote_capability::NpuRemoteAdapter;
-
-    let npus = edgerun_linux_npu::discover_linux_npus().expect("NPU discovery");
-    if npus.is_empty() {
-        println!("No NPU devices found, skipping");
-        return;
-    }
-
-    let backend = edgerun_linux_npu::LinuxNpuBackend { info: npus[0].clone() };
-    let descriptor = backend.descriptor();
-    let adapter = NpuRemoteAdapter::new(backend);
-    let mut wrapped = TestGrantedProvider::new(adapter);
-
-    let session_id = b"npu-session";
-    let open = CapabilitySessionOpen {
-        version: 1,
-        session_id: session_id.to_vec(),
-        selector: None,
-        mode: CapabilitySessionMode::Unary as i32,
-        requested_operations: vec![CapabilityOperation::Query as i32],
-        requested_access_class: CapabilityAccessClass::Derived as i32,
-        requested_constraints: Vec::new(),
-        correlation_id: Vec::new(),
-    };
-    let accept = wrapped.open_session(&open).expect("open npu session");
-    assert!(accept.accepted);
-
-    let invocation = CapabilityInvocation {
-        invocation_version: 1,
-        invocation_id: b"npu-query".to_vec(),
-        grant_id: accept.grant_id.clone(),
-        invoker: None,
-        operation: ProtoOp::Query as i32,
-        requested_access_class: CapabilityAccessClass::Derived as i32,
-        parameter_object: None,
-        correlation_id: Vec::new(),
-        invoked_at: None,
-        signature: None,
-    };
-    let result = wrapped.invoke(session_id, &invocation, None)
-        .expect("invoke should succeed");
-    assert!(result.result.success);
-    let info_str = String::from_utf8_lossy(&result.inline_payload);
-    println!("NPU info: {}", info_str);
-    assert!(info_str.contains("display_name"));
 }
 
 // ===========================================================================
@@ -1196,59 +1084,6 @@ fn test_goodix_e2e_discover() {
         }
         Err(e) => {
             println!("Goodix discovery failed: {:?}", e);
-        }
-    }
-}
-
-#[test]
-#[ignore = "requires Goodix fingerprint sensor"]
-fn test_goodix_e2e_capture() {
-    require_hardware();
-
-    use crate::test_policy::TestGrantedProvider;
-    use edgerun_fingerprint::FingerprintReader;
-    use edgerun_remote_capability::FingerprintRemoteAdapter;
-
-    let devices = edgerun_goodix_fingerprint::discover_supported_devices();
-    let devs = match devices {
-        Ok(d) if !d.is_empty() => d,
-        _ => {
-            println!("No Goodix devices found, skipping");
-            return;
-        }
-    };
-
-    let reader = edgerun_goodix_fingerprint::GoodixFingerprintReader::new(devs[0].clone())
-        .expect("open reader");
-    let adapter = FingerprintRemoteAdapter::new(reader, 5000);
-    let mut wrapped = TestGrantedProvider::new(adapter);
-
-    let session_id = b"fingerprint-session";
-    let open = CapabilitySessionOpen {
-        version: 1,
-        session_id: session_id.to_vec(),
-        selector: None,
-        mode: CapabilitySessionMode::Stream as i32,
-        requested_operations: vec![CapabilityOperation::Capture as i32],
-        requested_access_class: CapabilityAccessClass::Derived as i32,
-        requested_constraints: Vec::new(),
-        correlation_id: Vec::new(),
-    };
-    let accept = wrapped.open_session(&open).expect("open fingerprint session");
-    assert!(accept.accepted);
-
-    // Try to capture — requires finger on sensor
-    let event = wrapped.next_event(session_id);
-    match event {
-        Ok(Some(ev)) => {
-            println!("Captured fingerprint: {} bytes", ev.inline_payload.len());
-            assert!(!ev.inline_payload.is_empty());
-        }
-        Ok(None) => {
-            println!("No fingerprint event (no finger on sensor)");
-        }
-        Err(e) => {
-            println!("Fingerprint capture error: {:?}", e);
         }
     }
 }

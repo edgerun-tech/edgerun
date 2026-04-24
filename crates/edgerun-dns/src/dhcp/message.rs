@@ -1077,17 +1077,20 @@ mod tests {
     fn test_offer_roundtrip() {
         let mac = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
         let server = Ipv4Addr::new(192, 168, 1, 1);
+        let net = NetworkConfig {
+            server_id: server,
+            subnet_mask: Ipv4Addr::new(255, 255, 255, 0),
+            router: server,
+            dns_servers: vec![Ipv4Addr::new(8, 8, 8, 8)],
+            lease_time: 86400,
+            tftp_server: Some("192.168.1.1".to_string()),
+            bootfile: Some("bootx64.efi".to_string()),
+        };
         let msg = DhcpMessage::offer(
             0x12345678,
             mac,
             Ipv4Addr::new(192, 168, 1, 100),
-            server,
-            Ipv4Addr::new(255, 255, 255, 0),
-            Ipv4Addr::new(192, 168, 1, 1),
-            vec![Ipv4Addr::new(8, 8, 8, 8)],
-            86400,
-            Some("192.168.1.1".to_string()),
-            Some("bootx64.efi".to_string()),
+            net,
         );
         let wire = msg.to_wire();
         let parsed = DhcpMessage::from_wire(&wire).unwrap();

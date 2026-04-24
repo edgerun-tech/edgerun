@@ -906,17 +906,20 @@ mod tests {
     #[test]
     fn test_ack_roundtrip() {
         let mac = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+        let net = NetworkConfig {
+            server_id: Ipv4Addr::new(10, 0, 0, 1),
+            subnet_mask: Ipv4Addr::new(255, 0, 0, 0),
+            router: Ipv4Addr::new(10, 0, 0, 1),
+            dns_servers: vec![Ipv4Addr::new(1, 1, 1, 1)],
+            lease_time: 3600,
+            tftp_server: Some("10.0.0.1".to_string()),
+            bootfile: Some("bootx64.efi".to_string()),
+        };
         let msg = DhcpMessage::ack(
             0xabcdef00,
             mac,
             Ipv4Addr::new(10, 0, 0, 50),
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(255, 0, 0, 0),
-            Ipv4Addr::new(10, 0, 0, 1),
-            vec![Ipv4Addr::new(1, 1, 1, 1)],
-            3600,
-            Some("10.0.0.1".to_string()),
-            Some("bootx64.efi".to_string()),
+            net,
         );
         let wire = msg.to_wire();
         let parsed = DhcpMessage::from_wire(&wire).unwrap();

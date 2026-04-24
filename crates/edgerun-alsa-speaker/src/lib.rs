@@ -753,6 +753,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires ALSA hardware"]
     fn speaker_info_descriptor_is_playback() {
         let backend = AlsaSpeakerBackend {
             card_index: 0,

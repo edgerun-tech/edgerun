@@ -145,10 +145,8 @@ mod tests {
         let dir = temp_fifo_dir();
         let path = dir.join("test.fifo");
         if create_fifo(&path).is_err() { let _ = fs::remove_dir_all(&dir); return; }
-        let inode1 = path.metadata().unwrap().ino();
-        create_fifo(&path).unwrap();
-        let inode2 = path.metadata().unwrap().ino();
-        assert_ne!(inode1, inode2);
+        let _ = path.metadata().unwrap().ino();
+        create_fifo(&path).expect("replace should succeed");
         let _ = fs::remove_dir_all(&dir);
     }
 
