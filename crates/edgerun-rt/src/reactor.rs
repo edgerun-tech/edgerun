@@ -215,13 +215,16 @@ impl FdInterest {
             let _ = epoll.ctl(libc::EPOLL_CTL_MOD, fd, &mut ev);
             true
         } else {
-            // No wakers — keep the fd in the map and epoll with 0 events.
-            // We don't deregister to avoid races: a concurrent wait_read/write
-            // may already hold an Arc<FdInterest> and will call set_and_update
-            // next. If we DEL here, their MOD will fail with ENOENT.
-            // The fd stays in epoll with 0 events — harmless overhead.
+            // No waiters - but we can't DEL here due to the race mentioned above.
+            // Keep the fd registered with EPOLLIN|EPOLLOUT (always ready) which is safe.
+            // This prevents stalls when events arrive before new waiters register.
             drop(state);
-            false
+            let mut ev = libc::epoll_event {
+                events: (libc::EPOLLIN | libc::EPOLLOUT) as _,
+                u64: fd as u64,
+            };
+            let _ = epoll.ctl(libc::EPOLL_CTL_MOD, fd, &mut ev);
+            true
         }
     }
 
@@ -318,17 +321,20 @@ impl Reactor {
 
     pub(crate) fn get_or_register_fd(&self, fd: RawFd) -> std::sync::Arc<FdInterest> {
         let mut map = self.fds.lock();
-        map.entry(fd)
-            .or_insert_with(|| {
-                let s = std::sync::Arc::new(FdInterest::new());
-                let mut ev = libc::epoll_event { events: 0, u64: fd as u64 };
-                // If ADD fails (e.g. fd already in epoll), that's OK —
-                // the fd is already registered, and subsequent MOD calls
-                // will work correctly.
-                let _ = self.epoll.ctl(libc::EPOLL_CTL_ADD, fd, &mut ev);
-                s
-            })
-            .clone()
+        if let Some(interest) = map.get(&fd) {
+            return interest.clone();
+        }
+        // Register immediately with both read+write interest to avoid missing the first event.
+        // The wakers will start as None, so no tasks will wake until wait_read/wait_write sets them.
+        // Using level-triggered (no EPOLLET) ensures we get notified if data is already available.
+        let s = std::sync::Arc::new(FdInterest::new());
+        let mut ev = libc::epoll_event {
+            events: (libc::EPOLLIN | libc::EPOLLOUT) as _,
+            u64: fd as u64,
+        };
+        let _ = self.epoll.ctl(libc::EPOLL_CTL_ADD, fd, &mut ev);
+        map.insert(fd, s.clone());
+        s
     }
 
     pub(crate) fn deregister_fd(&self, fd: RawFd) {
