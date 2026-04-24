@@ -1,7 +1,7 @@
 //! HTTP server for the editor. Single POST /edit endpoint.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use edgerun_http::{
@@ -470,7 +470,7 @@ fn ensure_in_cache<'a>(
     file: &Path,
 ) -> Result<&'a mut syn::File, String> {
     use std::collections::hash_map::Entry;
-    match cache.entry(file.clone()) {
+    match cache.entry(file.to_path_buf()) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
             let parsed = edit_ops::parse_file(file)?;

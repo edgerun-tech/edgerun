@@ -15,7 +15,7 @@
 //! edgerun-mailq mailbox add-user <root> <user> <domains...> — Register a user
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use edgerun_email::smtp::relay::queue::{MailIndex, MailStatus, RecipientStatusType};
 use edgerun_email::smtp::server::{MaildirStore, MailboxStats};

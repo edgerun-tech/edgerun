@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use edgerun_storage::{BlobStore, BlobKeySource, BlobStoreConfig, FileIndex};
 

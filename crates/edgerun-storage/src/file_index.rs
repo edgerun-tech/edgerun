@@ -239,7 +239,7 @@ impl FileIndex {
             revocations: RwLock::new(HashMap::new()),
             credentials: RwLock::new(HashMap::new()),
             work_accounting: RwLock::new(Vec::new()),
-            data_root: data_root.clone(),
+            data_root: data_root.to_path_buf(),
         };
 
         index.load()?;
