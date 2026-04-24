@@ -1,8 +1,7 @@
-use thiserror::Error;
+use edgerun_error::Error;
 
 #[derive(Error, Debug)]
 pub enum SigningError {
-    #[error("Signing failed: {0}")]
     Failed(String),
 }
 

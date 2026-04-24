@@ -1,6 +1,7 @@
-use edgerun_rt::RwLock;
+use edgerun_rt::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderMetrics {

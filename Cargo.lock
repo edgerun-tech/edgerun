@@ -112,7 +112,7 @@ dependencies = [
  "nom",
  "num-traits",
  "rusticata-macros",
- "thiserror 2.0.18",
+ "thiserror",
  "time",
 ]
 
@@ -873,7 +873,6 @@ dependencies = [
  "edgerun-url",
  "serde",
  "sha2",
- "thiserror 1.0.69",
  "time",
 ]
 
@@ -1475,7 +1474,7 @@ dependencies = [
  "edgerun-rt",
  "edgerun-solana",
  "mockall",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -1787,9 +1786,11 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "edgerun-config",
+ "edgerun-error",
  "edgerun-mesh",
  "edgerun-rt",
  "edgerun-solana",
+ "serde",
 ]
 
 [[package]]
@@ -2521,7 +2522,7 @@ dependencies = [
  "jni-sys 0.4.1",
  "log 0.4.29",
  "simd_cesu8",
- "thiserror 2.0.18",
+ "thiserror",
  "walkdir",
  "windows-link",
 ]
@@ -3713,31 +3714,11 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "thiserror"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
-dependencies = [
- "thiserror-impl 1.0.69",
-]
-
-[[package]]
-name = "thiserror"
 version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.18",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "thiserror-impl",
 ]
 
 [[package]]
@@ -4257,7 +4238,7 @@ dependencies = [
  "oid-registry",
  "ring",
  "rusticata-macros",
- "thiserror 2.0.18",
+ "thiserror",
  "time",
 ]
 

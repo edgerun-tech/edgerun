@@ -254,10 +254,7 @@ impl ConfigState {
 
 #[derive(Debug, Clone, edgerun_error::Error)]
 pub enum ConfigError {
-    #[error("config file is empty")]
     EmptyFile,
-    #[error("parse error: {0}")]
     ParseError(String),
-    #[error("validation error: {0}")]
     ValidationError(String),
 }

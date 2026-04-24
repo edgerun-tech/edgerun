@@ -177,7 +177,6 @@ edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json
 edgerun-json = { path = "crates/edgerun-json", features = ["serde"] }
 edgerun-error = { path = "crates/edgerun-error" }
-thiserror = "1"
 serde = { version = "1", features = ["derive"] }
 # Browser deps
 edgerun-display = { path = "crates/edgerun-display" }
