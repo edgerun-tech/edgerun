@@ -10,13 +10,16 @@ edgerun-rt.workspace = true
 edgerun-log.workspace = true
 edgerun-crypto.workspace = true
 edgerun-http.workspace = true
+edgerun-json.workspace = true
 edgerun-dns.workspace = true
 edgerun-encoding.workspace = true
+edgerun-secret-service.workspace = true
 sha2 = { workspace = true }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 serde = { version = "1", features = ["derive"] }
 url = { version = "2", features = ["serde"] }
-thiserror = "2"
+edgerun-error.workspace = true
+thiserror.workspace = true
 log = "0.4"
 
 [dev-dependencies]

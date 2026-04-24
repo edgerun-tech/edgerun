@@ -351,9 +351,7 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
 /// Import errors.
 #[derive(Debug, Clone, edgerun_error::Error)]
 pub enum ImportError {
-    #[error("no config could be extracted from the import")]
     EmptyConfig,
-    #[error("invalid value: {0}")]
     InvalidValue(String),
 }
 

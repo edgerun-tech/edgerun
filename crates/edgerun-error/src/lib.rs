@@ -19,31 +19,19 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
         _ => panic!("Error derive only works on enums"),
     };
     
-    let mut match_arms = Vec::new();
+    let mut cases = Vec::new();
     
     for variant in variants.iter() {
         let variant_ident = &variant.ident;
-        let discriminant = variant.discriminant.as_ref()
-            .map(|(eq, d)| quote!(#eq #d))
-            .unwrap_or_default();
-        
-        // Simple: just use variant name as message
-        let format_str = variant_ident.to_string();
         
         match &variant.fields {
             Fields::Unit => {
-                match_arms.push(quote! {
-                    #ident::#variant_ident #discriminant => write!(f, #format_str),
-                });
+                cases.push(quote! { Self::#variant_ident => write!(f, "{}", stringify!(#variant_ident)) });
             }
-            Fields::Unnamed(unnamed) if unnamed.unnamed.len() == 1 => {
-                match_arms.push(quote! {
-                    #ident::#variant_ident #discriminant(ref __inner) => write!(f, #format_str, __inner),
-                });
+            Fields::Unnamed(u) if u.unnamed.len() == 1 => {
+                cases.push(quote! { Self::#variant_ident(ref e) => write!(f, "{}: {}", stringify!(#variant_ident), e) });
             }
-            _ => {
-                panic!("Error derive: variant must have 0 or 1 fields");
-            }
+            _ => {}
         }
     }
     
@@ -51,7 +39,7 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
         impl #impl_generics ::core::fmt::Display for #ident #ty_generics #where_clause {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 match self {
-                    #(#match_arms)*
+                    #(#cases),*
                 }
             }
         }

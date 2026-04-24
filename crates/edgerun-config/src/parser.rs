@@ -1,10 +1,9 @@
 //! Config file parser — reads YAML and produces typed config resources.
 
 use crate::types::ConfigResource;
-use edgerun_json::Deserialize;
 use edgerun_json::yaml::{YamlValue, YamlDeserializer};
 
-#[derive(Debug, Clone, edgerun_json::Deserialize)]
+#[derive(Debug, Clone)]
 struct RawDoc {
     kind: String,
     spec: YamlValue,
