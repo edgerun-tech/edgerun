@@ -1474,7 +1474,6 @@ dependencies = [
  "edgerun-rt",
  "edgerun-solana",
  "mockall",
- "thiserror",
 ]
 
 [[package]]

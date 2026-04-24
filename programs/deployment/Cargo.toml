@@ -8,7 +8,6 @@ exclude = ["../"]
 
 [dependencies]
 solana-program = "4.0"
-thiserror = "2.0"
 borsh = "1.6"
 
 [lib]

@@ -3,6 +3,8 @@
 //!
 //! Run: cargo test --test api_parity_probe -- --nocapture
 
+#![cfg(feature = "std")]
+
 use edgerun_json as lg;
 use std::collections::BTreeSet;
 use std::fs;
@@ -16,12 +18,12 @@ fn extract_public_items(source_dir: &Path) -> BTreeSet<(String, String)> {
         return items;
     }
 
-    fn walk_dir(dir: &Path, items: &mut BTreeSet<(String, String)>) {
+    fn walk_dir(dir: &Path, items: &mut BTreeSet<(String, String)>, source_dir: &Path) {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
-                    walk_dir(&path, items);
+                    walk_dir(&path, items, source_dir);
                 } else if path.extension().is_some_and(|ext| ext == "rs") {
                     if let Ok(content) = fs::read_to_string(&path) {
                         let module = path
@@ -100,7 +102,7 @@ fn extract_public_items(source_dir: &Path) -> BTreeSet<(String, String)> {
         }
     }
 
-    walk_dir(source_dir, &mut items);
+    walk_dir(source_dir, &mut items, source_dir);
 
     items
 }

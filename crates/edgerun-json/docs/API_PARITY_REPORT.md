@@ -7,7 +7,7 @@
 ## Summary
 
 - **serde_json top-level items found**: 144
-- **edgerun-json top-level items found**: 187
+- **edgerun-json top-level items found**: 217
 - **Core API items tracked**: 22
 
 - **Present in edgerun-json**: 3 / 4 (75.0%)
@@ -225,11 +225,14 @@
 - `as_f64`
 - `as_i128`
 - `as_i64`
+- `as_mapping`
 - `as_null`
 - `as_number`
 - `as_object`
 - `as_object_mut`
+- `as_sequence`
 - `as_str`
+- `as_table`
 - `as_u128`
 - `as_u64`
 - `build_object_index`
@@ -250,8 +253,12 @@
 - `from_str`
 - `from_str<T>`
 - `from_string`
+- `from_toml_str`
+- `from_toml_str_typed<T>`
 - `from_u128`
 - `from_value<T>`
+- `from_yaml_str`
+- `from_yaml_str_typed<T>`
 - `get`
 - `get<'a>`
 - `get<I>`
@@ -272,23 +279,30 @@
 - `io`
 - `io_error_kind`
 - `is_array`
+- `is_bool`
 - `is_boolean`
 - `is_data`
 - `is_empty`
 - `is_eof`
 - `is_f64`
+- `is_float`
 - `is_i64`
+- `is_integer`
 - `is_io`
+- `is_mapping`
 - `is_null`
 - `is_number`
 - `is_object`
 - `is_string`
 - `is_syntax`
+- `is_table`
 - `is_u64`
 - `iter`
 - `iter_mut`
 - `json_error_to_serde`
 - `json_parse_error_to_serde`
+- `json_to_toml`
+- `json_to_yaml`
 - `keys`
 - `kind`
 - `len`
@@ -302,8 +316,10 @@
 - `parse_json_borrowed`
 - `parse_json_tape`
 - `parse_tape_value`
+- `parse_toml_value`
 - `parse_value`
 - `parse_value_borrowed`
+- `parse_yaml_value`
 - `pointer`
 - `pointer_mut`
 - `push_field`
@@ -326,6 +342,8 @@
 - `to_string<T>`
 - `to_string_pretty`
 - `to_string_pretty<T>`
+- `to_toml_string`
+- `to_toml_string_typed<T>`
 - `to_value<T>`
 - `to_vec`
 - `to_vec<T: Serialize + ?Sized>`
@@ -336,6 +354,9 @@
 - `to_writer<W: Write>`
 - `to_writer_pretty<T, W>`
 - `to_writer_pretty<W: Write>`
+- `to_yaml_string`
+- `to_yaml_string_typed<T>`
+- `toml_to_json`
 - `try_push_field`
 - `try_push_item`
 - `values`
@@ -351,6 +372,7 @@
 - `write_json_value`
 - `write_json_value_pretty`
 - `write_row_json_bytes<'a, I>`
+- `yaml_to_json`
 
 ### Types
 
@@ -362,6 +384,10 @@
 - `JsonValue` (enum)
 - `JsonValueError` (enum)
 - `TapeTokenKind` (enum)
+- `TomlError` (enum)
+- `TomlValue` (enum)
+- `YamlError` (enum)
+- `YamlValue` (enum)
 - `BorrowedRawDeserializer` (struct)
 - `BoxedFromString;` (struct)
 - `CompiledObjectSchema` (struct)
@@ -389,9 +415,11 @@
 - `StreamingStructSerializer` (struct)
 - `StreamingStructVariantSerializer` (struct)
 - `StreamingTupleVariantSerializer` (struct)
+- `TaggedYamlValue` (struct)
 - `TapeObjectIndex` (struct)
 - `TapeToken` (struct)
 - `TapeValue` (struct)
+- `YamlDeserializer` (struct)
 - `Number` (type)
 - `Result<T,` (type)
 - `Value` (type)

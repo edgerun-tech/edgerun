@@ -1134,7 +1134,7 @@ mod tests {
         let resp = server.handle_device_code("");
         assert_eq!(resp.status().as_u16(), 400);
         let body = resp.body_as_string().unwrap();
-        let json: JsonValue = from_str(body).unwrap();
+        let json: JsonValue = from_str(&body).unwrap();
         assert_eq!(json.get("error").and_then(|v| v.as_str()), Some("invalid_request"));
     }
 
@@ -1150,7 +1150,7 @@ mod tests {
         let resp = server.handle_device_code(&body);
         assert_eq!(resp.status().as_u16(), 200);
 
-        let json: JsonValue = from_str(resp.body_as_string().unwrap()).unwrap();
+        let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         assert!(json.get("device_code").is_some());
         assert!(json.get("user_code").is_some());
         assert!(json.get("verification_uri").is_some());
@@ -1181,7 +1181,7 @@ mod tests {
         let resp = server.discovery_response();
         assert_eq!(resp.status().as_u16(), 200);
 
-        let json: JsonValue = from_str(resp.body_as_string().unwrap()).unwrap();
+        let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         assert_eq!(json.get("issuer").and_then(|v| v.as_str()), Some("https://auth.example.com"));
         assert!(json.get("authorization_endpoint").is_some());
         assert!(json.get("token_endpoint").is_some());
@@ -1196,7 +1196,7 @@ mod tests {
         let resp = server.jwks_response();
         assert_eq!(resp.status().as_u16(), 200);
 
-        let json: JsonValue = from_str(resp.body_as_string().unwrap()).unwrap();
+        let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         let keys = json.get("keys").and_then(|v| v.as_array()).unwrap();
         assert_eq!(keys.len(), 1);
         let key = &keys[0];
@@ -1230,7 +1230,7 @@ mod tests {
         let resp = server.handle_introspect(body);
         assert_eq!(resp.status().as_u16(), 200);
 
-        let json: JsonValue = from_str(resp.body_as_string().unwrap()).unwrap();
+        let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         assert_eq!(json.get("active").and_then(|v| v.as_bool()), Some(true));
         assert_eq!(json.get("client_id").and_then(|v| v.as_str()), Some(client.client_id.as_str()));
         assert_eq!(json.get("sub").and_then(|v| v.as_str()), Some("user-1"));
@@ -1243,7 +1243,7 @@ mod tests {
         let resp = server.handle_introspect(body);
         assert_eq!(resp.status().as_u16(), 200);
 
-        let json: JsonValue = from_str(resp.body_as_string().unwrap()).unwrap();
+        let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         assert_eq!(json.get("active").and_then(|v| v.as_bool()), Some(false));
     }
 
@@ -1284,7 +1284,7 @@ mod tests {
         let resp = server.handle_userinfo(Some("Bearer valid-token"));
         assert_eq!(resp.status().as_u16(), 200);
 
-        let json: JsonValue = from_str(resp.body_as_string().unwrap()).unwrap();
+        let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         assert_eq!(json.get("sub").and_then(|v| v.as_str()), Some("user-123"));
         assert_eq!(json.get("scope").and_then(|v| v.as_str()), Some("openid email"));
         assert_eq!(json.get("iss").and_then(|v| v.as_str()), Some("https://auth.example.com"));

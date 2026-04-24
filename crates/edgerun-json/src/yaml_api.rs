@@ -35,7 +35,6 @@ impl PartialEq for YamlValue {
             (YamlValue::String(a), YamlValue::String(b)) => a == b,
             (YamlValue::Array(a), YamlValue::Array(b)) => a == b,
             (YamlValue::Mapping(a), YamlValue::Mapping(b)) => {
-                // Compare mappings by iterating both and checking equality
                 if a.len() != b.len() {
                     return false;
                 }
@@ -51,6 +50,22 @@ impl PartialEq for YamlValue {
             (YamlValue::Tagged(a), YamlValue::Tagged(b)) => a == b,
             _ => false,
         }
+    }
+}
+
+impl core::ops::Index<usize> for YamlValue {
+    type Output = YamlValue;
+    fn index(&self, index: usize) -> &YamlValue {
+        self.as_sequence()
+            .and_then(|arr| arr.get(index))
+            .unwrap_or(&YamlValue::Null)
+    }
+}
+
+impl core::ops::Index<&str> for YamlValue {
+    type Output = YamlValue;
+    fn index(&self, key: &str) -> &YamlValue {
+        self.get(key).unwrap_or(&YamlValue::Null)
     }
 }
 
@@ -118,6 +133,13 @@ impl YamlValue {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             YamlValue::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            YamlValue::Number(n) => n.as_i64(),
             _ => None,
         }
     }

@@ -126,6 +126,10 @@ mod tests {
     use super::*;
     #[cfg(not(feature = "std"))]
     use alloc::vec;
+    #[cfg(not(feature = "std"))]
+    use alloc::string::ToString;
+    #[cfg(not(feature = "std"))]
+    use alloc::borrow::ToOwned;
     use std::borrow::Cow;
 
     #[test]
