@@ -261,6 +261,9 @@ impl QuicConnection {
     /// Send a CRYPTO frame in an Initial packet (unprotected header + encrypted payload).
     async fn send_initial_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
+        eprintln!("DEBUG CLIENT: CRYPTO frame payload[:20]={:02x?}", &payload[..payload.len().min(20)]);
+        eprintln!("DEBUG CLIENT: frame_type=0x{:02x}", payload.first().copied().unwrap_or(0));
+        
         let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
 
         let pkt = QuicPacket::initial(
@@ -290,8 +293,14 @@ impl QuicConnection {
             return Err("No Initial protection keys".into());
         };
 
+        eprintln!("DEBUG CLIENT: aad[:20]={:02x?}", &aad[..aad.len().min(20)]);
+        eprintln!("DEBUG CLIENT: encrypted[:20]={:02x?}", &encrypted[..encrypted.len().min(20)]);
+        eprintln!("DEBUG CLIENT: send_bytes[:20]={:02x?}", &send_bytes[..send_bytes.len().min(20)]);
+
         let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
+        
+        eprintln!("DEBUG CLIENT: full[:30]={:02x?}", &full_packet[..full_packet.len().min(30)]);
 
         let addr: SocketAddr = self.server_addr.parse()
             .map_err(|e| format!("Invalid server address: {}", e))?;

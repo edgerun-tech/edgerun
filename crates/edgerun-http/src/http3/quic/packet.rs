@@ -16,26 +16,29 @@ pub enum PacketType {
 }
 
 impl PacketType {
-    /// Encode to byte value
+    /// Encode to byte value (RFC 9000 §17.2 long header format)
     pub fn to_byte(self) -> u8 {
         match self {
-            PacketType::Initial => 0x00,
-            PacketType::ZeroRtt => 0x10,
-            PacketType::Handshake => 0x20,
-            PacketType::Retry => 0x30,
+            PacketType::Initial => 0xC0,
+            PacketType::ZeroRtt => 0xD0,
+            PacketType::Handshake => 0xE0,
+            PacketType::Retry => 0xF0,
             PacketType::OneRtt => 0x40,
         }
     }
 
     /// Decode from byte value
     pub fn from_byte(byte: u8) -> Option<Self> {
-        match byte & 0xF0 {
-            0x00 => Some(PacketType::Initial),
-            0x10 => Some(PacketType::ZeroRtt),
-            0x20 => Some(PacketType::Handshake),
-            0x30 => Some(PacketType::Retry),
-            0x40..=0xFF => Some(PacketType::OneRtt),
-            _ => None,
+        if byte & 0x80 != 0 {
+            match (byte >> 4) & 0x03 {
+                0x0 => Some(PacketType::Initial),
+                0x1 => Some(PacketType::ZeroRtt),
+                0x2 => Some(PacketType::Handshake),
+                0x3 => Some(PacketType::Retry),
+                _ => None,
+            }
+        } else {
+            Some(PacketType::OneRtt)
         }
     }
 }
@@ -489,6 +492,6 @@ mod tests {
         ];
         
         let offset = get_long_header_payload_offset(&packet).unwrap();
-        assert_eq!(offset, 28);
+        assert_eq!(offset, 29);
     }
 }
