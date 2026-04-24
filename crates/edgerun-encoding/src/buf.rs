@@ -5,6 +5,17 @@
 
 use alloc::vec::Vec;
 
+#[derive(Debug)]
+pub struct BufferError;
+
+impl core::fmt::Display for BufferError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "buffer underflow")
+    }
+}
+
+impl core::error::Error for BufferError {}
+
 /// Trait for reading bytes from a buffer.
 ///
 /// Compatible with `bytes::Buf`.
@@ -40,8 +51,8 @@ pub trait Buf {
     }
 
     /// Read a single byte, returning an error if the buffer is empty.
-    fn get_u8_result(&mut self) -> Result<u8, ()> {
-        self.try_get_u8().ok_or(())
+    fn get_u8_result(&mut self) -> Result<u8, BufferError> {
+        self.try_get_u8().ok_or(BufferError)
     }
 
     /// Copy bytes from the buffer without advancing the read position.
