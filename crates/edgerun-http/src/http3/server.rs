@@ -44,7 +44,7 @@ use std::sync::Arc;
 use super::connection::Http3Connection;
 use super::quic::QuicTlsServerHandshaker;
 use super::quic::crypto::PacketProtection;
-use super::quic::packet::{QuicPacket, PacketType};
+use super::quic::packet::{QuicPacket, PacketType, get_long_header_payload_offset};
 use super::quic::frame::QuicFrame;
 use super::quic::QuicConnection;
 use super::quic::ConnectionId;
@@ -199,39 +199,74 @@ impl Http3Server {
         data: &[u8],
         client_addr: SocketAddr,
     ) -> Result<(Http3Connection, SocketAddr), String> {
-        // Parse the QUIC packet
-        let (pkt, _) = QuicPacket::from_bytes(data)
-            .map_err(|e| format!("Packet parse error: {}", e))?;
-
-        if pkt.header.packet_type != PacketType::Initial {
-            return Err(format!("Expected Initial packet, got {:?}", pkt.header.packet_type));
+        if data.len() < 25 {
+            return Err("Packet too short".to_string());
         }
+
+        let first_byte = data[0];
+        eprintln!("DEBUG: first={:02x} data[:20]={:02x?}", first_byte, &data[..20]);
+
+        // Use reusable function to split AAD from encrypted payload
+        let (aad, encrypted_payload) = match get_long_header_payload_offset(data) {
+            Ok(offset) => (data[..offset].to_vec(), data[offset..].to_vec()),
+            Err(e) => return Err(format!("Get payload offset failed: {}", e)),
+        };
+
+        eprintln!("DEBUG: aad_len={}, encrypted_len={}", aad.len(), encrypted_payload.len());
+
+        // Extract CIDs from AAD
+        let dst_cid_len = aad[5] as usize;
+        let dst_cid = aad[6..6+dst_cid_len].to_vec();
+        let src_cid = if 6 + dst_cid_len + 1 < aad.len() {
+            let src_offset = 6 + dst_cid_len + 1;
+            let src_cid_len = aad[src_offset - 1] as usize;
+            if src_offset + src_cid_len <= aad.len() {
+                aad[src_offset..src_offset + src_cid_len].to_vec()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        eprintln!("DEBUG: parsed dst_cid={:?} src_cid={:?}", dst_cid, src_cid);
+
+        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
+        let initial_keys = handshaker.initial_keys(&dst_cid);
+        let mut initial_protection = PacketProtection::new(&initial_keys);
+
+        let plaintext = initial_protection.unprotect(&aad, 0, &encrypted_payload)
+            .map_err(|e| format!("Decrypt failed: {}", e))?;
+
+        eprintln!("DEBUG: plaintext[:30]={:02x?}", &plaintext[..plaintext.len().min(30)]);
+        eprintln!("DEBUG: frame_type=0x{:02x}", plaintext.first().copied().unwrap_or(0));
+
+        // Try parsing as QUIC CRYPTO frame first (0x06)
+        let mut crypto_data = Self::parse_crypto_frame(&plaintext)
+            .map(|(d, _)| d);
+
+        // If no QUIC CRYPTO frame, try treating raw TLS handshake data
+        if crypto_data.is_none() && !plaintext.is_empty() {
+            eprintln!("DEBUG: trying raw TLS data");
+            // Raw TLS handshake data starts with 0x01 (ClientHello) or 0x02 (ServerHello)
+            // TLS over QUIC uses 0x01 prefix for Handshake message type
+            if plaintext.starts_with(&[0x01]) || plaintext.starts_with(&[0x16]) {
+                crypto_data = Some(plaintext.to_vec());
+            }
+        }
+
+        let crypto_data = crypto_data.ok_or_else(|| "No CRYPTO frame in decrypted payload".to_string())?;
 
         // Update address validation state
         {
             let mut state_map = self.validation_state.lock().unwrap();
-            // Clean up stale entries
             state_map.retain(|_, state| !state.is_stale());
             let state = state_map.entry(client_addr).or_insert_with(AddressValidationState::new);
             state.record_received(data.len() as u64);
         }
 
-        let client_dcid = pkt.header.dst_cid.clone();
-        let client_scid = pkt.header.src_cid.clone();
-
-        // Decrypt the Initial packet payload
-        // First, derive Initial keys to decrypt
-        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
-        let initial_keys = handshaker.initial_keys(&client_dcid);
-        let mut initial_protection = PacketProtection::new(&initial_keys);
-
-        // Decrypt payload
-        let plaintext = initial_protection.unprotect(&[], pkt.header.packet_number, &pkt.payload)
-            .map_err(|e| format!("Initial decrypt failed: {}", e))?;
-
-        // Parse CRYPTO frame
-        let (crypto_data, _) = Self::parse_crypto_frame(&plaintext)
-            .ok_or_else(|| "No CRYPTO frame in Initial packet".to_string())?;
+        let client_dcid = dst_cid;
+        let client_scid = src_cid;
 
         // Process ClientHello, get ServerHello
         let server_hello = handshaker.process_client_hello(&crypto_data)?;

@@ -10,7 +10,7 @@ pub mod transport;
 pub use crypto::{PacketProtection, ProtectionKeys, QuicCrypto};
 pub use frame::QuicFrame;
 pub use handshake::{HandshakeResult, QuicTlsHandshaker};
-pub use packet::{PacketType, QuicPacket};
+pub use packet::{PacketType, QuicPacket, get_long_header_payload_offset};
 pub use server_handshake::{QuicTlsServerHandshaker, ServerHandshakeResult};
 pub use transport::QuicTransport;
 
@@ -273,15 +273,24 @@ impl QuicConnection {
         );
 
         let packet_bytes = pkt.to_bytes();
-        let header_len = 9.min(packet_bytes.len());
+
+        // Use reusable function to get AAD + encrypted payload split
+        let (aad, encrypted) = match packet::get_long_header_payload_offset(&packet_bytes) {
+            Ok(offset) => (
+                packet_bytes[..offset].to_vec(),
+                packet_bytes[offset..].to_vec(),
+            ),
+            Err(e) => return Err(format!("Get payload offset failed: {}", e)),
+        };
+
         let send_bytes = if let Some(ref mut prot) = self.initial_protection {
-            prot.protect(&packet_bytes[..header_len], &packet_bytes[header_len..])
+            prot.protect(&aad, &encrypted)
                 .map_err(|e| format!("Initial encrypt failed: {}", e))?
         } else {
             return Err("No Initial protection keys".into());
         };
 
-        let mut full_packet = packet_bytes[..header_len].to_vec();
+        let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
 
         let addr: SocketAddr = self.server_addr.parse()

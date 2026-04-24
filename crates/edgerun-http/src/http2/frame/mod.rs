@@ -379,7 +379,8 @@ mod tests {
         assert_eq!(FrameType::from_u8(0), Some(FrameType::Data));
         assert_eq!(FrameType::from_u8(1), Some(FrameType::Headers));
         assert_eq!(FrameType::from_u8(8), Some(FrameType::WindowUpdate));
-        assert_eq!(FrameType::from_u8(10), None);
+        // RFC 9113 §4.1: unknown frame types are treated as Extension
+        assert_eq!(FrameType::from_u8(10), Some(FrameType::Extension));
     }
 
     #[test]

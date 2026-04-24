@@ -107,7 +107,7 @@ impl DynamicTable {
     /// slices are borrowed from their representations in the `DynamicTable`
     /// internal implementation, which means that it is possible only to
     /// iterate through the headers, not mutate them.
-    fn iter(&self) -> DynamicTableIter {
+    fn iter(&self) -> DynamicTableIter<'_> {
         DynamicTableIter {
             inner: self.table.iter(),
         }
@@ -125,6 +125,7 @@ impl DynamicTable {
     }
 
     /// Returns the maximum size of the table in octets.
+    #[allow(dead_code)]
     fn get_max_table_size(&self) -> usize {
         self.max_size
     }
@@ -178,6 +179,7 @@ impl DynamicTable {
     }
 
     /// Converts the current state of the table to a `Vec`
+    #[allow(dead_code)]
     fn to_vec(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
         let mut ret: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
         for elem in self.table.iter() {
@@ -222,7 +224,7 @@ struct HeaderTableIter<'a> {
     inner: iter::Chain<
             iter::Map<
                 slice::Iter<'a, (&'a [u8], &'a [u8])>,
-                fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8])>,
+                fn(&'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8])>,
             DynamicTableIter<'a>>,
 }
 
@@ -278,7 +280,7 @@ impl<'a> HeaderTable<'a> {
         HeaderTableIter {
             inner: self.static_table.iter()
                                     .map(static_table_mapper as
-                                            fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8]))
+                                            fn(&'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8]))
                                     .chain(self.dynamic_table.iter()),
         }
     }

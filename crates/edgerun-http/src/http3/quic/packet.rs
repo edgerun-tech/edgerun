@@ -373,6 +373,49 @@ impl QuicPacket {
     }
 }
 
+/// Get packet number length from first byte (RFC 9000 bits 0-1, 0 means 4)
+pub fn get_packet_number_length(first_byte: u8) -> usize {
+    if first_byte & 0x03 == 0 { 4 } else { (first_byte & 0x03) as usize }
+}
+
+/// Get byte offset where payload starts in a long-header packet
+pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
+    if data.len() < 6 {
+        return Err("Data too short".to_string());
+    }
+
+    let first_byte = data[0];
+    let packet_type = PacketType::from_byte(first_byte)
+        .ok_or("Invalid packet type")?;
+
+    let mut pos = 5;
+
+    let dst_cid_len = data[pos] as usize;
+    pos += 1 + dst_cid_len;
+
+    let src_cid_len = data[pos] as usize;
+    pos += 1 + src_cid_len;
+
+    if packet_type == PacketType::Initial {
+        let (token_len, consumed) = decode_varint_public(&data[pos..])
+            .ok_or("Invalid token length")?;
+        pos += consumed + token_len as usize;
+    }
+
+    let (_, consumed) = decode_varint_public(&data[pos..])
+        .ok_or("Invalid length varint")?;
+    pos += consumed;
+
+    let pn_length = get_packet_number_length(first_byte);
+    pos += pn_length;
+
+    Ok(pos)
+}
+
+fn decode_varint_public(data: &[u8]) -> Option<(u64, usize)> {
+    edgerun_encoding::quic_varint::decode_varint(data).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,5 +467,28 @@ mod tests {
         let bytes = pkt.to_bytes();
         assert!(!bytes.is_empty());
         assert!(bytes.len() > 20);
+    }
+
+    #[test]
+    fn test_get_packet_number_length() {
+        assert_eq!(get_packet_number_length(0xC0), 4);
+        assert_eq!(get_packet_number_length(0xC1), 1);
+        assert_eq!(get_packet_number_length(0xC2), 2);
+        assert_eq!(get_packet_number_length(0xC3), 3);
+    }
+
+    #[test]
+    fn test_get_long_header_payload_offset() {
+        let mut packet = vec![
+            0xC0, 0x00, 0x00, 0x00, 0x01,  // first_byte + version
+            8, 1,2,3,4,5,6,7,8,           // dst_cid
+            8, 9,10,11,12,13,14,15,16,     // src_cid
+            0,                               // token_len = 0
+            4,                               // payload length
+            0,0,0,0,                        // packet number
+        ];
+        
+        let offset = get_long_header_payload_offset(&packet).unwrap();
+        assert_eq!(offset, 28);
     }
 }

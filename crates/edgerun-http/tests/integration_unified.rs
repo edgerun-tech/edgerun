@@ -217,7 +217,6 @@ fn client_http2_explicit() {
 }
 
 #[test]
-#[ignore] // HTTP/3 over QUIC not fully implemented
 fn client_http3_explicit() {
     use edgerun_tls::generate_self_signed as gen_cert;
 
