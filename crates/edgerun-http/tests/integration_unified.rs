@@ -233,8 +233,13 @@ fn client_http3_explicit() {
         let server_task = spawn(async move { server.serve_with_shutdown(shutdown_clone).await });
         sleep(Duration::from_millis(100)).await;
 
+        eprintln!("[test] Starting client connection...");
+
         let client = HttpClient::new().version(HttpVersion::Http3);
+        eprintln!("[test] Client created, making request...");
+
         let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await?;
+        eprintln!("[test] Got response: {}", resp.status());
 
         assert_eq!(resp.status().as_u16(), 200);
         shutdown.cancel();
