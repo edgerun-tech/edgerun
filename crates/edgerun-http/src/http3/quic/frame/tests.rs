@@ -50,6 +50,80 @@ fn test_crypto_frame() {
 }
 
 #[test]
+fn test_crypto_frame_with_tls_handshake_data() {
+    // Simulate wrapping TLS ClientHello in QUIC CRYPTO frame
+    let tls_client_hello = vec![
+        0x01, 0x00, 0x00, 0xac, // handshake type + length
+        0x03, 0x03, // TLS version
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // random
+        0x00, // session id length
+    ];
+    
+    let frame = QuicFrame::Crypto {
+        offset: 0,
+        data: tls_client_hello.clone(),
+    };
+    let bytes = frame.to_bytes();
+    
+    // First byte should be 0x06 (CRYPTO frame type)
+    assert_eq!(bytes[0], 0x06);
+    
+    // Parse it back
+    let (parsed, consumed) = QuicFrame::from_bytes(&bytes).unwrap();
+    if let QuicFrame::Crypto { offset, data } = parsed {
+        assert_eq!(offset, 0);
+        assert_eq!(data, tls_client_hello);
+    } else {
+        panic!("Expected Crypto frame");
+    }
+}
+
+#[test]
+fn test_crypto_frame_roundtrip() {
+    let original_data = vec![0x06, 0x00, 0x40, 0xb0, 0x01, 0x00, 0x00, 0xac, 0x03, 0x03];
+    let frame = QuicFrame::Crypto {
+        offset: 0,
+        data: original_data.clone(),
+    };
+    let encoded = frame.to_bytes();
+    
+    let (parsed, _) = QuicFrame::from_bytes(&encoded).unwrap();
+    if let QuicFrame::Crypto { data, .. } = parsed {
+        assert_eq!(data, original_data);
+    }
+}
+
+#[test]
+fn test_crypto_exact_encoding() {
+    // Build exact bytes we expect: [0x06][offset=0][length=N][TLS data]
+    let tls_data = vec![0x01, 0x00, 0x00, 0xac, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00];
+    let frame = QuicFrame::Crypto {
+        offset: 0,
+        data: tls_data.clone(),
+    };
+    let encoded = frame.to_bytes();
+    
+    // First byte should be 0x06 (CRYPTO frame type)
+    assert_eq!(encoded[0], 0x06, "First byte should be 0x06 for CRYPTO frame");
+    
+    // Second byte should be varint for offset (0)
+    assert_eq!(encoded[1], 0, "Offset should be 0");
+    
+    // Third byte should be varint for length
+    // For length 10, that's stored as 0x0a
+    // Actually in varint, values < 64 are single byte
+    // So encoded[2] should be the length
+    assert_eq!(encoded[2] as usize, tls_data.len(), "Length should match");
+    
+    // Verify roundtrip
+    let (parsed, _) = QuicFrame::from_bytes(&encoded).unwrap();
+    if let QuicFrame::Crypto { offset, data } = parsed {
+        assert_eq!(offset, 0);
+        assert_eq!(data, tls_data);
+    }
+}
+
+#[test]
 fn test_max_data_frame() {
     let frame = QuicFrame::MaxData { max_data: 65535 };
     let bytes = frame.to_bytes();
