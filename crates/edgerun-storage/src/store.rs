@@ -574,10 +574,7 @@ impl NodeStore {
     /// Returns the number of successfully resolved items.
     pub fn process_fetch_queue(&self) -> Result<usize, StorageError> {
         let mut resolved = 0;
-        loop {
-            let Some(entry) = self.index.dequeue_fetch()? else {
-                break;
-            };
+        while let Some(entry) = self.index.dequeue_fetch()? {
             let success = match entry.target_type.as_str() {
                 "object" => {
                     let obj_ref = edgerun_proto::edgerun::v0::common::ObjectRef {
@@ -1200,7 +1197,7 @@ impl NodeStore {
         secret: &[u8],
         description: Option<&str>,
     ) -> Result<(), StorageError> {
-        let blob_id = self.blobs.store(secret, &[self.config.node_identity.clone()])?;
+        let blob_id = self.blobs.store(secret, std::slice::from_ref(&self.config.node_identity))?;
 
         self.index.put_credential(namespace, name, &blob_id, description)?;
 

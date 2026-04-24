@@ -577,45 +577,40 @@ impl ConnectionPool {
             return Self::connect_sock_static(connect_timeout, &SocketAddr::new(ip, port)).await;
         }
 
-        if let Ok(result) = rt_timeout(
+        let host_str = host.to_string();
+        if let Ok(Ok(addrs)) = rt_timeout(
             dns_timeout,
             edgerun_rt::spawn_blocking(move || {
                 use std::net::ToSocketAddrs;
-                format!("{}:443", host_str).to_socket_addrs()
+                format!("{}:443", host_str).to_socket_addrs().unwrap().collect::<Vec<_>>()
             })
-        ).await.map_ok(|addrs| {
-                let mut ipv4_fallback = None;
-                for addr in addrs.by_ref() {
-                    match addr.ip() {
-                        IpAddr::V6(_) => return Some(addr),
-                        IpAddr::V4(_) => {
-                            if ipv4_fallback.is_none() {
-                                ipv4_fallback = Some(addr);
-                            }
+        ).await {
+            let mut ipv4_fallback = None;
+            for addr in addrs {
+                match addr.ip() {
+                    IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, &addr).await,
+                    IpAddr::V4(_) => {
+                        if ipv4_fallback.is_none() {
+                            ipv4_fallback = Some(addr);
                         }
                     }
                 }
-                ipv4_fallback
-        }) {
-            if let Some(addr) = result {
+            }
+            if let Some(addr) = ipv4_fallback {
                 return Self::connect_sock_static(connect_timeout, &addr).await;
             }
         }
 
         if let Some(mut client) = edgerun_dns::DnsClient::system() {
             client.set_timeout(dns_timeout);
-            if let Ok(ips) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
-                if let Ok(ips) = ips {
-                    if let Some(ip) = ips.first() {
-                        return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V6(*ip), port)).await;
-                    }
+            if let Ok(Ok(ip)) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
+                if let Some(ip) = ip.first() {
+                    return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V6(*ip), port)).await;
                 }
             }
-            if let Ok(ips) = rt_timeout(dns_timeout, client.query_a(host)).await {
-                if let Ok(ips) = ips {
-                    if let Some(ip) = ips.first() {
-                        return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V4(*ip), port)).await;
-                    }
+            if let Ok(Ok(ip)) = rt_timeout(dns_timeout, client.query_a(host)).await {
+                if let Some(ip) = ip.first() {
+                    return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V4(*ip), port)).await;
                 }
             }
         }
@@ -783,10 +778,8 @@ impl ConnectionPool {
         }
         if let Some((scheme, rest)) = current.split_once("://") {
             if let Some((host_port, path)) = rest.split_once('/') {
-                if location.starts_with('/') {
-                    if let Some(stripped) = location.strip_prefix('/') {
-                        return format!("{}://{}/{}", scheme, host_port, stripped);
-                    }
+                if let Some(stripped) = location.strip_prefix('/') {
+                    return format!("{}://{}/{}", scheme, host_port, stripped);
                 }
                 let base = path.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
                 return format!("{}://{}{}/{}", scheme, host_port, base, location);

@@ -261,7 +261,7 @@ pub fn encode_msg(msg: &Msg) -> Vec<u8> {
     out.extend_from_slice(&msg.ser.to_le_bytes());
     out.extend_from_slice(&(hfd.len() as u32).to_le_bytes());
     out.extend_from_slice(&hfd);
-    out.extend(std::iter::repeat(0).take(pad));
+    out.extend(std::iter::repeat_n(0, pad));
     out.extend_from_slice(&bdata);
     out
 }

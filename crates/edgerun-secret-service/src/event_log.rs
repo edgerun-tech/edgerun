@@ -205,43 +205,34 @@ impl EventLog {
     pub fn replay(&self) -> io::Result<Vec<SecretEvent>> {
         let mut file = File::open(&self.path)?;
         let mut events = Vec::new();
-        loop {
-            match decode_varint_stream(&mut file) {
-                Ok(Some(total_len)) => {
-                    let mut buf = vec![0u8; total_len as usize];
-                    match file.read_exact(&mut buf) {
-                        Ok(()) => {
-                            let event_type = SecretEventType::from_byte(buf[0]);
-                            let payload = &buf[1..];
-                            if let Some(et) = event_type {
-                                match et {
-                                    SecretEventType::SecretPut => {
-                                        if let Ok(p) = SecretPutPayload::decode(payload) {
-                                            events.push(SecretEvent::Put(p));
-                                        }
-                                    }
-                                    SecretEventType::SecretDelete => {
-                                        if let Ok(p) = SecretDeletePayload::decode(payload) {
-                                            events.push(SecretEvent::Delete(p));
-                                        }
-                                    }
-                                    SecretEventType::CollectionCreated => {
-                                        if let Ok(p) = CollectionCreatedPayload::decode(payload) {
-                                            events.push(SecretEvent::CollectionCreated(p));
-                                        }
-                                    }
-                                    SecretEventType::CollectionDeleted => {
-                                        if let Ok(p) = CollectionDeletedPayload::decode(payload) {
-                                            events.push(SecretEvent::CollectionDeleted(p));
-                                        }
-                                    }
-                                }
-                            }
+        while let Ok(Some(total_len)) = decode_varint_stream(&mut file) {
+            let mut buf = vec![0u8; total_len as usize];
+            let _ = file.read_exact(&mut buf);
+            let event_type = SecretEventType::from_byte(buf[0]);
+            let payload = &buf[1..];
+            if let Some(et) = event_type {
+                match et {
+                    SecretEventType::SecretPut => {
+                        if let Ok(p) = SecretPutPayload::decode(payload) {
+                            events.push(SecretEvent::Put(p));
                         }
-                        Err(_) => break,
+                    }
+                    SecretEventType::SecretDelete => {
+                        if let Ok(p) = SecretDeletePayload::decode(payload) {
+                            events.push(SecretEvent::Delete(p));
+                        }
+                    }
+                    SecretEventType::CollectionCreated => {
+                        if let Ok(p) = CollectionCreatedPayload::decode(payload) {
+                            events.push(SecretEvent::CollectionCreated(p));
+                        }
+                    }
+                    SecretEventType::CollectionDeleted => {
+                        if let Ok(p) = CollectionDeletedPayload::decode(payload) {
+                            events.push(SecretEvent::CollectionDeleted(p));
+                        }
                     }
                 }
-                Ok(None) | Err(_) => break,
             }
         }
         Ok(events)

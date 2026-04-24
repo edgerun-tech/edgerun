@@ -393,7 +393,7 @@ fn build_method_call(
     msg.extend_from_slice(&(fields_len as u32).to_le_bytes());
 
     msg.extend_from_slice(&fields);
-    msg.extend(std::iter::repeat(0).take(pad_len));
+    msg.extend(std::iter::repeat_n(0, pad_len));
     msg.extend_from_slice(body_bytes);
 
     msg

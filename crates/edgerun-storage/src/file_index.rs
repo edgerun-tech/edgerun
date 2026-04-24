@@ -795,7 +795,7 @@ impl FileIndex {
         let mut peers: Vec<_> = self.peers.read().iter().map(|(k, v)| {
             (k.clone(), v.addr.clone(), v.status.clone(), v.last_seen, v.is_bootstrap)
         }).collect();
-        peers.sort_by(|a, b| b.3.cmp(&a.3));
+        peers.sort_by_key(|b| std::cmp::Reverse(b.3));
         Ok(peers)
     }
 
@@ -824,7 +824,7 @@ impl FileIndex {
             (k.clone(), v.object_id_hex.clone(), v.view_type.clone(), v.producer_hex.clone(),
              v.produced_at, v.completeness, v.base_heads.clone())
         }).collect();
-        snaps.sort_by(|a, b| b.4.cmp(&a.4));
+        snaps.sort_by_key(|b| std::cmp::Reverse(b.4));
         Ok(snaps)
     }
 

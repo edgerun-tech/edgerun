@@ -285,9 +285,8 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
         if line.is_empty() || line.starts_with('#') { continue; }
 
         if depth == 0 {
-            if line.ends_with('{') {
-                let zone = &line[..line.len()-1];
-                let zone = zone.trim().trim_matches('"').trim_matches('/');
+            if let Some(stripped) = line.strip_suffix('{') {
+                let zone = stripped.trim().trim_matches('"').trim_matches('/');
                 if !zone.is_empty() {
                     if let Some(z) = current_zone.take() {
                         blocks.push(CoreBlock { zone: z, plugins: std::mem::take(&mut current_plugins) });
@@ -311,11 +310,11 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
                         blocks.push(CoreBlock { zone: z, plugins: std::mem::take(&mut current_plugins) });
                     }
                 }
-            } else if line.ends_with('{') {
+            } else if let Some(stripped) = line.strip_suffix('{') {
                 // Nested block (e.g. hosts { ... })
                 depth += 1;
                 // Parse as plugin with args from the part before {
-                let plugin_line = &line[..line.len()-1].trim();
+                let plugin_line = stripped.trim();
                 let parts: Vec<&str> = plugin_line.split_whitespace().collect();
                 if !parts.is_empty() {
                     current_plugins.push(CorePlugin {

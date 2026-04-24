@@ -130,18 +130,13 @@ impl Server {
             buf.extend_from_slice(&msg_buf[..n]);
 
             // Try to decode one or more complete messages
-            loop {
-                match decode_msg(&buf) {
-                    Ok(msg) => {
-                        let msg_len = estimate_encoded_len(&msg);
-                        buf.drain(..msg_len.min(buf.len()));
-                        let reply = self.handle_message(&client_name, &msg);
-                        let reply_data = encode_msg(&reply);
-                        let _ = stream.write_all(&reply_data);
-                        let _ = stream.flush();
-                    }
-                    Err(_) => break, // incomplete message, wait for more data
-                }
+            while let Ok(msg) = decode_msg(&buf) {
+                let msg_len = estimate_encoded_len(&msg);
+                buf.drain(..msg_len.min(buf.len()));
+                let reply = self.handle_message(&client_name, &msg);
+                let reply_data = encode_msg(&reply);
+                let _ = stream.write_all(&reply_data);
+                let _ = stream.flush();
             }
         }
 

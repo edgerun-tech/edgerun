@@ -226,7 +226,7 @@ async fn cmd_retry(data_root: &Path, message_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-async fn cmd_retry_all(data_root: &PathBuf) -> Result<(), String> {
+async fn cmd_retry_all(data_root: &Path) -> Result<(), String> {
     let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
     let messages = index.list_queued().await;
 
@@ -240,7 +240,7 @@ async fn cmd_retry_all(data_root: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-async fn cmd_delete(data_root: &PathBuf, message_id: &str) -> Result<(), String> {
+async fn cmd_delete(data_root: &Path, message_id: &str) -> Result<(), String> {
     let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
     let _msg = index.get_message(message_id).await
         .ok_or_else(|| format!("Message not found: {}", message_id))?;
@@ -251,7 +251,7 @@ async fn cmd_delete(data_root: &PathBuf, message_id: &str) -> Result<(), String>
     Ok(())
 }
 
-async fn cmd_stats(data_root: &PathBuf) -> Result<(), String> {
+async fn cmd_stats(data_root: &Path) -> Result<(), String> {
     let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
     let messages = index.list_queued().await;
 
@@ -285,7 +285,7 @@ async fn cmd_stats(data_root: &PathBuf) -> Result<(), String> {
 // Mailbox commands
 // ===========================================================================
 
-async fn cmd_mbx_list(maildir_root: &PathBuf, user: &str) -> Result<(), String> {
+async fn cmd_mbx_list(maildir_root: &Path, user: &str) -> Result<(), String> {
     let store = MaildirStore::new(maildir_root).map_err(|e| e.to_string())?;
     let messages = store.list_messages(user).map_err(|e| e.to_string())?;
 
@@ -309,7 +309,7 @@ async fn cmd_mbx_list(maildir_root: &PathBuf, user: &str) -> Result<(), String> 
     Ok(())
 }
 
-async fn cmd_mbx_show(maildir_root: &PathBuf, user: &str) -> Result<(), String> {
+async fn cmd_mbx_show(maildir_root: &Path, user: &str) -> Result<(), String> {
     let store = MaildirStore::new(maildir_root).map_err(|e| e.to_string())?;
     let stats = store.mailbox_stats(user).map_err(|e| e.to_string())?;
 
@@ -321,7 +321,7 @@ async fn cmd_mbx_show(maildir_root: &PathBuf, user: &str) -> Result<(), String> 
     Ok(())
 }
 
-async fn cmd_mbx_read(maildir_root: &PathBuf, _user: &str, path: &PathBuf) -> Result<(), String> {
+async fn cmd_mbx_read(maildir_root: &Path, _user: &str, path: &Path) -> Result<(), String> {
     let store = MaildirStore::new(maildir_root).map_err(|e| e.to_string())?;
     let data = store.read_message(path).map_err(|e| e.to_string())?;
 
@@ -331,7 +331,7 @@ async fn cmd_mbx_read(maildir_root: &PathBuf, _user: &str, path: &PathBuf) -> Re
     Ok(())
 }
 
-async fn cmd_mbx_add_user(maildir_root: &PathBuf, user: &str, domains: &[String]) -> Result<(), String> {
+async fn cmd_mbx_add_user(maildir_root: &Path, user: &str, domains: &[String]) -> Result<(), String> {
     let store = MaildirStore::new(maildir_root).map_err(|e| e.to_string())?;
     let domain_refs: Vec<&str> = domains.iter().map(|s| s.as_str()).collect();
     store.add_user(user, &domain_refs).map_err(|e| e.to_string())?;

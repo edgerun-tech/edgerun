@@ -68,11 +68,8 @@ impl Body {
             BodyInner::Full(data) => Ok(data),
             BodyInner::Stream(stream) => {
                 let mut data = Vec::new();
-                loop {
-                    match stream.rx.recv().await {
-                        Some(chunk) => data.extend_from_slice(&chunk),
-                        None => break,
-                    }
+                while let Some(chunk) = stream.rx.recv().await {
+                    data.extend_from_slice(&chunk);
                 }
                 Ok(data)
             }
