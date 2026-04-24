@@ -446,11 +446,11 @@ impl VirtualFileSystem {
     /// Binary files are automatically skipped.
     pub fn grep(&self, pattern: &str) -> Vec<GrepMatch> {
         use rayon::prelude::*;
-        use regex::Regex;
+        use edgerun_regex::Regex;
 
         let regex = match Regex::new(pattern) {
-            Ok(r) => r,
-            Err(_) => return Vec::new(),
+            Some(r) => r,
+            None => return Vec::new(),
         };
 
         self.files
@@ -476,18 +476,13 @@ impl VirtualFileSystem {
 
     /// Search for files matching glob pattern
     pub fn glob(&self, pattern: &str) -> Vec<&PathBuf> {
-        let glob_pattern = match glob::Pattern::new(pattern) {
-            Ok(p) => p,
-            Err(_) => return Vec::new(),
-        };
-
         self.files
             .keys()
             .filter(|path| {
                 !self.deleted.contains(*path)
                     && path
                         .to_str()
-                        .map(|s| glob_pattern.matches(s))
+                        .map(|s| edgerun_glob::glob_match(pattern, s))
                         .unwrap_or(false)
             })
             .collect()

@@ -1263,6 +1263,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-glob"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-goodix-fingerprint"
 version = "0.1.0"
 dependencies = [
@@ -1743,6 +1747,10 @@ name = "edgerun-quectel-ec200a"
 version = "0.1.0"
 
 [[package]]
+name = "edgerun-regex"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-remote-capability"
 version = "0.1.0"
 dependencies = [
@@ -1959,13 +1967,13 @@ dependencies = [
  "criterion 0.5.1",
  "dashmap",
  "edgerun-clap",
+ "edgerun-glob",
  "edgerun-inotify",
+ "edgerun-regex",
  "edgerun-rt",
- "glob",
  "ignore",
  "libc",
  "rayon",
- "regex",
  "sha1",
  "tempfile",
 ]
@@ -2285,12 +2293,6 @@ dependencies = [
  "opaque-debug",
  "polyval",
 ]
-
-[[package]]
-name = "glob"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "globset"

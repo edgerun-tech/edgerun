@@ -1,0 +1,16 @@
+[package]
+name = "edgerun-regex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Zero-dependency regex for grep (subset)"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+
+[lints]
+workspace = true

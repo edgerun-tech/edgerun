@@ -85,9 +85,7 @@ impl GitAwarePersist {
 
         // Glob pattern
         if pattern_str.contains('*') {
-            if let Ok(glob) = glob::Pattern::new(&pattern_str) {
-                return glob.matches(&path_str);
-            }
+            return edgerun_glob::glob_match(&pattern_str, &path_str);
         }
 
         // Directory prefix

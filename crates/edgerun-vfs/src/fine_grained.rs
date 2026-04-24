@@ -258,11 +258,11 @@ impl FineGrainedVFS {
 
     /// Search for pattern in text files (parallel). Binary files are skipped.
     pub fn grep(&self, pattern: &str) -> Vec<GrepMatch> {
-        use regex::Regex;
+        use edgerun_regex::Regex;
 
         let regex = match Regex::new(pattern) {
-            Ok(r) => r,
-            Err(_) => return Vec::new(),
+            Some(r) => r,
+            None => return Vec::new(),
         };
 
         self.files
