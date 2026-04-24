@@ -26,6 +26,7 @@ extern crate std;
 
 pub mod base32hex;
 pub mod base64;
+pub mod buf;
 pub mod chunked;
 pub mod cstring;
 pub mod frame;

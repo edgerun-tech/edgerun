@@ -1,6 +1,6 @@
 //! ProviderRegistry Client
 //!
-//! Minimal JSON-RPC client using edgerun-http and bincode.
+//! Minimal JSON-RPC client using edgerun-http and edgerun-json.
 
 use std::sync::{Arc, mpsc};
 use crate::solana_types::{Pubkey, AccountMeta, Instruction};
@@ -119,7 +119,7 @@ impl ProviderClient {
         data: &T,
         accounts: Vec<AccountMeta>,
     ) -> Instruction {
-        let encoded = bincode::serialize(data).unwrap();
+        let encoded = edgerun_json::to_vec(data).unwrap();
         let mut bytes = vec![variant];
         bytes.extend(encoded);
         Instruction {

@@ -9,5 +9,5 @@ edgerun-config = { path = "../edgerun-config" }
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-error = { path = "../edgerun-error" }
+edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
-bincode = "1.3"

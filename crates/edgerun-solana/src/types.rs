@@ -1,3 +1,4 @@
+use edgerun_json::from_slice;
 use crate::solana_types::Pubkey;
 use serde::{Deserialize, Serialize};
 
@@ -86,13 +87,13 @@ impl Default for Deployment {
 
 impl Deployment {
     pub fn try_from_slice(data: &[u8]) -> Result<Self, String> {
-        bincode::deserialize(data).map_err(|e| format!("{:?}", e))
+        from_slice(data).map_err(|e| format!("{:?}", e))
     }
 }
 
 impl Provider {
     pub fn try_from_slice(data: &[u8]) -> Result<Self, String> {
-        bincode::deserialize(data).map_err(|e| format!("{:?}", e))
+        from_slice(data).map_err(|e| format!("{:?}", e))
     }
 }
 

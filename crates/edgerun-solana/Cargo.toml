@@ -7,9 +7,8 @@ edition = "2021"
 bs58 = "0.5"
 edgerun-error = { path = "../edgerun-error" }
 serde = { version = "1", features = ["derive"] }
-bincode = "1.3"
 edgerun-http = { path = "../edgerun-http" }
-edgerun-json = { path = "../edgerun-json" }
+edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-crypto = { path = "../edgerun-crypto" }
 

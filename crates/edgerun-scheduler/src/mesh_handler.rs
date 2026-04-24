@@ -2,6 +2,7 @@
 //!
 //! Processes MetricsReport frames and reports to on-chain.
 
+use edgerun_json::from_slice;
 use edgerun_mesh::FrameType;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
 use edgerun_solana::DeploymentClient;
@@ -36,7 +37,7 @@ impl Scheduler {
         src: [u8; 32],
         payload: &[u8],
     ) -> Result<(), String> {
-        let report: MetricsReportPayload = bincode::deserialize(payload)
+        let report: MetricsReportPayload = from_slice(payload)
             .map_err(|e| format!("Failed to deserialize metrics: {}", e))?;
         
         let metrics = self.metrics_receiver.receive_from_mesh(src, &report)?;
@@ -57,7 +58,7 @@ impl Scheduler {
     ) -> Result<(), String> {
         use edgerun_mesh::mesh_payload::MigrationCompletePayload;
         
-        let result: MigrationCompletePayload = bincode::deserialize(payload)
+        let result: MigrationCompletePayload = from_slice(payload)
             .map_err(|e| format!("Failed to deserialize migration result: {}", e))?;
         
         let name = String::from_utf8_lossy(&result.deployment_name);
