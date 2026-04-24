@@ -107,7 +107,7 @@ members = [
 edition = "2021"
 license = "MIT"
 publish = true
-version = "0.1.0"
+version = "0.1.1"
 
 # Version management:
 # - Run: cargo install cargo-public-api

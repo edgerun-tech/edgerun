@@ -1310,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-json"
-version = "1.0.149"
+version = "0.1.0"
 dependencies = [
  "criterion 0.8.2",
  "serde",
