@@ -1,4 +1,5 @@
 use edgerun_http::{HttpServer, HttpClient, HttpVersion, into_handler, Response, StatusCode};
+use edgerun_http::http3::quic::packet::QuicPacket;
 use edgerun_rt::{Runtime, spawn, sleep};
 use std::time::Duration;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -10,50 +11,42 @@ fn next_port() -> u16 {
 }
 
 fn main() {
-    println!("=== Starting standalone HTTP/3 test ===");
+    println!("=== Test AAD mismatch ===");
     
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     
     rt.block_on(async {
-        let port = next_port();
-        println!("Using port {}", port);
+        // Test: Compare AAD from packet vs header_to_bytes_aad
+        let pkt = QuicPacket::initial(
+            0x00000001,  // QUIC_VERSION_V1
+            vec![1,2,3,4,5,6,7,8],  // dcid  
+            vec![8,7,6,5,4,3,2,1],  // scid
+            vec![],  // token
+            0,  // packet number
+            vec![0x06, 0x00, 0x40, 0xb0, 0x01],  // CRYPTO frame
+        );
         
-        let cert = edgerun_tls::generate_self_signed(&["127.0.0.1", "localhost"]).expect("cert");
-        println!("Generated cert");
+        let packet_bytes = pkt.to_bytes();
+        println!("packet_bytes[:30]={:02x?}", &packet_bytes[..packet_bytes.len().min(30)]);
         
-        let handler = into_handler(|_req| {
-            Response::text(StatusCode::new(200).unwrap(), "OK")
-        });
+        // Method 1: header_to_bytes_aad()
+        let aad_from_method = pkt.header_to_bytes_aad();
+        println!("header_to_bytes_aad[:30]={:02x?}", &aad_from_method[..aad_from_method.len().min(30)]);
         
-        let server = HttpServer::new(handler)
-            .with_tls(cert.clone())
-            .with_http3()
-            .bind(format!("127.0.0.1:{}", port))
-            .await
-            .expect("bind");
+        // Method 2: get_long_header_payload_offset  
+        use edgerun_http::http3::quic::packet::get_long_header_payload_offset;
+        let offset = get_long_header_payload_offset(&packet_bytes).unwrap();
+        let aad_from_split = &packet_bytes[..offset];
+        println!("get_long_header_payload_offset[:30]={:02x?}", &aad_from_split[..aad_from_split.len().min(30)]);
         
-        println!("Server bound, starting...");
+        // Compare
+        if aad_from_method == aad_from_split {
+            println!("✓ AAD methods MATCH");
+        } else {
+            println!("✗ AAD methods DIFFER!");
+            println!("  method len={}, split len={}", aad_from_method.len(), aad_from_split.len());
+        }
         
-        let shutdown = edgerun_rt::CancellationToken::new();
-        let shutdown_clone = shutdown.clone();
-        
-        let server_task = spawn(async move { 
-            println!("Server serve starting");
-            server.serve_with_shutdown(shutdown_clone).await 
-        });
-        
-        sleep(Duration::from_millis(200)).await;
-        println!("Sleep done, creating client...");
-        
-        let client = HttpClient::new().version(HttpVersion::Http3);
-        println!("Client created, making request...");
-        
-        let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await.expect("request");
-        println!("Got response: {}", resp.status());
-        
-        shutdown.cancel();
-        server_task.await.expect("server");
-        
-        println!("=== Test PASSED ===");
+        println!("=== Test done ===");
     });
 }
