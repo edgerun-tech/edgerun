@@ -447,6 +447,11 @@ impl QuicTlsServerHandshaker {
         self.complete
     }
 
+    /// Check if client key share was received and processed.
+    pub fn has_client_key_share(&self) -> bool {
+        !self.client_key_share.is_empty()
+    }
+
     /// Mark handshake as complete.
     pub fn mark_complete(&mut self) {
         self.complete = true;

@@ -177,3 +177,101 @@ pub mod alpn {
 
 /// Well-known UDP port for HTTP/3
 pub const HTTP3_DEFAULT_PORT: u16 = 443;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_http3_error_codes() {
+        assert_eq!(error_codes::H3_NO_ERROR, 0x0100);
+        assert_eq!(error_codes::H3_GENERAL_PROTOCOL_ERROR, 0x0101);
+        assert_eq!(error_codes::H3_INTERNAL_ERROR, 0x0102);
+        assert_eq!(error_codes::H3_STREAM_CREATION_ERROR, 0x0103);
+        assert_eq!(error_codes::H3_CLOSED_CRITICAL_STREAM, 0x0104);
+    }
+
+    #[test]
+    fn test_quic_error_codes() {
+        assert_eq!(quic_error_codes::QUIC_NO_ERROR, 0x0);
+        assert_eq!(quic_error_codes::QUIC_INTERNAL_ERROR, 0x1);
+        assert_eq!(quic_error_codes::QUIC_CONNECTION_REFUSED, 0x2);
+        assert_eq!(quic_error_codes::QUIC_FLOW_CONTROL_ERROR, 0x3);
+    }
+
+    #[test]
+    fn test_http3_versions() {
+        assert_eq!(versions::HTTP3_VERSION, 0x00000001);
+        assert_eq!(versions::GREASE_VERSION, 0x0a0a0a0a);
+    }
+
+    #[test]
+    fn test_alpn_identifiers() {
+        assert_eq!(alpn::H3, b"h3");
+        assert_eq!(alpn::H3_29, b"h3-29");
+    }
+
+    #[test]
+    fn test_http3_default_port() {
+        assert_eq!(HTTP3_DEFAULT_PORT, 443);
+    }
+
+    #[test]
+    fn test_http3_error_display() {
+        let err = Http3Error::ProtocolViolation("test error".to_string());
+        assert_eq!(format!("{}", err), "Protocol violation: test error");
+
+        let err = Http3Error::QuicError("quic test".to_string());
+        assert_eq!(format!("{}", err), "QUIC error: quic test");
+
+        let err = Http3Error::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"));
+        assert_eq!(format!("{}", err), "I/O error: not found");
+
+        let err = Http3Error::StreamError { stream_id: 42, error_code: 0x01 };
+        assert_eq!(format!("{}", err), "Stream 42 error: 1");
+    }
+
+    #[test]
+    fn test_http3_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
+        let h3_err: Http3Error = io_err.into();
+
+        match h3_err {
+            Http3Error::Io(_) => {}
+            _ => panic!("Expected Http3Error::Io"),
+        }
+    }
+
+    #[test]
+    fn test_http3_error_from_string() {
+        let s = "test error".to_string();
+        let h3_err: Http3Error = s.into();
+
+        match h3_err {
+            Http3Error::QuicError(msg) => assert_eq!(msg, "test error"),
+            _ => panic!("Expected Http3Error::QuicError"),
+        }
+    }
+
+    #[test]
+    fn test_http3_error_stream_error() {
+        let err = Http3Error::StreamError {
+            stream_id: 123,
+            error_code: 0x42,
+        };
+        let s = format!("{}", err);
+        assert!(s.contains("123"));
+        assert!(s.contains("66"));
+    }
+
+    #[test]
+    fn test_http3_error_connection_error() {
+        let err = Http3Error::ConnectionError {
+            error_code: 0x100,
+            reason: "handshake failed".to_string(),
+        };
+        let s = format!("{}", err);
+        assert!(s.contains("256"));
+        assert!(s.contains("handshake failed"));
+    }
+}

@@ -3,6 +3,7 @@
 pub mod crypto;
 pub mod frame;
 pub mod handshake;
+pub mod handshake_unified;
 pub mod packet;
 pub mod server_handshake;
 pub mod transport;

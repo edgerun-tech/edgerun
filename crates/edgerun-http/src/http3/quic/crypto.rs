@@ -116,24 +116,16 @@ impl PacketProtection {
     pub fn protect(&mut self, header: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
         let pn = self.packet_number;
         self.packet_number += 1;
-        
-        eprintln!("CRYPTO protect: pn={}, header.len={}, plaintext[:20]={:02x?}", pn, header.len(), &plaintext[..plaintext.len().min(20)]);
-        
+
         let nonce = self.make_nonce(&self.write_iv, pn);
 
-        // Use the AEAD with AAD (the unprotected packet header)
         let mut buffer = plaintext.to_vec();
-        
-        eprintln!("CRYPTO protect: before encrypt[:20]={:02x?}", &buffer[..buffer.len().min(20)]);
-        
+
         let tag = self.write_aead.encrypt_in_place_detached(&nonce, header, &mut buffer)
             .map_err(|e| format!("AEAD encrypt failed: {:?}", e))?;
 
-        // GCM output = ciphertext || tag (16 bytes)
         buffer.extend_from_slice(tag.as_slice());
-        
-        eprintln!("CRYPTO protect: after encrypt[:20]={:02x?}", &buffer[..buffer.len().min(20)]);
-        
+
         Ok(buffer)
     }
 
@@ -143,24 +135,17 @@ impl PacketProtection {
     /// Nonce = read_iv XOR (packet_number << 8)
     pub fn unprotect(&mut self, header: &[u8], packet_number: u64, ciphertext_and_tag: &[u8]) -> Result<Vec<u8>, String> {
         let nonce = self.make_nonce(&self.read_iv, packet_number);
-        
-        eprintln!("CRYPTO unprotect: pn={}, header.len={}, ciphertext[:20]={:02x?}", packet_number, header.len(), &ciphertext_and_tag[..ciphertext_and_tag.len().min(20)]);
 
-        // Split ciphertext from the trailing 16-byte GCM tag
         if ciphertext_and_tag.len() < 16 {
             return Err("Ciphertext too short for AEAD tag".to_string());
         }
         let tag_start = ciphertext_and_tag.len() - 16;
         let tag = aes_gcm::Tag::from_slice(&ciphertext_and_tag[tag_start..]);
         let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
-        
-        eprintln!("CRYPTO unprotect: before decrypt[:20]={:02x?}", &buffer[..buffer.len().min(20)]);
 
         self.read_aead.decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
             .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
 
-        eprintln!("CRYPTO unprotect: after decrypt[:20]={:02x?}", &buffer[..buffer.len().min(20)]);
-        
         Ok(buffer)
     }
 
