@@ -20,7 +20,6 @@ serde = { version = "1", features = ["derive"] }
 url = { version = "2", features = ["serde"] }
 edgerun-error.workspace = true
 thiserror.workspace = true
-log = "0.4"
 
 [dev-dependencies]
 

@@ -870,7 +870,6 @@ dependencies = [
  "edgerun-log",
  "edgerun-rt",
  "edgerun-secret-service",
- "log 0.4.29",
  "serde",
  "sha2",
  "thiserror 1.0.69",
