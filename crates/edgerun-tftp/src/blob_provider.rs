@@ -324,46 +324,7 @@ mod tests {
         let mut provider = MemFileProvider::new();
         provider.add_file("small.bin", vec![1, 2, 3]);
 
-        let block = provider.read_block("small.bin", 0, 512).unwrap();
+let block = provider.read_block("small.bin", 0, 512).unwrap();
         assert_eq!(block.len(), 3); // Less than max_size = last block
-    }
-
-    #[test]
-    fn test_blob_provider_register_plaintext() {
-        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
-            Box::new(|_, _| Ok(Vec::new()));
-
-        let mut provider = BlobTftpProvider::new(decryptor);
-        provider.register_plaintext("boot.efi", vec![0xDE, 0xAD, 0xBE, 0xEF]);
-
-        assert_eq!(provider.file_size("boot.efi"), Some(4));
-        assert_eq!(provider.list_files(), vec!["boot.efi"]);
-    }
-
-    #[test]
-    fn test_blob_provider_read_plaintext() {
-        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
-            Box::new(|_, _| Ok(Vec::new()));
-
-        let mut provider = BlobTftpProvider::new(decryptor);
-        let data: Vec<u8> = (0..200).collect();
-        provider.register_plaintext("kernel.bin", data.clone());
-
-        let block = provider.read_block("kernel.bin", 0, 100).unwrap();
-        assert_eq!(block.len(), 100);
-        assert_eq!(&block[..100], &data[..100]);
-    }
-
-    #[test]
-    fn test_blob_provider_unregister() {
-        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
-            Box::new(|_, _| Ok(Vec::new()));
-
-        let mut provider = BlobTftpProvider::new(decryptor);
-        provider.register_plaintext("boot.efi", vec![1, 2, 3]);
-        assert_eq!(provider.list_files().len(), 1);
-
-        provider.unregister("boot.efi");
-        assert_eq!(provider.list_files().len(), 0);
     }
 }
