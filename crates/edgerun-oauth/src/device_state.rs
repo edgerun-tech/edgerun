@@ -169,22 +169,18 @@ fn generate_user_code() -> std::io::Result<String> {
     let mut code = String::with_capacity(9);
     let mut byte_idx = 0;
     for i in 0..8 {
-        loop {
-            if byte_idx >= bytes.len() {
-                // Refill bytes if exhausted
-                getrandom::fill(&mut bytes).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, format!("random generation failed: {e}"))
-                })?;
-                byte_idx = 0;
-            }
-            let idx = bytes[byte_idx] as usize % CHARSET.len();
-            byte_idx += 1;
-            if i == 4 {
-                code.push('-');
-            }
-            code.push(CHARSET[idx] as char);
-            break;
+        if byte_idx >= bytes.len() {
+            getrandom::fill(&mut bytes).map_err(|e| {
+                std::io::Error::new(std::io::ErrorKind::Other, format!("random generation failed: {e}"))
+            })?;
+            byte_idx = 0;
         }
+        let idx = bytes[byte_idx] as usize % CHARSET.len();
+        byte_idx += 1;
+        if i == 4 {
+            code.push('-');
+        }
+        code.push(CHARSET[idx] as char);
     }
     Ok(code)
 }

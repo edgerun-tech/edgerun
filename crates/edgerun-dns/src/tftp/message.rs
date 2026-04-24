@@ -186,7 +186,7 @@ impl TftpOptions {
                 }
                 "timeout" => {
                     if let Ok(t) = value.parse::<u8>() {
-                        if t >= 1 && t <= 255 {
+                        if t >= 1 {
                             opts.timeout = t;
                         }
                     }

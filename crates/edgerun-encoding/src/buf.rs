@@ -339,7 +339,7 @@ impl Buf for std::io::Cursor<&[u8]> {
         use std::io::Read;
         let mut skip = [0u8; 1];
         for _ in 0..n {
-            self.read(&mut skip).ok();
+            let _ = self.read(&mut skip);
         }
     }
 }
@@ -363,7 +363,7 @@ impl Buf for std::io::Cursor<&mut Vec<u8>> {
         use std::io::Read;
         let mut skip = [0u8; 1];
         for _ in 0..n {
-            self.read(&mut skip).ok();
+            let _ = self.read(&mut skip);
         }
     }
 }
@@ -387,7 +387,7 @@ impl Buf for std::io::Cursor<Vec<u8>> {
         use std::io::Read;
         let mut skip = [0u8; 1];
         for _ in 0..n {
-            self.read(&mut skip).ok();
+            let _ = self.read(&mut skip);
         }
     }
 }
@@ -411,7 +411,7 @@ impl<'a> Buf for std::io::Cursor<&'a Vec<u8>> {
         use std::io::Read;
         let mut skip = [0u8; 1];
         for _ in 0..n {
-            self.read(&mut skip).ok();
+            let _ = self.read(&mut skip);
         }
     }
 }
@@ -435,7 +435,7 @@ impl<'a, 'b> Buf for &'a mut std::io::Cursor<&'b mut Vec<u8>> {
         use std::io::Read;
         let mut skip = [0u8; 1];
         for _ in 0..n {
-            self.read(&mut skip).ok();
+            let _ = self.read(&mut skip);
         }
     }
 }

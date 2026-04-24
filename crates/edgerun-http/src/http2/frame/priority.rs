@@ -18,15 +18,7 @@ pub struct PriorityFrame {
 impl PriorityFrame {
     /// Create a new PRIORITY frame
     pub fn new(stream_id: u32, exclusive: bool, stream_dependency: u32, weight: u8) -> Self {
-        // HTTP/2 weight range is 1-256, but u8 only holds 0-255.
-        // Weight 256 is stored as 255 (the difference is negligible in practice).
-        let w = if weight < 1 {
-            1
-        } else if weight >= 255 {
-            255
-        } else {
-            weight
-        };
+        let w = if weight == 0 { 1 } else { weight };
         PriorityFrame {
             stream_id,
             exclusive,

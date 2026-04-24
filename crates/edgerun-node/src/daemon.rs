@@ -769,12 +769,8 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
                 crate::init::reap_zombies();
             }
         } else {
-            // Normal mode: wait for ctrl_c
-            loop {
-                let _ = edgerun_rt::ctrl_c().await;
-                edgerun_log::info!("shutdown requested (normal mode)");
-                break;
-            }
+            let _ = edgerun_rt::ctrl_c().await;
+            edgerun_log::info!("shutdown requested (normal mode)");
         }
     });
     let _ = shutdown.await;
