@@ -21,7 +21,7 @@
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use edgerun_rt::sync::RwLock;
 
@@ -221,7 +221,7 @@ pub struct FileIndex {
 impl FileIndex {
     // Note: all methods take &self because interior mutability is via RwLock.
 
-    pub fn open(data_root: &PathBuf) -> io::Result<Self> {
+    pub fn open(data_root: &Path) -> io::Result<Self> {
         let idx_dir = data_root.join("indexes");
         fs::create_dir_all(&idx_dir)?;
 

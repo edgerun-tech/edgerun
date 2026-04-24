@@ -467,7 +467,7 @@ fn apply_remove_file_cached(
 /// e.g. when a resolve_file points to a file outside source_files).
 fn ensure_in_cache<'a>(
     cache: &'a mut HashMap<PathBuf, syn::File>,
-    file: &PathBuf,
+    file: &Path,
 ) -> Result<&'a mut syn::File, String> {
     use std::collections::hash_map::Entry;
     match cache.entry(file.clone()) {

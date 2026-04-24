@@ -151,7 +151,7 @@ fn main() -> Result<(), String> {
 // Commands
 // ===========================================================================
 
-async fn cmd_list(data_root: &PathBuf) -> Result<(), String> {
+async fn cmd_list(data_root: &Path) -> Result<(), String> {
     let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
     let messages = index.list_queued().await;
 
@@ -178,7 +178,7 @@ async fn cmd_list(data_root: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-async fn cmd_show(data_root: &PathBuf, message_id: &str) -> Result<(), String> {
+async fn cmd_show(data_root: &Path, message_id: &str) -> Result<(), String> {
     let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
     let msg = index.get_message(message_id).await
         .ok_or_else(|| format!("Message not found: {}", message_id))?;

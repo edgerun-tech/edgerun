@@ -375,7 +375,7 @@ fn now_us() -> u64 {
 }
 
 /// Derive a deterministic 32-byte key from the data_root path via SHA-256.
-fn derive_key_from_path(path: &PathBuf) -> [u8; 32] {
+fn derive_key_from_path(path: &Path) -> [u8; 32] {
     let bytes = path.as_os_str().as_encoded_bytes();
     let hash = edgerun_core::crypto::sha256(bytes);
     let mut key = [0u8; 32];

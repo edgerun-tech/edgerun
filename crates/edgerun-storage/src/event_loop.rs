@@ -13,6 +13,7 @@
 use edgerun_core::protocol::EventEnvelope;
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
+use std::path::Path;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -287,7 +288,7 @@ pub trait EventHandler: Send + Sync {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn open_stream_file(events_dir: &PathBuf, stream_id: &[u8]) -> File {
+fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> File {
     let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
     let log_path = events_dir.join(format!("{stream_id_hex}.log"));
     if let Some(parent) = log_path.parent() {
