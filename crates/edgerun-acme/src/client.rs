@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use edgerun_rt::RwLock;
-use edgerun_http::{HttpClient, Request, Response, StatusCode, Method};
+use edgerun_http::{HttpClient, Method};
 use edgerun_encoding::base64url_nopad_encode;
-use sha2::{Sha256, Digest};
 use url::Url;
 
 use crate::types::{Directory, DirectoryUrl, Identifier, AcmeErrorDetail, JwsHeader, SignedJws, NewAccountRequestWithNonce, NewOrderRequest, CSRRequest, RevokeCertRequest, CertificateResponse};
@@ -12,7 +11,6 @@ use crate::order::Order;
 use crate::challenge::Challenge;
 use crate::http_challenge::HttpChallengeHandler;
 use crate::dns_challenge::DnsChallengeManager;
-use crate::tls_alpn_challenge::TlsAlpnManager;
 use crate::AcmeError;
 
 pub struct AcmeClient {

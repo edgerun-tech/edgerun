@@ -1,6 +1,5 @@
 use edgerun_solana::{DeploymentClient, solana_types::Pubkey};
 use edgerun_solana::signers::Ed25519Signer;
-use edgerun_solana::types::pricing;
 
 pub enum DeploymentCommand {
     Create {
@@ -105,7 +104,7 @@ pub fn parse_deployment_command() -> DeploymentCommand {
             let mut memory_bytes = 0u64;
             let mut storage_bytes = 0u64;
             let mut network_bytes = 0u64;
-            let mut containers = 1u32;
+            let containers = 1u32;
             
             while let Some(arg) = args.next() {
                 match arg.as_str() {

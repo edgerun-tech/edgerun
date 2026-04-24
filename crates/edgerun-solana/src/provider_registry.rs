@@ -13,6 +13,7 @@ use crate::types::{Provider, ProviderStatus, collateral};
 use crate::provider_registry_program_id;
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[allow(dead_code)]
 enum ProviderRegistryInstruction {
     Initialize,
     Register {

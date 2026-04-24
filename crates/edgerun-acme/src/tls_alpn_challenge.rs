@@ -3,6 +3,7 @@ use sha2::{Sha256, Digest};
 use edgerun_encoding::base64url_nopad_encode;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct TlsAlpnChallenge {
     domain: String,
     token: String,

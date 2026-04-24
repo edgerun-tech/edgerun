@@ -1,9 +1,8 @@
-use std::sync::Arc;
 
 use edgerun_crypto::{random_p256_signing_key, p256_signing_key_to_pem, p256_signing_key_from_pem, SigningKey, Digest};
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use edgerun_crypto::p256::ecdsa::Signature;
-use edgerun_encoding::base64::{base64url_nopad_encode, standard_encode};
+use edgerun_encoding::base64::base64url_nopad_encode;
 
 use crate::types::Jwk;
 use crate::AcmeError;

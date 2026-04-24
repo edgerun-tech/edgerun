@@ -1159,6 +1159,7 @@ impl Default for TransportParameters {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::UdpSocket;
 
     #[test]
     fn test_quic_dummy() {
@@ -1173,6 +1174,109 @@ mod tests {
         let cid2 = ConnectionId::random();
         assert_eq!(cid1.len(), 8);
         assert_ne!(cid1, cid2);
+    }
+
+    #[test]
+    fn test_initial_packet_send_receive() {
+        use crate::http3::quic::frame::QuicFrame;
+        use crate::http3::quic::packet;
+
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        rt.block_on(async {
+            let client_socket = UdpSocket::bind("127.0.0.1:0").expect("client bind");
+            let server_socket = UdpSocket::bind("127.0.0.1:0").expect("server bind");
+            let client_addr = client_socket.local_addr().expect("client local");
+            let server_addr = server_socket.local_addr().expect("server local");
+
+            client_socket.connect(server_addr).expect("client connect");
+            server_socket.connect(client_addr).expect("server connect");
+
+            let client = Arc::new(AsyncUdpSocket::from_std(client_socket).expect("wrap client"));
+            let server = Arc::new(AsyncUdpSocket::from_std(server_socket).expect("wrap server"));
+
+            let dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
+            let handshaker = handshake::QuicTlsHandshaker::new("example.com");
+            let initial_keys = handshaker.initial_keys(&dcid);
+            let mut prot = crypto::PacketProtection::new(&initial_keys);
+
+            let crypto_data = handshaker.initial_crypto_data();
+            let frame = QuicFrame::Crypto {
+                offset: 0,
+                data: crypto_data.to_vec(),
+            };
+            let payload = frame.to_bytes();
+
+            eprintln!("TEST: payload[:20]={:02x?}", &payload[..payload.len().min(20)]);
+            eprintln!("TEST: frame_type=0x{:02x}", payload.first().copied().unwrap_or(0));
+
+            let mut conn = QuicConnection {
+                socket: client,
+                server_addr: "127.0.0.1:0".to_string(),
+                transport: QuicTransport::new(ConnectionId::random(), ConnectionId::random()),
+                crypto: QuicCrypto::new(),
+                protection: None,
+                hs_protection: None,
+                initial_protection: Some(prot),
+                established: false,
+                recv_buffer: Vec::new(),
+                recv_offset: 0,
+                server_dcid: ConnectionId::random(),
+                early_data_protection: None,
+                early_data_sent: false,
+                key_phase: false,
+                prev_protection: None,
+                client_app_traffic_secret: Vec::new(),
+                server_app_traffic_secret: Vec::new(),
+                cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+                stream_send_offset: std::collections::HashMap::new(),
+                active_path: None,
+                pending_path_challenges: std::collections::HashMap::new(),
+                sent_packets_buffer: Vec::new(),
+            };
+
+            let pn = conn.transport.next_packet_number(PacketNumberSpace::ApplicationData);
+            let pkt = QuicPacket::initial(
+                QUIC_VERSION_V1,
+                conn.transport.remote_cid.as_bytes().to_vec(),
+                conn.transport.local_cid.as_bytes().to_vec(),
+                vec![],
+                pn,
+                payload.clone(),
+            );
+            let packet_bytes = pkt.to_bytes();
+
+            let payload_offset = packet::get_long_header_payload_offset(&packet_bytes).map_err(|e| e.to_string())?;
+            let aad = packet_bytes[..payload_offset].to_vec();
+            let encrypted = packet_bytes[payload_offset..].to_vec();
+
+            eprintln!("TEST: aad len={}, encrypted len={}", aad.len(), encrypted.len());
+
+            let send_bytes = conn.initial_protection.as_mut().expect("prot")
+                .protect(&aad, &encrypted)
+                .map_err(|e| e.to_string())?;
+
+            eprintln!("TEST: send_bytes[:20]={:02x?}", &send_bytes[..send_bytes.len().min(20)]);
+
+            conn.socket.send_to(&send_bytes, server_addr).await.expect("send");
+            eprintln!("TEST: sent {} bytes", send_bytes.len());
+
+            let mut buf = [0u8; 4096];
+            let (n, _) = server.recv_from(&mut buf).await.expect("recv");
+            eprintln!("TEST: received {} bytes", n);
+            eprintln!("TEST: recv_buf[:20]={:02x?}", &buf[..n.min(20)]);
+
+            assert!(n > 0, "Should receive some bytes");
+            assert_eq!(n, send_bytes.len(), "Receive length should match send length");
+
+            let recv_bytes = &buf[..n];
+            assert_eq!(recv_bytes, send_bytes.as_slice(), "Received encrypted packet should match sent");
+
+            Ok::<(), String>(())
+        }).expect("test failed");
     }
 
     #[test]

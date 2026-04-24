@@ -6,10 +6,10 @@ use edgerun_mesh::FrameType;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
 use edgerun_solana::DeploymentClient;
 use edgerun_solana::signers::Ed25519Signer;
-use edgerun_solana::solana_types::Pubkey;
 use crate::Scheduler;
 
 impl Scheduler {
+    #[allow(unused_variables)]
     /// Process a mesh frame and handle metrics reporting.
     pub fn handle_mesh_frame(
         &mut self,

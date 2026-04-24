@@ -8,6 +8,7 @@ use edgerun_encoding::base64url_nopad_encode;
 use crate::account::AccountKey;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct DnsChallenge {
     domain: String,
     token: String,

@@ -1,7 +1,7 @@
 use edgerun_rt::{spawn, CancellationToken, timeout, AsyncTcpStream, AsyncTcpListener, TcpSocket, AsyncReadExt, AsyncWriteExt};
 use edgerun_log::{info, debug, warn};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -51,6 +51,7 @@ impl ProxyServer {
         }
     }
 
+    #[allow(dead_code)]
     fn is_shutting_down(&self) -> bool {
         self.graceful_shutdown.load(Ordering::Relaxed)
     }
