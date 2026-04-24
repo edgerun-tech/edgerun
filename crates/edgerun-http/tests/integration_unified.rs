@@ -147,7 +147,6 @@ fn server_http1_head() {
 // ============================================================================
 
 #[test]
-#[ignore] // TLS
 fn server_https_get() {
     use edgerun_tls::generate_self_signed as gen_cert;
 
@@ -161,7 +160,7 @@ fn server_https_get() {
         let server_task = spawn(async move { server.accept_one().await });
         sleep(Duration::from_millis(100)).await;
 
-        let client = HttpClient::new();
+        let client = HttpClient::new().version(HttpVersion::Http1);
         let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await?;
 
         assert_eq!(resp.status().as_u16(), 200);
@@ -218,7 +217,7 @@ fn client_http2_explicit() {
 }
 
 #[test]
-#[ignore] // HTTP/3 over QUIC
+#[ignore] // HTTP/3 over QUIC not fully implemented
 fn client_http3_explicit() {
     use edgerun_tls::generate_self_signed as gen_cert;
 
@@ -246,7 +245,6 @@ fn client_http3_explicit() {
 }
 
 #[test]
-#[ignore] // Best = HTTP/3 -> needs HTTP/3 working
 fn client_best_negotiation() {
     use edgerun_tls::generate_self_signed as gen_cert;
 
@@ -254,7 +252,6 @@ fn client_best_negotiation() {
         let cert = gen_cert(&["127.0.0.1", "localhost"]).expect("cert");
         let server = HttpServer::new(EchoHandler)
             .with_tls(cert.clone())
-            .with_http3()
             .bind(format!("127.0.0.1:{}", port))
             .await?;
 
@@ -263,7 +260,6 @@ fn client_best_negotiation() {
         let server_task = spawn(async move { server.serve_with_shutdown(shutdown_clone).await });
         sleep(Duration::from_millis(100)).await;
 
-        // Default is HttpVersion::Best
         let client = HttpClient::new();
         let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await?;
 

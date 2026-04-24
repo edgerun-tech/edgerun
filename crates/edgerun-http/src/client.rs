@@ -208,14 +208,9 @@ impl HttpClient {
             }
             HttpVersion::Http3 => self.execute_http3(request).await,
             HttpVersion::Best => {
-                match self.execute_http3(request).await {
+                match self.execute_http2(request).await {
                     Ok(r) => Ok(r),
-                    Err(_) => {
-                        match self.execute_http2(request).await {
-                            Ok(r) => Ok(r),
-                            Err(_) => self.execute_http1(request).await,
-                        }
-                    }
+                    Err(_) => self.execute_http1(request).await,
                 }
             }
         }
