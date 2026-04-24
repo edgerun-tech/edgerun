@@ -54,6 +54,9 @@ use super::huffman::HuffmanDecoderError;
 use super::STATIC_TABLE;
 use super::{StaticTable, HeaderTable};
 
+pub type IndexedHeader<'a> = (&'a [u8], &'a [u8]);
+pub type DecodedHeader<'a> = (Cow<'a, [u8]>, Cow<'a, [u8]>);
+
 /// Decodes an integer encoded with a given prefix size (in bits).
 /// Assumes that the buffer `buf` contains the integer to be decoded,
 /// with the first byte representing the octet that contains the
@@ -393,7 +396,7 @@ impl<'a> Decoder<'a> {
 
     /// Decodes an indexed header representation.
     fn decode_indexed(&self, buf: &[u8])
-            -> Result<((&[u8], &[u8]), usize), DecoderError> {
+            -> Result<(IndexedHeader<'_>, usize), DecoderError> {
         let (index, consumed) = decode_integer(buf, 7)?;
         debug!("Decoding indexed: index = {}, consumed = {}", index, consumed);
 
@@ -420,7 +423,7 @@ impl<'a> Decoder<'a> {
     /// - index: whether or not the decoded value should be indexed (i.e.
     ///   included in the dynamic table).
     fn decode_literal<'b>(&'b self, buf: &'b [u8], index: bool)
-            -> Result<((Cow<'b, [u8]>, Cow<'b, [u8]>), usize), DecoderError> {
+            -> Result<(DecodedHeader<'b>, usize), DecoderError> {
         let prefix = if index {
             6
         } else {

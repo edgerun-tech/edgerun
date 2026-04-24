@@ -82,6 +82,7 @@ impl Url {
     }
 
     /// Convert back to string.
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         let mut s = format!("{}://{}", self.scheme, self.authority.host);
         if let Some(port) = self.authority.port {
@@ -152,11 +153,7 @@ fn parse_url(input: &str) -> Result<Url, ParseError> {
     };
     
     // Parse fragment
-    let fragment = if let Some(rest) = rest.strip_prefix('#') {
-        Some(rest.to_string())
-    } else {
-        None
-    };
+    let fragment = rest.strip_prefix('#').map(|rest| rest.to_string());
     
     Ok(Url {
         scheme,

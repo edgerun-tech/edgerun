@@ -47,8 +47,9 @@ pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send
 /// // Or register from plaintext directly (for development)
 /// // provider.register_plaintext("vmlinuz", kernel_bytes.to_vec());
 /// ```
+#[allow(clippy::type_complexity)]
 pub struct BlobTftpProvider {
-    decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync>,
+    decryptor: Box<DecryptFn>,
     /// Filename → blob mapping.
     registry: HashMap<String, BlobEntry>,
     /// Decrypted blobs cached in memory.
@@ -72,7 +73,7 @@ pub enum BlobEntry {
 impl BlobTftpProvider {
     /// Create a new blob-backed TFTP provider.
     pub fn new(
-        decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync>,
+        decryptor: Box<DecryptFn>,
     ) -> Self {
         Self {
             decryptor,
@@ -168,8 +169,8 @@ impl BlobTftpProvider {
     }
 
     /// Get the decryptor function (for external use).
-    pub fn decryptor(&self) -> &(dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync) {
-        &*self.decryptor
+    pub fn decryptor(&self) -> &DecryptFn {
+        &self.decryptor
     }
 }
 

@@ -103,6 +103,7 @@ pub use aes_gcm::{Aes256Gcm as AesGcmCipher};
 /// Unified AEAD cipher for TLS 1.3 / QUIC
 /// Supports AES-128-GCM, AES-256-GCM, and ChaCha20-Poly1305
 #[derive(Clone)]
+#[allow(clippy::large_size_difference)]
 pub enum AeadCipher {
     Aes128Gcm(aes_gcm::Aes128Gcm),
     Aes256Gcm(aes_gcm::Aes256Gcm),

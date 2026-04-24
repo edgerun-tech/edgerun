@@ -18,6 +18,7 @@ fn to_kebab_case(s: &str) -> String {
     result
 }
 
+#[allow(clippy::type_complexity)]
 fn parse_arg_attrs(field: &Field) -> (Option<char>, Option<String>, Option<String>, Option<String>, bool, Option<usize>, Option<char>) {
     let mut short = None;
     let mut long = None;
@@ -78,7 +79,7 @@ fn parse_arg_attrs(field: &Field) -> (Option<char>, Option<String>, Option<Strin
             }
         }
     }
-    (short, long, help, default, is_subcommand, num_args, value_delimiter)
+(short, long, help, default, is_subcommand, num_args, value_delimiter)
 }
 
 fn parse_global_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<String>) {

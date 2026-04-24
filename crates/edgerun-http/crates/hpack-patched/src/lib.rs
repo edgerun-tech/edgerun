@@ -2,6 +2,11 @@
 //! performing the encoding and decoding of header sets, according to the
 //! HPACK spec.
 
+type StaticEntryIter<'a> = iter::Map<
+    slice::Iter<'a, (&'a [u8], &'a [u8])>,
+    fn(&'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8])>;
+type HeaderIterChain<'a> = iter::Chain<StaticEntryIter<'a>, DynamicTableIter<'a>>;
+
 #[macro_use] extern crate log;
 #[cfg(feature = "interop_tests")]
 #[allow(unused_imports)]
@@ -218,14 +223,7 @@ type StaticTable<'a> = &'a [(&'a [u8], &'a [u8])];
 /// monstrosity, that is required because "abstract return types" don't exist
 /// yet ([https://github.com/rust-lang/rfcs/pull/105]).
 struct HeaderTableIter<'a> {
-    // Represents a chain of static-table -> dynamic-table elements.
-    // The mapper is required to transform the elements yielded from the static
-    // table to a type that matches the elements yielded from the dynamic table.
-    inner: iter::Chain<
-            iter::Map<
-                slice::Iter<'a, (&'a [u8], &'a [u8])>,
-                fn(&'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8])>,
-            DynamicTableIter<'a>>,
+    inner: HeaderIterChain<'a>,
 }
 
 impl<'a> Iterator for HeaderTableIter<'a> {

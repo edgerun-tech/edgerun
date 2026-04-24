@@ -1008,6 +1008,7 @@ fn nl80211_get_station(ifindex: i32, bssid: &[u8; 6]) -> Result<(Option<i32>, Op
 /// Query all connected stations (for AP mode) or get station list.
 ///
 /// Returns Vec of (mac, signal_dbm, tx_bitrate_kbps).
+#[allow(clippy::type_complexity)]
 fn nl80211_dump_stations(ifindex: i32) -> Result<Vec<([u8; 6], i32, Option<u32>)>, CapabilityError> {
     let mut sock = Nl80211Socket::open()?;
 

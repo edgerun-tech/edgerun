@@ -23,6 +23,9 @@ use edgerun_camera_biometrics::{
     FaceBounds,
 };
 
+pub type RawDetection = (i32, i32, i32, i32, f32);
+pub type NmsResult = (RawDetection, u32);
+
 // ===========================================================================
 // Public Types
 // ===========================================================================
@@ -486,7 +489,7 @@ impl FaceDetector {
     // Non-maximum suppression
     // -----------------------------------------------------------------------
 
-    fn nms(&self, detections: &[(i32, i32, i32, i32, f32)], iou_thresh: f32) -> Vec<((i32, i32, i32, i32, f32), u32)> {
+    fn nms(&self, detections: &[RawDetection], iou_thresh: f32) -> Vec<NmsResult> {
         if detections.is_empty() {
             return Vec::new();
         }

@@ -265,7 +265,7 @@ pub fn to_toml_string(value: &TomlValue) -> Result<String, TomlError> {
     Ok(output)
 }
 
-fn to_toml_value(output: &mut String, value: &TomlValue, _indent: usize) -> Result<(), TomlError> {
+fn to_toml_value(output: &mut String, value: &TomlValue, _unused_indent: usize) -> Result<(), TomlError> {
     match value {
         TomlValue::String(s) => {
             if s.contains('"') || s.contains('\n') || s.contains('\\') || s.contains('#') {

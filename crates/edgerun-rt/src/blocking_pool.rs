@@ -196,10 +196,11 @@ impl std::fmt::Display for PoolError {
 
 impl std::error::Error for PoolError {}
 
+type PoolTask = Box<dyn FnOnce() + Send>;
+type PoolSender = std::sync::mpsc::SyncSender<PoolTask>;
+
 struct PoolInner {
-    /// `None` = shut down. Held inside a Mutex so `shutdown()` can take it
-    /// (dropping the sender → `Disconnected` for all workers).
-    tx: Mutex<Option<std::sync::mpsc::SyncSender<Box<dyn FnOnce() + Send>>>>,
+    tx: Mutex<Option<PoolSender>>,
     threads: Mutex<Vec<StdJoinHandle<()>>>,
     joined: AtomicBool,
     thread_count: usize,
