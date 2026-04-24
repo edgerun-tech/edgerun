@@ -48,40 +48,28 @@ fn parse_arg_attrs(field: &Field) -> (Option<char>, Option<String>, Option<Strin
                                 value_tokens.extend([tokens.next().unwrap()]);
                             }
                             if ident_str == "short" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Char(c) = lit {
-                                        short = Some(c.value());
-                                    }
+                                if let Ok(Lit::Char(c)) = syn::parse2::<Lit>(value_tokens) {
+                                    short = Some(c.value());
                                 }
                             } else if ident_str == "long" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Str(s) = lit {
-                                        long = Some(s.value());
-                                    }
+                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
+                                    long = Some(s.value());
                                 }
                             } else if ident_str == "help" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Str(s) = lit {
-                                        help = Some(s.value());
-                                    }
+                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
+                                    help = Some(s.value());
                                 }
                             } else if ident_str == "default_value" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Str(s) = lit {
-                                        default = Some(s.value());
-                                    }
+                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
+                                    default = Some(s.value());
                                 }
                             } else if ident_str == "num_args" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Int(i) = lit {
-                                        num_args = Some(i.base10_parse().unwrap_or(1));
-                                    }
+                                if let Ok(Lit::Int(i)) = syn::parse2::<Lit>(value_tokens) {
+                                    num_args = Some(i.base10_parse().unwrap_or(1));
                                 }
                             } else if ident_str == "value_delimiter" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Char(c) = lit {
-                                        value_delimiter = Some(c.value());
-                                    }
+                                if let Ok(Lit::Char(c)) = syn::parse2::<Lit>(value_tokens) {
+                                    value_delimiter = Some(c.value());
                                 }
                             }
                         }
@@ -165,11 +153,9 @@ fn parse_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<String>) 
                                         name = Some(s.value());
                                     }
                                 }
-                            } else if ident_str == "about" {
-                                if let Ok(lit) = syn::parse2::<Lit>(value_tokens) {
-                                    if let Lit::Str(s) = lit {
-                                        about = Some(s.value());
-                                    }
+                            } else if ident_str == "name" || ident_str == "about" {
+                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
+                                    about = Some(s.value());
                                 }
                             }
                         }

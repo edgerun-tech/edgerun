@@ -140,8 +140,7 @@ impl BlobTftpProvider {
             return Ok(());
         }
 
-        if let Some(entry) = self.registry.get(filename) {
-            if let BlobEntry::Encrypted { nonce, ciphertext, .. } = entry {
+        if let Some(BlobEntry::Encrypted { nonce, ciphertext, .. }) = self.registry.get(filename) {
                 let plaintext = (self.decryptor)(nonce, ciphertext)?;
                 self.cache.insert(
                     filename.to_string(),
@@ -153,7 +152,6 @@ impl BlobTftpProvider {
                     self.cache[filename].data.len()
                 );
             }
-        }
 
         Ok(())
     }
@@ -219,12 +217,10 @@ impl FileProvider for BlobTftpProvider {
             match (self.decryptor)(nonce, ciphertext) {
                 Ok(plaintext) => {
                     // Cache it for subsequent blocks
-                    if let Some(entry) = self.registry.get(filename) {
-                        if let BlobEntry::Encrypted { .. } = entry {
-                            // Note: we can't mutate self here (immutable borrow),
-                            // but the cache will be populated on the next file_size call.
-                            // For now just return the block.
-                        }
+                    if let Some(BlobEntry::Encrypted { .. }) = self.registry.get(filename) {
+                        // Note: we can't mutate self here (immutable borrow),
+                        // but the cache will be populated on the next file_size call.
+                        // For now just return the block.
                     }
                     if offset >= plaintext.len() {
                         return None;
