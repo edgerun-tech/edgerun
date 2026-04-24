@@ -1,6 +1,7 @@
 //! OAuth 2.0 / OIDC type definitions.
 
 use edgerun_json::{JsonValue, from_str, to_string};
+use crate::oauth_client::percent_encode;
 
 // ---------------------------------------------------------------------------
 // Scope

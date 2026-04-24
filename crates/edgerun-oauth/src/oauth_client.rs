@@ -475,6 +475,6 @@ impl OAuthClient {
 // Helpers
 // ===========================================================================
 
-fn percent_encode(s: &str) -> String {
+pub(crate) fn percent_encode(s: &str) -> String {
     edgerun_encoding::percent::percent_encode(s)
 }
