@@ -365,7 +365,7 @@ fn apply_rename_type_cached(
 
 fn apply_add_fn_cached(
     cache: &mut HashMap<PathBuf, syn::File>,
-    file: &PathBuf,
+    file: &Path,
     name: &str,
     args: &str,
     ret: &str,
@@ -374,13 +374,13 @@ fn apply_add_fn_cached(
 ) -> Result<(), String> {
     let parsed = ensure_in_cache(cache, file)?;
     edit_ops::add_fn(parsed, name, args, ret, body)?;
-    modified.insert(file.clone());
+    modified.insert(file.to_path_buf());
     Ok(())
 }
 
 fn apply_replace_fn_body_cached(
     cache: &mut HashMap<PathBuf, syn::File>,
-    file: &PathBuf,
+    file: &Path,
     name: &str,
     body: &str,
     modified: &mut std::collections::HashSet<PathBuf>,
@@ -389,13 +389,13 @@ fn apply_replace_fn_body_cached(
     if !edit_ops::replace_fn_body(parsed, name, body)? {
         return Err(format!("fn {name} not found"));
     }
-    modified.insert(file.clone());
+    modified.insert(file.to_path_buf());
     Ok(())
 }
 
 fn apply_remove_fn_cached(
     cache: &mut HashMap<PathBuf, syn::File>,
-    file: &PathBuf,
+    file: &Path,
     name: &str,
     modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
@@ -403,25 +403,25 @@ fn apply_remove_fn_cached(
     if !edit_ops::remove_fn(parsed, name) {
         return Err(format!("fn {name} not found"));
     }
-    modified.insert(file.clone());
+    modified.insert(file.to_path_buf());
     Ok(())
 }
 
 fn apply_add_use_cached(
     cache: &mut HashMap<PathBuf, syn::File>,
-    file: &PathBuf,
+    file: &Path,
     use_path: &str,
     modified: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), String> {
     let parsed = ensure_in_cache(cache, file)?;
     edit_ops::add_use(parsed, use_path)?;
-    modified.insert(file.clone());
+    modified.insert(file.to_path_buf());
     Ok(())
 }
 
 fn apply_add_derive_cached(
     cache: &mut HashMap<PathBuf, syn::File>,
-    file: &PathBuf,
+    file: &Path,
     name: &str,
     derive: &str,
     modified: &mut std::collections::HashSet<PathBuf>,
@@ -430,7 +430,7 @@ fn apply_add_derive_cached(
     if !edit_ops::add_derive(parsed, name, derive)? {
         return Err(format!("struct/enum {name} not found"));
     }
-    modified.insert(file.clone());
+    modified.insert(file.to_path_buf());
     Ok(())
 }
 
