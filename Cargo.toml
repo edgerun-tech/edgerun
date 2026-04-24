@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
   "crates/edgerun-error",
+  "crates/edgerun-url",
   "crates/edgerun-inotify",
   "crates/edgerun-alsa-microphone",
   "crates/edgerun-alsa-speaker",
@@ -163,6 +164,7 @@ edgerun-encoding = { path = "crates/edgerun-encoding" }
 edgerun-acme = { path = "crates/edgerun-acme" }
 edgerun-dns = { path = "crates/edgerun-dns" }
 edgerun-tls = { path = "crates/edgerun-tls" }
+edgerun-url = { path = "crates/edgerun-url" }
 edgerun-email = { path = "crates/edgerun-email" }
 edgerun-log = { path = "crates/edgerun-log" }
 edgerun-rt = { path = "crates/edgerun-rt" }

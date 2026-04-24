@@ -1,4 +1,4 @@
-use url::Url;
+use edgerun_url::Url;
 
 use crate::types::OrderStatus;
 

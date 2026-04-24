@@ -1,6 +1,6 @@
 
 use serde::{Deserialize, Serialize};
-use url::Url;
+use edgerun_url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Directory {

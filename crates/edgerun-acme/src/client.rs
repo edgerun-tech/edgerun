@@ -3,7 +3,7 @@ use std::sync::Arc;
 use edgerun_rt::RwLock;
 use edgerun_http::{HttpClient, Method};
 use edgerun_encoding::base64url_nopad_encode;
-use url::Url;
+use edgerun_url::Url;
 
 use crate::types::{Directory, DirectoryUrl, Identifier, AcmeErrorDetail, JwsHeader, SignedJws, NewAccountRequestWithNonce, NewOrderRequest, CSRRequest, RevokeCertRequest, CertificateResponse};
 use crate::account::AccountKey;
