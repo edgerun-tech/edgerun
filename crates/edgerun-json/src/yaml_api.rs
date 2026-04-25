@@ -241,18 +241,22 @@ fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(Yam
         }
 
         if let Some(colon_pos) = trimmed.find(':') {
-            let key = trimmed[..colon_pos].trim();
+            let mut key = trimmed[..colon_pos].trim().to_string();
+            // Strip quotes from keys
+            if (key.starts_with('"') && key.ends_with('"')) || (key.starts_with('\'') && key.ends_with('\'')) {
+                key = key[1..key.len()-1].to_string();
+            }
             let value_str = trimmed[colon_pos + 1..].trim();
 
             if value_str.is_empty() {
                 // Nested block - parse lines at higher indentation
                 i += 1;
                 let (nested, new_i) = parse_yaml_at(lines, i, leading + 2)?;
-                values.push(YamlValue::Mapping(vec![(key.to_owned(), nested)]));
+                values.push(YamlValue::Mapping(vec![(key, nested)]));
                 i = new_i;
             } else {
                 let value = parse_yaml_simple(value_str)?;
-                values.push(YamlValue::Mapping(vec![(key.to_owned(), value)]));
+                values.push(YamlValue::Mapping(vec![(key, value)]));
                 i += 1;
             }
         } else {
