@@ -1,6 +1,10 @@
 // Vendored from qpack 0.1.0 (crates.io) — all modules made public.
 // QPACK header compression for HTTP/3 (RFC 9204).
 
+#![no_std]
+
+extern crate alloc;
+
 pub use self::{
     decoder::{decode_stateless, Decoded, DecoderError},
     encoder::{encode_stateless, EncoderError},
@@ -30,13 +34,11 @@ pub enum Error {
     Decoder(DecoderError),
 }
 
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl alloc::fmt::Display for Error {
+    fn fmt(&self, f: &mut alloc::fmt::Formatter<'_>) -> alloc::fmt::Result {
         match self {
-            Error::Encoder(e) => write!(f, "Encoder {}", e),
-            Error::Decoder(e) => write!(f, "Decoder {}", e),
+            Error::Encoder(e) => write!(f, "Encoder {:?}", e),
+            Error::Decoder(e) => write!(f, "Decoder {:?}", e),
         }
     }
 }

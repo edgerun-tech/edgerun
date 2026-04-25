@@ -1,7 +1,10 @@
-use std::{
-    borrow::Cow,
-    fmt::{Display, Formatter},
-};
+use alloc::borrow::Cow;
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::format;
+use alloc::vec;
+use alloc::vec::Vec;
+use alloc::fmt::{Display, Formatter};
 
 /**
  * https://tools.ietf.org/html/rfc7541
@@ -9,7 +12,7 @@ use std::{
  */
 pub const ESTIMATED_OVERHEAD_BYTES: usize = 32;
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq, Ord, PartialOrd)]
 pub struct HeaderField {
     pub name: Cow<'static, [u8]>,
     pub value: Cow<'static, [u8]>,
@@ -53,7 +56,7 @@ impl AsRef<HeaderField> for HeaderField {
 }
 
 impl Display for HeaderField {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
         write!(
             f,
             "\"{}\": \"{}\"",

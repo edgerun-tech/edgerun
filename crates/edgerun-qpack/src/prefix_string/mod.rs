@@ -2,9 +2,10 @@ mod bitwin;
 mod decode;
 mod encode;
 
-use std::convert::TryInto;
-use std::fmt;
-use std::num::TryFromIntError;
+use alloc::vec::Vec;
+use core::convert::TryInto;
+use core::fmt;
+use core::num::TryFromIntError;
 
 use edgerun_encoding::buf::{Buf, BufMut};
 
@@ -26,17 +27,19 @@ pub enum Error {
     BufSize(TryFromIntError),
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Error::UnexpectedEnd => write!(f, "unexpected end"),
-            Error::Integer(e) => write!(f, "could not parse integer: {}", e),
+            Error::Integer(e) => write!(f, "could not parse integer: {:?}", e),
             Error::HuffmanDecoding(e) => write!(f, "Huffman decode failed: {:?}", e),
             Error::HuffmanEncoding(e) => write!(f, "Huffman encode failed: {:?}", e),
             Error::BufSize(_) => write!(f, "number in buffer wrong size"),
         }
     }
 }
+
+impl core::error::Error for Error {}
 
 pub fn decode<B: Buf>(size: u8, buf: &mut B) -> Result<Vec<u8>, Error> {
     let (flags, len) = prefix_int::decode(size - 1, buf)?;
@@ -98,7 +101,7 @@ impl From<TryFromIntError> for Error {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use std::io::Cursor;
+    use edgerun_encoding::buf::Cursor;
 
     #[test]
     fn codec_6() {

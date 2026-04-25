@@ -1,4 +1,4 @@
-use std::fmt;
+use core::fmt;
 
 use edgerun_encoding::buf::{Buf, BufMut};
 
@@ -8,14 +8,16 @@ pub enum Error {
     UnexpectedEnd,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Error::Overflow => write!(f, "value overflow"),
             Error::UnexpectedEnd => write!(f, "unexpected end"),
         }
     }
 }
+
+impl core::error::Error for Error {}
 
 pub fn decode<B: Buf>(size: u8, buf: &mut B) -> Result<(u8, u64), Error> {
     assert!(size <= 8);
@@ -80,7 +82,7 @@ const MAX_POWER: usize = 9 * 7;
 #[cfg(test)]
 mod test {
     use assert_matches::assert_matches;
-    use std::io::Cursor;
+    use edgerun_encoding::buf::Cursor;
 
     use crate::prefix_int::Error;
 

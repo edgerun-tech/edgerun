@@ -8,6 +8,19 @@ pub enum ParseError {
     InvalidBase(isize),
 }
 
+impl core::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ParseError::Integer(e) => write!(f, "invalid integer: {:?}", e),
+            ParseError::String(e) => write!(f, "invalid string: {:?}", e),
+            ParseError::InvalidPrefix(p) => write!(f, "invalid prefix: 0x{:02x}", p),
+            ParseError::InvalidBase(b) => write!(f, "invalid base: {}", b),
+        }
+    }
+}
+
+impl core::error::Error for ParseError {}
+
 impl From<prefix_int::Error> for ParseError {
     fn from(e: prefix_int::Error) -> Self {
         ParseError::Integer(e)

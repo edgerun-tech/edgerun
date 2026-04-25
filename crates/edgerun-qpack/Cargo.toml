@@ -7,7 +7,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-encoding = { path = "../edgerun-encoding" }
+edgerun-encoding = { path = "../edgerun-encoding", features = ["alloc"] }
+
 
 [dev-dependencies]
 assert_matches = "1"

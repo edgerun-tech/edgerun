@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+use core::cmp::Ordering;
 use super::BitWindow;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -5,6 +7,17 @@ pub enum Error {
     MissingBits(BitWindow),
     Unhandled(BitWindow, usize),
 }
+
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::MissingBits(bw) => write!(f, "missing bits at byte {} bit {}", bw.byte, bw.bit),
+            Error::Unhandled(bw, val) => write!(f, "unhandled value {} at byte {} bit {}", val, bw.byte, bw.bit),
+        }
+    }
+}
+
+impl core::error::Error for Error {}
 
 #[derive(Clone, Debug)]
 enum DecodeValue {
@@ -20,7 +33,6 @@ struct HuffmanDecoder {
 
 impl HuffmanDecoder {
     fn check_eof(&self, bit_pos: &mut BitWindow, input: &[u8]) -> Result<Option<u32>, Error> {
-        use std::cmp::Ordering;
         match ((bit_pos.byte + 1) as usize).cmp(&input.len()) {
             // Position is out-of-range
             Ordering::Greater => {

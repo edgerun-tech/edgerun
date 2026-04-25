@@ -1,7 +1,9 @@
-use std::{
-    borrow::Cow,
-    collections::{btree_map::Entry as BTEntry, hash_map::Entry, BTreeMap, HashMap, VecDeque},
-};
+use alloc::borrow::Cow;
+use alloc::collections::{btree_map::Entry, btree_map::BTreeMap, VecDeque};
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use super::{field::HeaderField, static_::StaticTable};
 use crate::vas::{self, VirtualAddressSpace};
@@ -24,6 +26,24 @@ pub enum Error {
     NoTrackingData,
     InvalidTrackingCount,
 }
+
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::BadRelativeIndex(i) => write!(f, "bad relative index: {}", i),
+            Error::BadPostbaseIndex(i) => write!(f, "bad postbase index: {}", i),
+            Error::BadIndex(i) => write!(f, "bad index: {}", i),
+            Error::MaxTableSizeReached => write!(f, "max table size reached"),
+            Error::MaximumTableSizeTooLarge => write!(f, "maximum table size too large"),
+            Error::MaxBlockedStreamsTooLarge => write!(f, "max blocked streams too large"),
+            Error::UnknownStreamId(id) => write!(f, "unknown stream id: {}", id),
+            Error::NoTrackingData => write!(f, "no tracking data"),
+            Error::InvalidTrackingCount => write!(f, "invalid tracking count"),
+        }
+    }
+}
+
+impl core::error::Error for Error {}
 
 pub struct DynamicTableDecoder<'a> {
     table: &'a DynamicTable,
@@ -53,7 +73,7 @@ pub struct DynamicTableEncoder<'a> {
     base: usize,
     commited: bool,
     stream_id: u64,
-    block_refs: HashMap<usize, usize>,
+    block_refs: BTreeMap<usize, usize>,
 }
 
 impl<'a> Drop for DynamicTableEncoder<'a> {
@@ -243,14 +263,14 @@ pub struct DynamicTable {
     curr_size: usize,
     max_size: usize,
     vas: VirtualAddressSpace,
-    field_map: HashMap<HeaderField, usize>,
-    name_map: HashMap<Cow<'static, [u8]>, usize>,
+    field_map: BTreeMap<HeaderField, usize>,
+    name_map: BTreeMap<Cow<'static, [u8]>, usize>,
     track_map: BTreeMap<usize, usize>,
-    track_blocks: HashMap<u64, VecDeque<HashMap<usize, usize>>>,
+    track_blocks: BTreeMap<u64, VecDeque<BTreeMap<usize, usize>>>,
     largest_known_received: usize,
     blocked_max: usize,
     blocked_count: usize,
-    blocked_streams: BTreeMap<usize, usize>, // <required_ref, blocked_count>
+    blocked_streams: BTreeMap<usize, usize>,
 }
 
 impl DynamicTable {
@@ -273,7 +293,7 @@ impl DynamicTable {
         DynamicTableEncoder {
             base: self.vas.largest_ref(),
             table: self,
-            block_refs: HashMap::new(),
+            block_refs: BTreeMap::new(),
             commited: false,
             stream_id,
         }
@@ -443,7 +463,7 @@ impl DynamicTable {
         matches!(self.track_map.get(&reference), Some(count) if *count > 0)
     }
 
-    fn track_block(&mut self, stream_id: u64, refs: HashMap<usize, usize>) {
+    fn track_block(&mut self, stream_id: u64, refs: BTreeMap<usize, usize>) {
         match self.track_blocks.entry(stream_id) {
             Entry::Occupied(mut e) => {
                 e.get_mut().push_back(refs);
@@ -462,8 +482,8 @@ impl DynamicTable {
     {
         for (reference, count) in refs {
             match self.track_map.entry(reference) {
-                BTEntry::Occupied(mut e) => {
-                    use std::cmp::Ordering;
+                Entry::Occupied(mut e) => {
+                    use core::cmp::Ordering;
                     match e.get().cmp(&count) {
                         Ordering::Less => {
                             return Err(Error::InvalidTrackingCount);
@@ -474,7 +494,7 @@ impl DynamicTable {
                         _ => *e.get_mut() -= count,
                     }
                 }
-                BTEntry::Vacant(_) => return Err(Error::InvalidTrackingCount),
+                Entry::Vacant(_) => return Err(Error::InvalidTrackingCount),
             }
         }
         Ok(())
@@ -488,11 +508,11 @@ impl DynamicTable {
         self.blocked_count += 1;
 
         match self.blocked_streams.entry(largest) {
-            BTEntry::Occupied(mut e) => {
+            Entry::Occupied(mut e) => {
                 let entry = e.get_mut();
                 *entry += 1;
             }
-            BTEntry::Vacant(e) => {
+            Entry::Vacant(e) => {
                 e.insert(1);
             }
         }
@@ -508,7 +528,7 @@ impl DynamicTable {
         let blocked = self
             .blocked_streams
             .split_off(&(self.largest_known_received + 1));
-        let acked = std::mem::replace(&mut self.blocked_streams, blocked);
+        let acked = core::mem::replace(&mut self.blocked_streams, blocked);
 
         if !acked.is_empty() {
             let total_acked = acked.iter().fold(0usize, |t, (_, v)| t + v);
@@ -536,6 +556,10 @@ mod tests {
     #![allow(clippy::identity_op)]
 
     use super::*;
+    use alloc::format;
+    use alloc::string::ToString;
+    use core::cmp::Ordering;
+
     use crate::{static_::StaticTable, tests::helpers::build_table};
 
     const STREAM_ID: u64 = 0x4;
@@ -1051,7 +1075,7 @@ mod tests {
     #[test]
     fn encoder_insertion_refs_not_commited() {
         let mut table = build_table();
-        table.track_blocks = HashMap::new();
+        table.track_blocks = BTreeMap::new();
         let stream_id = 42;
         {
             let mut encoder = table.encoder(stream_id);
@@ -1071,7 +1095,7 @@ mod tests {
     fn encoder_insertion_with_ref_tracks_both() {
         let mut table = build_table();
         table.insert(HeaderField::new("foo", "bar")).unwrap();
-        table.track_blocks = HashMap::new();
+        table.track_blocks = BTreeMap::new();
 
         let stream_id = 42;
         let mut encoder = table.encoder(stream_id);
@@ -1094,7 +1118,7 @@ mod tests {
     fn encoder_ref_count_are_incremented() {
         let mut table = build_table();
         table.insert(HeaderField::new("foo", "bar")).unwrap();
-        table.track_blocks = HashMap::new();
+        table.track_blocks = BTreeMap::new();
         table.track_ref(1);
 
         let stream_id = 42;
@@ -1146,7 +1170,7 @@ mod tests {
 
     fn tracked_table(stream_id: u64) -> DynamicTable {
         let mut table = build_table();
-        table.track_blocks = HashMap::new();
+        table.track_blocks = BTreeMap::new();
         {
             let mut encoder = table.encoder(stream_id);
             for idx in 1..4 {

@@ -1,5 +1,10 @@
-use edgerun_encoding::buf::{Buf, BufMut};
-use std::{convert::TryInto, fmt, io::Cursor, num::TryFromIntError};
+use alloc::vec::Vec;
+use alloc::boxed::Box;
+use core::convert::TryInto;
+use core::fmt;
+use core::num::TryFromIntError;
+
+use edgerun_encoding::buf::{Buf, BufMut, Cursor};
 
 use super::{
     dynamic::{DynamicTable, DynamicTableDecoder, Error as DynamicTableError},
@@ -37,17 +42,15 @@ pub enum DecoderError {
     BufSize(TryFromIntError),
 }
 
-impl std::error::Error for DecoderError {}
-
-impl std::fmt::Display for DecoderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for DecoderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            DecoderError::InvalidInteger(e) => write!(f, "invalid integer: {}", e),
+            DecoderError::InvalidInteger(e) => write!(f, "invalid integer: {:?}", e),
             DecoderError::InvalidString(e) => write!(f, "invalid string: {:?}", e),
             DecoderError::InvalidIndex(e) => write!(f, "invalid dynamic index: {:?}", e),
             DecoderError::DynamicTable(e) => write!(f, "dynamic table error: {:?}", e),
             DecoderError::InvalidStaticIndex(i) => write!(f, "unknown static index: {}", i),
-            DecoderError::UnknownPrefix(p) => write!(f, "unknown instruction code: 0x{}", p),
+            DecoderError::UnknownPrefix(p) => write!(f, "unknown instruction code: 0x{:02x}", p),
             DecoderError::MissingRefs(n) => write!(f, "missing {} refs to decode bloc", n),
             DecoderError::BadBaseIndex(i) => write!(f, "out of bounds base index: {}", i),
             DecoderError::UnexpectedEnd => write!(f, "unexpected end"),
@@ -56,6 +59,8 @@ impl std::fmt::Display for DecoderError {
         }
     }
 }
+
+impl core::error::Error for DecoderError {}
 
 pub fn ack_header<W: BufMut>(stream_id: u64, decoder: &mut W) {
     HeaderAck(stream_id).encode(decoder);
@@ -270,7 +275,7 @@ enum Instruction {
 impl fmt::Debug for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Instruction::Insert(h) => write!(f, "Instruction::Insert {{ {} }}", h),
+            Instruction::Insert(_) => write!(f, "Instruction::Insert"),
             Instruction::TableSizeUpdate(n) => {
                 write!(f, "Instruction::TableSizeUpdate {{ {} }}", n)
             }

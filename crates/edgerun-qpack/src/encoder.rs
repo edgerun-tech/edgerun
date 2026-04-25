@@ -1,6 +1,7 @@
-use std::{cmp, io::Cursor};
-
-use edgerun_encoding::buf::{Buf, BufMut};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp;
+use edgerun_encoding::buf::{Buf, BufMut, Cursor};
 
 use super::{
     block::{
@@ -30,20 +31,20 @@ pub enum EncoderError {
     UnknownDecoderInstruction(u8),
 }
 
-impl std::error::Error for EncoderError {}
-
-impl std::fmt::Display for EncoderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for EncoderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             EncoderError::Insertion(e) => write!(f, "dynamic table insertion: {:?}", e),
-            EncoderError::InvalidString(e) => write!(f, "could not parse string: {}", e),
-            EncoderError::InvalidInteger(e) => write!(f, "could not parse integer: {}", e),
+            EncoderError::InvalidString(e) => write!(f, "could not parse string: {:?}", e),
+            EncoderError::InvalidInteger(e) => write!(f, "could not parse integer: {:?}", e),
             EncoderError::UnknownDecoderInstruction(e) => {
                 write!(f, "got unkown decoder instruction: {}", e)
             }
         }
     }
 }
+
+impl core::error::Error for EncoderError {}
 
 pub struct Encoder {
     table: DynamicTable,
