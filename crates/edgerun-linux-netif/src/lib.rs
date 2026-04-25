@@ -328,10 +328,7 @@ mod tests {
 
     #[test]
     fn link_state_from_str_unknown() {
-        assert_eq!(
-            link_state_from_str(None),
-            NetworkLinkState::Unknown
-        );
+        assert_eq!(link_state_from_str(None), NetworkLinkState::Unknown);
         assert_eq!(
             link_state_from_str(Some("invalid".to_string())),
             NetworkLinkState::Unknown

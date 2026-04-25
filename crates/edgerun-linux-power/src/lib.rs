@@ -276,7 +276,10 @@ mod tests {
             power_kind_from_type(Some("Unknown".into())),
             PowerSupplyKind::Unknown
         );
-        assert_eq!(power_kind_from_type(Some("".into())), PowerSupplyKind::Unknown);
+        assert_eq!(
+            power_kind_from_type(Some("".into())),
+            PowerSupplyKind::Unknown
+        );
         assert_eq!(power_kind_from_type(None), PowerSupplyKind::Unknown);
     }
 
@@ -306,7 +309,10 @@ mod tests {
             battery_status_from_str(Some("Unknown".into())),
             Some(BatteryStatus::Unknown)
         );
-        assert_eq!(battery_status_from_str(Some("".into())), Some(BatteryStatus::Unknown));
+        assert_eq!(
+            battery_status_from_str(Some("".into())),
+            Some(BatteryStatus::Unknown)
+        );
         assert_eq!(battery_status_from_str(None), None);
     }
 

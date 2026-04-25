@@ -28,10 +28,7 @@ impl Response {
 
     /// Create a 101 Switching Protocols response for upgrades
     pub fn switching_protocols() -> Self {
-        
-        Response::new(
-            StatusCode::new(101).expect("101 is a valid status code")
-        )
+        Response::new(StatusCode::new(101).expect("101 is a valid status code"))
     }
 
     /// Create a response from parts.
@@ -56,7 +53,9 @@ impl Response {
                 continue; // Skip Content-Encoding — body is decoded
             }
             if n.eq_ignore_ascii_case("content-length") {
-                new_headers.insert("content-length", &body.len().to_string()).ok();
+                new_headers
+                    .insert("content-length", &body.len().to_string())
+                    .ok();
             } else {
                 new_headers.insert(n, value.as_str()).ok();
             }
@@ -100,8 +99,9 @@ impl Response {
         let crlf = Self::find_crlf(raw, pos).ok_or_else(|| {
             crate::Error::InvalidResponse("No status line terminator".to_string())
         })?;
-        let status_line = std::str::from_utf8(&raw[pos..crlf])
-            .map_err(|_| crate::Error::InvalidResponse("Invalid UTF-8 in status line".to_string()))?;
+        let status_line = std::str::from_utf8(&raw[pos..crlf]).map_err(|_| {
+            crate::Error::InvalidResponse("Invalid UTF-8 in status line".to_string())
+        })?;
         pos = crlf + 2;
 
         // Parse status line: HTTP-Version SP Status-Code SP Reason-Phrase
@@ -116,8 +116,7 @@ impl Response {
             .parse::<u16>()
             .map_err(|_| crate::Error::InvalidResponse("Invalid status code".to_string()))?;
 
-        let status = StatusCode::new(status_code)
-            .map_err(crate::Error::InvalidResponse)?;
+        let status = StatusCode::new(status_code).map_err(crate::Error::InvalidResponse)?;
 
         // Parse headers until blank line (CRLF)
         let mut headers = HeaderMap::new();
@@ -135,8 +134,9 @@ impl Response {
             let crlf = Self::find_crlf(raw, pos).ok_or_else(|| {
                 crate::Error::InvalidResponse("No header line terminator".to_string())
             })?;
-            let line = std::str::from_utf8(&raw[pos..crlf])
-                .map_err(|_| crate::Error::InvalidResponse("Invalid UTF-8 in header".to_string()))?;
+            let line = std::str::from_utf8(&raw[pos..crlf]).map_err(|_| {
+                crate::Error::InvalidResponse("Invalid UTF-8 in header".to_string())
+            })?;
 
             if let Some(colon_pos) = line.find(':') {
                 let name = line[..colon_pos].trim();
@@ -153,7 +153,12 @@ impl Response {
 
         // Responses to HEAD requests and 1xx/204/304 responses MUST NOT have a body
         if is_head || status_code_val < 200 || status_code_val == 204 || status_code_val == 304 {
-            return Ok(Response { status, headers, body: Vec::new(), trailers: HeaderMap::new() });
+            return Ok(Response {
+                status,
+                headers,
+                body: Vec::new(),
+                trailers: HeaderMap::new(),
+            });
         }
 
         let remaining = &raw[pos..];
@@ -162,7 +167,9 @@ impl Response {
         let transfer_encoding = headers
             .get("transfer-encoding")
             .map(|v| v.as_str().to_lowercase());
-        let is_chunked = transfer_encoding.as_deref().is_some_and(|v| v.contains("chunked"));
+        let is_chunked = transfer_encoding
+            .as_deref()
+            .is_some_and(|v| v.contains("chunked"));
 
         let (body, trailers) = if is_chunked {
             super::chunked::parse_chunked_body_with_trailers(remaining)?
@@ -178,7 +185,12 @@ impl Response {
             (remaining.to_vec(), HeaderMap::new())
         };
 
-        Ok(Response { status, headers, body, trailers })
+        Ok(Response {
+            status,
+            headers,
+            body,
+            trailers,
+        })
     }
 
     /// Create a response from HTTP response string (convenience wrapper).

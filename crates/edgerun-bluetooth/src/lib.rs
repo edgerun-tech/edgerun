@@ -255,7 +255,9 @@ mod tests {
 
     #[test]
     fn scan_result_empty() {
-        let result = BluetoothScanResult { observations: vec![] };
+        let result = BluetoothScanResult {
+            observations: vec![],
+        };
         assert!(result.observations.is_empty());
     }
 
@@ -283,7 +285,9 @@ mod tests {
 
     #[test]
     fn scan_result_clone_and_eq() {
-        let result = BluetoothScanResult { observations: vec![] };
+        let result = BluetoothScanResult {
+            observations: vec![],
+        };
         assert_eq!(result.clone(), result);
     }
 

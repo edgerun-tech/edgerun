@@ -1,7 +1,7 @@
-use edgerun_hardware_signing::NodeID;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
-use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+use edgerun_crypto::p256::PublicKey;
+use edgerun_hardware_signing::NodeID;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -123,11 +123,7 @@ impl SessionManager {
 
     /// Encrypts a plaintext for the given peer.
     /// Returns an error if no active session exists (handshake required).
-    pub fn encrypt_for(
-        &mut self,
-        peer: NodeID,
-        plaintext: &[u8],
-    ) -> Result<Vec<u8>, SessionError> {
+    pub fn encrypt_for(&mut self, peer: NodeID, plaintext: &[u8]) -> Result<Vec<u8>, SessionError> {
         let session = self
             .sessions
             .get_mut(&peer)
@@ -173,8 +169,8 @@ impl SessionManager {
 /// Derives a 32-byte AES-256 session key from an ECDH shared secret
 /// using HKDF-SHA256.
 pub(crate) fn derive_session_key(shared_secret: &[u8]) -> [u8; 32] {
-    let key_bytes = edgerun_core::crypto::HkdfSha256::new(None, shared_secret)
-        .expand(HKDF_INFO, 32);
+    let key_bytes =
+        edgerun_core::crypto::HkdfSha256::new(None, shared_secret).expand(HKDF_INFO, 32);
     key_bytes.try_into().expect("HKDF expand failed")
 }
 

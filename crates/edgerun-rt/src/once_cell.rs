@@ -96,15 +96,13 @@ impl<T> OnceCell<T> {
 
         let mut s = self.state.lock();
         match &*s {
-            State::Ready(_) => {
-                unsafe {
-                    let ptr: *const T = match &*s {
-                        State::Ready(v) => v,
-                        _ => unreachable!(),
-                    };
-                    return &*ptr;
-                }
-            }
+            State::Ready(_) => unsafe {
+                let ptr: *const T = match &*s {
+                    State::Ready(v) => v,
+                    _ => unreachable!(),
+                };
+                return &*ptr;
+            },
             State::Initializing => panic!("OnceCell: concurrent init"),
             State::Uninit => {}
         }

@@ -1,5 +1,5 @@
-pub mod tlv;
 pub mod ac;
+pub mod tlv;
 
-pub use tlv::{TlvWriter, TlvReader, AnonymousTag};
 pub use ac::AcMatterClient;
+pub use tlv::{AnonymousTag, TlvReader, TlvWriter};

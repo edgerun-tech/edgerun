@@ -61,7 +61,10 @@ impl ResourceTracker {
     pub fn try_allocate(&self, cores: u32, memory_bytes: u64) -> bool {
         let mut state = self.state.write().expect("capacity state poisoned");
         let cores_ok = cores <= self.total_cores.saturating_sub(state.allocated_cores);
-        let mem_ok = memory_bytes <= self.total_memory_bytes.saturating_sub(state.allocated_memory);
+        let mem_ok = memory_bytes
+            <= self
+                .total_memory_bytes
+                .saturating_sub(state.allocated_memory);
         if cores_ok && mem_ok {
             state.allocated_cores += cores;
             state.allocated_memory += memory_bytes;
@@ -87,13 +90,16 @@ impl ResourceTracker {
     /// Available memory right now.
     pub fn available_memory(&self) -> u64 {
         let state = self.state.read().expect("capacity state poisoned");
-        self.total_memory_bytes.saturating_sub(state.allocated_memory)
+        self.total_memory_bytes
+            .saturating_sub(state.allocated_memory)
     }
 
     /// Current utilization as percentage (0-100).
     pub fn core_utilization_pct(&self) -> u32 {
         let state = self.state.read().expect("capacity state poisoned");
-        if self.total_cores == 0 { return 0; }
+        if self.total_cores == 0 {
+            return 0;
+        }
         (state.allocated_cores * 100) / self.total_cores
     }
 }
@@ -106,7 +112,10 @@ impl ResourceTracker {
 fn cpu_count() -> u32 {
     // Try /proc/cpuinfo first
     if let Ok(content) = std::fs::read_to_string("/proc/cpuinfo") {
-        let count = content.lines().filter(|l| l.starts_with("processor")).count();
+        let count = content
+            .lines()
+            .filter(|l| l.starts_with("processor"))
+            .count();
         if count > 0 {
             return count as u32;
         }
@@ -163,13 +172,20 @@ mod tests {
     fn capacity_discovery_returns_reasonable_values() {
         let cap = NodeCapacity::discover();
         assert!(cap.total_cores >= 1, "cpu count was 0");
-        assert!(cap.total_cores <= 4096, "cpu count impossibly high: {}", cap.total_cores);
+        assert!(
+            cap.total_cores <= 4096,
+            "cpu count impossibly high: {}",
+            cap.total_cores
+        );
         assert!(cap.total_memory_bytes >= 1_000_000, "memory impossibly low");
     }
 
     #[test]
     fn tracker_allows_allocation_within_limits() {
-        let cap = NodeCapacity { total_cores: 8, total_memory_bytes: 16_000_000_000 };
+        let cap = NodeCapacity {
+            total_cores: 8,
+            total_memory_bytes: 16_000_000_000,
+        };
         let tracker = ResourceTracker::new(&cap, 1, 1_000_000_000);
 
         assert!(tracker.try_allocate(4, 8_000_000_000));
@@ -181,7 +197,10 @@ mod tests {
 
     #[test]
     fn tracker_rejects_oversold_cores() {
-        let cap = NodeCapacity { total_cores: 4, total_memory_bytes: 8_000_000_000 };
+        let cap = NodeCapacity {
+            total_cores: 4,
+            total_memory_bytes: 8_000_000_000,
+        };
         let tracker = ResourceTracker::new(&cap, 0, 0);
 
         assert!(tracker.try_allocate(3, 1_000_000_000));
@@ -192,7 +211,10 @@ mod tests {
 
     #[test]
     fn tracker_rejects_single_request_exceeding_total() {
-        let cap = NodeCapacity { total_cores: 4, total_memory_bytes: 8_000_000_000 };
+        let cap = NodeCapacity {
+            total_cores: 4,
+            total_memory_bytes: 8_000_000_000,
+        };
         let tracker = ResourceTracker::new(&cap, 0, 0);
 
         assert!(!tracker.try_allocate(10, 1_000_000_000));
@@ -201,7 +223,10 @@ mod tests {
 
     #[test]
     fn tracker_utilization() {
-        let cap = NodeCapacity { total_cores: 10, total_memory_bytes: 20_000_000_000 };
+        let cap = NodeCapacity {
+            total_cores: 10,
+            total_memory_bytes: 20_000_000_000,
+        };
         let tracker = ResourceTracker::new(&cap, 0, 0);
 
         assert_eq!(tracker.core_utilization_pct(), 0);

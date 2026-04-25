@@ -1,5 +1,5 @@
+use edgerun_solana::{solana_types::Pubkey, DeploymentClient, DeploymentStatus};
 use std::collections::HashMap;
-use edgerun_solana::{DeploymentClient, DeploymentStatus, solana_types::Pubkey};
 
 pub struct DeploymentManager {
     rpc_url: Option<String>,
@@ -47,7 +47,7 @@ impl DeploymentManager {
             deployment_client: None,
         }
     }
-    
+
     pub fn new_with_rpc(rpc_url: &str) -> Self {
         let mut this = Self::new();
         this.rpc_url = Some(rpc_url.to_string());
@@ -56,27 +56,27 @@ impl DeploymentManager {
         }
         this
     }
-    
+
     pub fn create_local(&mut self, handle: DeploymentHandle) {
         self.deployments.insert(handle.name.clone(), handle);
     }
-    
+
     pub fn get(&self, name: &str) -> Option<&DeploymentHandle> {
         self.deployments.get(name)
     }
-    
+
     pub fn get_mut(&mut self, name: &str) -> Option<&mut DeploymentHandle> {
         self.deployments.get_mut(name)
     }
-    
+
     pub fn remove(&mut self, name: &str) -> Option<DeploymentHandle> {
         self.deployments.remove(name)
     }
-    
+
     pub fn list(&self) -> Vec<&DeploymentHandle> {
         self.deployments.values().collect()
     }
-    
+
     pub fn iter_mut(&mut self) -> &mut HashMap<String, DeploymentHandle> {
         &mut self.deployments
     }
@@ -87,7 +87,7 @@ impl DeploymentManager {
             .filter(|d| matches!(d.status, DeploymentStatus::Running))
             .collect()
     }
-    
+
     pub fn list_unassigned(&self) -> Vec<DeploymentHandle> {
         self.deployments
             .values()
@@ -95,7 +95,7 @@ impl DeploymentManager {
             .cloned()
             .collect()
     }
-    
+
     pub fn assign_to_provider(&mut self, name: &str, provider_id: &[u8; 32]) -> bool {
         if let Some(d) = self.deployments.get_mut(name) {
             d.provider = *provider_id;
@@ -104,7 +104,7 @@ impl DeploymentManager {
         }
         false
     }
-    
+
     pub fn unassign(&mut self, name: &str) -> bool {
         if let Some(d) = self.deployments.get_mut(name) {
             d.assigned = false;
@@ -112,8 +112,8 @@ impl DeploymentManager {
         }
         false
     }
-    
-pub fn sync_all(&mut self) {
+
+    pub fn sync_all(&mut self) {
         if let Some(client) = &self.deployment_client {
             for (_, handle) in self.deployments.iter_mut() {
                 let pubkey = Pubkey::new_from_array(handle.on_chain_address);
@@ -126,26 +126,32 @@ pub fn sync_all(&mut self) {
             }
         }
     }
-    
-    pub fn calculate_burn_rate(_container_count: u32, cpu: u32, memory: u64, storage: u64, network: u32) -> u64 {
+
+    pub fn calculate_burn_rate(
+        _container_count: u32,
+        cpu: u32,
+        memory: u64,
+        storage: u64,
+        network: u32,
+    ) -> u64 {
         use edgerun_solana::types::pricing;
-        
+
         let cpu_cost = cpu as u64 * pricing::CORE_HOUR;
-        let memory_gib = memory.div_ceil(1024*1024 * 1024);
+        let memory_gib = memory.div_ceil(1024 * 1024 * 1024);
         let memory_cost = memory_gib * pricing::RAM_GIB_HOUR;
-        let storage_gib = storage.div_ceil(1024*1024 * 1024);
+        let storage_gib = storage.div_ceil(1024 * 1024 * 1024);
         let storage_cost = storage_gib * pricing::STORAGE_GIB_HOUR;
         let network_cost = network as u64 * pricing::NETWORK_MBIT_HOUR;
-        
+
         (cpu_cost + memory_cost + storage_cost + network_cost) / 3600
     }
-    
+
     pub fn mark_running(&mut self, name: &str) {
         if let Some(d) = self.deployments.get_mut(name) {
             d.status = DeploymentStatus::Running;
         }
     }
-    
+
     pub fn set_error(&mut self, name: &str, _error: &str) {
         if let Some(d) = self.deployments.get_mut(name) {
             d.status = DeploymentStatus::Disputed;
@@ -162,13 +168,13 @@ impl Default for DeploymentManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_burn_rate_calculation() {
         let rate = DeploymentManager::calculate_burn_rate(1, 4, 8_000_000_000, 10_000_000_000, 100);
         assert!(rate > 0);
     }
-    
+
     #[test]
     fn test_manager_creation() {
         let _ = DeploymentManager::new();
@@ -190,7 +196,7 @@ mod tests {
             spent: 0,
             assigned: false,
         });
-        
+
         dm.mark_running("test-deployment");
         let d = dm.get("test-deployment").unwrap();
         assert!(matches!(d.status, DeploymentStatus::Running));
@@ -212,7 +218,7 @@ mod tests {
             spent: 0,
             assigned: false,
         });
-        
+
         dm.set_error("test-deployment", "Container crashed");
         let d = dm.get("test-deployment").unwrap();
         assert!(matches!(d.status, DeploymentStatus::Disputed));

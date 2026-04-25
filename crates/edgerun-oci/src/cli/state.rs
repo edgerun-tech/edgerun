@@ -9,7 +9,10 @@ use crate::state::load_state;
 pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?);
     }
 
@@ -36,6 +39,10 @@ pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
         "bundle": updated_state.bundle,
         "annotations": updated_state.annotations.unwrap_or_default(),
     });
-    println!("{}", edgerun_json::to_string_pretty(&output).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?);
+    println!(
+        "{}",
+        edgerun_json::to_string_pretty(&output)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+    );
     Ok(())
 }

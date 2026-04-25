@@ -1,5 +1,5 @@
 // Test RateLimiter with the actual runtime.
-use edgerun_rt::{RateLimiter, Runtime, spawn};
+use edgerun_rt::{spawn, RateLimiter, Runtime};
 use std::time::{Duration, Instant};
 
 fn main() {
@@ -113,7 +113,11 @@ fn test_rate_limiter_refill_over_time() {
     std::thread::sleep(Duration::from_millis(100));
     // Should have some tokens now.
     let avail = limiter.available();
-    assert!(avail >= 1.0, "expected >= 1 token after 100ms, got {}", avail);
+    assert!(
+        avail >= 1.0,
+        "expected >= 1 token after 100ms, got {}",
+        avail
+    );
     println!("  test_rate_limiter_refill_over_time OK");
 }
 

@@ -1,13 +1,13 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use edgerun_crypto::sha2::Digest;
 use edgerun_capabilities::{
     validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
     CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_crypto::sha2::Digest;
 use edgerun_proto::edgerun::v0::common::{IdentityRef, NodeRef};
 use prost_types::{Duration as ProstDuration, Timestamp};
 
@@ -81,4 +81,3 @@ impl GrantRecord {
         self.revoked.is_some()
     }
 }
-

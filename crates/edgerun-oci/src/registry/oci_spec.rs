@@ -104,7 +104,10 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
     // Insert mounts if there are volume mounts
     if !volume_mounts.is_empty() {
         if let edgerun_json::JsonValue::Object(ref mut fields) = spec {
-            fields.push(("mounts".to_string(), edgerun_json::JsonValue::Array(volume_mounts)));
+            fields.push((
+                "mounts".to_string(),
+                edgerun_json::JsonValue::Array(volume_mounts),
+            ));
         }
     }
 

@@ -195,9 +195,9 @@ impl Stream {
     /// Check if all data has been received
     pub fn is_recv_complete(&self) -> bool {
         self.end_stream_received
-            && self.content_length.is_none_or(|cl| {
-                self.bytes_received >= cl
-            })
+            && self
+                .content_length
+                .is_none_or(|cl| self.bytes_received >= cl)
     }
 
     /// Check if all data has been sent
@@ -254,7 +254,6 @@ impl StreamManager {
         Ok(stream_id)
     }
 
-
     /// Create a server-initiated stream (for PUSH_PROMISE)
     pub fn create_server_stream(&mut self, stream_id: u32) -> Result<u32> {
         // Server streams must be even
@@ -274,8 +273,6 @@ impl StreamManager {
 
         Ok(stream_id)
     }
-
-
 
     /// Get or create a stream for received headers
     pub fn get_or_create_stream(&mut self, stream_id: u32) -> Result<&mut Stream> {

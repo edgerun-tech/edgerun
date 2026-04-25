@@ -52,7 +52,8 @@ impl LmtpClient {
     }
 
     async fn connect_tcp(addr: &str) -> io::Result<AsyncTcpStream> {
-        let sock_addr: std::net::SocketAddr = addr.parse()
+        let sock_addr: std::net::SocketAddr = addr
+            .parse()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         let fut = ConnectFuture::new(sock_addr);
         match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
@@ -77,7 +78,8 @@ impl LmtpClient {
         for line in response.message.lines() {
             self.capabilities.push(line.to_string());
             if let Some(pos) = line.find(' ') {
-                self.capabilities_map.insert(line[..pos].to_string(), Some(line[pos + 1..].to_string()));
+                self.capabilities_map
+                    .insert(line[..pos].to_string(), Some(line[pos + 1..].to_string()));
             } else {
                 self.capabilities_map.insert(line.to_string(), None);
             }
@@ -88,11 +90,14 @@ impl LmtpClient {
 
     /// Send MAIL FROM.
     pub async fn mail_from(&mut self, address: &str) -> io::Result<()> {
-        let response = self.send_command(&format!("MAIL FROM:<{}>", address)).await?;
+        let response = self
+            .send_command(&format!("MAIL FROM:<{}>", address))
+            .await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(
-                format!("MAIL FROM rejected: {}", response.message),
-            ));
+            return Err(io::Error::other(format!(
+                "MAIL FROM rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -101,9 +106,10 @@ impl LmtpClient {
     pub async fn rcpt_to(&mut self, address: &str) -> io::Result<()> {
         let response = self.send_command(&format!("RCPT TO:<{}>", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(
-                format!("RCPT TO rejected: {}", response.message),
-            ));
+            return Err(io::Error::other(format!(
+                "RCPT TO rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -114,9 +120,10 @@ impl LmtpClient {
     pub async fn data(&mut self, message: &[u8]) -> io::Result<Vec<SmtpResponse>> {
         let response = self.send_command("DATA").await?;
         if !response.code.is_continuation() {
-            return Err(io::Error::other(
-                format!("DATA rejected: {}", response.message),
-            ));
+            return Err(io::Error::other(format!(
+                "DATA rejected: {}",
+                response.message
+            )));
         }
 
         self.stream.write_all(message).await?;
@@ -151,7 +158,10 @@ impl LmtpClient {
     pub async fn noop(&mut self) -> io::Result<()> {
         let response = self.send_command("NOOP").await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("NOOP rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "NOOP rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -160,7 +170,10 @@ impl LmtpClient {
     pub async fn quit(&mut self) -> io::Result<()> {
         let response = self.send_command("QUIT").await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("QUIT rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "QUIT rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -171,15 +184,24 @@ impl LmtpClient {
         let line = self.read_line().await?;
         let line = match line {
             Some(l) => l,
-            None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "server disconnected",
+                ))
+            }
         };
 
         if line.len() < 4 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "malformed response"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "malformed response",
+            ));
         }
 
         let code_str = &line[..3];
-        let code = code_str.parse::<u16>()
+        let code = code_str
+            .parse::<u16>()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         let is_multiline = line.as_bytes().get(3) == Some(&b'-');
@@ -197,7 +219,12 @@ impl LmtpClient {
                 let next_line = self.read_line().await?;
                 let next_line = match next_line {
                     Some(l) => l,
-                    None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
+                    None => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "server disconnected",
+                        ))
+                    }
                 };
                 let is_final = next_line.as_bytes().get(3) != Some(&b'-');
                 all_lines.push(next_line[4..].to_string());

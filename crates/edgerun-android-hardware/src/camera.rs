@@ -2,7 +2,7 @@
 
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
-    CapabilityOperation, CapabilityRole, CapabilityProvider,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 
 #[cfg(feature = "android-real")]
@@ -42,7 +42,9 @@ mod real {
                 let name = std::ffi::CString::new("libcamera2_ndk.so").unwrap();
                 let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
                 if handle.is_null() {
-                    return Err(CapabilityError::Provider("libcamera2_ndk.so not found (requires Android 9.0+)".into()));
+                    return Err(CapabilityError::Provider(
+                        "libcamera2_ndk.so not found (requires Android 9.0+)".into(),
+                    ));
                 }
                 fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
                     let c_name = std::ffi::CString::new(name).unwrap();
@@ -69,11 +71,16 @@ mod real {
     }
 
     unsafe fn cstr_to_string(ptr: *const i8) -> String {
-        if ptr.is_null() { return String::new(); }
+        if ptr.is_null() {
+            return String::new();
+        }
         std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
     }
 
-    pub struct Camera2Session { manager: ACameraManager, camera_ids: Vec<String> }
+    pub struct Camera2Session {
+        manager: ACameraManager,
+        camera_ids: Vec<String>,
+    }
 
     impl Camera2Session {
         pub fn open() -> Result<Self, CapabilityError> {
@@ -81,34 +88,53 @@ mod real {
             unsafe {
                 let manager = (fns.create)();
                 if manager.is_null() {
-                    return Err(CapabilityError::Provider("ACameraManager_create failed".into()));
+                    return Err(CapabilityError::Provider(
+                        "ACameraManager_create failed".into(),
+                    ));
                 }
                 let mut id_list: *mut ACameraIdList = std::ptr::null_mut();
                 let status = (fns.get_camera_id_list)(manager, &mut id_list);
                 if status != ACAMERA_ERROR_OK || id_list.is_null() {
                     (fns.delete)(manager);
-                    return Err(CapabilityError::Provider(format!("ACameraManager_getCameraIdList failed: {status}")));
+                    return Err(CapabilityError::Provider(format!(
+                        "ACameraManager_getCameraIdList failed: {status}"
+                    )));
                 }
                 let num = (fns.get_num_cameras)(id_list);
                 let mut ids = Vec::new();
-                for i in 0..num { ids.push(cstr_to_string((fns.get_camera_id)(id_list, i))); }
+                for i in 0..num {
+                    ids.push(cstr_to_string((fns.get_camera_id)(id_list, i)));
+                }
                 (fns.delete_camera_id_list)(id_list);
-                Ok(Self { manager, camera_ids: ids })
+                Ok(Self {
+                    manager,
+                    camera_ids: ids,
+                })
             }
         }
-        pub fn available_cameras(&self) -> &[String] { &self.camera_ids }
+        pub fn available_cameras(&self) -> &[String] {
+            &self.camera_ids
+        }
     }
 
     impl Drop for Camera2Session {
         fn drop(&mut self) {
-            if let Ok(fns) = ensure_loaded() { unsafe { (fns.delete)(self.manager); } }
+            if let Ok(fns) = ensure_loaded() {
+                unsafe {
+                    (fns.delete)(self.manager);
+                }
+            }
         }
     }
 
-    pub struct AndroidCameraProvider { session: Option<Camera2Session> }
+    pub struct AndroidCameraProvider {
+        session: Option<Camera2Session>,
+    }
 
     impl AndroidCameraProvider {
-        pub fn new() -> Self { Self { session: None } }
+        pub fn new() -> Self {
+            Self { session: None }
+        }
         pub fn init(&mut self) -> Result<(), CapabilityError> {
             self.session = Some(Camera2Session::open()?);
             Ok(())
@@ -117,9 +143,15 @@ mod real {
 
     impl CapabilityProvider for AndroidCameraProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-camera", "android", CapabilityRole::Input,
-                &[CapabilityModality::Visual], &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+            capability_descriptor(
+                "android-camera",
+                "android",
+                CapabilityRole::Input,
+                &[CapabilityModality::Visual],
+                &[edgerun_capabilities::CapabilityEventKind::Text],
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }
@@ -136,14 +168,24 @@ mod real {
     }
 
     impl AndroidCameraProvider {
-        pub fn new() -> Self { Self }
-        pub fn init(&mut self) -> Result<(), CapabilityError> { Ok(()) }
+        pub fn new() -> Self {
+            Self
+        }
+        pub fn init(&mut self) -> Result<(), CapabilityError> {
+            Ok(())
+        }
     }
     impl CapabilityProvider for AndroidCameraProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-camera-stub", "stub", CapabilityRole::Input,
-                &[CapabilityModality::Visual], &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+            capability_descriptor(
+                "android-camera-stub",
+                "stub",
+                CapabilityRole::Input,
+                &[CapabilityModality::Visual],
+                &[edgerun_capabilities::CapabilityEventKind::Text],
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }

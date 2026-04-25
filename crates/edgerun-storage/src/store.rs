@@ -14,11 +14,11 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::blobs::{BlobStore, BlobKeySource};
+use crate::blobs::{BlobKeySource, BlobStore};
 use crate::credentials::CredentialStore;
+use crate::error::StorageError;
 use crate::event_loop::{EventLoopBuilder, EventWriter, FetchHandler, PeerDiscoveryHandler};
 use crate::file_index::FileIndex;
-use crate::error::StorageError;
 use std::collections::HashSet;
 
 // ---------------------------------------------------------------------------
@@ -113,18 +113,16 @@ impl NodeStore {
             blob_dir: blobs_dir,
         };
         let key_source = match config.blob_key_source.as_ref() {
-            BlobKeySource::Software { private_key_bytes } => {
-                BlobKeySource::Software { private_key_bytes: private_key_bytes.clone() }
-            }
-            BlobKeySource::HardwareSealed { unseal_fn, seal_fn } => {
-                BlobKeySource::HardwareSealed {
-                    unseal_fn: unseal_fn.clone(),
-                    seal_fn: seal_fn.clone(),
-                }
-            }
-            BlobKeySource::Password { passphrase } => {
-                BlobKeySource::Password { passphrase: passphrase.clone() }
-            }
+            BlobKeySource::Software { private_key_bytes } => BlobKeySource::Software {
+                private_key_bytes: private_key_bytes.clone(),
+            },
+            BlobKeySource::HardwareSealed { unseal_fn, seal_fn } => BlobKeySource::HardwareSealed {
+                unseal_fn: unseal_fn.clone(),
+                seal_fn: seal_fn.clone(),
+            },
+            BlobKeySource::Password { passphrase } => BlobKeySource::Password {
+                passphrase: passphrase.clone(),
+            },
         };
         let blobs = Arc::new(BlobStore::open(&blob_config, key_source)?);
         let credentials = CredentialStore::new(
@@ -179,7 +177,11 @@ impl NodeStore {
     /// Retrieves an event from the event log by stream ID and sequence number.
     ///
     /// Uses the file index to find the file offset, then reads the protobuf bytes.
-    pub fn get_event(&self, stream_id: &[u8], seq: u64) -> Result<Option<EventEnvelope>, StorageError> {
+    pub fn get_event(
+        &self,
+        stream_id: &[u8],
+        seq: u64,
+    ) -> Result<Option<EventEnvelope>, StorageError> {
         let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
 
         // Look up offset in file index
@@ -188,7 +190,11 @@ impl NodeStore {
         };
 
         // Read from event log file
-        let log_path = self.config.data_root.join("events").join(format!("{}.log", stream_id_hex));
+        let log_path = self
+            .config
+            .data_root
+            .join("events")
+            .join(format!("{}.log", stream_id_hex));
         let mut file = File::open(&log_path)?;
         file.seek(SeekFrom::Start(entry.file_offset))?;
 
@@ -230,7 +236,11 @@ impl NodeStore {
 
     /// Looks up a previously processed command by its hash.
     /// Returns (command_id, decision_event_seq) if found.
-    pub fn get_replay_entry(&self, target_node: &str, command_hash: &str) -> Result<Option<(String, i64)>, StorageError> {
+    pub fn get_replay_entry(
+        &self,
+        target_node: &str,
+        command_hash: &str,
+    ) -> Result<Option<(String, i64)>, StorageError> {
         match self.index.get_replay_entry(target_node, command_hash)? {
             Some(entry) => Ok(Some((entry.command_id, entry.decision_event_seq))),
             None => Ok(None),
@@ -238,8 +248,19 @@ impl NodeStore {
     }
 
     /// Records a processed command in the persistent replay cache.
-    pub fn put_replay_entry(&self, target_node: &str, command_hash: &str, command_id: &str, decision_event_seq: i64) -> Result<(), StorageError> {
-        Ok(self.index.put_replay_entry(target_node, command_hash, command_id, decision_event_seq)?)
+    pub fn put_replay_entry(
+        &self,
+        target_node: &str,
+        command_hash: &str,
+        command_id: &str,
+        decision_event_seq: i64,
+    ) -> Result<(), StorageError> {
+        Ok(self.index.put_replay_entry(
+            target_node,
+            command_hash,
+            command_id,
+            decision_event_seq,
+        )?)
     }
 
     /// Validates the cryptographic integrity of a stream chain.
@@ -312,10 +333,12 @@ impl NodeStore {
                 if actual != Some(expected) {
                     return Err(StorageError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        format!("prev_hash mismatch at seq {}: expected {}, got {:?}",
+                        format!(
+                            "prev_hash mismatch at seq {}: expected {}, got {:?}",
                             seq,
                             edgerun_core::util::bytes_to_hex(expected),
-                            actual.map(|v| edgerun_core::util::bytes_to_hex(v))),
+                            actual.map(|v| edgerun_core::util::bytes_to_hex(v))
+                        ),
                     )));
                 }
             }
@@ -578,7 +601,8 @@ impl NodeStore {
             let success = match entry.target_type.as_str() {
                 "object" => {
                     let obj_ref = edgerun_proto::edgerun::v0::common::ObjectRef {
-                        object_id: edgerun_core::util::hex_to_bytes(&entry.target_id).unwrap_or_default(),
+                        object_id: edgerun_core::util::hex_to_bytes(&entry.target_id)
+                            .unwrap_or_default(),
                         object_kind: None,
                     };
                     self.get_object(&obj_ref)?.is_some()
@@ -601,7 +625,11 @@ impl NodeStore {
                 self.index.mark_fetch_done(entry.id)?;
                 resolved += 1;
             } else {
-                self.index.enqueue_fetch(&entry.target_type, &entry.target_id, entry.priority - 1)?;
+                self.index.enqueue_fetch(
+                    &entry.target_type,
+                    &entry.target_id,
+                    entry.priority - 1,
+                )?;
             }
         }
         Ok(resolved)
@@ -618,7 +646,12 @@ impl NodeStore {
     }
 
     /// Re-enqueue a fetch entry with lower priority for retry.
-    pub fn requeue_fetch(&self, target_type: &str, target_id: &str, priority: i64) -> Result<(), StorageError> {
+    pub fn requeue_fetch(
+        &self,
+        target_type: &str,
+        target_id: &str,
+        priority: i64,
+    ) -> Result<(), StorageError> {
         Ok(self.index.enqueue_fetch(target_type, target_id, priority)?)
     }
 
@@ -637,18 +670,31 @@ impl NodeStore {
     // -----------------------------------------------------------------------
 
     /// Returns all known snapshots.
-    pub fn list_snapshots(&self) -> Result<Vec<(String, String, String, String, i64, i32, String)>, StorageError> {
+    pub fn list_snapshots(
+        &self,
+    ) -> Result<Vec<(String, String, String, String, i64, i32, String)>, StorageError> {
         Ok(self.index.list_snapshots()?)
     }
 
     /// Returns a snapshot by ID.
-    pub fn get_snapshot(&self, snapshot_id: &str) -> Result<Option<(String, String, String, String, i64, i32, String)>, StorageError> {
+    pub fn get_snapshot(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<Option<(String, String, String, String, i64, i32, String)>, StorageError> {
         Ok(self.index.get_snapshot(snapshot_id)?)
     }
 
     /// Records or updates a known peer.
-    pub fn upsert_peer(&self, node_id_hex: &str, addr: Option<&str>, status: &str, is_bootstrap: bool) -> Result<(), StorageError> {
-        Ok(self.index.upsert_peer(node_id_hex, addr, status, is_bootstrap)?)
+    pub fn upsert_peer(
+        &self,
+        node_id_hex: &str,
+        addr: Option<&str>,
+        status: &str,
+        is_bootstrap: bool,
+    ) -> Result<(), StorageError> {
+        Ok(self
+            .index
+            .upsert_peer(node_id_hex, addr, status, is_bootstrap)?)
     }
 
     /// Updates a peer's reachability status.
@@ -661,19 +707,33 @@ impl NodeStore {
     // -----------------------------------------------------------------------
 
     /// Records a controller change for replay and projection.
-    pub fn record_controller_change(&self, controller_hex: &str, change_type: &str, event_seq: i64) -> Result<(), StorageError> {
-        Ok(self.index.record_controller_change(controller_hex, change_type, event_seq)?)
+    pub fn record_controller_change(
+        &self,
+        controller_hex: &str,
+        change_type: &str,
+        event_seq: i64,
+    ) -> Result<(), StorageError> {
+        Ok(self
+            .index
+            .record_controller_change(controller_hex, change_type, event_seq)?)
     }
 
     /// Projects the controller set from the persistent change log.
     /// Starts with the initial controllers and applies all changes up to the given event sequence.
-    pub fn project_controller_set(&self, initial: Vec<Vec<u8>>, up_to_seq: i64) -> Result<ControllerSet, StorageError> {
+    pub fn project_controller_set(
+        &self,
+        initial: Vec<Vec<u8>>,
+        up_to_seq: i64,
+    ) -> Result<ControllerSet, StorageError> {
         let mut set = ControllerSet::new(initial);
         for (controller_hex, change_type) in self.index.list_controller_changes(up_to_seq)? {
-            let controller_id = edgerun_core::util::hex_to_bytes(&controller_hex).unwrap_or_default();
+            let controller_id =
+                edgerun_core::util::hex_to_bytes(&controller_hex).unwrap_or_default();
             match change_type.as_str() {
                 "added" => set.add(controller_id),
-                "removed" => { set.remove(&controller_id); }
+                "removed" => {
+                    set.remove(&controller_id);
+                }
                 "transferred" => set.add(controller_id),
                 _ => {}
             }
@@ -694,7 +754,13 @@ impl NodeStore {
         capability_hex: &str,
         expires_at: Option<i64>,
     ) -> Result<(), StorageError> {
-        Ok(self.index.store_delegation(delegation_id, issuer_hex, recipient_hex, capability_hex, expires_at)?)
+        Ok(self.index.store_delegation(
+            delegation_id,
+            issuer_hex,
+            recipient_hex,
+            capability_hex,
+            expires_at,
+        )?)
     }
 
     /// Stores a revocation record.
@@ -706,7 +772,13 @@ impl NodeStore {
         target_hex: &str,
         effective_at: Option<i64>,
     ) -> Result<(), StorageError> {
-        Ok(self.index.store_revocation(revocation_id, issuer_hex, target_type, target_hex, effective_at)?)
+        Ok(self.index.store_revocation(
+            revocation_id,
+            issuer_hex,
+            target_type,
+            target_hex,
+            effective_at,
+        )?)
     }
 
     /// Returns all active revocation target IDs (type, hex).
@@ -715,7 +787,9 @@ impl NodeStore {
     }
 
     /// Returns all known peers.
-    pub fn list_peers(&self) -> Result<Vec<(String, Option<String>, String, Option<i64>, bool)>, StorageError> {
+    pub fn list_peers(
+        &self,
+    ) -> Result<Vec<(String, Option<String>, String, Option<i64>, bool)>, StorageError> {
         Ok(self.index.list_peers()?)
     }
 
@@ -729,7 +803,10 @@ impl NodeStore {
     // -----------------------------------------------------------------------
 
     /// Record a completed work unit.
-    pub fn record_work_accounting(&self, accounting: &edgerun_core::accounting::WorkAccounting) -> Result<(), StorageError> {
+    pub fn record_work_accounting(
+        &self,
+        accounting: &edgerun_core::accounting::WorkAccounting,
+    ) -> Result<(), StorageError> {
         let record_hash = accounting.compute_record_hash();
         let record = crate::WorkAccountingRecord {
             data: accounting.to_bytes(),
@@ -757,17 +834,27 @@ impl NodeStore {
     }
 
     /// Get all work records in a time window.
-    pub fn work_in_time_range(&self, from_us: u64, to_us: u64) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
+    pub fn work_in_time_range(
+        &self,
+        from_us: u64,
+        to_us: u64,
+    ) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
         Ok(self.index.work_in_time_range(from_us, to_us)?)
     }
 
     /// Get all work records for a specific workload class.
-    pub fn work_by_class(&self, class: &str) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
+    pub fn work_by_class(
+        &self,
+        class: &str,
+    ) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
         Ok(self.index.work_by_class(class)?)
     }
 
     /// Get all work records with a specific status.
-    pub fn work_by_status(&self, status: &str) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
+    pub fn work_by_status(
+        &self,
+        status: &str,
+    ) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
         Ok(self.index.work_by_status(status)?)
     }
 
@@ -794,18 +881,22 @@ impl NodeStore {
         completeness: i32,
     ) -> Result<edgerun_proto::edgerun::v0::access::SnapshotDescriptor, StorageError> {
         use edgerun_proto::edgerun::v0::access::SnapshotDescriptor;
-        use edgerun_proto::edgerun::v0::common::{HeadRef, Digest, IdentityRef};
-        
+        use edgerun_proto::edgerun::v0::common::{Digest, HeadRef, IdentityRef};
+
         // Collect current stream heads
         let heads = self.list_stream_heads()?;
-        let base_heads: Vec<HeadRef> = heads.iter().map(|(sid, seq, hash)| HeadRef {
-            stream_id: edgerun_core::util::hex_to_bytes(sid).unwrap_or_else(|_| sid.clone().into_bytes()),
-            seq: *seq as u64,
-            event_hash: Some(Digest {
-                algorithm: 1,
-                value: hash.clone(),
-            }),
-        }).collect();
+        let base_heads: Vec<HeadRef> = heads
+            .iter()
+            .map(|(sid, seq, hash)| HeadRef {
+                stream_id: edgerun_core::util::hex_to_bytes(sid)
+                    .unwrap_or_else(|_| sid.clone().into_bytes()),
+                seq: *seq as u64,
+                event_hash: Some(Digest {
+                    algorithm: 1,
+                    value: hash.clone(),
+                }),
+            })
+            .collect();
 
         // Create snapshot descriptor
         let now_secs = std::time::SystemTime::now()
@@ -813,7 +904,8 @@ impl NodeStore {
             .unwrap()
             .as_secs();
         let snapshot_id = {
-            let digest = edgerun_core::crypto::sha256(format!("{}-{}", view_type, now_secs).as_bytes());
+            let digest =
+                edgerun_core::crypto::sha256(format!("{}-{}", view_type, now_secs).as_bytes());
             format!("snap-{}", edgerun_core::util::bytes_to_hex(&digest[..8]))
         };
         let node_id = signer.node_id();
@@ -848,7 +940,11 @@ impl NodeStore {
         // Sign the descriptor with domain separation
         let record = edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone());
         let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-        let sig = signer.sign_record(edgerun_core::crypto::SIG_DOMAIN_SNAPSHOT_DESCRIPTOR, &canonical)
+        let sig = signer
+            .sign_record(
+                edgerun_core::crypto::SIG_DOMAIN_SNAPSHOT_DESCRIPTOR,
+                &canonical,
+            )
             .map_err(|e| StorageError::Encode(format!("snapshot signing failed: {}", e)))?;
         descriptor.signature = Some(edgerun_core::protocol::Signature {
             algorithm: 1,
@@ -857,11 +953,15 @@ impl NodeStore {
 
         // Store as encrypted object
         let descriptor_bytes = prost::Message::encode_to_vec(&descriptor);
-        let object_ref = self.put_object(&descriptor_bytes, 3 /* OBJECT_KIND_SNAPSHOT */, &[])?;
+        let object_ref =
+            self.put_object(&descriptor_bytes, 3 /* OBJECT_KIND_SNAPSHOT */, &[])?;
 
         // Store base_heads as simple delimited text: stream_hex:seq:hash_hex;...
-        let base_heads_text: String = heads.iter()
-            .map(|(sid, seq, hash)| format!("{}:{}:{}", sid, seq, edgerun_core::util::bytes_to_hex(hash)))
+        let base_heads_text: String = heads
+            .iter()
+            .map(|(sid, seq, hash)| {
+                format!("{}:{}:{}", sid, seq, edgerun_core::util::bytes_to_hex(hash))
+            })
             .collect::<Vec<_>>()
             .join(";");
         let producer_hex = edgerun_core::util::bytes_to_hex(&node_id.0);
@@ -923,15 +1023,30 @@ impl NodeStore {
             String::new()
         };
         // Serialize base_heads as simple (stream_id_hex, seq, hash_hex) tuples
-        let simple_heads: Vec<(String, u64, String)> = descriptor.base_heads.iter().map(|h| {
-            (
-                edgerun_core::util::bytes_to_hex(&h.stream_id),
-                h.seq,
-                h.event_hash.as_ref().map(|d| edgerun_core::util::bytes_to_hex(&d.value)).unwrap_or_default(),
-            )
-        }).collect();
-        let base_heads = simple_heads.iter().map(|(s, seq, h)| format!("{}:{}:{}", s, seq, h)).collect::<Vec<_>>().join(";");
-        let produced_at = descriptor.produced_at.as_ref().map(|t| t.seconds).unwrap_or(0);
+        let simple_heads: Vec<(String, u64, String)> = descriptor
+            .base_heads
+            .iter()
+            .map(|h| {
+                (
+                    edgerun_core::util::bytes_to_hex(&h.stream_id),
+                    h.seq,
+                    h.event_hash
+                        .as_ref()
+                        .map(|d| edgerun_core::util::bytes_to_hex(&d.value))
+                        .unwrap_or_default(),
+                )
+            })
+            .collect();
+        let base_heads = simple_heads
+            .iter()
+            .map(|(s, seq, h)| format!("{}:{}:{}", s, seq, h))
+            .collect::<Vec<_>>()
+            .join(";");
+        let produced_at = descriptor
+            .produced_at
+            .as_ref()
+            .map(|t| t.seconds)
+            .unwrap_or(0);
 
         self.index.put_snapshot(
             &snapshot_id,
@@ -948,13 +1063,17 @@ impl NodeStore {
         let mut is_stale = false;
         for base_head in &descriptor.base_heads {
             let stream_id_hex = edgerun_core::util::bytes_to_hex(&base_head.stream_id);
-            if let Some((_sid, local_seq, _hash)) = local_heads.iter().find(|(s, _, _)| s == &stream_id_hex) {
+            if let Some((_sid, local_seq, _hash)) =
+                local_heads.iter().find(|(s, _, _)| s == &stream_id_hex)
+            {
                 let local_seq_u64 = *local_seq as u64;
                 if base_head.seq < local_seq_u64 {
                     is_stale = true;
                     // In v0 we always accept stale snapshots
                 } else if base_head.seq > local_seq_u64 {
-                    return Err(StorageError::Decode("snapshot base is ahead of local head".into()));
+                    return Err(StorageError::Decode(
+                        "snapshot base is ahead of local head".into(),
+                    ));
                 }
             }
         }
@@ -992,12 +1111,8 @@ impl NodeStore {
         }
 
         let cmd_id_hex = edgerun_core::util::bytes_to_hex(command_id);
-        self.index.put_replay_entry(
-            &target_hex,
-            &cmd_hash_hex,
-            &cmd_id_hex,
-            decision_event_seq,
-        )?;
+        self.index
+            .put_replay_entry(&target_hex, &cmd_hash_hex, &cmd_id_hex, decision_event_seq)?;
 
         Ok(CommandReplayResult::New)
     }
@@ -1050,7 +1165,11 @@ impl NodeStore {
                 // Try to read varint length prefix
                 let (len, eof) = match decode_varint_from_file(&mut file) {
                     Ok(v) => v,
-                    Err(StorageError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                    Err(StorageError::Io(ref e))
+                        if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+                    {
+                        break
+                    }
                     Err(e) => return Err(e),
                 };
                 if eof {
@@ -1070,7 +1189,7 @@ impl NodeStore {
                 };
 
                 // Compute hash
-                                let event_hash = edgerun_core::crypto::sha256(&event_bytes).to_vec();
+                let event_hash = edgerun_core::crypto::sha256(&event_bytes).to_vec();
 
                 // Rebuild index entry
                 self.index.put_event(
@@ -1134,11 +1253,12 @@ impl NodeStore {
     /// Checks available disk space on the data root partition.
     /// Returns available bytes, or `None` if the stat couldn't be obtained.
     pub fn available_disk_space(&self) -> Result<Option<u64>, std::io::Error> {
-        use std::os::unix::ffi::OsStrExt;
         use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
 
-        let path_c = CString::new(self.config.data_root.as_os_str().as_bytes())
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "path contains null bytes"))?;
+        let path_c = CString::new(self.config.data_root.as_os_str().as_bytes()).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "path contains null bytes")
+        })?;
 
         unsafe {
             let mut stat = std::mem::MaybeUninit::zeroed().assume_init();
@@ -1167,7 +1287,7 @@ impl NodeStore {
                 }
             }
             Ok(None) => Ok(()), // Can't check, proceed optimistically
-            Err(_) => Ok(()), // Can't check, proceed optimistically
+            Err(_) => Ok(()),   // Can't check, proceed optimistically
         }
     }
 
@@ -1197,9 +1317,12 @@ impl NodeStore {
         secret: &[u8],
         description: Option<&str>,
     ) -> Result<(), StorageError> {
-        let blob_id = self.blobs.store(secret, std::slice::from_ref(&self.config.node_identity))?;
+        let blob_id = self
+            .blobs
+            .store(secret, &[self.config.node_identity.clone()])?;
 
-        self.index.put_credential(namespace, name, &blob_id, description)?;
+        self.index
+            .put_credential(namespace, name, &blob_id, description)?;
 
         Ok(())
     }
@@ -1227,12 +1350,10 @@ impl NodeStore {
     /// Delete a credential by namespace and name.
     ///
     /// Returns `true` if the credential existed, `false` if it was already gone.
-    pub fn delete_credential(
-        &self,
-        namespace: &str,
-        name: &str,
-    ) -> Result<bool, StorageError> {
-        self.index.delete_credential(namespace, name).map_err(StorageError::Io)
+    pub fn delete_credential(&self, namespace: &str, name: &str) -> Result<bool, StorageError> {
+        self.index
+            .delete_credential(namespace, name)
+            .map_err(StorageError::Io)
     }
 
     /// List all credential names in a namespace.
@@ -1268,7 +1389,7 @@ pub enum CommandReplayResult {
 // Varint helpers — use shared edgerun-core::varint for encoding
 // ---------------------------------------------------------------------------
 
-use edgerun_core::varint::{encode_varint, decode_varint_from_read};
+use edgerun_core::varint::{decode_varint_from_read, encode_varint};
 
 fn decode_varint_from_file(file: &mut File) -> Result<(u64, bool), StorageError> {
     match decode_varint_from_read(file) {
@@ -1277,4 +1398,3 @@ fn decode_varint_from_file(file: &mut File) -> Result<(u64, bool), StorageError>
         Err(e) => Err(StorageError::Io(e)),
     }
 }
-

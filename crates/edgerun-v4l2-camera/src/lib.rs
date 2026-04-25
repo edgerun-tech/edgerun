@@ -282,8 +282,7 @@ impl From<CameraBiometricError> for V4l2CameraError {
 }
 
 pub fn parse_c_string(bytes: &[u8]) -> String {
-    edgerun_encoding::cstring::decode_c_string_trimmed(bytes)
-        .unwrap_or_default()
+    edgerun_encoding::cstring::decode_c_string_trimmed(bytes).unwrap_or_default()
 }
 
 fn pixel_format_from_v4l2(value: u32) -> CameraPixelFormat {
@@ -938,10 +937,8 @@ impl CameraBiometricReader for V4l2CameraBiometricReader {
             require_hardware_match: request.require_hardware_match,
         };
         // Initialize enrollment session
-        self.enrollment_sessions.insert(
-            request.label.clone(),
-            (session.clone(), Vec::new()),
-        );
+        self.enrollment_sessions
+            .insert(request.label.clone(), (session.clone(), Vec::new()));
         Ok(session)
     }
 
@@ -950,9 +947,10 @@ impl CameraBiometricReader for V4l2CameraBiometricReader {
         session_id: &str,
         capture: &CameraCapture,
     ) -> Result<CameraEnrollProgress, CameraBiometricError> {
-        let session = self.enrollment_sessions.get_mut(session_id).ok_or_else(|| {
-            CameraBiometricError::Provider("no active enrollment session".into())
-        })?;
+        let session = self
+            .enrollment_sessions
+            .get_mut(session_id)
+            .ok_or_else(|| CameraBiometricError::Provider("no active enrollment session".into()))?;
 
         // Extract face region from the capture
         if let Some(face_gray) = extract_face_region(&capture.frame) {
@@ -987,9 +985,10 @@ impl CameraBiometricReader for V4l2CameraBiometricReader {
         &mut self,
         session_id: &str,
     ) -> Result<CameraTemplateRecord, CameraBiometricError> {
-        let (_, samples) = self.enrollment_sessions.remove(session_id).ok_or_else(|| {
-            CameraBiometricError::Provider("no active enrollment session".into())
-        })?;
+        let (_, samples) = self
+            .enrollment_sessions
+            .remove(session_id)
+            .ok_or_else(|| CameraBiometricError::Provider("no active enrollment session".into()))?;
 
         if samples.is_empty() {
             return Err(CameraBiometricError::Provider(
@@ -1429,7 +1428,9 @@ impl PairedCameraBiometricReader for V4l2PairedCameraBiometricReader {
             edgerun_camera_biometrics::CameraLivenessChallengeKind::PassivePresence => {
                 if challenge.require_rgb && !face_present_in_rgb {
                     false
-                } else { !challenge.require_infrared || face_present_in_infrared }
+                } else {
+                    !challenge.require_infrared || face_present_in_infrared
+                }
             }
             _ => false,
         };

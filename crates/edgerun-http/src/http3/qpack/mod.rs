@@ -49,22 +49,14 @@ mod tests {
     #[test]
     fn test_qpack_roundtrip_static_only() {
         // Encode headers with only static table entries
-        let headers = vec![
-            (":method", "GET"),
-            (":scheme", "https"),
-            (":path", "/"),
-        ];
+        let headers = vec![(":method", "GET"), (":scheme", "https"), (":path", "/")];
 
         let mut encoder = QpackEncoder::new();
         let mut decoder = QpackDecoder::new();
 
-        let (encoded, _) = encoder
-            .encode(&headers)
-            .expect("encode failed");
+        let (encoded, _) = encoder.encode(&headers).expect("encode failed");
 
-        let decoded = decoder
-            .decode(&encoded)
-            .expect("decode failed");
+        let decoded = decoder.decode(&encoded).expect("decode failed");
 
         assert_eq!(decoded.len(), 3);
         assert_eq!(decoded[0].0, ":method");
@@ -88,13 +80,9 @@ mod tests {
         let mut encoder = QpackEncoder::new();
         let mut decoder = QpackDecoder::new();
 
-        let (encoded, _) = encoder
-            .encode(&headers)
-            .expect("encode failed");
+        let (encoded, _) = encoder.encode(&headers).expect("encode failed");
 
-        let decoded = decoder
-            .decode(&encoded)
-            .expect("decode failed");
+        let decoded = decoder.decode(&encoded).expect("decode failed");
 
         assert_eq!(decoded.len(), 4);
         assert_eq!(decoded[3].0, "x-custom-header");

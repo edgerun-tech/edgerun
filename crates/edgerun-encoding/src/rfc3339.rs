@@ -21,7 +21,10 @@ pub struct DateTimeUtc {
 impl DateTimeUtc {
     /// Unix epoch (1970-01-01T00:00:00Z).
     pub fn epoch() -> Self {
-        Self { unix_secs: 0, nanos: 0 }
+        Self {
+            unix_secs: 0,
+            nanos: 0,
+        }
     }
 
     /// Current time from system clock.
@@ -69,15 +72,25 @@ pub fn parse_rfc3339(value: &str) -> Result<DateTimeUtc, ParseRfc3339Error> {
     }
 
     let year = d4(s, 0)?;
-    if s[4] != b'-' { return Err(ParseRfc3339Error); }
+    if s[4] != b'-' {
+        return Err(ParseRfc3339Error);
+    }
     let month = d2(s, 5)?;
-    if s[7] != b'-' { return Err(ParseRfc3339Error); }
+    if s[7] != b'-' {
+        return Err(ParseRfc3339Error);
+    }
     let day = d2(s, 8)?;
-    if s[10] != b'T' { return Err(ParseRfc3339Error); }
+    if s[10] != b'T' {
+        return Err(ParseRfc3339Error);
+    }
     let hour = d2(s, 11)?;
-    if s[13] != b':' { return Err(ParseRfc3339Error); }
+    if s[13] != b':' {
+        return Err(ParseRfc3339Error);
+    }
     let minute = d2(s, 14)?;
-    if s[16] != b':' { return Err(ParseRfc3339Error); }
+    if s[16] != b':' {
+        return Err(ParseRfc3339Error);
+    }
     let second = d2(s, 17)?;
 
     // Fractional seconds
@@ -108,7 +121,9 @@ pub fn parse_rfc3339(value: &str) -> Result<DateTimeUtc, ParseRfc3339Error> {
     } else if frac_index + 6 <= s.len() && (s[frac_index] == b'+' || s[frac_index] == b'-') {
         let sign = if s[frac_index] == b'+' { 1i64 } else { -1i64 };
         let tz_h = d2(s, frac_index + 1)? as i64;
-        if s[frac_index + 3] != b':' { return Err(ParseRfc3339Error); }
+        if s[frac_index + 3] != b':' {
+            return Err(ParseRfc3339Error);
+        }
         let tz_m = d2(s, frac_index + 4)? as i64;
         sign * (tz_h * 3600 + tz_m * 60)
     } else {
@@ -169,7 +184,10 @@ pub fn format_rfc3339_utc(dt: &DateTimeUtc) -> String {
     let minute = ((rem_secs % 3600) / 60) as u32;
     let second = (rem_secs % 60) as u32;
 
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", year, month, day, hour, minute, second)
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        year, month, day, hour, minute, second
+    )
 }
 
 /// Canonicalize an RFC3339 timestamp string to UTC form.
@@ -199,7 +217,13 @@ fn days_in_month(year: u32, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 => if is_leap_year(year) { 29 } else { 28 },
+        2 => {
+            if is_leap_year(year) {
+                29
+            } else {
+                28
+            }
+        }
         _ => 0,
     }
 }

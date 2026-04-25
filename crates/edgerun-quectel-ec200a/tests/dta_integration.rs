@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use edgerun_quectel_ec200a::{PowerState, State, NetworkType, Band};
+use edgerun_quectel_ec200a::{Band, NetworkType, PowerState, State};
 
 /// Simulates the Quectel EC200A modem for testing
 struct ModemSimulator {
@@ -50,55 +50,49 @@ impl ModemSimulator {
         responses.insert("AT+CIMI".into(), "123456789012345\r\nOK".into());
         responses.insert("AT+CFUN=1".into(), "OK".into());
         responses.insert("AT+CFUN=4".into(), "OK".into());
-        
+
         Self {
             state: Arc::new(Mutex::new(ModemState::default())),
             responses,
         }
     }
-    
+
     fn execute_at_command(&self, cmd: &str) -> Result<String, String> {
         let mut state = self.state.lock().unwrap();
-        
+
         match cmd {
             "AT" => {
                 state.state = State::On;
                 Ok("OK".into())
-            },
+            }
             "AT+CREG?" => {
                 state.state = State::Registered;
                 state.registered = true;
                 Ok("\r\n+CREG: 0,5\r\nOK".into())
-            },
-            "AT+COPS?" => {
-                Ok("\r\n+COPS: 0,0,\"DTA_NET\",2\r\nOK".into())
-            },
+            }
+            "AT+COPS?" => Ok("\r\n+COPS: 0,0,\"DTA_NET\",2\r\nOK".into()),
             "AT+CSQ" => {
                 state.signal_quality = 18;
                 Ok("\r\n+CSQ: 18,99\r\nOK".into())
-            },
-            "ATI" => {
-                Ok("\r\nQuectel EC200A-EU Rev1.0\r\nOK".into())
-            },
-            "AT+CIMI" => {
-                Ok("\r\n123456789012345\r\nOK".into())
-            },
+            }
+            "ATI" => Ok("\r\nQuectel EC200A-EU Rev1.0\r\nOK".into()),
+            "AT+CIMI" => Ok("\r\n123456789012345\r\nOK".into()),
             "AT+CFUN=1" => {
                 state.state = State::Registered;
                 state.power = PowerState::On;
                 state.registered = true;
                 Ok("OK".into())
-            },
+            }
             "AT+CFUN=4" => {
                 state.state = State::Off;
                 state.power = PowerState::Off;
                 state.registered = false;
                 Ok("OK".into())
-            },
+            }
             _ => Ok("ERROR".into()),
         }
     }
-    
+
     fn get_state(&self) -> ModemState {
         self.state.lock().unwrap().clone()
     }
@@ -115,7 +109,10 @@ fn test_dta_registration() {
 #[test]
 fn test_dta_network_operator() {
     let modem = ModemSimulator::new();
-    assert!(modem.execute_at_command("AT+COPS?").unwrap().contains("DTA_NET"));
+    assert!(modem
+        .execute_at_command("AT+COPS?")
+        .unwrap()
+        .contains("DTA_NET"));
 }
 
 #[test]
@@ -157,10 +154,13 @@ fn test_dta_radio_power() {
 #[test]
 fn test_dta_complete_flow() {
     let modem = ModemSimulator::new();
-    
+
     // Power on modem
-    assert!(modem.execute_at_command("AT+CFUN=1").unwrap().contains("OK"));
-    
+    assert!(modem
+        .execute_at_command("AT+CFUN=1")
+        .unwrap()
+        .contains("OK"));
+
     // Verify registered state
     let state = modem.get_state();
     assert_eq!(state.state, State::Registered);
@@ -171,10 +171,10 @@ fn test_dta_complete_flow() {
 fn test_multiple_dta_modems() {
     let m1 = ModemSimulator::new();
     let m2 = ModemSimulator::new();
-    
+
     let r1 = m1.execute_at_command("AT+CREG?").unwrap();
     let r2 = m2.execute_at_command("AT+CREG?").unwrap();
-    
+
     assert!(r1.contains("OK"));
     assert!(r2.contains("OK"));
 }
@@ -182,10 +182,13 @@ fn test_multiple_dta_modems() {
 #[test]
 fn test_dta_lifecycle() {
     let modem = ModemSimulator::new();
-    
+
     // Power on
-    assert!(modem.execute_at_command("AT+CFUN=1").unwrap().contains("OK"));
-    
+    assert!(modem
+        .execute_at_command("AT+CFUN=1")
+        .unwrap()
+        .contains("OK"));
+
     // Verify registration state changed
     let state = modem.get_state();
     assert_eq!(state.state, State::Registered);
@@ -220,14 +223,14 @@ fn test_dta_error_handling() {
 #[test]
 fn test_dta_power_cycle() {
     let modem = ModemSimulator::new();
-    
+
     // Power off
     let resp = modem.execute_at_command("AT+CFUN=4").unwrap();
     assert!(resp.contains("OK"));
     let s = modem.get_state();
     assert_eq!(s.state, State::Off);
     assert!(!s.registered);
-    
+
     // Power on again
     let resp = modem.execute_at_command("AT+CFUN=1").unwrap();
     assert!(resp.contains("OK"));

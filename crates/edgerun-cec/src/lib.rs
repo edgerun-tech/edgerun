@@ -183,7 +183,10 @@ mod tests {
     #[test]
     fn cec_logical_address_debug() {
         assert_eq!(format!("{:?}", CecLogicalAddress::Tv), "Tv");
-        assert_eq!(format!("{:?}", CecLogicalAddress::AudioSystem), "AudioSystem");
+        assert_eq!(
+            format!("{:?}", CecLogicalAddress::AudioSystem),
+            "AudioSystem"
+        );
     }
 
     #[test]

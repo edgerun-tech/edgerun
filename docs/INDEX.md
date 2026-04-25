@@ -90,8 +90,8 @@ Design documentation for all 136 crates, organized by domain.
 
 | Metric | Value |
 |--------|-------|
-| Total crates | 137 (in workspace members) |
-| Total crate directories | 103 |
+| Total crates | 142 (in workspace members) |
+| Total crate directories | 106 |
 | Total proto files | 44 |
 | Files with `#[test]` | 268 |
 | Integration test files | 142 |

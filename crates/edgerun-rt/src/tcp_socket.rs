@@ -8,9 +8,9 @@ use std::net::SocketAddr;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::Arc;
 
-use crate::tcp::AsyncTcpStream;
-use crate::tcp::AsyncTcpListener;
 use crate::runtime::current_rt;
+use crate::tcp::AsyncTcpListener;
+use crate::tcp::AsyncTcpStream;
 
 /// A builder for TCP sockets.
 ///
@@ -158,10 +158,14 @@ impl TcpSocket {
         let res = unsafe { libc::connect(fd, &sa as *const _ as *const _, addrlen) };
         if res < 0 {
             let e = io::Error::last_os_error();
-            edgerun_log::debug!("connect({:?}) -> -1, error={:?}, kind={:?}", addr, e.raw_os_error(), e.kind());
+            edgerun_log::debug!(
+                "connect({:?}) -> -1, error={:?}, kind={:?}",
+                addr,
+                e.raw_os_error(),
+                e.kind()
+            );
             // EINPROGRESS and EWOULDBLOCK both mean non-blocking connect started.
-            if e.kind() != io::ErrorKind::WouldBlock
-                && e.raw_os_error() != Some(libc::EINPROGRESS)
+            if e.kind() != io::ErrorKind::WouldBlock && e.raw_os_error() != Some(libc::EINPROGRESS)
             {
                 unsafe { libc::close(fd) };
                 return Err(e);
@@ -182,9 +186,7 @@ impl TcpSocket {
     }
 
     fn create_socket(&self) -> io::Result<RawFd> {
-        let fd = unsafe {
-            libc::socket(self.domain, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0)
-        };
+        let fd = unsafe { libc::socket(self.domain, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0) };
         if fd < 0 {
             Err(io::Error::last_os_error())
         } else {
@@ -195,13 +197,31 @@ impl TcpSocket {
     fn apply_socket_opts(&self, fd: RawFd) -> io::Result<()> {
         if self.reuse_addr {
             let opt: libc::c_int = 1;
-            if unsafe { libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, &opt as *const _ as *const _, std::mem::size_of_val(&opt) as _) } < 0 {
+            if unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_REUSEADDR,
+                    &opt as *const _ as *const _,
+                    std::mem::size_of_val(&opt) as _,
+                )
+            } < 0
+            {
                 return Err(io::Error::last_os_error());
             }
         }
         if self.reuse_port {
             let opt: libc::c_int = 1;
-            if unsafe { libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEPORT, &opt as *const _ as *const _, std::mem::size_of_val(&opt) as _) } < 0 {
+            if unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_REUSEPORT,
+                    &opt as *const _ as *const _,
+                    std::mem::size_of_val(&opt) as _,
+                )
+            } < 0
+            {
                 return Err(io::Error::last_os_error());
             }
         }
@@ -212,25 +232,61 @@ impl TcpSocket {
             } else {
                 (libc::IPPROTO_IP, libc::IP_TTL)
             };
-            if unsafe { libc::setsockopt(fd, level, optname, &opt as *const _ as *const _, std::mem::size_of_val(&opt) as _) } < 0 {
+            if unsafe {
+                libc::setsockopt(
+                    fd,
+                    level,
+                    optname,
+                    &opt as *const _ as *const _,
+                    std::mem::size_of_val(&opt) as _,
+                )
+            } < 0
+            {
                 return Err(io::Error::last_os_error());
             }
         }
         if self.nodelay {
             let opt: libc::c_int = 1;
-            if unsafe { libc::setsockopt(fd, libc::IPPROTO_TCP, libc::TCP_NODELAY, &opt as *const _ as *const _, std::mem::size_of_val(&opt) as _) } < 0 {
+            if unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::IPPROTO_TCP,
+                    libc::TCP_NODELAY,
+                    &opt as *const _ as *const _,
+                    std::mem::size_of_val(&opt) as _,
+                )
+            } < 0
+            {
                 return Err(io::Error::last_os_error());
             }
         }
         if let Some(size) = self.send_buffer_size {
             let opt = size as libc::c_int;
-            if unsafe { libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &opt as *const _ as *const _, std::mem::size_of_val(&opt) as _) } < 0 {
+            if unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_SNDBUF,
+                    &opt as *const _ as *const _,
+                    std::mem::size_of_val(&opt) as _,
+                )
+            } < 0
+            {
                 return Err(io::Error::last_os_error());
             }
         }
         if let Some(size) = self.recv_buffer_size {
             let opt = size as libc::c_int;
-            if unsafe { libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &opt as *const _ as *const _, std::mem::size_of_val(&opt) as _) } < 0 {
+            if unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_RCVBUF,
+                    &opt as *const _ as *const _,
+                    std::mem::size_of_val(&opt) as _,
+                )
+            } < 0
+            {
                 return Err(io::Error::last_os_error());
             }
         }

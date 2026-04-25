@@ -1,12 +1,12 @@
 use crate::{GattError, GattResult};
+use std::collections::HashMap;
 use std::io;
 use std::mem::size_of;
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use std::thread;
-use std::collections::HashMap;
+use std::time::Duration;
 
 const AF_BLUETOOTH: i32 = 31;
 const SOCK_RAW: i32 = 3;
@@ -134,7 +134,9 @@ impl HciConnection {
     pub fn new(controller_index: u16) -> GattResult<Self> {
         let fd = unsafe { socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI) };
         if fd < 0 {
-            return Err(GattError::SocketFailed("failed to create HCI socket".to_string()));
+            return Err(GattError::SocketFailed(
+                "failed to create HCI socket".to_string(),
+            ));
         }
 
         let addr = SockAddrHci {
@@ -153,7 +155,9 @@ impl HciConnection {
 
         if rc < 0 {
             unsafe { close(fd) };
-            return Err(GattError::SocketFailed("failed to bind HCI socket".to_string()));
+            return Err(GattError::SocketFailed(
+                "failed to bind HCI socket".to_string(),
+            ));
         }
 
         Ok(Self {
@@ -165,11 +169,7 @@ impl HciConnection {
         })
     }
 
-    pub fn connect_le(
-        &mut self,
-        peer_addr: &str,
-        params: LeConnParams,
-    ) -> GattResult<u16> {
+    pub fn connect_le(&mut self, peer_addr: &str, params: LeConnParams) -> GattResult<u16> {
         let bdaddr = reverse_bdaddr(peer_addr)
             .ok_or_else(|| GattError::InvalidAddress(peer_addr.to_string()))?;
 
@@ -204,7 +204,9 @@ impl HciConnection {
 
         let rc = unsafe { send(self.fd, req.as_ptr().cast(), req.len(), 0) };
         if rc < 0 {
-            return Err(GattError::SendFailed("failed to send HCI command".to_string()));
+            return Err(GattError::SendFailed(
+                "failed to send HCI command".to_string(),
+            ));
         }
 
         self.peer_addr = Mutex::new(Some(peer_addr.to_string()));
@@ -229,7 +231,9 @@ impl HciConnection {
 
             let poll_rc = unsafe { poll(&mut pollfd, 1, poll_ms) };
             if poll_rc < 0 {
-                return Err(GattError::PollFailed("poll failed on HCI socket".to_string()));
+                return Err(GattError::PollFailed(
+                    "poll failed on HCI socket".to_string(),
+                ));
             }
 
             if poll_rc > 0 {
@@ -298,7 +302,9 @@ impl HciConnection {
 
         let rc = unsafe { send(self.fd, req.as_ptr().cast(), req.len(), 0) };
         if rc < 0 {
-            return Err(GattError::SendFailed("failed to send disconnect command".to_string()));
+            return Err(GattError::SendFailed(
+                "failed to send disconnect command".to_string(),
+            ));
         }
 
         self.connected.store(false, Ordering::SeqCst);
@@ -340,11 +346,7 @@ impl HciConnectionPool {
         })
     }
 
-    pub fn connect_le(
-        &self,
-        peer_addr: &str,
-        addr_type: u8,
-    ) -> GattResult<Arc<HciConnection>> {
+    pub fn connect_le(&self, peer_addr: &str, addr_type: u8) -> GattResult<Arc<HciConnection>> {
         {
             let conns = self.connections.lock().unwrap();
             if let Some(existing) = conns.get(peer_addr) {

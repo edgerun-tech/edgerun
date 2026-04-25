@@ -78,9 +78,7 @@ impl Transport {
     #[cfg(feature = "tls")]
     pub async fn upgrade_tls(self, server_name: &str) -> io::Result<Self> {
         match self {
-            Transport::Tls(_) => {
-                Err(io::Error::other("already using TLS"))
-            }
+            Transport::Tls(_) => Err(io::Error::other("already using TLS")),
             Transport::Plain(stream) => {
                 let tls = AsyncTlsStream::client(stream, server_name, &[], None)
                     .await
@@ -308,7 +306,11 @@ impl<P: MailProtocol> ProtocolServer<P> {
     /// Create a new protocol server.
     pub fn new(config: ServerConfig, protocol: P) -> io::Result<Self> {
         let listener = Arc::new(edgerun_rt::AsyncTcpListener::bind(&config.bind_addr)?);
-        edgerun_log::info!("edgerun-mail: {} listening on {}", std::any::type_name::<P>(), config.bind_addr);
+        edgerun_log::info!(
+            "edgerun-mail: {} listening on {}",
+            std::any::type_name::<P>(),
+            config.bind_addr
+        );
         Ok(Self {
             listener,
             protocol: Arc::new(protocol),
@@ -327,7 +329,9 @@ impl<P: MailProtocol> ProtocolServer<P> {
 
                     edgerun_log::info!("edgerun-mail: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        if let Err(e) = handle_connection(stream, peer, protocol, config, shutdown).await {
+                        if let Err(e) =
+                            handle_connection(stream, peer, protocol, config, shutdown).await
+                        {
                             edgerun_log::error!("edgerun-mail: connection error: {}", e);
                         }
                     });

@@ -2,8 +2,8 @@
 //! Reads GPS data from sysfs (available on all Android devices via Linux kernel).
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityModality,
-    CapabilityOperation, CapabilityRole, CapabilityProvider,
+    capability_descriptor, CapabilityDescriptor, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole,
 };
 
 #[cfg(feature = "android-real")]
@@ -20,13 +20,21 @@ mod real {
     }
 
     fn read_sysfs_prop(path: &str) -> Option<String> {
-        std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+        std::fs::read_to_string(path)
+            .ok()
+            .map(|s| s.trim().to_string())
     }
 
-    pub struct AndroidLocationProvider { last_location: Option<Location> }
+    pub struct AndroidLocationProvider {
+        last_location: Option<Location>,
+    }
 
     impl AndroidLocationProvider {
-        pub fn new() -> Self { Self { last_location: None } }
+        pub fn new() -> Self {
+            Self {
+                last_location: None,
+            }
+        }
 
         pub fn get_location(&mut self) -> Option<Location> {
             if let (Ok(lat_str), Ok(lon_str)) = (
@@ -35,8 +43,11 @@ mod real {
             ) {
                 if let (Ok(lat), Ok(lon)) = (lat_str.parse::<f64>(), lon_str.parse::<f64>()) {
                     let loc = Location {
-                        latitude: lat, longitude: lon, altitude: 0.0,
-                        accuracy_meters: 10.0, provider: "sysfs".into(),
+                        latitude: lat,
+                        longitude: lon,
+                        altitude: 0.0,
+                        accuracy_meters: 10.0,
+                        provider: "sysfs".into(),
                     };
                     self.last_location = Some(loc.clone());
                     return Some(loc);
@@ -48,10 +59,15 @@ mod real {
 
     impl CapabilityProvider for AndroidLocationProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-location", "android", CapabilityRole::Input,
+            capability_descriptor(
+                "android-location",
+                "android",
+                CapabilityRole::Input,
                 &[CapabilityModality::Other],
                 &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }
@@ -66,13 +82,22 @@ mod real {
         }
     }
 
-    impl AndroidLocationProvider { pub fn new() -> Self { Self } }
+    impl AndroidLocationProvider {
+        pub fn new() -> Self {
+            Self
+        }
+    }
     impl CapabilityProvider for AndroidLocationProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-location-stub", "stub", CapabilityRole::Input,
+            capability_descriptor(
+                "android-location-stub",
+                "stub",
+                CapabilityRole::Input,
                 &[CapabilityModality::Other],
                 &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }

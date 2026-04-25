@@ -1,5 +1,5 @@
 // Test Barrier primitive with the actual runtime.
-use edgerun_rt::{Barrier, Runtime, spawn};
+use edgerun_rt::{spawn, Barrier, Runtime};
 use std::sync::Arc;
 use std::time::Duration;
 

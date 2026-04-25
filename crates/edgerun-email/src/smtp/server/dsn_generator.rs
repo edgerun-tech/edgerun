@@ -221,10 +221,13 @@ impl DsnBounce {
 /// Generate a unique boundary string.
 fn generate_boundary() -> String {
     // Simple unique boundary using a timestamp-like approach
-    format!("----=_EdgerunDSN_{}_7f8a9b", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0))
+    format!(
+        "----=_EdgerunDSN_{}_7f8a9b",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    )
 }
 
 #[cfg(test)]

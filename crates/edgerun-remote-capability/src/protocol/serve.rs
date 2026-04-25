@@ -1,16 +1,12 @@
 //! Protocol dispatch loop: serve_one() and pump_one_event().
 
 use edgerun_capabilities::CapabilityError;
-use edgerun_proto::edgerun::v0::capability::{
-    CapabilityInvocation, CapabilityResult,
-};
+use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_proto::edgerun::v0::capability_runtime::{
     capability_remote_envelope, CapabilityRemoteEnvelope, CapabilityResultFrame,
 };
 
-use super::{
-    RemoteCapabilityProvider, RemoteCapabilityTransport, RemoteInvocationResult,
-};
+use super::{RemoteCapabilityProvider, RemoteCapabilityTransport, RemoteInvocationResult};
 
 /// Handle one envelope from the transport. Returns `Ok(false)` on EOF.
 pub fn serve_one<P: RemoteCapabilityProvider, T: RemoteCapabilityTransport>(

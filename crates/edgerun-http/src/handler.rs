@@ -30,10 +30,7 @@ use std::sync::Arc;
 /// }
 /// ```
 pub trait Handler: Send + Sync + 'static {
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
 }
 
 /// Wrap a synchronous function as a [`Handler`].
@@ -76,7 +73,9 @@ where
 }
 
 /// A handler that wraps a synchronous function.
-pub struct SyncHandler<F> { f: F }
+pub struct SyncHandler<F> {
+    f: F,
+}
 
 impl<F> Handler for SyncHandler<F>
 where
@@ -88,7 +87,9 @@ where
 }
 
 /// A handler that wraps an async function.
-pub struct AsyncHandler<F> { f: F }
+pub struct AsyncHandler<F> {
+    f: F,
+}
 
 impl<F, Fut> Handler for AsyncHandler<F>
 where

@@ -7,27 +7,26 @@
 
 pub mod benchmark;
 pub mod discovery;
+pub mod mesh_payload;
 pub mod router;
 pub mod router_benchmark;
-pub mod mesh_payload;
 
-mod frame_types;
 mod frame;
-mod routing;
+mod frame_types;
 mod node;
+mod routing;
 
 #[cfg(test)]
 mod router_tests;
 
 pub use edgerun_hardware_signing::NodeID;
+pub use frame::{MeshFrame, MeshFrameHeader};
 pub use frame_types::FrameType;
-pub use frame::{MeshFrameHeader, MeshFrame};
+pub use node::{sign_frame, DiscoveryPayload, LocalNode, MeshPeer};
 pub use routing::{MeshRoute, MeshRoutingTable};
-pub use node::{MeshPeer, DiscoveryPayload, LocalNode, sign_frame};
 
 #[cfg(test)]
 mod tests;
-
 
 // ---------------------------------------------------------------------------
 // Re-exports from the router module for backward compatibility with
@@ -35,5 +34,7 @@ mod tests;
 // ---------------------------------------------------------------------------
 
 pub use discovery::DiscoveryPacket;
+pub use mesh_payload::{
+    DeploymentMetrics, MetricsReportPayload, MigrationCompletePayload, MigrationOrderPayload,
+};
 pub use router::MeshRouter;
-pub use mesh_payload::{MetricsReportPayload, DeploymentMetrics, MigrationOrderPayload, MigrationCompletePayload};

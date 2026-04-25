@@ -61,7 +61,7 @@ delete  →  (poststop + cgroup cleanup)                                     →
 
 ## Test Results
 
-**Last run:** 2025-04-11 | **All green:** 149 tests (125 unit + 24 integration), 0 clippy warnings
+**Last run:** 2026-04-24 | **All green:** 149 tests (125 unit + 24 integration), 0 clippy warnings
 
 ### Unit tests: 125 passed, 0 failed
 

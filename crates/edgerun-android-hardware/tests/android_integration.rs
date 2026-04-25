@@ -8,7 +8,7 @@
 #[cfg(test)]
 mod tests {
     use edgerun_android_hardware::*;
-    use edgerun_biometrics::{BiometricModality, BiometricState, BiometricAssuranceStrength};
+    use edgerun_biometrics::{BiometricAssuranceStrength, BiometricModality, BiometricState};
     use edgerun_capabilities::CapabilityProvider;
 
     // =========================================================================
@@ -31,10 +31,16 @@ mod tests {
 
         for (name, provider) in providers {
             let desc = provider.descriptor();
-            assert!(!desc.provider_name.is_empty(),
-                "Provider '{}' has empty provider_name", name);
-            assert!(desc.descriptor_version >= 1,
-                "Provider '{}' has invalid descriptor_version", name);
+            assert!(
+                !desc.provider_name.is_empty(),
+                "Provider '{}' has empty provider_name",
+                name
+            );
+            assert!(
+                desc.descriptor_version >= 1,
+                "Provider '{}' has invalid descriptor_version",
+                name
+            );
         }
     }
 
@@ -42,26 +48,36 @@ mod tests {
     fn all_android_providers_have_correct_roles() {
         // Input providers
         let input = AndroidInputProvider::new();
-        assert_eq!(input.descriptor().role,
-            edgerun_capabilities::CapabilityRole::Input as i32);
+        assert_eq!(
+            input.descriptor().role,
+            edgerun_capabilities::CapabilityRole::Input as i32
+        );
 
         let audio_in = AndroidAudioInputProvider::new();
-        assert_eq!(audio_in.descriptor().role,
-            edgerun_capabilities::CapabilityRole::Input as i32);
+        assert_eq!(
+            audio_in.descriptor().role,
+            edgerun_capabilities::CapabilityRole::Input as i32
+        );
 
         // Output providers
         let audio_out = AndroidAudioOutputProvider::new();
-        assert_eq!(audio_out.descriptor().role,
-            edgerun_capabilities::CapabilityRole::Output as i32);
+        assert_eq!(
+            audio_out.descriptor().role,
+            edgerun_capabilities::CapabilityRole::Output as i32
+        );
 
         let display = AndroidDisplayProvider::new();
-        assert_eq!(display.descriptor().role,
-            edgerun_capabilities::CapabilityRole::Output as i32);
+        assert_eq!(
+            display.descriptor().role,
+            edgerun_capabilities::CapabilityRole::Output as i32
+        );
 
         // Secure element
         let biometric = AndroidBiometricProvider::new();
-        assert_eq!(biometric.descriptor().role,
-            edgerun_capabilities::CapabilityRole::SecureElement as i32);
+        assert_eq!(
+            biometric.descriptor().role,
+            edgerun_capabilities::CapabilityRole::SecureElement as i32
+        );
     }
 
     #[test]
@@ -73,10 +89,14 @@ mod tests {
         let out_modalities = audio_out.descriptor().modalities;
 
         // Auditory modality = 2
-        assert!(in_modalities.contains(&(edgerun_capabilities::CapabilityModality::Auditory as i32)),
-            "Audio input should have Auditory modality");
-        assert!(out_modalities.contains(&(edgerun_capabilities::CapabilityModality::Auditory as i32)),
-            "Audio output should have Auditory modality");
+        assert!(
+            in_modalities.contains(&(edgerun_capabilities::CapabilityModality::Auditory as i32)),
+            "Audio input should have Auditory modality"
+        );
+        assert!(
+            out_modalities.contains(&(edgerun_capabilities::CapabilityModality::Auditory as i32)),
+            "Audio output should have Auditory modality"
+        );
     }
 
     #[test]
@@ -85,8 +105,10 @@ mod tests {
         let modalities = camera.descriptor().modalities;
 
         // Visual modality = 1
-        assert!(modalities.contains(&(edgerun_capabilities::CapabilityModality::Visual as i32)),
-            "Camera should have Visual modality");
+        assert!(
+            modalities.contains(&(edgerun_capabilities::CapabilityModality::Visual as i32)),
+            "Camera should have Visual modality"
+        );
     }
 
     #[test]
@@ -95,8 +117,10 @@ mod tests {
         let modalities = display.descriptor().modalities;
 
         // Display modality = 5
-        assert!(modalities.contains(&(edgerun_capabilities::CapabilityModality::Display as i32)),
-            "Display should have Display modality");
+        assert!(
+            modalities.contains(&(edgerun_capabilities::CapabilityModality::Display as i32)),
+            "Display should have Display modality"
+        );
     }
 
     #[test]
@@ -105,8 +129,10 @@ mod tests {
         let modalities = biometric.descriptor().modalities;
 
         // Biometric modality = 4
-        assert!(modalities.contains(&(edgerun_capabilities::CapabilityModality::Biometric as i32)),
-            "Biometric should have Biometric modality");
+        assert!(
+            modalities.contains(&(edgerun_capabilities::CapabilityModality::Biometric as i32)),
+            "Biometric should have Biometric modality"
+        );
     }
 
     #[test]
@@ -115,8 +141,10 @@ mod tests {
         let modalities = sensors.descriptor().modalities;
 
         // Other modality = 11
-        assert!(modalities.contains(&(edgerun_capabilities::CapabilityModality::Other as i32)),
-            "Sensors should have Other modality");
+        assert!(
+            modalities.contains(&(edgerun_capabilities::CapabilityModality::Other as i32)),
+            "Sensors should have Other modality"
+        );
     }
 
     #[test]
@@ -124,8 +152,10 @@ mod tests {
         let location = AndroidLocationProvider::new();
         let modalities = location.descriptor().modalities;
 
-        assert!(modalities.contains(&(edgerun_capabilities::CapabilityModality::Other as i32)),
-            "Location should have Other modality");
+        assert!(
+            modalities.contains(&(edgerun_capabilities::CapabilityModality::Other as i32)),
+            "Location should have Other modality"
+        );
     }
 
     #[test]
@@ -133,8 +163,10 @@ mod tests {
         let power = AndroidPowerProvider::new();
         let modalities = power.descriptor().modalities;
 
-        assert!(modalities.contains(&(edgerun_capabilities::CapabilityModality::Other as i32)),
-            "Power should have Other modality");
+        assert!(
+            modalities.contains(&(edgerun_capabilities::CapabilityModality::Other as i32)),
+            "Power should have Other modality"
+        );
     }
 
     #[test]
@@ -154,8 +186,12 @@ mod tests {
         for provider in providers {
             let desc = provider.descriptor();
             // Query operation = 0
-            assert!(desc.operations.contains(&(edgerun_capabilities::CapabilityOperation::Query as i32)),
-                "Provider '{}' should have Query operation", desc.provider_name);
+            assert!(
+                desc.operations
+                    .contains(&(edgerun_capabilities::CapabilityOperation::Query as i32)),
+                "Provider '{}' should have Query operation",
+                desc.provider_name
+            );
         }
     }
 
@@ -166,9 +202,8 @@ mod tests {
     #[test]
     fn keystore_trait_can_be_implemented() {
         use edgerun_android_keystore::{
-            AndroidKeystoreKeyInfo, AndroidKeystoreSignatureAlgorithm,
-            AndroidKeystoreAssuranceLevel, AndroidKeystoreError,
-            AndroidKeystoreSigningKey,
+            AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo,
+            AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
         };
 
         struct TestKey;
@@ -195,8 +230,14 @@ mod tests {
         let key = TestKey;
         let info = key.key_info().unwrap();
         assert_eq!(info.alias, "test-key");
-        assert_eq!(info.algorithm, AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256);
-        assert_eq!(info.assurance_level, AndroidKeystoreAssuranceLevel::StrongBox);
+        assert_eq!(
+            info.algorithm,
+            AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256
+        );
+        assert_eq!(
+            info.assurance_level,
+            AndroidKeystoreAssuranceLevel::StrongBox
+        );
 
         let sig = key.sign_message(b"test message").unwrap();
         assert_eq!(sig.len(), 64);
@@ -205,10 +246,9 @@ mod tests {
     #[test]
     fn keystore_signing_functions_work() {
         use edgerun_android_keystore::{
-            AndroidKeystoreKeyInfo, AndroidKeystoreSignatureAlgorithm,
-            AndroidKeystoreAssuranceLevel, AndroidKeystoreError,
-            AndroidKeystoreSigningKey, sign_record_with_keystore,
-            sign_record_with_keystore_checked,
+            sign_record_with_keystore, sign_record_with_keystore_checked,
+            AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo,
+            AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
         };
 
         struct TestKey;
@@ -239,7 +279,8 @@ mod tests {
             &[AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256],
             "test:v0:sig",
             &[0xFF; 32],
-        ).unwrap();
+        )
+        .unwrap();
         assert!(!sig.is_empty());
 
         // Checked signing with non-matching algorithm should fail
@@ -248,7 +289,8 @@ mod tests {
             &[AndroidKeystoreSignatureAlgorithm::RsaPssSha256],
             "test:v0:sig",
             &[0xFF; 32],
-        ).unwrap_err();
+        )
+        .unwrap_err();
         assert!(matches!(err, AndroidKeystoreError::UnsupportedAlgorithm(_)));
     }
 
@@ -269,20 +311,19 @@ mod tests {
     fn biometric_stub_state_is_default() {
         let state = AndroidBiometricProvider::get_state();
         assert_eq!(state, BiometricState::default());
-        assert_eq!(
-            state.assurance_strength(),
-            BiometricAssuranceStrength::None
-        );
+        assert_eq!(state.assurance_strength(), BiometricAssuranceStrength::None);
     }
 
     #[test]
     fn biometric_strength_hierarchy() {
         let none = BiometricState::default();
         let presence = BiometricState {
-            user_present: true, ..Default::default()
+            user_present: true,
+            ..Default::default()
         };
         let biometric_match = BiometricState {
-            verified: true, ..Default::default()
+            verified: true,
+            ..Default::default()
         };
         let hardware_protected = BiometricState {
             verified: true,
@@ -292,9 +333,18 @@ mod tests {
         };
 
         assert_eq!(none.assurance_strength(), BiometricAssuranceStrength::None);
-        assert_eq!(presence.assurance_strength(), BiometricAssuranceStrength::UserPresence);
-        assert_eq!(biometric_match.assurance_strength(), BiometricAssuranceStrength::BiometricMatch);
-        assert_eq!(hardware_protected.assurance_strength(), BiometricAssuranceStrength::HardwareProtectedBiometric);
+        assert_eq!(
+            presence.assurance_strength(),
+            BiometricAssuranceStrength::UserPresence
+        );
+        assert_eq!(
+            biometric_match.assurance_strength(),
+            BiometricAssuranceStrength::BiometricMatch
+        );
+        assert_eq!(
+            hardware_protected.assurance_strength(),
+            BiometricAssuranceStrength::HardwareProtectedBiometric
+        );
 
         assert!(none.assurance_strength() < presence.assurance_strength());
         assert!(presence.assurance_strength() < biometric_match.assurance_strength());
@@ -313,7 +363,11 @@ mod tests {
         ];
         for (i, a) in modalities.iter().enumerate() {
             for (j, b) in modalities.iter().enumerate() {
-                if i == j { assert_eq!(a, b); } else { assert_ne!(a, b); }
+                if i == j {
+                    assert_eq!(a, b);
+                } else {
+                    assert_ne!(a, b);
+                }
             }
         }
     }
@@ -321,7 +375,9 @@ mod tests {
     #[test]
     fn biometric_satisfies_policy() {
         let strong = BiometricState {
-            verified: true, hardware_protected: true, user_present: true,
+            verified: true,
+            hardware_protected: true,
+            user_present: true,
             modality: Some(BiometricModality::Fingerprint),
         };
         assert!(strong.satisfies(BiometricAssuranceStrength::HardwareProtectedBiometric));
@@ -329,7 +385,10 @@ mod tests {
         assert!(strong.satisfies(BiometricAssuranceStrength::UserPresence));
         assert!(strong.satisfies(BiometricAssuranceStrength::None));
 
-        let weak = BiometricState { user_present: true, ..Default::default() };
+        let weak = BiometricState {
+            user_present: true,
+            ..Default::default()
+        };
         assert!(weak.satisfies(BiometricAssuranceStrength::UserPresence));
         assert!(weak.satisfies(BiometricAssuranceStrength::None));
         assert!(!weak.satisfies(BiometricAssuranceStrength::BiometricMatch));

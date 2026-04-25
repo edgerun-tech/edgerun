@@ -4,8 +4,10 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::time::Duration;
 
-use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT, NetworkConfig};
 use super::lease::LeasePool;
+use super::message::{
+    DhcpMessage, DhcpMessageType, NetworkConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
+};
 
 /// DHCPv4 server configuration.
 pub struct DhcpServerConfig {
@@ -81,9 +83,13 @@ impl DhcpServer {
             let fd = socket.as_raw_fd();
             let opt: libc::c_int = 1;
             unsafe {
-                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR,
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_REUSEADDR,
                     &opt as *const _ as *const libc::c_void,
-                    std::mem::size_of::<libc::c_int>() as libc::socklen_t);
+                    std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+                );
             }
         }
 
@@ -119,10 +125,7 @@ impl DhcpServer {
             "edgerun-dhcp: server listening on 0.0.0.0:{}",
             DHCP_SERVER_PORT
         );
-        eprintln!(
-            "  pool: {} - {}",
-            self.pool.pool_start, self.pool.pool_end
-        );
+        eprintln!("  pool: {} - {}", self.pool.pool_start, self.pool.pool_end);
         eprintln!(
             "  server: {}, router: {}, dns: {:?}",
             self.config.server_ip, self.config.router, self.config.dns_servers
@@ -187,11 +190,16 @@ impl DhcpServer {
             format_mac(mac),
             msg.xid,
             msg.is_bootp,
-            msg.options.param_request_list.contains(&super::message::OPT_RAPID_COMMIT)
+            msg.options
+                .param_request_list
+                .contains(&super::message::OPT_RAPID_COMMIT)
         );
 
         // Check for rapid commit (RFC 4039) — 2-message DORA
-        let rapid_commit = msg.options.param_request_list.contains(&super::message::OPT_RAPID_COMMIT);
+        let rapid_commit = msg
+            .options
+            .param_request_list
+            .contains(&super::message::OPT_RAPID_COMMIT);
 
         // Try to allocate an IP
         let ip = match self.pool.allocate(
@@ -235,21 +243,24 @@ impl DhcpServer {
             if let Some(ref bootfile) = bootfile {
                 // Put bootfile name in the file field (RFC 951)
                 let file_bytes = bootfile.as_bytes();
-                offer.file[..file_bytes.len().min(128)].copy_from_slice(&file_bytes[..file_bytes.len().min(128)]);
+                offer.file[..file_bytes.len().min(128)]
+                    .copy_from_slice(&file_bytes[..file_bytes.len().min(128)]);
             }
         }
 
         // Rapid commit: respond with ACK instead of OFFER (RFC 4039)
         if rapid_commit {
-            offer.options.param_request_list.push(super::message::OPT_RAPID_COMMIT);
-            edgerun_log::info!("edgerun-dhcp: sending RAPID-COMMIT ACK {} to {}",
-                ip, format_mac(mac));
-        } else {
-            eprintln!(
-                "edgerun-dhcp: sending OFFER {} to {}",
+            offer
+                .options
+                .param_request_list
+                .push(super::message::OPT_RAPID_COMMIT);
+            edgerun_log::info!(
+                "edgerun-dhcp: sending RAPID-COMMIT ACK {} to {}",
                 ip,
                 format_mac(mac)
             );
+        } else {
+            eprintln!("edgerun-dhcp: sending OFFER {} to {}", ip, format_mac(mac));
         }
 
         self.send_reply(&offer, msg)
@@ -313,7 +324,12 @@ impl DhcpServer {
                 // IP is assigned to someone else — release old, allocate new
                 self.pool.release(existing.mac);
                 // Try re-allocate
-                match self.pool.allocate(mac, msg.options.client_id.clone(), self.config.lease_time, msg.xid) {
+                match self.pool.allocate(
+                    mac,
+                    msg.options.client_id.clone(),
+                    self.config.lease_time,
+                    msg.xid,
+                ) {
                     Some(new_ip) if new_ip == ip => {
                         // Good, re-allocated same IP
                     }
@@ -329,18 +345,11 @@ impl DhcpServer {
             // Same MAC, same IP — just ACK
         } else {
             // Not in pool at all — maybe client is requesting an IP we never offered
-            eprintln!(
-                "edgerun-dhcp: REQUEST for {} not in our pool — NAK",
-                ip
-            );
+            eprintln!("edgerun-dhcp: REQUEST for {} not in our pool — NAK", ip);
             return self.send_nak(msg.xid, mac);
         }
 
-        eprintln!(
-            "edgerun-dhcp: sending ACK {} to {}",
-            ip,
-            format_mac(mac)
-        );
+        eprintln!("edgerun-dhcp: sending ACK {} to {}", ip, format_mac(mac));
         self.send_ack(msg, ip)
     }
 
@@ -430,7 +439,8 @@ impl DhcpServer {
             }
             if let Some(ref bf) = bootfile {
                 let file_bytes = bf.as_bytes();
-                ack.file[..file_bytes.len().min(128)].copy_from_slice(&file_bytes[..file_bytes.len().min(128)]);
+                ack.file[..file_bytes.len().min(128)]
+                    .copy_from_slice(&file_bytes[..file_bytes.len().min(128)]);
             }
         }
 
@@ -461,10 +471,8 @@ impl DhcpServer {
     fn send_nak(&mut self, xid: u32, client_mac: [u8; 6]) -> Result<(), io::Error> {
         let nak = DhcpMessage::nak(xid, self.config.server_ip, client_mac);
         let wire = nak.to_wire();
-        let broadcast = SocketAddr::new(
-            std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
-            DHCP_CLIENT_PORT,
-        );
+        let broadcast =
+            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
         let _ = self.socket.send_to(&wire, broadcast);
         Ok(())
     }
@@ -474,23 +482,15 @@ impl DhcpServer {
 
         // RFC 2131 §4.1: If relay agent (giaddr) is set, unicast to it
         if !original.giaddr.is_unspecified() {
-            let addr = SocketAddr::new(
-                std::net::IpAddr::V4(original.giaddr),
-                DHCP_SERVER_PORT,
-            );
+            let addr = SocketAddr::new(std::net::IpAddr::V4(original.giaddr), DHCP_SERVER_PORT);
             self.socket.send_to(&wire, addr)?;
         } else if !original.ciaddr.is_unspecified() && !original.broadcast {
-            let addr = SocketAddr::new(
-                std::net::IpAddr::V4(original.ciaddr),
-                DHCP_CLIENT_PORT,
-            );
+            let addr = SocketAddr::new(std::net::IpAddr::V4(original.ciaddr), DHCP_CLIENT_PORT);
             self.socket.send_to(&wire, addr)?;
         } else {
             // Broadcast to client
-            let broadcast = SocketAddr::new(
-                std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
-                DHCP_CLIENT_PORT,
-            );
+            let broadcast =
+                SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
             self.socket.send_to(&wire, broadcast)?;
         }
         Ok(())
@@ -514,12 +514,7 @@ impl DhcpServer {
 fn network_broadcast(ip: Ipv4Addr, mask: Ipv4Addr) -> Ipv4Addr {
     let i = ip.octets();
     let m = mask.octets();
-    Ipv4Addr::new(
-        i[0] | !m[0],
-        i[1] | !m[1],
-        i[2] | !m[2],
-        i[3] | !m[3],
-    )
+    Ipv4Addr::new(i[0] | !m[0], i[1] | !m[1], i[2] | !m[2], i[3] | !m[3])
 }
 
 fn format_mac(mac: [u8; 6]) -> String {

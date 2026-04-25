@@ -3,8 +3,8 @@
 //! Provides structured error types for each subsystem, enabling precise
 //! error reporting and recovery decisions.
 
-use std::io;
 use std::fmt;
+use std::io;
 
 /// Top-level OCI runtime error.
 #[derive(Debug)]
@@ -92,7 +92,11 @@ pub enum RootfsError {
     /// Mount destination escapes rootfs.
     PathEscape(String),
     /// Mount failed.
-    MountFailed { source: String, target: String, error: String },
+    MountFailed {
+        source: String,
+        target: String,
+        error: String,
+    },
     /// pivot_root failed.
     PivotRootFailed { error: String },
     /// Device creation failed.
@@ -109,13 +113,23 @@ impl fmt::Display for RootfsError {
             RootfsError::Io(e) => write!(f, "io error: {}", e),
             RootfsError::NotFound(p) => write!(f, "rootfs not found: {}", p),
             RootfsError::PathEscape(p) => write!(f, "mount destination escapes rootfs: {}", p),
-            RootfsError::MountFailed { source, target, error } => {
+            RootfsError::MountFailed {
+                source,
+                target,
+                error,
+            } => {
                 write!(f, "mount failed: {} -> {}: {}", source, target, error)
             }
             RootfsError::PivotRootFailed { error } => write!(f, "pivot_root failed: {}", error),
-            RootfsError::DeviceFailed { path, error } => write!(f, "device creation failed for {}: {}", path, error),
-            RootfsError::SysctlFailed { key, error } => write!(f, "sysctl failed for {}: {}", key, error),
-            RootfsError::PropagationFailed { mode, error } => write!(f, "rootfs propagation failed ({}): {}", mode, error),
+            RootfsError::DeviceFailed { path, error } => {
+                write!(f, "device creation failed for {}: {}", path, error)
+            }
+            RootfsError::SysctlFailed { key, error } => {
+                write!(f, "sysctl failed for {}: {}", key, error)
+            }
+            RootfsError::PropagationFailed { mode, error } => {
+                write!(f, "rootfs propagation failed ({}): {}", mode, error)
+            }
         }
     }
 }
@@ -152,7 +166,11 @@ pub enum CgroupError {
     /// Cgroup path not found.
     NotFound(String),
     /// Cgroup file write failed.
-    WriteFailed { file: String, content: String, error: String },
+    WriteFailed {
+        file: String,
+        content: String,
+        error: String,
+    },
     /// PID placement in cgroup failed.
     PidPlacementFailed { pid: u32, error: String },
     /// Invalid resource value.
@@ -166,7 +184,11 @@ impl fmt::Display for CgroupError {
         match self {
             CgroupError::Io(e) => write!(f, "io error: {}", e),
             CgroupError::NotFound(p) => write!(f, "cgroup not found: {}", p),
-            CgroupError::WriteFailed { file, content, error } => {
+            CgroupError::WriteFailed {
+                file,
+                content,
+                error,
+            } => {
                 write!(f, "cgroup write failed ({}): {} - {}", file, content, error)
             }
             CgroupError::PidPlacementFailed { pid, error } => {
@@ -309,7 +331,10 @@ mod tests {
     #[test]
     fn lifecycle_error_display() {
         let e = LifecycleError::AlreadyExists("test-container".into());
-        assert_eq!(format!("{}", e), "container 'test-container' already exists");
+        assert_eq!(
+            format!("{}", e),
+            "container 'test-container' already exists"
+        );
     }
 
     #[test]
@@ -324,7 +349,10 @@ mod tests {
             from: "created".into(),
             to: "deleted".into(),
         };
-        assert_eq!(format!("{}", e), "invalid state transition: created -> deleted");
+        assert_eq!(
+            format!("{}", e),
+            "invalid state transition: created -> deleted"
+        );
     }
 
     #[test]
@@ -336,7 +364,10 @@ mod tests {
     #[test]
     fn rootfs_error_path_escape() {
         let e = RootfsError::PathEscape("../etc/passwd".into());
-        assert_eq!(format!("{}", e), "mount destination escapes rootfs: ../etc/passwd");
+        assert_eq!(
+            format!("{}", e),
+            "mount destination escapes rootfs: ../etc/passwd"
+        );
     }
 
     #[test]
@@ -422,7 +453,10 @@ mod tests {
             OciError::Rootfs(RootfsError::NotFound("y".into())),
             OciError::Seccomp(SeccompError::InvalidSyscall("z".into())),
             OciError::Cgroup(CgroupError::NotFound("a".into())),
-            OciError::Hook(crate::hooks::HookError { hook_path: "b".into(), error: std::io::Error::other("c") }),
+            OciError::Hook(crate::hooks::HookError {
+                hook_path: "b".into(),
+                error: std::io::Error::other("c"),
+            }),
             OciError::Capability(CapabilityError::UnknownCapability("d".into())),
             OciError::Namespace(NamespaceError::UnknownType("e".into())),
             OciError::Config(ConfigError::MissingField("f".into())),

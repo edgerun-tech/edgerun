@@ -184,7 +184,10 @@ pub fn encode_string_field_u16(value: &str) -> Result<Vec<u8>, StringFieldError>
 /// assert_eq!(s, "hello");
 /// assert_eq!(cursor, 7);
 /// ```
-pub fn decode_string_field_u16(bytes: &[u8], cursor: &mut usize) -> Result<String, StringFieldError> {
+pub fn decode_string_field_u16(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<String, StringFieldError> {
     if *cursor + 2 > bytes.len() {
         return Err(StringFieldError::TruncatedInput);
     }
@@ -378,20 +381,26 @@ pub fn decode_optional_string_field_u32(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec;
     use alloc::format;
     use alloc::string::ToString;
+    use alloc::vec;
 
     #[test]
     fn test_encode_string_field() {
-        assert_eq!(encode_string_field("hello").unwrap(), vec![0x05, b'h', b'e', b'l', b'l', b'o']);
+        assert_eq!(
+            encode_string_field("hello").unwrap(),
+            vec![0x05, b'h', b'e', b'l', b'l', b'o']
+        );
         assert_eq!(encode_string_field("").unwrap(), vec![0x00]);
     }
 
     #[test]
     fn test_encode_string_field_too_long() {
         let long_string = "a".repeat(256);
-        assert!(matches!(encode_string_field(&long_string), Err(StringFieldError::LengthExceedsInput)));
+        assert!(matches!(
+            encode_string_field(&long_string),
+            Err(StringFieldError::LengthExceedsInput)
+        ));
     }
 
     #[test]
@@ -407,14 +416,20 @@ mod tests {
     fn test_decode_string_field_truncated() {
         let data = vec![0x05, b'h', b'e'];
         let mut cursor = 0;
-        assert!(matches!(decode_string_field(&data, &mut cursor), Err(StringFieldError::TruncatedInput)));
+        assert!(matches!(
+            decode_string_field(&data, &mut cursor),
+            Err(StringFieldError::TruncatedInput)
+        ));
     }
 
     #[test]
     fn test_decode_string_field_invalid_utf8() {
         let data = vec![0x02, 0xff, 0xfe];
         let mut cursor = 0;
-        assert!(matches!(decode_string_field(&data, &mut cursor), Err(StringFieldError::InvalidUtf8)));
+        assert!(matches!(
+            decode_string_field(&data, &mut cursor),
+            Err(StringFieldError::InvalidUtf8)
+        ));
     }
 
     #[test]
@@ -461,7 +476,10 @@ mod tests {
 
     #[test]
     fn test_encode_string_field_u16() {
-        assert_eq!(encode_string_field_u16("hello").unwrap(), vec![0x05, 0x00, b'h', b'e', b'l', b'l', b'o']);
+        assert_eq!(
+            encode_string_field_u16("hello").unwrap(),
+            vec![0x05, 0x00, b'h', b'e', b'l', b'l', b'o']
+        );
     }
 
     #[test]
@@ -475,7 +493,10 @@ mod tests {
 
     #[test]
     fn test_encode_bytes() {
-        assert_eq!(encode_bytes(b"hello").unwrap(), vec![0x05, b'h', b'e', b'l', b'l', b'o']);
+        assert_eq!(
+            encode_bytes(b"hello").unwrap(),
+            vec![0x05, b'h', b'e', b'l', b'l', b'o']
+        );
     }
 
     #[test]
@@ -489,12 +510,8 @@ mod tests {
 
     #[test]
     fn test_bytes_roundtrip() {
-        let test_cases: Vec<Vec<u8>> = vec![
-            vec![],
-            vec![0x00],
-            vec![0xff, 0xfe, 0xfd],
-            vec![0u8; 200],
-        ];
+        let test_cases: Vec<Vec<u8>> =
+            vec![vec![], vec![0x00], vec![0xff, 0xfe, 0xfd], vec![0u8; 200]];
         for b in &test_cases {
             let encoded = encode_bytes(b).unwrap();
             let mut cursor = 0;
@@ -508,7 +525,10 @@ mod tests {
     fn test_encode_string_field_u32() {
         let mut out = Vec::new();
         encode_string_field_u32("hello", &mut out).unwrap();
-        assert_eq!(out, vec![0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']);
+        assert_eq!(
+            out,
+            vec![0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']
+        );
     }
 
     #[test]
@@ -537,7 +557,10 @@ mod tests {
     fn test_encode_optional_string_field_u32_some() {
         let mut out = Vec::new();
         encode_optional_string_field_u32(Some("hello"), &mut out).unwrap();
-        assert_eq!(out, vec![0x01, 0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']);
+        assert_eq!(
+            out,
+            vec![0x01, 0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o']
+        );
     }
 
     #[test]

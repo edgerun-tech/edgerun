@@ -10,4 +10,4 @@ pub mod cli;
 #[cfg(feature = "std")]
 pub use cli::{Arg, ArgGroup, ArgMatches, Command, FromArgMatches, Parser};
 
-pub use edgerun_clap_derive::{Parser, Subcommand, command, arg};
+pub use edgerun_clap_derive::{arg, command, Parser, Subcommand};

@@ -40,4 +40,3 @@ pub fn validate_reachability_hint_map(
     }
     Ok(())
 }
-

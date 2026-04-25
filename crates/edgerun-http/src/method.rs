@@ -91,15 +91,26 @@ impl FromStr for Method {
         }
 
         // Case-insensitive match for standard methods (no allocation)
-        if s.eq_ignore_ascii_case("GET") { Ok(Method::GET) }
-        else if s.eq_ignore_ascii_case("POST") { Ok(Method::POST) }
-        else if s.eq_ignore_ascii_case("PUT") { Ok(Method::PUT) }
-        else if s.eq_ignore_ascii_case("DELETE") { Ok(Method::DELETE) }
-        else if s.eq_ignore_ascii_case("PATCH") { Ok(Method::PATCH) }
-        else if s.eq_ignore_ascii_case("HEAD") { Ok(Method::HEAD) }
-        else if s.eq_ignore_ascii_case("OPTIONS") { Ok(Method::OPTIONS) }
-        else if s.eq_ignore_ascii_case("CONNECT") { Ok(Method::CONNECT) }
-        else if s.eq_ignore_ascii_case("TRACE") { Ok(Method::TRACE) }
-        else { Ok(Method::Extension(s.to_string())) }
+        if s.eq_ignore_ascii_case("GET") {
+            Ok(Method::GET)
+        } else if s.eq_ignore_ascii_case("POST") {
+            Ok(Method::POST)
+        } else if s.eq_ignore_ascii_case("PUT") {
+            Ok(Method::PUT)
+        } else if s.eq_ignore_ascii_case("DELETE") {
+            Ok(Method::DELETE)
+        } else if s.eq_ignore_ascii_case("PATCH") {
+            Ok(Method::PATCH)
+        } else if s.eq_ignore_ascii_case("HEAD") {
+            Ok(Method::HEAD)
+        } else if s.eq_ignore_ascii_case("OPTIONS") {
+            Ok(Method::OPTIONS)
+        } else if s.eq_ignore_ascii_case("CONNECT") {
+            Ok(Method::CONNECT)
+        } else if s.eq_ignore_ascii_case("TRACE") {
+            Ok(Method::TRACE)
+        } else {
+            Ok(Method::Extension(s.to_string()))
+        }
     }
 }

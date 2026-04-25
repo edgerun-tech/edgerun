@@ -7,10 +7,10 @@
 
 extern crate alloc;
 
+use alloc::format;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use alloc::format;
 
 /// A parsed URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,17 +108,21 @@ impl Url {
 
 fn parse_url(input: &str) -> Result<Url, ParseError> {
     let input = input.trim();
-    
+
     // Must have scheme
-    let (rest, scheme) = parse_scheme(input).ok_or(ParseError { msg: "missing scheme" })?;
+    let (rest, scheme) = parse_scheme(input).ok_or(ParseError {
+        msg: "missing scheme",
+    })?;
     if rest.len() < 3 || &rest[0..2] != "//" {
         return Err(ParseError { msg: "missing //" });
     }
     let rest = &rest[2..];
-    
+
     // Parse authority (host:port)
-    let (rest, authority) = parse_authority(rest).ok_or(ParseError { msg: "invalid authority" })?;
-    
+    let (rest, authority) = parse_authority(rest).ok_or(ParseError {
+        msg: "invalid authority",
+    })?;
+
     // Parse path
     let path = if rest.is_empty() || rest.starts_with('?') || rest.starts_with('#') {
         String::new()
@@ -129,11 +133,13 @@ fn parse_url(input: &str) -> Result<Url, ParseError> {
         let end = rest.find(['?', '#']).unwrap_or(rest.len());
         rest[..end].to_string()
     };
-    let rest = if path.is_empty() { rest } else {
+    let rest = if path.is_empty() {
+        rest
+    } else {
         let end = rest.find(['?', '#']).unwrap_or(rest.len());
         &rest[end..]
     };
-    
+
     // Parse query
     let query = if let Some(rest) = rest.strip_prefix('?') {
         let end = rest.find('#').unwrap_or(rest.len());
@@ -151,10 +157,10 @@ fn parse_url(input: &str) -> Result<Url, ParseError> {
     } else {
         rest
     };
-    
+
     // Parse fragment
     let fragment = rest.strip_prefix('#').map(|rest| rest.to_string());
-    
+
     Ok(Url {
         scheme,
         authority,
@@ -167,7 +173,11 @@ fn parse_url(input: &str) -> Result<Url, ParseError> {
 fn parse_scheme(input: &str) -> Option<(&str, String)> {
     let colon = input.find(':')?;
     let scheme = input[..colon].to_lowercase();
-    if scheme.is_empty() || !scheme.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.') {
+    if scheme.is_empty()
+        || !scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+    {
         return None;
     }
     Some((&input[colon + 1..], scheme))
@@ -178,10 +188,10 @@ fn parse_authority(input: &str) -> Option<(&str, Authority)> {
     let question = input.find('?');
     let hash = input.find('#');
     let end = [slash, question, hash].into_iter().flatten().min()?;
-    
+
     let authority_str = &input[..end];
     let rest = &input[end..];
-    
+
     let (host, port) = if let Some(colon) = authority_str.rfind(':') {
         let port_str = &authority_str[colon + 1..];
         let host = &authority_str[..colon];
@@ -192,7 +202,7 @@ fn parse_authority(input: &str) -> Option<(&str, Authority)> {
     } else {
         (authority_str.to_string(), None)
     };
-    
+
     Some((rest, Authority { host, port }))
 }
 

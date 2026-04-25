@@ -225,8 +225,16 @@ mod tests {
                 refresh_millihz: 144_000,
             },
             modes: vec![
-                DisplayMode { width: 2560, height: 1440, refresh_millihz: 144_000 },
-                DisplayMode { width: 1920, height: 1080, refresh_millihz: 60_000 },
+                DisplayMode {
+                    width: 2560,
+                    height: 1440,
+                    refresh_millihz: 144_000,
+                },
+                DisplayMode {
+                    width: 1920,
+                    height: 1080,
+                    refresh_millihz: 60_000,
+                },
             ],
             hdr_capable: true,
             touch_capable: false,

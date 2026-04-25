@@ -29,65 +29,125 @@ pub struct SignalKind(libc::c_int);
 
 impl SignalKind {
     /// SIGHUP — terminal line hangup
-    pub const fn hangup() -> Self { Self(libc::SIGHUP) }
+    pub const fn hangup() -> Self {
+        Self(libc::SIGHUP)
+    }
     /// SIGINT — interrupt from keyboard
-    pub const fn interrupt() -> Self { Self(libc::SIGINT) }
+    pub const fn interrupt() -> Self {
+        Self(libc::SIGINT)
+    }
     /// SIGQUIT — quit from keyboard
-    pub const fn quit() -> Self { Self(libc::SIGQUIT) }
+    pub const fn quit() -> Self {
+        Self(libc::SIGQUIT)
+    }
     /// SIGILL — illegal instruction
-    pub const fn illegal_instruction() -> Self { Self(libc::SIGILL) }
+    pub const fn illegal_instruction() -> Self {
+        Self(libc::SIGILL)
+    }
     /// SIGTRAP — trace/breakpoint trap
-    pub const fn trap() -> Self { Self(libc::SIGTRAP) }
+    pub const fn trap() -> Self {
+        Self(libc::SIGTRAP)
+    }
     /// SIGABRT — abort signal
-    pub const fn abort() -> Self { Self(libc::SIGABRT) }
+    pub const fn abort() -> Self {
+        Self(libc::SIGABRT)
+    }
     /// SIGBUS — bus error
-    pub const fn bus() -> Self { Self(libc::SIGBUS) }
+    pub const fn bus() -> Self {
+        Self(libc::SIGBUS)
+    }
     /// SIGFPE — floating-point exception
-    pub const fn floating_point_exception() -> Self { Self(libc::SIGFPE) }
+    pub const fn floating_point_exception() -> Self {
+        Self(libc::SIGFPE)
+    }
     /// SIGKILL — kill (cannot be caught or ignored)
-    pub const fn kill() -> Self { Self(libc::SIGKILL) }
+    pub const fn kill() -> Self {
+        Self(libc::SIGKILL)
+    }
     /// SIGUSR1 — user-defined signal 1
-    pub const fn user_defined1() -> Self { Self(libc::SIGUSR1) }
+    pub const fn user_defined1() -> Self {
+        Self(libc::SIGUSR1)
+    }
     /// SIGSEGV — segmentation violation
-    pub const fn segmentation_violation() -> Self { Self(libc::SIGSEGV) }
+    pub const fn segmentation_violation() -> Self {
+        Self(libc::SIGSEGV)
+    }
     /// SIGUSR2 — user-defined signal 2
-    pub const fn user_defined2() -> Self { Self(libc::SIGUSR2) }
+    pub const fn user_defined2() -> Self {
+        Self(libc::SIGUSR2)
+    }
     /// SIGPIPE — write on a pipe with no reader
-    pub const fn pipe() -> Self { Self(libc::SIGPIPE) }
+    pub const fn pipe() -> Self {
+        Self(libc::SIGPIPE)
+    }
     /// SIGALRM — timer signal from alarm
-    pub const fn alarm() -> Self { Self(libc::SIGALRM) }
+    pub const fn alarm() -> Self {
+        Self(libc::SIGALRM)
+    }
     /// SIGTERM — termination signal
-    pub const fn terminate() -> Self { Self(libc::SIGTERM) }
+    pub const fn terminate() -> Self {
+        Self(libc::SIGTERM)
+    }
     /// SIGCHLD — child process status change
-    pub const fn child() -> Self { Self(libc::SIGCHLD) }
+    pub const fn child() -> Self {
+        Self(libc::SIGCHLD)
+    }
     /// SIGCONT — continue if stopped
-    pub const fn r#continue() -> Self { Self(libc::SIGCONT) }
+    pub const fn r#continue() -> Self {
+        Self(libc::SIGCONT)
+    }
     /// SIGSTOP — stop (cannot be caught or ignored)
-    pub const fn stop() -> Self { Self(libc::SIGSTOP) }
+    pub const fn stop() -> Self {
+        Self(libc::SIGSTOP)
+    }
     /// SIGTSTP — stop from keyboard
-    pub const fn tty_stop() -> Self { Self(libc::SIGTSTP) }
+    pub const fn tty_stop() -> Self {
+        Self(libc::SIGTSTP)
+    }
     /// SIGTTIN — background read from tty
-    pub const fn tty_in() -> Self { Self(libc::SIGTTIN) }
+    pub const fn tty_in() -> Self {
+        Self(libc::SIGTTIN)
+    }
     /// SIGTTOU — background write to tty
-    pub const fn tty_out() -> Self { Self(libc::SIGTTOU) }
+    pub const fn tty_out() -> Self {
+        Self(libc::SIGTTOU)
+    }
     /// SIGURG — urgent condition on socket
-    pub const fn urgent() -> Self { Self(libc::SIGURG) }
+    pub const fn urgent() -> Self {
+        Self(libc::SIGURG)
+    }
     /// SIGXCPU — CPU time limit exceeded
-    pub const fn cpu_limit_exceeded() -> Self { Self(libc::SIGXCPU) }
+    pub const fn cpu_limit_exceeded() -> Self {
+        Self(libc::SIGXCPU)
+    }
     /// SIGXFSZ — file size limit exceeded
-    pub const fn file_size_limit_exceeded() -> Self { Self(libc::SIGXFSZ) }
+    pub const fn file_size_limit_exceeded() -> Self {
+        Self(libc::SIGXFSZ)
+    }
     /// SIGVTALRM — virtual timer expired
-    pub const fn virtual_timer_expired() -> Self { Self(libc::SIGVTALRM) }
+    pub const fn virtual_timer_expired() -> Self {
+        Self(libc::SIGVTALRM)
+    }
     /// SIGPROF — profiling timer expired
-    pub const fn profile() -> Self { Self(libc::SIGPROF) }
+    pub const fn profile() -> Self {
+        Self(libc::SIGPROF)
+    }
     /// SIGWINCH — window resize
-    pub const fn winch() -> Self { Self(libc::SIGWINCH) }
+    pub const fn winch() -> Self {
+        Self(libc::SIGWINCH)
+    }
     /// SIGIO — I/O is possible
-    pub const fn io() -> Self { Self(libc::SIGIO) }
+    pub const fn io() -> Self {
+        Self(libc::SIGIO)
+    }
     /// SIGPWR — power failure
-    pub const fn power() -> Self { Self(libc::SIGPWR) }
+    pub const fn power() -> Self {
+        Self(libc::SIGPWR)
+    }
     /// SIGSYS — bad system call
-    pub const fn bad_system_call() -> Self { Self(libc::SIGSYS) }
+    pub const fn bad_system_call() -> Self {
+        Self(libc::SIGSYS)
+    }
 
     /// Raw signal number
     pub const fn as_raw(self) -> libc::c_int {
@@ -207,11 +267,7 @@ impl AsyncRead for Signal {
         }
 
         unsafe {
-            let n = libc::read(
-                fd,
-                buf.as_mut_ptr() as *mut libc::c_void,
-                buf.len(),
-            );
+            let n = libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -253,11 +309,7 @@ impl Future for Recv<'_> {
 
         let fd = this.signal.fd.load(std::sync::atomic::Ordering::Relaxed);
         unsafe {
-            let n = libc::read(
-                fd,
-                buf.as_mut_ptr() as *mut libc::c_void,
-                buf.len(),
-            );
+            let n = libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {

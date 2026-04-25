@@ -8,16 +8,19 @@ use crate::state::load_state;
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?);
     }
 
     let id = crate::cli::require_container_id(args)?;
 
     let state = load_state(id)?;
-    let pid = state.pid.ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container has no PID")
-    })?;
+    let pid = state
+        .pid
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;
 
     // Find all processes in the container's PID namespace
     // We do this by scanning /proc and checking if the NSpid field contains
@@ -97,9 +100,10 @@ fn find_descendants(init_pid: u32) -> Vec<u32> {
                                     if let Some(ppid_str) = line.split_whitespace().nth(1) {
                                         if let Ok(ppid) = ppid_str.parse::<u32>() {
                                             if (ppid == init_pid || result.contains(&ppid))
-                                                && !result.contains(&n) {
-                                                    result.push(n);
-                                                }
+                                                && !result.contains(&n)
+                                            {
+                                                result.push(n);
+                                            }
                                         }
                                     }
                                     break;

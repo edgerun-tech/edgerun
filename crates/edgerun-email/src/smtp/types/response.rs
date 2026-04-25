@@ -8,17 +8,29 @@ pub struct SmtpResponseCode {
 
 impl SmtpResponseCode {
     pub const fn new(d1: u8, d2: u8, d3: u8) -> Self {
-        Self { digit1: d1, digit2: d2, digit3: d3 }
+        Self {
+            digit1: d1,
+            digit2: d2,
+            digit3: d3,
+        }
     }
 
     pub const fn as_u16(&self) -> u16 {
         self.digit1 as u16 * 100 + self.digit2 as u16 * 10 + self.digit3 as u16
     }
 
-    pub const fn is_success(&self) -> bool { self.digit1 == 2 }
-    pub const fn is_continuation(&self) -> bool { self.digit1 == 3 }
-    pub const fn is_transient_failure(&self) -> bool { self.digit1 == 4 }
-    pub const fn is_permanent_failure(&self) -> bool { self.digit1 == 5 }
+    pub const fn is_success(&self) -> bool {
+        self.digit1 == 2
+    }
+    pub const fn is_continuation(&self) -> bool {
+        self.digit1 == 3
+    }
+    pub const fn is_transient_failure(&self) -> bool {
+        self.digit1 == 4
+    }
+    pub const fn is_permanent_failure(&self) -> bool {
+        self.digit1 == 5
+    }
 }
 
 impl std::fmt::Display for SmtpResponseCode {
@@ -62,7 +74,11 @@ pub struct EnhancedStatusCode {
 
 impl EnhancedStatusCode {
     pub const fn new(class: u8, subject: u8, detail: u8) -> Self {
-        Self { class, subject, detail }
+        Self {
+            class,
+            subject,
+            detail,
+        }
     }
 }
 
@@ -158,7 +174,10 @@ impl SmtpResponse {
 
 impl SmtpResponse {
     pub fn service_ready(domain: &str) -> Self {
-        Self::new(SmtpResponseCode::SERVICE_READY, format!("{} ESMTP ready", domain))
+        Self::new(
+            SmtpResponseCode::SERVICE_READY,
+            format!("{} ESMTP ready", domain),
+        )
     }
 
     pub fn ok(message: &str) -> Self {
@@ -170,7 +189,10 @@ impl SmtpResponse {
     }
 
     pub fn start_mail_input() -> Self {
-        Self::new(SmtpResponseCode::START_MAIL_INPUT, "Start mail input; end with <CRLF>.<CRLF>")
+        Self::new(
+            SmtpResponseCode::START_MAIL_INPUT,
+            "Start mail input; end with <CRLF>.<CRLF>",
+        )
     }
 
     pub fn syntax_error(message: &str) -> Self {
@@ -179,8 +201,11 @@ impl SmtpResponse {
     }
 
     pub fn command_not_implemented(cmd: &str) -> Self {
-        Self::new(SmtpResponseCode::COMMAND_NOT_IMPLEMENTED, format!("{} command not implemented", cmd))
-            .with_enhanced(EnhancedStatusCode::FEATURE_NOT_IMPLEMENTED)
+        Self::new(
+            SmtpResponseCode::COMMAND_NOT_IMPLEMENTED,
+            format!("{} command not implemented", cmd),
+        )
+        .with_enhanced(EnhancedStatusCode::FEATURE_NOT_IMPLEMENTED)
     }
 
     pub fn bad_sequence(message: &str) -> Self {
@@ -189,8 +214,11 @@ impl SmtpResponse {
     }
 
     pub fn mailbox_not_found(address: &str) -> Self {
-        Self::new(SmtpResponseCode::MAILBOX_NOT_FOUND, format!("<{}>: Recipient address rejected", address))
-            .with_enhanced(EnhancedStatusCode::ADDRESSING_MAILBOX)
+        Self::new(
+            SmtpResponseCode::MAILBOX_NOT_FOUND,
+            format!("<{}>: Recipient address rejected", address),
+        )
+        .with_enhanced(EnhancedStatusCode::ADDRESSING_MAILBOX)
     }
 
     pub fn transient_failure(message: &str) -> Self {
@@ -198,30 +226,43 @@ impl SmtpResponse {
     }
 
     pub fn too_many_recipients(count: usize) -> Self {
-        Self::new(SmtpResponseCode::TOO_MANY_RECIPIENTS,
-            format!("Too many recipients (max 100, got {})", count))
-            .with_enhanced(EnhancedStatusCode::MESSAGE_TOO_LARGE)
+        Self::new(
+            SmtpResponseCode::TOO_MANY_RECIPIENTS,
+            format!("Too many recipients (max 100, got {})", count),
+        )
+        .with_enhanced(EnhancedStatusCode::MESSAGE_TOO_LARGE)
     }
 
     pub fn line_too_long(len: usize, max: usize) -> Self {
-        Self::new(SmtpResponseCode::LINE_TOO_LONG,
-            format!("Line too long ({} > {} chars)", len, max))
-            .with_enhanced(EnhancedStatusCode::SYNTAX_ERROR)
+        Self::new(
+            SmtpResponseCode::LINE_TOO_LONG,
+            format!("Line too long ({} > {} chars)", len, max),
+        )
+        .with_enhanced(EnhancedStatusCode::SYNTAX_ERROR)
     }
 
     pub fn auth_required() -> Self {
-        Self::new(SmtpResponseCode::AUTHENTICATION_FAILED, "Authentication required")
-            .with_enhanced(EnhancedStatusCode::AUTH_REQUIRED)
+        Self::new(
+            SmtpResponseCode::AUTHENTICATION_FAILED,
+            "Authentication required",
+        )
+        .with_enhanced(EnhancedStatusCode::AUTH_REQUIRED)
     }
 
     pub fn auth_mechanism_unknown(mechanism: &str) -> Self {
-        Self::new(SmtpResponseCode::AUTHENTICATION_FAILED, format!("AUTH {} not supported", mechanism))
-            .with_enhanced(EnhancedStatusCode::AUTH_MECHANISM_UNKNOWN)
+        Self::new(
+            SmtpResponseCode::AUTHENTICATION_FAILED,
+            format!("AUTH {} not supported", mechanism),
+        )
+        .with_enhanced(EnhancedStatusCode::AUTH_MECHANISM_UNKNOWN)
     }
 
     pub fn auth_success(identity: &str) -> Self {
-        Self::new(SmtpResponseCode::OK, format!("Authentication successful ({})", identity))
-            .with_enhanced(EnhancedStatusCode::AUTH_SUCCESS)
+        Self::new(
+            SmtpResponseCode::OK,
+            format!("Authentication successful ({})", identity),
+        )
+        .with_enhanced(EnhancedStatusCode::AUTH_SUCCESS)
     }
 
     pub fn auth_continue(challenge: &str) -> Self {
@@ -234,13 +275,19 @@ impl SmtpResponse {
     }
 
     pub fn vrfy_disabled() -> Self {
-        Self::new(SmtpResponseCode::COMMAND_NOT_IMPLEMENTED, "VRFY command disabled for security reasons")
-            .with_enhanced(EnhancedStatusCode::FEATURE_NOT_IMPLEMENTED)
+        Self::new(
+            SmtpResponseCode::COMMAND_NOT_IMPLEMENTED,
+            "VRFY command disabled for security reasons",
+        )
+        .with_enhanced(EnhancedStatusCode::FEATURE_NOT_IMPLEMENTED)
     }
 
     pub fn expn_disabled() -> Self {
-        Self::new(SmtpResponseCode::COMMAND_NOT_IMPLEMENTED, "EXPN command disabled for security reasons")
-            .with_enhanced(EnhancedStatusCode::FEATURE_NOT_IMPLEMENTED)
+        Self::new(
+            SmtpResponseCode::COMMAND_NOT_IMPLEMENTED,
+            "EXPN command disabled for security reasons",
+        )
+        .with_enhanced(EnhancedStatusCode::FEATURE_NOT_IMPLEMENTED)
     }
 
     pub fn help_text(domain: &str) -> Self {
@@ -248,8 +295,7 @@ impl SmtpResponse {
             "Supported commands: EHLO HELO MAIL RCPT DATA RSET NOOP QUIT VRFY EXPN HELP STARTTLS AUTH\n\
              {}\n\
              For more info see https://tools.ietf.org/html/rfc5321", domain);
-        Self::new(SmtpResponseCode::HELP, text)
-            .with_enhanced(EnhancedStatusCode::HELP_TEXT)
+        Self::new(SmtpResponseCode::HELP, text).with_enhanced(EnhancedStatusCode::HELP_TEXT)
     }
 }
 
@@ -276,11 +322,17 @@ mod tests {
 
     #[test]
     fn test_multiline_response() {
-        let resp = SmtpResponse::multiline(SmtpResponseCode::OK, vec![
-            "Hello mail.example.com".to_string(),
-            "PIPELINING".to_string(),
-        ]);
-        assert_eq!(resp.format(), "250-Hello mail.example.com\r\n250 PIPELINING\r\n");
+        let resp = SmtpResponse::multiline(
+            SmtpResponseCode::OK,
+            vec![
+                "Hello mail.example.com".to_string(),
+                "PIPELINING".to_string(),
+            ],
+        );
+        assert_eq!(
+            resp.format(),
+            "250-Hello mail.example.com\r\n250 PIPELINING\r\n"
+        );
     }
 
     #[test]
@@ -299,10 +351,16 @@ mod tests {
 
     #[test]
     fn test_specialized_responses() {
-        assert!(SmtpResponse::too_many_recipients(101).format().contains("101"));
-        assert!(SmtpResponse::line_too_long(1200, 998).format().contains("1200"));
+        assert!(SmtpResponse::too_many_recipients(101)
+            .format()
+            .contains("101"));
+        assert!(SmtpResponse::line_too_long(1200, 998)
+            .format()
+            .contains("1200"));
         assert!(SmtpResponse::vrfy_disabled().format().contains("VRFY"));
         assert!(SmtpResponse::expn_disabled().format().contains("EXPN"));
-        assert!(SmtpResponse::help_text("test.host").format().contains("EHLO"));
+        assert!(SmtpResponse::help_text("test.host")
+            .format()
+            .contains("EHLO"));
     }
 }

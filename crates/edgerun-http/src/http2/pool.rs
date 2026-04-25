@@ -9,10 +9,8 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use edgerun_rt::{
-    AsyncTcpStream, ConnectFuture, timeout as rt_timeout,
-};
 use edgerun_rt::sync::Mutex;
+use edgerun_rt::{timeout as rt_timeout, AsyncTcpStream, ConnectFuture};
 
 use edgerun_tls::async_tls::AsyncTlsStream;
 use edgerun_tls::SessionCache;
@@ -107,7 +105,8 @@ impl Http2Pool {
             ));
         }
 
-        let host = uri.host()
+        let host = uri
+            .host()
             .ok_or_else(|| Error::InvalidUri("No host in URI".into()))?
             .to_string();
         let port = uri.port().unwrap_or(443);
@@ -117,30 +116,44 @@ impl Http2Pool {
             uri.path().to_string()
         };
 
-        let key = PoolKey { host: host.clone(), port };
+        let key = PoolKey {
+            host: host.clone(),
+            port,
+        };
 
         self.prune_idle();
 
         if !self.connections.contains_key(&key) {
             let client = self.create_connection(&host, port).await?;
-            self.connections.insert(key.clone(), Http2Conn {
-                client: Some(client),
-                last_used: Instant::now(),
-            });
+            self.connections.insert(
+                key.clone(),
+                Http2Conn {
+                    client: Some(client),
+                    last_used: Instant::now(),
+                },
+            );
         }
 
         let h2_headers = Self::build_h2_headers(request, &path_and_query, &host, true);
 
-        let conn = self.connections.get_mut(&key)
+        let conn = self
+            .connections
+            .get_mut(&key)
             .ok_or_else(|| Error::ProtocolError("connection not found".into()))?;
         conn.last_used = Instant::now();
 
         let body = request.body().map(|b| b.to_vec());
-        let client = conn.client.as_mut()
+        let client = conn
+            .client
+            .as_mut()
             .ok_or_else(|| Error::ProtocolError("connection has no client".into()))?;
-        let pending = client.request(&h2_headers, body).await
+        let pending = client
+            .request(&h2_headers, body)
+            .await
             .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")))?;
-        pending.into_full_response().await
+        pending
+            .into_full_response()
+            .await
             .map_err(|e| Error::ProtocolError(format!("HTTP/2 response failed: {e:?}")))
     }
 
@@ -156,7 +169,8 @@ impl Http2Pool {
             ));
         }
 
-        let host = uri.host()
+        let host = uri
+            .host()
             .ok_or_else(|| Error::InvalidUri("No host in URI".into()))?
             .to_string();
         let port = uri.port().unwrap_or(443);
@@ -166,7 +180,10 @@ impl Http2Pool {
             uri.path().to_string()
         };
 
-        let key = PoolKey { host: host.clone(), port };
+        let key = PoolKey {
+            host: host.clone(),
+            port,
+        };
 
         // Prune + ensure connection exists (brief locks)
         let need_conn = {
@@ -181,10 +198,13 @@ impl Http2Pool {
             };
             let client = Self::create_connection_static(ct, dt, &host, port, &sc).await?;
             let mut p2 = pool.lock();
-            p2.connections.insert(key.clone(), Http2Conn {
-                client: Some(client),
-                last_used: Instant::now(),
-            });
+            p2.connections.insert(
+                key.clone(),
+                Http2Conn {
+                    client: Some(client),
+                    last_used: Instant::now(),
+                },
+            );
         }
 
         let h2_headers = Self::build_h2_headers(request, &path_and_query, &host, true);
@@ -192,18 +212,28 @@ impl Http2Pool {
         // Extract client, make request, put it back
         let (body, mut client) = {
             let mut p = pool.lock();
-            let conn = p.connections.get_mut(&key)
+            let conn = p
+                .connections
+                .get_mut(&key)
                 .ok_or_else(|| Error::ProtocolError("connection not found".into()))?;
             conn.last_used = Instant::now();
-            (request.body().map(|b| b.to_vec()), conn.client.take()
-                .ok_or_else(|| Error::ProtocolError("connection has no client".into()))?)
+            (
+                request.body().map(|b| b.to_vec()),
+                conn.client
+                    .take()
+                    .ok_or_else(|| Error::ProtocolError("connection has no client".into()))?,
+            )
         };
 
-        let result = client.request(&h2_headers, body).await
+        let result = client
+            .request(&h2_headers, body)
+            .await
             .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")));
 
         let response = match result {
-            Ok(pending) => pending.into_full_response().await
+            Ok(pending) => pending
+                .into_full_response()
+                .await
                 .map_err(|e| Error::ProtocolError(format!("HTTP/2 response failed: {e:?}"))),
             Err(e) => Err(e),
         };
@@ -219,17 +249,27 @@ impl Http2Pool {
         response
     }
 
-    fn build_h2_headers(request: &crate::Request, path: &str, host: &str, _is_https: bool) -> Vec<(Vec<u8>, Vec<u8>)> {
-        let mut headers = vec![
-            (b":method".to_vec(), request.method().as_str().as_bytes().to_vec()),
-            (b":scheme".to_vec(), b"https".to_vec()),
-            (b":authority".to_vec(), host.as_bytes().to_vec()),
-            (b":path".to_vec(), path.as_bytes().to_vec()),
-        ];
+    fn build_h2_headers(
+        request: &crate::Request,
+        path: &str,
+        host: &str,
+        _is_https: bool,
+    ) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut headers = Vec::new();
+        headers.push((
+            b":method".to_vec(),
+            request.method().as_str().as_bytes().to_vec(),
+        ));
+        headers.push((b":scheme".to_vec(), b"https".to_vec()));
+        headers.push((b":authority".to_vec(), host.as_bytes().to_vec()));
+        headers.push((b":path".to_vec(), path.as_bytes().to_vec()));
         for (name, value) in request.headers().iter() {
             // HTTP/2 requires lowercase header field names (RFC 9113 §8.2.1)
             let name_lower = name.as_str().to_lowercase();
-            headers.push((name_lower.as_bytes().to_vec(), value.as_str().as_bytes().to_vec()));
+            headers.push((
+                name_lower.as_bytes().to_vec(),
+                value.as_str().as_bytes().to_vec(),
+            ));
         }
         headers
     }
@@ -237,9 +277,13 @@ impl Http2Pool {
     /// Create a new HTTP/2 connection (instance method).
     async fn create_connection(&self, host: &str, port: u16) -> Result<AsyncClient> {
         Self::create_connection_static(
-            self.connect_timeout, self.dns_timeout, host, port,
+            self.connect_timeout,
+            self.dns_timeout,
+            host,
+            port,
             &self.session_cache,
-        ).await
+        )
+        .await
     }
 
     /// Create a new HTTP/2 connection (static, no self borrow).
@@ -250,14 +294,15 @@ impl Http2Pool {
         port: u16,
         session_cache: &SessionCache,
     ) -> Result<AsyncClient> {
-        let stream = Self::resolve_and_connect_static(
-            connect_timeout, dns_timeout, host, port,
-        ).await?;
+        let stream =
+            Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port).await?;
 
-        let tls = AsyncTlsStream::client(stream, host, &[b"h2"], Some(session_cache)).await
+        let tls = AsyncTlsStream::client(stream, host, &[b"h2"], Some(session_cache))
+            .await
             .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
 
-        let client = AsyncClient::new(tls).await
+        let client = AsyncClient::new(tls)
+            .await
             .map_err(|e| Error::ProtocolError(format!("HTTP/2 connection failed: {e:?}")))?;
 
         Ok(client)
@@ -278,16 +323,22 @@ impl Http2Pool {
             dns_timeout,
             edgerun_rt::spawn_blocking(move || {
                 use std::net::ToSocketAddrs;
-                format!("{}:443", host_str).to_socket_addrs().unwrap().collect::<Vec<_>>()
-            })
-        ).await {
-            let mut ipv4_fallback = None;
-            for addr in addrs {
-                match addr.ip() {
-                    IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, &addr).await,
-                    IpAddr::V4(_) => {
-                        if ipv4_fallback.is_none() {
-                            ipv4_fallback = Some(addr);
+                format!("{}:443", host_str).to_socket_addrs()
+            }),
+        )
+        .await
+        {
+            if let Ok(Ok(mut addrs)) = addrs {
+                let mut ipv4_fallback = None;
+                for addr in addrs.by_ref() {
+                    match addr.ip() {
+                        IpAddr::V6(_) => {
+                            return Self::connect_sock_static(connect_timeout, &addr).await
+                        }
+                        IpAddr::V4(_) => {
+                            if ipv4_fallback.is_none() {
+                                ipv4_fallback = Some(addr);
+                            }
                         }
                     }
                 }
@@ -299,19 +350,33 @@ impl Http2Pool {
 
         if let Some(mut client) = edgerun_dns::DnsClient::system() {
             client.set_timeout(dns_timeout);
-            if let Ok(Ok(ip)) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
-                if let Some(ip) = ip.first() {
-                    return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V6(*ip), port)).await;
+            if let Ok(ips) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
+                if let Ok(ips) = ips {
+                    if let Some(ip) = ips.first() {
+                        return Self::connect_sock_static(
+                            connect_timeout,
+                            &SocketAddr::new(IpAddr::V6(*ip), port),
+                        )
+                        .await;
+                    }
                 }
             }
-            if let Ok(Ok(ip)) = rt_timeout(dns_timeout, client.query_a(host)).await {
-                if let Some(ip) = ip.first() {
-                    return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V4(*ip), port)).await;
+            if let Ok(ips) = rt_timeout(dns_timeout, client.query_a(host)).await {
+                if let Ok(ips) = ips {
+                    if let Some(ip) = ips.first() {
+                        return Self::connect_sock_static(
+                            connect_timeout,
+                            &SocketAddr::new(IpAddr::V4(*ip), port),
+                        )
+                        .await;
+                    }
                 }
             }
         }
 
-        Err(Error::InvalidUri(format!("DNS resolution failed for {host}")))
+        Err(Error::InvalidUri(format!(
+            "DNS resolution failed for {host}"
+        )))
     }
 
     async fn connect_sock_static(
@@ -328,9 +393,8 @@ impl Http2Pool {
 
     fn prune_idle(&mut self) {
         let now = Instant::now();
-        self.connections.retain(|_, conn| {
-            now.duration_since(conn.last_used) < self.idle_timeout
-        });
+        self.connections
+            .retain(|_, conn| now.duration_since(conn.last_used) < self.idle_timeout);
     }
 
     pub fn close(&mut self) {

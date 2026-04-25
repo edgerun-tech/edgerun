@@ -1,5 +1,5 @@
 // Test sleep_until and timeout_at with the actual runtime.
-use edgerun_rt::{sleep_until, timeout_at, SleepUntil, Runtime, spawn};
+use edgerun_rt::{sleep_until, spawn, timeout_at, Runtime, SleepUntil};
 use std::time::{Duration, Instant as StdInstant};
 
 fn main() {
@@ -85,7 +85,8 @@ fn test_timeout_at_success() {
         let result = timeout_at(deadline, async {
             edgerun_rt::sleep(Duration::from_millis(20)).await;
             "done"
-        }).await;
+        })
+        .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "done");
         println!("    timeout_at completed with value");
@@ -102,7 +103,8 @@ fn test_timeout_at_expires() {
         let result = timeout_at(deadline, async {
             edgerun_rt::sleep(Duration::from_secs(100)).await;
             "should not reach"
-        }).await;
+        })
+        .await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(format!("{}", err), "deadline elapsed");
@@ -120,7 +122,8 @@ fn test_timeout_at_wrapped_sleep() {
         let result = timeout_at(deadline, async {
             edgerun_rt::sleep(Duration::from_millis(30)).await;
             42
-        }).await;
+        })
+        .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
     });

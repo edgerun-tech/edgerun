@@ -16,30 +16,33 @@ use std::path::PathBuf;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    let socket_path = args.get(1)
+    let socket_path = args
+        .get(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/run/edgerun/secret.sock"));
 
-    let data_root = args.get(2)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            dirs_data_root().unwrap_or_else(|| {
-                // Secure fallback: use a hidden directory in current user's home
-                // Never use /tmp as it's world-readable and volatile
-                let default_dir = if let Ok(home) = std::env::var("HOME") {
-                    PathBuf::from(home).join(".edgerun/secrets")
-                } else {
-                    // Last resort: use /var/lib which is standard for system data
-                    PathBuf::from("/var/lib/edgerun/secrets")
-                };
+    let data_root = args.get(2).map(PathBuf::from).unwrap_or_else(|| {
+        dirs_data_root().unwrap_or_else(|| {
+            // Secure fallback: use a hidden directory in current user's home
+            // Never use /tmp as it's world-readable and volatile
+            let default_dir = if let Ok(home) = std::env::var("HOME") {
+                PathBuf::from(home).join(".edgerun/secrets")
+            } else {
+                // Last resort: use /var/lib which is standard for system data
+                PathBuf::from("/var/lib/edgerun/secrets")
+            };
 
-                // Ensure the directory exists with proper permissions
-                if let Err(e) = std::fs::create_dir_all(&default_dir) {
-                    eprintln!("warning: failed to create data directory {}: {}", default_dir.display(), e);
-                }
-                default_dir
-            })
-        });
+            // Ensure the directory exists with proper permissions
+            if let Err(e) = std::fs::create_dir_all(&default_dir) {
+                eprintln!(
+                    "warning: failed to create data directory {}: {}",
+                    default_dir.display(),
+                    e
+                );
+            }
+            default_dir
+        })
+    });
 
     eprintln!("edgerun-secret-service v0.1");
     eprintln!("  socket: {}", socket_path.display());

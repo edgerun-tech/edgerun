@@ -15,7 +15,13 @@ use crate::json::OciLinuxResources;
 pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
     if let Err(e) = fs::write(cgroup_root.join(file), content) {
         if let Ok(mut kmsg) = fs::OpenOptions::new().write(true).open("/dev/kmsg") {
-            let _ = writeln!(kmsg, "edgerun: cgroup write error {}/{}: {}", cgroup_root.display(), file, e);
+            let _ = writeln!(
+                kmsg,
+                "edgerun: cgroup write error {}/{}: {}",
+                cgroup_root.display(),
+                file,
+                e
+            );
         }
     }
 }
@@ -23,7 +29,10 @@ pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
 /// Append to a cgroup file (for per-device entries like io.weight).
 pub fn cgroup_append(cgroup_root: &Path, file: &str, content: &str) {
     use std::io::Write;
-    if let Ok(mut f) = fs::OpenOptions::new().append(true).open(cgroup_root.join(file)) {
+    if let Ok(mut f) = fs::OpenOptions::new()
+        .append(true)
+        .open(cgroup_root.join(file))
+    {
         let _ = writeln!(f, "{}", content);
     }
 }
@@ -79,13 +88,21 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
         if let Some(rt_runtime) = cpu.realtime_runtime {
             if let Some(rt_period) = cpu.realtime_period {
                 if rt_period > 0 {
-                    cgroup_write(&cgroup_root, "cpu.max.rt", &format!("{} {}", rt_runtime, rt_period));
+                    cgroup_write(
+                        &cgroup_root,
+                        "cpu.max.rt",
+                        &format!("{} {}", rt_runtime, rt_period),
+                    );
                 }
             }
         }
         if let Some(shares) = cpu.shares {
             if shares > 0 {
-                cgroup_write(&cgroup_root, "cpu.weight", &format!("{}", shares_to_weight(shares)));
+                cgroup_write(
+                    &cgroup_root,
+                    "cpu.weight",
+                    &format!("{}", shares_to_weight(shares)),
+                );
             }
         }
         // CPU affinity: cpuset.cpus and cpuset.mems
@@ -124,7 +141,8 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
             for wd in weight_devs {
                 let entry = format!("{}:{}", wd.major, wd.minor);
                 // Prefer the device-specific weight from the spec
-                let dev_weight = wd.weight
+                let dev_weight = wd
+                    .weight
                     .map(|w| (w as u64).saturating_mul(100).clamp(1, 10000))
                     .unwrap_or(100); // default v2 weight if not specified
                 let line = format!("{} {}", entry, dev_weight);
@@ -135,16 +153,40 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
         // Per-device leaf weight (cgroup v1 only — skipped in v2)
         // leaf_weight_device is also cgroup v1 only — skipped
         // Throttle devices
-        write_throttle_devices(&cgroup_root, "io.max", blkio.throttle_read_bps_device.as_deref(), "rbps")?;
-        write_throttle_devices(&cgroup_root, "io.max", blkio.throttle_write_bps_device.as_deref(), "wbps")?;
-        write_throttle_devices(&cgroup_root, "io.max", blkio.throttle_read_iops_device.as_deref(), "riops")?;
-        write_throttle_devices(&cgroup_root, "io.max", blkio.throttle_write_iops_device.as_deref(), "wiops")?;
+        write_throttle_devices(
+            &cgroup_root,
+            "io.max",
+            blkio.throttle_read_bps_device.as_deref(),
+            "rbps",
+        )?;
+        write_throttle_devices(
+            &cgroup_root,
+            "io.max",
+            blkio.throttle_write_bps_device.as_deref(),
+            "wbps",
+        )?;
+        write_throttle_devices(
+            &cgroup_root,
+            "io.max",
+            blkio.throttle_read_iops_device.as_deref(),
+            "riops",
+        )?;
+        write_throttle_devices(
+            &cgroup_root,
+            "io.max",
+            blkio.throttle_write_iops_device.as_deref(),
+            "wiops",
+        )?;
     }
 
     // Hugepage limits
     if let Some(ref hugepages) = resources.hugepage_limits {
         for hp in hugepages {
-            cgroup_write(&cgroup_root, &format!("hugetlb.{}.max", hp.pagesize), &format!("{}", hp.limit));
+            cgroup_write(
+                &cgroup_root,
+                &format!("hugetlb.{}.max", hp.pagesize),
+                &format!("{}", hp.limit),
+            );
         }
     }
 
@@ -185,10 +227,15 @@ fn write_throttle_devices(
     devices: Option<&[crate::json::OciLinuxThrottleDevice]>,
     key: &str,
 ) -> io::Result<()> {
-    let Some(devices) = devices else { return Ok(()) };
-    if devices.is_empty() { return Ok(()) };
+    let Some(devices) = devices else {
+        return Ok(());
+    };
+    if devices.is_empty() {
+        return Ok(());
+    };
 
-    let content = devices.iter()
+    let content = devices
+        .iter()
         .map(|d| format!("{}:{} {}={}", d.major, d.minor, key, d.rate))
         .collect::<Vec<_>>()
         .join("\n");
@@ -200,7 +247,9 @@ fn write_throttle_devices(
 /// Convert legacy cpu.shares to cgroup v2 cpu.weight.
 /// Uses saturating arithmetic to prevent overflow with large shares values.
 pub fn shares_to_weight(shares: u64) -> u64 {
-    if shares <= 2 { return 1; }
+    if shares <= 2 {
+        return 1;
+    }
     // Use saturating_mul to prevent overflow: (shares - 2) * 9999
     let w = 1 + (shares - 2).saturating_mul(9999) / 262142;
     w.clamp(1, 10000)

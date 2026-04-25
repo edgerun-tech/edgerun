@@ -79,7 +79,9 @@ pub async fn handle_tcp_connection(
             &mut read_buf,
             ctx,
             &nonce,
-        ).await {
+        )
+        .await
+        {
             Some(state) => {
                 edgerun_log::info!("session established with peer (initiator)");
                 state
@@ -91,12 +93,9 @@ pub async fn handle_tcp_connection(
         }
     } else {
         // We're the responder -- wait for peer's hello
-        match perform_session_handshake_as_responder(
-            &mut reader,
-            &mut writer,
-            &mut read_buf,
-            ctx,
-        ).await {
+        match perform_session_handshake_as_responder(&mut reader, &mut writer, &mut read_buf, ctx)
+            .await
+        {
             Some(state) => {
                 edgerun_log::info!("session established with peer (responder)");
                 state
@@ -115,7 +114,8 @@ pub async fn handle_tcp_connection(
         &mut conn_rate_limiter,
         &store_tx,
         &session_state,
-    ).await;
+    )
+    .await;
 }
 
 /// Performs the session handshake as the initiator (client side).
@@ -281,7 +281,8 @@ where
 
     // Select protocol version and transport features
     let protocol_version = session::select_protocol_version(&hello.supported_protocol_versions)?;
-    let transport_features = session::select_transport_features(&hello.supported_transport_features);
+    let transport_features =
+        session::select_transport_features(&hello.supported_transport_features);
 
     // Build and send SessionAccept
     let nonce = hello.session_nonce.clone();
@@ -398,8 +399,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         }
 
         // Try SessionHello (in case peer sends another hello)
-        if let Ok(_hello) =
-            edgerun_proto::edgerun::v0::network::SessionHello::decode(&payload[..])
+        if let Ok(_hello) = edgerun_proto::edgerun::v0::network::SessionHello::decode(&payload[..])
         {
             edgerun_log::debug!("ignoring duplicate SessionHello");
             continue;
@@ -415,11 +415,15 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             use edgerun_proto::edgerun::v0::stream::CommandType;
             if command.command_type == CommandType::PublishSnapshot as i32 {
                 let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-                if store_tx.send(StoreRequest::ProduceSnapshot {
-                    view_type: "stream_heads".to_string(),
-                    completeness: 1, // FULL
-                    reply_tx,
-                }).await.is_err() {
+                if store_tx
+                    .send(StoreRequest::ProduceSnapshot {
+                        view_type: "stream_heads".to_string(),
+                        completeness: 1, // FULL
+                        reply_tx,
+                    })
+                    .await
+                    .is_err()
+                {
                     return;
                 }
                 match reply_rx.await {
@@ -441,16 +445,20 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             // Check if this is a fetch object command
             if command.command_type == CommandType::FetchObject as i32 {
                 // Decode the raw payload as proto CommandEnvelope to get payload_object
-                let proto_command = match edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&raw[..]) {
-                    Ok(cmd) => cmd,
-                    Err(e) => {
-                        edgerun_log::warn!("FETCH_OBJECT: failed to decode proto command: {}", e);
-                        let err = "FETCH_OBJECT: decode failed".to_string();
-                        let resp_frame = encode_tcp_frame(err.as_bytes());
-                        let _ = writer.write_all(&resp_frame).await;
-                        continue;
-                    }
-                };
+                let proto_command =
+                    match edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&raw[..]) {
+                        Ok(cmd) => cmd,
+                        Err(e) => {
+                            edgerun_log::warn!(
+                                "FETCH_OBJECT: failed to decode proto command: {}",
+                                e
+                            );
+                            let err = "FETCH_OBJECT: decode failed".to_string();
+                            let resp_frame = encode_tcp_frame(err.as_bytes());
+                            let _ = writer.write_all(&resp_frame).await;
+                            continue;
+                        }
+                    };
 
                 // Extract the ObjectRef from the proto command's payload_object
                 let object_ref = if let Some(ref obj) = proto_command.payload {
@@ -458,7 +466,9 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                     match obj {
                         Payload::PayloadObject(obj) => obj.clone(),
                         Payload::InlinePayload(bytes) => {
-                            if let Ok(obj) = edgerun_proto::edgerun::v0::common::ObjectRef::decode(&bytes[..]) {
+                            if let Ok(obj) =
+                                edgerun_proto::edgerun::v0::common::ObjectRef::decode(&bytes[..])
+                            {
                                 obj
                             } else {
                                 edgerun_proto::edgerun::v0::common::ObjectRef {
@@ -484,7 +494,14 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                 }
 
                 let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-                if store_tx.send(StoreRequest::FetchObject { object_ref, reply_tx }).await.is_err() {
+                if store_tx
+                    .send(StoreRequest::FetchObject {
+                        object_ref,
+                        reply_tx,
+                    })
+                    .await
+                    .is_err()
+                {
                     return;
                 }
                 match reply_rx.await {
@@ -504,9 +521,16 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             }
 
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-            if store_tx.send(StoreRequest::Command {
-                raw_bytes: raw, command, peer_id: None, reply_tx: Some(reply_tx),
-            }).await.is_err() {
+            if store_tx
+                .send(StoreRequest::Command {
+                    raw_bytes: raw,
+                    command,
+                    peer_id: None,
+                    reply_tx: Some(reply_tx),
+                })
+                .await
+                .is_err()
+            {
                 return;
             }
             match reply_rx.await {
@@ -526,14 +550,19 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         }
 
         // Try QueryRequest
-        if let Ok(query) =
-            edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..])
-        {
+        if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..]) {
             let raw = payload.clone();
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-            if store_tx.send(StoreRequest::Query {
-                raw_bytes: raw, query, peer_id: None, reply_tx: Some(reply_tx),
-            }).await.is_err() {
+            if store_tx
+                .send(StoreRequest::Query {
+                    raw_bytes: raw,
+                    query,
+                    peer_id: None,
+                    reply_tx: Some(reply_tx),
+                })
+                .await
+                .is_err()
+            {
                 return;
             }
             match reply_rx.await {

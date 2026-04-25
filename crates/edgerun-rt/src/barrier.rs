@@ -3,11 +3,11 @@
 //! When `wait()` is called on the barrier, the task pends until
 //! `n` tasks have called `wait()`. Then all are released simultaneously.
 
+use crate::sync::Mutex;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 /// An async barrier for coordinating `n` tasks.
@@ -40,11 +40,17 @@ impl Barrier {
     /// Waits at the barrier. If this is the `n`-th call, all waiting
     /// tasks are released. Otherwise, the task pends.
     pub fn wait(&self) -> BarrierWait<'_> {
-        BarrierWait { barrier: self, generation: self.generation.load(Ordering::Acquire), registered: false }
+        BarrierWait {
+            barrier: self,
+            generation: self.generation.load(Ordering::Acquire),
+            registered: false,
+        }
     }
 
     /// Returns the number of tasks required to trip the barrier.
-    pub fn n(&self) -> usize { self.n }
+    pub fn n(&self) -> usize {
+        self.n
+    }
 }
 
 /// Future returned by `Barrier::wait()`.
@@ -144,9 +150,15 @@ mod tests {
     fn barrier_reusable() {
         let b = Barrier::new(1);
         let mut fut1 = b.wait();
-        assert!(matches!(Pin::new(&mut fut1).poll(&mut cx()), Poll::Ready(_)));
+        assert!(matches!(
+            Pin::new(&mut fut1).poll(&mut cx()),
+            Poll::Ready(_)
+        ));
         // Second wait should also succeed
         let mut fut2 = b.wait();
-        assert!(matches!(Pin::new(&mut fut2).poll(&mut cx()), Poll::Ready(_)));
+        assert!(matches!(
+            Pin::new(&mut fut2).poll(&mut cx()),
+            Poll::Ready(_)
+        ));
     }
 }

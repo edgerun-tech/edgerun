@@ -2,8 +2,8 @@ use edgerun_linux_sysfs::parse_hex_u32_from_str;
 // Re-export sysfs helpers that downstream NPU backends need.
 pub use edgerun_linux_sysfs::{read_trimmed, temp_root};
 use edgerun_npu::{
-    CapabilityDescriptor, CapabilityError, CapabilityProvider, default_npu_descriptor,
-    validate_npu_workload_request, NpuDevice, NpuInfo, NpuWorkloadRequest, NpuWorkloadResult,
+    default_npu_descriptor, validate_npu_workload_request, CapabilityDescriptor, CapabilityError,
+    CapabilityProvider, NpuDevice, NpuInfo, NpuWorkloadRequest, NpuWorkloadResult,
 };
 use std::collections::BTreeSet;
 use std::fs;
@@ -54,8 +54,10 @@ fn pci_info_from_device(device_path: &Path) -> (Option<String>, Option<u32>, Opt
     let pci_address = device_path
         .file_name()
         .map(|v| v.to_string_lossy().to_string());
-    let vendor_id = read_trimmed(&device_path.join("vendor")).and_then(|v| parse_hex_u32_from_str(&v));
-    let device_id = read_trimmed(&device_path.join("device")).and_then(|v| parse_hex_u32_from_str(&v));
+    let vendor_id =
+        read_trimmed(&device_path.join("vendor")).and_then(|v| parse_hex_u32_from_str(&v));
+    let device_id =
+        read_trimmed(&device_path.join("device")).and_then(|v| parse_hex_u32_from_str(&v));
     let accel_class = read_trimmed(&device_path.join("class"))
         .and_then(|v| parse_hex_u32_from_str(&v))
         .is_some_and(|class_code| class_code >> 16 == 0x12);

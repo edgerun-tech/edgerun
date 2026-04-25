@@ -5,10 +5,10 @@
 //!
 //! Uses our `sync::Condvar` for efficient waiting (no spin loops).
 
+use crate::sync::{Condvar, Mutex};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use crate::sync::{Condvar, Mutex};
 
 struct ReadyQueueInner {
     q: Mutex<VecDeque<usize>>,

@@ -1,13 +1,18 @@
 use std::time::SystemTime;
 
+use edgerun_core::util::system_time_to_prost;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
-use edgerun_core::util::system_time_to_prost;
 
 /// Result of query cost evaluation.
 pub enum QueryCostCheck {
-    Allowed { max_bytes: Option<usize>, max_results: Option<usize> },
-    Denied { reason: &'static str },
+    Allowed {
+        max_bytes: Option<usize>,
+        max_results: Option<usize>,
+    },
+    Denied {
+        reason: &'static str,
+    },
 }
 
 /// Evaluates the query's cost_limit and returns allowed limits or denial reason.
@@ -20,8 +25,14 @@ pub fn check_query_cost(
 
     let (max_bytes, max_results) = if let Some(ref cost_limit) = query.cost_limit {
         // If cost_limit is specified, use its values with defaults as fallbacks
-        let bytes = cost_limit.max_total_bytes.map(|b| b as usize).unwrap_or(DEFAULT_MAX_BYTES);
-        let results = cost_limit.max_results.map(|r| r as usize).unwrap_or(DEFAULT_MAX_RESULTS);
+        let bytes = cost_limit
+            .max_total_bytes
+            .map(|b| b as usize)
+            .unwrap_or(DEFAULT_MAX_BYTES);
+        let results = cost_limit
+            .max_results
+            .map(|r| r as usize)
+            .unwrap_or(DEFAULT_MAX_RESULTS);
         (bytes, results)
     } else {
         // No cost limit specified -- use defaults
@@ -50,7 +61,10 @@ pub fn execute_query(
 
     // 1. Check cost limits before doing any work
     let (max_bytes, max_results) = match check_query_cost(query) {
-        QueryCostCheck::Allowed { max_bytes, max_results } => (max_bytes, max_results),
+        QueryCostCheck::Allowed {
+            max_bytes,
+            max_results,
+        } => (max_bytes, max_results),
         QueryCostCheck::Denied { reason } => {
             edgerun_log::warn!("query denied due to cost limits");
             return build_query_denial(query, responder_node_id, reason);
@@ -65,30 +79,29 @@ pub fn execute_query(
 
     match query_class {
         // Return all known stream heads
-        x if x == QueryClass::Head as i32 => {
-            match store.list_stream_heads() {
-                Ok(heads) => {
-                    for (stream_id_hex, seq, hash) in heads {
-                        if max_results.is_some_and(|m| event_refs.len() >= m) {
-                            completeness = ResultCompleteness::Partial as i32;
-                            break;
-                        }
-                        event_refs.push(EventRef {
-                            stream_id: edgerun_core::util::hex_to_bytes(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
-                            seq: seq as u64,
-                            event_hash: Some(edgerun_core::protocol::Digest {
-                                algorithm: 1,
-                                value: hash,
-                            }),
-                        });
+        x if x == QueryClass::Head as i32 => match store.list_stream_heads() {
+            Ok(heads) => {
+                for (stream_id_hex, seq, hash) in heads {
+                    if max_results.is_some_and(|m| event_refs.len() >= m) {
+                        completeness = ResultCompleteness::Partial as i32;
+                        break;
                     }
-                }
-                Err(_e) => {
-                    edgerun_log::warn!("query HEAD failed");
-                    completeness = ResultCompleteness::Partial as i32;
+                    event_refs.push(EventRef {
+                        stream_id: edgerun_core::util::hex_to_bytes(&stream_id_hex)
+                            .unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                        seq: seq as u64,
+                        event_hash: Some(edgerun_core::protocol::Digest {
+                            algorithm: 1,
+                            value: hash,
+                        }),
+                    });
                 }
             }
-        }
+            Err(_e) => {
+                edgerun_log::warn!("query HEAD failed");
+                completeness = ResultCompleteness::Partial as i32;
+            }
+        },
 
         // Return events in a range for specified streams
         x if x == QueryClass::EventRange as i32 => {
@@ -128,14 +141,17 @@ pub fn execute_query(
                             // No time filter — return full range
                             let from_seq = 0i64;
                             let to_seq = *head_seq;
-                            if let Ok(events) = store.list_event_range(stream_id_hex, from_seq, to_seq) {
+                            if let Ok(events) =
+                                store.list_event_range(stream_id_hex, from_seq, to_seq)
+                            {
                                 for (seq, hash, _ver) in events {
                                     if max_results.is_some_and(|m| event_refs.len() >= m) {
                                         completeness = ResultCompleteness::Partial as i32;
                                         break;
                                     }
                                     event_refs.push(EventRef {
-                                        stream_id: edgerun_core::util::hex_to_bytes(stream_id_hex).unwrap_or_else(|_| stream_id_hex.clone().into_bytes()),
+                                        stream_id: edgerun_core::util::hex_to_bytes(stream_id_hex)
+                                            .unwrap_or_else(|_| stream_id_hex.clone().into_bytes()),
                                         seq: seq as u64,
                                         event_hash: Some(edgerun_core::protocol::Digest {
                                             algorithm: 1,
@@ -192,30 +208,30 @@ pub fn execute_query(
         }
 
         // Snapshot query: return known snapshot refs
-        x if x == QueryClass::Snapshot as i32 => {
-            match store.list_snapshots() {
-                Ok(snaps) => {
-                    for (sid, oid_hex, _vt, _ph, _pa, _c, _bh) in &snaps {
-                        if max_results.is_some_and(|m| snapshot_refs.len() >= m) {
-                            completeness = ResultCompleteness::Partial as i32;
-                            break;
-                        }
-                        use edgerun_proto::edgerun::v0::common::SnapshotRef;
-                        snapshot_refs.push(SnapshotRef {
-                            snapshot_id: sid.clone().into_bytes(),
-                            object_id: Some(edgerun_core::util::hex_to_bytes(oid_hex).unwrap_or_default()),
-                        });
+        x if x == QueryClass::Snapshot as i32 => match store.list_snapshots() {
+            Ok(snaps) => {
+                for (sid, oid_hex, _vt, _ph, _pa, _c, _bh) in &snaps {
+                    if max_results.is_some_and(|m| snapshot_refs.len() >= m) {
+                        completeness = ResultCompleteness::Partial as i32;
+                        break;
                     }
-                    if snaps.is_empty() {
-                        completeness = ResultCompleteness::MetadataOnly as i32;
-                    }
+                    use edgerun_proto::edgerun::v0::common::SnapshotRef;
+                    snapshot_refs.push(SnapshotRef {
+                        snapshot_id: sid.clone().into_bytes(),
+                        object_id: Some(
+                            edgerun_core::util::hex_to_bytes(oid_hex).unwrap_or_default(),
+                        ),
+                    });
                 }
-                Err(_e) => {
-                    edgerun_log::warn!("query SNAPSHOT failed");
-                    completeness = ResultCompleteness::Partial as i32;
+                if snaps.is_empty() {
+                    completeness = ResultCompleteness::MetadataOnly as i32;
                 }
             }
-        }
+            Err(_e) => {
+                edgerun_log::warn!("query SNAPSHOT failed");
+                completeness = ResultCompleteness::Partial as i32;
+            }
+        },
 
         // Search query: scan event log for matching event types or content
         x if x == QueryClass::Search as i32 => {
@@ -229,7 +245,8 @@ pub fn execute_query(
                             break;
                         }
                         event_refs.push(EventRef {
-                            stream_id: edgerun_core::util::hex_to_bytes(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                            stream_id: edgerun_core::util::hex_to_bytes(&stream_id_hex)
+                                .unwrap_or_else(|_| stream_id_hex.into_bytes()),
                             seq: seq as u64,
                             event_hash: Some(edgerun_core::protocol::Digest {
                                 algorithm: 1,
@@ -255,7 +272,8 @@ pub fn execute_query(
                         break;
                     }
                     event_refs.push(EventRef {
-                        stream_id: edgerun_core::util::hex_to_bytes(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                        stream_id: edgerun_core::util::hex_to_bytes(&stream_id_hex)
+                            .unwrap_or_else(|_| stream_id_hex.into_bytes()),
                         seq: seq as u64,
                         event_hash: Some(edgerun_core::protocol::Digest {
                             algorithm: 1,
@@ -273,7 +291,9 @@ pub fn execute_query(
                     use edgerun_proto::edgerun::v0::common::SnapshotRef;
                     snapshot_refs.push(SnapshotRef {
                         snapshot_id: sid.clone().into_bytes(),
-                        object_id: Some(edgerun_core::util::hex_to_bytes(oid_hex).unwrap_or_default()),
+                        object_id: Some(
+                            edgerun_core::util::hex_to_bytes(oid_hex).unwrap_or_default(),
+                        ),
                     });
                 }
             }
@@ -330,8 +350,8 @@ pub fn execute_query(
 
     // Sign the query response with domain separation
     {
-        use edgerun_core::protocol::{ProtocolRecord, canonical_bytes};
         use edgerun_core::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT;
+        use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
         let record = ProtocolRecord::QueryResultFragment(fragment.clone());
         let canonical = canonical_bytes(&record, true);
         if let Ok(sig) = signer.sign_record(SIG_DOMAIN_QUERY_RESULT_FRAGMENT, &canonical) {

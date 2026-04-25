@@ -1,9 +1,12 @@
-use edgerun_hardware_signing::{    MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID,};use edgerun_crypto::p256::ecdsa::Signature;use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;use edgerun_crypto::p256::ecdsa::VerifyingKey;
 use super::*;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
+use edgerun_crypto::p256::ecdsa::Signature;
+use edgerun_crypto::p256::ecdsa::VerifyingKey;
+use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
 
 use super::*;
-use edgerun_hardware_signing::{HardwareSignatureAlgorithm, HardwareSigningError};
 use edgerun_crypto::p256::ecdsa::SigningKey;
+use edgerun_hardware_signing::{HardwareSignatureAlgorithm, HardwareSigningError};
 
 // -----------------------------------------------------------------------
 // Helpers
@@ -301,7 +304,10 @@ fn frame_wire_roundtrip_with_payload() {
         signature: sig,
     };
     let wire = frame.to_wire();
-    assert_eq!(wire.len(), MeshFrameHeader::SIZE + payload.len() + MESH_SIGNATURE_LENGTH);
+    assert_eq!(
+        wire.len(),
+        MeshFrameHeader::SIZE + payload.len() + MESH_SIGNATURE_LENGTH
+    );
     let recovered = MeshFrame::from_wire(&wire).expect("parse should succeed");
     assert_eq!(recovered.payload, payload);
     assert_eq!(recovered.signature, sig);
@@ -979,7 +985,10 @@ fn frame_sign_and_verify_with_real_p256_key() {
 
     let wire = frame.to_wire();
     let recovered = MeshFrame::from_wire(&wire).expect("wire parse should succeed");
-    assert!(recovered.verify_signature(), "signature should be valid on wire frame");
+    assert!(
+        recovered.verify_signature(),
+        "signature should be valid on wire frame"
+    );
     assert_eq!(recovered.payload, payload);
     assert_eq!(recovered.header.src, node_id);
     assert_eq!(recovered.header.dest, dest);

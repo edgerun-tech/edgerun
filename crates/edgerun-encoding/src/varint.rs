@@ -171,7 +171,18 @@ mod tests {
 
     #[test]
     fn roundtrip_various() {
-        for v in [0, 1, 127, 128, 255, 256, 16383, 16384, u32::MAX as u64, u64::MAX] {
+        for v in [
+            0,
+            1,
+            127,
+            128,
+            255,
+            256,
+            16383,
+            16384,
+            u32::MAX as u64,
+            u64::MAX,
+        ] {
             let encoded = encode_varint(v);
             let (decoded, _) = decode_varint_slice(&encoded).unwrap();
             assert_eq!(decoded, v);
@@ -199,6 +210,9 @@ mod tests {
         assert_eq!(decode_varint_iter(&mut iter).unwrap(), 128);
         assert_eq!(decode_varint_iter(&mut iter).unwrap(), 127);
         assert_eq!(decode_varint_iter(&mut iter).unwrap(), 0);
-        assert_eq!(decode_varint_iter(&mut iter), Err(VarintError::UnexpectedEof));
+        assert_eq!(
+            decode_varint_iter(&mut iter),
+            Err(VarintError::UnexpectedEof)
+        );
     }
 }

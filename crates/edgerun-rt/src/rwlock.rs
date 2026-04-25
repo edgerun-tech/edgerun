@@ -7,12 +7,12 @@
 //! Guards hold `crate::sync::RwLockReadGuard`/`RwLockWriteGuard` (not `MutexGuard`),
 //! so multiple readers coexist correctly. The async wait queue prevents busy-spinning.
 
+use crate::sync::{Mutex, RwLock as SyncRwLock};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::mem::ManuallyDrop;
 use std::pin::Pin;
 use std::sync::Arc;
-use crate::sync::{Mutex, RwLock as SyncRwLock};
 use std::task::{Context, Poll, Waker};
 
 struct RwState {
@@ -234,22 +234,16 @@ mod tests {
     use super::*;
     use std::pin::Pin;
 
-    static NOOP_WAKER: std::sync::LazyLock<Waker> =
-        std::sync::LazyLock::new(|| {
-            static VTABLE: std::task::RawWakerVTable =
-                std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-            const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-                std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-            }
-            const fn wake_noop(_: *const ()) {}
-            const fn drop_noop(_: *const ()) {}
-            unsafe {
-                Waker::from_raw(std::task::RawWaker::new(
-                    std::ptr::null(),
-                    &VTABLE,
-                ))
-            }
-        });
+    static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
+        static VTABLE: std::task::RawWakerVTable =
+            std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
+        const fn clone_noop(_: *const ()) -> std::task::RawWaker {
+            std::task::RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        const fn wake_noop(_: *const ()) {}
+        const fn drop_noop(_: *const ()) {}
+        unsafe { Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+    });
 
     fn cx() -> Context<'static> {
         Context::from_waker(&NOOP_WAKER)

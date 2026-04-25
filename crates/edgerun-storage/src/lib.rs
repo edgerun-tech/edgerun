@@ -24,9 +24,12 @@ pub mod event_loop;
 pub mod file_index;
 pub mod store;
 
-pub use error::StorageError;
-pub use blobs::{BlobStore, BlobKeySource, BlobEntry, BlobStoreConfig, blob_file_path};
+pub use blobs::{blob_file_path, BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig};
 pub use credentials::CredentialStore;
-pub use event_loop::{EventWriter, EventLoopBuilder, DispatchContext, EventHandler, OpEventType, FetchHandler, PeerDiscoveryHandler, PeerStatusHandler, CredentialHandler, CredentialDeleteHandler};
-pub use file_index::{FileIndex, EventIndexEntry, ReplayEntry, FetchEntry, WorkAccountingRecord};
-pub use store::{NodeStore, NodeStoreConfig, CommandReplayResult, ObjectResult, ControllerSet};
+pub use error::StorageError;
+pub use event_loop::{
+    CredentialDeleteHandler, CredentialHandler, DispatchContext, EventHandler, EventLoopBuilder,
+    EventWriter, FetchHandler, OpEventType, PeerDiscoveryHandler, PeerStatusHandler,
+};
+pub use file_index::{EventIndexEntry, FetchEntry, FileIndex, ReplayEntry, WorkAccountingRecord};
+pub use store::{CommandReplayResult, ControllerSet, NodeStore, NodeStoreConfig, ObjectResult};

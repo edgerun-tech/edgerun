@@ -1,5 +1,7 @@
 // Test Take and poll_fn with the actual runtime.
-use edgerun_rt::{DuplexStream, Cursor, Runtime, AsyncReadExt, AsyncWriteExt, spawn, poll_fn, Take};
+use edgerun_rt::{
+    poll_fn, spawn, AsyncReadExt, AsyncWriteExt, Cursor, DuplexStream, Runtime, Take,
+};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -159,7 +161,9 @@ fn test_take_duplex_stream() {
     println!("  test_take_duplex_stream...");
     let h = spawn(async {
         let (mut a, b) = DuplexStream::channel();
-        a.write_all(b"limited data here").await.expect("write failed");
+        a.write_all(b"limited data here")
+            .await
+            .expect("write failed");
         let mut take = b.take(7);
         let mut buf = [0u8; 64];
         let n = take.read(&mut buf).await.expect("read failed");
@@ -194,7 +198,8 @@ fn test_poll_fn_pending_then_ready() {
             } else {
                 Poll::Ready(count)
             }
-        }).await;
+        })
+        .await;
         assert_eq!(val, 2);
     });
     std::thread::sleep(Duration::from_millis(100));
@@ -213,7 +218,8 @@ fn test_poll_fn_counter() {
             } else {
                 Poll::Ready(i)
             }
-        }).await;
+        })
+        .await;
         assert_eq!(val, 5);
     });
     std::thread::sleep(Duration::from_millis(100));
@@ -239,22 +245,21 @@ fn test_poll_fn_with_spawn() {
     println!("  test_poll_fn_with_spawn...");
     let h = spawn(async {
         let mut state = "initial";
-        let result = poll_fn(|cx| {
-            match state {
-                "initial" => {
-                    state = "waiting";
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                "waiting" => {
-                    state = "done";
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                "done" => Poll::Ready("finished"),
-                _ => unreachable!(),
+        let result = poll_fn(|cx| match state {
+            "initial" => {
+                state = "waiting";
+                cx.waker().wake_by_ref();
+                Poll::Pending
             }
-        }).await;
+            "waiting" => {
+                state = "done";
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+            "done" => Poll::Ready("finished"),
+            _ => unreachable!(),
+        })
+        .await;
         assert_eq!(result, "finished");
     });
     std::thread::sleep(Duration::from_millis(100));

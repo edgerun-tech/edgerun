@@ -10,7 +10,7 @@ use std::time::Duration;
 use edgerun_rt::AsyncUdpSocket;
 
 use super::message::{DnsMessage, DnsResponseCode};
-use super::record::{DnsRecordType, DnsRecordData};
+use super::record::{DnsRecordData, DnsRecordType};
 
 /// Async DNS client for sending queries.
 ///
@@ -195,7 +195,12 @@ impl DnsClient {
         let msg = self.send_query(name, DnsRecordType::URI).await?;
         let mut results = Vec::new();
         for answer in &msg.answers {
-            if let DnsRecordData::URI { priority, weight, target } = &answer.data {
+            if let DnsRecordData::URI {
+                priority,
+                weight,
+                target,
+            } = &answer.data
+            {
                 results.push((*priority, *weight, target.clone()));
             }
         }
@@ -203,13 +208,21 @@ impl DnsClient {
     }
 
     /// Send a generic query and return the full response message.
-    pub async fn query(&mut self, name: &str, qtype: DnsRecordType) -> Result<DnsMessage, io::Error> {
+    pub async fn query(
+        &mut self,
+        name: &str,
+        qtype: DnsRecordType,
+    ) -> Result<DnsMessage, io::Error> {
         self.send_query(name, qtype).await
     }
 
     // --- Internal ---
 
-    async fn send_query(&mut self, name: &str, qtype: DnsRecordType) -> Result<DnsMessage, io::Error> {
+    async fn send_query(
+        &mut self,
+        name: &str,
+        qtype: DnsRecordType,
+    ) -> Result<DnsMessage, io::Error> {
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
 
@@ -220,7 +233,8 @@ impl DnsClient {
         poll_send_to(&mut self.socket, &wire, self.server).await?;
 
         // Read response with timeout — async, non-blocking.
-        let response = edgerun_rt::timeout(self.timeout, poll_recv(&mut self.socket)).await
+        let response = edgerun_rt::timeout(self.timeout, poll_recv(&mut self.socket))
+            .await
             .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "DNS query timed out"))??;
 
         let response = DnsMessage::from_wire(&response)
@@ -234,12 +248,10 @@ impl DnsClient {
         }
 
         if response.header.response_code != DnsResponseCode::NoError {
-            return Err(io::Error::other(
-                format!(
-                    "DNS error: {}",
-                    response.header.response_code.as_str()
-                ),
-            ));
+            return Err(io::Error::other(format!(
+                "DNS error: {}",
+                response.header.response_code.as_str()
+            )));
         }
 
         Ok(response)
@@ -290,11 +302,7 @@ mod tests {
     fn test_query_build() {
         use super::super::message::DnsMessage;
         // Just verify the query message builds correctly
-        let msg = DnsMessage::query(
-            0x1234,
-            "example.com".to_string(),
-            DnsRecordType::A,
-        );
+        let msg = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::A);
         let wire = msg.to_wire();
         assert!(wire.len() > 12);
     }

@@ -150,10 +150,7 @@ pub struct AlertMessage {
 impl AlertMessage {
     /// Create a new alert message
     pub fn new(level: AlertLevel, description: Alert) -> Self {
-        AlertMessage {
-            level,
-            description,
-        }
+        AlertMessage { level, description }
     }
 
     /// Parse alert from bytes
@@ -165,10 +162,7 @@ impl AlertMessage {
         let level = AlertLevel::from_wire(data[0])?;
         let description = Alert::from_wire(data[1])?;
 
-        Ok(AlertMessage {
-            level,
-            description,
-        })
+        Ok(AlertMessage { level, description })
     }
 
     /// Serialize alert to bytes
@@ -190,29 +184,20 @@ mod tests {
 
     #[test]
     fn test_alert_from_wire() {
-        assert_eq!(
-            Alert::from_wire(40).unwrap(),
-            Alert::HandshakeFailure
-        );
+        assert_eq!(Alert::from_wire(40).unwrap(), Alert::HandshakeFailure);
         assert_eq!(Alert::from_wire(80).unwrap(), Alert::InternalError);
         assert!(Alert::from_wire(255).is_err());
     }
 
     #[test]
     fn test_alert_description() {
-        assert_eq!(
-            Alert::HandshakeFailure.description(),
-            "handshake_failure"
-        );
+        assert_eq!(Alert::HandshakeFailure.description(), "handshake_failure");
         assert_eq!(Alert::InternalError.description(), "internal_error");
     }
 
     #[test]
     fn test_alert_display() {
-        assert_eq!(
-            Alert::UnrecognizedName.to_string(),
-            "unrecognized_name"
-        );
+        assert_eq!(Alert::UnrecognizedName.to_string(), "unrecognized_name");
     }
 
     #[test]

@@ -106,9 +106,7 @@ impl<F: AsRawFd> AsRawFd for AsyncFd<F> {
 
 impl<F: AsRawFd + std::fmt::Debug> std::fmt::Debug for AsyncFd<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AsyncFd")
-            .field("inner", &self.fd)
-            .finish()
+        f.debug_struct("AsyncFd").field("inner", &self.fd).finish()
     }
 }
 
@@ -138,7 +136,11 @@ fn poll_ready(fd: RawFd, read: bool, cx: &mut Context<'_>) -> Poll<io::Result<()
     // Immediate readiness check via poll(2) with timeout=0.
     let mut pfd = libc::pollfd {
         fd,
-        events: if read { libc::POLLIN as _ } else { libc::POLLOUT as _ },
+        events: if read {
+            libc::POLLIN as _
+        } else {
+            libc::POLLOUT as _
+        },
         revents: 0,
     };
     let res = unsafe { libc::poll(&mut pfd, 1, 0) };
@@ -210,11 +212,17 @@ pub fn pipe() -> io::Result<(AsyncFd<OwnedAsyncFd>, AsyncFd<OwnedAsyncFd>)> {
     }
     // Set non-blocking — with cleanup on failure.
     if let Err(e) = set_nonblocking(fds[0]) {
-        unsafe { libc::close(fds[0]); libc::close(fds[1]); }
+        unsafe {
+            libc::close(fds[0]);
+            libc::close(fds[1]);
+        }
         return Err(e);
     }
     if let Err(e) = set_nonblocking(fds[1]) {
-        unsafe { libc::close(fds[0]); libc::close(fds[1]); }
+        unsafe {
+            libc::close(fds[0]);
+            libc::close(fds[1]);
+        }
         return Err(e);
     }
     let read_fd = AsyncFd::new(OwnedAsyncFd::from_raw_fd(fds[0]))?;

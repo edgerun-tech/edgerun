@@ -59,19 +59,58 @@ fn main() {
     // Reference table
     println!();
     println!("=== Reference Baselines ===");
-    println!("  CPU Int:          {} ops/s", edgerun_core::accounting::REFERENCE_CPU_INT_SCORE);
-    println!("  CPU Crypto:       {} hashes/s", edgerun_core::accounting::REFERENCE_CPU_CRYPTO_SCORE);
-    println!("  Memory BW:        {} MB/s", edgerun_core::accounting::REFERENCE_MEM_BW_MBPS);
-    println!("  Memory Lat:       {} ns", edgerun_core::accounting::REFERENCE_MEM_LATENCY_NS);
-    println!("  Storage IOPS:     {} ops/s", edgerun_core::accounting::REFERENCE_STORAGE_IOPS);
-    println!("  Storage Seq:      {} MB/s", edgerun_core::accounting::REFERENCE_STORAGE_SEQ_MBPS);
-    println!("  Storage Events:   {} ops/s", edgerun_core::accounting::REFERENCE_STORAGE_EVENT_IOPS);
-    println!("  Storage Blob:     {} ops/s", edgerun_core::accounting::REFERENCE_STORAGE_BLOB_OPS);
-    println!("  Storage Object:   {} ops/s", edgerun_core::accounting::REFERENCE_STORAGE_OBJECT_OPS);
-    println!("  Net Enc/Dec:      {} ops/s", edgerun_core::accounting::REFERENCE_NET_FRAME_ENCODE_DECODE_OPS);
-    println!("  Net Sign/Vrfy:    {} ops/s", edgerun_core::accounting::REFERENCE_NET_FRAME_SIGN_VERIFY_OPS);
-    println!("  Net UDP:          {} ops/s", edgerun_core::accounting::REFERENCE_NET_UDP_THROUGHPUT_OPS);
-    println!("  Net Router:       {} ops/s", edgerun_core::accounting::REFERENCE_NET_ROUTER_LOOKUP_OPS);
+    println!(
+        "  CPU Int:          {} ops/s",
+        edgerun_core::accounting::REFERENCE_CPU_INT_SCORE
+    );
+    println!(
+        "  CPU Crypto:       {} hashes/s",
+        edgerun_core::accounting::REFERENCE_CPU_CRYPTO_SCORE
+    );
+    println!(
+        "  Memory BW:        {} MB/s",
+        edgerun_core::accounting::REFERENCE_MEM_BW_MBPS
+    );
+    println!(
+        "  Memory Lat:       {} ns",
+        edgerun_core::accounting::REFERENCE_MEM_LATENCY_NS
+    );
+    println!(
+        "  Storage IOPS:     {} ops/s",
+        edgerun_core::accounting::REFERENCE_STORAGE_IOPS
+    );
+    println!(
+        "  Storage Seq:      {} MB/s",
+        edgerun_core::accounting::REFERENCE_STORAGE_SEQ_MBPS
+    );
+    println!(
+        "  Storage Events:   {} ops/s",
+        edgerun_core::accounting::REFERENCE_STORAGE_EVENT_IOPS
+    );
+    println!(
+        "  Storage Blob:     {} ops/s",
+        edgerun_core::accounting::REFERENCE_STORAGE_BLOB_OPS
+    );
+    println!(
+        "  Storage Object:   {} ops/s",
+        edgerun_core::accounting::REFERENCE_STORAGE_OBJECT_OPS
+    );
+    println!(
+        "  Net Enc/Dec:      {} ops/s",
+        edgerun_core::accounting::REFERENCE_NET_FRAME_ENCODE_DECODE_OPS
+    );
+    println!(
+        "  Net Sign/Vrfy:    {} ops/s",
+        edgerun_core::accounting::REFERENCE_NET_FRAME_SIGN_VERIFY_OPS
+    );
+    println!(
+        "  Net UDP:          {} ops/s",
+        edgerun_core::accounting::REFERENCE_NET_UDP_THROUGHPUT_OPS
+    );
+    println!(
+        "  Net Router:       {} ops/s",
+        edgerun_core::accounting::REFERENCE_NET_ROUTER_LOOKUP_OPS
+    );
 
     // Summary
     let duration_ms = (full_cert.benchmark_completed_us - full_cert.benchmark_started_us) / 1000;

@@ -2,7 +2,10 @@ use std::io;
 use std::os::raw::c_void;
 
 use crate::json::{OciLinuxSeccomp, OciSeccompAction};
-use crate::syscalls::{do_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, SECCOMP_FILTER_FLAG_NEW_LISTENER};
+use crate::syscalls::{
+    do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
+    SECCOMP_SET_MODE_FILTER,
+};
 
 use super::*;
 use actions::{action_to_bpf, arch_to_bpf};
@@ -45,8 +48,12 @@ fn seccomp_bpf_prog_contains_allow_and_deny() {
     let mut found_deny = false;
     for insn in insns_slice {
         let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
-        if k == 0x7fff0000 { found_allow = true; }
-        if k == 0x00050001 { found_deny = true; }
+        if k == 0x7fff0000 {
+            found_allow = true;
+        }
+        if k == 0x00050001 {
+            found_deny = true;
+        }
     }
     assert!(found_allow, "should contain RET_ALLOW (0x7fff0000)");
     assert!(found_deny, "should contain RET_ERRNO(EPERM) (0x00050001)");
@@ -117,19 +124,17 @@ fn build_seccomp_prog_with_arg_filters() {
         architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
         listener_path: None,
         listener_metadata: None,
-        syscalls: Some(vec![
-            OciSeccompSyscallEntry {
-                names: Some(vec!["openat".into()]),
-                action: Some(OciSeccompAction::Errno),
-                errno_ret: Some(13),
-                args: Some(vec![crate::json::OciSeccompArg {
-                    index: 1,
-                    value: 0o100000,
-                    value_two: 0,
-                    op: "SCMP_CMP_EQ".into(),
-                }]),
-            },
-        ]),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["openat".into()]),
+            action: Some(OciSeccompAction::Errno),
+            errno_ret: Some(13),
+            args: Some(vec![crate::json::OciSeccompArg {
+                index: 1,
+                value: 0o100000,
+                value_two: 0,
+                op: "SCMP_CMP_EQ".into(),
+            }]),
+        }]),
     };
     let (_, prog) = build_seccomp_prog(&spec);
     assert!(prog.len() >= 16);
@@ -145,19 +150,17 @@ fn build_seccomp_prog_with_ne_arg_filter() {
         architectures: None,
         listener_path: None,
         listener_metadata: None,
-        syscalls: Some(vec![
-            OciSeccompSyscallEntry {
-                names: Some(vec!["ioctl".into()]),
-                action: Some(OciSeccompAction::Kill),
-                errno_ret: None,
-                args: Some(vec![crate::json::OciSeccompArg {
-                    index: 1,
-                    value: 0x5401,
-                    value_two: 0,
-                    op: "SCMP_CMP_NE".into(),
-                }]),
-            },
-        ]),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["ioctl".into()]),
+            action: Some(OciSeccompAction::Kill),
+            errno_ret: None,
+            args: Some(vec![crate::json::OciSeccompArg {
+                index: 1,
+                value: 0x5401,
+                value_two: 0,
+                op: "SCMP_CMP_NE".into(),
+            }]),
+        }]),
     };
     let (_, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
@@ -169,7 +172,10 @@ fn action_to_bpf_values() {
     assert_eq!(action_to_bpf(&OciSeccompAction::Allow, None), 0x7fff0000);
     assert_eq!(action_to_bpf(&OciSeccompAction::Kill, None), 0x00000000);
     assert_eq!(action_to_bpf(&OciSeccompAction::Errno, Some(1)), 0x00050001);
-    assert_eq!(action_to_bpf(&OciSeccompAction::Errno, Some(13)), 0x0005000d);
+    assert_eq!(
+        action_to_bpf(&OciSeccompAction::Errno, Some(13)),
+        0x0005000d
+    );
 }
 
 #[test]
@@ -201,16 +207,17 @@ fn bpf_lt_uses_jge() {
         architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
         listener_path: None,
         listener_metadata: None,
-        syscalls: Some(vec![
-            OciSeccompSyscallEntry {
-                names: Some(vec!["openat".into()]),
-                action: Some(OciSeccompAction::Allow),
-                errno_ret: None,
-                args: Some(vec![crate::json::OciSeccompArg {
-                    index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_LT".into(),
-                }]),
-            },
-        ]),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["openat".into()]),
+            action: Some(OciSeccompAction::Allow),
+            errno_ret: None,
+            args: Some(vec![crate::json::OciSeccompArg {
+                index: 0,
+                value: 0x100,
+                value_two: 0,
+                op: "SCMP_CMP_LT".into(),
+            }]),
+        }]),
     };
     let (_, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
@@ -238,8 +245,14 @@ fn bpf_lt_uses_jge() {
                 found_jgt_for_hi = true;
             }
         }
-        assert!(found_jge_for_lt, "LT should use JGE (0x30) with jt=skip, jf=0 for lo");
-        assert!(found_jgt_for_hi, "LT should use JGT (0x25) with jt=1, jf=0 for hi");
+        assert!(
+            found_jge_for_lt,
+            "LT should use JGE (0x30) with jt=skip, jf=0 for lo"
+        );
+        assert!(
+            found_jgt_for_hi,
+            "LT should use JGT (0x25) with jt=1, jf=0 for hi"
+        );
     }
 }
 
@@ -252,16 +265,17 @@ fn bpf_gt_uses_jgt() {
         architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
         listener_path: None,
         listener_metadata: None,
-        syscalls: Some(vec![
-            OciSeccompSyscallEntry {
-                names: Some(vec!["openat".into()]),
-                action: Some(OciSeccompAction::Allow),
-                errno_ret: None,
-                args: Some(vec![crate::json::OciSeccompArg {
-                    index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_GT".into(),
-                }]),
-            },
-        ]),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["openat".into()]),
+            action: Some(OciSeccompAction::Allow),
+            errno_ret: None,
+            args: Some(vec![crate::json::OciSeccompArg {
+                index: 0,
+                value: 0x100,
+                value_two: 0,
+                op: "SCMP_CMP_GT".into(),
+            }]),
+        }]),
     };
     let (_, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
@@ -287,8 +301,14 @@ fn bpf_gt_uses_jgt() {
                 found_jgt_hi = true;
             }
         }
-        assert!(found_jgt_lo, "GT should use JGT (0x25) with jt=0, jf=skip for lo");
-        assert!(found_jgt_hi, "GT should use JGT (0x25) with jt=0, jf=1 for hi");
+        assert!(
+            found_jgt_lo,
+            "GT should use JGT (0x25) with jt=0, jf=skip for lo"
+        );
+        assert!(
+            found_jgt_hi,
+            "GT should use JGT (0x25) with jt=0, jf=1 for hi"
+        );
     }
 }
 
@@ -301,16 +321,17 @@ fn bpf_ge_uses_jge() {
         architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
         listener_path: None,
         listener_metadata: None,
-        syscalls: Some(vec![
-            OciSeccompSyscallEntry {
-                names: Some(vec!["openat".into()]),
-                action: Some(OciSeccompAction::Allow),
-                errno_ret: None,
-                args: Some(vec![crate::json::OciSeccompArg {
-                    index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_GE".into(),
-                }]),
-            },
-        ]),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["openat".into()]),
+            action: Some(OciSeccompAction::Allow),
+            errno_ret: None,
+            args: Some(vec![crate::json::OciSeccompArg {
+                index: 0,
+                value: 0x100,
+                value_two: 0,
+                op: "SCMP_CMP_GE".into(),
+            }]),
+        }]),
     };
     let (_, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
@@ -336,8 +357,14 @@ fn bpf_ge_uses_jge() {
                 found_jge_hi = true;
             }
         }
-        assert!(found_jge_lo, "GE should use JGE (0x30) with jt=0, jf=skip for lo");
-        assert!(found_jge_hi, "GE should use JGE (0x30) with jt=0, jf=1 for hi");
+        assert!(
+            found_jge_lo,
+            "GE should use JGE (0x30) with jt=0, jf=skip for lo"
+        );
+        assert!(
+            found_jge_hi,
+            "GE should use JGE (0x30) with jt=0, jf=1 for hi"
+        );
     }
 }
 
@@ -350,16 +377,17 @@ fn bpf_le_uses_jgt() {
         architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
         listener_path: None,
         listener_metadata: None,
-        syscalls: Some(vec![
-            OciSeccompSyscallEntry {
-                names: Some(vec!["openat".into()]),
-                action: Some(OciSeccompAction::Allow),
-                errno_ret: None,
-                args: Some(vec![crate::json::OciSeccompArg {
-                    index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_LE".into(),
-                }]),
-            },
-        ]),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["openat".into()]),
+            action: Some(OciSeccompAction::Allow),
+            errno_ret: None,
+            args: Some(vec![crate::json::OciSeccompArg {
+                index: 0,
+                value: 0x100,
+                value_two: 0,
+                op: "SCMP_CMP_LE".into(),
+            }]),
+        }]),
     };
     let (_, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
@@ -385,8 +413,14 @@ fn bpf_le_uses_jgt() {
                 found_jgt_hi = true;
             }
         }
-        assert!(found_jgt_lo, "LE should use JGT (0x25) with jt=skip, jf=0 for lo");
-        assert!(found_jgt_hi, "LE should use JGT (0x25) with jt=1, jf=0 for hi");
+        assert!(
+            found_jgt_lo,
+            "LE should use JGT (0x25) with jt=skip, jf=0 for lo"
+        );
+        assert!(
+            found_jgt_hi,
+            "LE should use JGT (0x25) with jt=1, jf=0 for hi"
+        );
     }
 }
 
@@ -399,16 +433,17 @@ fn bpf_masked_eq_uses_and_then_jeq() {
         architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
         listener_path: None,
         listener_metadata: None,
-        syscalls: Some(vec![
-            OciSeccompSyscallEntry {
-                names: Some(vec!["openat".into()]),
-                action: Some(OciSeccompAction::Allow),
-                errno_ret: None,
-                args: Some(vec![crate::json::OciSeccompArg {
-                    index: 0, value: 0xFF, value_two: 0x42, op: "SCMP_CMP_MASKED_EQ".into(),
-                }]),
-            },
-        ]),
+        syscalls: Some(vec![OciSeccompSyscallEntry {
+            names: Some(vec!["openat".into()]),
+            action: Some(OciSeccompAction::Allow),
+            errno_ret: None,
+            args: Some(vec![crate::json::OciSeccompArg {
+                index: 0,
+                value: 0xFF,
+                value_two: 0x42,
+                op: "SCMP_CMP_MASKED_EQ".into(),
+            }]),
+        }]),
     };
     let (_, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
@@ -425,11 +460,18 @@ fn bpf_masked_eq_uses_and_then_jeq() {
         for insn in insns {
             let code = u16::from_le_bytes([insn[0], insn[1]]);
             let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
-            if code == 0x50 && k == 0xFF { found_and_lo = true; }
-            if code == 0x15 && k == 0x42 { found_jeq_lo = true; }
+            if code == 0x50 && k == 0xFF {
+                found_and_lo = true;
+            }
+            if code == 0x15 && k == 0x42 {
+                found_jeq_lo = true;
+            }
         }
         assert!(found_and_lo, "MASKED_EQ should use AND (0x50) with mask");
-        assert!(found_jeq_lo, "MASKED_EQ should use JEQ (0x15) with expected value");
+        assert!(
+            found_jeq_lo,
+            "MASKED_EQ should use JEQ (0x15) with expected value"
+        );
     }
 }
 
@@ -504,8 +546,14 @@ fn arch_to_bpf_unknown_defaults_to_current() {
 
 #[test]
 fn action_to_bpf_all_variants() {
-    assert_eq!(action_to_bpf(&OciSeccompAction::KillProcess, None), 0x80000000);
-    assert_eq!(action_to_bpf(&OciSeccompAction::KillThread, None), 0x00000000);
+    assert_eq!(
+        action_to_bpf(&OciSeccompAction::KillProcess, None),
+        0x80000000
+    );
+    assert_eq!(
+        action_to_bpf(&OciSeccompAction::KillThread, None),
+        0x00000000
+    );
     assert_eq!(action_to_bpf(&OciSeccompAction::Trap, None), 0x00030000);
     assert_eq!(action_to_bpf(&OciSeccompAction::Trace, None), 0x7ff00000);
     assert_eq!(action_to_bpf(&OciSeccompAction::Log, None), 0x7ffe0000);
@@ -522,7 +570,10 @@ fn bpf_long_skip_exact_255() {
     assert_eq!(insns[0][0], 0x15);
     assert_eq!(insns[0][2], 0);
     assert_eq!(insns[0][3], 255);
-    assert_eq!(u32::from_le_bytes([insns[0][4], insns[0][5], insns[0][6], insns[0][7]]), 0xFFFFFFFF);
+    assert_eq!(
+        u32::from_le_bytes([insns[0][4], insns[0][5], insns[0][6], insns[0][7]]),
+        0xFFFFFFFF
+    );
 }
 
 #[test]
@@ -587,7 +638,11 @@ fn build_seccomp_prog_multiple_syscall_names() {
     };
     let (_, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
-    assert!(len >= 8, "multiple syscall names should generate multiple rules, got {}", len);
+    assert!(
+        len >= 8,
+        "multiple syscall names should generate multiple rules, got {}",
+        len
+    );
 }
 
 #[test]

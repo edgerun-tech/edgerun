@@ -6,19 +6,19 @@
 //! - `spawn_blocking` code consolidated into a single inner method
 //! - `Builder::enable_all()` removed (was a no-op stub)
 
+use crate::sync::Mutex;
 use std::future::Future;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread::JoinHandle as StdJoinHandle;
-use crate::sync::Mutex;
 
 use crate::blocking_pool::BlockingPool;
 pub use crate::blocking_pool::{JoinError, JoinHandle};
 use crate::metrics::{Metrics, RuntimeMetrics};
-use crate::trace;
-use crate::ready_queue::ReadyQueue;
 use crate::reactor::Reactor;
+use crate::ready_queue::ReadyQueue;
 use crate::task_map::TaskMap;
+use crate::trace;
 use crate::waker::make_waker;
 
 // ===========================================================================
@@ -89,7 +89,9 @@ impl RuntimeInner {
                 if handle_for_closure.is_aborted() {
                     metrics_clone.total_aborted.fetch_add(1, Ordering::Relaxed);
                     handle_for_closure.set_result(Err(JoinError));
-                    metrics_clone.total_completed.fetch_add(1, Ordering::Relaxed);
+                    metrics_clone
+                        .total_completed
+                        .fetch_add(1, Ordering::Relaxed);
                     trace::task_aborted(task_id);
                     return false;
                 }
@@ -98,7 +100,9 @@ impl RuntimeInner {
                 match fut.as_mut().poll(cx) {
                     std::task::Poll::Ready(v) => {
                         handle_for_closure.set_result(Ok(v));
-                        metrics_clone.total_completed.fetch_add(1, Ordering::Relaxed);
+                        metrics_clone
+                            .total_completed
+                            .fetch_add(1, Ordering::Relaxed);
                         trace::task_finished(task_id);
                         false
                     }
@@ -242,9 +246,8 @@ impl Builder {
                     let w = make_waker(id, Arc::clone(&queue));
                     let mut cx = std::task::Context::from_waker(&w);
 
-                    let still_pending = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        task(&mut cx)
-                    }));
+                    let still_pending =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| task(&mut cx)));
 
                     match still_pending {
                         Ok(true) => {
@@ -354,11 +357,7 @@ impl Runtime {
     /// or via `Drop`) is safe and only performs shutdown once.
     pub fn shutdown(&self) {
         // Only perform shutdown once.
-        if self
-            .inner
-            .shutdown_initiated
-            .swap(true, Ordering::AcqRel)
-        {
+        if self.inner.shutdown_initiated.swap(true, Ordering::AcqRel) {
             return;
         }
         self.inner.reactor.shutdown();

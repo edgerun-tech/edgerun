@@ -1,15 +1,15 @@
 //! Mesh session management — ECDH handshakes, session encryption, and replay protection.
 use std::time::Duration;
 
-mod session;
+mod error;
 mod handshake;
 mod manager;
-mod error;
+mod session;
 
-pub use session::MeshSession;
-pub use handshake::{HandshakeInit, HandshakeAccept, EphemeralSecret};
-pub use manager::SessionManager;
 pub use error::SessionError;
+pub use handshake::{EphemeralSecret, HandshakeAccept, HandshakeInit};
+pub use manager::SessionManager;
+pub use session::MeshSession;
 
 // Constants
 // ---------------------------------------------------------------------------
@@ -31,7 +31,6 @@ pub const MAX_FRAMES_BEFORE_REKEY: u64 = 1_000_000;
 
 /// Maximum age before forced rekey.
 pub const MAX_SESSION_AGE: Duration = Duration::from_secs(300); // 5 minutes
-
 
 #[cfg(test)]
 mod tests;

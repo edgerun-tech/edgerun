@@ -7,36 +7,32 @@
 //! use edgerun_remote_capability::MemoryRemoteTransport;
 //! ```
 
-pub mod protocol;
-pub mod transport;
-pub mod policy;
 pub mod adapters;
 pub mod capability_signature;
+pub mod policy;
+pub mod protocol;
+pub mod transport;
 
 // Re-export the core public API.
-pub use protocol::{
-    RemoteCapabilityProvider, RemoteCapabilityTransport, RemoteInvocationResult,
-    serve_one, pump_one_event, capability_error_result,
-    default_remote_requester,
-    session_open_as_request, session_accept_from_grant, session_reject,
-    accept_session_open_unchecked,
-    capability_remote_envelope,
-    CapabilityRemoteEnvelope, CapabilityInvocationFrame, CapabilityResultFrame,
-    CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
-    CapabilitySessionMode, CapabilitySessionOpen,
-};
-pub use transport::{FramedRemoteTransport, accept_unix, accept_tcp, MemoryRemoteTransport};
-pub use policy::{PolicyWrappedProvider, IntoPolicyWrappedProvider, SessionGrantBinding};
-pub use capability_signature::{
-    sign_invocation, sign_request, sign_grant, sign_result, sign_revocation,
-    verify_invocation, verify_request, verify_grant, verify_result, verify_revocation,
-};
 pub use adapters::{
-    BluetoothConnectionRemoteAdapter, BluetoothRemoteAdapter,
-    CameraRemoteAdapter, PairedCameraRemoteAdapter,
-    InputRemoteAdapter, MicrophoneRemoteAdapter,
-    SpeakerRemoteAdapter, WifiControlRemoteAdapter, WifiRemoteAdapter,
+    BluetoothConnectionRemoteAdapter, BluetoothRemoteAdapter, CameraRemoteAdapter,
+    InputRemoteAdapter, MicrophoneRemoteAdapter, PairedCameraRemoteAdapter, SpeakerRemoteAdapter,
+    WifiControlRemoteAdapter, WifiRemoteAdapter,
 };
+pub use capability_signature::{
+    sign_grant, sign_invocation, sign_request, sign_result, sign_revocation, verify_grant,
+    verify_invocation, verify_request, verify_result, verify_revocation,
+};
+pub use policy::{IntoPolicyWrappedProvider, PolicyWrappedProvider, SessionGrantBinding};
+pub use protocol::{
+    accept_session_open_unchecked, capability_error_result, capability_remote_envelope,
+    default_remote_requester, pump_one_event, serve_one, session_accept_from_grant,
+    session_open_as_request, session_reject, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
+    CapabilityResultFrame, CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
+    CapabilitySessionMode, CapabilitySessionOpen, RemoteCapabilityProvider,
+    RemoteCapabilityTransport, RemoteInvocationResult,
+};
+pub use transport::{accept_tcp, accept_unix, FramedRemoteTransport, MemoryRemoteTransport};
 
 #[cfg(test)]
 mod tests;

@@ -42,7 +42,8 @@ pub fn load_registry_auth(path: &std::path::Path) -> io::Result<RegistryAuth> {
             if let Some(colon) = auth_rest.find(':') {
                 let after_colon = &auth_rest[colon + 1..];
                 // Skip whitespace and quote
-                let trimmed = after_colon.trim_start_matches(|c: char| !c.is_ascii_alphanumeric() && c != '+');
+                let trimmed = after_colon
+                    .trim_start_matches(|c: char| !c.is_ascii_alphanumeric() && c != '+');
                 // Find the closing quote
                 if let Some(end_quote) = trimmed.find('"') {
                     let auth_str = &trimmed[..end_quote];
@@ -92,11 +93,7 @@ pub fn parse_bearer_auth(header: &str) -> Option<(String, String, Option<String>
         }
     }
 
-    Some((
-        realm?,
-        service.unwrap_or_else(|| "registry".into()),
-        scope,
-    ))
+    Some((realm?, service.unwrap_or_else(|| "registry".into()), scope))
 }
 
 /// Resolve credentials from the secret service for a given registry host.
@@ -143,7 +140,9 @@ mod tests {
         // Store a credential via the secret service backend
         let coll = "/org/freedesktop/secrets/collections/registry";
         let mut backend = edgerun_secret_service::Backend::new_noop(root.clone()).unwrap();
-        backend.put(coll, "docker.io", b"myuser:mypass123", "Docker Hub", &[]).unwrap();
+        backend
+            .put(coll, "docker.io", b"myuser:mypass123", "Docker Hub", &[])
+            .unwrap();
 
         // Resolve it
         let creds = resolve_from_secret_service(&root, "registry", "docker.io");
@@ -164,7 +163,9 @@ mod tests {
         let coll = "/org/freedesktop/secrets/collections/registry";
         let mut backend = edgerun_secret_service::Backend::new_noop(root.clone()).unwrap();
         // Store without the colon separator
-        backend.put(coll, "docker.io", b"no-colon-here", "Bad", &[]).unwrap();
+        backend
+            .put(coll, "docker.io", b"no-colon-here", "Bad", &[])
+            .unwrap();
 
         let creds = resolve_from_secret_service(&root, "registry", "docker.io");
         assert!(creds.is_none());

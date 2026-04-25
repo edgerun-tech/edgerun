@@ -10,7 +10,7 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 
 use crate::syscalls::{do_setns, ns};
-use crate::userns::{do_setuid, do_setgid};
+use crate::userns::{do_setgid, do_setuid};
 
 /// Relay I/O between the host terminal and a container PTY.
 ///
@@ -52,8 +52,8 @@ fn tty_relay(pty_master_fd: i32, child_pid: libc::pid_t) -> io::Result<std::proc
     let _guard = TerminalGuard(orig_termios);
 
     // Bidirectional relay using poll(2)
-    use std::os::unix::io::FromRawFd;
     use std::os::fd::IntoRawFd;
+    use std::os::unix::io::FromRawFd;
     let stdin_file = unsafe { std::fs::File::from_raw_fd(stdin_fd) };
     let pty_file = unsafe { std::fs::File::from_raw_fd(pty_master_fd) };
 
@@ -66,8 +66,16 @@ fn tty_relay(pty_master_fd: i32, child_pid: libc::pid_t) -> io::Result<std::proc
 
     loop {
         let mut fds = [
-            libc::pollfd { fd: stdin_fd, events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: pty_master_fd, events: libc::POLLIN, revents: 0 },
+            libc::pollfd {
+                fd: stdin_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: pty_master_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
         ];
 
         let ret = unsafe { libc::poll(fds.as_mut_ptr(), 2, 100) };
@@ -80,12 +88,26 @@ fn tty_relay(pty_master_fd: i32, child_pid: libc::pid_t) -> io::Result<std::proc
 
         // stdin → pty_master
         if fds[0].revents & libc::POLLIN != 0 {
-            let n = unsafe { libc::read(stdin_fd, buf_in.as_mut_ptr() as *mut libc::c_void, buf_in.len()) };
+            let n = unsafe {
+                libc::read(
+                    stdin_fd,
+                    buf_in.as_mut_ptr() as *mut libc::c_void,
+                    buf_in.len(),
+                )
+            };
             if n > 0 {
                 let mut sent = 0isize;
                 while sent < n as isize {
-                    let w = unsafe { libc::write(pty_master_fd, buf_in.as_ptr().offset(sent) as *const libc::c_void, (n as isize - sent) as usize) };
-                    if w <= 0 { break; }
+                    let w = unsafe {
+                        libc::write(
+                            pty_master_fd,
+                            buf_in.as_ptr().offset(sent) as *const libc::c_void,
+                            (n as isize - sent) as usize,
+                        )
+                    };
+                    if w <= 0 {
+                        break;
+                    }
                     sent += w as isize;
                 }
             } else if n == 0 {
@@ -95,12 +117,26 @@ fn tty_relay(pty_master_fd: i32, child_pid: libc::pid_t) -> io::Result<std::proc
 
         // pty_master → stdout
         if fds[1].revents & libc::POLLIN != 0 {
-            let n = unsafe { libc::read(pty_master_fd, buf_out.as_mut_ptr() as *mut libc::c_void, buf_out.len()) };
+            let n = unsafe {
+                libc::read(
+                    pty_master_fd,
+                    buf_out.as_mut_ptr() as *mut libc::c_void,
+                    buf_out.len(),
+                )
+            };
             if n > 0 {
                 let mut sent = 0isize;
                 while sent < n as isize {
-                    let w = unsafe { libc::write(libc::STDOUT_FILENO, buf_out.as_ptr().offset(sent) as *const libc::c_void, (n as isize - sent) as usize) };
-                    if w <= 0 { break; }
+                    let w = unsafe {
+                        libc::write(
+                            libc::STDOUT_FILENO,
+                            buf_out.as_ptr().offset(sent) as *const libc::c_void,
+                            (n as isize - sent) as usize,
+                        )
+                    };
+                    if w <= 0 {
+                        break;
+                    }
                     sent += w as isize;
                 }
             } else if n == 0 {
@@ -114,12 +150,28 @@ fn tty_relay(pty_master_fd: i32, child_pid: libc::pid_t) -> io::Result<std::proc
         if wait_ret > 0 {
             // Drain remaining pty output
             loop {
-                let n = unsafe { libc::read(pty_master_fd, buf_out.as_mut_ptr() as *mut libc::c_void, buf_out.len()) };
-                if n <= 0 { break; }
+                let n = unsafe {
+                    libc::read(
+                        pty_master_fd,
+                        buf_out.as_mut_ptr() as *mut libc::c_void,
+                        buf_out.len(),
+                    )
+                };
+                if n <= 0 {
+                    break;
+                }
                 let mut sent = 0isize;
                 while sent < n as isize {
-                    let w = unsafe { libc::write(libc::STDOUT_FILENO, buf_out.as_ptr().offset(sent) as *const libc::c_void, (n as isize - sent) as usize) };
-                    if w <= 0 { break; }
+                    let w = unsafe {
+                        libc::write(
+                            libc::STDOUT_FILENO,
+                            buf_out.as_ptr().offset(sent) as *const libc::c_void,
+                            (n as isize - sent) as usize,
+                        )
+                    };
+                    if w <= 0 {
+                        break;
+                    }
                     sent += w as isize;
                 }
             }
@@ -188,7 +240,10 @@ fn recv_fd(sock_fd: i32) -> io::Result<i32> {
 
     let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
     if cmsg.is_null() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "no control message received"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "no control message received",
+        ));
     }
 
     let fd = unsafe {
@@ -201,20 +256,25 @@ fn recv_fd(sock_fd: i32) -> io::Result<i32> {
 pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?);
     }
 
     let parsed = parse_exec_args(args)?;
 
     let state = crate::state::load_state(&parsed.id)?;
-    let pid = state.pid.ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container has no PID")
-    })?;
+    let pid = state
+        .pid
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;
 
     if !crate::cli::is_process_alive(pid) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            format!("container {} is not running", parsed.id)));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("container {} is not running", parsed.id),
+        ));
     }
 
     // Load spec for process config
@@ -227,58 +287,83 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     };
 
     // Determine final args, env, cwd, user
-    let (exec_args, env_vars, cwd, uid, gid) = if let Some(ref process_path) = parsed.process_json_path {
-        // Load process config from JSON file
-        let proc_data = fs::read(process_path)?;
-        let proc: crate::json::OciProcess = edgerun_json::from_slice(&proc_data)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let args = proc.args.clone().unwrap_or_else(|| vec!["sh".into()]);
-        let env = proc.env.clone().unwrap_or_default();
-        let cwd = proc.cwd.clone().unwrap_or_else(|| "/".into());
-        let uid = proc.user.as_ref().and_then(|u| u.uid).unwrap_or(0);
-        let gid = proc.user.as_ref().and_then(|u| u.gid).unwrap_or(0);
-        (args, env, cwd, uid, gid)
-    } else if let Some(ref proc_json) = parsed.process_json {
-        // Parse inline process JSON
-        let proc: crate::json::OciProcess = edgerun_json::from_slice(proc_json.as_bytes())
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let args = proc.args.clone().unwrap_or_else(|| vec!["sh".into()]);
-        let env = proc.env.clone().unwrap_or_default();
-        let cwd = proc.cwd.clone().unwrap_or_else(|| "/".into());
-        let uid = proc.user.as_ref().and_then(|u| u.uid).unwrap_or(0);
-        let gid = proc.user.as_ref().and_then(|u| u.gid).unwrap_or(0);
-        (args, env, cwd, uid, gid)
-    } else {
-        // Use spec defaults + overrides
-        let proc = spec.as_ref().and_then(|s| s.process.clone()).unwrap_or_default();
-        let mut env = proc.env.unwrap_or_else(|| crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect());
-        let cwd = parsed.cwd.clone().or(proc.cwd).unwrap_or_else(|| "/".into());
-        let uid = parsed.user.map(|(u, _g)| u).or_else(|| proc.user.as_ref().and_then(|u| u.uid)).unwrap_or(0);
-        let gid = parsed.user.map(|(_u, g)| g).or_else(|| proc.user.as_ref().and_then(|u| u.gid)).unwrap_or(0);
-
-        // Apply --env overrides
-        for (k, v) in &parsed.extra_env {
-            let entry = format!("{}={}", k, v);
-            env.retain(|e| !e.starts_with(&format!("{}=", k)));
-            env.push(entry);
-        }
-
-        let exec_args = if parsed.exec_args.is_empty() {
-            proc.args.unwrap_or_else(|| vec!["sh".into()])
+    let (exec_args, env_vars, cwd, uid, gid) =
+        if let Some(ref process_path) = parsed.process_json_path {
+            // Load process config from JSON file
+            let proc_data = fs::read(process_path)?;
+            let proc: crate::json::OciProcess = edgerun_json::from_slice(&proc_data)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            let args = proc.args.clone().unwrap_or_else(|| vec!["sh".into()]);
+            let env = proc.env.clone().unwrap_or_default();
+            let cwd = proc.cwd.clone().unwrap_or_else(|| "/".into());
+            let uid = proc.user.as_ref().and_then(|u| u.uid).unwrap_or(0);
+            let gid = proc.user.as_ref().and_then(|u| u.gid).unwrap_or(0);
+            (args, env, cwd, uid, gid)
+        } else if let Some(ref proc_json) = parsed.process_json {
+            // Parse inline process JSON
+            let proc: crate::json::OciProcess = edgerun_json::from_slice(proc_json.as_bytes())
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            let args = proc.args.clone().unwrap_or_else(|| vec!["sh".into()]);
+            let env = proc.env.clone().unwrap_or_default();
+            let cwd = proc.cwd.clone().unwrap_or_else(|| "/".into());
+            let uid = proc.user.as_ref().and_then(|u| u.uid).unwrap_or(0);
+            let gid = proc.user.as_ref().and_then(|u| u.gid).unwrap_or(0);
+            (args, env, cwd, uid, gid)
         } else {
-            parsed.exec_args.clone()
+            // Use spec defaults + overrides
+            let proc = spec
+                .as_ref()
+                .and_then(|s| s.process.clone())
+                .unwrap_or_default();
+            let mut env = proc.env.unwrap_or_else(|| {
+                crate::process::DEFAULT_ENV
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            });
+            let cwd = parsed
+                .cwd
+                .clone()
+                .or(proc.cwd)
+                .unwrap_or_else(|| "/".into());
+            let uid = parsed
+                .user
+                .map(|(u, _g)| u)
+                .or_else(|| proc.user.as_ref().and_then(|u| u.uid))
+                .unwrap_or(0);
+            let gid = parsed
+                .user
+                .map(|(_u, g)| g)
+                .or_else(|| proc.user.as_ref().and_then(|u| u.gid))
+                .unwrap_or(0);
+
+            // Apply --env overrides
+            for (k, v) in &parsed.extra_env {
+                let entry = format!("{}={}", k, v);
+                env.retain(|e| !e.starts_with(&format!("{}=", k)));
+                env.push(entry);
+            }
+
+            let exec_args = if parsed.exec_args.is_empty() {
+                proc.args.unwrap_or_else(|| vec!["sh".into()])
+            } else {
+                parsed.exec_args.clone()
+            };
+            (exec_args, env, cwd, uid, gid)
         };
-        (exec_args, env, cwd, uid, gid)
-    };
 
     if exec_args.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "command to execute required"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "command to execute required",
+        ));
     }
 
     // Create socketpair for passing PTY master fd from child to parent
     let mut sockets = [-1i32; 2];
     if parsed.terminal {
-        let ret = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, sockets.as_mut_ptr()) };
+        let ret =
+            unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, sockets.as_mut_ptr()) };
         if ret != 0 {
             return Err(io::Error::last_os_error());
         }
@@ -294,7 +379,9 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         // Child process: join container namespaces
         let needs_pid_fork = match join_container_namespaces(pid) {
             Ok(needs_fork) => needs_fork,
-            Err(_) => { unsafe { libc::_exit(126) }; }
+            Err(_) => {
+                unsafe { libc::_exit(126) };
+            }
         };
 
         // If we joined the PID namespace, fork again so the grandchild
@@ -370,7 +457,9 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         // chdir
         let cwd_c = match CString::new(cwd.as_bytes()) {
             Ok(c) => c,
-            Err(_) => { unsafe { libc::_exit(126) }; }
+            Err(_) => {
+                unsafe { libc::_exit(126) };
+            }
         };
         unsafe { libc::chdir(cwd_c.as_ptr()) };
 
@@ -395,7 +484,8 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
             exec_args[0].clone()
         } else {
             let exe_name = &exec_args[0];
-            let path_env = env_vars.iter()
+            let path_env = env_vars
+                .iter()
                 .find(|e| e.starts_with("PATH="))
                 .map(|e| &e[5..])
                 .unwrap_or("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
@@ -413,12 +503,16 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         // Exec
         let exe_cstr = match CString::new(exe_path.as_bytes()) {
             Ok(c) => c,
-            Err(_) => { unsafe { libc::_exit(126) }; }
+            Err(_) => {
+                unsafe { libc::_exit(126) };
+            }
         };
-        let c_args: Vec<CString> = exec_args.iter()
+        let c_args: Vec<CString> = exec_args
+            .iter()
             .filter_map(|a| CString::new(a.as_bytes()).ok())
             .collect();
-        let c_ptrs: Vec<*const libc::c_char> = c_args.iter()
+        let c_ptrs: Vec<*const libc::c_char> = c_args
+            .iter()
             .map(|s| s.as_ptr())
             .chain(std::iter::once(std::ptr::null()))
             .collect();
@@ -433,9 +527,8 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         // Close child end in parent
         unsafe { libc::close(sockets[1]) };
 
-        let pty_master = recv_fd(parent_sock).map_err(|e| {
-            io::Error::other(format!("failed to receive PTY master fd: {}", e))
-        })?;
+        let pty_master = recv_fd(parent_sock)
+            .map_err(|e| io::Error::other(format!("failed to receive PTY master fd: {}", e)))?;
         unsafe { libc::close(parent_sock) };
 
         // Bidirectional TTY relay
@@ -531,14 +624,20 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
             "--cwd" => {
                 i += 1;
                 if i >= args.len() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "--cwd requires a value"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--cwd requires a value",
+                    ));
                 }
                 result.cwd = Some(args[i].clone());
             }
             "--env" | "-e" => {
                 i += 1;
                 if i >= args.len() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "--env requires a value"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--env requires a value",
+                    ));
                 }
                 if let Some((k, v)) = args[i].split_once('=') {
                     result.extra_env.push((k.into(), v.into()));
@@ -547,7 +646,10 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
             "--user" | "-u" => {
                 i += 1;
                 if i >= args.len() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "--user requires a value"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--user requires a value",
+                    ));
                 }
                 if let Some((u, g)) = args[i].split_once(':') {
                     let uid: u32 = u.parse().map_err(|_| {
@@ -559,7 +661,10 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
                     result.user = Some((uid, gid));
                 } else {
                     let uid: u32 = args[i].parse().map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidInput, format!("invalid user: {}", args[i]))
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("invalid user: {}", args[i]),
+                        )
                     })?;
                     result.user = Some((uid, 0));
                 }
@@ -570,14 +675,20 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
             "--process" | "-p" => {
                 i += 1;
                 if i >= args.len() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "--process requires a path"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--process requires a path",
+                    ));
                 }
                 result.process_json_path = Some(args[i].clone());
             }
             "--process-json" => {
                 i += 1;
                 if i >= args.len() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "--process-json requires a value"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--process-json requires a value",
+                    ));
                 }
                 result.process_json = Some(args[i].clone());
             }
@@ -595,15 +706,20 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
                 }
             }
             _ => {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                    format!("unknown exec flag: {}", args[i])));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unknown exec flag: {}", args[i]),
+                ));
             }
         }
         i += 1;
     }
 
     if result.id.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "container ID required"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID required",
+        ));
     }
 
     Ok(result)

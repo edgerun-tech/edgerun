@@ -49,18 +49,28 @@ mod tests {
 
     #[test]
     fn test_parse_headers() {
-        let data = b"From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nBody";
+        let data =
+            b"From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nBody";
         let headers = parse_headers(data);
         assert_eq!(headers.len(), 3);
-        assert_eq!(headers[0], ("From".to_string(), "sender@example.com".to_string()));
-        assert_eq!(headers[1], ("To".to_string(), "recipient@example.com".to_string()));
+        assert_eq!(
+            headers[0],
+            ("From".to_string(), "sender@example.com".to_string())
+        );
+        assert_eq!(
+            headers[1],
+            ("To".to_string(), "recipient@example.com".to_string())
+        );
         assert_eq!(headers[2], ("Subject".to_string(), "Test".to_string()));
     }
 
     #[test]
     fn test_get_header_helpers() {
         let data = b"From: sender@example.com\r\nSubject: Hello\r\n\r\nHi";
-        assert_eq!(get_from_address(data), Some("sender@example.com".to_string()));
+        assert_eq!(
+            get_from_address(data),
+            Some("sender@example.com".to_string())
+        );
         assert_eq!(get_subject(data), Some("Hello".to_string()));
         assert_eq!(get_date(data), None);
     }

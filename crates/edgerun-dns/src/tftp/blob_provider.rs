@@ -64,9 +64,7 @@ pub enum BlobEntry {
         nonce: Vec<u8>,
     },
     /// Plaintext blob (already decrypted, for development or unencrypted files).
-    Plaintext {
-        data: Vec<u8>,
-    },
+    Plaintext { data: Vec<u8> },
 }
 
 impl BlobTftpProvider {
@@ -114,10 +112,8 @@ impl BlobTftpProvider {
             BlobEntry::Plaintext { data: data.clone() },
         );
         // Cache it
-        self.cache.insert(
-            filename.to_string(),
-            Arc::new(CachedBlob { data }),
-        );
+        self.cache
+            .insert(filename.to_string(), Arc::new(CachedBlob { data }));
     }
 
     /// Remove a registered boot file.
@@ -140,18 +136,21 @@ impl BlobTftpProvider {
             return Ok(());
         }
 
-        if let Some(BlobEntry::Encrypted { nonce, ciphertext, .. }) = self.registry.get(filename) {
-                let plaintext = (self.decryptor)(nonce, ciphertext)?;
-                self.cache.insert(
-                    filename.to_string(),
-                    Arc::new(CachedBlob { data: plaintext }),
-                );
-                eprintln!(
-                    "edgerun-tftp: cached '{}' ({} bytes)",
-                    filename,
-                    self.cache[filename].data.len()
-                );
-            }
+        if let Some(BlobEntry::Encrypted {
+            nonce, ciphertext, ..
+        }) = self.registry.get(filename)
+        {
+            let plaintext = (self.decryptor)(nonce, ciphertext)?;
+            self.cache.insert(
+                filename.to_string(),
+                Arc::new(CachedBlob { data: plaintext }),
+            );
+            eprintln!(
+                "edgerun-tftp: cached '{}' ({} bytes)",
+                filename,
+                self.cache[filename].data.len()
+            );
+        }
 
         Ok(())
     }
@@ -183,7 +182,11 @@ impl FileProvider for BlobTftpProvider {
         // Check registry
         match self.registry.get(filename)? {
             BlobEntry::Plaintext { data } => Some(data.len() as u64),
-            BlobEntry::Encrypted { ciphertext, nonce: _nonce, .. } => {
+            BlobEntry::Encrypted {
+                ciphertext,
+                nonce: _nonce,
+                ..
+            } => {
                 // For encrypted blobs, we don't know plaintext size without decrypting.
                 // Best estimate: ciphertext length (slightly larger due to GCM tag).
                 // The actual size will be reported in OACK after warm_cache.
@@ -213,7 +216,10 @@ impl FileProvider for BlobTftpProvider {
         }
 
         // Encrypted blob — need to decrypt on demand
-        if let Some(BlobEntry::Encrypted { ciphertext, nonce, .. }) = self.registry.get(filename) {
+        if let Some(BlobEntry::Encrypted {
+            ciphertext, nonce, ..
+        }) = self.registry.get(filename)
+        {
             match (self.decryptor)(nonce, ciphertext) {
                 Ok(plaintext) => {
                     // Cache it for subsequent blocks

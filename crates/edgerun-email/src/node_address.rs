@@ -32,7 +32,7 @@ pub fn node_id_from_address(address: &str) -> Option<String> {
 }
 
 /// Validate a node address exists locally
-/// 
+///
 /// In production, this checks if we have a channel/credential for this node.
 /// For now, we keep a local registry of known nodes.
 pub struct NodeRegistry {
@@ -97,13 +97,13 @@ mod tests {
     fn test_parse_node_address() {
         let node_id = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
         let addr = format!("{}@nodes.edgerun.tech", node_id);
-        
+
         let result = parse_node_address(&addr);
         assert!(result.is_some());
         let (id, domain) = result.unwrap();
         assert_eq!(id, node_id);
         assert_eq!(domain, "nodes.edgerun.tech");
-        
+
         // Invalid addresses
         assert!(parse_node_address("user@external.com").is_none());
         assert!(parse_node_address("short@nodes.edgerun.tech").is_none());
@@ -112,20 +112,23 @@ mod tests {
     #[test]
     fn test_node_registry() {
         let mut registry = NodeRegistry::new();
-        
+
         let node_id = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
-        
+
         assert!(!registry.is_known(node_id));
-        
-        registry.register(node_id.to_string(), Some("/ipc/channels/abc123".to_string()));
-        
+
+        registry.register(
+            node_id.to_string(),
+            Some("/ipc/channels/abc123".to_string()),
+        );
+
         assert!(registry.is_known(node_id));
-        
+
         let info = registry.get(node_id).unwrap();
         assert!(!info.verified);
-        
+
         registry.mark_verified(node_id);
-        
+
         let info = registry.get(node_id).unwrap();
         assert!(info.verified);
     }

@@ -1,6 +1,8 @@
 use crate::constants::*;
 use crate::types::*;
-use crate::wire::{map_ecc_curve, map_name_algorithm, map_public_object_type, read_tpm2b, read_u16, read_u32};
+use crate::wire::{
+    map_ecc_curve, map_name_algorithm, map_public_object_type, read_tpm2b, read_u16, read_u32,
+};
 
 // ---------------------------------------------------------------------------
 // Response parsers

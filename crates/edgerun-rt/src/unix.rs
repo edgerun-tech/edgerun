@@ -7,12 +7,12 @@
 
 use std::future::Future;
 use std::io;
-use std::os::unix::net::UnixListener as StdUnixListener;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::net::UnixListener as StdUnixListener;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 use crate::io_traits::{AsyncRead, AsyncWrite};
@@ -48,8 +48,12 @@ impl UnixStream {
     pub fn split(self: &Arc<Self>) -> (UnixReadHalf, UnixWriteHalf) {
         self.refs.fetch_add(2, Ordering::Relaxed);
         (
-            UnixReadHalf { inner: Arc::clone(self) },
-            UnixWriteHalf { inner: Arc::clone(self) },
+            UnixReadHalf {
+                inner: Arc::clone(self),
+            },
+            UnixWriteHalf {
+                inner: Arc::clone(self),
+            },
         )
     }
 
@@ -70,8 +74,7 @@ impl UnixStream {
     pub fn local_addr(&self) -> io::Result<std::os::unix::net::SocketAddr> {
         unsafe {
             let mut addr: libc::sockaddr_storage = std::mem::zeroed();
-            let mut addrlen: libc::socklen_t =
-                std::mem::size_of::<libc::sockaddr_storage>() as _;
+            let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_storage>() as _;
             let res = libc::getsockname(
                 self.fd,
                 &mut addr as *mut _ as *mut libc::sockaddr,
@@ -81,7 +84,10 @@ impl UnixStream {
                 return Err(io::Error::last_os_error());
             }
             if addr.ss_family as libc::c_int != libc::AF_UNIX {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a unix socket"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a unix socket",
+                ));
             }
             let unix_addr = &addr as *const _ as *const libc::sockaddr_un;
             let path = std::ffi::CStr::from_ptr((*unix_addr).sun_path.as_ptr())
@@ -95,8 +101,7 @@ impl UnixStream {
     pub fn peer_addr(&self) -> io::Result<std::os::unix::net::SocketAddr> {
         unsafe {
             let mut addr: libc::sockaddr_storage = std::mem::zeroed();
-            let mut addrlen: libc::socklen_t =
-                std::mem::size_of::<libc::sockaddr_storage>() as _;
+            let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_storage>() as _;
             let res = libc::getpeername(
                 self.fd,
                 &mut addr as *mut _ as *mut libc::sockaddr,
@@ -106,7 +111,10 @@ impl UnixStream {
                 return Err(io::Error::last_os_error());
             }
             if addr.ss_family as libc::c_int != libc::AF_UNIX {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a unix socket"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a unix socket",
+                ));
             }
             let unix_addr = &addr as *const _ as *const libc::sockaddr_un;
             let path = std::ffi::CStr::from_ptr((*unix_addr).sun_path.as_ptr())
@@ -418,11 +426,7 @@ impl Future for UnixConnectFuture {
         match std::mem::replace(&mut this.state, ConnectState::Done) {
             ConnectState::Init { path } => {
                 let fd = unsafe {
-                    libc::socket(
-                        libc::AF_UNIX,
-                        libc::SOCK_STREAM | libc::SOCK_CLOEXEC,
-                        0,
-                    )
+                    libc::socket(libc::AF_UNIX, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0)
                 };
                 if fd < 0 {
                     return Poll::Ready(Err(io::Error::last_os_error()));
@@ -434,9 +438,7 @@ impl Future for UnixConnectFuture {
                     unsafe { libc::close(fd) };
                     return Poll::Ready(Err(io::Error::last_os_error()));
                 }
-                if unsafe {
-                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK)
-                } < 0 {
+                if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
                     unsafe { libc::close(fd) };
                     return Poll::Ready(Err(io::Error::last_os_error()));
                 }
@@ -459,16 +461,9 @@ impl Future for UnixConnectFuture {
                         path_bytes.len(),
                     );
                 }
-                let addrlen =
-                    std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
+                let addrlen = std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
 
-                let res = unsafe {
-                    libc::connect(
-                        fd,
-                        &addr as *const _ as *const _,
-                        addrlen,
-                    )
-                };
+                let res = unsafe { libc::connect(fd, &addr as *const _ as *const _, addrlen) };
                 if res == 0 {
                     // Connected immediately (e.g., socket already exists and accepts).
                     if let Some(rt) = try_current_rt() {
@@ -497,8 +492,7 @@ impl Future for UnixConnectFuture {
             ConnectState::Connecting { fd, path: _ } => {
                 // Check SO_ERROR to see if connect succeeded or failed.
                 let mut error: libc::c_int = 0;
-                let mut len =
-                    std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+                let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
                 let res = unsafe {
                     libc::getsockopt(
                         fd,
@@ -522,11 +516,9 @@ impl Future for UnixConnectFuture {
                 Poll::Ready(Err(io::Error::from_raw_os_error(error)))
             }
 
-            ConnectState::Done => {
-                Poll::Ready(Err(io::Error::other(
-                    "connect future polled after completion",
-                )))
-            }
+            ConnectState::Done => Poll::Ready(Err(io::Error::other(
+                "connect future polled after completion",
+            ))),
         }
     }
 }
@@ -548,7 +540,10 @@ impl UnixListener {
         let listener = StdUnixListener::bind(path)?;
         listener.set_nonblocking(true)?;
         let fd = listener.as_raw_fd();
-        Ok(Self { inner: listener, fd })
+        Ok(Self {
+            inner: listener,
+            fd,
+        })
     }
 
     pub fn accept(&self) -> UnixAcceptFuture<'_> {

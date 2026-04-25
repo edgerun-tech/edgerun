@@ -5,9 +5,15 @@ use std::net::{Ipv6Addr, SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 
 use super::duid::Duid;
-use super::message::{Dhcpv6Message, Dhcpv6MsgType, TransactionId, DHCPV6_CLIENT_PORT, DHCPV6_SERVER_PORT, ALL_DHCP_RELAY_AND_SERVERS};
-use super::options::{Dhcpv6Option, StatusCode, OPT_RAPID_COMMIT, OPT_IA_NA, OPT_IAADDR, OPT_SERVERID, OPT_DNS_SERVERS, OPT_DOMAIN_LIST};
 use super::lease::Dhcpv6Lease;
+use super::message::{
+    Dhcpv6Message, Dhcpv6MsgType, TransactionId, ALL_DHCP_RELAY_AND_SERVERS, DHCPV6_CLIENT_PORT,
+    DHCPV6_SERVER_PORT,
+};
+use super::options::{
+    Dhcpv6Option, StatusCode, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_IAADDR, OPT_IA_NA,
+    OPT_RAPID_COMMIT, OPT_SERVERID,
+};
 
 /// DHCPv6 client state machine.
 pub struct Dhcpv6Client {
@@ -68,7 +74,12 @@ impl Dhcpv6Client {
         // Step 2: Wait for ADVERTISE
         let advertise = match self.wait_for(&[Dhcpv6MsgType::Advertise], xid, &deadline) {
             Some(msg) => msg,
-            None => return Err(io::Error::new(io::ErrorKind::TimedOut, "No Advertise received")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "No Advertise received",
+                ))
+            }
         };
 
         // Extract server DUID
@@ -101,13 +112,15 @@ impl Dhcpv6Client {
 
     /// Renew the current lease.
     pub fn renew(&mut self) -> Result<Dhcpv6Lease, io::Error> {
-        let lease = self.lease.as_ref().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "No active lease")
-        })?;
+        let lease = self
+            .lease
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No active lease"))?;
 
-        let server_duid = self.server_duid.as_ref().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "No server DUID")
-        })?;
+        let server_duid = self
+            .server_duid
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No server DUID"))?;
 
         let renew = Dhcpv6Message::renew(self.iaid, &self.client_duid, server_duid);
         let xid = renew.transaction_id;
@@ -120,18 +133,22 @@ impl Dhcpv6Client {
         };
 
         let (_addr, _duid) = self.process_reply(&reply)?;
-        self.lease.clone().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No lease after renew"))
+        self.lease
+            .clone()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No lease after renew"))
     }
 
     /// Release the current lease.
     pub fn release(&mut self) -> Result<(), io::Error> {
-        let lease = self.lease.as_ref().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "No active lease")
-        })?;
+        let lease = self
+            .lease
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No active lease"))?;
 
-        let server_duid = self.server_duid.as_ref().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "No server DUID")
-        })?;
+        let server_duid = self
+            .server_duid
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No server DUID"))?;
 
         let release = Dhcpv6Message::release(self.iaid, &self.client_duid, server_duid);
         self.send_multicast(&release)?;
@@ -149,7 +166,12 @@ impl Dhcpv6Client {
         let deadline = Instant::now() + self.timeout;
         let reply = match self.wait_for(&[Dhcpv6MsgType::Reply], xid, &deadline) {
             Some(msg) => msg,
-            None => return Err(io::Error::new(io::ErrorKind::TimedOut, "No Reply to Information-Request")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "No Reply to Information-Request",
+                ))
+            }
         };
 
         self.extract_options(&reply);
@@ -170,7 +192,12 @@ impl Dhcpv6Client {
         Ok(())
     }
 
-    fn wait_for(&self, expected_types: &[Dhcpv6MsgType], xid: TransactionId, deadline: &Instant) -> Option<Dhcpv6Message> {
+    fn wait_for(
+        &self,
+        expected_types: &[Dhcpv6MsgType],
+        xid: TransactionId,
+        deadline: &Instant,
+    ) -> Option<Dhcpv6Message> {
         while Instant::now() < *deadline {
             let mut buf = [0u8; 1500];
             if let Ok((n, _)) = self.socket.recv_from(&mut buf) {
@@ -187,7 +214,9 @@ impl Dhcpv6Client {
     fn process_reply(&mut self, reply: &Dhcpv6Message) -> Result<(Ipv6Addr, Vec<u8>), io::Error> {
         // Extract IAADDR from reply
         for ia_na in reply.ia_na_options() {
-            let subs = ia_na.sub_options().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            let subs = ia_na
+                .sub_options()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
             for sub in subs {
                 if sub.code == OPT_IAADDR {
                     if let Some(addr) = sub.address() {
@@ -213,12 +242,19 @@ impl Dhcpv6Client {
         for opt in &reply.options {
             if let Some((status, msg)) = opt.status() {
                 if status != StatusCode::Success {
-                    return Err(io::Error::other(format!("DHCPv6 error: {} ({})", status.as_str(), msg)));
+                    return Err(io::Error::other(format!(
+                        "DHCPv6 error: {} ({})",
+                        status.as_str(),
+                        msg
+                    )));
                 }
             }
         }
 
-        Err(io::Error::new(io::ErrorKind::InvalidData, "No address in Reply"))
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "No address in Reply",
+        ))
     }
 
     fn extract_options(&mut self, msg: &Dhcpv6Message) {

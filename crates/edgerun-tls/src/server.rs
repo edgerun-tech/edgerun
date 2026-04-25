@@ -11,9 +11,6 @@ pub use client_hello::ClientHello;
 
 // Re-export public builder functions for consumers
 pub use message_builder::{
-    build_server_hello,
-    build_encrypted_extensions,
-    build_certificate_message,
-    build_certificate_verify,
-    build_finished_message,
+    build_certificate_message, build_certificate_verify, build_encrypted_extensions,
+    build_finished_message, build_server_hello,
 };

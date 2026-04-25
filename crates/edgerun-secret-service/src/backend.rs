@@ -7,11 +7,10 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use edgerun_storage::{BlobStore, BlobKeySource, BlobStoreConfig, FileIndex};
+use edgerun_storage::{BlobKeySource, BlobStore, BlobStoreConfig, FileIndex};
 
 use edgerun_proto::edgerun::v0::stream::{
-    SecretPutPayload, SecretDeletePayload,
-    CollectionCreatedPayload, CollectionDeletedPayload,
+    CollectionCreatedPayload, CollectionDeletedPayload, SecretDeletePayload, SecretPutPayload,
 };
 use prost::Message;
 
@@ -52,25 +51,45 @@ impl CredentialMeta {
         for (k, v) in &self.attributes {
             attrs.insert(k.clone(), edgerun_json::JsonValue::String(v.clone()));
         }
-        obj.insert("label".into(), edgerun_json::JsonValue::String(self.label.clone()));
+        obj.insert(
+            "label".into(),
+            edgerun_json::JsonValue::String(self.label.clone()),
+        );
         obj.insert("attributes".into(), edgerun_json::JsonValue::Object(attrs));
-        obj.insert("created_us".into(), edgerun_json::JsonValue::from(self.created_us));
+        obj.insert(
+            "created_us".into(),
+            edgerun_json::JsonValue::from(self.created_us),
+        );
         edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default()
     }
 
     pub fn from_json(s: &str) -> Option<Self> {
         let v: edgerun_json::JsonValue = edgerun_json::from_str(s).ok()?;
-        let label = v.get("label").and_then(edgerun_json::JsonValue::as_str).unwrap_or("").to_string();
-        let created_us = v.get("created_us").and_then(edgerun_json::JsonValue::as_u64).unwrap_or(0);
+        let label = v
+            .get("label")
+            .and_then(edgerun_json::JsonValue::as_str)
+            .unwrap_or("")
+            .to_string();
+        let created_us = v
+            .get("created_us")
+            .and_then(edgerun_json::JsonValue::as_u64)
+            .unwrap_or(0);
         let mut attributes = HashMap::new();
-        if let Some(attrs) = v.get("attributes").and_then(edgerun_json::JsonValue::as_object) {
+        if let Some(attrs) = v
+            .get("attributes")
+            .and_then(edgerun_json::JsonValue::as_object)
+        {
             for (k, val) in attrs.iter() {
                 if let Some(vs) = val.as_str() {
                     attributes.insert(k.clone(), vs.to_string());
                 }
             }
         }
-        Some(Self { label, attributes, created_us })
+        Some(Self {
+            label,
+            attributes,
+            created_us,
+        })
     }
 }
 
@@ -94,14 +113,24 @@ impl Backend {
     pub fn new(data_root: PathBuf, record_event: SecretEventRecorder) -> io::Result<Self> {
         let pk = derive_key_from_path(&data_root);
 
-        let blob_cfg = BlobStoreConfig { blob_dir: data_root.join("blobs") };
+        let blob_cfg = BlobStoreConfig {
+            blob_dir: data_root.join("blobs"),
+        };
         let _ = std::fs::create_dir_all(&blob_cfg.blob_dir);
-        let blobs = BlobStore::open(&blob_cfg, BlobKeySource::Software { private_key_bytes: pk.to_vec() })
-            .map_err(|e| io::Error::other(e.to_string()))?;
-        let index = FileIndex::open(&data_root)
-            .map_err(|e| io::Error::other(e.to_string()))?;
+        let blobs = BlobStore::open(
+            &blob_cfg,
+            BlobKeySource::Software {
+                private_key_bytes: pk.to_vec(),
+            },
+        )
+        .map_err(|e| io::Error::other(e.to_string()))?;
+        let index = FileIndex::open(&data_root).map_err(|e| io::Error::other(e.to_string()))?;
 
-        Ok(Self { blobs, index, record_event })
+        Ok(Self {
+            blobs,
+            index,
+            record_event,
+        })
     }
 
     /// Creates a backend with a no-op event recorder (for tests).
@@ -111,7 +140,9 @@ impl Backend {
 
     /// Map a collection D-Bus path to a credential namespace.
     pub fn coll_to_ns(coll_path: &str) -> String {
-        coll_path.trim_start_matches("/org/freedesktop/secrets/collections/").into()
+        coll_path
+            .trim_start_matches("/org/freedesktop/secrets/collections/")
+            .into()
     }
 
     /// Map a collection path + item name to an item D-Bus path.
@@ -122,7 +153,10 @@ impl Backend {
     /// Compute a stable item key from label + attributes (SHA-256 based).
     pub fn item_key(label: &str, attrs: &[(String, String)]) -> String {
         let mut obj = edgerun_json::Map::new();
-        obj.insert("l".into(), edgerun_json::JsonValue::String(label.to_string()));
+        obj.insert(
+            "l".into(),
+            edgerun_json::JsonValue::String(label.to_string()),
+        );
         let mut arr = Vec::new();
         for (k, v) in attrs {
             let mut pair = edgerun_json::Map::new();
@@ -131,13 +165,21 @@ impl Backend {
             arr.push(edgerun_json::JsonValue::Object(pair));
         }
         obj.insert("a".into(), edgerun_json::JsonValue::Array(arr));
-        let json = edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default();
+        let json =
+            edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default();
         edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(json.as_bytes()))
     }
 
     // -- CRUD --
 
-    pub fn put(&mut self, coll: &str, key: &str, secret: &[u8], label: &str, attrs: &[(String, String)]) -> io::Result<()> {
+    pub fn put(
+        &mut self,
+        coll: &str,
+        key: &str,
+        secret: &[u8],
+        label: &str,
+        attrs: &[(String, String)],
+    ) -> io::Result<()> {
         let ns = Self::coll_to_ns(coll);
         let meta = CredentialMeta {
             label: label.into(),
@@ -147,11 +189,14 @@ impl Backend {
         let description = meta.to_json();
 
         // Store encrypted blob
-        let blob_id = self.blobs.store(secret, &[])
+        let blob_id = self
+            .blobs
+            .store(secret, &[])
             .map_err(|e| io::Error::other(e.to_string()))?;
 
         // Index with metadata in description
-        self.index.put_credential(&ns, key, &blob_id, Some(&description))
+        self.index
+            .put_credential(&ns, key, &blob_id, Some(&description))
             .map_err(|e| io::Error::other(e.to_string()))?;
 
         // Record event in node's main stream
@@ -171,18 +216,30 @@ impl Backend {
     pub fn get(&self, coll: &str, key: &str) -> io::Result<Option<(Vec<u8>, CredentialMeta)>> {
         let ns = Self::coll_to_ns(coll);
 
-        let rec = self.index.get_credential(&ns, key)
+        let rec = self
+            .index
+            .get_credential(&ns, key)
             .map_err(|e| io::Error::other(e.to_string()))?;
-        let Some(rec) = rec else { return Ok(None); };
+        let Some(rec) = rec else {
+            return Ok(None);
+        };
 
-        let entry = self.blobs.load(&rec.blob_id)
+        let entry = self
+            .blobs
+            .load(&rec.blob_id)
             .map_err(|e| io::Error::other(e.to_string()))?;
-        let Some(entry) = entry else { return Ok(None); };
+        let Some(entry) = entry else {
+            return Ok(None);
+        };
 
-        let secret = self.blobs.decrypt(&entry.nonce, &entry.ciphertext)
+        let secret = self
+            .blobs
+            .decrypt(&entry.nonce, &entry.ciphertext)
             .map_err(|e| io::Error::other(e.to_string()))?;
 
-        let meta = rec.description.as_deref()
+        let meta = rec
+            .description
+            .as_deref()
             .and_then(CredentialMeta::from_json)
             .unwrap_or_else(|| CredentialMeta {
                 label: key.to_string(),
@@ -198,9 +255,12 @@ impl Backend {
 
         // Get current state for the event (before index mutation)
         let (label, existed) = {
-            let rec = self.index.get_credential(&ns, key)
+            let rec = self
+                .index
+                .get_credential(&ns, key)
                 .map_err(|e| io::Error::other(e.to_string()))?;
-            let label = rec.as_ref()
+            let label = rec
+                .as_ref()
                 .and_then(|r| r.description.as_deref())
                 .and_then(CredentialMeta::from_json)
                 .map(|m| m.label)
@@ -221,7 +281,9 @@ impl Backend {
         }
 
         // Then update the mutable index (rebuildable from events)
-        let removed = self.index.delete_credential(&ns, key)
+        let removed = self
+            .index
+            .delete_credential(&ns, key)
             .map_err(|e| io::Error::other(e.to_string()))?;
 
         Ok(removed)
@@ -229,40 +291,58 @@ impl Backend {
 
     pub fn list(&self, coll: &str) -> io::Result<Vec<(String, CredentialMeta)>> {
         let ns = Self::coll_to_ns(coll);
-        let creds = self.index.list_credentials(&ns)
+        let creds = self
+            .index
+            .list_credentials(&ns)
             .map_err(|e| io::Error::other(e.to_string()))?;
 
-        Ok(creds.into_iter().map(|(key, desc, _ts)| {
-            let meta = desc.as_deref()
-                .and_then(CredentialMeta::from_json)
-                .unwrap_or_else(|| CredentialMeta {
-                    label: key.clone(),
-                    attributes: HashMap::new(),
-                    created_us: 0,
-                });
-            (key, meta)
-        }).collect())
+        Ok(creds
+            .into_iter()
+            .map(|(key, desc, _ts)| {
+                let meta = desc
+                    .as_deref()
+                    .and_then(CredentialMeta::from_json)
+                    .unwrap_or_else(|| CredentialMeta {
+                        label: key.clone(),
+                        attributes: HashMap::new(),
+                        created_us: 0,
+                    });
+                (key, meta)
+            })
+            .collect())
     }
 
-    pub fn search(&self, coll: &str, attrs: &[(String, String)]) -> io::Result<Vec<(String, CredentialMeta)>> {
+    pub fn search(
+        &self,
+        coll: &str,
+        attrs: &[(String, String)],
+    ) -> io::Result<Vec<(String, CredentialMeta)>> {
         let items = self.list(coll)?;
-        if attrs.is_empty() { return Ok(items); }
-        Ok(items.into_iter().filter(|(_, meta)| {
-            attrs.iter().all(|(k, v)| meta.attributes.get(k) == Some(v))
-        }).collect())
+        if attrs.is_empty() {
+            return Ok(items);
+        }
+        Ok(items
+            .into_iter()
+            .filter(|(_, meta)| attrs.iter().all(|(k, v)| meta.attributes.get(k) == Some(v)))
+            .collect())
     }
 
     pub fn list_collections(&self) -> io::Result<Vec<String>> {
-        let namespaces = self.index.list_credential_namespaces()
+        let namespaces = self
+            .index
+            .list_credential_namespaces()
             .map_err(|e| io::Error::other(e.to_string()))?;
-        Ok(namespaces.into_iter()
+        Ok(namespaces
+            .into_iter()
             .map(|ns| format!("/org/freedesktop/secrets/collections/{}", ns))
             .collect())
     }
 
     pub fn collection_exists(&self, coll: &str) -> bool {
         let ns = Self::coll_to_ns(coll);
-        self.index.list_credential_namespaces().is_ok_and(|ns_list| ns_list.contains(&ns))
+        self.index
+            .list_credential_namespaces()
+            .is_ok_and(|ns_list| ns_list.contains(&ns))
     }
 
     /// Rebuilds the credential index from secret operation events.
@@ -276,12 +356,19 @@ impl Backend {
     /// 2. Replay all events in order
     /// 3. For each `secret_put` → restore index entry
     /// 4. For each `secret_delete` → remove index entry
-    pub fn rebuild_index(&mut self, events: impl Iterator<Item = (String, Vec<u8>)>) -> io::Result<usize> {
+    pub fn rebuild_index(
+        &mut self,
+        events: impl Iterator<Item = (String, Vec<u8>)>,
+    ) -> io::Result<usize> {
         // Clear current credential index entries
-        let namespaces = self.index.list_credential_namespaces()
+        let namespaces = self
+            .index
+            .list_credential_namespaces()
             .map_err(|e| io::Error::other(e.to_string()))?;
         for ns in &namespaces {
-            let items = self.index.list_credentials(ns)
+            let items = self
+                .index
+                .list_credentials(ns)
                 .map_err(|e| io::Error::other(e.to_string()))?;
             for (key, _, _) in items {
                 let _ = self.index.delete_credential(ns, &key);
@@ -293,7 +380,9 @@ impl Backend {
             match event_type.as_str() {
                 "secret_put" => {
                     if let Ok(payload) = SecretPutPayload::decode(payload.as_slice()) {
-                        let attrs: Vec<(String, String)> = payload.attributes.iter()
+                        let attrs: Vec<(String, String)> = payload
+                            .attributes
+                            .iter()
                             .map(|(k, v)| (k.clone(), v.clone()))
                             .collect();
                         let meta = CredentialMeta {
@@ -312,7 +401,8 @@ impl Backend {
                 }
                 "secret_delete" => {
                     if let Ok(payload) = SecretDeletePayload::decode(payload.as_slice()) {
-                        self.index.delete_credential(&payload.namespace, &payload.key)?;
+                        self.index
+                            .delete_credential(&payload.namespace, &payload.key)?;
                         applied += 1;
                     }
                 }
@@ -323,7 +413,8 @@ impl Backend {
                     if let Ok(payload) = CollectionDeletedPayload::decode(payload.as_slice()) {
                         let items = self.index.list_credentials(&payload.collection_name)?;
                         for (key, _, _) in items {
-                            self.index.delete_credential(&payload.collection_name, &key)?;
+                            self.index
+                                .delete_credential(&payload.collection_name, &key)?;
                         }
                         applied += 1;
                     }
@@ -342,17 +433,23 @@ impl Backend {
             collection_name: collection_name.into(),
             label: label.into(),
         };
-        (self.record_event)("collection_created", prost::Message::encode_to_vec(&payload))
+        (self.record_event)(
+            "collection_created",
+            prost::Message::encode_to_vec(&payload),
+        )
     }
 
     /// Deletes a collection (records the event and removes items from index).
     pub fn delete_collection(&mut self, collection_name: &str) -> io::Result<u32> {
-        let items = self.index.list_credentials(collection_name)
+        let items = self
+            .index
+            .list_credentials(collection_name)
             .map_err(|e| io::Error::other(e.to_string()))?;
         let count = items.len() as u32;
 
         for (key, _, _) in &items {
-            self.index.delete_credential(collection_name, key)
+            self.index
+                .delete_credential(collection_name, key)
                 .map_err(|e| io::Error::other(e.to_string()))?;
         }
 
@@ -361,7 +458,10 @@ impl Backend {
             collection_name: collection_name.into(),
             items_removed: count,
         };
-        (self.record_event)("collection_deleted", prost::Message::encode_to_vec(&payload))?;
+        (self.record_event)(
+            "collection_deleted",
+            prost::Message::encode_to_vec(&payload),
+        )?;
 
         Ok(count)
     }
@@ -402,7 +502,10 @@ mod tests {
         let events: Arc<Mutex<Vec<(String, Vec<u8>)>>> = Arc::new(Mutex::new(Vec::new()));
         let captured = events.clone();
         let recorder: SecretEventRecorder = Box::new(move |event_type, payload| {
-            captured.lock().unwrap().push((event_type.to_string(), payload));
+            captured
+                .lock()
+                .unwrap()
+                .push((event_type.to_string(), payload));
             Ok(())
         });
         let be = Backend::new(data_root, recorder).unwrap();
@@ -413,7 +516,11 @@ mod tests {
     fn meta_roundtrip() {
         let mut attrs = HashMap::new();
         attrs.insert("xdg:schema".into(), "org.gnome.keyring.Note".into());
-        let meta = CredentialMeta { label: "My Note".into(), attributes: attrs, created_us: 12345 };
+        let meta = CredentialMeta {
+            label: "My Note".into(),
+            attributes: attrs,
+            created_us: 12345,
+        };
         let json = meta.to_json();
         let back = CredentialMeta::from_json(&json).unwrap();
         assert_eq!(back.label, "My Note");
@@ -426,7 +533,8 @@ mod tests {
         let root = tmp_root();
         let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
-        be.put(coll, "test-key", b"super-secret", "Test Label", &[]).unwrap();
+        be.put(coll, "test-key", b"super-secret", "Test Label", &[])
+            .unwrap();
         let (secret, meta) = be.get(coll, "test-key").unwrap().unwrap();
         assert_eq!(secret, b"super-secret");
         assert_eq!(meta.label, "Test Label");
@@ -437,7 +545,8 @@ mod tests {
         let root = tmp_root();
         let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
-        be.put(coll, "del-key", b"secret", "Del Label", &[]).unwrap();
+        be.put(coll, "del-key", b"secret", "Del Label", &[])
+            .unwrap();
         assert!(be.delete(coll, "del-key").unwrap());
         assert!(!be.delete(coll, "del-key").unwrap());
         assert!(be.get(coll, "del-key").unwrap().is_none());
@@ -459,17 +568,39 @@ mod tests {
         let root = tmp_root();
         let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
-        be.put(coll, "k1", b"v1", "GitHub", &[("server".into(), "github.com".into())]).unwrap();
-        be.put(coll, "k2", b"v2", "GitLab", &[("server".into(), "gitlab.com".into())]).unwrap();
-        let results = be.search(coll, &[("server".into(), "github.com".into())]).unwrap();
+        be.put(
+            coll,
+            "k1",
+            b"v1",
+            "GitHub",
+            &[("server".into(), "github.com".into())],
+        )
+        .unwrap();
+        be.put(
+            coll,
+            "k2",
+            b"v2",
+            "GitLab",
+            &[("server".into(), "gitlab.com".into())],
+        )
+        .unwrap();
+        let results = be
+            .search(coll, &[("server".into(), "github.com".into())])
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].1.label, "GitHub");
     }
 
     #[test]
     fn coll_to_ns() {
-        assert_eq!(Backend::coll_to_ns("/org/freedesktop/secrets/collections/default"), "default");
-        assert_eq!(Backend::coll_to_ns("/org/freedesktop/secrets/collections/login"), "login");
+        assert_eq!(
+            Backend::coll_to_ns("/org/freedesktop/secrets/collections/default"),
+            "default"
+        );
+        assert_eq!(
+            Backend::coll_to_ns("/org/freedesktop/secrets/collections/login"),
+            "login"
+        );
     }
 
     #[test]
@@ -494,7 +625,14 @@ mod tests {
         let coll = "/org/freedesktop/secrets/collections/default";
 
         // Put two items
-        be.put(coll, "k1", b"secret1", "Key 1", &[("server".into(), "github.com".into())]).unwrap();
+        be.put(
+            coll,
+            "k1",
+            b"secret1",
+            "Key 1",
+            &[("server".into(), "github.com".into())],
+        )
+        .unwrap();
         be.put(coll, "k2", b"secret2", "Key 2", &[]).unwrap();
         // Delete one
         be.delete(coll, "k1").unwrap();
@@ -504,7 +642,9 @@ mod tests {
         assert!(be.get(coll, "k2").unwrap().is_some());
 
         // Rebuild from captured events
-        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
+        let applied = be
+            .rebuild_index(events.lock().unwrap().clone().into_iter())
+            .unwrap();
         assert_eq!(applied, 3); // 2 puts + 1 delete
 
         // State should be identical after rebuild
@@ -526,7 +666,9 @@ mod tests {
         be.put(coll_default, "d2", b"v3", "D2", &[]).unwrap();
 
         // Rebuild
-        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
+        let applied = be
+            .rebuild_index(events.lock().unwrap().clone().into_iter())
+            .unwrap();
         assert_eq!(applied, 3);
 
         // All items still retrievable
@@ -560,14 +702,34 @@ mod tests {
         let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
-        be.put(coll, "gh", b"tok1", "GitHub", &[("server".into(), "github.com".into()), ("type".into(), "token".into())]).unwrap();
-        be.put(coll, "gl", b"tok2", "GitLab", &[("server".into(), "gitlab.com".into())]).unwrap();
+        be.put(
+            coll,
+            "gh",
+            b"tok1",
+            "GitHub",
+            &[
+                ("server".into(), "github.com".into()),
+                ("type".into(), "token".into()),
+            ],
+        )
+        .unwrap();
+        be.put(
+            coll,
+            "gl",
+            b"tok2",
+            "GitLab",
+            &[("server".into(), "gitlab.com".into())],
+        )
+        .unwrap();
 
         // Rebuild
-        be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
+        be.rebuild_index(events.lock().unwrap().clone().into_iter())
+            .unwrap();
 
         // Search still works
-        let results = be.search(coll, &[("server".into(), "github.com".into())]).unwrap();
+        let results = be
+            .search(coll, &[("server".into(), "github.com".into())])
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].1.label, "GitHub");
 
@@ -588,7 +750,9 @@ mod tests {
         be.delete(coll, "k3").unwrap();
 
         // Rebuild
-        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
+        let applied = be
+            .rebuild_index(events.lock().unwrap().clone().into_iter())
+            .unwrap();
         assert_eq!(applied, 5); // 3 puts + 2 deletes
 
         // Only k2 should remain
@@ -605,7 +769,8 @@ mod tests {
         let coll_wifi = "/org/freedesktop/secrets/collections/wifi";
 
         be.put(coll_default, "d1", b"v1", "D1", &[]).unwrap();
-        be.put(coll_wifi, "w1", b"wifipass", "Home WiFi", &[]).unwrap();
+        be.put(coll_wifi, "w1", b"wifipass", "Home WiFi", &[])
+            .unwrap();
 
         let collections = be.list_collections().unwrap();
         assert_eq!(collections.len(), 2);
@@ -613,7 +778,8 @@ mod tests {
         assert!(collections.contains(&"/org/freedesktop/secrets/collections/wifi".into()));
 
         // Rebuild and verify collections still listed
-        be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
+        be.rebuild_index(events.lock().unwrap().clone().into_iter())
+            .unwrap();
         let collections_after = be.list_collections().unwrap();
         assert_eq!(collections_after.len(), 2);
     }
@@ -627,7 +793,8 @@ mod tests {
         be.put(coll, "k1", b"v1", "K1", &[]).unwrap();
         assert!(be.collection_exists(coll));
 
-        be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
+        be.rebuild_index(events.lock().unwrap().clone().into_iter())
+            .unwrap();
         assert!(be.collection_exists(coll));
     }
 
@@ -684,8 +851,10 @@ mod tests {
         let (mut be, events) = backend_with_capture(root.clone());
         let coll = "/org/freedesktop/secrets/collections/default";
 
-        be.put(coll, "api-key", b"old-secret", "API Key", &[]).unwrap();
-        be.put(coll, "api-key", b"new-secret", "API Key", &[]).unwrap();
+        be.put(coll, "api-key", b"old-secret", "API Key", &[])
+            .unwrap();
+        be.put(coll, "api-key", b"new-secret", "API Key", &[])
+            .unwrap();
 
         let (secret, _) = be.get(coll, "api-key").unwrap().unwrap();
         assert_eq!(secret, b"new-secret");
@@ -705,10 +874,21 @@ mod tests {
         let root = tmp_root();
         let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
-        be.put(coll, "k1", b"v1", "K1", &[("server".into(), "github.com".into())]).unwrap();
-        let results = be.search(coll, &[("server".into(), "bitbucket.org".into())]).unwrap();
+        be.put(
+            coll,
+            "k1",
+            b"v1",
+            "K1",
+            &[("server".into(), "github.com".into())],
+        )
+        .unwrap();
+        let results = be
+            .search(coll, &[("server".into(), "bitbucket.org".into())])
+            .unwrap();
         assert!(results.is_empty());
-        let results = be.search(coll, &[("nonexistent".into(), "value".into())]).unwrap();
+        let results = be
+            .search(coll, &[("nonexistent".into(), "value".into())])
+            .unwrap();
         assert!(results.is_empty());
     }
 
@@ -717,10 +897,48 @@ mod tests {
         let root = tmp_root();
         let mut be = Backend::new_noop(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
-        be.put(coll, "k1", b"v1", "GitHub", &[("server".into(), "github.com".into()), ("type".into(), "password".into())]).unwrap();
-        be.put(coll, "k2", b"v2", "GitHub API", &[("server".into(), "github.com".into()), ("type".into(), "token".into())]).unwrap();
-        be.put(coll, "k3", b"v3", "GitLab", &[("server".into(), "gitlab.com".into()), ("type".into(), "token".into())]).unwrap();
-        let results = be.search(coll, &[("server".into(), "github.com".into()), ("type".into(), "password".into())]).unwrap();
+        be.put(
+            coll,
+            "k1",
+            b"v1",
+            "GitHub",
+            &[
+                ("server".into(), "github.com".into()),
+                ("type".into(), "password".into()),
+            ],
+        )
+        .unwrap();
+        be.put(
+            coll,
+            "k2",
+            b"v2",
+            "GitHub API",
+            &[
+                ("server".into(), "github.com".into()),
+                ("type".into(), "token".into()),
+            ],
+        )
+        .unwrap();
+        be.put(
+            coll,
+            "k3",
+            b"v3",
+            "GitLab",
+            &[
+                ("server".into(), "gitlab.com".into()),
+                ("type".into(), "token".into()),
+            ],
+        )
+        .unwrap();
+        let results = be
+            .search(
+                coll,
+                &[
+                    ("server".into(), "github.com".into()),
+                    ("type".into(), "password".into()),
+                ],
+            )
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].1.label, "GitHub");
     }
@@ -729,14 +947,20 @@ mod tests {
     fn backend_get_nonexistent_collection() {
         let root = tmp_root();
         let be = Backend::new_noop(root).unwrap();
-        assert!(be.get("/org/freedesktop/secrets/collections/nonexistent", "any").unwrap().is_none());
+        assert!(be
+            .get("/org/freedesktop/secrets/collections/nonexistent", "any")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn backend_list_nonexistent_collection() {
         let root = tmp_root();
         let be = Backend::new_noop(root).unwrap();
-        assert!(be.list("/org/freedesktop/secrets/collections/nonexistent").unwrap().is_empty());
+        assert!(be
+            .list("/org/freedesktop/secrets/collections/nonexistent")
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -747,7 +971,9 @@ mod tests {
         be.put(coll, "k1", b"first", "First", &[]).unwrap();
         be.delete(coll, "k1").unwrap();
         be.put(coll, "k1", b"second", "Second", &[]).unwrap();
-        let applied = be.rebuild_index(events.lock().unwrap().clone().into_iter()).unwrap();
+        let applied = be
+            .rebuild_index(events.lock().unwrap().clone().into_iter())
+            .unwrap();
         assert_eq!(applied, 3);
         let (secret, meta) = be.get(coll, "k1").unwrap().unwrap();
         assert_eq!(secret, b"second");
@@ -784,7 +1010,9 @@ mod tests {
         assert_ne!(k1, k3);
         let k4 = Backend::item_key("Unicode: 🔐", &[]);
         assert_eq!(k4.len(), 64);
-        let attrs: Vec<(String, String)> = (0..100).map(|i| (format!("k{}", i), format!("v{}", i))).collect();
+        let attrs: Vec<(String, String)> = (0..100)
+            .map(|i| (format!("k{}", i), format!("v{}", i)))
+            .collect();
         let k5 = Backend::item_key("many-attrs", &attrs);
         assert_eq!(k5.len(), 64);
     }

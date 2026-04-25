@@ -11,8 +11,8 @@
 //! 4. Peer allowlist check (if configured)
 //! 5. Only then: deeper signature, decryption, and authority work
 
-use std::collections::VecDeque;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::time::Instant;
 
 // ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ use std::time::Instant;
 pub struct TokenBucket {
     tokens: f64,
     max_tokens: f64,
-    refill_rate: f64,   // tokens per second
+    refill_rate: f64, // tokens per second
     last_refill: Instant,
 }
 
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn token_bucket_allows_burst() {
         let mut bucket = TokenBucket::new(5, 1); // burst of 5, 1/sec refill
-        // Should allow 5 in a row
+                                                 // Should allow 5 in a row
         for _ in 0..5 {
             assert!(bucket.try_consume());
         }
@@ -330,7 +330,7 @@ mod tests {
     fn token_bucket_high_refill_rate() {
         // With max_tokens=5, high refill rate refills multiple tokens between consumes
         let mut bucket = TokenBucket::new(5, 1000); // burst 5, 1000/sec
-        // Consume all 5 initial tokens
+                                                    // Consume all 5 initial tokens
         for _ in 0..5 {
             assert!(bucket.try_consume());
         }
@@ -403,7 +403,7 @@ mod tests {
         let mut cache = RecentHashCache::new(2);
         cache.insert(1);
         cache.insert(1); // re-insert same, set dedup but VecDeque still grows
-        // The hash is still in the cache
+                         // The hash is still in the cache
         assert!(cache.contains(1));
         // VecDeque has 2 entries but set has 1
         assert_eq!(cache.set.len(), 1);
@@ -462,12 +462,7 @@ mod tests {
 
     #[test]
     fn peer_allowlist_multiple_peers() {
-        let allowed = vec![
-            vec![1],
-            vec![2],
-            vec![3],
-            vec![4],
-        ];
+        let allowed = vec![vec![1], vec![2], vec![3], vec![4]];
         assert!(is_peer_allowed(&[3], &allowed));
         assert!(!is_peer_allowed(&[5], &allowed));
     }

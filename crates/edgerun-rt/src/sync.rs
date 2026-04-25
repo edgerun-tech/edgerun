@@ -14,9 +14,8 @@ use std::marker::PhantomData;
 use std::ptr::{self, NonNull};
 use std::sync::PoisonError;
 use std::sync::{
-    Condvar as StdCondvar, Mutex as StdMutex, MutexGuard as StdMutexGuard,
-    RwLock as StdRwLock, RwLockReadGuard as StdRwLockReadGuard,
-    RwLockWriteGuard as StdRwLockWriteGuard,
+    Condvar as StdCondvar, Mutex as StdMutex, MutexGuard as StdMutexGuard, RwLock as StdRwLock,
+    RwLockReadGuard as StdRwLockReadGuard, RwLockWriteGuard as StdRwLockWriteGuard,
 };
 use std::time::Duration;
 
@@ -186,7 +185,10 @@ impl<T: ?Sized> RwLock<T> {
     /// Attempts to acquire a read lock non-blocking.
     #[inline]
     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
-        self.inner.try_read().ok().map(|guard| RwLockReadGuard { guard })
+        self.inner
+            .try_read()
+            .ok()
+            .map(|guard| RwLockReadGuard { guard })
     }
 
     /// Acquires a write lock, blocking the current thread until it can be acquired.
@@ -202,7 +204,10 @@ impl<T: ?Sized> RwLock<T> {
     /// Attempts to acquire a write lock non-blocking.
     #[inline]
     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
-        self.inner.try_write().ok().map(|guard| RwLockWriteGuard { guard })
+        self.inner
+            .try_write()
+            .ok()
+            .map(|guard| RwLockWriteGuard { guard })
     }
 
     /// Consumes this `RwLock`, returning the underlying data.
@@ -302,9 +307,7 @@ impl Condvar {
     #[inline]
     pub fn wait<T>(&self, guard: &mut MutexGuard<'_, T>) {
         let old_guard = unsafe { ptr::read(&guard.guard) };
-        let new_guard = self.0.wait(old_guard).unwrap_or_else(|e| {
-            e.into_inner()
-        });
+        let new_guard = self.0.wait(old_guard).unwrap_or_else(|e| e.into_inner());
         unsafe { ptr::write(&mut guard.guard, new_guard) };
     }
 
@@ -314,7 +317,9 @@ impl Condvar {
     #[inline]
     pub fn wait_for<T>(&self, guard: &mut MutexGuard<'_, T>, timeout: Duration) -> bool {
         let old_guard = unsafe { ptr::read(&guard.guard) };
-        let (new_guard, timeout_result) = self.0.wait_timeout(old_guard, timeout)
+        let (new_guard, timeout_result) = self
+            .0
+            .wait_timeout(old_guard, timeout)
             .unwrap_or_else(|e| e.into_inner());
         unsafe { ptr::write(&mut guard.guard, new_guard) };
         !timeout_result.timed_out()

@@ -16,17 +16,17 @@
 //! No `.key` file is ever written.
 
 // Existing modules
+mod assurance;
 mod capabilities;
 mod capacity;
 mod command_dispatch;
-mod assurance;
-mod ingress;
-mod metering;
-mod session;
-mod init;
-mod workload_policy;
 mod hardware;
+mod ingress;
+mod init;
+mod metering;
 mod running_workloads;
+mod session;
+mod workload_policy;
 
 // Extracted modules
 mod cli;

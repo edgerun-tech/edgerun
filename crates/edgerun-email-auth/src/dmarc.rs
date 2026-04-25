@@ -62,13 +62,13 @@ impl DmarcResult {
 /// Parsed DMARC policy record.
 #[derive(Debug, Clone)]
 pub struct DmarcPolicy {
-    pub policy: String,       // p= (none, quarantine, reject)
-    pub sp_policy: String,    // sp= (subdomain policy)
-    pub pct: u8,              // pct= (percentage)
-    pub rua: Vec<String>,     // rua= (aggregate report URIs)
-    pub ruf: Vec<String>,     // ruf= (forensic report URIs)
-    pub adkim: String,        // adkim= (r=relaxed, s=strict)
-    pub aspf: String,         // aspf= (r=relaxed, s=strict)
+    pub policy: String,    // p= (none, quarantine, reject)
+    pub sp_policy: String, // sp= (subdomain policy)
+    pub pct: u8,           // pct= (percentage)
+    pub rua: Vec<String>,  // rua= (aggregate report URIs)
+    pub ruf: Vec<String>,  // ruf= (forensic report URIs)
+    pub adkim: String,     // adkim= (r=relaxed, s=strict)
+    pub aspf: String,      // aspf= (r=relaxed, s=strict)
 }
 
 impl Default for DmarcPolicy {
@@ -137,16 +137,10 @@ fn parse_dmarc_record(record: &str) -> io::Result<DmarcPolicy> {
             "adkim" => policy.adkim = value.to_lowercase(),
             "aspf" => policy.aspf = value.to_lowercase(),
             "rua" => {
-                policy.rua = value
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .collect();
+                policy.rua = value.split(',').map(|s| s.trim().to_string()).collect();
             }
             "ruf" => {
-                policy.ruf = value
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .collect();
+                policy.ruf = value.split(',').map(|s| s.trim().to_string()).collect();
             }
             _ => {}
         }
@@ -246,9 +240,15 @@ mod tests {
 
     #[test]
     fn test_extract_organizational_domain() {
-        assert_eq!(extract_organizational_domain("mail.example.com"), "example.com");
+        assert_eq!(
+            extract_organizational_domain("mail.example.com"),
+            "example.com"
+        );
         assert_eq!(extract_organizational_domain("example.com"), "example.com");
-        assert_eq!(extract_organizational_domain("sub.mail.example.com"), "example.com");
+        assert_eq!(
+            extract_organizational_domain("sub.mail.example.com"),
+            "example.com"
+        );
     }
 
     #[test]

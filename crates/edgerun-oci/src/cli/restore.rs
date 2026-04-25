@@ -11,7 +11,10 @@ use crate::state::{save_state, ContainerState as StateContainerState};
 pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         let root_str = root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?;
         crate::state::set_state_dir(root_str);
     }
@@ -72,11 +75,11 @@ pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
         }
     }
 
-    let id = id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
+    let id =
+        id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
 
-    let image_path = image_path.ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "--image-path is required")
-    })?;
+    let image_path = image_path
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "--image-path is required"))?;
 
     let bundle_path = bundle_path.unwrap_or_else(|| PathBuf::from("/var/lib/edgerun/bundle"));
 

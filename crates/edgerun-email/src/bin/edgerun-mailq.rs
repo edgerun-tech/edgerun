@@ -18,7 +18,7 @@
 use std::path::{Path, PathBuf};
 
 use edgerun_email::smtp::relay::queue::{MailIndex, MailStatus, RecipientStatusType};
-use edgerun_email::smtp::server::{MaildirStore, MailboxStats};
+use edgerun_email::smtp::server::{MailboxStats, MaildirStore};
 
 // ===========================================================================
 // Main
@@ -95,24 +95,31 @@ fn parse_args() -> Result<Command, String> {
             let subcmd = args.get(2).ok_or("mailbox requires a subcommand")?;
             match subcmd.as_str() {
                 "list" => {
-                    let root = PathBuf::from(args.get(3).ok_or("mailbox list requires <maildir-root>")?);
+                    let root =
+                        PathBuf::from(args.get(3).ok_or("mailbox list requires <maildir-root>")?);
                     let user = args.get(4).ok_or("mailbox list requires <user>")?.clone();
                     Ok(Command::MbxList(root, user))
                 }
                 "show" => {
-                    let root = PathBuf::from(args.get(3).ok_or("mailbox show requires <maildir-root>")?);
+                    let root =
+                        PathBuf::from(args.get(3).ok_or("mailbox show requires <maildir-root>")?);
                     let user = args.get(4).ok_or("mailbox show requires <user>")?.clone();
                     Ok(Command::MbxShow(root, user))
                 }
                 "read" => {
-                    let root = PathBuf::from(args.get(3).ok_or("mailbox read requires <maildir-root>")?);
+                    let root =
+                        PathBuf::from(args.get(3).ok_or("mailbox read requires <maildir-root>")?);
                     let user = args.get(4).ok_or("mailbox read requires <user>")?.clone();
                     let path = PathBuf::from(args.get(5).ok_or("mailbox read requires <path>")?);
                     Ok(Command::MbxRead(root, user, path))
                 }
                 "add-user" => {
-                    let root = PathBuf::from(args.get(3).ok_or("mailbox add-user requires <root>")?);
-                    let user = args.get(4).ok_or("mailbox add-user requires <user>")?.clone();
+                    let root =
+                        PathBuf::from(args.get(3).ok_or("mailbox add-user requires <root>")?);
+                    let user = args
+                        .get(4)
+                        .ok_or("mailbox add-user requires <user>")?
+                        .clone();
                     let domains = args.iter().skip(5).cloned().collect();
                     Ok(Command::MbxAddUser(root, user, domains))
                 }
@@ -140,9 +147,12 @@ fn main() -> Result<(), String> {
             Command::MbxList(root, user) => cmd_mbx_list(&root, &user).await,
             Command::MbxShow(root, user) => cmd_mbx_show(&root, &user).await,
             Command::MbxRead(root, user, path) => cmd_mbx_read(&root, &user, &path).await,
-            Command::MbxAddUser(root, user, domains) => cmd_mbx_add_user(&root, &user, &domains).await,
+            Command::MbxAddUser(root, user, domains) => {
+                cmd_mbx_add_user(&root, &user, &domains).await
+            }
         }
-    }).map_err(|e| e.to_string())?;
+    })
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -152,7 +162,9 @@ fn main() -> Result<(), String> {
 // ===========================================================================
 
 async fn cmd_list(data_root: &Path) -> Result<(), String> {
-    let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
+    let index = MailIndex::open(data_root)
+        .await
+        .map_err(|e| e.to_string())?;
     let messages = index.list_queued().await;
 
     if messages.is_empty() {
@@ -160,7 +172,10 @@ async fn cmd_list(data_root: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    println!("{:<30} {:<30} {:>6} {:>5}  {:<12}", "Message ID", "Sender", "Recipients", "Retry", "Status");
+    println!(
+        "{:<30} {:<30} {:>6} {:>5}  {:<12}",
+        "Message ID", "Sender", "Recipients", "Retry", "Status"
+    );
     println!("{}", "-".repeat(88));
 
     for msg in &messages {
@@ -179,8 +194,12 @@ async fn cmd_list(data_root: &Path) -> Result<(), String> {
 }
 
 async fn cmd_show(data_root: &Path, message_id: &str) -> Result<(), String> {
-    let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
-    let msg = index.get_message(message_id).await
+    let index = MailIndex::open(data_root)
+        .await
+        .map_err(|e| e.to_string())?;
+    let msg = index
+        .get_message(message_id)
+        .await
         .ok_or_else(|| format!("Message not found: {}", message_id))?;
 
     println!("Message ID:     {}", msg.message_id);
@@ -188,7 +207,14 @@ async fn cmd_show(data_root: &Path, message_id: &str) -> Result<(), String> {
     println!("Recipients:     {}", msg.recipients.join(", "));
     println!("Status:         {}", msg.status.as_str());
     println!("Retry Count:    {}/{}", msg.retry_count, msg.max_retries);
-    println!("Next Retry:     {}", if msg.next_retry_time == 0 { "immediate".to_string() } else { msg.next_retry_time.to_string() });
+    println!(
+        "Next Retry:     {}",
+        if msg.next_retry_time == 0 {
+            "immediate".to_string()
+        } else {
+            msg.next_retry_time.to_string()
+        }
+    );
     println!("Data Size:      {} bytes", msg.data.len());
     println!("Created:        {}", msg.created_at);
     println!("Updated:        {}", msg.updated_at);
@@ -215,24 +241,36 @@ async fn cmd_show(data_root: &Path, message_id: &str) -> Result<(), String> {
 }
 
 async fn cmd_retry(data_root: &Path, message_id: &str) -> Result<(), String> {
-    let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
-    let msg = index.get_message(message_id).await
+    let index = MailIndex::open(data_root)
+        .await
+        .map_err(|e| e.to_string())?;
+    let msg = index
+        .get_message(message_id)
+        .await
         .ok_or_else(|| format!("Message not found: {}", message_id))?;
 
     // Reset retry count and schedule for immediate delivery
-    index.schedule_retry(message_id, 0, 0).await.map_err(|e| e.to_string())?;
+    index
+        .schedule_retry(message_id, 0, 0)
+        .await
+        .map_err(|e| e.to_string())?;
     println!("Message {} queued for immediate retry.", message_id);
 
     Ok(())
 }
 
-async fn cmd_retry_all(data_root: &Path) -> Result<(), String> {
-    let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
+async fn cmd_retry_all(data_root: &PathBuf) -> Result<(), String> {
+    let index = MailIndex::open(data_root)
+        .await
+        .map_err(|e| e.to_string())?;
     let messages = index.list_queued().await;
 
     let mut count = 0;
     for msg in &messages {
-        index.schedule_retry(&msg.message_id, 0, 0).await.map_err(|e| e.to_string())?;
+        index
+            .schedule_retry(&msg.message_id, 0, 0)
+            .await
+            .map_err(|e| e.to_string())?;
         count += 1;
     }
 
@@ -240,25 +278,43 @@ async fn cmd_retry_all(data_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-async fn cmd_delete(data_root: &Path, message_id: &str) -> Result<(), String> {
-    let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
-    let _msg = index.get_message(message_id).await
+async fn cmd_delete(data_root: &PathBuf, message_id: &str) -> Result<(), String> {
+    let index = MailIndex::open(data_root)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _msg = index
+        .get_message(message_id)
+        .await
         .ok_or_else(|| format!("Message not found: {}", message_id))?;
 
     // Mark as bounced (permanent removal)
-    index.mark_bounced(message_id).await.map_err(|e| e.to_string())?;
+    index
+        .mark_bounced(message_id)
+        .await
+        .map_err(|e| e.to_string())?;
     println!("Message {} deleted from queue.", message_id);
     Ok(())
 }
 
-async fn cmd_stats(data_root: &Path) -> Result<(), String> {
-    let index = MailIndex::open(data_root).await.map_err(|e| e.to_string())?;
+async fn cmd_stats(data_root: &PathBuf) -> Result<(), String> {
+    let index = MailIndex::open(data_root)
+        .await
+        .map_err(|e| e.to_string())?;
     let messages = index.list_queued().await;
 
     let total = messages.len();
-    let queued = messages.iter().filter(|m| matches!(m.status, MailStatus::Queued)).count();
-    let retrying = messages.iter().filter(|m| matches!(m.status, MailStatus::Retrying)).count();
-    let sending = messages.iter().filter(|m| matches!(m.status, MailStatus::Sending)).count();
+    let queued = messages
+        .iter()
+        .filter(|m| matches!(m.status, MailStatus::Queued))
+        .count();
+    let retrying = messages
+        .iter()
+        .filter(|m| matches!(m.status, MailStatus::Retrying))
+        .count();
+    let sending = messages
+        .iter()
+        .filter(|m| matches!(m.status, MailStatus::Sending))
+        .count();
 
     let total_recipients: usize = messages.iter().map(|m| m.recipients.len()).sum();
     let avg_retries: f64 = if total > 0 {
@@ -276,7 +332,11 @@ async fn cmd_stats(data_root: &Path) -> Result<(), String> {
     println!("  Sending:            {}", sending);
     println!("  Total recipients:   {}", total_recipients);
     println!("  Avg retry count:    {:.1}", avg_retries);
-    println!("  Total data:         {} bytes ({:.1} KB)", total_data, total_data as f64 / 1024.0);
+    println!(
+        "  Total data:         {} bytes ({:.1} KB)",
+        total_data,
+        total_data as f64 / 1024.0
+    );
 
     Ok(())
 }
@@ -317,7 +377,11 @@ async fn cmd_mbx_show(maildir_root: &Path, user: &str) -> Result<(), String> {
     println!("  New (unread):     {}", stats.new_count);
     println!("  Read (cur):       {}", stats.cur_count);
     println!("  Total:            {}", stats.total_count);
-    println!("  Total size:       {} bytes ({:.1} KB)", stats.total_size, stats.total_size as f64 / 1024.0);
+    println!(
+        "  Total size:       {} bytes ({:.1} KB)",
+        stats.total_size,
+        stats.total_size as f64 / 1024.0
+    );
     Ok(())
 }
 
@@ -331,11 +395,21 @@ async fn cmd_mbx_read(maildir_root: &Path, _user: &str, path: &Path) -> Result<(
     Ok(())
 }
 
-async fn cmd_mbx_add_user(maildir_root: &Path, user: &str, domains: &[String]) -> Result<(), String> {
+async fn cmd_mbx_add_user(
+    maildir_root: &PathBuf,
+    user: &str,
+    domains: &[String],
+) -> Result<(), String> {
     let store = MaildirStore::new(maildir_root).map_err(|e| e.to_string())?;
     let domain_refs: Vec<&str> = domains.iter().map(|s| s.as_str()).collect();
-    store.add_user(user, &domain_refs).map_err(|e| e.to_string())?;
+    store
+        .add_user(user, &domain_refs)
+        .map_err(|e| e.to_string())?;
 
-    println!("User '{}' registered with domains: {}", user, domains.join(", "));
+    println!(
+        "User '{}' registered with domains: {}",
+        user,
+        domains.join(", ")
+    );
     Ok(())
 }

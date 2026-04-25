@@ -8,22 +8,26 @@ use crate::state::load_state;
 pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?);
     }
 
     let id = crate::cli::require_container_id(args)?;
 
     let state = load_state(id)?;
-    let pid = state.pid.ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container has no PID")
-    })?;
+    let pid = state
+        .pid
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;
 
     let bundle = &state.bundle;
     let config_path = std::path::Path::new(bundle).join("config.json");
     let cgroup_path = if let Ok(data) = fs::read(&config_path) {
         if let Ok(spec) = crate::json::parse_oci_spec(&data) {
-            spec.linux.as_ref()
+            spec.linux
+                .as_ref()
                 .and_then(|l| l.cgroups_path.as_ref())
                 .cloned()
                 .unwrap_or_else(|| "/edgerun".into())
@@ -34,7 +38,8 @@ pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
         "/edgerun".into()
     };
 
-    let cgroup_dir = std::path::Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+    let cgroup_dir =
+        std::path::Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
 
     // Check if --interval is specified for streaming
     let interval_ms: u64 = if let Some(idx) = args.iter().position(|a| a == "--interval") {
@@ -76,7 +81,10 @@ pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
 fn parse_interval(s: &str) -> Option<u64> {
     if s.ends_with('s') {
-        s.trim_end_matches('s').parse::<u64>().ok().map(|v| v * 1000)
+        s.trim_end_matches('s')
+            .parse::<u64>()
+            .ok()
+            .map(|v| v * 1000)
     } else if s.ends_with("ms") {
         s.trim_end_matches("ms").parse::<u64>().ok()
     } else {
@@ -85,7 +93,9 @@ fn parse_interval(s: &str) -> Option<u64> {
 }
 
 fn read_cgroup_file(cgroup_dir: &std::path::Path, file: &str) -> Option<String> {
-    fs::read_to_string(cgroup_dir.join(file)).ok().map(|s| s.trim().to_string())
+    fs::read_to_string(cgroup_dir.join(file))
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 fn read_cgroup_stats(cgroup_dir: &std::path::Path, pid: u32) -> io::Result<String> {
@@ -103,7 +113,9 @@ fn read_cgroup_stats(cgroup_dir: &std::path::Path, pid: u32) -> io::Result<Strin
         let mut first = true;
         for part in mem_current.split_whitespace() {
             if let Some((key, val)) = part.split_once('=') {
-                if !first { mem_obj.push(','); }
+                if !first {
+                    mem_obj.push(',');
+                }
                 mem_obj.push_str(&format!("\"{}\":{}", key, val));
                 first = false;
             }
@@ -118,7 +130,9 @@ fn read_cgroup_stats(cgroup_dir: &std::path::Path, pid: u32) -> io::Result<Strin
             let mut ef = true;
             for line in events.lines() {
                 if let Some((key, val)) = line.split_once(' ') {
-                    if !ef { mem_obj.push(','); }
+                    if !ef {
+                        mem_obj.push(',');
+                    }
                     mem_obj.push_str(&format!("\"{}\":{}", key, val));
                     ef = false;
                 }
@@ -135,7 +149,10 @@ fn read_cgroup_stats(cgroup_dir: &std::path::Path, pid: u32) -> io::Result<Strin
         let mut cpu_obj = String::new();
         cpu_obj.push_str("\"cpu\":{");
         if let Some((quota, period)) = cpu_max.split_once(' ') {
-            cpu_obj.push_str(&format!("\"max_quota\":\"{}\",\"max_period\":\"{}\"", quota, period));
+            cpu_obj.push_str(&format!(
+                "\"max_quota\":\"{}\",\"max_period\":\"{}\"",
+                quota, period
+            ));
         }
         // Add cpu.weight
         if let Some(weight) = read_cgroup_file(cgroup_dir, "cpu.weight") {
@@ -149,7 +166,9 @@ fn read_cgroup_stats(cgroup_dir: &std::path::Path, pid: u32) -> io::Result<Strin
             let mut sf = true;
             for line in stat.lines() {
                 if let Some((key, val)) = line.split_once(' ') {
-                    if !sf { cpu_obj.push(','); }
+                    if !sf {
+                        cpu_obj.push(',');
+                    }
                     cpu_obj.push_str(&format!("\"{}\":\"{}\"", key, val));
                     sf = false;
                 }

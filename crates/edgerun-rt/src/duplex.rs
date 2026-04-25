@@ -4,12 +4,12 @@
 //! back-to-back, similar to `tokio::io::duplex`. Useful for testing,
 //! mock connections, and in-process communication.
 
+use crate::sync::Mutex;
 use std::collections::VecDeque;
 use std::io::{self};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
-use crate::sync::Mutex;
 
 use crate::io_traits::{AsyncRead, AsyncWrite};
 
@@ -70,7 +70,10 @@ impl DuplexStream {
             if inner.closed {
                 Ok(0)
             } else {
-                Err(io::Error::new(io::ErrorKind::WouldBlock, "no data available"))
+                Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "no data available",
+                ))
             }
         } else {
             let n = std::cmp::min(buf.len(), inner.buf.len());

@@ -38,11 +38,11 @@ impl Regex {
     /// Check if pattern matches text.
     pub fn is_match(&self, text: &str) -> bool {
         let p = &self.pattern;
-        
+
         if p.is_empty() {
             return true;
         }
-        
+
         if self.is_anchored {
             if self.pattern.starts_with('^') {
                 text.starts_with(p.trim_start_matches('^'))

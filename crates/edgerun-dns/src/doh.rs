@@ -7,9 +7,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::message::{DnsMessage, DnsResponseCode};
-use super::server::{ServerState, handle_query};
 use super::cache::DnsCache;
+use super::server::{handle_query, ServerState};
+use crate::message::{DnsMessage, DnsResponseCode};
 
 /// DNS-over-HTTPS server configuration.
 #[derive(Debug, Clone)]
@@ -60,7 +60,9 @@ impl DohServer {
     }
 
     /// Get server state for external HTTP server integration.
-    pub fn state(&self) -> &ServerState { &self.state }
+    pub fn state(&self) -> &ServerState {
+        &self.state
+    }
 
     /// Handle a DoH GET request (`/dns-query?dns=<base64url>`).
     ///

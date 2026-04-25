@@ -1,7 +1,7 @@
 //! Config file parser — reads YAML and produces typed config resources.
 
 use crate::types::ConfigResource;
-use edgerun_json::yaml::{YamlValue, YamlDeserializer};
+use edgerun_json::yaml::{YamlDeserializer, YamlValue};
 
 #[derive(Debug, Clone)]
 struct RawDoc {
@@ -11,67 +11,66 @@ struct RawDoc {
 
 pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError> {
     let mut resources = Vec::new();
-    
+
     for doc_result in YamlDeserializer::parse(yaml) {
         let doc = match doc_result {
             Ok(d) => d,
             Err(e) => return Err(ConfigError::ParseError(e.to_string())),
         };
-        
+
         if doc.is_null() {
             continue;
         }
-        
-        let kind = doc.get("kind")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        
-        let spec = doc.get("spec")
-            .cloned()
-            .unwrap_or(YamlValue::Null);
-        
-        let res = match kind {
-            "DnsServer" => deserialize_resource::<crate::types::DnsServerSpec>(spec)
-                .map(ConfigResource::DnsServer),
-            "DnsZone" => deserialize_resource::<crate::types::DnsZoneSpec>(spec)
-                .map(ConfigResource::DnsZone),
-            "DnsForwarder" => deserialize_resource::<crate::types::DnsForwarderSpec>(spec)
-                .map(ConfigResource::DnsForwarder),
-            "ForwardingRule" => deserialize_resource::<crate::types::ForwardingRuleSpec>(spec)
-                .map(ConfigResource::ForwardingRule),
-            "TlsConfig" => deserialize_resource::<crate::types::TlsConfigSpec>(spec)
-                .map(ConfigResource::TlsConfig),
-            "RateLimit" => deserialize_resource::<crate::types::RateLimitSpec>(spec)
-                .map(ConfigResource::RateLimit),
-            "DhcpServer" => deserialize_resource::<crate::types::DhcpServerSpec>(spec)
-                .map(ConfigResource::DhcpServer),
-            "DhcpPool" => deserialize_resource::<crate::types::DhcpPoolSpec>(spec)
-                .map(ConfigResource::DhcpPool),
-            "TftpServer" => deserialize_resource::<crate::types::TftpServerSpec>(spec)
-                .map(ConfigResource::TftpServer),
-            "Node" => deserialize_resource::<crate::types::NodeSpec>(spec)
-                .map(ConfigResource::Node),
-            "Container" => deserialize_resource::<crate::types::ContainerSpec>(spec)
-                .map(ConfigResource::Container),
-            "Deployment" => deserialize_resource::<crate::types::DeploymentSpec>(spec)
-                .map(ConfigResource::Deployment),
-            "Secret" => deserialize_resource::<crate::types::SecretSpec>(spec)
-                .map(ConfigResource::Secret),
-            "Peer" => deserialize_resource::<crate::types::PeerSpec>(spec)
-                .map(ConfigResource::Peer),
-            "Gateway" => deserialize_resource::<crate::types::GatewaySpec>(spec)
-                .map(ConfigResource::Gateway),
-            "Service" => deserialize_resource::<crate::types::ServiceSpec>(spec)
-                .map(ConfigResource::Service),
-            "HttpRoute" => deserialize_resource::<crate::types::HttpRouteSpec>(spec)
-                .map(ConfigResource::HttpRoute),
-            "TcpRoute" => deserialize_resource::<crate::types::TcpRouteSpec>(spec)
-                .map(ConfigResource::TcpRoute),
-            "TlsRoute" => deserialize_resource::<crate::types::TlsRouteSpec>(spec)
-                .map(ConfigResource::TlsRoute),
-            _ => continue,
-        };
-        
+
+        let kind = doc.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+
+        let spec = doc.get("spec").cloned().unwrap_or(YamlValue::Null);
+
+        let res =
+            match kind {
+                "DnsServer" => deserialize_resource::<crate::types::DnsServerSpec>(spec)
+                    .map(ConfigResource::DnsServer),
+                "DnsZone" => deserialize_resource::<crate::types::DnsZoneSpec>(spec)
+                    .map(ConfigResource::DnsZone),
+                "DnsForwarder" => deserialize_resource::<crate::types::DnsForwarderSpec>(spec)
+                    .map(ConfigResource::DnsForwarder),
+                "ForwardingRule" => deserialize_resource::<crate::types::ForwardingRuleSpec>(spec)
+                    .map(ConfigResource::ForwardingRule),
+                "TlsConfig" => deserialize_resource::<crate::types::TlsConfigSpec>(spec)
+                    .map(ConfigResource::TlsConfig),
+                "RateLimit" => deserialize_resource::<crate::types::RateLimitSpec>(spec)
+                    .map(ConfigResource::RateLimit),
+                "DhcpServer" => deserialize_resource::<crate::types::DhcpServerSpec>(spec)
+                    .map(ConfigResource::DhcpServer),
+                "DhcpPool" => deserialize_resource::<crate::types::DhcpPoolSpec>(spec)
+                    .map(ConfigResource::DhcpPool),
+                "TftpServer" => deserialize_resource::<crate::types::TftpServerSpec>(spec)
+                    .map(ConfigResource::TftpServer),
+                "Node" => {
+                    deserialize_resource::<crate::types::NodeSpec>(spec).map(ConfigResource::Node)
+                }
+                "Container" => deserialize_resource::<crate::types::ContainerSpec>(spec)
+                    .map(ConfigResource::Container),
+                "Deployment" => deserialize_resource::<crate::types::DeploymentSpec>(spec)
+                    .map(ConfigResource::Deployment),
+                "Secret" => deserialize_resource::<crate::types::SecretSpec>(spec)
+                    .map(ConfigResource::Secret),
+                "Peer" => {
+                    deserialize_resource::<crate::types::PeerSpec>(spec).map(ConfigResource::Peer)
+                }
+                "Gateway" => deserialize_resource::<crate::types::GatewaySpec>(spec)
+                    .map(ConfigResource::Gateway),
+                "Service" => deserialize_resource::<crate::types::ServiceSpec>(spec)
+                    .map(ConfigResource::Service),
+                "HttpRoute" => deserialize_resource::<crate::types::HttpRouteSpec>(spec)
+                    .map(ConfigResource::HttpRoute),
+                "TcpRoute" => deserialize_resource::<crate::types::TcpRouteSpec>(spec)
+                    .map(ConfigResource::TcpRoute),
+                "TlsRoute" => deserialize_resource::<crate::types::TlsRouteSpec>(spec)
+                    .map(ConfigResource::TlsRoute),
+                _ => continue,
+            };
+
         if let Ok(r) = res {
             resources.push(r);
         }
@@ -86,8 +85,7 @@ pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError>
 
 fn deserialize_resource<T: serde::de::DeserializeOwned>(spec: YamlValue) -> Result<T, ConfigError> {
     let json = yaml_to_json(spec);
-    edgerun_json::from_value(json)
-        .map_err(|e| ConfigError::ParseError(e.to_string()))
+    edgerun_json::from_value(json).map_err(|e| ConfigError::ParseError(e.to_string()))
 }
 
 fn yaml_to_json(yaml: YamlValue) -> edgerun_json::JsonValue {
@@ -113,10 +111,12 @@ fn yaml_to_json(yaml: YamlValue) -> edgerun_json::JsonValue {
 pub fn to_yaml_all(resources: &[ConfigResource]) -> Result<String, ConfigError> {
     let mut out = String::new();
     for (i, res) in resources.iter().enumerate() {
-        if i > 0 { out.push_str("---\n"); }
-        
-        let json = edgerun_json::to_value(res)
-            .map_err(|e| ConfigError::ParseError(e.to_string()))?;
+        if i > 0 {
+            out.push_str("---\n");
+        }
+
+        let json =
+            edgerun_json::to_value(res).map_err(|e| ConfigError::ParseError(e.to_string()))?;
         let yaml = edgerun_json::yaml::json_to_yaml(json);
         let yaml_str = edgerun_json::yaml::to_yaml_string(&yaml)
             .map_err(|e| ConfigError::ParseError(e.to_string()))?;
@@ -198,7 +198,8 @@ impl ConfigState {
                 for zone_name in zones {
                     if !self.dns_zones.iter().any(|z| z.origin == *zone_name) {
                         return Err(ConfigError::ValidationError(format!(
-                            "dns_servers[{}]: references zone '{}' which does not exist", i, zone_name
+                            "dns_servers[{}]: references zone '{}' which does not exist",
+                            i, zone_name
                         )));
                     }
                 }
@@ -208,7 +209,8 @@ impl ConfigState {
             for pool_name in &dhcp.pools {
                 if !self.dhcp_pools.iter().any(|p| p.name == *pool_name) {
                     return Err(ConfigError::ValidationError(format!(
-                        "dhcp_servers[{}]: references pool '{}' which does not exist", i, pool_name
+                        "dhcp_servers[{}]: references pool '{}' which does not exist",
+                        i, pool_name
                     )));
                 }
             }
@@ -216,14 +218,18 @@ impl ConfigState {
         for (i, zone) in self.dns_zones.iter().enumerate() {
             if !zone.records.iter().any(|r| r.record_type == "NS") {
                 return Err(ConfigError::ValidationError(format!(
-                    "dns_zones[{}]: zone '{}' has no NS record", i, zone.origin
+                    "dns_zones[{}]: zone '{}' has no NS record",
+                    i, zone.origin
                 )));
             }
         }
         Ok(())
     }
 
-    pub fn build_dhcp_scopes(&self, server_idx: usize) -> Result<std::collections::HashMap<String, crate::types::DhcpPoolSpec>, ConfigError> {
+    pub fn build_dhcp_scopes(
+        &self,
+        server_idx: usize,
+    ) -> Result<std::collections::HashMap<String, crate::types::DhcpPoolSpec>, ConfigError> {
         let mut scopes = std::collections::HashMap::new();
         if server_idx >= self.dhcp_servers.len() {
             return Ok(scopes);
@@ -237,7 +243,10 @@ impl ConfigState {
         Ok(scopes)
     }
 
-    pub fn build_dhcpv6_scopes(&self, server_idx: usize) -> Result<std::collections::HashMap<String, crate::types::Dhcpv6PoolSpec>, ConfigError> {
+    pub fn build_dhcpv6_scopes(
+        &self,
+        server_idx: usize,
+    ) -> Result<std::collections::HashMap<String, crate::types::Dhcpv6PoolSpec>, ConfigError> {
         let mut scopes = std::collections::HashMap::new();
         if server_idx >= self.dhcpv6_servers.len() {
             return Ok(scopes);

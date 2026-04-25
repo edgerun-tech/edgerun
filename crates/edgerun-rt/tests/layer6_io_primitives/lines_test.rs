@@ -1,5 +1,5 @@
 // Test read_line and Lines with the actual runtime.
-use edgerun_rt::{DuplexStream, Runtime, AsyncReadExt, AsyncWriteExt, spawn, Cursor};
+use edgerun_rt::{spawn, AsyncReadExt, AsyncWriteExt, Cursor, DuplexStream, Runtime};
 use std::time::Duration;
 
 fn main() {
@@ -25,7 +25,9 @@ fn test_read_line_basic() {
         let (mut a, b) = DuplexStream::channel();
         let mut reader = b;
 
-        a.write_all(b"first line\nsecond line\n").await.expect("write failed");
+        a.write_all(b"first line\nsecond line\n")
+            .await
+            .expect("write failed");
 
         let mut line = String::new();
         let n = reader.read_line(&mut line).await.expect("read_line failed");
@@ -102,15 +104,29 @@ fn test_lines_basic() {
     println!("  test_lines_basic...");
     let h = spawn(async {
         let (mut a, b) = DuplexStream::channel();
-        a.write_all(b"line1\nline2\nline3\n").await.expect("write failed");
+        a.write_all(b"line1\nline2\nline3\n")
+            .await
+            .expect("write failed");
         a.shutdown().await.expect("shutdown failed");
 
         let mut lines = b.lines();
-        let l1 = lines.next_line().await.expect("next_line failed").expect("expected line");
+        let l1 = lines
+            .next_line()
+            .await
+            .expect("next_line failed")
+            .expect("expected line");
         assert_eq!(l1, "line1");
-        let l2 = lines.next_line().await.expect("next_line failed").expect("expected line");
+        let l2 = lines
+            .next_line()
+            .await
+            .expect("next_line failed")
+            .expect("expected line");
         assert_eq!(l2, "line2");
-        let l3 = lines.next_line().await.expect("next_line failed").expect("expected line");
+        let l3 = lines
+            .next_line()
+            .await
+            .expect("next_line failed")
+            .expect("expected line");
         assert_eq!(l3, "line3");
         let l4 = lines.next_line().await.expect("next_line failed");
         assert!(l4.is_none(), "expected EOF, got {:?}", l4);
@@ -128,9 +144,17 @@ fn test_lines_no_trailing_newline() {
         a.shutdown().await.expect("shutdown failed");
 
         let mut lines = b.lines();
-        let l1 = lines.next_line().await.expect("next_line failed").expect("expected line");
+        let l1 = lines
+            .next_line()
+            .await
+            .expect("next_line failed")
+            .expect("expected line");
         assert_eq!(l1, "line1");
-        let l2 = lines.next_line().await.expect("next_line failed").expect("expected line");
+        let l2 = lines
+            .next_line()
+            .await
+            .expect("next_line failed")
+            .expect("expected line");
         assert_eq!(l2, "line2");
         let l3 = lines.next_line().await.expect("next_line failed");
         assert!(l3.is_none(), "expected EOF, got {:?}", l3);
@@ -144,13 +168,23 @@ fn test_lines_crlf() {
     println!("  test_lines_crlf...");
     let h = spawn(async {
         let (mut a, b) = DuplexStream::channel();
-        a.write_all(b"crlf1\r\ncrlf2\r\n").await.expect("write failed");
+        a.write_all(b"crlf1\r\ncrlf2\r\n")
+            .await
+            .expect("write failed");
         a.shutdown().await.expect("shutdown failed");
 
         let mut lines = b.lines();
-        let l1 = lines.next_line().await.expect("next_line failed").expect("expected line");
+        let l1 = lines
+            .next_line()
+            .await
+            .expect("next_line failed")
+            .expect("expected line");
         assert_eq!(l1, "crlf1");
-        let l2 = lines.next_line().await.expect("next_line failed").expect("expected line");
+        let l2 = lines
+            .next_line()
+            .await
+            .expect("next_line failed")
+            .expect("expected line");
         assert_eq!(l2, "crlf2");
     });
     std::thread::sleep(Duration::from_millis(200));

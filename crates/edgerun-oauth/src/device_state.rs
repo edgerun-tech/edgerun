@@ -152,27 +152,24 @@ impl DeviceGrantStore {
 
 fn generate_random_token(len: usize) -> std::io::Result<String> {
     let mut bytes = vec![0u8; len];
-    getrandom::fill(&mut bytes).map_err(|e| {
-        std::io::Error::other(format!("random generation failed: {e}"))
-    })?;
+    getrandom::fill(&mut bytes)
+        .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
     Ok(base64url_nopad_encode(&bytes))
 }
 
 fn generate_user_code() -> std::io::Result<String> {
     const CHARSET: &[u8] = b"BCDFGHJKLMNPQRSTVWXYZ";
     let mut bytes = [0u8; 8];
-    getrandom::fill(&mut bytes).map_err(|e| {
-        std::io::Error::other(format!("random generation failed: {e}"))
-    })?;
+    getrandom::fill(&mut bytes)
+        .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
 
     // Use rejection sampling to ensure valid chars
     let mut code = String::with_capacity(9);
     let mut byte_idx = 0;
     for i in 0..8 {
         if byte_idx >= bytes.len() {
-            getrandom::fill(&mut bytes).map_err(|e| {
-                std::io::Error::other(format!("random generation failed: {e}"))
-            })?;
+            getrandom::fill(&mut bytes)
+                .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
             byte_idx = 0;
         }
         let idx = bytes[byte_idx] as usize % CHARSET.len();
@@ -200,7 +197,8 @@ mod tests {
             vec!["openid".into(), "email".into()],
             "challenge123",
             "https://auth.example.com/verify",
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(grant.client_id, "my-client");
         assert_eq!(grant.scopes, vec!["openid", "email"]);
@@ -219,7 +217,8 @@ mod tests {
             vec!["openid".into()],
             "challenge",
             "https://auth.example.com/verify",
-        ).unwrap();
+        )
+        .unwrap();
 
         grant.expires_in = Duration::from_secs(0); // immediately expired
         assert!(grant.is_expired());
@@ -232,7 +231,8 @@ mod tests {
             vec!["openid".into()],
             "challenge",
             "https://auth.example.com/verify",
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(!grant.authorized);
         grant.authorize();
@@ -248,7 +248,8 @@ mod tests {
             vec!["openid".into()],
             "challenge",
             "https://auth.example.com/verify",
-        ).unwrap();
+        )
+        .unwrap();
 
         let device_code = grant.device_code.clone();
         let user_code = grant.user_code.clone();
@@ -284,7 +285,8 @@ mod tests {
             vec!["openid".into()],
             "challenge",
             "https://auth.example.com/verify",
-        ).unwrap();
+        )
+        .unwrap();
         grant.expires_in = Duration::from_secs(0); // expired immediately
         store.store(grant);
 
@@ -298,8 +300,13 @@ mod tests {
         assert_eq!(code.len(), 9); // XXXX-XXXX
         assert_eq!(code.chars().nth(4).unwrap(), '-');
         for (i, c) in code.chars().enumerate() {
-            if i == 4 { continue; }
-            assert!(c.is_ascii_uppercase(), "user_code char should be uppercase: {c}");
+            if i == 4 {
+                continue;
+            }
+            assert!(
+                c.is_ascii_uppercase(),
+                "user_code char should be uppercase: {c}"
+            );
         }
     }
 }

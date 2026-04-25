@@ -23,8 +23,6 @@ impl edgerun_email::server::ConnectionInterceptor for ConnectionInterceptorAdapt
         stream: Arc<AsyncTcpStream>,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         let handler = Arc::clone(&self.handler);
-        Box::pin(async move {
-            handler.handle(peer, stream).await
-        })
+        Box::pin(async move { handler.handle(peer, stream).await })
     }
 }

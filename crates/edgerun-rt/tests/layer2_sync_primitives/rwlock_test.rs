@@ -1,5 +1,5 @@
 // Test RwLock primitive with the actual runtime.
-use edgerun_rt::{RwLock, Runtime, spawn};
+use edgerun_rt::{spawn, Runtime, RwLock};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -278,13 +278,18 @@ fn test_heavy_read_write_contention() {
                 assert!(
                     *g >= last,
                     "reader {} saw {} < {} (non-monotonic)",
-                    r, *g, last
+                    r,
+                    *g,
+                    last
                 );
                 last = *g;
                 count += 1;
                 std::thread::sleep(Duration::from_millis(2));
             }
-            println!("    reader {} completed {} reads, final value {}", r, count, last);
+            println!(
+                "    reader {} completed {} reads, final value {}",
+                r, count, last
+            );
         });
         handles.push(h);
     }

@@ -48,7 +48,9 @@ impl Certificate {
     pub fn from_pem(pem: &str) -> Result<Self, String> {
         let cert = DerCertificate::from_pem(pem)
             .map_err(|e| format!("Failed to parse PEM certificate: {e}"))?;
-        let der_bytes = cert.to_der().map_err(|e| format!("Failed to re-encode cert: {e}"))?;
+        let der_bytes = cert
+            .to_der()
+            .map_err(|e| format!("Failed to re-encode cert: {e}"))?;
         Self::from_parsed(&cert, der_bytes)
     }
 
@@ -79,12 +81,9 @@ impl Certificate {
         let mut certs = Vec::new();
         let mut pos = 0;
         while pos + 5 < list_data.len() {
-            let cert_data_len = u32::from_be_bytes([
-                0,
-                list_data[pos],
-                list_data[pos + 1],
-                list_data[pos + 2],
-            ]) as usize;
+            let cert_data_len =
+                u32::from_be_bytes([0, list_data[pos], list_data[pos + 1], list_data[pos + 2]])
+                    as usize;
             pos += 3;
             if pos + cert_data_len + 2 > list_data.len() {
                 break;
@@ -117,7 +116,9 @@ impl Certificate {
         let not_after = Self::time_to_unix(&tbs.validity.not_after);
 
         // Subject public key
-        let subject_public_key = tbs.subject_public_key_info.subject_public_key
+        let subject_public_key = tbs
+            .subject_public_key_info
+            .subject_public_key
             .raw_bytes()
             .to_vec();
 
@@ -125,15 +126,14 @@ impl Certificate {
         let subject_alt_names = Self::extract_sans(cert);
 
         // Signature algorithm OID
-        let signature_algorithm = cert.signature_algorithm.oid
-            .as_bytes()
-            .to_vec();
+        let signature_algorithm = cert.signature_algorithm.oid.as_bytes().to_vec();
 
         // Signature value
         let signature_value = cert.signature.raw_bytes().to_vec();
 
         // TBS certificate DER
-        let tbs_certificate_der = cert.tbs_certificate
+        let tbs_certificate_der = cert
+            .tbs_certificate
             .to_der()
             .map_err(|e| format!("Failed to encode TBS: {e}"))?;
 
@@ -155,7 +155,9 @@ impl Certificate {
 
     /// Extract Common Name from an x509_cert Name
     fn extract_cn(name: &edgerun_crypto::x509_cert::name::Name) -> Option<String> {
-        use edgerun_crypto::x509_cert::der::asn1::{Ia5StringRef, PrintableStringRef, Utf8StringRef};
+        use edgerun_crypto::x509_cert::der::asn1::{
+            Ia5StringRef, PrintableStringRef, Utf8StringRef,
+        };
         // Use x509-cert's der crate OIDs (const-oid 0.9.x)
         const COMMON_NAME: edgerun_crypto::x509_cert::der::oid::ObjectIdentifier =
             edgerun_crypto::x509_cert::der::oid::db::rfc4519::CN;
@@ -182,11 +184,15 @@ impl Certificate {
     fn extract_sans(cert: &DerCertificate) -> Vec<String> {
         use edgerun_crypto::x509_cert::ext::pkix::SubjectAltName;
         let tbs = &cert.tbs_certificate;
-        let Some(exts) = &tbs.extensions else { return Vec::new() };
+        let Some(exts) = &tbs.extensions else {
+            return Vec::new();
+        };
 
         let mut sans = Vec::new();
         for ext in exts.iter() {
-            if ext.extn_id == edgerun_crypto::x509_cert::der::oid::db::rfc5280::ID_CE_SUBJECT_ALT_NAME {
+            if ext.extn_id
+                == edgerun_crypto::x509_cert::der::oid::db::rfc5280::ID_CE_SUBJECT_ALT_NAME
+            {
                 if let Ok(san) = SubjectAltName::from_der(ext.extn_value.as_bytes()) {
                     for name in san.0.iter() {
                         if let GeneralName::DnsName(dns) = name {
@@ -294,10 +300,9 @@ impl Certificate {
 
         // The issuer public key should be an uncompressed EC point (0x04 || X || Y)
         // for P-256, that's 65 bytes total
-        let verifying_key = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(
-            issuer_pubkey.as_slice(),
-        )
-        .map_err(|e| format!("Failed to parse issuer public key: {e}"))?;
+        let verifying_key =
+            edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(issuer_pubkey.as_slice())
+                .map_err(|e| format!("Failed to parse issuer public key: {e}"))?;
 
         // Parse the signature from DER format
         // ECDSA signatures in X.509 are DER-encoded ASN.1 SEQUENCE of two INTEGERs (r, s)
@@ -308,10 +313,12 @@ impl Certificate {
         use edgerun_crypto::signature::hazmat::PrehashVerifier;
         verifying_key
             .verify_prehash(&hash, &signature)
-            .map_err(|e| format!(
-                "ECDSA signature verification failed ({} over P-256): {e}",
-                hasher_name
-            ))?;
+            .map_err(|e| {
+                format!(
+                    "ECDSA signature verification failed ({} over P-256): {e}",
+                    hasher_name
+                )
+            })?;
 
         Ok(())
     }
@@ -324,7 +331,9 @@ impl Certificate {
         // Wildcard: *.example.com matches anything.example.com
         if cert_name.starts_with("*.") && hostname.len() > cert_name.len() - 1 {
             let wildcard_suffix = &cert_name[1..];
-            if hostname.ends_with(wildcard_suffix) && !hostname[..hostname.len() - wildcard_suffix.len() + 1].contains('.') {
+            if hostname.ends_with(wildcard_suffix)
+                && !hostname[..hostname.len() - wildcard_suffix.len() + 1].contains('.')
+            {
                 return true;
             }
         }

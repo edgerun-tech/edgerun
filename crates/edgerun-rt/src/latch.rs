@@ -22,8 +22,8 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 use crate::sync::Mutex;
@@ -78,11 +78,13 @@ impl Latch {
             return;
         }
         // Use saturating_sub to prevent usize underflow.
-        let prev = self.inner.count.fetch_update(
-            Ordering::AcqRel,
-            Ordering::Acquire,
-            |count| Some(count.saturating_sub(n)),
-        ).unwrap_or(0);
+        let prev = self
+            .inner
+            .count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                Some(count.saturating_sub(n))
+            })
+            .unwrap_or(0);
         if prev <= n {
             let wakers = self.inner.wakers.lock().drain(..).collect::<Vec<_>>();
             for w in wakers {

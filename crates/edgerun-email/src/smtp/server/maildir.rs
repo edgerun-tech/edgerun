@@ -180,7 +180,8 @@ impl MaildirStore {
 
     /// Move a message from new/ to cur/ (mark as read).
     pub fn mark_read(&self, path: &Path) -> io::Result<()> {
-        let filename = path.file_name()
+        let filename = path
+            .file_name()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no filename"))?;
         let cur_path = self.root.join("cur").join(filename);
         fs::rename(path, cur_path)?;
@@ -197,14 +198,21 @@ impl MaildirStore {
         let user_dir = self.user_maildir(username);
 
         let new_count = fs::read_dir(user_dir.join("new"))
-            .map(|e| e.filter(|e| e.as_ref().map(|e| e.path().is_file()).unwrap_or(false)).count())
+            .map(|e| {
+                e.filter(|e| e.as_ref().map(|e| e.path().is_file()).unwrap_or(false))
+                    .count()
+            })
             .unwrap_or(0);
 
         let cur_count = fs::read_dir(user_dir.join("cur"))
-            .map(|e| e.filter(|e| e.as_ref().map(|e| e.path().is_file()).unwrap_or(false)).count())
+            .map(|e| {
+                e.filter(|e| e.as_ref().map(|e| e.path().is_file()).unwrap_or(false))
+                    .count()
+            })
             .unwrap_or(0);
 
-        let total_size = self.list_messages(username)?
+        let total_size = self
+            .list_messages(username)?
             .iter()
             .filter_map(|m| m.path.metadata().ok().map(|m| m.len()))
             .sum();
@@ -251,8 +259,14 @@ impl MailHandler for MaildirStore {
         for recipient in &envelope.recipients {
             if let Some(username) = self.extract_user(recipient) {
                 // Write to tmp/ first, then rename to new/ (atomic delivery)
-                let tmp_path = self.user_maildir(&username).join("tmp").join(self.unique_filename());
-                let new_path = self.user_maildir(&username).join("new").join(tmp_path.file_name().unwrap());
+                let tmp_path = self
+                    .user_maildir(&username)
+                    .join("tmp")
+                    .join(self.unique_filename());
+                let new_path = self
+                    .user_maildir(&username)
+                    .join("new")
+                    .join(tmp_path.file_name().unwrap());
 
                 // Write the message
                 let mut file = fs::File::create(&tmp_path)?;
@@ -267,11 +281,7 @@ impl MailHandler for MaildirStore {
         Ok(())
     }
 
-    fn authenticate(
-        &self,
-        _mechanism: &str,
-        _credentials: &AuthCredentials,
-    ) -> AuthResult {
+    fn authenticate(&self, _mechanism: &str, _credentials: &AuthCredentials) -> AuthResult {
         AuthResult::Unsupported
     }
 
@@ -386,7 +396,9 @@ mod tests {
     fn test_validate_recipient_known_user() {
         let dir = test_dir("known_user");
         let store = MaildirStore::new(&dir).unwrap();
-        store.add_user("ken", &["edgerun.mail", "localhost"]).unwrap();
+        store
+            .add_user("ken", &["edgerun.mail", "localhost"])
+            .unwrap();
 
         assert!(store.validate_recipient("ken@edgerun.mail").is_ok());
         assert!(store.validate_recipient("ken@localhost").is_ok());
@@ -434,7 +446,9 @@ mod tests {
 
         let messages = store.list_messages("ken").unwrap();
         assert_eq!(messages.len(), 2);
-        assert!(messages.iter().all(|m| matches!(m.state, MaildirState::New)));
+        assert!(messages
+            .iter()
+            .all(|m| matches!(m.state, MaildirState::New)));
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -466,11 +480,19 @@ mod tests {
     fn test_extract_user() {
         let dir = test_dir("extract_user");
         let store = MaildirStore::new(&dir).unwrap();
-        store.add_user("ken", &["edgerun.mail", "localhost"]).unwrap();
+        store
+            .add_user("ken", &["edgerun.mail", "localhost"])
+            .unwrap();
         store.add_user("admin", &["edgerun.mail"]).unwrap();
 
-        assert_eq!(store.extract_user("ken@edgerun.mail"), Some("ken".to_string()));
-        assert_eq!(store.extract_user("admin@edgerun.mail"), Some("admin".to_string()));
+        assert_eq!(
+            store.extract_user("ken@edgerun.mail"),
+            Some("ken".to_string())
+        );
+        assert_eq!(
+            store.extract_user("admin@edgerun.mail"),
+            Some("admin".to_string())
+        );
         assert_eq!(store.extract_user("unknown@edgerun.mail"), None);
 
         let _ = fs::remove_dir_all(&dir);

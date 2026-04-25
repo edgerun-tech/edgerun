@@ -9,8 +9,8 @@ mod features;
 mod kill;
 mod pause;
 mod ps;
-mod resume;
 mod restore;
+mod resume;
 mod spec;
 mod start;
 mod state;
@@ -31,8 +31,8 @@ pub use features::cmd_features;
 pub use kill::cmd_kill;
 pub use pause::cmd_pause;
 pub use ps::cmd_ps;
-pub use resume::cmd_resume;
 pub use restore::cmd_restore;
+pub use resume::cmd_resume;
 pub use spec::cmd_spec;
 pub use start::cmd_start;
 pub use state::cmd_state;
@@ -132,7 +132,11 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
             _ => {
                 if j > 0 {
                     let prev = &args[j - 1];
-                    if prev == "--bundle" || prev == "--pid-file" || prev.starts_with("--bundle=") || prev.starts_with("--pid-file=") {
+                    if prev == "--bundle"
+                        || prev == "--pid-file"
+                        || prev.starts_with("--bundle=")
+                        || prev.starts_with("--pid-file=")
+                    {
                         continue;
                     }
                 }
@@ -172,7 +176,9 @@ pub fn print_usage() {
     eprintln!("  registry logout <reg>     Logout from a registry");
     eprintln!();
     eprintln!("Registry options:");
-    eprintln!("  --images-dir <path>       Image storage directory (default: /var/lib/edgerun/images)");
+    eprintln!(
+        "  --images-dir <path>       Image storage directory (default: /var/lib/edgerun/images)"
+    );
     eprintln!("  --store <path>            Layer blob cache (default: /var/lib/edgerun/store)");
     eprintln!();
     eprintln!("Global options:");
@@ -222,7 +228,7 @@ pub fn is_process_alive(pid: u32) -> bool {
 
 /// Extract container ID from command args, returning an error if missing.
 pub fn require_container_id(args: &[String]) -> std::io::Result<&str> {
-    args.first()
-        .map(|s| s.as_str())
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "container ID required"))
+    args.first().map(|s| s.as_str()).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "container ID required")
+    })
 }

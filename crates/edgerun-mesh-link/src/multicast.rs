@@ -12,12 +12,12 @@
 //! attaches the sender's MAC to incoming raw Ethernet frames so the
 //! router can learn peer identities from Ethernet source addresses.
 
+use super::*;
 use edgerun_hardware_signing::NodeID;
 use edgerun_mesh::{DiscoveryPacket, FrameType, MeshFrame, MeshRouter};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};
-use super::*;
 
 // Multicast UDP socket (for discovery)
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ impl MulticastSocket {
             setsockopt(
                 fd,
                 IPPROTO_UDP as c_int, // Actually this is SOL_IP = 0
-                0,                     // SOL_IP
+                0,                    // SOL_IP
                 &mreq as *const _ as *const c_void,
                 std::mem::size_of::<IpMreq>() as u32,
             )

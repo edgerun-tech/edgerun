@@ -162,8 +162,8 @@ pub fn url_encode_pairs(pairs: &[(&str, &str)]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec;
     use alloc::string::ToString;
+    use alloc::vec;
 
     #[test]
     fn test_percent_encode() {

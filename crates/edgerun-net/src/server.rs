@@ -4,17 +4,17 @@
 //! On config reload, services are restarted with the new configuration.
 
 use std::net::Ipv4Addr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use edgerun_config::{ConfigState, parse_and_validate};
-use edgerun_dns::dhcp::{DhcpScope, DhcpMultiServer};
+use edgerun_config::{parse_and_validate, ConfigState};
+use edgerun_dns::dhcp::{DhcpMultiServer, DhcpScope};
 use edgerun_dns::server::DnsServer;
 
-use crate::integration::DnsDhcpIntegration;
 use crate::config_watch::ConfigWatcher;
+use crate::integration::DnsDhcpIntegration;
 
 /// Shared shutdown flag for a service thread.
 struct ServiceHandle {
@@ -58,7 +58,10 @@ impl NetServer {
 
         // Start config watcher for hot-reload
         let watcher = if self.hot_reload {
-            edgerun_log::info!("edgerun-net: hot-reload enabled, watching {}", self.config_path);
+            edgerun_log::info!(
+                "edgerun-net: hot-reload enabled, watching {}",
+                self.config_path
+            );
             let watcher = ConfigWatcher::new(&[&self.config_path]);
             Some(watcher.start()?)
         } else {
@@ -74,21 +77,27 @@ impl NetServer {
                 if watcher.take_changed() {
                     edgerun_log::info!("edgerun-net: reloading config...");
                     match std::fs::read_to_string(&self.config_path) {
-                        Ok(text) => match parse_and_validate(&text) {
-                            Ok(new_config) => {
-                                edgerun_log::info!("edgerun-net: config parsed successfully, restarting services");
-                                // Stop all services
-                                let old = std::mem::take(&mut services);
-                                for svc in old {
-                                    svc.stop();
+                        Ok(text) => {
+                            match parse_and_validate(&text) {
+                                Ok(new_config) => {
+                                    edgerun_log::info!("edgerun-net: config parsed successfully, restarting services");
+                                    // Stop all services
+                                    let old = std::mem::take(&mut services);
+                                    for svc in old {
+                                        svc.stop();
+                                    }
+                                    // Start with new config
+                                    services = self.start_all_services(&new_config)?;
+                                    edgerun_log::info!(
+                                        "edgerun-net: services restarted with new config"
+                                    );
+                                    self.print_summary(&new_config);
                                 }
-                                // Start with new config
-                                services = self.start_all_services(&new_config)?;
-                                edgerun_log::info!("edgerun-net: services restarted with new config");
-                                self.print_summary(&new_config);
+                                Err(e) => {
+                                    edgerun_log::warn!("edgerun-net: config reload failed: {}", e)
+                                }
                             }
-                            Err(e) => edgerun_log::warn!("edgerun-net: config reload failed: {}", e),
-                        },
+                        }
                         Err(e) => edgerun_log::warn!("edgerun-net: failed to read config: {}", e),
                     }
                 }
@@ -107,7 +116,10 @@ impl NetServer {
     }
 
     /// Start all services and return their handles.
-    fn start_all_services(&self, config: &ConfigState) -> Result<Vec<ServiceHandle>, Box<dyn std::error::Error>> {
+    fn start_all_services(
+        &self,
+        config: &ConfigState,
+    ) -> Result<Vec<ServiceHandle>, Box<dyn std::error::Error>> {
         let mut services = Vec::new();
 
         if let Some(svc) = self.start_dns(config)? {
@@ -123,7 +135,10 @@ impl NetServer {
         Ok(services)
     }
 
-    fn start_dns(&self, config: &ConfigState) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
+    fn start_dns(
+        &self,
+        config: &ConfigState,
+    ) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
         if config.dns_zones.is_empty() && config.dns_servers.is_empty() {
             edgerun_log::info!("edgerun-net: no DNS configuration found, skipping DNS server");
             return Ok(None);
@@ -138,8 +153,11 @@ impl NetServer {
         let handle = thread::spawn(move || {
             edgerun_log::info!("edgerun-net: DNS server starting on :53 (UDP + TCP)");
             for zone in &zones {
-                edgerun_log::info!("edgerun-net:   authoritative zone: {} ({} static records)",
-                    zone.origin, zone.records.len());
+                edgerun_log::info!(
+                    "edgerun-net:   authoritative zone: {} ({} static records)",
+                    zone.origin,
+                    zone.records.len()
+                );
             }
 
             let mut dns_server = DnsServer::new(edgerun_dns::server::DnsServerConfig::default());
@@ -160,17 +178,26 @@ impl NetServer {
                 let a_records = integration.get_a_records();
                 let ptr_records = integration.get_ptr_records();
                 if !a_records.is_empty() {
-                    edgerun_log::debug!("edgerun-net: {} dynamic A records, {} PTR records from DHCP",
-                        a_records.len(), ptr_records.len());
+                    edgerun_log::debug!(
+                        "edgerun-net: {} dynamic A records, {} PTR records from DHCP",
+                        a_records.len(),
+                        ptr_records.len()
+                    );
                 }
                 std::thread::sleep(Duration::from_secs(10));
             }
         });
 
-        Ok(Some(ServiceHandle { stop_flag: stop_flag_clone, thread: Some(handle) }))
+        Ok(Some(ServiceHandle {
+            stop_flag: stop_flag_clone,
+            thread: Some(handle),
+        }))
     }
 
-    fn start_dhcpv4(&self, config: &ConfigState) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
+    fn start_dhcpv4(
+        &self,
+        config: &ConfigState,
+    ) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
         if config.dhcp_servers.is_empty() {
             edgerun_log::info!("edgerun-net: no DHCPv4 configuration found, skipping DHCPv4");
             return Ok(None);
@@ -184,46 +211,76 @@ impl NetServer {
         let handle = thread::spawn(move || {
             for (server_idx, server_spec) in dhcp_config.dhcp_servers.iter().enumerate() {
                 if stop_flag.load(Ordering::Relaxed) {
-                    edgerun_log::info!("edgerun-net: DHCPv4 server[{}] stopped before start", server_idx);
+                    edgerun_log::info!(
+                        "edgerun-net: DHCPv4 server[{}] stopped before start",
+                        server_idx
+                    );
                     return;
                 }
 
                 let scopes = match build_scopes_from_config(&dhcp_config, server_idx) {
                     Ok(s) => s,
                     Err(e) => {
-                        edgerun_log::warn!("edgerun-net: failed to build DHCPv4 scopes for server[{}]: {}", server_idx, e);
+                        edgerun_log::warn!(
+                            "edgerun-net: failed to build DHCPv4 scopes for server[{}]: {}",
+                            server_idx,
+                            e
+                        );
                         continue;
                     }
                 };
 
                 if scopes.is_empty() {
-                    edgerun_log::warn!("edgerun-net: no valid pools for DHCPv4 server[{}]", server_idx);
+                    edgerun_log::warn!(
+                        "edgerun-net: no valid pools for DHCPv4 server[{}]",
+                        server_idx
+                    );
                     continue;
                 }
 
-                edgerun_log::info!("edgerun-net: starting DHCPv4 server[{}] with {} scopes",
-                    server_idx, scopes.len());
+                edgerun_log::info!(
+                    "edgerun-net: starting DHCPv4 server[{}] with {} scopes",
+                    server_idx,
+                    scopes.len()
+                );
                 for scope in &scopes {
-                    edgerun_log::info!("edgerun-net:   scope: {} ({} → {})",
-                        scope.name, scope.pool.pool_start, scope.pool.pool_end);
+                    edgerun_log::info!(
+                        "edgerun-net:   scope: {} ({} → {})",
+                        scope.name,
+                        scope.pool.pool_start,
+                        scope.pool.pool_end
+                    );
                 }
 
-                let server_ip = server_spec.router
+                let server_ip = server_spec
+                    .router
                     .as_deref()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(Ipv4Addr::new(192, 168, 1, 1));
 
-                let port = if std::env::var("EDGERUN_NET_TEST").is_ok() { 1067 } else { 67 };
+                let port = if std::env::var("EDGERUN_NET_TEST").is_ok() {
+                    1067
+                } else {
+                    67
+                };
 
                 let mut server = match DhcpMultiServer::with_port(server_ip, port, scopes) {
                     Ok(s) => s,
                     Err(e) => {
-                        edgerun_log::warn!("edgerun-net: failed to start DHCPv4 server[{}]: {}", server_idx, e);
+                        edgerun_log::warn!(
+                            "edgerun-net: failed to start DHCPv4 server[{}]: {}",
+                            server_idx,
+                            e
+                        );
                         continue;
                     }
                 };
 
-                edgerun_log::info!("edgerun-net: DHCPv4 server[{}] listening on :{}", server_idx, port);
+                edgerun_log::info!(
+                    "edgerun-net: DHCPv4 server[{}] listening on :{}",
+                    server_idx,
+                    port
+                );
 
                 loop {
                     if stop_flag.load(Ordering::Relaxed) {
@@ -235,7 +292,11 @@ impl NetServer {
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
                         Err(e) if e.kind() == std::io::ErrorKind::TimedOut => continue,
                         Err(e) => {
-                            edgerun_log::warn!("edgerun-net: DHCPv4 server[{}] error: {}", server_idx, e);
+                            edgerun_log::warn!(
+                                "edgerun-net: DHCPv4 server[{}] error: {}",
+                                server_idx,
+                                e
+                            );
                             std::thread::sleep(Duration::from_secs(1));
                         }
                     }
@@ -243,10 +304,16 @@ impl NetServer {
             }
         });
 
-        Ok(Some(ServiceHandle { stop_flag: stop_flag_clone, thread: Some(handle) }))
+        Ok(Some(ServiceHandle {
+            stop_flag: stop_flag_clone,
+            thread: Some(handle),
+        }))
     }
 
-    fn start_dhcpv6(&self, config: &ConfigState) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
+    fn start_dhcpv6(
+        &self,
+        config: &ConfigState,
+    ) -> Result<Option<ServiceHandle>, Box<dyn std::error::Error>> {
         // Check if DHCPv6 is configured
         if config.dhcpv6_servers.is_empty() || config.dhcpv6_pools.is_empty() {
             edgerun_log::info!("edgerun-net: no DHCPv6 configuration found, skipping DHCPv6");
@@ -255,24 +322,30 @@ impl NetServer {
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_flag_clone = stop_flag.clone();
-        
+
         // Clone config for the thread
         let config = config.clone();
 
         let handle = thread::spawn(move || {
-            edgerun_log::info!("edgerun-net: starting DHCPv6 server with {} server(s) and {} pool(s)",
-                config.dhcpv6_servers.len(), config.dhcpv6_pools.len());
-            
-            use edgerun_dhcpv6::server::{Dhcpv6Server, Dhcpv6ServerConfig};
+            edgerun_log::info!(
+                "edgerun-net: starting DHCPv6 server with {} server(s) and {} pool(s)",
+                config.dhcpv6_servers.len(),
+                config.dhcpv6_pools.len()
+            );
+
             use edgerun_dhcpv6::lease::LeasePool;
-            
+            use edgerun_dhcpv6::server::{Dhcpv6Server, Dhcpv6ServerConfig};
+
             // Start DHCPv6 server(s) - for now, we start the first one
             if let Some(_server_spec) = config.dhcpv6_servers.first() {
                 // Build scope from config
                 match config.build_dhcpv6_scopes(0) {
                     Ok(scopes_map) => {
-                        edgerun_log::info!("edgerun-net: built {} DHCPv6 scope(s)", scopes_map.len());
-                        
+                        edgerun_log::info!(
+                            "edgerun-net: built {} DHCPv6 scope(s)",
+                            scopes_map.len()
+                        );
+
                         // Merge all pools into one for now
                         let mut main_pool = LeasePool::new();
                         for (_name, scope_pool) in scopes_map {
@@ -284,41 +357,60 @@ impl NetServer {
                                 }
                             }
                             if scope_pool.prefix_length > 0 {
-                                main_pool.available_prefixes.push((std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), scope_pool.prefix_length));
+                                main_pool.available_prefixes.push((
+                                    std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0),
+                                    scope_pool.prefix_length,
+                                ));
                             }
                         }
-                        
-                        if main_pool.available_addresses.is_empty() && main_pool.available_prefixes.is_empty() {
-                            edgerun_log::warn!("edgerun-net: DHCPv6 pool has no addresses or prefixes configured");
+
+                        if main_pool.available_addresses.is_empty()
+                            && main_pool.available_prefixes.is_empty()
+                        {
+                            edgerun_log::warn!(
+                                "edgerun-net: DHCPv6 pool has no addresses or prefixes configured"
+                            );
                             return;
                         }
-                        
+
                         let server_config = Dhcpv6ServerConfig::default();
-                        
+
                         match Dhcpv6Server::new(server_config, main_pool) {
                             Ok(mut server) => {
-                                edgerun_log::info!("edgerun-net: DHCPv6 server started successfully");
-                                
+                                edgerun_log::info!(
+                                    "edgerun-net: DHCPv6 server started successfully"
+                                );
+
                                 // Run server tick loop
                                 loop {
                                     if stop_flag.load(Ordering::Relaxed) {
                                         edgerun_log::info!("edgerun-net: DHCPv6 server stopped");
                                         return;
                                     }
-                                    
+
                                     match server.tick() {
                                         Ok(()) => {}
-                                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                                        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => continue,
+                                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                                            continue
+                                        }
+                                        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                                            continue
+                                        }
                                         Err(e) => {
-                                            edgerun_log::warn!("edgerun-net: DHCPv6 server error: {}", e);
+                                            edgerun_log::warn!(
+                                                "edgerun-net: DHCPv6 server error: {}",
+                                                e
+                                            );
                                             std::thread::sleep(Duration::from_secs(1));
                                         }
                                     }
                                 }
                             }
                             Err(e) => {
-                                edgerun_log::warn!("edgerun-net: failed to start DHCPv6 server: {}", e);
+                                edgerun_log::warn!(
+                                    "edgerun-net: failed to start DHCPv6 server: {}",
+                                    e
+                                );
                             }
                         }
                     }
@@ -329,7 +421,10 @@ impl NetServer {
             }
         });
 
-        Ok(Some(ServiceHandle { stop_flag: stop_flag_clone, thread: Some(handle) }))
+        Ok(Some(ServiceHandle {
+            stop_flag: stop_flag_clone,
+            thread: Some(handle),
+        }))
     }
 
     fn print_summary(&self, config: &ConfigState) {
@@ -340,36 +435,44 @@ impl NetServer {
         edgerun_log::info!("  DHCPv6 servers: {}", config.dhcpv6_servers.len());
         edgerun_log::info!("  DHCPv6 pools:   {}", config.dhcpv6_pools.len());
         edgerun_log::info!("  TFTP servers:   {}", config.tftp_servers.len());
-        edgerun_log::info!("  Hot-reload:     {}", if self.hot_reload { "enabled" } else { "disabled" });
+        edgerun_log::info!(
+            "  Hot-reload:     {}",
+            if self.hot_reload {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        );
         edgerun_log::info!("==================================");
     }
 }
 
-fn build_scopes_from_config(config: &ConfigState, server_idx: usize) -> Result<Vec<DhcpScope>, Box<dyn std::error::Error>> {
-    let scopes_map = config.build_dhcp_scopes(server_idx)
+fn build_scopes_from_config(
+    config: &ConfigState,
+    server_idx: usize,
+) -> Result<Vec<DhcpScope>, Box<dyn std::error::Error>> {
+    let scopes_map = config
+        .build_dhcp_scopes(server_idx)
         .map_err(|e| format!("config error: {}", e))?;
 
     let mut scopes = Vec::new();
     for (_, pool) in scopes_map {
-        let start: std::net::Ipv4Addr = pool.range_start.parse()
+        let start: std::net::Ipv4Addr = pool
+            .range_start
+            .parse()
             .map_err(|e| format!("invalid range_start: {}", e))?;
-        let end: std::net::Ipv4Addr = pool.range_end.parse()
+        let end: std::net::Ipv4Addr = pool
+            .range_end
+            .parse()
             .map_err(|e| format!("invalid range_end: {}", e))?;
-        let mask: std::net::Ipv4Addr = pool.subnet_mask.parse()
+        let mask: std::net::Ipv4Addr = pool
+            .subnet_mask
+            .parse()
             .map_err(|e| format!("invalid subnet_mask: {}", e))?;
-        
-        let router: std::net::Ipv4Addr = pool.subnet_mask.parse()
-            .unwrap_or(start);
-        
-        let scope = DhcpScope::new(
-            &pool.name,
-            start,
-            end,
-            mask,
-            router,
-            vec![router],
-            3600,
-        );
+
+        let router: std::net::Ipv4Addr = pool.subnet_mask.parse().unwrap_or(start);
+
+        let scope = DhcpScope::new(&pool.name, start, end, mask, router, vec![router], 3600);
         scopes.push(scope);
     }
     Ok(scopes)

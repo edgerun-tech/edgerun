@@ -3,8 +3,8 @@
 //! Mirrors `AsyncUdpSocket` but uses `AF_UNIX` addresses (paths).
 
 use std::io;
-use std::os::unix::net::SocketAddr;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::net::SocketAddr;
 use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -87,7 +87,11 @@ impl UnixDatagram {
     }
 
     /// Receives a datagram, returning the sender's address.
-    pub fn poll_recv_from(&self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<(usize, SocketAddr)>> {
+    pub fn poll_recv_from(
+        &self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<(usize, SocketAddr)>> {
         unsafe {
             let mut addr: libc::sockaddr_un = std::mem::zeroed();
             let mut addrlen: libc::socklen_t = std::mem::size_of::<libc::sockaddr_un>() as _;
@@ -141,10 +145,20 @@ impl UnixDatagram {
     }
 
     /// Sends data to the given path.
-    pub fn poll_send_to<P: AsRef<Path>>(&self, cx: &mut Context<'_>, buf: &[u8], path: P) -> Poll<io::Result<usize>> {
+    pub fn poll_send_to<P: AsRef<Path>>(
+        &self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        path: P,
+    ) -> Poll<io::Result<usize>> {
         let path_bytes = match path.as_ref().to_str() {
             Some(s) => s,
-            None => return Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid path"))),
+            None => {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "invalid path",
+                )))
+            }
         };
         let addr = match make_addr(path_bytes) {
             Ok(a) => a,
@@ -193,7 +207,10 @@ impl UnixDatagram {
                 return Err(io::Error::last_os_error());
             }
             if addr.ss_family as libc::c_int != libc::AF_UNIX {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a unix socket"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a unix socket",
+                ));
             }
             let unix_addr = &addr as *const _ as *const libc::sockaddr_un;
             let path = std::ffi::CStr::from_ptr((*unix_addr).sun_path.as_ptr())
@@ -213,13 +230,21 @@ impl Drop for UnixDatagram {
 impl Unpin for UnixDatagram {}
 
 impl AsyncRead for UnixDatagram {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
         self.poll_recv(cx, buf)
     }
 }
 
 impl AsyncWrite for UnixDatagram {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         self.poll_send(cx, buf)
     }
 

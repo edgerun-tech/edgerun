@@ -1,7 +1,7 @@
 // Test CancellationToken with the actual runtime.
-use edgerun_rt::{CancellationToken, Runtime, spawn};
-use std::sync::Arc;
+use edgerun_rt::{spawn, CancellationToken, Runtime};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 fn main() {
@@ -57,7 +57,11 @@ fn test_cancel_multiple_waiters() {
     token.cancel();
     std::thread::sleep(Duration::from_millis(100));
 
-    assert_eq!(count.load(Ordering::SeqCst), 5, "all 5 waiters should be woken");
+    assert_eq!(
+        count.load(Ordering::SeqCst),
+        5,
+        "all 5 waiters should be woken"
+    );
     for h in handles {
         drop(h);
     }
@@ -96,11 +100,19 @@ fn test_cancel_unblocks_task() {
 
     std::thread::sleep(Duration::from_millis(20));
     assert_eq!(started.load(Ordering::SeqCst), 1);
-    assert_eq!(completed.load(Ordering::SeqCst), 0, "should not complete before cancel");
+    assert_eq!(
+        completed.load(Ordering::SeqCst),
+        0,
+        "should not complete before cancel"
+    );
 
     token.cancel();
     std::thread::sleep(Duration::from_millis(50));
-    assert_eq!(completed.load(Ordering::SeqCst), 1, "should complete after cancel");
+    assert_eq!(
+        completed.load(Ordering::SeqCst),
+        1,
+        "should complete after cancel"
+    );
 
     drop(h);
     println!("  test_cancel_unblocks_task OK");
@@ -129,7 +141,11 @@ fn test_cancel_cooperative_shutdown() {
     std::thread::sleep(Duration::from_millis(100));
 
     let work_done = counter.load(Ordering::SeqCst);
-    assert!(work_done < 10, "task should stop early after cancel, did {} iterations", work_done);
+    assert!(
+        work_done < 10,
+        "task should stop early after cancel, did {} iterations",
+        work_done
+    );
     drop(h);
     println!("  test_cancel_cooperative_shutdown OK");
 }
@@ -164,7 +180,11 @@ fn test_cancel_idempotent() {
     token.cancel();
 
     std::thread::sleep(Duration::from_millis(50));
-    assert_eq!(count.load(Ordering::SeqCst), 1, "task should complete exactly once");
+    assert_eq!(
+        count.load(Ordering::SeqCst),
+        1,
+        "task should complete exactly once"
+    );
     drop(h);
     println!("  test_cancel_idempotent OK");
 }
@@ -220,7 +240,11 @@ fn test_cancel_with_sleep() {
 
     let work_done = counter.load(Ordering::SeqCst);
     assert!(work_done > 0, "some work should be done before cancel");
-    assert!(work_done < 10, "work should stop after cancel, did {}", work_done);
+    assert!(
+        work_done < 10,
+        "work should stop after cancel, did {}",
+        work_done
+    );
 
     drop(h);
     println!("  test_cancel_with_sleep OK (did {} iterations)", work_done);

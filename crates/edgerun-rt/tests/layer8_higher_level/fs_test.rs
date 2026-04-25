@@ -1,5 +1,5 @@
 // Test async fs module with the actual runtime.
-use edgerun_rt::{Runtime, fs};
+use edgerun_rt::{fs, Runtime};
 use std::time::Duration;
 
 fn make_temp_dir() -> std::path::PathBuf {
@@ -55,8 +55,12 @@ fn test_read_to_string() {
 
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {
-        fs::write(&path, "unicode: 你好 🌍").await.expect("write failed");
-        let text = fs::read_to_string(&path).await.expect("read_to_string failed");
+        fs::write(&path, "unicode: 你好 🌍")
+            .await
+            .expect("write failed");
+        let text = fs::read_to_string(&path)
+            .await
+            .expect("read_to_string failed");
         assert_eq!(text, "unicode: 你好 🌍");
     });
     println!("  test_read_to_string OK");
@@ -89,8 +93,12 @@ fn test_rename_file() {
 
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {
-        fs::write(&old_path, b"renamed").await.expect("write failed");
-        fs::rename(&old_path, &new_path).await.expect("rename failed");
+        fs::write(&old_path, b"renamed")
+            .await
+            .expect("write failed");
+        fs::rename(&old_path, &new_path)
+            .await
+            .expect("rename failed");
         assert!(!old_path.exists());
         assert!(new_path.exists());
         let data = fs::read(&new_path).await.expect("read failed");
@@ -126,9 +134,13 @@ fn test_create_dir_all_and_remove() {
 
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async move {
-        fs::create_dir_all(&deep).await.expect("create_dir_all failed");
+        fs::create_dir_all(&deep)
+            .await
+            .expect("create_dir_all failed");
         assert!(deep.is_dir());
-        fs::remove_dir_all(&base_a).await.expect("remove_dir_all failed");
+        fs::remove_dir_all(&base_a)
+            .await
+            .expect("remove_dir_all failed");
         assert!(!base_a.exists());
     });
     println!("  test_create_dir_all_and_remove OK");

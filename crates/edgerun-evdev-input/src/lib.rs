@@ -322,18 +322,18 @@ impl EvdevInputBackend {
                 revents: 0,
             };
 
-            let ret = unsafe {
-                libc::poll(&mut pollfd, 1, timeout_ms)
-            };
+            let ret = unsafe { libc::poll(&mut pollfd, 1, timeout_ms) };
 
             if ret < 0 {
                 let err = std::io::Error::last_os_error();
                 if err.kind() == std::io::ErrorKind::Interrupted {
                     continue; // EINTR, retry
                 }
-                return Err(CapabilityError::Provider(
-                    format!("poll evdev fd {}: {}", self.file.as_raw_fd(), err),
-                ));
+                return Err(CapabilityError::Provider(format!(
+                    "poll evdev fd {}: {}",
+                    self.file.as_raw_fd(),
+                    err
+                )));
             }
 
             if ret == 0 {
@@ -342,9 +342,10 @@ impl EvdevInputBackend {
 
             // Check for errors
             if pollfd.revents & (POLLERR | POLLHUP) != 0 {
-                return Err(CapabilityError::Provider(
-                    format!("evdev fd {} error/hangup", self.file.as_raw_fd()),
-                ));
+                return Err(CapabilityError::Provider(format!(
+                    "evdev fd {} error/hangup",
+                    self.file.as_raw_fd()
+                )));
             }
 
             // Read available events
@@ -353,12 +354,16 @@ impl EvdevInputBackend {
                 break; // Buffer full
             }
 
-            match self.file.read(&mut buf[total_read..total_read + remaining_bytes]) {
+            match self
+                .file
+                .read(&mut buf[total_read..total_read + remaining_bytes])
+            {
                 Ok(0) => {
                     // EOF — device disconnected
-                    return Err(CapabilityError::Provider(
-                        format!("evdev fd {} EOF (device disconnected)", self.file.as_raw_fd()),
-                    ));
+                    return Err(CapabilityError::Provider(format!(
+                        "evdev fd {} EOF (device disconnected)",
+                        self.file.as_raw_fd()
+                    )));
                 }
                 Ok(n) => {
                     total_read += n;
@@ -367,9 +372,11 @@ impl EvdevInputBackend {
                     if e.kind() == std::io::ErrorKind::WouldBlock {
                         continue; // No data yet, poll again
                     }
-                    return Err(CapabilityError::Provider(
-                        format!("read evdev fd {}: {}", self.file.as_raw_fd(), e),
-                    ));
+                    return Err(CapabilityError::Provider(format!(
+                        "read evdev fd {}: {}",
+                        self.file.as_raw_fd(),
+                        e
+                    )));
                 }
             }
         }
@@ -408,13 +415,12 @@ impl EvdevInputBackend {
     /// While grabbed, no other process receives events from this device.
     pub fn grab(&self, grab: bool) -> Result<(), CapabilityError> {
         let grab_val: c_int = if grab { 1 } else { 0 };
-        let ret = unsafe {
-            libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as _, grab_val)
-        };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as _, grab_val) };
         if ret < 0 {
-            Err(CapabilityError::Provider(
-                format!("EVIOCGRAB failed: {}", std::io::Error::last_os_error()),
-            ))
+            Err(CapabilityError::Provider(format!(
+                "EVIOCGRAB failed: {}",
+                std::io::Error::last_os_error()
+            )))
         } else {
             Ok(())
         }
@@ -423,13 +429,12 @@ impl EvdevInputBackend {
     /// Get device name via EVIOCGNAME ioctl (more reliable than sysfs).
     pub fn ioctl_device_name(&self) -> Result<String, CapabilityError> {
         let mut buf = [0u8; 256];
-        let ret = unsafe {
-            libc::ioctl(self.file.as_raw_fd(), EVIOCGNAME as _, buf.as_mut_ptr())
-        };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), EVIOCGNAME as _, buf.as_mut_ptr()) };
         if ret < 0 {
-            return Err(CapabilityError::Provider(
-                format!("EVIOCGNAME failed: {}", std::io::Error::last_os_error()),
-            ));
+            return Err(CapabilityError::Provider(format!(
+                "EVIOCGNAME failed: {}",
+                std::io::Error::last_os_error()
+            )));
         }
         let len = ret as usize;
         let name = std::str::from_utf8(&buf[..len])
@@ -711,10 +716,7 @@ mod tests {
 
     #[test]
     fn classify_other() {
-        assert_eq!(
-            classify_device(&[], &[], &[], &[]),
-            InputDeviceKind::Other
-        );
+        assert_eq!(classify_device(&[], &[], &[], &[]), InputDeviceKind::Other);
     }
 
     #[test]
@@ -862,10 +864,17 @@ mod tests {
         let dir = temp_root("evdev-input-modalias");
         let event = dir.join("event0");
         fs::create_dir_all(event.join("device/capabilities")).unwrap();
-        fs::write(event.join("device/uevent"), "MODALIAS=input:b0003v046Dp085Ee0110\n").unwrap();
+        fs::write(
+            event.join("device/uevent"),
+            "MODALIAS=input:b0003v046Dp085Ee0110\n",
+        )
+        .unwrap();
         fs::write(event.join("device/capabilities/ev"), "0\n").unwrap();
         let devices = discover_evdev_devices_in(&dir).unwrap();
-        assert_eq!(devices[0].modalias, Some("input:b0003v046Dp085Ee0110".into()));
+        assert_eq!(
+            devices[0].modalias,
+            Some("input:b0003v046Dp085Ee0110".into())
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

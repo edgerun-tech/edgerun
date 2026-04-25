@@ -16,8 +16,8 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use edgerun_vfs::GitAwarePersist;
 use edgerun_inotify::{Inotify, WatchMask};
+use edgerun_vfs::GitAwarePersist;
 use rayon::ThreadPoolBuilder;
 
 const LOCK_FILE: &str = "/var/run/edgerun-vfs.lock";
@@ -34,8 +34,14 @@ impl Cli {
     fn from_args() -> Self {
         let args: Vec<_> = std::env::args().collect();
         Self {
-            source: args.get(1).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(".")),
-            mount_point: args.get(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp/edgerun-vfs")),
+            source: args
+                .get(1)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(".")),
+            mount_point: args
+                .get(2)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("/tmp/edgerun-vfs")),
             ram_size: args.get(3).cloned().unwrap_or_else(|| "16G".to_string()),
             sync_workers: args.get(4).and_then(|s| s.parse().ok()).unwrap_or(4),
         }
@@ -211,7 +217,10 @@ fn main() {
     mark_unclean_start();
 
     let source = cli.source.canonicalize().unwrap_or_else(|_| {
-        eprintln!("Error: Source path does not exist: {}", cli.source.display());
+        eprintln!(
+            "Error: Source path does not exist: {}",
+            cli.source.display()
+        );
         release_lock();
         std::process::exit(1);
     });
@@ -231,7 +240,14 @@ fn main() {
     // Step 1: Mount tmpfs
     eprintln!("📦 Step 1/4: Mounting tmpfs...");
     let output = Command::new("mount")
-        .args(["-t", "tmpfs", "-o", &format!("size={}", cli.ram_size), "tmpfs", &ram_disk.display().to_string()])
+        .args([
+            "-t",
+            "tmpfs",
+            "-o",
+            &format!("size={}", cli.ram_size),
+            "tmpfs",
+            &ram_disk.display().to_string(),
+        ])
         .output();
 
     match output {
@@ -253,11 +269,18 @@ fn main() {
     let start = std::time::Instant::now();
 
     let rsync_status = Command::new("rsync")
-        .args(["-a", "--no-D", &format!("{}/", source.display()), &ram_disk.display().to_string()])
+        .args([
+            "-a",
+            "--no-D",
+            &format!("{}/", source.display()),
+            &ram_disk.display().to_string(),
+        ])
         .status();
 
     match rsync_status {
-        Ok(status) if status.success() => eprintln!("   ✅ Copied in {:.2}s", start.elapsed().as_secs_f64()),
+        Ok(status) if status.success() => {
+            eprintln!("   ✅ Copied in {:.2}s", start.elapsed().as_secs_f64())
+        }
         _ => {
             eprintln!("   ❌ rsync failed");
             release_lock();
@@ -274,7 +297,11 @@ fn main() {
     std::fs::create_dir_all(&cli.mount_point).ok();
 
     let output = Command::new("mount")
-        .args(["--bind", &ram_disk.display().to_string(), &cli.mount_point.display().to_string()])
+        .args([
+            "--bind",
+            &ram_disk.display().to_string(),
+            &cli.mount_point.display().to_string(),
+        ])
         .output();
 
     match output {
@@ -308,10 +335,14 @@ fn main() {
     std::thread::spawn(move || {
         let mut inotify = Inotify::init().expect("Failed to create inotify");
         let watches = inotify.watches();
-        
-        let mask = WatchMask::CREATE | WatchMask::MODIFY | WatchMask::DELETE | WatchMask::MOVED_FROM | WatchMask::MOVED_TO;
+
+        let mask = WatchMask::CREATE
+            | WatchMask::MODIFY
+            | WatchMask::DELETE
+            | WatchMask::MOVED_FROM
+            | WatchMask::MOVED_TO;
         let _ = watches.add(&watch_ram, mask).expect("Failed to watch path");
-        
+
         let mut buf = [0u8; 65536];
         loop {
             let events = inotify.read_events(&mut buf);
@@ -444,7 +475,9 @@ mod tests {
         assert!(is_git_path(Path::new("foo/.git")));
         assert!(is_git_path(Path::new("foo/.git/HEAD")));
         assert!(is_git_path(Path::new("foo/bar/.git/config")));
-        assert!(is_git_path(Path::new("nested/repo/.git/objects/pack/foo.pack")));
+        assert!(is_git_path(Path::new(
+            "nested/repo/.git/objects/pack/foo.pack"
+        )));
     }
 
     #[test]

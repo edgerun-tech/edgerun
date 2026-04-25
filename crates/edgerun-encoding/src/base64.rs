@@ -10,15 +10,17 @@
 //! - `edgerun-email/src/smtp/client/builder.rs` (Standard Base64 with line wrapping)
 //! - `edgerun-http/src/http1/upgrade.rs` (Custom u64 base64)
 
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::format;
 
 /// Standard Base64 alphabet (RFC 4648)
-const STANDARD_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const STANDARD_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /// Base64-URL alphabet (RFC 4648, Section 5)
-const URLSAFE_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const URLSAFE_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 /// Encode 3 bytes to 4 Base64 characters using the given alphabet.
 fn encode_tripplet(bytes: &[u8; 3], alphabet: &[u8; 64]) -> [u8; 4] {
@@ -43,10 +45,7 @@ fn decode_quad(chars: &[u8; 4], reverse: &[u8; 256]) -> Option<[u8; 3]> {
         return None;
     }
 
-    let n = (r0 as u32) << 18
-        | (r1 as u32) << 12
-        | (r2 as u32) << 6
-        | (r3 as u32);
+    let n = (r0 as u32) << 18 | (r1 as u32) << 12 | (r2 as u32) << 6 | (r3 as u32);
     Some([(n >> 16) as u8, (n >> 8) as u8, n as u8])
 }
 

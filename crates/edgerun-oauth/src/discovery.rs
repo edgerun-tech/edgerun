@@ -1,8 +1,8 @@
 //! OIDC Discovery (RFC 8414) and JWKS document types.
 
-use edgerun_json::{JsonValue, from_str};
 use crate::errors::OAuthError;
 use crate::types::Scope;
+use edgerun_json::{from_str, JsonValue};
 
 /// OIDC Discovery document (`.well-known/openid-configuration`).
 #[derive(Debug, Clone)]
@@ -33,7 +33,12 @@ impl OidcDiscoveryDocument {
         let str_array = |key: &str| -> Vec<String> {
             v.get(key)
                 .and_then(|x| x.as_array())
-                .map(|arr| arr.iter().filter_map(|x| x.as_str()).map(|s| s.to_string()).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str())
+                        .map(|s| s.to_string())
+                        .collect()
+                })
                 .unwrap_or_default()
         };
 
@@ -55,50 +60,102 @@ impl OidcDiscoveryDocument {
             grant_types_supported: str_array("grant_types_supported"),
             scopes_supported,
             subject_types_supported: str_array("subject_types_supported"),
-            id_token_signing_alg_values_supported: str_array("id_token_signing_alg_values_supported"),
+            id_token_signing_alg_values_supported: str_array(
+                "id_token_signing_alg_values_supported",
+            ),
             code_challenge_methods_supported: str_array("code_challenge_methods_supported"),
-            token_endpoint_auth_methods_supported: str_array("token_endpoint_auth_methods_supported"),
+            token_endpoint_auth_methods_supported: str_array(
+                "token_endpoint_auth_methods_supported",
+            ),
         })
     }
 
     /// Serialize to JSON string.
     pub fn to_json(&self) -> String {
-        use edgerun_json::{JsonValue, Map, to_string};
+        use edgerun_json::{to_string, JsonValue, Map};
         let mut obj = Vec::new();
         obj.push(("issuer".into(), JsonValue::String(self.issuer.clone())));
-        obj.push(("authorization_endpoint".into(), JsonValue::String(self.authorization_endpoint.clone())));
-        obj.push(("token_endpoint".into(), JsonValue::String(self.token_endpoint.clone())));
+        obj.push((
+            "authorization_endpoint".into(),
+            JsonValue::String(self.authorization_endpoint.clone()),
+        ));
+        obj.push((
+            "token_endpoint".into(),
+            JsonValue::String(self.token_endpoint.clone()),
+        ));
         if let Some(ref v) = self.userinfo_endpoint {
             obj.push(("userinfo_endpoint".into(), JsonValue::String(v.clone())));
         }
         obj.push(("jwks_uri".into(), JsonValue::String(self.jwks_uri.clone())));
         if let Some(ref v) = self.device_authorization_endpoint {
-            obj.push(("device_authorization_endpoint".into(), JsonValue::String(v.clone())));
+            obj.push((
+                "device_authorization_endpoint".into(),
+                JsonValue::String(v.clone()),
+            ));
         }
         if let Some(ref v) = self.introspection_endpoint {
-            obj.push(("introspection_endpoint".into(), JsonValue::String(v.clone())));
+            obj.push((
+                "introspection_endpoint".into(),
+                JsonValue::String(v.clone()),
+            ));
         }
         if let Some(ref v) = self.revocation_endpoint {
             obj.push(("revocation_endpoint".into(), JsonValue::String(v.clone())));
         }
-        obj.push(("response_types_supported".into(), str_array(&self.response_types_supported)));
-        obj.push(("grant_types_supported".into(), str_array(&self.grant_types_supported)));
-        obj.push(("scopes_supported".into(), str_array(&self.scopes_supported.iter().map(|s| s.0.clone()).collect::<Vec<_>>())));
-        obj.push(("subject_types_supported".into(), str_array(&self.subject_types_supported)));
-        obj.push(("id_token_signing_alg_values_supported".into(), str_array(&self.id_token_signing_alg_values_supported)));
-        obj.push(("code_challenge_methods_supported".into(), str_array(&self.code_challenge_methods_supported)));
-        obj.push(("token_endpoint_auth_methods_supported".into(), str_array(&self.token_endpoint_auth_methods_supported)));
+        obj.push((
+            "response_types_supported".into(),
+            str_array(&self.response_types_supported),
+        ));
+        obj.push((
+            "grant_types_supported".into(),
+            str_array(&self.grant_types_supported),
+        ));
+        obj.push((
+            "scopes_supported".into(),
+            str_array(
+                &self
+                    .scopes_supported
+                    .iter()
+                    .map(|s| s.0.clone())
+                    .collect::<Vec<_>>(),
+            ),
+        ));
+        obj.push((
+            "subject_types_supported".into(),
+            str_array(&self.subject_types_supported),
+        ));
+        obj.push((
+            "id_token_signing_alg_values_supported".into(),
+            str_array(&self.id_token_signing_alg_values_supported),
+        ));
+        obj.push((
+            "code_challenge_methods_supported".into(),
+            str_array(&self.code_challenge_methods_supported),
+        ));
+        obj.push((
+            "token_endpoint_auth_methods_supported".into(),
+            str_array(&self.token_endpoint_auth_methods_supported),
+        ));
         let val = JsonValue::Object(Map::from_iter(obj));
         to_string(&val).unwrap_or_else(|_| "{}".into())
     }
 
     /// Discover from a base URL by fetching the well-known endpoint.
     pub async fn discover(base_url: &str) -> Result<Self, OAuthError> {
-        let url = format!("{}/.well-known/openid-configuration", base_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/.well-known/openid-configuration",
+            base_url.trim_end_matches('/')
+        );
         let client = edgerun_http::HttpClient::new();
-        let resp = client.get(&url).await.map_err(|e| OAuthError::HttpError(e.to_string()))?;
+        let resp = client
+            .get(&url)
+            .await
+            .map_err(|e| OAuthError::HttpError(e.to_string()))?;
         if resp.status().as_u16() != 200 {
-            return Err(OAuthError::HttpError(format!("HTTP {}", resp.status().as_u16())));
+            return Err(OAuthError::HttpError(format!(
+                "HTTP {}",
+                resp.status().as_u16()
+            )));
         }
         let body = String::from_utf8_lossy(resp.body()).to_string();
         Self::from_json(&body).map_err(OAuthError::JsonError)
@@ -135,11 +192,20 @@ impl JwksDocument {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
         let v: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse: {e}"))?;
-        let keys_array = v.get("keys").and_then(|x| x.as_array()).cloned().unwrap_or_default();
+        let keys_array = v
+            .get("keys")
+            .and_then(|x| x.as_array())
+            .cloned()
+            .unwrap_or_default();
         let mut keys = Vec::new();
 
         for key_json in keys_array {
-            let str_field = |k: &str| key_json.get(k).and_then(|x| x.as_str()).map(|s| s.to_string());
+            let str_field = |k: &str| {
+                key_json
+                    .get(k)
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string())
+            };
 
             keys.push(Jwk {
                 kid: str_field("kid"),
@@ -161,7 +227,7 @@ impl JwksDocument {
 
     /// Serialize to JSON string.
     pub fn to_json(&self) -> String {
-        use edgerun_json::{JsonValue, Map, to_string};
+        use edgerun_json::{to_string, JsonValue, Map};
         let keys_arr: Vec<JsonValue> = self.keys.iter().map(|k| k.raw.clone()).collect();
         let obj = vec![("keys".into(), JsonValue::Array(keys_arr))];
         let val = JsonValue::Object(Map::from_iter(obj));
@@ -171,9 +237,15 @@ impl JwksDocument {
     /// Fetch JWKS from a URL.
     pub async fn fetch(url: &str) -> Result<Self, OAuthError> {
         let client = edgerun_http::HttpClient::new();
-        let resp = client.get(url).await.map_err(|e| OAuthError::HttpError(e.to_string()))?;
+        let resp = client
+            .get(url)
+            .await
+            .map_err(|e| OAuthError::HttpError(e.to_string()))?;
         if resp.status().as_u16() != 200 {
-            return Err(OAuthError::HttpError(format!("HTTP {}", resp.status().as_u16())));
+            return Err(OAuthError::HttpError(format!(
+                "HTTP {}",
+                resp.status().as_u16()
+            )));
         }
         let body = String::from_utf8_lossy(resp.body()).to_string();
         Self::from_json(&body).map_err(OAuthError::JsonError)
@@ -187,7 +259,12 @@ impl JwksDocument {
 
 fn str_array(strings: &[String]) -> JsonValue {
     use edgerun_json::JsonValue;
-    JsonValue::Array(strings.iter().map(|s| JsonValue::String(s.clone())).collect())
+    JsonValue::Array(
+        strings
+            .iter()
+            .map(|s| JsonValue::String(s.clone()))
+            .collect(),
+    )
 }
 
 // ===========================================================================
@@ -208,7 +285,10 @@ mod tests {
         }"#;
         let doc = OidcDiscoveryDocument::from_json(json).unwrap();
         assert_eq!(doc.issuer, "https://auth.example.com");
-        assert_eq!(doc.authorization_endpoint, "https://auth.example.com/authorize");
+        assert_eq!(
+            doc.authorization_endpoint,
+            "https://auth.example.com/authorize"
+        );
         assert_eq!(doc.token_endpoint, "https://auth.example.com/token");
         assert_eq!(doc.jwks_uri, "https://auth.example.com/jwks");
     }
@@ -231,8 +311,14 @@ mod tests {
             "code_challenge_methods_supported": ["S256"]
         }"#;
         let doc = OidcDiscoveryDocument::from_json(json).unwrap();
-        assert_eq!(doc.userinfo_endpoint, Some("https://auth.example.com/userinfo".into()));
-        assert_eq!(doc.device_authorization_endpoint, Some("https://auth.example.com/device/code".into()));
+        assert_eq!(
+            doc.userinfo_endpoint,
+            Some("https://auth.example.com/userinfo".into())
+        );
+        assert_eq!(
+            doc.device_authorization_endpoint,
+            Some("https://auth.example.com/device/code".into())
+        );
         assert_eq!(doc.response_types_supported, vec!["code"]);
         assert_eq!(doc.scopes_supported.len(), 3);
     }

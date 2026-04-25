@@ -23,15 +23,15 @@
 //! // Add `Authentication-Results: auth_results` to the message
 //! ```
 
-pub mod spf;
 pub mod dkim;
 pub mod dmarc;
 pub mod sign;
+pub mod spf;
 
 pub use dkim::{DkimResult, DkimSignature, DkimStatus};
 pub use dmarc::{DmarcPolicy, DmarcResult, DmarcStatus};
-pub use spf::SpfResult;
 pub use sign::DkimSigner;
+pub use spf::SpfResult;
 
 use std::io;
 
@@ -64,7 +64,10 @@ impl AuthenticationResults {
             if i == 0 {
                 // Only show the selector for the first one to keep it readable
                 if let Some(ref sel) = dkim.selector {
-                    parts.last_mut().unwrap().push_str(&format!("; header.s={}", sel));
+                    parts
+                        .last_mut()
+                        .unwrap()
+                        .push_str(&format!("; header.s={}", sel));
                 }
             }
         }
@@ -206,7 +209,10 @@ impl<'a, D: DnsQuery> EmailAuthEvaluator<'a, D> {
 
 /// Trait for DNS queries needed by the evaluator.
 pub trait DnsQuery {
-    fn query_txt(&mut self, name: &str) -> impl std::future::Future<Output = io::Result<Vec<String>>> + Send;
+    fn query_txt(
+        &mut self,
+        name: &str,
+    ) -> impl std::future::Future<Output = io::Result<Vec<String>>> + Send;
 }
 
 impl DnsQuery for edgerun_dns::client::DnsClient {

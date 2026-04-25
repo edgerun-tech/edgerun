@@ -258,9 +258,6 @@ mod tests {
     #[test]
     fn usb_descriptor_has_text_modality() {
         let descriptor = default_usb_descriptor("linux-usb", "root");
-        assert_eq!(
-            descriptor.modalities,
-            vec![CapabilityModality::Text as i32]
-        );
+        assert_eq!(descriptor.modalities, vec![CapabilityModality::Text as i32]);
     }
 }

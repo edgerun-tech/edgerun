@@ -1,5 +1,5 @@
 // Test AsyncFd with the actual runtime.
-use edgerun_rt::{AsyncFd, pipe, Runtime, spawn};
+use edgerun_rt::{pipe, spawn, AsyncFd, Runtime};
 use std::os::unix::io::AsRawFd;
 use std::time::Duration;
 

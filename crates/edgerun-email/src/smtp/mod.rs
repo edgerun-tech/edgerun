@@ -42,13 +42,12 @@ pub mod relay;
 pub mod server;
 pub mod types;
 
-pub use client::{EmailBuilder, MimePart, SmtpClient};
-pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
 pub use crate::server::ConnectionInterceptor;
-pub use server::handler::{AuthCredentials, AuthResult};
+pub use client::{EmailBuilder, MimePart, SmtpClient};
 pub use relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
+pub use server::handler::{AuthCredentials, AuthResult};
+pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
 pub use types::{
-    DsnNotify, DsnRet, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand,
-    SmtpResponse, SmtpResponseCode, SmtpState,
-    get_subject, get_from_address, get_date, parse_headers,
+    get_date, get_from_address, get_subject, parse_headers, DsnNotify, DsnRet, EnhancedStatusCode,
+    MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };

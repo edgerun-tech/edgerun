@@ -97,7 +97,12 @@ impl SessionCache {
         if tickets.len() >= self.max_per_server {
             // Remove oldest first
             if let Some(pos) = tickets.iter().position(|t| {
-                t.received_at == tickets.iter().map(|x| x.received_at).min().unwrap_or(t.received_at)
+                t.received_at
+                    == tickets
+                        .iter()
+                        .map(|x| x.received_at)
+                        .min()
+                        .unwrap_or(t.received_at)
             }) {
                 tickets.remove(pos);
             }

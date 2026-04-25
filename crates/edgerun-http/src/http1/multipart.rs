@@ -75,11 +75,11 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
         pos += headers_end;
 
         // Extract Content-Disposition
-        let content_disposition = headers.get("content-disposition")
+        let content_disposition = headers
+            .get("content-disposition")
             .ok_or(MultipartError::MissingContentDisposition)?;
 
-        let name = extract_param(content_disposition, "name")
-            .ok_or(MultipartError::MissingName)?;
+        let name = extract_param(content_disposition, "name").ok_or(MultipartError::MissingName)?;
         let filename = extract_param(content_disposition, "filename");
 
         // Extract Content-Type
@@ -133,7 +133,9 @@ pub fn extract_boundary(content_type: &str) -> Option<String> {
 
 /// Check if Content-Type is multipart/form-data
 pub fn is_multipart(content_type: &str) -> bool {
-    content_type.to_lowercase().starts_with("multipart/form-data")
+    content_type
+        .to_lowercase()
+        .starts_with("multipart/form-data")
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +195,11 @@ fn find_next_boundary(
 
     // Then check for end delimiter: \r\n--boundary--
     let crlf_end = b"\r\n";
-    for i in start..body.len().saturating_sub(crlf_end.len() + end_delimiter.len() - 1) {
+    for i in start
+        ..body
+            .len()
+            .saturating_sub(crlf_end.len() + end_delimiter.len() - 1)
+    {
         if body[i..i + crlf_end.len()] == *crlf_end {
             let after_crlf = i + crlf_end.len();
             if body.len() >= after_crlf + end_delimiter.len()
@@ -241,8 +247,8 @@ fn parse_headers(body: &[u8]) -> Result<(HashMap<String, String>, usize), Multip
             .map(|i| pos + i)
             .unwrap_or(body.len());
 
-        let line = std::str::from_utf8(&body[pos..line_end])
-            .map_err(|_| MultipartError::InvalidUtf8)?;
+        let line =
+            std::str::from_utf8(&body[pos..line_end]).map_err(|_| MultipartError::InvalidUtf8)?;
 
         if let Some(colon) = line.find(':') {
             let name = line[..colon].trim().to_lowercase();
@@ -296,7 +302,10 @@ mod tests {
     fn test_extract_boundary() {
         let ct = "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let boundary = extract_boundary(ct);
-        assert_eq!(boundary.as_deref(), Some("----WebKitFormBoundary7MA4YWxkTrZu0gW"));
+        assert_eq!(
+            boundary.as_deref(),
+            Some("----WebKitFormBoundary7MA4YWxkTrZu0gW")
+        );
     }
 
     #[test]
@@ -356,12 +365,18 @@ mod tests {
     fn test_extract_param_quoted() {
         let header = r#"form-data; name="myfield"; filename="myfile.txt""#;
         assert_eq!(extract_param(header, "name"), Some("myfield".to_string()));
-        assert_eq!(extract_param(header, "filename"), Some("myfile.txt".to_string()));
+        assert_eq!(
+            extract_param(header, "filename"),
+            Some("myfile.txt".to_string())
+        );
     }
 
     #[test]
     fn test_extract_param_unquoted() {
         let header = "multipart/form-data; boundary=myboundary";
-        assert_eq!(extract_param(header, "boundary"), Some("myboundary".to_string()));
+        assert_eq!(
+            extract_param(header, "boundary"),
+            Some("myboundary".to_string())
+        );
     }
 }

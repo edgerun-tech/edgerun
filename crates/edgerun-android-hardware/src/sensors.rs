@@ -1,8 +1,8 @@
 //! Android sensors via `libsensor.so` (NDK `ASensorManager`).
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityModality,
-    CapabilityOperation, CapabilityRole, CapabilityProvider,
+    capability_descriptor, CapabilityDescriptor, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole,
 };
 
 #[cfg(feature = "android-real")]
@@ -71,7 +71,9 @@ mod real {
         LIB_SENSOR.get_or_try_init(sensor::SensorFns::load)
     }
 
-    pub struct ASensorManagerWrapper { manager: ASensorManager }
+    pub struct ASensorManagerWrapper {
+        manager: ASensorManager,
+    }
 
     impl ASensorManagerWrapper {
         pub fn new() -> Result<Self, CapabilityError> {
@@ -79,7 +81,9 @@ mod real {
             unsafe {
                 let manager = (fns.get_instance)();
                 if manager.is_null() {
-                    return Err(CapabilityError::Provider("ASensorManager_getInstance returned null".into()));
+                    return Err(CapabilityError::Provider(
+                        "ASensorManager_getInstance returned null".into(),
+                    ));
                 }
                 Ok(Self { manager })
             }
@@ -89,34 +93,58 @@ mod real {
             let fns = ensure_loaded().ok()?;
             unsafe {
                 let sensor = (fns.get_default_sensor)(self.manager, sensor_type);
-                if sensor.is_null() { return None; }
-                let name = std::ffi::CStr::from_ptr((fns.get_name)(sensor)).to_string_lossy().into_owned();
-                let vendor = std::ffi::CStr::from_ptr((fns.get_vendor)(sensor)).to_string_lossy().into_owned();
+                if sensor.is_null() {
+                    return None;
+                }
+                let name = std::ffi::CStr::from_ptr((fns.get_name)(sensor))
+                    .to_string_lossy()
+                    .into_owned();
+                let vendor = std::ffi::CStr::from_ptr((fns.get_vendor)(sensor))
+                    .to_string_lossy()
+                    .into_owned();
                 let res = (fns.get_resolution)(sensor);
                 Some(format!("{name} ({vendor}, res={res:.2})"))
             }
         }
 
         pub fn list_sensors(&self) -> Vec<String> {
-            [ASENSOR_TYPE_ACCELEROMETER, ASENSOR_TYPE_GYROSCOPE, ASENSOR_TYPE_LIGHT,
-             ASENSOR_TYPE_PROXIMITY, ASENSOR_TYPE_MAGNETIC_FIELD, ASENSOR_TYPE_PRESSURE,
-             ASENSOR_TYPE_GRAVITY, ASENSOR_TYPE_LINEAR_ACCELERATION]
-                .iter().filter_map(|&t| self.get_sensor(t)).collect()
+            [
+                ASENSOR_TYPE_ACCELEROMETER,
+                ASENSOR_TYPE_GYROSCOPE,
+                ASENSOR_TYPE_LIGHT,
+                ASENSOR_TYPE_PROXIMITY,
+                ASENSOR_TYPE_MAGNETIC_FIELD,
+                ASENSOR_TYPE_PRESSURE,
+                ASENSOR_TYPE_GRAVITY,
+                ASENSOR_TYPE_LINEAR_ACCELERATION,
+            ]
+            .iter()
+            .filter_map(|&t| self.get_sensor(t))
+            .collect()
         }
     }
 
-    pub struct AndroidSensorProvider { manager: Option<ASensorManagerWrapper> }
+    pub struct AndroidSensorProvider {
+        manager: Option<ASensorManagerWrapper>,
+    }
 
     impl AndroidSensorProvider {
-        pub fn new() -> Self { Self { manager: None } }
+        pub fn new() -> Self {
+            Self { manager: None }
+        }
     }
 
     impl CapabilityProvider for AndroidSensorProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-sensors", "android", CapabilityRole::Input,
+            capability_descriptor(
+                "android-sensors",
+                "android",
+                CapabilityRole::Input,
                 &[CapabilityModality::Other],
                 &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }
@@ -133,15 +161,24 @@ mod real {
         }
     }
 
-    impl AndroidSensorProvider { pub fn new() -> Self { Self } }
+    impl AndroidSensorProvider {
+        pub fn new() -> Self {
+            Self
+        }
+    }
     impl CapabilityProvider for AndroidSensorProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-sensors-stub", "stub", CapabilityRole::Input,
+            capability_descriptor(
+                "android-sensors-stub",
+                "stub",
+                CapabilityRole::Input,
                 &[CapabilityModality::Other],
                 &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }
 
-pub use real::{AndroidSensorProvider, ASensorManagerWrapper};
+pub use real::{ASensorManagerWrapper, AndroidSensorProvider};

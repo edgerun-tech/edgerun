@@ -38,10 +38,18 @@ pub enum NameError {
 impl std::fmt::Display for NameError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::TooLong { len } => write!(f, "domain name too long: {} characters (max 253)", len),
-            Self::LabelTooLong { label } => write!(f, "label too long: '{}' (max 63 characters)", label),
-            Self::InvalidHyphen { label } => write!(f, "invalid hyphen placement in label: '{}'", label),
-            Self::InvalidCharacter { label } => write!(f, "invalid character in label: '{}'", label),
+            Self::TooLong { len } => {
+                write!(f, "domain name too long: {} characters (max 253)", len)
+            }
+            Self::LabelTooLong { label } => {
+                write!(f, "label too long: '{}' (max 63 characters)", label)
+            }
+            Self::InvalidHyphen { label } => {
+                write!(f, "invalid hyphen placement in label: '{}'", label)
+            }
+            Self::InvalidCharacter { label } => {
+                write!(f, "invalid character in label: '{}'", label)
+            }
             Self::Empty => write!(f, "domain name is empty"),
         }
     }
@@ -79,18 +87,24 @@ pub fn validate_name(name: &str) -> Result<(), NameError> {
         }
 
         if label.len() > 63 {
-            return Err(NameError::LabelTooLong { label: label.to_string() });
+            return Err(NameError::LabelTooLong {
+                label: label.to_string(),
+            });
         }
 
         if label.starts_with('-') || label.ends_with('-') {
-            return Err(NameError::InvalidHyphen { label: label.to_string() });
+            return Err(NameError::InvalidHyphen {
+                label: label.to_string(),
+            });
         }
 
         // Accept ASCII letters, digits, hyphens
         // Also accept punycode (xn--) which uses only these chars
         for ch in label.chars() {
             if !ch.is_ascii_alphanumeric() && ch != '-' {
-                return Err(NameError::InvalidCharacter { label: label.to_string() });
+                return Err(NameError::InvalidCharacter {
+                    label: label.to_string(),
+                });
             }
         }
     }

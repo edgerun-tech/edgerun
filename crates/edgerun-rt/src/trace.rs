@@ -146,7 +146,8 @@ impl TaskSpanMap {
 }
 
 /// Global registry of task → root span ID.
-pub(crate) static TASK_SPANS: std::sync::LazyLock<TaskSpanMap> = std::sync::LazyLock::new(TaskSpanMap::new);
+pub(crate) static TASK_SPANS: std::sync::LazyLock<TaskSpanMap> =
+    std::sync::LazyLock::new(TaskSpanMap::new);
 
 // ===========================================================================
 // Task lifecycle helpers

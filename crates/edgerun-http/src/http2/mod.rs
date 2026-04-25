@@ -6,8 +6,8 @@ pub mod client;
 pub mod connection;
 pub mod flow_control;
 pub mod frame;
-pub mod hpack;
 pub mod headers;
+pub mod hpack;
 pub mod pool;
 pub mod server;
 pub mod settings;
@@ -26,8 +26,8 @@ pub use client::{AsyncClient, HttpResponse, PendingRequest};
 pub use connection::Connection;
 pub use flow_control::FlowController;
 pub use frame::{Frame, FrameType};
-pub use hpack::{Decoder, Encoder};
 pub use headers::{validate_header_name_case, validate_request_headers};
+pub use hpack::{Decoder, Encoder};
 pub use server::{FrameAction, Http2Server};
 pub use settings::Settings;
 pub use stream::Stream;
@@ -79,10 +79,9 @@ impl std::fmt::Display for Http2Error {
                 stream_id,
                 error_code,
             } => write!(f, "Stream {} error: {:?}", stream_id, error_code),
-            Http2Error::ConnectionError {
-                error_code,
-                reason,
-            } => write!(f, "Connection error {:?}: {}", error_code, reason),
+            Http2Error::ConnectionError { error_code, reason } => {
+                write!(f, "Connection error {:?}: {}", error_code, reason)
+            }
             Http2Error::FlowControl(msg) => write!(f, "Flow control error: {}", msg),
             Http2Error::SettingsTimeout => write!(f, "Settings timeout"),
         }

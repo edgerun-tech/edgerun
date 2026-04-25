@@ -7,15 +7,12 @@
 //  - isolates ONE interaction path so the first failure identifies the exact bug
 
 use edgerun_rt::{
-    AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWriteExt,
-    Barrier, Builder, CancellationToken, Cursor, DuplexStream, Empty,
-    JoinSet, Latch, MissedTickBehavior, Mutex, Notify, OnceCell,
-    RateLimiter, Repeat, RwLock, Semaphore, Sleep,
-    UnixDatagram, UnixListener, UnixStream,
-    broadcast, fs, interval, mpsc, oneshot, pipe, poll_fn, process,
-    repeat, sleep, sink, spawn, spawn_blocking, sleep_until, timeout, unbounded,
-    yieldnow, AsyncRead, AsyncWrite, BufReader, BufWriter, Runtime,
-    RuntimeMetrics, WatchSender,
+    broadcast, fs, interval, mpsc, oneshot, pipe, poll_fn, process, repeat, sink, sleep,
+    sleep_until, spawn, spawn_blocking, timeout, unbounded, yieldnow, AsyncRead, AsyncReadExt,
+    AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWrite, AsyncWriteExt, Barrier,
+    BufReader, BufWriter, Builder, CancellationToken, Cursor, DuplexStream, Empty, JoinSet, Latch,
+    MissedTickBehavior, Mutex, Notify, OnceCell, RateLimiter, Repeat, Runtime, RuntimeMetrics,
+    RwLock, Semaphore, Sleep, UnixDatagram, UnixListener, UnixStream, WatchSender,
 };
 use std::net::SocketAddr;
 use std::os::unix::io::AsRawFd;
@@ -25,7 +22,9 @@ use std::time::{Duration, Instant};
 
 // ---- Test harness: each test gets its own 5-second deadline inside block_on ----
 
-struct Runner { rt: Arc<Runtime> }
+struct Runner {
+    rt: Arc<Runtime>,
+}
 
 impl Runner {
     fn test(&self, name: &str, f: impl std::future::Future<Output = ()> + Send + 'static) {
@@ -39,7 +38,11 @@ impl Runner {
             }
         });
         if !ok {
-            panic!("\n  DEADLOCK: '{}' exceeded 5s (wall: {:?})\n", name, t0.elapsed());
+            panic!(
+                "\n  DEADLOCK: '{}' exceeded 5s (wall: {:?})\n",
+                name,
+                t0.elapsed()
+            );
         }
         eprintln!("OK ({:?})", t0.elapsed());
     }
@@ -58,7 +61,10 @@ fn main() {
 
     r.test("rt_panic_isolation", async {
         let bad = spawn(async { panic!("x") });
-        let good = spawn(async { sleep(Duration::from_millis(5)).await; 1 });
+        let good = spawn(async {
+            sleep(Duration::from_millis(5)).await;
+            1
+        });
         assert!(bad.await.is_err());
         assert_eq!(good.await.unwrap(), 1);
     });
@@ -72,9 +78,16 @@ fn main() {
         let mut hs = vec![];
         for _ in 0..4 {
             let c = c.clone();
-            hs.push(spawn(async move { for _ in 0..10 { c.fetch_add(1, Ordering::Relaxed); yieldnow().await; } }));
+            hs.push(spawn(async move {
+                for _ in 0..10 {
+                    c.fetch_add(1, Ordering::Relaxed);
+                    yieldnow().await;
+                }
+            }));
         }
-        for h in hs { h.await.unwrap(); }
+        for h in hs {
+            h.await.unwrap();
+        }
         assert_eq!(c.load(Ordering::Relaxed), 40);
     });
 
@@ -111,23 +124,23 @@ fn main() {
     r.test("mpsc_cap1_send_blocks_recv_unblocks", async {
         let (tx, mut rx) = mpsc::channel::<u64>(1);
         tx.send_nowait(0).unwrap();
-        
+
         let tx2 = tx.clone();
         let sender = spawn(async move {
             tx2.send(1).await.unwrap();
         });
-        
+
         // Receive first item (0), which should wake sender to send 1
         let v0 = rx.recv().await;
         assert_eq!(v0, Some(0));
-        
+
         // Give sender a chance to run and send 1
         yieldnow().await;
-        
+
         // Receive second item (1)
         let v1 = rx.recv().await;
         assert_eq!(v1, Some(1));
-        
+
         sender.await.unwrap();
     });
 
@@ -136,7 +149,9 @@ fn main() {
         let (tx, mut rx) = mpsc::channel::<u64>(1);
         let tx2 = tx.clone();
         let sender = spawn(async move {
-            for i in 0..100u64 { tx2.send(i).await.unwrap(); }
+            for i in 0..100u64 {
+                tx2.send(i).await.unwrap();
+            }
         });
         drop(tx);
         let mut sum = 0u64;
@@ -156,10 +171,22 @@ fn main() {
     r.test("mpsc_cap2_two_producers", async {
         let (tx, mut rx) = mpsc::channel::<u64>(2);
         let mut hs = vec![];
-        for p in 0..2u64 { let t = tx.clone(); hs.push(spawn(async move { for i in 0..50u64 { t.send(p*100+i).await.unwrap(); } })); }
+        for p in 0..2u64 {
+            let t = tx.clone();
+            hs.push(spawn(async move {
+                for i in 0..50u64 {
+                    t.send(p * 100 + i).await.unwrap();
+                }
+            }));
+        }
         drop(tx);
-        let mut n = 0; while let Some(_) = rx.recv().await { n += 1; }
-        for h in hs { h.await.unwrap(); }
+        let mut n = 0;
+        while let Some(_) = rx.recv().await {
+            n += 1;
+        }
+        for h in hs {
+            h.await.unwrap();
+        }
         assert_eq!(n, 100);
     });
 
@@ -167,10 +194,22 @@ fn main() {
     r.test("mpsc_cap4_four_producers", async {
         let (tx, mut rx) = mpsc::channel::<u64>(4);
         let mut hs = vec![];
-        for p in 0..4u64 { let t = tx.clone(); hs.push(spawn(async move { for i in 0..200u64 { t.send(p*1000+i).await.unwrap(); } })); }
+        for p in 0..4u64 {
+            let t = tx.clone();
+            hs.push(spawn(async move {
+                for i in 0..200u64 {
+                    t.send(p * 1000 + i).await.unwrap();
+                }
+            }));
+        }
         drop(tx);
-        let mut n = 0; while let Some(_) = rx.recv().await { n += 1; }
-        for h in hs { h.await.unwrap(); }
+        let mut n = 0;
+        while let Some(_) = rx.recv().await {
+            n += 1;
+        }
+        for h in hs {
+            h.await.unwrap();
+        }
         assert_eq!(n, 800);
     });
 
@@ -185,7 +224,9 @@ fn main() {
 
     r.test("oneshot", async {
         let (tx, rx) = oneshot::channel::<u64>();
-        spawn(async move { tx.send(42).unwrap(); });
+        spawn(async move {
+            tx.send(42).unwrap();
+        });
         assert_eq!(rx.await.unwrap(), 42);
     });
 
@@ -213,16 +254,33 @@ fn main() {
     r.test("mutex_10_tasks", async {
         let m = Arc::new(Mutex::new(0u64));
         let mut hs = vec![];
-        for _ in 0..10 { let m = m.clone(); hs.push(spawn(async move { for _ in 0..100 { *m.lock().await += 1; } })); }
-        for h in hs { h.await.unwrap(); }
+        for _ in 0..10 {
+            let m = m.clone();
+            hs.push(spawn(async move {
+                for _ in 0..100 {
+                    *m.lock().await += 1;
+                }
+            }));
+        }
+        for h in hs {
+            h.await.unwrap();
+        }
         assert_eq!(*m.lock().await, 1000);
     });
 
     r.test("rwlock_write_exclusive", async {
         let rw = Arc::new(RwLock::new(0u64));
         let mut hs = vec![];
-        for _ in 0..5 { let r = rw.clone(); hs.push(spawn(async move { let mut g = r.write().await; *g += 1; })); }
-        for h in hs { h.await.unwrap(); }
+        for _ in 0..5 {
+            let r = rw.clone();
+            hs.push(spawn(async move {
+                let mut g = r.write().await;
+                *g += 1;
+            }));
+        }
+        for h in hs {
+            h.await.unwrap();
+        }
         assert_eq!(*rw.read().await, 5);
     });
 
@@ -232,23 +290,34 @@ fn main() {
         let act = Arc::new(AtomicUsize::new(0));
         let mut hs = vec![];
         for _ in 0..10 {
-            let s=sem.clone(); let a=act.clone(); let m=max.clone();
+            let s = sem.clone();
+            let a = act.clone();
+            let m = max.clone();
             hs.push(spawn(async move {
                 let _p = s.acquire().await;
                 let c = a.fetch_add(1, Ordering::Relaxed);
-                m.fetch_max(c+1, Ordering::Relaxed);
+                m.fetch_max(c + 1, Ordering::Relaxed);
                 sleep(Duration::from_millis(5)).await;
                 a.fetch_sub(1, Ordering::Relaxed);
             }));
         }
-        for h in hs { h.await.unwrap(); }
+        for h in hs {
+            h.await.unwrap();
+        }
         assert!(max.load(Ordering::Relaxed) <= 3);
     });
 
     r.test("notify_one", async {
         let n = Arc::new(Notify::new());
         let c = Arc::new(AtomicBool::new(false));
-        let w = spawn({ let n=n.clone(); let c=c.clone(); async move { n.notified().await; c.store(true, Ordering::Relaxed); }});
+        let w = spawn({
+            let n = n.clone();
+            let c = c.clone();
+            async move {
+                n.notified().await;
+                c.store(true, Ordering::Relaxed);
+            }
+        });
         sleep(Duration::from_millis(20)).await;
         n.notify_one();
         w.await.unwrap();
@@ -258,7 +327,14 @@ fn main() {
     r.test("cancellation", async {
         let t = CancellationToken::new();
         let c = Arc::new(AtomicUsize::new(0));
-        let w = spawn({ let t=t.clone(); let c=c.clone(); async move { t.cancelled().await; c.fetch_add(1, Ordering::Relaxed); }});
+        let w = spawn({
+            let t = t.clone();
+            let c = c.clone();
+            async move {
+                t.cancelled().await;
+                c.fetch_add(1, Ordering::Relaxed);
+            }
+        });
         sleep(Duration::from_millis(20)).await;
         t.cancel();
         w.await.unwrap();
@@ -271,11 +347,18 @@ fn main() {
         let t0 = Instant::now();
         sleep(Duration::from_millis(50)).await;
         let e = t0.elapsed();
-        assert!(e >= Duration::from_millis(40) && e < Duration::from_millis(500), "slept {:?}", e);
+        assert!(
+            e >= Duration::from_millis(40) && e < Duration::from_millis(500),
+            "slept {:?}",
+            e
+        );
     });
 
     r.test("timeout_fires", async {
-        let r = timeout(Duration::from_millis(30), async { sleep(Duration::from_secs(100)).await; }).await;
+        let r = timeout(Duration::from_millis(30), async {
+            sleep(Duration::from_secs(100)).await;
+        })
+        .await;
         assert!(r.is_err());
     });
 
@@ -293,7 +376,9 @@ fn main() {
     r.test("pipe", async {
         let (rd, wr) = pipe().unwrap();
         let data = b"pipe";
-        unsafe { libc::write(wr.as_raw_fd(), data.as_ptr() as *const _, data.len()); }
+        unsafe {
+            libc::write(wr.as_raw_fd(), data.as_ptr() as *const _, data.len());
+        }
         rd.readable().await.unwrap();
         let mut buf = [0u8; 8];
         let n = unsafe { libc::read(rd.as_raw_fd(), buf.as_mut_ptr() as *mut _, 8) };
@@ -322,7 +407,13 @@ fn main() {
     // ============ PROCESS ============
 
     r.test("process_echo", async {
-        let o = process::output(|| { let mut c = std::process::Command::new("echo"); c.arg("-n").arg("x"); c }).await.unwrap();
+        let o = process::output(|| {
+            let mut c = std::process::Command::new("echo");
+            c.arg("-n").arg("x");
+            c
+        })
+        .await
+        .unwrap();
         assert_eq!(o.stdout, b"x");
     });
 
@@ -351,7 +442,8 @@ fn main() {
             assert_eq!(&buf[..n], b"ping");
         });
         sleep(Duration::from_millis(200)).await;
-        drop(srv); drop(cli);
+        drop(srv);
+        drop(cli);
     });
 
     r.test("udp_loopback", async {
@@ -359,7 +451,9 @@ fn main() {
         let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
         let s = Arc::new(AsyncUdpSocket::bind(&addr).unwrap());
         let s1 = s.clone();
-        let snd = spawn(async move { s1.send_to(b"x", addr).await.unwrap(); });
+        let snd = spawn(async move {
+            s1.send_to(b"x", addr).await.unwrap();
+        });
         let s2 = s.clone();
         let rcv = spawn(async move {
             let mut buf = [0u8; 8];
@@ -367,7 +461,8 @@ fn main() {
             assert_eq!(&buf[..n], b"x");
         });
         sleep(Duration::from_millis(200)).await;
-        drop(snd); drop(rcv);
+        drop(snd);
+        drop(rcv);
     });
 
     eprintln!("\n  ALL 27 E2E TESTS PASSED");
@@ -375,7 +470,11 @@ fn main() {
 }
 
 struct CleanupDir(std::path::PathBuf);
-impl Drop for CleanupDir { fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); } }
+impl Drop for CleanupDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
 
 fn find_free_port() -> u16 {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

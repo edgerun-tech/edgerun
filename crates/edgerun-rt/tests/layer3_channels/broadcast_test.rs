@@ -1,8 +1,8 @@
 // Test broadcast channel with the actual runtime.
 use edgerun_rt::broadcast::{self, TryRecvError};
-use edgerun_rt::{Runtime, spawn};
-use std::sync::Arc;
+use edgerun_rt::{spawn, Runtime};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 fn main() {
@@ -149,7 +149,11 @@ fn test_close_wakes_receivers() {
     tx.close();
     std::thread::sleep(Duration::from_millis(100));
 
-    assert_eq!(count.load(Ordering::SeqCst), 2, "both receivers should get closed");
+    assert_eq!(
+        count.load(Ordering::SeqCst),
+        2,
+        "both receivers should get closed"
+    );
     drop(r1);
     drop(r2);
     println!("  test_close_wakes_receivers OK");

@@ -20,7 +20,6 @@ pub fn discover_gpus() -> Vec<edgerun_linux_gpu::LinuxGpuDevice> {
     }
 }
 
-
 #[cfg(feature = "all-hardware")]
 pub fn discover_displays() -> Vec<edgerun_drm_display::DrmConnectorInfo> {
     match edgerun_drm_display::discover_drm_connectors() {
@@ -31,7 +30,6 @@ pub fn discover_displays() -> Vec<edgerun_drm_display::DrmConnectorInfo> {
         }
     }
 }
-
 
 // ===========================================================================
 // Fingerprint
@@ -51,12 +49,14 @@ pub fn discover_fingerprint_readers() -> Vec<String> {
                 ));
             }
         }
-        Err(e) => eprintln!("edgerund: warning: Goodix fingerprint discovery failed: {}", e),
+        Err(e) => eprintln!(
+            "edgerund: warning: Goodix fingerprint discovery failed: {}",
+            e
+        ),
     }
 
     readers
 }
-
 
 // ===========================================================================
 // Bluetooth
@@ -70,7 +70,10 @@ pub fn discover_bluetooth_controllers() -> Vec<String> {
     match edgerun_mgmt_bluetooth::discover_controllers() {
         Ok(ctrls) => {
             for ctrl in ctrls {
-                controllers.push(format!("BT controller #{}: {} ({})", ctrl.index, ctrl.name, ctrl.address));
+                controllers.push(format!(
+                    "BT controller #{}: {} ({})",
+                    ctrl.index, ctrl.name, ctrl.address
+                ));
             }
         }
         Err(e) => eprintln!("edgerund: warning: BT controller discovery failed: {}", e),
@@ -78,7 +81,6 @@ pub fn discover_bluetooth_controllers() -> Vec<String> {
 
     controllers
 }
-
 
 // ===========================================================================
 // WiFi
@@ -95,7 +97,6 @@ pub fn discover_wifi_interfaces() -> Vec<edgerun_linux_wifi::LinuxWifiInterface>
     }
 }
 
-
 // ===========================================================================
 // USB
 // ===========================================================================
@@ -111,7 +112,6 @@ pub fn discover_usb_devices() -> Vec<edgerun_linux_usb::LinuxUsbDevice> {
     }
 }
 
-
 // ===========================================================================
 // PCI
 // ===========================================================================
@@ -126,7 +126,6 @@ pub fn discover_pci_devices() -> Vec<edgerun_linux_pci::LinuxPciDevice> {
         }
     }
 }
-
 
 // ===========================================================================
 // NFC
@@ -147,7 +146,6 @@ pub fn discover_nfc_adapters() -> Vec<String> {
 
     adapters
 }
-
 
 // ===========================================================================
 // NPU (including AMD xDNA)
@@ -180,7 +178,6 @@ pub fn discover_npu_devices() -> Vec<String> {
     devices
 }
 
-
 // ===========================================================================
 // Power
 // ===========================================================================
@@ -192,7 +189,10 @@ pub fn discover_power_supplies() -> Vec<String> {
     match edgerun_linux_power::discover_power_supplies() {
         Ok(psus) => {
             for psu in psus {
-                supplies.push(format!("Power supply: {} ({:?})", psu.instance_id, psu.kind));
+                supplies.push(format!(
+                    "Power supply: {} ({:?})",
+                    psu.instance_id, psu.kind
+                ));
             }
         }
         Err(e) => eprintln!("edgerund: warning: power supply discovery failed: {}", e),
@@ -205,7 +205,10 @@ pub fn discover_power_supplies() -> Vec<String> {
                 supplies.push(format!("Battery: {}%", pct));
             }
             if let Some(on_ac) = sys.on_ac_power {
-                supplies.push(format!("AC power: {}", if on_ac { "online" } else { "offline" }));
+                supplies.push(format!(
+                    "AC power: {}",
+                    if on_ac { "online" } else { "offline" }
+                ));
             }
             supplies.push(format!("Lid: {:?}", sys.lid_state));
             for source in &sys.sources {
@@ -217,7 +220,6 @@ pub fn discover_power_supplies() -> Vec<String> {
 
     supplies
 }
-
 
 // ===========================================================================
 // CEC (Consumer Electronics Control over HDMI)
@@ -238,7 +240,6 @@ pub fn discover_cec_adapters() -> Vec<String> {
 
     adapters
 }
-
 
 // ===========================================================================
 // Input (evdev)
@@ -261,7 +262,6 @@ pub fn discover_input_devices() -> Vec<String> {
     }
 }
 
-
 // ===========================================================================
 // Audio Input (ALSA microphone)
 // ===========================================================================
@@ -272,10 +272,7 @@ pub fn discover_audio_input() -> Vec<String> {
         Ok(pcms) => pcms
             .into_iter()
             .filter(|p| p.capture)
-            .map(|p| format!(
-                "ALSA PCM {}:{} ({})",
-                p.card_index, p.device_index, p.name
-            ))
+            .map(|p| format!("ALSA PCM {}:{} ({})", p.card_index, p.device_index, p.name))
             .collect(),
         Err(e) => {
             eprintln!("edgerund: warning: ALSA microphone discovery failed: {}", e);
@@ -283,7 +280,6 @@ pub fn discover_audio_input() -> Vec<String> {
         }
     }
 }
-
 
 // ===========================================================================
 // Audio Output (ALSA speaker)
@@ -294,10 +290,12 @@ pub fn discover_audio_output() -> Vec<String> {
     match edgerun_alsa_speaker::discover_speakers() {
         Ok(speakers) => speakers
             .into_iter()
-            .map(|s| format!(
-                "ALSA {} card={} device={} ({}ch, {}Hz)",
-                s.card_id, s.card_index, s.device_index, s.channels, s.default_sample_rate_hz
-            ))
+            .map(|s| {
+                format!(
+                    "ALSA {} card={} device={} ({}ch, {}Hz)",
+                    s.card_id, s.card_index, s.device_index, s.channels, s.default_sample_rate_hz
+                )
+            })
             .collect(),
         Err(e) => {
             eprintln!("edgerund: warning: ALSA speaker discovery failed: {}", e);
@@ -305,7 +303,6 @@ pub fn discover_audio_output() -> Vec<String> {
         }
     }
 }
-
 
 // ===========================================================================
 // Camera (V4L2)
@@ -320,9 +317,15 @@ pub fn discover_cameras() -> Vec<String> {
                 let caps = match c.query_info() {
                     Ok(info) => {
                         let mut parts = Vec::new();
-                        if info.supports_video_capture() { parts.push("capture"); }
-                        if info.supports_streaming() { parts.push("streaming"); }
-                        if parts.is_empty() { parts.push("unknown"); }
+                        if info.supports_video_capture() {
+                            parts.push("capture");
+                        }
+                        if info.supports_streaming() {
+                            parts.push("streaming");
+                        }
+                        if parts.is_empty() {
+                            parts.push("unknown");
+                        }
                         parts.join(", ")
                     }
                     Err(_) => "unknown".into(),
@@ -337,7 +340,6 @@ pub fn discover_cameras() -> Vec<String> {
     }
 }
 
-
 // ===========================================================================
 // Audio Calibration
 // ===========================================================================
@@ -349,7 +351,7 @@ pub fn run_audio_calibration(
     mic_card: u32,
     mic_device: u32,
 ) -> Result<Vec<edgerun_audio_calibration::AudioSweepStepResult>, String> {
-    use edgerun_audio_calibration::{AudioSweepConfig, run_speaker_mic_sweep};
+    use edgerun_audio_calibration::{run_speaker_mic_sweep, AudioSweepConfig};
 
     let config = AudioSweepConfig {
         speaker_card,
@@ -370,7 +372,6 @@ pub fn run_audio_calibration(
     run_speaker_mic_sweep(&config).map_err(|e| format!("audio calibration failed: {}", e))
 }
 
-
 // ===========================================================================
 // Biometrics
 // ===========================================================================
@@ -380,7 +381,6 @@ pub fn get_biometric_state() -> edgerun_biometrics::BiometricState {
     edgerun_biometrics::BiometricState::default()
 }
 
-
 // ===========================================================================
 // Android Keystore
 // ===========================================================================
@@ -389,10 +389,8 @@ pub fn get_biometric_state() -> edgerun_biometrics::BiometricState {
 /// Uses only stdlib, always available.
 pub fn check_android_keystore_available() -> bool {
     // Check if we're running on Android with KeyStore
-    std::path::Path::new("/system/bin/keystore2").exists()
-        || std::env::var("ANDROID_DATA").is_ok()
+    std::path::Path::new("/system/bin/keystore2").exists() || std::env::var("ANDROID_DATA").is_ok()
 }
-
 
 // ===========================================================================
 // Android Hardware (NDK-backed providers)
@@ -401,9 +399,9 @@ pub fn check_android_keystore_available() -> bool {
 #[cfg(target_os = "android")]
 mod android_hw {
     use edgerun_android_hardware::{
-        AndroidInputProvider, AndroidAudioInputProvider, AndroidAudioOutputProvider,
-        AndroidSensorProvider, AndroidDisplayProvider, AndroidCameraProvider,
-        AndroidBiometricProvider, AndroidLocationProvider, AndroidPowerProvider,
+        AndroidAudioInputProvider, AndroidAudioOutputProvider, AndroidBiometricProvider,
+        AndroidCameraProvider, AndroidDisplayProvider, AndroidInputProvider,
+        AndroidLocationProvider, AndroidPowerProvider, AndroidSensorProvider,
     };
 
     pub fn discover_input() -> Vec<String> {
@@ -516,8 +514,8 @@ impl HardwareInventory {
         let android = discover_android_hardware();
         Self {
             platform: "android",
-            gpus: vec![],                    // TODO: Android GPU via EGL
-            displays: vec![],                // TODO: ANativeWindow
+            gpus: vec![],     // TODO: Android GPU via EGL
+            displays: vec![], // TODO: ANativeWindow
             input_devices: vec!["AInput (NDK)".into()],
             audio_input: vec!["AAudio capture".into()],
             audio_output: vec!["AAudio playback".into()],
@@ -530,7 +528,11 @@ impl HardwareInventory {
             pci_devices: vec![],
             nfc_adapters: vec![],
             npu_devices: vec![],
-            power_supplies: android.iter().filter(|s| s.contains("Battery") || s.contains("Charging")).cloned().collect(),
+            power_supplies: android
+                .iter()
+                .filter(|s| s.contains("Battery") || s.contains("Charging"))
+                .cloned()
+                .collect(),
             cec_adapters: vec![],
             biometric: vec!["BiometricPrompt (JNI)".into()],
             location: vec!["LocationManager (JNI)".into()],
@@ -545,7 +547,12 @@ impl HardwareInventory {
         let gpus = discover_gpus();
         let displays: Vec<String> = discover_displays()
             .into_iter()
-            .map(|c| format!("{} (connected={}, enabled={})", c.connector_name, c.connected, c.enabled))
+            .map(|c| {
+                format!(
+                    "{} (connected={}, enabled={})",
+                    c.connector_name, c.connected, c.enabled
+                )
+            })
             .collect();
         let fingerprint_readers = discover_fingerprint_readers();
         let bluetooth_controllers = discover_bluetooth_controllers();
@@ -556,18 +563,39 @@ impl HardwareInventory {
         let usb_devices: Vec<String> = discover_usb_devices()
             .into_iter()
             .map(|d| {
-                let vid = d.vendor_id.map(|v| format!("{:04x}", v)).unwrap_or_else(|| "????".into());
-                let pid = d.product_id.map(|p| format!("{:04x}", p)).unwrap_or_else(|| "????".into());
-                let name = d.product_name.as_deref().or(d.manufacturer.as_deref()).unwrap_or("unknown");
+                let vid = d
+                    .vendor_id
+                    .map(|v| format!("{:04x}", v))
+                    .unwrap_or_else(|| "????".into());
+                let pid = d
+                    .product_id
+                    .map(|p| format!("{:04x}", p))
+                    .unwrap_or_else(|| "????".into());
+                let name = d
+                    .product_name
+                    .as_deref()
+                    .or(d.manufacturer.as_deref())
+                    .unwrap_or("unknown");
                 format!("{}:{}:{} {}", vid, pid, d.instance_id, name)
             })
             .collect();
         let pci_devices: Vec<String> = discover_pci_devices()
             .into_iter()
             .map(|d| {
-                let vid = d.vendor_id.map(|v| format!("{:04x}", v)).unwrap_or_else(|| "????".into());
-                let did = d.device_id.map(|p| format!("{:04x}", p)).unwrap_or_else(|| "????".into());
-                format!("{} {} (driver: {})", d.address, format!("{}:{}", vid, did), d.driver.as_deref().unwrap_or("none"))
+                let vid = d
+                    .vendor_id
+                    .map(|v| format!("{:04x}", v))
+                    .unwrap_or_else(|| "????".into());
+                let did = d
+                    .device_id
+                    .map(|p| format!("{:04x}", p))
+                    .unwrap_or_else(|| "????".into());
+                format!(
+                    "{} {} (driver: {})",
+                    d.address,
+                    format!("{}:{}", vid, did),
+                    d.driver.as_deref().unwrap_or("none")
+                )
             })
             .collect();
         let nfc_adapters = discover_nfc_adapters();
@@ -581,11 +609,21 @@ impl HardwareInventory {
 
         Self {
             platform: "linux",
-            gpus: gpus.iter().map(|g| format!("GPU: {} ({}:{})",
-                g.pci_address,
-                g.vendor_id.map(|v| format!("{:04x}", v)).unwrap_or_else(|| "????".into()),
-                g.device_id.map(|d| format!("{:04x}", d)).unwrap_or_else(|| "????".into())
-            )).collect(),
+            gpus: gpus
+                .iter()
+                .map(|g| {
+                    format!(
+                        "GPU: {} ({}:{})",
+                        g.pci_address,
+                        g.vendor_id
+                            .map(|v| format!("{:04x}", v))
+                            .unwrap_or_else(|| "????".into()),
+                        g.device_id
+                            .map(|d| format!("{:04x}", d))
+                            .unwrap_or_else(|| "????".into())
+                    )
+                })
+                .collect(),
             displays,
             input_devices,
             audio_input,
@@ -618,11 +656,21 @@ impl HardwareInventory {
         lines.push(format!("  GPUs:            {}", self.gpus.len()));
         lines.push(format!("  Displays:        {}", self.displays.len()));
         lines.push(format!("  Input:           {}", self.input_devices.len()));
-        lines.push(format!("  Audio in/out:    {}/{}", self.audio_input.len(), self.audio_output.len()));
+        lines.push(format!(
+            "  Audio in/out:    {}/{}",
+            self.audio_input.len(),
+            self.audio_output.len()
+        ));
         lines.push(format!("  Sensors:         {}", self.sensors.len()));
         lines.push(format!("  Camera:          {}", self.camera.len()));
-        lines.push(format!("  Fingerprint:     {}", self.fingerprint_readers.len()));
-        lines.push(format!("  Bluetooth:       {}", self.bluetooth_controllers.len()));
+        lines.push(format!(
+            "  Fingerprint:     {}",
+            self.fingerprint_readers.len()
+        ));
+        lines.push(format!(
+            "  Bluetooth:       {}",
+            self.bluetooth_controllers.len()
+        ));
         lines.push(format!("  WiFi interfaces: {}", self.wifi_interfaces.len()));
         lines.push(format!("  USB devices:     {}", self.usb_devices.len()));
         lines.push(format!("  PCI devices:     {}", self.pci_devices.len()));

@@ -561,10 +561,7 @@ mod tests {
 
     #[test]
     fn discover_gpus_returns_empty_for_missing_pci_dir() {
-        let result = discover_gpus_in(
-            Path::new("/nonexistent/pci"),
-            Path::new("/nonexistent/drm"),
-        );
+        let result = discover_gpus_in(Path::new("/nonexistent/pci"), Path::new("/nonexistent/drm"));
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }
@@ -621,7 +618,10 @@ mod tests {
 
     #[test]
     fn parse_connector_name_valid() {
-        assert_eq!(parse_connector_name("card0-HDMI-A-1"), Some("HDMI-A-1".into()));
+        assert_eq!(
+            parse_connector_name("card0-HDMI-A-1"),
+            Some("HDMI-A-1".into())
+        );
         assert_eq!(parse_connector_name("card1-DP-2"), Some("DP-2".into()));
         assert_eq!(parse_connector_name("card0-eDP-1"), Some("eDP-1".into()));
     }
@@ -684,7 +684,13 @@ mod tests {
         // If /dev/dri/card0 exists, it returns Some
         let result = drm_device_node_for("card0");
         // May be None or Some depending on system
-        assert!(result.is_none() || result.as_ref().map(|s| s.contains("card0")).unwrap_or(false));
+        assert!(
+            result.is_none()
+                || result
+                    .as_ref()
+                    .map(|s| s.contains("card0"))
+                    .unwrap_or(false)
+        );
     }
 
     #[test]

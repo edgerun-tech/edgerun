@@ -1,6 +1,6 @@
 // Test oneshot channel with the actual runtime.
-use edgerun_rt::{Runtime, spawn};
 use edgerun_rt::oneshot;
+use edgerun_rt::{spawn, Runtime};
 use std::time::Duration;
 
 fn main() {

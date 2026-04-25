@@ -154,13 +154,22 @@ impl Dhcpv6Message {
         ia_na_data.extend_from_slice(&iaid.to_be_bytes());
         ia_na_data.extend_from_slice(&0u32.to_be_bytes()); // T1 (server fills in)
         ia_na_data.extend_from_slice(&0u32.to_be_bytes()); // T2 (server fills in)
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_IA_NA, ia_na_data));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_IA_NA,
+            ia_na_data,
+        ));
 
         // Client Identifier option
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_CLIENTID, client_duid.to_vec()));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_CLIENTID,
+            client_duid.to_vec(),
+        ));
 
         // Elapsed Time option
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_ELAPSED_TIME, elapsed_ms.to_be_bytes().to_vec()));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_ELAPSED_TIME,
+            elapsed_ms.to_be_bytes().to_vec(),
+        ));
 
         // Option Request List — what we want (each option code is 2 bytes, big-endian)
         let mut oro_data = Vec::new();
@@ -172,7 +181,10 @@ impl Dhcpv6Message {
         ] {
             oro_data.extend_from_slice(&code.to_be_bytes());
         }
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_ORO, oro_data));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_ORO,
+            oro_data,
+        ));
 
         Self {
             msg_type: Dhcpv6MsgType::Solicit,
@@ -190,13 +202,22 @@ impl Dhcpv6Message {
         ia_na_data.extend_from_slice(&iaid.to_be_bytes());
         ia_na_data.extend_from_slice(&0u32.to_be_bytes());
         ia_na_data.extend_from_slice(&0u32.to_be_bytes());
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_IA_NA, ia_na_data));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_IA_NA,
+            ia_na_data,
+        ));
 
         // Client Identifier
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_CLIENTID, client_duid.to_vec()));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_CLIENTID,
+            client_duid.to_vec(),
+        ));
 
         // Server Identifier
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_SERVERID, server_duid.to_vec()));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_SERVERID,
+            server_duid.to_vec(),
+        ));
 
         Self {
             msg_type: Dhcpv6MsgType::Request,
@@ -213,10 +234,19 @@ impl Dhcpv6Message {
         ia_na_data.extend_from_slice(&iaid.to_be_bytes());
         ia_na_data.extend_from_slice(&0u32.to_be_bytes());
         ia_na_data.extend_from_slice(&0u32.to_be_bytes());
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_IA_NA, ia_na_data));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_IA_NA,
+            ia_na_data,
+        ));
 
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_CLIENTID, client_duid.to_vec()));
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_SERVERID, server_duid.to_vec()));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_CLIENTID,
+            client_duid.to_vec(),
+        ));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_SERVERID,
+            server_duid.to_vec(),
+        ));
 
         Self {
             msg_type: Dhcpv6MsgType::Renew,
@@ -228,7 +258,10 @@ impl Dhcpv6Message {
     /// Create an Information-Request message (stateless).
     pub fn information_request(client_duid: &[u8]) -> Self {
         let mut options = Vec::new();
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_CLIENTID, client_duid.to_vec()));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_CLIENTID,
+            client_duid.to_vec(),
+        ));
         let mut oro_data = Vec::new();
         for &code in &[
             super::options::OPT_DNS_SERVERS,
@@ -237,7 +270,10 @@ impl Dhcpv6Message {
         ] {
             oro_data.extend_from_slice(&code.to_be_bytes());
         }
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_ORO, oro_data));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_ORO,
+            oro_data,
+        ));
 
         Self {
             msg_type: Dhcpv6MsgType::InformationRequest,
@@ -254,10 +290,19 @@ impl Dhcpv6Message {
         ia_na_data.extend_from_slice(&iaid.to_be_bytes());
         ia_na_data.extend_from_slice(&0u32.to_be_bytes());
         ia_na_data.extend_from_slice(&0u32.to_be_bytes());
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_IA_NA, ia_na_data));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_IA_NA,
+            ia_na_data,
+        ));
 
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_CLIENTID, client_duid.to_vec()));
-        options.push(super::options::Dhcpv6Option::from_raw(super::options::OPT_SERVERID, server_duid.to_vec()));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_CLIENTID,
+            client_duid.to_vec(),
+        ));
+        options.push(super::options::Dhcpv6Option::from_raw(
+            super::options::OPT_SERVERID,
+            server_duid.to_vec(),
+        ));
 
         Self {
             msg_type: Dhcpv6MsgType::Release,
@@ -280,36 +325,50 @@ impl Dhcpv6Message {
     /// Parse from wire format.
     pub fn from_wire(data: &[u8]) -> Result<Self, io::Error> {
         if data.len() < 4 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "DHCPv6 message too short"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "DHCPv6 message too short",
+            ));
         }
 
-        let msg_type = Dhcpv6MsgType::from_u8(data[0])
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, format!("Unknown DHCPv6 type: {}", data[0])))?;
+        let msg_type = Dhcpv6MsgType::from_u8(data[0]).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Unknown DHCPv6 type: {}", data[0]),
+            )
+        })?;
 
         let transaction_id = TransactionId([data[1], data[2], data[3]]);
 
         let options = super::options::Dhcpv6Option::parse_all(&data[4..])?;
 
-        Ok(Self { msg_type, transaction_id, options })
+        Ok(Self {
+            msg_type,
+            transaction_id,
+            options,
+        })
     }
 
     /// Get the Client DUID from options, if present.
     pub fn client_duid(&self) -> Option<Vec<u8>> {
-        self.options.iter()
+        self.options
+            .iter()
             .find(|o| o.code == super::options::OPT_CLIENTID)
             .map(|o| o.data.clone())
     }
 
     /// Get the Server DUID from options, if present.
     pub fn server_duid(&self) -> Option<Vec<u8>> {
-        self.options.iter()
+        self.options
+            .iter()
             .find(|o| o.code == super::options::OPT_SERVERID)
             .map(|o| o.data.clone())
     }
 
     /// Get IA_NA options from the message.
     pub fn ia_na_options(&self) -> Vec<&super::options::Dhcpv6Option> {
-        self.options.iter()
+        self.options
+            .iter()
             .filter(|o| o.code == super::options::OPT_IA_NA)
             .collect()
     }
@@ -318,29 +377,40 @@ impl Dhcpv6Message {
     pub fn ia_id(&self) -> Option<u32> {
         self.ia_na_options().first().and_then(|opt| {
             if opt.data.len() >= 12 {
-                Some(u32::from_be_bytes([opt.data[0], opt.data[1], opt.data[2], opt.data[3]]))
-            } else { None }
+                Some(u32::from_be_bytes([
+                    opt.data[0],
+                    opt.data[1],
+                    opt.data[2],
+                    opt.data[3],
+                ]))
+            } else {
+                None
+            }
         })
     }
 
     /// Get the elapsed time option in milliseconds.
     pub fn elapsed_time_ms(&self) -> Option<u16> {
-        self.options.iter()
+        self.options
+            .iter()
             .find(|o| o.code == super::options::OPT_ELAPSED_TIME)
             .and_then(|o| {
                 if o.data.len() >= 2 {
                     Some(u16::from_be_bytes([o.data[0], o.data[1]]))
-                } else { None }
+                } else {
+                    None
+                }
             })
     }
 
     /// Get the Option Request List.
     pub fn option_request_list(&self) -> Vec<u16> {
-        self.options.iter()
+        self.options
+            .iter()
             .find(|o| o.code == super::options::OPT_ORO)
             .map(|o| {
                 (0..o.data.len() / 2)
-                    .map(|i| u16::from_be_bytes([o.data[i*2], o.data[i*2+1]]))
+                    .map(|i| u16::from_be_bytes([o.data[i * 2], o.data[i * 2 + 1]]))
                     .collect()
             })
             .unwrap_or_default()
@@ -395,7 +465,10 @@ mod tests {
     #[test]
     fn test_msg_type_display() {
         assert_eq!(Dhcpv6MsgType::Solicit.to_string(), "SOLICIT");
-        assert_eq!(Dhcpv6MsgType::InformationRequest.to_string(), "INFORMATION-REQUEST");
+        assert_eq!(
+            Dhcpv6MsgType::InformationRequest.to_string(),
+            "INFORMATION-REQUEST"
+        );
     }
 
     #[test]

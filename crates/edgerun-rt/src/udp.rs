@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
-use crate::runtime::try_current_rt;
 use crate::reactor_fd_ready::{FdReadReady, FdWriteReady};
+use crate::runtime::try_current_rt;
 
 // ===========================================================================
 // AsyncUdpSocket
@@ -187,8 +187,7 @@ impl AsyncUdpSocket {
         unsafe {
             let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
                 std::mem::MaybeUninit::zeroed();
-            let mut addrlen =
-                std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+            let mut addrlen = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
             let n = libc::recvfrom(
                 self.fd,
                 buf.as_mut_ptr() as *mut libc::c_void,
@@ -227,12 +226,7 @@ impl AsyncUdpSocket {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         unsafe {
-            let n = libc::send(
-                self.fd,
-                buf.as_ptr() as *const libc::c_void,
-                buf.len(),
-                0,
-            );
+            let n = libc::send(self.fd, buf.as_ptr() as *const libc::c_void, buf.len(), 0);
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -253,12 +247,7 @@ impl AsyncUdpSocket {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         unsafe {
-            let n = libc::recv(
-                self.fd,
-                buf.as_mut_ptr() as *mut libc::c_void,
-                buf.len(),
-                0,
-            );
+            let n = libc::recv(self.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0);
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -306,8 +295,7 @@ impl AsyncUdpSocket {
         loop {
             let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
                 std::mem::MaybeUninit::zeroed();
-            let mut addrlen =
-                std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+            let mut addrlen = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
             let n = unsafe {
                 libc::recvfrom(
                     self.fd,
@@ -373,13 +361,8 @@ fn fd_local_addr(fd: RawFd) -> io::Result<SocketAddr> {
     unsafe {
         let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
             std::mem::MaybeUninit::zeroed();
-        let mut len =
-            std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
-        let res = libc::getsockname(
-            fd,
-            storage.as_mut_ptr() as *mut libc::sockaddr,
-            &mut len,
-        );
+        let mut len = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+        let res = libc::getsockname(fd, storage.as_mut_ptr() as *mut libc::sockaddr, &mut len);
         if res < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -392,13 +375,8 @@ fn fd_peer_addr(fd: RawFd) -> io::Result<SocketAddr> {
     unsafe {
         let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
             std::mem::MaybeUninit::zeroed();
-        let mut len =
-            std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
-        let res = libc::getpeername(
-            fd,
-            storage.as_mut_ptr() as *mut libc::sockaddr,
-            &mut len,
-        );
+        let mut len = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+        let res = libc::getpeername(fd, storage.as_mut_ptr() as *mut libc::sockaddr, &mut len);
         if res < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -435,10 +413,7 @@ fn socket_addr_to_sockaddr(addr: &SocketAddr) -> libc::sockaddr_storage {
                 sin6_scope_id: v6.scope_id(),
             };
             unsafe {
-                std::ptr::write(
-                    storage.as_mut_ptr() as *mut libc::sockaddr_in6,
-                    sin6,
-                );
+                std::ptr::write(storage.as_mut_ptr() as *mut libc::sockaddr_in6, sin6);
             }
         }
     }
@@ -448,16 +423,11 @@ fn socket_addr_to_sockaddr(addr: &SocketAddr) -> libc::sockaddr_storage {
 fn sockaddr_len(addr: &SocketAddr) -> libc::socklen_t {
     match addr {
         SocketAddr::V4(_) => std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t,
-        SocketAddr::V6(_) => {
-            std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t
-        }
+        SocketAddr::V6(_) => std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t,
     }
 }
 
-fn sockaddr_to_addr(
-    storage: &libc::sockaddr_storage,
-    len: libc::socklen_t,
-) -> SocketAddr {
+fn sockaddr_to_addr(storage: &libc::sockaddr_storage, len: libc::socklen_t) -> SocketAddr {
     unsafe {
         let family = storage.ss_family;
         if family as i32 == libc::AF_INET {

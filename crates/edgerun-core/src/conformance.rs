@@ -6,13 +6,13 @@ use std::path::{Path, PathBuf};
 use crate::crypto::sha256;
 use crate::result::{ReasonCode, ValidationResult, Verdict};
 use crate::util::bytes_to_hex_prefixed;
-use crate::value::Value;
 use crate::validators::{
     validate_canonical_case, validate_command_case, validate_control_change_case,
-    validate_crypto_case, validate_delegation_case, validate_network_case,
-    validate_object_case, validate_query_case, validate_snapshot_case,
-    validate_stream_append_case, validate_trust_case, FixtureVerifier,
+    validate_crypto_case, validate_delegation_case, validate_network_case, validate_object_case,
+    validate_query_case, validate_snapshot_case, validate_stream_append_case, validate_trust_case,
+    FixtureVerifier,
 };
+use crate::value::Value;
 
 fn yaml_value_to_value(v: edgerun_json::yaml::YamlValue) -> Value {
     match v {
@@ -52,9 +52,9 @@ fn parse_yaml_full(text: &str) -> BTreeMap<String, Value> {
         Ok(_) => BTreeMap::new(),
         Err(_) => BTreeMap::new(),
     }
-}// ===========================================================================
-// Test verifier — checks signature structure (real verification in tests)
-// ===========================================================================
+} // ===========================================================================
+  // Test verifier — checks signature structure (real verification in tests)
+  // ===========================================================================
 
 struct TestVerifier;
 
@@ -134,7 +134,9 @@ fn enrich_with_corpus_hashes(
                         if let Some(Value::Map(stream_heads)) = local_state.get("stream_heads") {
                             for head_val in stream_heads.values() {
                                 if let Value::Map(head) = head_val {
-                                    if let Some(Value::String(head_hash)) = head.get("event_hash_hex") {
+                                    if let Some(Value::String(head_hash)) =
+                                        head.get("event_hash_hex")
+                                    {
                                         if !prev_ref.contains_key("hash_hex") {
                                             prev_ref.insert(
                                                 "hash_hex".to_string(),
@@ -182,7 +184,9 @@ fn enrich_with_corpus_hashes(
                     if let Some(Value::Seq(entries)) = manifest.get_mut("entries") {
                         for entry in entries {
                             if let Value::Map(entry_map) = entry {
-                                if let Some(Value::String(digest)) = entry_map.get_mut("chunk_digest") {
+                                if let Some(Value::String(digest)) =
+                                    entry_map.get_mut("chunk_digest")
+                                {
                                     if digest.starts_with("0x") {
                                         *digest = digest[2..].to_string();
                                     }
@@ -251,9 +255,7 @@ fn load_vector(dir: &Path) -> Option<VectorCase> {
 
     let result = match manifest.get("suite").and_then(Value::as_str).unwrap_or("") {
         "canonical" => validate_canonical_case(&semantic),
-        "stream" => {
-            validate_stream_append_case(&semantic, &local_state, &verifier, hash_fn)
-        }
+        "stream" => validate_stream_append_case(&semantic, &local_state, &verifier, hash_fn),
         "delegation" => validate_delegation_case(&semantic, &local_state, &verifier),
         "command" => validate_command_case(&semantic, &local_state, &verifier, hash_fn),
         "control" => validate_control_change_case(&semantic, &local_state, &verifier),
@@ -263,13 +265,11 @@ fn load_vector(dir: &Path) -> Option<VectorCase> {
         "query" => validate_query_case(&semantic, &local_state, &verifier, hash_fn),
         "trust" => validate_trust_case(&semantic, &local_state, &verifier, hash_fn),
         "crypto" => validate_crypto_case(&semantic, &verifier, hash_fn),
-        other => {
-            crate::result::reject(
-                ReasonCode::StructuralInvalid,
-                Value::String(format!("unknown suite: {}", other)),
-                crate::result::empty_map(),
-            )
-        }
+        other => crate::result::reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("unknown suite: {}", other)),
+            crate::result::empty_map(),
+        ),
     };
 
     Some(VectorCase {
@@ -310,7 +310,10 @@ impl VectorCase {
         let result = &self.result;
         let expected = &self.expected;
 
-        let expected_verdict = expected.get("verdict").and_then(Value::as_str).unwrap_or("");
+        let expected_verdict = expected
+            .get("verdict")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         let actual_verdict = match result.verdict {
             Verdict::Accept => "ACCEPT",
             Verdict::Reject => "REJECT",
@@ -378,7 +381,11 @@ impl VectorCase {
 
 /// Recursively check that all keys in `expected` exist in `actual` with matching values.
 /// Extra keys in `actual` are allowed (subset matching).
-fn map_subset_match(expected: &BTreeMap<String, Value>, actual: &BTreeMap<String, Value>, path: &str) -> Option<String> {
+fn map_subset_match(
+    expected: &BTreeMap<String, Value>,
+    actual: &BTreeMap<String, Value>,
+    path: &str,
+) -> Option<String> {
     for (key, expected_val) in expected {
         match actual.get(key) {
             Some(actual_val) => {
@@ -444,13 +451,18 @@ fn find_vector_dirs() -> Vec<PathBuf> {
     for entry in std::fs::read_dir(&corpus_path)
         .ok()
         .into_iter()
-        .flatten().flatten()
+        .flatten()
+        .flatten()
     {
         if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
             let suite_dir = entry.path();
             if let Ok(entries) = std::fs::read_dir(&suite_dir) {
                 for case_entry in entries.flatten() {
-                    if case_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                    if case_entry
+                        .file_type()
+                        .map(|ft| ft.is_dir())
+                        .unwrap_or(false)
+                    {
                         let case_dir = case_entry.path();
                         if case_dir.join("manifest.yaml").exists() {
                             dirs.push(case_dir);
@@ -472,7 +484,11 @@ mod tests {
     fn conformance_parse_vectors() {
         let dirs = find_vector_dirs();
         assert!(!dirs.is_empty(), "No corpus vectors found");
-        assert!(dirs.len() >= 40, "Expected at least 40 vectors, found {}", dirs.len());
+        assert!(
+            dirs.len() >= 40,
+            "Expected at least 40 vectors, found {}",
+            dirs.len()
+        );
 
         // Verify we can load all vectors
         for dir in &dirs {

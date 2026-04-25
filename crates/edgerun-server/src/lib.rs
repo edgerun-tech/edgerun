@@ -36,12 +36,11 @@ use edgerun_rt::CancellationToken;
 use std::sync::Arc;
 use std::time::Duration;
 
+use edgerun_http::connection_middleware::{
+    ConnectionChain, ConnectionHandler, ConnectionMiddleware, MiddlewareAdapter, PassThroughHandler,
+};
 use edgerun_http::handler::Handler;
 use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
-use edgerun_http::connection_middleware::{
-    ConnectionChain, ConnectionHandler, ConnectionMiddleware,
-    PassThroughHandler, MiddlewareAdapter,
-};
 
 pub mod connection_interceptor_adapter;
 use connection_interceptor_adapter::ConnectionInterceptorAdapter;
@@ -51,7 +50,6 @@ use connection_interceptor_adapter::ConnectionInterceptorAdapter;
 // ---------------------------------------------------------------------------
 #[cfg(feature = "dns")]
 mod dns_config {
-    
 
     #[derive(Debug, Clone)]
     pub struct DnsConfig {
@@ -77,7 +75,7 @@ pub use dns_config::DnsConfig;
 
 #[cfg(feature = "dhcp")]
 mod dhcp_config {
-    
+
     use std::net::Ipv4Addr;
 
     #[derive(Debug, Clone)]
@@ -421,7 +419,9 @@ impl Server {
     pub async fn build(self) -> std::io::Result<BoundServer> {
         let http_bound = if let Some(h) = self.http {
             let mut server = HttpServer::new(h.handler);
-            if let Some(ka) = h.keep_alive { server = server.keep_alive(Some(ka)); }
+            if let Some(ka) = h.keep_alive {
+                server = server.keep_alive(Some(ka));
+            }
             server = server.max_request_size(h.max_request_size);
             if let Some(cert) = h.tls {
                 server = server.with_tls(cert);
@@ -460,7 +460,8 @@ impl Server {
                 default_bootfile: None,
                 bootfile_by_arch: std::collections::HashMap::new(),
             };
-            let srv = edgerun_dhcp::DhcpServer::new(dhcp_config, config.pool_start, config.pool_end)?;
+            let srv =
+                edgerun_dhcp::DhcpServer::new(dhcp_config, config.pool_start, config.pool_end)?;
             Some(srv)
         } else {
             None
@@ -494,18 +495,22 @@ impl Server {
         };
 
         // Build connection middleware chain
-        let connection_middleware: Arc<dyn ConnectionHandler> = if self.connection_middleware.is_empty() {
-            Arc::new(PassThroughHandler)
-        } else {
-            let chain = self.connection_middleware.into_iter().fold(
-                ConnectionChain::new(PassThroughHandler),
-                |chain, mw| chain.with(MiddlewareAdapter::new(mw)),
-            );
-            chain.build()
-        };
-        let connection_interceptor = Arc::new(ConnectionInterceptorAdapter::new(
-            Arc::clone(&connection_middleware),
-        )) as Arc<dyn edgerun_email::server::ConnectionInterceptor>;
+        let connection_middleware: Arc<dyn ConnectionHandler> =
+            if self.connection_middleware.is_empty() {
+                Arc::new(PassThroughHandler)
+            } else {
+                let chain = self
+                    .connection_middleware
+                    .into_iter()
+                    .fold(ConnectionChain::new(PassThroughHandler), |chain, mw| {
+                        chain.with(MiddlewareAdapter::new(mw))
+                    });
+                chain.build()
+            };
+        let connection_interceptor = Arc::new(ConnectionInterceptorAdapter::new(Arc::clone(
+            &connection_middleware,
+        )))
+            as Arc<dyn edgerun_email::server::ConnectionInterceptor>;
 
         #[cfg(feature = "imap")]
         let imap_server = if let Some(config) = self.imap {
@@ -519,7 +524,10 @@ impl Server {
             };
             let mut srv = if let Some(ref maildir_root) = config.maildir_root {
                 let store = edgerun_email::imap::MaildirImapStore::new(maildir_root)?;
-                edgerun_email::imap::ImapServer::with_store(imap_config, std::sync::Arc::new(store))?
+                edgerun_email::imap::ImapServer::with_store(
+                    imap_config,
+                    std::sync::Arc::new(store),
+                )?
             } else {
                 edgerun_email::imap::ImapServer::new(imap_config)?
             };
@@ -600,7 +608,9 @@ impl Server {
 }
 
 impl Default for Server {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// A fully bound server with all protocol listeners ready.
@@ -683,36 +693,28 @@ impl BoundServer {
         #[cfg(feature = "imap")]
         if let Some(imap) = self.imap.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
-                imap.run(token).await
-            }));
+            tasks.push(edgerun_rt::spawn(async move { imap.run(token).await }));
         }
 
         // SMTP
         #[cfg(feature = "smtp")]
         if let Some(smtp) = self.smtp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
-                smtp.run(token).await
-            }));
+            tasks.push(edgerun_rt::spawn(async move { smtp.run(token).await }));
         }
 
         // LMTP
         #[cfg(feature = "lmtp")]
         if let Some(lmtp) = self.lmtp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
-                lmtp.run(token).await
-            }));
+            tasks.push(edgerun_rt::spawn(async move { lmtp.run(token).await }));
         }
 
         // Proxy
         #[cfg(feature = "proxy")]
         if let Some(proxy) = self.proxy.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
-                proxy.run(token).await
-            }));
+            tasks.push(edgerun_rt::spawn(async move { proxy.run(token).await }));
         }
 
         // Wait for all tasks

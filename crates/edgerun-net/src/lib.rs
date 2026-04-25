@@ -35,10 +35,10 @@
 //! └─────────────────────────────────────────────────┘
 //! ```
 
-pub mod server;
-pub mod integration;
 pub mod config_watch;
+pub mod integration;
+pub mod server;
 
-pub use server::NetServer;
-pub use integration::DnsDhcpIntegration;
 pub use config_watch::ConfigWatcher;
+pub use integration::DnsDhcpIntegration;
+pub use server::NetServer;

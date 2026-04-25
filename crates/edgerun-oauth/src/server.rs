@@ -12,21 +12,21 @@
 //! directly on any `HttpServer`.
 
 use crate::device_state::{DeviceGrantStore, PendingDeviceGrant};
-use crate::discovery::{JwksDocument, Jwk};
+use crate::discovery::{Jwk, JwksDocument};
 use crate::errors::{DeviceError, OAuthError, OAuthResult};
-use crate::jwt::{JwtVerifier, IdToken};
+use crate::jwt::{IdToken, JwtVerifier};
 use crate::pkce::PkcePair;
 use crate::types::{Credentials, TokenResponse};
-use edgerun_encoding::base64::base64url_nopad_encode;
-use edgerun_encoding::percent::{percent_decode, parse_form_urlencoded as parse_form_btree};
-use std::collections::HashMap;
-use edgerun_crypto::getrandom;
-use edgerun_crypto::sha256;
-use edgerun_crypto::p256::ecdsa::SigningKey;
-use edgerun_crypto::p256::ecdsa::signature::Signer;
 use edgerun_crypto::ecdsa::Signature;
+use edgerun_crypto::getrandom;
+use edgerun_crypto::p256::ecdsa::signature::Signer;
+use edgerun_crypto::p256::ecdsa::SigningKey;
+use edgerun_crypto::sha256;
+use edgerun_encoding::base64::base64url_nopad_encode;
+use edgerun_encoding::percent::{parse_form_urlencoded as parse_form_btree, percent_decode};
 use edgerun_http::{Handler, Middleware, Next, Request, Response, StatusCode};
-use edgerun_json::{from_str, to_string, JsonValue, JsonNumber, Map};
+use edgerun_json::{from_str, to_string, JsonNumber, JsonValue, Map};
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -259,7 +259,12 @@ impl OAuthServer {
     }
 
     /// Register a client with explicit ID and secret.
-    pub fn register_client_with_id(&self, client_id: &str, client_secret: &str, scopes: Vec<String>) -> ClientRegistration {
+    pub fn register_client_with_id(
+        &self,
+        client_id: &str,
+        client_secret: &str,
+        scopes: Vec<String>,
+    ) -> ClientRegistration {
         let registration = ClientRegistration {
             client_id: client_id.to_string(),
             client_name: client_id.to_string(),
@@ -303,12 +308,24 @@ impl OAuthServer {
 
         let doc = crate::discovery::OidcDiscoveryDocument {
             issuer: self.config.issuer.clone(),
-            authorization_endpoint: format!("{}{}", self.config.issuer_url, self.config.authorize_path),
+            authorization_endpoint: format!(
+                "{}{}",
+                self.config.issuer_url, self.config.authorize_path
+            ),
             token_endpoint: format!("{}{}", self.config.issuer_url, self.config.token_path),
-            userinfo_endpoint: Some(format!("{}{}", self.config.issuer_url, self.config.userinfo_path)),
+            userinfo_endpoint: Some(format!(
+                "{}{}",
+                self.config.issuer_url, self.config.userinfo_path
+            )),
             jwks_uri: format!("{}{}", self.config.issuer_url, self.config.jwks_path),
-            device_authorization_endpoint: Some(format!("{}{}", self.config.issuer_url, self.config.device_code_path)),
-            introspection_endpoint: Some(format!("{}{}", self.config.issuer_url, self.config.introspect_path)),
+            device_authorization_endpoint: Some(format!(
+                "{}{}",
+                self.config.issuer_url, self.config.device_code_path
+            )),
+            introspection_endpoint: Some(format!(
+                "{}{}",
+                self.config.issuer_url, self.config.introspect_path
+            )),
             revocation_endpoint: None,
             response_types_supported: vec!["code".into()],
             grant_types_supported: vec![
@@ -332,30 +349,37 @@ impl OAuthServer {
 
     /// Generate the JWKS document as an HTTP response.
     pub fn jwks_response(&self) -> Response {
-        use edgerun_crypto::p256::ecdsa::VerifyingKey;
         use edgerun_crypto::elliptic_curve::sec1::ToEncodedPoint;
+        use edgerun_crypto::p256::ecdsa::VerifyingKey;
 
         let vk = VerifyingKey::from(&self.signing_key);
         let point = vk.to_encoded_point(false);
         let raw = point.as_bytes();
 
-        let fields = vec![
-            ("kty".into(), JsonValue::String("EC".into())),
-            ("crv".into(), JsonValue::String("P-256".into())),
-            ("alg".into(), JsonValue::String("ES256".into())),
-            ("use".into(), JsonValue::String("sig".into())),
-            ("kid".into(), JsonValue::String(self.signing_key_id.clone())),
-            ("x".into(), JsonValue::String(base64url_nopad_encode(&raw[1..33]))),
-            ("y".into(), JsonValue::String(base64url_nopad_encode(&raw[33..65])))];
+        let mut fields = Vec::new();
+        fields.push(("kty".into(), JsonValue::String("EC".into())));
+        fields.push(("crv".into(), JsonValue::String("P-256".into())));
+        fields.push(("alg".into(), JsonValue::String("ES256".into())));
+        fields.push(("use".into(), JsonValue::String("sig".into())));
+        fields.push(("kid".into(), JsonValue::String(self.signing_key_id.clone())));
+        fields.push((
+            "x".into(),
+            JsonValue::String(base64url_nopad_encode(&raw[1..33])),
+        ));
+        fields.push((
+            "y".into(),
+            JsonValue::String(base64url_nopad_encode(&raw[33..65])),
+        ));
 
-        let jwk_json = to_string(&JsonValue::Object(Map::from_iter(fields)))
-            .unwrap_or_else(|_| "{}".into());
+        let jwk_json =
+            to_string(&JsonValue::Object(Map::from_iter(fields))).unwrap_or_else(|_| "{}".into());
         let jwk_raw: JsonValue = from_str(&jwk_json).unwrap_or(JsonValue::Object(Map::new()));
 
         let keys_arr = vec![jwk_raw];
-        let obj = vec![("keys".into(), JsonValue::Array(keys_arr))];
-        let doc_json = to_string(&JsonValue::Object(Map::from_iter(obj)))
-            .unwrap_or_else(|_| "{}".into());
+        let mut obj = Vec::new();
+        obj.push(("keys".into(), JsonValue::Array(keys_arr)));
+        let doc_json =
+            to_string(&JsonValue::Object(Map::from_iter(obj))).unwrap_or_else(|_| "{}".into());
 
         Response::json(StatusCode::new(200).unwrap(), &doc_json)
     }
@@ -386,11 +410,17 @@ impl OAuthServer {
         };
         let cc_method = match params.get("code_challenge_method") {
             Some(m) => m,
-            None => return self.oauth_error("invalid_request", "missing code_challenge_method", 400),
+            None => {
+                return self.oauth_error("invalid_request", "missing code_challenge_method", 400)
+            }
         };
 
         if cc_method != "S256" {
-            return self.oauth_error("invalid_request", "only S256 code_challenge_method is supported", 400);
+            return self.oauth_error(
+                "invalid_request",
+                "only S256 code_challenge_method is supported",
+                400,
+            );
         }
 
         // Verify client exists
@@ -398,17 +428,14 @@ impl OAuthServer {
             return self.oauth_error("invalid_client", "unknown client_id", 401);
         }
 
-        let scopes: Vec<String> = params.get("scope")
+        let scopes: Vec<String> = params
+            .get("scope")
             .map(|s| s.split_whitespace().map(|s| s.to_string()).collect())
             .unwrap_or_else(|| vec!["openid".into()]);
 
         let base_uri = format!("{}{}", self.config.issuer_url, self.config.authorize_path);
-        let grant = match PendingDeviceGrant::generate(
-            client_id,
-            scopes,
-            code_challenge,
-            &base_uri,
-        ) {
+        let grant = match PendingDeviceGrant::generate(client_id, scopes, code_challenge, &base_uri)
+        {
             Ok(g) => g,
             Err(e) => return Response::text(StatusCode::new(500).unwrap(), &e.to_string()),
         };
@@ -422,14 +449,19 @@ impl OAuthServer {
 
         self.device_store.store(grant);
 
-        let fields = vec![
-            ("device_code".into(), JsonValue::String(device_code)),
-            ("user_code".into(), JsonValue::String(user_code)),
-            ("verification_uri".into(), JsonValue::String(verification_uri)),
-            ("verification_uri_complete".into(), JsonValue::String(verification_uri_complete)),
-            ("expires_in".into(), JsonValue::from(expires_in)),
-            ("interval".into(), JsonValue::from(interval)),
-        ];
+        let mut fields = Vec::new();
+        fields.push(("device_code".into(), JsonValue::String(device_code)));
+        fields.push(("user_code".into(), JsonValue::String(user_code)));
+        fields.push((
+            "verification_uri".into(),
+            JsonValue::String(verification_uri),
+        ));
+        fields.push((
+            "verification_uri_complete".into(),
+            JsonValue::String(verification_uri_complete),
+        ));
+        fields.push(("expires_in".into(), JsonValue::from(expires_in)));
+        fields.push(("interval".into(), JsonValue::from(interval)));
 
         let val = JsonValue::Object(Map::from_iter(fields));
         let json = to_string(&val).unwrap_or_else(|_| "{}".into());
@@ -446,7 +478,10 @@ impl OAuthServer {
     }
 
     /// Look up a device grant by user code.
-    pub fn lookup_device_grant_by_user_code(&self, user_code: &str) -> Option<(String, Vec<String>)> {
+    pub fn lookup_device_grant_by_user_code(
+        &self,
+        user_code: &str,
+    ) -> Option<(String, Vec<String>)> {
         let grant = self.device_store.lookup_by_user_code(user_code)?;
         if grant.is_expired() {
             return None;
@@ -471,7 +506,11 @@ impl OAuthServer {
             "urn:ietf:params:oauth:grant-type:device_code" => self.handle_device_token(&params),
             "authorization_code" => self.handle_auth_code_token(&params),
             "refresh_token" => self.handle_refresh_token(&params),
-            _ => self.oauth_error("unsupported_grant_type", &format!("unsupported grant_type: {grant_type}"), 400),
+            _ => self.oauth_error(
+                "unsupported_grant_type",
+                &format!("unsupported grant_type: {grant_type}"),
+                400,
+            ),
         }
     }
 
@@ -539,30 +578,36 @@ impl OAuthServer {
         let refresh_token = generate_token(48);
 
         // Sign ID token with at_hash
-        let id_token = match self.sign_id_token_with_at_hash(
-            &grant.client_id,
-            &granted_scopes,
-            &access_token,
-        ) {
-            Ok(t) => t,
-            Err(e) => return Response::text(StatusCode::new(500).unwrap(), &e.to_string()),
-        };
+        let id_token =
+            match self.sign_id_token_with_at_hash(&grant.client_id, &granted_scopes, &access_token)
+            {
+                Ok(t) => t,
+                Err(e) => return Response::text(StatusCode::new(500).unwrap(), &e.to_string()),
+            };
 
         // Store token for introspection
-        write_lock(&self.tokens).insert(access_token.clone(), TokenEntry {
-            client_id: client_id.clone(),
-            scopes: granted_scopes.clone(),
-            active: true,
-            token_type: "Bearer".into(),
-            exp: now + self.config.access_token_ttl_secs,
-            iat: now,
-            sub: Some(grant.client_id.clone()),
-            raw_token: access_token.clone(),
-        });
+        write_lock(&self.tokens).insert(
+            access_token.clone(),
+            TokenEntry {
+                client_id: client_id.clone(),
+                scopes: granted_scopes.clone(),
+                active: true,
+                token_type: "Bearer".into(),
+                exp: now + self.config.access_token_ttl_secs,
+                iat: now,
+                sub: Some(grant.client_id.clone()),
+                raw_token: access_token.clone(),
+            },
+        );
 
         self.device_store.remove(device_code);
 
-        self.token_response(&access_token, &refresh_token, Some(&id_token), self.config.access_token_ttl_secs)
+        self.token_response(
+            &access_token,
+            &refresh_token,
+            Some(&id_token),
+            self.config.access_token_ttl_secs,
+        )
     }
 
     fn handle_auth_code_token(&self, params: &HashMap<String, String>) -> Response {
@@ -601,23 +646,32 @@ impl OAuthServer {
         let refresh_token = generate_token(48);
         let granted_scopes = client.scopes.clone();
 
-        let id_token = match self.sign_id_token_with_at_hash(client_id, &granted_scopes, &access_token) {
-            Ok(t) => t,
-            Err(e) => return Response::text(StatusCode::new(500).unwrap(), &e.to_string()),
-        };
+        let id_token =
+            match self.sign_id_token_with_at_hash(client_id, &granted_scopes, &access_token) {
+                Ok(t) => t,
+                Err(e) => return Response::text(StatusCode::new(500).unwrap(), &e.to_string()),
+            };
 
-        write_lock(&self.tokens).insert(access_token.clone(), TokenEntry {
-            client_id: client_id.clone(),
-            scopes: granted_scopes.clone(),
-            active: true,
-            token_type: "Bearer".into(),
-            exp: now + self.config.access_token_ttl_secs,
-            iat: now,
-            sub: Some(client_id.clone()),
-            raw_token: access_token.clone(),
-        });
+        write_lock(&self.tokens).insert(
+            access_token.clone(),
+            TokenEntry {
+                client_id: client_id.clone(),
+                scopes: granted_scopes.clone(),
+                active: true,
+                token_type: "Bearer".into(),
+                exp: now + self.config.access_token_ttl_secs,
+                iat: now,
+                sub: Some(client_id.clone()),
+                raw_token: access_token.clone(),
+            },
+        );
 
-        self.token_response(&access_token, &refresh_token, Some(&id_token), self.config.access_token_ttl_secs)
+        self.token_response(
+            &access_token,
+            &refresh_token,
+            Some(&id_token),
+            self.config.access_token_ttl_secs,
+        )
     }
 
     fn handle_refresh_token(&self, params: &HashMap<String, String>) -> Response {
@@ -650,7 +704,8 @@ impl OAuthServer {
         // Find the original token to get scopes
         let original_scopes = {
             let tokens = read_lock(&self.tokens);
-            tokens.values()
+            tokens
+                .values()
                 .find(|t| t.client_id == *client_id)
                 .map(|t| t.scopes.clone())
                 .unwrap_or_else(|| vec!["openid".into()])
@@ -663,18 +718,26 @@ impl OAuthServer {
 
         let access_token = generate_token(48);
 
-        write_lock(&self.tokens).insert(access_token.clone(), TokenEntry {
-            client_id: client_id.clone(),
-            scopes: original_scopes.clone(),
-            active: true,
-            token_type: "Bearer".into(),
-            exp: now + self.config.access_token_ttl_secs,
-            iat: now,
-            sub: Some(client_id.clone()),
-            raw_token: access_token.clone(),
-        });
+        write_lock(&self.tokens).insert(
+            access_token.clone(),
+            TokenEntry {
+                client_id: client_id.clone(),
+                scopes: original_scopes.clone(),
+                active: true,
+                token_type: "Bearer".into(),
+                exp: now + self.config.access_token_ttl_secs,
+                iat: now,
+                sub: Some(client_id.clone()),
+                raw_token: access_token.clone(),
+            },
+        );
 
-        self.token_response(&access_token, refresh_token, None, self.config.access_token_ttl_secs)
+        self.token_response(
+            &access_token,
+            refresh_token,
+            None,
+            self.config.access_token_ttl_secs,
+        )
     }
 
     // -----------------------------------------------------------------------
@@ -684,7 +747,9 @@ impl OAuthServer {
     /// Handle a userinfo request. Expects `Authorization: Bearer <token>`.
     pub fn handle_userinfo(&self, auth_header: Option<&str>) -> Response {
         let token = match auth_header {
-            Some(h) => h.strip_prefix("Bearer ").or_else(|| h.strip_prefix("bearer ")),
+            Some(h) => h
+                .strip_prefix("Bearer ")
+                .or_else(|| h.strip_prefix("bearer ")),
             None => None,
         };
 
@@ -699,14 +764,18 @@ impl OAuthServer {
         let entry = match read_lock(&self.tokens).get(token) {
             Some(e) => e.clone(),
             None => {
-                return Response::new(StatusCode::new(401).unwrap())
-                    .with_header("WWW-Authenticate", r#"Bearer error="invalid_token", error_description="token not found""#);
+                return Response::new(StatusCode::new(401).unwrap()).with_header(
+                    "WWW-Authenticate",
+                    r#"Bearer error="invalid_token", error_description="token not found""#,
+                );
             }
         };
 
         if !entry.active {
-            return Response::new(StatusCode::new(401).unwrap())
-                .with_header("WWW-Authenticate", r#"Bearer error="invalid_token", error_description="token revoked""#);
+            return Response::new(StatusCode::new(401).unwrap()).with_header(
+                "WWW-Authenticate",
+                r#"Bearer error="invalid_token", error_description="token revoked""#,
+            );
         }
 
         let now = std::time::SystemTime::now()
@@ -715,13 +784,21 @@ impl OAuthServer {
             .unwrap_or(0);
 
         if entry.exp < now {
-            return Response::new(StatusCode::new(401).unwrap())
-                .with_header("WWW-Authenticate", r#"Bearer error="expired_token", error_description="token expired""#);
+            return Response::new(StatusCode::new(401).unwrap()).with_header(
+                "WWW-Authenticate",
+                r#"Bearer error="expired_token", error_description="token expired""#,
+            );
         }
 
         let mut fields = Vec::new();
-        fields.push(("sub".into(), JsonValue::String(entry.sub.clone().unwrap_or(entry.client_id.clone()))));
-        fields.push(("client_id".into(), JsonValue::String(entry.client_id.clone())));
+        fields.push((
+            "sub".into(),
+            JsonValue::String(entry.sub.clone().unwrap_or(entry.client_id.clone())),
+        ));
+        fields.push((
+            "client_id".into(),
+            JsonValue::String(entry.client_id.clone()),
+        ));
         if !entry.scopes.is_empty() {
             fields.push(("scope".into(), JsonValue::String(entry.scopes.join(" "))));
         }
@@ -845,22 +922,25 @@ impl OAuthServer {
         );
         let header_b64 = base64url_nopad_encode(header_json.as_bytes());
 
-        let payload_fields = vec![
-            ("iss".into(), JsonValue::String(self.config.issuer.clone())),
-            ("sub".into(), JsonValue::String(client_id.to_string())),
-            ("aud".into(), JsonValue::String(client_id.to_string())),
-            ("exp".into(), JsonValue::from(now + self.config.access_token_ttl_secs)),
-            ("iat".into(), JsonValue::from(now)),
-            ("scope".into(), JsonValue::String(scopes.join(" "))),
-            ("at_hash".into(), JsonValue::String(at_hash)),
-        ];
+        let mut payload_fields = Vec::new();
+        payload_fields.push(("iss".into(), JsonValue::String(self.config.issuer.clone())));
+        payload_fields.push(("sub".into(), JsonValue::String(client_id.to_string())));
+        payload_fields.push(("aud".into(), JsonValue::String(client_id.to_string())));
+        payload_fields.push((
+            "exp".into(),
+            JsonValue::from(now + self.config.access_token_ttl_secs),
+        ));
+        payload_fields.push(("iat".into(), JsonValue::from(now)));
+        payload_fields.push(("scope".into(), JsonValue::String(scopes.join(" "))));
+        payload_fields.push(("at_hash".into(), JsonValue::String(at_hash)));
 
         let payload_json = to_string(&JsonValue::Object(Map::from_iter(payload_fields)))
             .map_err(|e| OAuthError::JsonError(e.to_string()))?;
         let payload_b64 = base64url_nopad_encode(payload_json.as_bytes());
 
         let signing_input = format!("{header_b64}.{payload_b64}");
-        let signature: Signature<edgerun_crypto::p256::NistP256> = self.signing_key.sign(signing_input.as_bytes());
+        let signature: Signature<edgerun_crypto::p256::NistP256> =
+            self.signing_key.sign(signing_input.as_bytes());
         let sig_der = signature.to_der().as_bytes().to_vec();
         let sig_b64 = base64url_nopad_encode(&sig_der);
 
@@ -876,7 +956,8 @@ impl OAuthServer {
     fn validate_scopes(&self, requested: &[String], registered: &[String]) -> Vec<String> {
         let registered_set: std::collections::HashSet<&str> =
             registered.iter().map(|s| s.as_str()).collect();
-        requested.iter()
+        requested
+            .iter()
             .filter(|s| registered_set.contains(s.as_str()))
             .cloned()
             .collect()
@@ -893,12 +974,17 @@ impl OAuthServer {
         id_token: Option<&str>,
         expires_in: u64,
     ) -> Response {
-        let mut fields = vec![
-            ("access_token".into(), JsonValue::String(access_token.to_string())),
-            ("token_type".into(), JsonValue::String("Bearer".into())),
-            ("expires_in".into(), JsonValue::from(expires_in)),
-            ("refresh_token".into(), JsonValue::String(refresh_token.to_string())),
-        ];
+        let mut fields = Vec::new();
+        fields.push((
+            "access_token".into(),
+            JsonValue::String(access_token.to_string()),
+        ));
+        fields.push(("token_type".into(), JsonValue::String("Bearer".into())));
+        fields.push(("expires_in".into(), JsonValue::from(expires_in)));
+        fields.push((
+            "refresh_token".into(),
+            JsonValue::String(refresh_token.to_string()),
+        ));
         if let Some(idt) = id_token {
             fields.push(("id_token".into(), JsonValue::String(idt.to_string())));
         }
@@ -909,10 +995,12 @@ impl OAuthServer {
     }
 
     fn oauth_error(&self, error: &str, desc: &str, status: u16) -> Response {
-        let fields = vec![
-            ("error".into(), JsonValue::String(error.to_string())),
-            ("error_description".into(), JsonValue::String(desc.to_string())),
-        ];
+        let mut fields = Vec::new();
+        fields.push(("error".into(), JsonValue::String(error.to_string())));
+        fields.push((
+            "error_description".into(),
+            JsonValue::String(desc.to_string()),
+        ));
         let val = JsonValue::Object(Map::from_iter(fields));
         let json = to_string(&val).unwrap_or_else(|_| "{}".into());
         Response::json(StatusCode::new(status).unwrap(), &json)
@@ -936,7 +1024,9 @@ impl Handler for OAuthServer {
         let method = request.method().clone();
         let path = request.uri().path().to_string();
         let body = request.body().map(|b| b.to_vec()).unwrap_or_default();
-        let auth_header = request.headers().get("Authorization")
+        let auth_header = request
+            .headers()
+            .get("Authorization")
             .map(|h| h.as_str().to_string());
 
         Box::pin(async move {
@@ -1016,9 +1106,11 @@ impl edgerun_http::Middleware for BearerAuthMiddleware {
     ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         Box::pin(async move {
             // Extract bearer token
-            let auth_header = req.headers().get("Authorization")
-                .map(|h| h.as_str());
-            let token = auth_header.and_then(|h| h.strip_prefix("Bearer ").or_else(|| h.strip_prefix("bearer ")));
+            let auth_header = req.headers().get("Authorization").map(|h| h.as_str());
+            let token = auth_header.and_then(|h| {
+                h.strip_prefix("Bearer ")
+                    .or_else(|| h.strip_prefix("bearer "))
+            });
 
             match token {
                 Some(t) => {
@@ -1029,16 +1121,12 @@ impl edgerun_http::Middleware for BearerAuthMiddleware {
                             req.extensions_mut().insert::<Claims>(claims);
                             next.run(req).await
                         }
-                        None => {
-                            Response::new(StatusCode::new(401).unwrap())
-                                .with_header("WWW-Authenticate", r#"Bearer error="invalid_token""#)
-                        }
+                        None => Response::new(StatusCode::new(401).unwrap())
+                            .with_header("WWW-Authenticate", r#"Bearer error="invalid_token""#),
                     }
                 }
-                None => {
-                    Response::new(StatusCode::new(401).unwrap())
-                        .with_header("WWW-Authenticate", r#"Bearer error="missing_token""#)
-                }
+                None => Response::new(StatusCode::new(401).unwrap())
+                    .with_header("WWW-Authenticate", r#"Bearer error="missing_token""#),
             }
         })
     }
@@ -1093,7 +1181,8 @@ mod tests {
     #[test]
     fn test_register_client_with_id() {
         let server = make_server();
-        let client = server.register_client_with_id("fixed-id", "fixed-secret", vec!["openid".into()]);
+        let client =
+            server.register_client_with_id("fixed-id", "fixed-secret", vec!["openid".into()]);
         assert_eq!(client.client_id, "fixed-id");
         assert_eq!(client.client_secret, Some("fixed-secret".into()));
     }
@@ -1101,7 +1190,9 @@ mod tests {
     #[test]
     fn test_scope_validation_subset() {
         let server = make_server();
-        let client = server.register_client("my-app", vec!["openid".into(), "profile".into()]).client_id;
+        let client = server
+            .register_client("my-app", vec!["openid".into(), "profile".into()])
+            .client_id;
 
         // Request scopes that are a subset of registered
         let granted = {
@@ -1114,7 +1205,9 @@ mod tests {
     #[test]
     fn test_scope_validation_extra_rejected() {
         let server = make_server();
-        let client = server.register_client("my-app", vec!["openid".into()]).client_id;
+        let client = server
+            .register_client("my-app", vec!["openid".into()])
+            .client_id;
 
         let c = server.get_client(&client).unwrap();
         let granted = server.validate_scopes(&["openid".into(), "admin".into()], &c.scopes);
@@ -1124,7 +1217,9 @@ mod tests {
     #[test]
     fn test_scope_validation_none_granted() {
         let server = make_server();
-        let client = server.register_client("my-app", vec!["openid".into()]).client_id;
+        let client = server
+            .register_client("my-app", vec!["openid".into()])
+            .client_id;
 
         let c = server.get_client(&client).unwrap();
         let granted = server.validate_scopes(&["admin".into()], &c.scopes);
@@ -1138,7 +1233,10 @@ mod tests {
         assert_eq!(resp.status().as_u16(), 400);
         let body = resp.body_as_string().unwrap();
         let json: JsonValue = from_str(&body).unwrap();
-        assert_eq!(json.get("error").and_then(|v| v.as_str()), Some("invalid_request"));
+        assert_eq!(
+            json.get("error").and_then(|v| v.as_str()),
+            Some("invalid_request")
+        );
     }
 
     #[test]
@@ -1164,7 +1262,8 @@ mod tests {
     #[test]
     fn test_device_code_unknown_client() {
         let server = make_server();
-        let body = "client_id=nonexistent&scope=openid&code_challenge=abc&code_challenge_method=S256";
+        let body =
+            "client_id=nonexistent&scope=openid&code_challenge=abc&code_challenge_method=S256";
         let resp = server.handle_device_code(body);
         assert_eq!(resp.status().as_u16(), 401);
     }
@@ -1185,7 +1284,10 @@ mod tests {
         assert_eq!(resp.status().as_u16(), 200);
 
         let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
-        assert_eq!(json.get("issuer").and_then(|v| v.as_str()), Some("https://auth.example.com"));
+        assert_eq!(
+            json.get("issuer").and_then(|v| v.as_str()),
+            Some("https://auth.example.com")
+        );
         assert!(json.get("authorization_endpoint").is_some());
         assert!(json.get("token_endpoint").is_some());
         assert!(json.get("userinfo_endpoint").is_some());
@@ -1218,16 +1320,19 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        write_lock(&server.tokens).insert("test-token".into(), TokenEntry {
-            client_id: client.client_id.clone(),
-            scopes: vec!["openid".into()],
-            active: true,
-            token_type: "Bearer".into(),
-            exp: now + 3600,
-            iat: now,
-            sub: Some("user-1".into()),
-            raw_token: "test-token".into(),
-        });
+        write_lock(&server.tokens).insert(
+            "test-token".into(),
+            TokenEntry {
+                client_id: client.client_id.clone(),
+                scopes: vec!["openid".into()],
+                active: true,
+                token_type: "Bearer".into(),
+                exp: now + 3600,
+                iat: now,
+                sub: Some("user-1".into()),
+                raw_token: "test-token".into(),
+            },
+        );
 
         let body = "token=test-token";
         let resp = server.handle_introspect(body);
@@ -1235,7 +1340,10 @@ mod tests {
 
         let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         assert_eq!(json.get("active").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(json.get("client_id").and_then(|v| v.as_str()), Some(client.client_id.as_str()));
+        assert_eq!(
+            json.get("client_id").and_then(|v| v.as_str()),
+            Some(client.client_id.as_str())
+        );
         assert_eq!(json.get("sub").and_then(|v| v.as_str()), Some("user-1"));
     }
 
@@ -1273,24 +1381,33 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        write_lock(&server.tokens).insert("valid-token".into(), TokenEntry {
-            client_id: client.client_id.clone(),
-            scopes: vec!["openid".into(), "email".into()],
-            active: true,
-            token_type: "Bearer".into(),
-            exp: now + 3600,
-            iat: now,
-            sub: Some("user-123".into()),
-            raw_token: "valid-token".into(),
-        });
+        write_lock(&server.tokens).insert(
+            "valid-token".into(),
+            TokenEntry {
+                client_id: client.client_id.clone(),
+                scopes: vec!["openid".into(), "email".into()],
+                active: true,
+                token_type: "Bearer".into(),
+                exp: now + 3600,
+                iat: now,
+                sub: Some("user-123".into()),
+                raw_token: "valid-token".into(),
+            },
+        );
 
         let resp = server.handle_userinfo(Some("Bearer valid-token"));
         assert_eq!(resp.status().as_u16(), 200);
 
         let json: JsonValue = from_str(&resp.body_as_string().unwrap()).unwrap();
         assert_eq!(json.get("sub").and_then(|v| v.as_str()), Some("user-123"));
-        assert_eq!(json.get("scope").and_then(|v| v.as_str()), Some("openid email"));
-        assert_eq!(json.get("iss").and_then(|v| v.as_str()), Some("https://auth.example.com"));
+        assert_eq!(
+            json.get("scope").and_then(|v| v.as_str()),
+            Some("openid email")
+        );
+        assert_eq!(
+            json.get("iss").and_then(|v| v.as_str()),
+            Some("https://auth.example.com")
+        );
     }
 
     #[test]
@@ -1302,16 +1419,19 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        write_lock(&server.tokens).insert("bearer-token".into(), TokenEntry {
-            client_id: client.client_id,
-            scopes: vec!["openid".into()],
-            active: true,
-            token_type: "Bearer".into(),
-            exp: now + 3600,
-            iat: now,
-            sub: Some("user-1".into()),
-            raw_token: "bearer-token".into(),
-        });
+        write_lock(&server.tokens).insert(
+            "bearer-token".into(),
+            TokenEntry {
+                client_id: client.client_id,
+                scopes: vec!["openid".into()],
+                active: true,
+                token_type: "Bearer".into(),
+                exp: now + 3600,
+                iat: now,
+                sub: Some("user-1".into()),
+                raw_token: "bearer-token".into(),
+            },
+        );
 
         let claims = server.verify_bearer_token("bearer-token").unwrap();
         assert_eq!(claims.sub, "user-1");
@@ -1323,16 +1443,19 @@ mod tests {
         let server = make_server();
         let client = server.register_client("my-app", vec!["openid".into()]);
 
-        write_lock(&server.tokens).insert("expired-token".into(), TokenEntry {
-            client_id: client.client_id,
-            scopes: vec!["openid".into()],
-            active: true,
-            token_type: "Bearer".into(),
-            exp: 100, // long expired
-            iat: 0,
-            sub: Some("user-1".into()),
-            raw_token: "expired-token".into(),
-        });
+        write_lock(&server.tokens).insert(
+            "expired-token".into(),
+            TokenEntry {
+                client_id: client.client_id,
+                scopes: vec!["openid".into()],
+                active: true,
+                token_type: "Bearer".into(),
+                exp: 100, // long expired
+                iat: 0,
+                sub: Some("user-1".into()),
+                raw_token: "expired-token".into(),
+            },
+        );
 
         assert!(server.verify_bearer_token("expired-token").is_none());
     }
@@ -1352,7 +1475,8 @@ mod tests {
 
     #[test]
     fn test_form_urlencoded_parsing() {
-        let params = parse_form_urlencoded("grant_type=refresh_token&client_id=my-id&refresh_token=xyz");
+        let params =
+            parse_form_urlencoded("grant_type=refresh_token&client_id=my-id&refresh_token=xyz");
         assert_eq!(params.get("grant_type"), Some(&"refresh_token".to_string()));
         assert_eq!(params.get("client_id"), Some(&"my-id".to_string()));
         assert_eq!(params.get("refresh_token"), Some(&"xyz".to_string()));
@@ -1361,6 +1485,9 @@ mod tests {
     #[test]
     fn test_form_urlencoded_with_spaces() {
         let params = parse_form_urlencoded("scope=openid+profile+email");
-        assert_eq!(params.get("scope"), Some(&"openid profile email".to_string()));
+        assert_eq!(
+            params.get("scope"),
+            Some(&"openid profile email".to_string())
+        );
     }
 }

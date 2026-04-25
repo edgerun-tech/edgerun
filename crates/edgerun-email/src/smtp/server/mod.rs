@@ -6,6 +6,6 @@ pub mod session;
 
 pub use dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 pub use handler::{MailHandler, MemoryMailStore};
-pub use maildir::{MaildirMessage, MaildirState, MaildirStore, MailboxStats};
+pub use maildir::{MailboxStats, MaildirMessage, MaildirState, MaildirStore};
 pub use rate_limit::{RateLimitConfig, RateLimiter};
 pub use session::{SmtpServer, SmtpServerConfig};

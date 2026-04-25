@@ -83,7 +83,10 @@ impl TsigKey {
         use edgerun_crypto::RngCore;
         let mut secret = vec![0u8; 64];
         edgerun_crypto::OsRng.fill_bytes(&mut secret);
-        Self { secret, algorithm: TsigAlgorithm::HmacSha256 }
+        Self {
+            secret,
+            algorithm: TsigAlgorithm::HmacSha256,
+        }
     }
 
     /// Create a TSIG key from raw bytes.
@@ -94,15 +97,20 @@ impl TsigKey {
     /// Create a TSIG key from a base64-encoded secret.
     pub fn from_base64(b64: &str, algorithm: TsigAlgorithm) -> Result<Self, io::Error> {
         use std::io::{Error, ErrorKind};
-        let secret = decode_base64(b64).ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid base64"))?;
+        let secret = decode_base64(b64)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid base64"))?;
         Ok(Self { secret, algorithm })
     }
 
     /// Raw secret bytes.
-    pub fn secret(&self) -> &[u8] { &self.secret }
+    pub fn secret(&self) -> &[u8] {
+        &self.secret
+    }
 
     /// Algorithm used by this key.
-    pub fn algorithm(&self) -> TsigAlgorithm { self.algorithm }
+    pub fn algorithm(&self) -> TsigAlgorithm {
+        self.algorithm
+    }
 }
 
 /// TSIG signer — creates signed DNS messages.
@@ -141,7 +149,10 @@ impl TsigSigner {
     }
 
     /// Set time fudge (seconds). Default 300.
-    pub fn set_fudge(&mut self, fudge: u16) { &mut self.fudge; self.fudge = fudge; }
+    pub fn set_fudge(&mut self, fudge: u16) {
+        &mut self.fudge;
+        self.fudge = fudge;
+    }
 
     /// Sign a DNS message and return the signed wire format.
     ///
@@ -194,7 +205,12 @@ impl TsigSigner {
     }
 
     /// Compute the HMAC MAC value for a DNS message.
-    fn compute_mac(&self, msg: &DnsMessage, tsig: &TsigRdata, request_mac: &[u8]) -> Result<Vec<u8>, io::Error> {
+    fn compute_mac(
+        &self,
+        msg: &DnsMessage,
+        tsig: &TsigRdata,
+        request_mac: &[u8],
+    ) -> Result<Vec<u8>, io::Error> {
         let mut mac_input = Vec::new();
 
         // Key name (wire format)
@@ -206,7 +222,9 @@ impl TsigSigner {
         // Original message (without TSIG record)
         let mut msg_copy = msg.clone();
         // Remove TSIG from additional section
-        msg_copy.additional.retain(|r| r.rtype != DnsRecordType::TSIG);
+        msg_copy
+            .additional
+            .retain(|r| r.rtype != DnsRecordType::TSIG);
         msg_copy.header.additional_count = msg_copy.additional.len() as u16;
         let msg_wire = msg_copy.to_wire();
         mac_input.extend_from_slice(&msg_wire);
@@ -227,11 +245,12 @@ impl TsigSigner {
             TsigAlgorithm::HmacSha256 => edgerun_crypto::hmac_sha256(key, &mac_input),
             TsigAlgorithm::HmacSha384 => edgerun_crypto::hmac_sha384(key, &mac_input),
             TsigAlgorithm::HmacSha512 => {
-                use edgerun_crypto::sha2::{Digest, Sha512};
-                use edgerun_crypto::hmac::Mac;
                 use edgerun_crypto::hmac::Hmac;
-                let mut mac = <Hmac<Sha512> as edgerun_crypto::digest::KeyInit>::new_from_slice(key)
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+                use edgerun_crypto::hmac::Mac;
+                use edgerun_crypto::sha2::{Digest, Sha512};
+                let mut mac =
+                    <Hmac<Sha512> as edgerun_crypto::digest::KeyInit>::new_from_slice(key)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
                 mac.update(&mac_input);
                 mac.finalize().into_bytes().to_vec()
             }
@@ -263,13 +282,18 @@ impl TsigVerifier {
     ///
     /// Also returns the MAC (for multi-message sequences) and a message
     /// with the TSIG record stripped.
-    pub fn verify(&self, wire: &[u8], request_mac: &[u8])
-        -> Result<(TsigRdata, Vec<u8>, Vec<u8>), TsigError> {
-        let msg = DnsMessage::from_wire(wire)
-            .map_err(|e| TsigError::Parse(e.to_string()))?;
+    pub fn verify(
+        &self,
+        wire: &[u8],
+        request_mac: &[u8],
+    ) -> Result<(TsigRdata, Vec<u8>, Vec<u8>), TsigError> {
+        let msg = DnsMessage::from_wire(wire).map_err(|e| TsigError::Parse(e.to_string()))?;
 
         // Find TSIG record in additional section
-        let tsig_idx = msg.additional.iter().position(|r| r.rtype == DnsRecordType::TSIG)
+        let tsig_idx = msg
+            .additional
+            .iter()
+            .position(|r| r.rtype == DnsRecordType::TSIG)
             .ok_or(TsigError::NoTsig)?;
         let tsig_record = msg.additional[tsig_idx].clone();
 
@@ -292,8 +316,8 @@ impl TsigVerifier {
 
         // Verify time
         let now = current_time();
-        if now < tsig.time_signed - self.fudge as u64
-            || now > tsig.time_signed + self.fudge as u64 {
+        if now < tsig.time_signed - self.fudge as u64 || now > tsig.time_signed + self.fudge as u64
+        {
             return Err(TsigError::BadTime);
         }
 
@@ -318,11 +342,12 @@ impl TsigVerifier {
             TsigAlgorithm::HmacSha256 => edgerun_crypto::hmac_sha256(key, &mac_input),
             TsigAlgorithm::HmacSha384 => edgerun_crypto::hmac_sha384(key, &mac_input),
             TsigAlgorithm::HmacSha512 => {
-                use edgerun_crypto::sha2::{Digest, Sha512};
-                use edgerun_crypto::hmac::Mac;
                 use edgerun_crypto::hmac::Hmac;
-                let mut mac = <Hmac<Sha512> as edgerun_crypto::digest::KeyInit>::new_from_slice(key)
-                    .map_err(|e| TsigError::Key(e.to_string()))?;
+                use edgerun_crypto::hmac::Mac;
+                use edgerun_crypto::sha2::{Digest, Sha512};
+                let mut mac =
+                    <Hmac<Sha512> as edgerun_crypto::digest::KeyInit>::new_from_slice(key)
+                        .map_err(|e| TsigError::Key(e.to_string()))?;
                 mac.update(&mac_input);
                 mac.finalize().into_bytes().to_vec()
             }
@@ -334,7 +359,9 @@ impl TsigVerifier {
 
         // Return TSIG data, MAC, and message wire without TSIG
         let mut stripped = msg;
-        stripped.additional.retain(|r| r.rtype != DnsRecordType::TSIG);
+        stripped
+            .additional
+            .retain(|r| r.rtype != DnsRecordType::TSIG);
         stripped.header.additional_count = stripped.additional.len() as u16;
         let stripped_wire = stripped.to_wire();
 
@@ -434,7 +461,9 @@ impl std::error::Error for TsigError {}
 fn encode_tsig_name(name: &str) -> Vec<u8> {
     let mut buf = Vec::new();
     for label in name.split('.') {
-        if label.is_empty() { continue; }
+        if label.is_empty() {
+            continue;
+        }
         buf.push(label.len() as u8);
         buf.extend_from_slice(label.as_bytes());
     }
@@ -483,8 +512,14 @@ mod tests {
 
     #[test]
     fn test_algorithm_from_name() {
-        assert_eq!(TsigAlgorithm::from_name("hmac-sha256"), Some(TsigAlgorithm::HmacSha256));
-        assert_eq!(TsigAlgorithm::from_name("hmac-sha384"), Some(TsigAlgorithm::HmacSha384));
+        assert_eq!(
+            TsigAlgorithm::from_name("hmac-sha256"),
+            Some(TsigAlgorithm::HmacSha256)
+        );
+        assert_eq!(
+            TsigAlgorithm::from_name("hmac-sha384"),
+            Some(TsigAlgorithm::HmacSha384)
+        );
         assert_eq!(TsigAlgorithm::from_name("unknown"), None);
     }
 
@@ -497,7 +532,11 @@ mod tests {
         let signed = signer.sign(&msg, &[]).unwrap();
 
         // Check TSIG record is in additional section
-        let tsig_count = signed.additional.iter().filter(|r| r.rtype == DnsRecordType::TSIG).count();
+        let tsig_count = signed
+            .additional
+            .iter()
+            .filter(|r| r.rtype == DnsRecordType::TSIG)
+            .count();
         assert_eq!(tsig_count, 1);
     }
 

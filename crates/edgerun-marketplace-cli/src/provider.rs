@@ -1,5 +1,5 @@
-use edgerun_solana::{ProviderClient, solana_types::Pubkey};
 use edgerun_solana::signers::Ed25519Signer;
+use edgerun_solana::{solana_types::Pubkey, ProviderClient};
 
 pub enum ProviderCommand {
     Register {
@@ -10,18 +10,27 @@ pub enum ProviderCommand {
         storage_bytes: u64,
         network_mbits: u32,
     },
-    Get { provider: String },
+    Get {
+        provider: String,
+    },
     List,
-    Attest { provider: String, uptime_seconds: u32 },
-    Pause { provider: String },
-    Resume { provider: String },
+    Attest {
+        provider: String,
+        uptime_seconds: u32,
+    },
+    Pause {
+        provider: String,
+    },
+    Resume {
+        provider: String,
+    },
 }
 
 pub fn parse_provider_command() -> ProviderCommand {
     let mut args = std::env::args();
     let _ = args.next();
     let _ = args.next();
-    
+
     match args.next().as_deref() {
         Some("register") | Some("r") => {
             let mut provider = None;
@@ -30,27 +39,35 @@ pub fn parse_provider_command() -> ProviderCommand {
             let mut memory_bytes = 8589934592u64;
             let mut storage_bytes = 10737418240u64;
             let mut network_mbits = 100u32;
-            
+
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--authority" | "-a" => authority = args.next(),
                     "--cpu-cores" | "-c" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() { cpu_cores = v; }
+                        if let Ok(v) = args.next().unwrap_or_default().parse() {
+                            cpu_cores = v;
+                        }
                     }
                     "--memory" | "-m" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() { memory_bytes = v; }
+                        if let Ok(v) = args.next().unwrap_or_default().parse() {
+                            memory_bytes = v;
+                        }
                     }
                     "--storage" | "-s" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() { storage_bytes = v; }
+                        if let Ok(v) = args.next().unwrap_or_default().parse() {
+                            storage_bytes = v;
+                        }
                     }
                     "--network" | "-n" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() { network_mbits = v; }
+                        if let Ok(v) = args.next().unwrap_or_default().parse() {
+                            network_mbits = v;
+                        }
                     }
                     _ if !arg.starts_with('-') => provider = Some(arg),
                     _ => {}
                 }
             }
-            
+
             ProviderCommand::Register {
                 provider: provider.unwrap_or_else(|| "".to_string()),
                 authority,
@@ -68,7 +85,10 @@ pub fn parse_provider_command() -> ProviderCommand {
         Some("attest") | Some("a") => {
             let provider = args.next().unwrap_or_default();
             let uptime: u32 = args.next().unwrap_or_default().parse().unwrap_or(0);
-            ProviderCommand::Attest { provider, uptime_seconds: uptime }
+            ProviderCommand::Attest {
+                provider,
+                uptime_seconds: uptime,
+            }
         }
         Some("pause") => {
             let provider = args.next().unwrap_or_default();
@@ -85,27 +105,54 @@ pub fn parse_provider_command() -> ProviderCommand {
     }
 }
 
-pub async fn handle(cmd: ProviderCommand, rpc_url: String, signer: Option<Ed25519Signer>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn handle(
+    cmd: ProviderCommand,
+    rpc_url: String,
+    signer: Option<Ed25519Signer>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = ProviderClient::new(&rpc_url)?;
 
     match &cmd {
-        ProviderCommand::Register { provider, authority, cpu_cores, memory_bytes, storage_bytes, network_mbits } => {
+        ProviderCommand::Register {
+            provider,
+            authority,
+            cpu_cores,
+            memory_bytes,
+            storage_bytes,
+            network_mbits,
+        } => {
             let provider_pubkey: Pubkey = provider.parse().unwrap_or_default();
             let authority_pubkey = match authority {
                 Some(a) => a.parse().unwrap_or_default(),
                 None => Pubkey::default(),
             };
 
-            let min_collateral = edgerun_solana::types::collateral::calculate_minimum(*cpu_cores, *memory_bytes, *storage_bytes, *network_mbits);
+            let min_collateral = edgerun_solana::types::collateral::calculate_minimum(
+                *cpu_cores,
+                *memory_bytes,
+                *storage_bytes,
+                *network_mbits,
+            );
             println!("=== Register Provider ===");
             println!("Provider: {}", provider);
             println!("Minimum collateral: {} lamports", min_collateral);
-            println!("Resources: {} cores, {} bytes RAM, {} bytes storage, {} Mbps",
-                cpu_cores, memory_bytes, storage_bytes, network_mbits);
+            println!(
+                "Resources: {} cores, {} bytes RAM, {} bytes storage, {} Mbps",
+                cpu_cores, memory_bytes, storage_bytes, network_mbits
+            );
 
             if let Some(ref signer) = signer {
-                let ix = client.register_instruction(&provider_pubkey, &authority_pubkey, *cpu_cores, *memory_bytes, *storage_bytes, *network_mbits);
-                let tx_sig = client.send_instruction_signed(ix, &authority_pubkey, signer).await?;
+                let ix = client.register_instruction(
+                    &provider_pubkey,
+                    &authority_pubkey,
+                    *cpu_cores,
+                    *memory_bytes,
+                    *storage_bytes,
+                    *network_mbits,
+                );
+                let tx_sig = client
+                    .send_instruction_signed(ix, &authority_pubkey, signer)
+                    .await?;
                 println!("Transaction sent: {}", tx_sig);
             } else {
                 println!("\nNote: No keypair loaded. To send this transaction:");
@@ -119,8 +166,10 @@ pub async fn handle(cmd: ProviderCommand, rpc_url: String, signer: Option<Ed2551
                 Ok(p) => {
                     println!("=== Provider Info ===");
                     println!("Collateral: {} lamports", p.collateral_staked);
-                    println!("Resources: {} cores, {} bytes RAM, {} bytes storage, {} Mbps",
-                        p.cpu_cores, p.memory_bytes, p.storage_bytes, p.network_mbits);
+                    println!(
+                        "Resources: {} cores, {} bytes RAM, {} bytes storage, {} Mbps",
+                        p.cpu_cores, p.memory_bytes, p.storage_bytes, p.network_mbits
+                    );
                     println!("Status: {:?}", p.status);
                     println!("Earnings: {} lamports", p.total_earnings);
                 }
@@ -144,7 +193,10 @@ pub async fn handle(cmd: ProviderCommand, rpc_url: String, signer: Option<Ed2551
             }
             Ok(())
         }
-        ProviderCommand::Attest { provider, uptime_seconds } => {
+        ProviderCommand::Attest {
+            provider,
+            uptime_seconds,
+        } => {
             let pubkey: Pubkey = provider.parse().unwrap_or_default();
             if let Some(ref signer) = signer {
                 let ix = client.attest_instruction(&pubkey, &pubkey, *uptime_seconds);

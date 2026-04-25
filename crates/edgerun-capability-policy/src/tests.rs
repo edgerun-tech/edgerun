@@ -1,19 +1,18 @@
-use super::*;
-use super::helpers::*;
 use super::engine::*;
-use std::collections::{BTreeSet, VecDeque};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use edgerun_crypto::rand_core::RngCore;
+use super::helpers::*;
+use super::*;
 use edgerun_capabilities::{
     capability_descriptor, constraint, constraint_with_scope, CapabilityAccessClass,
     CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor, CapabilityError,
     CapabilityEventKind, CapabilityGrant, CapabilityModality, CapabilityOperation,
     CapabilityRequest, CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_crypto::rand_core::RngCore;
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::common::{IdentityRef, RateLimit};
 use prost_types::{Duration as ProstDuration, Timestamp};
-
+use std::collections::{BTreeSet, VecDeque};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // -- Test fixture helpers --
 
@@ -115,8 +114,14 @@ fn policy_context_clone_and_debug() {
 #[test]
 fn policy_context_equality() {
     let now = SystemTime::now();
-    let a = PolicyContext { now, ..PolicyContext::default() };
-    let b = PolicyContext { now, ..PolicyContext::default() };
+    let a = PolicyContext {
+        now,
+        ..PolicyContext::default()
+    };
+    let b = PolicyContext {
+        now,
+        ..PolicyContext::default()
+    };
     assert_eq!(a, b);
     let c = PolicyContext {
         user_present: true,
@@ -150,7 +155,9 @@ fn policy_decision_allow_clone() {
         supersedes_revocation: None,
         signature: None,
     };
-    let d = PolicyDecision::Allow { grant: Box::new(grant) };
+    let d = PolicyDecision::Allow {
+        grant: Box::new(grant),
+    };
     let cloned = d.clone();
     assert_eq!(d, cloned);
 }
@@ -517,7 +524,9 @@ fn revoke_marks_grant_unusable() {
     assert!(engine.grant_record(&grant.grant_id).unwrap().is_revoked());
 
     let invocation = make_invocation(&grant.grant_id, CapabilityOperation::Query as i32);
-    let err = engine.authorize_invocation(&invocation, &context).unwrap_err();
+    let err = engine
+        .authorize_invocation(&invocation, &context)
+        .unwrap_err();
     assert_eq!(
         err,
         CapabilityError::PermissionDenied("capability grant has been revoked")
@@ -646,9 +655,9 @@ fn require_biometric_satisfied_with_biometric() {
 fn require_hardware_protected_denied_without_hardware() {
     let descriptor = test_descriptor();
     let mut request = request_for(&descriptor);
-    request
-        .requested_constraints
-        .push(constraint(CapabilityConstraintKind::RequireHardwareProtected));
+    request.requested_constraints.push(constraint(
+        CapabilityConstraintKind::RequireHardwareProtected,
+    ));
     let mut engine = SimplePolicyEngine::default();
     let context = PolicyContext {
         user_present: true,
@@ -669,9 +678,9 @@ fn require_hardware_protected_denied_without_hardware() {
 fn require_hardware_protected_satisfied_with_hardware() {
     let descriptor = test_descriptor();
     let mut request = request_for(&descriptor);
-    request
-        .requested_constraints
-        .push(constraint(CapabilityConstraintKind::RequireHardwareProtected));
+    request.requested_constraints.push(constraint(
+        CapabilityConstraintKind::RequireHardwareProtected,
+    ));
     let mut engine = SimplePolicyEngine::default();
     let context = PolicyContext {
         user_present: true,
@@ -798,9 +807,7 @@ fn one_shot_from_descriptor_allows_single_use() {
         .unwrap_err();
     assert_eq!(
         err,
-        CapabilityError::PermissionDenied(
-            "capability grant is one-shot and has already been used"
-        )
+        CapabilityError::PermissionDenied("capability grant is one-shot and has already been used")
     );
 }
 
@@ -825,7 +832,9 @@ fn one_shot_from_request_allows_single_use() {
     };
     let invocation = make_invocation(&grant.grant_id, CapabilityOperation::Query as i32);
     engine.authorize_invocation(&invocation, &context).unwrap();
-    let err = engine.authorize_invocation(&invocation, &context).unwrap_err();
+    let err = engine
+        .authorize_invocation(&invocation, &context)
+        .unwrap_err();
     assert!(matches!(
         err,
         CapabilityError::PermissionDenied("capability grant is one-shot and has already been used")
@@ -914,7 +923,9 @@ fn rate_limit_resets_after_window() {
         now: later,
         ..PolicyContext::default()
     };
-    engine.authorize_invocation(&invocation, &later_ctx).unwrap();
+    engine
+        .authorize_invocation(&invocation, &later_ctx)
+        .unwrap();
     let record = engine.grant_record(&grant.grant_id).unwrap();
     assert_eq!(record.invocation_count, 2);
 }
@@ -952,7 +963,9 @@ fn rate_limit_with_higher_max_allows_burst() {
     engine.authorize_invocation(&invocation, &context).unwrap();
     engine.authorize_invocation(&invocation, &context).unwrap();
     engine.authorize_invocation(&invocation, &context).unwrap();
-    let err = engine.authorize_invocation(&invocation, &context).unwrap_err();
+    let err = engine
+        .authorize_invocation(&invocation, &context)
+        .unwrap_err();
     assert_eq!(
         err,
         CapabilityError::PermissionDenied("capability grant is rate limited")
@@ -991,7 +1004,9 @@ fn authorize_invocation_expired_grant() {
         ..PolicyContext::default()
     };
     let invocation = make_invocation(&grant.grant_id, CapabilityOperation::Query as i32);
-    let err = engine.authorize_invocation(&invocation, &expired_ctx).unwrap_err();
+    let err = engine
+        .authorize_invocation(&invocation, &expired_ctx)
+        .unwrap_err();
     assert_eq!(
         err,
         CapabilityError::PermissionDenied("capability grant has expired")
@@ -1438,10 +1453,7 @@ fn import_grant_with_expiry() {
 #[test]
 fn capability_error_display_invalid_request() {
     let err = CapabilityError::InvalidRequest("missing field");
-    assert_eq!(
-        err.to_string(),
-        "invalid capability request: missing field"
-    );
+    assert_eq!(err.to_string(), "invalid capability request: missing field");
 }
 
 #[test]
@@ -1470,8 +1482,7 @@ fn capability_error_display_provider() {
 
 #[test]
 fn capability_error_is_std_error() {
-    let err: Box<dyn std::error::Error> =
-        Box::new(CapabilityError::InvalidRequest("test"));
+    let err: Box<dyn std::error::Error> = Box::new(CapabilityError::InvalidRequest("test"));
     assert!(err.source().is_none());
 }
 
@@ -1517,9 +1528,9 @@ fn engine_handles_multiple_distinct_grants() {
 fn combined_constraints_all_must_pass() {
     let descriptor = test_descriptor();
     let mut request = request_for(&descriptor);
-    request
-        .requested_constraints
-        .push(constraint(CapabilityConstraintKind::RequireHardwareProtected));
+    request.requested_constraints.push(constraint(
+        CapabilityConstraintKind::RequireHardwareProtected,
+    ));
     request
         .requested_constraints
         .push(constraint(CapabilityConstraintKind::RequireBiometric));
@@ -1718,7 +1729,10 @@ fn has_constraint_kind_finds_matching() {
         &constraints,
         CapabilityConstraintKind::RequireUserPresence
     ));
-    assert!(has_constraint_kind(&constraints, CapabilityConstraintKind::Scope));
+    assert!(has_constraint_kind(
+        &constraints,
+        CapabilityConstraintKind::Scope
+    ));
     assert!(!has_constraint_kind(
         &constraints,
         CapabilityConstraintKind::RequireBiometric
@@ -1855,8 +1869,7 @@ fn engine_nonce_increments_per_grant() {
 fn effective_access_class_derived_when_unspecified() {
     let descriptor = test_descriptor();
     let mut request = request_for(&descriptor);
-    request.selector.as_mut().unwrap().access_class =
-        CapabilityAccessClass::Unspecified as i32;
+    request.selector.as_mut().unwrap().access_class = CapabilityAccessClass::Unspecified as i32;
     let mut engine = SimplePolicyEngine::default();
     let grant = match engine
         .evaluate_request(&descriptor, &request, &PolicyContext::default())
@@ -1888,4 +1901,3 @@ fn invocation_timestamps_are_tracked() {
     let record = engine.grant_record(&grant.grant_id).unwrap();
     assert_eq!(record.invocation_timestamps.len(), 1);
 }
-

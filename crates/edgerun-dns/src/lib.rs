@@ -41,51 +41,64 @@
 //! });
 //! ```
 
-pub mod message;
-pub mod client;
-pub mod server;
-pub mod zone;
-pub mod record;
-pub mod name;
-pub mod dnssec;
-pub mod zone_file;
-pub mod cache;
-pub mod resolver;
-pub mod tsig;
 pub mod axfr;
-pub mod dot;
-pub mod doh;
+pub mod cache;
+pub mod client;
 pub mod dhcp;
-pub mod tftp;
+pub mod dnssec;
+pub mod doh;
+pub mod dot;
+pub mod message;
+pub mod name;
+pub mod record;
 pub mod resolv_conf;
+pub mod resolver;
+pub mod server;
+pub mod tftp;
+pub mod tsig;
+pub mod zone;
+pub mod zone_file;
 
-pub use cache::DnsCache;
-pub use resolver::{RecursiveResolver, RootHint, default_root_hints};
-pub use server::RateLimiter;
-pub use tsig::{TsigKey, TsigSigner, TsigVerifier, TsigAlgorithm, TsigError};
 pub use axfr::{handle_axfr, handle_notify, handle_update};
-pub use dot::{DotServer, DotServerConfig};
+pub use cache::DnsCache;
 pub use doh::{DohServer, DohServerConfig};
+pub use dot::{DotServer, DotServerConfig};
+pub use resolver::{default_root_hints, RecursiveResolver, RootHint};
+pub use server::RateLimiter;
+pub use tsig::{TsigAlgorithm, TsigError, TsigKey, TsigSigner, TsigVerifier};
 
 // DHCP re-exports
-pub use dhcp::{DhcpClient, DhcpServer, DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, NetworkConfig, PxeClientArch, Lease};
-pub use dhcp::{OPT_TFTP_SERVER_NAME, OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_NDI, OPT_CLIENT_MACHINE_ID, OPT_VENDOR_ENCAP, OPT_HOST_NAME};
+pub use dhcp::{
+    DhcpClient, DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease,
+    NetworkConfig, PxeClientArch,
+};
+pub use dhcp::{
+    OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_MACHINE_ID, OPT_CLIENT_NDI, OPT_HOST_NAME,
+    OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP,
+};
 
 // TFTP re-exports
-pub use tftp::{TftpServer, TftpMessage, TftpOpcode, TftpError, TftpOptions, BlobTftpProvider};
+pub use tftp::{BlobTftpProvider, TftpError, TftpMessage, TftpOpcode, TftpOptions, TftpServer};
 
 // resolv.conf re-exports
-pub use resolv_conf::{ResolvConf, Nameserver};
+pub use resolv_conf::{Nameserver, ResolvConf};
 
-pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
-pub use message::{DnsQuestion, DnsRecord};
 pub use client::DnsClient;
+pub use dnssec::{
+    compute_key_tag, validate_response, verify_chain_of_trust, verify_rrsig, DnssecResult,
+};
+pub use dnssec::{
+    find_nsec3_covering, nsec3_base32hex, nsec3_hash_owner, nsec3_type_bitmap,
+    synthesize_nsec3_chain,
+};
+pub use dnssec::{
+    generate_dnskey_ecdsap256, generate_dnskey_ed25519, sign_rrset_ecdsap256, sign_rrsig_ed25519,
+};
+pub use dnssec::{sign_zone_ecdsap256, sign_zone_ed25519};
+pub use message::{DnsHeader, DnsMessage, DnsOpcode, DnsResponseCode};
+pub use message::{DnsQuestion, DnsRecord};
+pub use name::{normalize_name, validate_name, NameError};
+pub use record::{DnsRecordData, DnsRecordType};
+pub use server::query::{handle_query, ServerState, MAX_UDP_RESPONSE};
 pub use server::{DnsServer, DnsServerConfig};
-pub use server::query::{ServerState, handle_query, MAX_UDP_RESPONSE};
 pub use zone::DnsZone;
-pub use record::{DnsRecordType, DnsRecordData};
-pub use name::{validate_name, normalize_name, NameError};
-pub use dnssec::{DnssecResult, compute_key_tag, verify_rrsig, verify_chain_of_trust, validate_response};
-pub use dnssec::{generate_dnskey_ed25519, generate_dnskey_ecdsap256, sign_rrsig_ed25519, sign_rrset_ecdsap256};
-pub use dnssec::{sign_zone_ed25519, sign_zone_ecdsap256};
-pub use dnssec::{nsec3_hash_owner, nsec3_base32hex, nsec3_type_bitmap, synthesize_nsec3_chain, find_nsec3_covering};

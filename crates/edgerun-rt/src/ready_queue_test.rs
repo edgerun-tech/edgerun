@@ -1,11 +1,11 @@
 //! Unit tests for ready_queue.rs — tests the Condvar-based task queue
 //! directly without the runtime.
 
-use std::sync::Arc;
+use crate::ready_queue::ReadyQueue;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use crate::ready_queue::ReadyQueue;
 
 #[test]
 fn push_and_pop_single() {

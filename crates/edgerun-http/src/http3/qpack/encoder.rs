@@ -7,9 +7,9 @@
 //! - Header block encoding with dynamic table references (Indexed::Dynamic, IndexedWithPostBase)
 //! - Decoder stream feedback via `on_decoder_recv()`
 
-use edgerun_qpack::{HeaderField, EncoderError, encode_stateless};
-use edgerun_qpack::encoder::Encoder;
 use edgerun_qpack::dynamic::DynamicTable;
+use edgerun_qpack::encoder::Encoder;
+use edgerun_qpack::{encode_stateless, EncoderError, HeaderField};
 
 /// QPACK encoder with full dynamic table support.
 ///
@@ -102,7 +102,11 @@ impl QpackEncoder {
     }
 
     /// Encode a single header field.
-    pub fn encode_header(&mut self, name: &str, value: &str) -> Result<(Vec<u8>, Vec<u8>), EncoderError> {
+    pub fn encode_header(
+        &mut self,
+        name: &str,
+        value: &str,
+    ) -> Result<(Vec<u8>, Vec<u8>), EncoderError> {
         self.encode(&[(name, value)])
     }
 

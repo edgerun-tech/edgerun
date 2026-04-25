@@ -11,17 +11,14 @@ use std::io;
 
 use super::message::{DnsMessage, DnsOpcode, DnsQuestion, DnsRecord, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};
+use super::tsig::{TsigError, TsigVerifier};
 use super::zone::DnsZone;
-use super::tsig::{TsigVerifier, TsigError};
 
 /// Handle an AXFR zone transfer request.
 ///
 /// Returns a vector of DNS messages, each containing a portion of the zone.
 /// The first and last messages contain SOA records per RFC 5936.
-pub fn handle_axfr(
-    query: &DnsMessage,
-    zone: &DnsZone,
-) -> Result<Vec<DnsMessage>, DnsResponseCode> {
+pub fn handle_axfr(query: &DnsMessage, zone: &DnsZone) -> Result<Vec<DnsMessage>, DnsResponseCode> {
     let question = query.questions.first().ok_or(DnsResponseCode::FormErr)?;
 
     // Verify the requested zone matches
@@ -51,10 +48,16 @@ pub fn handle_axfr(
         // SOA first
         let a_is_soa = a.rtype == DnsRecordType::SOA;
         let b_is_soa = b.rtype == DnsRecordType::SOA;
-        if a_is_soa && !b_is_soa { return std::cmp::Ordering::Less; }
-        if !a_is_soa && b_is_soa { return std::cmp::Ordering::Greater; }
+        if a_is_soa && !b_is_soa {
+            return std::cmp::Ordering::Less;
+        }
+        if !a_is_soa && b_is_soa {
+            return std::cmp::Ordering::Greater;
+        }
         // Then by name, then by type
-        a.name.cmp(&b.name).then_with(|| a.rtype.as_u16().cmp(&b.rtype.as_u16()))
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.rtype.as_u16().cmp(&b.rtype.as_u16()))
     });
 
     if all_records.is_empty() {
@@ -64,7 +67,8 @@ pub fn handle_axfr(
     let id = query.header.id;
 
     // First message: SOA
-    let first_soa = all_records.iter()
+    let first_soa = all_records
+        .iter()
         .find(|r| r.rtype == DnsRecordType::SOA)
         .ok_or(DnsResponseCode::ServFail)?
         .clone();
@@ -111,7 +115,10 @@ pub fn handle_notify(query: &DnsMessage) -> Result<DnsMessage, DnsResponseCode> 
     }
 
     // Validate the SOA in the authority section
-    let has_soa = query.authority.iter().any(|r| r.rtype == DnsRecordType::SOA);
+    let has_soa = query
+        .authority
+        .iter()
+        .any(|r| r.rtype == DnsRecordType::SOA);
     if !has_soa {
         return Err(DnsResponseCode::FormErr);
     }
@@ -139,7 +146,8 @@ pub fn handle_update(
 
     // Zone section must have exactly one question specifying the zone
     let zone_question = query.questions.first().ok_or(DnsResponseCode::FormErr)?;
-    if zone_question.qclass != 1 { // IN
+    if zone_question.qclass != 1 {
+        // IN
         return Err(DnsResponseCode::NotAuth);
     }
     if zone_question.qtype != DnsRecordType::SOA {
@@ -177,7 +185,11 @@ pub fn handle_update(
 pub fn format_axfr(messages: &[DnsMessage]) -> String {
     let mut out = String::new();
     for (i, msg) in messages.iter().enumerate() {
-        out.push_str(&format!(";; Message {} ({} records)\n", i + 1, msg.answers.len()));
+        out.push_str(&format!(
+            ";; Message {} ({} records)\n",
+            i + 1,
+            msg.answers.len()
+        ));
         for rr in &msg.answers {
             out.push_str(&format_rr(rr));
         }
@@ -186,8 +198,14 @@ pub fn format_axfr(messages: &[DnsMessage]) -> String {
 }
 
 fn format_rr(rr: &DnsRecord) -> String {
-    format!("{}  {}  {}  {}  {}\n",
-        rr.name, rr.ttl, rr.rclass, rr.rtype, format_rdata(&rr.data))
+    format!(
+        "{}  {}  {}  {}  {}\n",
+        rr.name,
+        rr.ttl,
+        rr.rclass,
+        rr.rtype,
+        format_rdata(&rr.data)
+    )
 }
 
 fn format_rdata(data: &DnsRecordData) -> String {
@@ -198,21 +216,61 @@ fn format_rdata(data: &DnsRecordData) -> String {
         DnsRecordData::NS(name) => name.clone(),
         DnsRecordData::MX { priority, exchange } => format!("{} {}", priority, exchange),
         DnsRecordData::TXT(text) => format!("\"{}\"", text),
-        DnsRecordData::SOA { mname, rname, serial, refresh, retry, expire, minimum } =>
-            format!("{} {} {} {} {} {} {}", mname, rname, serial, refresh, retry, expire, minimum),
-        DnsRecordData::SRV { priority, weight, port, target } =>
-            format!("{} {} {} {}", priority, weight, port, target),
+        DnsRecordData::SOA {
+            mname,
+            rname,
+            serial,
+            refresh,
+            retry,
+            expire,
+            minimum,
+        } => format!(
+            "{} {} {} {} {} {} {}",
+            mname, rname, serial, refresh, retry, expire, minimum
+        ),
+        DnsRecordData::SRV {
+            priority,
+            weight,
+            port,
+            target,
+        } => format!("{} {} {} {}", priority, weight, port, target),
         DnsRecordData::PTR(name) => name.clone(),
-        DnsRecordData::NAPTR { order, preference, flags, services, regexp, replacement } =>
-            format!("{} {} \"{}\" \"{}\" \"{}\" {}", order, preference, flags, services, regexp, replacement),
-        DnsRecordData::CAA { critical, tag, value } =>
-            format!("{} {} \"{}\"", if *critical { 128 } else { 0 }, tag, value),
+        DnsRecordData::NAPTR {
+            order,
+            preference,
+            flags,
+            services,
+            regexp,
+            replacement,
+        } => format!(
+            "{} {} \"{}\" \"{}\" \"{}\" {}",
+            order, preference, flags, services, regexp, replacement
+        ),
+        DnsRecordData::CAA {
+            critical,
+            tag,
+            value,
+        } => format!("{} {} \"{}\"", if *critical { 128 } else { 0 }, tag, value),
         DnsRecordData::HINFO { cpu, os } => format!("\"{}\" \"{}\"", cpu, os),
         DnsRecordData::RP { mbox, txt } => format!("{} {}", mbox, txt),
-        DnsRecordData::LOC { version, size, horiz_pre, vert_pre, latitude, longitude, altitude } =>
-            format!("{} {} {} {} {} {} {} {}", version, size, horiz_pre, vert_pre, latitude, longitude, altitude, altitude),
+        DnsRecordData::LOC {
+            version,
+            size,
+            horiz_pre,
+            vert_pre,
+            latitude,
+            longitude,
+            altitude,
+        } => format!(
+            "{} {} {} {} {} {} {} {}",
+            version, size, horiz_pre, vert_pre, latitude, longitude, altitude, altitude
+        ),
         DnsRecordData::AFSDB { subtype, hostname } => format!("{} {}", subtype, hostname),
-        DnsRecordData::URI { priority, weight, target } => format!("{} {} \"{}\"", priority, weight, target),
+        DnsRecordData::URI {
+            priority,
+            weight,
+            target,
+        } => format!("{} {} \"{}\"", priority, weight, target),
         _ => format!("{:?}", data),
     }
 }
@@ -242,8 +300,18 @@ mod tests {
         assert!(msgs.len() >= 3);
 
         // First and last should have SOA
-        assert!(msgs.first().unwrap().answers.iter().any(|r| r.rtype == DnsRecordType::SOA));
-        assert!(msgs.last().unwrap().answers.iter().any(|r| r.rtype == DnsRecordType::SOA));
+        assert!(msgs
+            .first()
+            .unwrap()
+            .answers
+            .iter()
+            .any(|r| r.rtype == DnsRecordType::SOA));
+        assert!(msgs
+            .last()
+            .unwrap()
+            .answers
+            .iter()
+            .any(|r| r.rtype == DnsRecordType::SOA));
 
         // All should have same ID
         for msg in &msgs {
@@ -271,7 +339,15 @@ mod tests {
         let mut query = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::SOA);
         query.header.opcode = DnsOpcode::Notify;
         query.authority.push(DnsRecord::soa(
-            "example.com".into(), "ns1.example.com".into(), "admin.example.com".into(), 1, 3600, 900, 604800, 86400, 3600
+            "example.com".into(),
+            "ns1.example.com".into(),
+            "admin.example.com".into(),
+            1,
+            3600,
+            900,
+            604800,
+            86400,
+            3600,
         ));
 
         let resp = handle_notify(&query).unwrap();
@@ -293,7 +369,9 @@ mod tests {
         let mut query = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::SOA);
         query.header.opcode = DnsOpcode::Update;
         // Update section: add a TXT record
-        query.authority.push(DnsRecord::txt("example.com".into(), "v=spf1".into(), 3600));
+        query
+            .authority
+            .push(DnsRecord::txt("example.com".into(), "v=spf1".into(), 3600));
 
         let resp = handle_update(&query, &mut zone, None).unwrap();
         assert_eq!(resp.header.response_code, DnsResponseCode::NoError);
@@ -309,7 +387,7 @@ mod tests {
         let mut query = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::SOA);
         query.header.opcode = DnsOpcode::Update;
         // Delete all records for "www"
-        let mut del = DnsRecord::a("www.example.com".into(), Ipv4Addr::new(0,0,0,0), 0);
+        let mut del = DnsRecord::a("www.example.com".into(), Ipv4Addr::new(0, 0, 0, 0), 0);
         del.rclass = 0; // NONE = delete all
         query.authority.push(del);
 

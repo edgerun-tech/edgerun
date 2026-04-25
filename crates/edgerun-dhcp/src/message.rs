@@ -295,7 +295,11 @@ impl DhcpMessage {
         if data.len() < Self::HEADER_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("DHCP message too short: {} bytes (min {})", data.len(), Self::HEADER_SIZE),
+                format!(
+                    "DHCP message too short: {} bytes (min {})",
+                    data.len(),
+                    Self::HEADER_SIZE
+                ),
             ));
         }
 
@@ -453,12 +457,7 @@ impl DhcpMessage {
     }
 
     /// Create a DHCP OFFER (server → client).
-    pub fn offer(
-        xid: u32,
-        mac: [u8; 6],
-        yiaddr: Ipv4Addr,
-        net: NetworkConfig,
-    ) -> Self {
+    pub fn offer(xid: u32, mac: [u8; 6], yiaddr: Ipv4Addr, net: NetworkConfig) -> Self {
         Self {
             op: DhcpOp::Reply,
             htype: HTYPE_ETHER,
@@ -491,12 +490,7 @@ impl DhcpMessage {
     }
 
     /// Create a DHCP ACK (server → client).
-    pub fn ack(
-        xid: u32,
-        mac: [u8; 6],
-        yiaddr: Ipv4Addr,
-        net: NetworkConfig,
-    ) -> Self {
+    pub fn ack(xid: u32, mac: [u8; 6], yiaddr: Ipv4Addr, net: NetworkConfig) -> Self {
         Self {
             op: DhcpOp::Reply,
             htype: HTYPE_ETHER,
@@ -618,7 +612,8 @@ impl DhcpOptions {
                 }
                 OPT_SUBNET_MASK => {
                     if value.len() == 4 {
-                        opts.subnet_mask = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                        opts.subnet_mask =
+                            Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
                     }
                 }
                 OPT_ROUTER => {
@@ -629,33 +624,39 @@ impl DhcpOptions {
                 OPT_DNS_SERVER => {
                     for chunk in value.chunks(4) {
                         if chunk.len() == 4 {
-                            opts.dns_servers.push(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]));
+                            opts.dns_servers
+                                .push(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]));
                         }
                     }
                 }
                 OPT_REQUESTED_IP => {
                     if value.len() == 4 {
-                        opts.requested_ip = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                        opts.requested_ip =
+                            Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
                     }
                 }
                 OPT_LEASE_TIME => {
                     if value.len() == 4 {
-                        opts.lease_time = Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.lease_time =
+                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
                     }
                 }
                 OPT_SERVER_ID => {
                     if value.len() == 4 {
-                        opts.server_id = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                        opts.server_id =
+                            Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
                     }
                 }
                 OPT_RENEWAL_TIME => {
                     if value.len() == 4 {
-                        opts.renewal_time = Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.renewal_time =
+                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
                     }
                 }
                 OPT_REBIND_TIME => {
                     if value.len() == 4 {
-                        opts.rebind_time = Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.rebind_time =
+                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
                     }
                 }
                 OPT_CLIENT_ID => {
@@ -899,8 +900,14 @@ mod tests {
         assert_eq!(parsed.options.server_id, Some(server));
         assert_eq!(parsed.options.lease_time, Some(86400));
         assert_eq!(parsed.options.dns_servers, vec![Ipv4Addr::new(8, 8, 8, 8)]);
-        assert_eq!(parsed.options.tftp_server_name, Some("192.168.1.1".to_string()));
-        assert_eq!(parsed.options.bootfile_name, Some("bootx64.efi".to_string()));
+        assert_eq!(
+            parsed.options.tftp_server_name,
+            Some("192.168.1.1".to_string())
+        );
+        assert_eq!(
+            parsed.options.bootfile_name,
+            Some("bootx64.efi".to_string())
+        );
     }
 
     #[test]
@@ -915,12 +922,7 @@ mod tests {
             tftp_server: Some("10.0.0.1".to_string()),
             bootfile: Some("bootx64.efi".to_string()),
         };
-        let msg = DhcpMessage::ack(
-            0xabcdef00,
-            mac,
-            Ipv4Addr::new(10, 0, 0, 50),
-            net,
-        );
+        let msg = DhcpMessage::ack(0xabcdef00, mac, Ipv4Addr::new(10, 0, 0, 50), net);
         let wire = msg.to_wire();
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
 
@@ -928,8 +930,14 @@ mod tests {
         assert_eq!(parsed.options.lease_time, Some(3600));
         assert_eq!(parsed.options.renewal_time, Some(1800));
         assert_eq!(parsed.options.rebind_time, Some(3150));
-        assert_eq!(parsed.options.tftp_server_name, Some("10.0.0.1".to_string()));
-        assert_eq!(parsed.options.bootfile_name, Some("bootx64.efi".to_string()));
+        assert_eq!(
+            parsed.options.tftp_server_name,
+            Some("10.0.0.1".to_string())
+        );
+        assert_eq!(
+            parsed.options.bootfile_name,
+            Some("bootx64.efi".to_string())
+        );
     }
 
     #[test]
@@ -939,7 +947,10 @@ mod tests {
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
 
         assert_eq!(parsed.options.message_type, Some(DhcpMessageType::Nak));
-        assert_eq!(parsed.options.server_id, Some(Ipv4Addr::new(192, 168, 1, 1)));
+        assert_eq!(
+            parsed.options.server_id,
+            Some(Ipv4Addr::new(192, 168, 1, 1))
+        );
     }
 
     #[test]
@@ -955,7 +966,10 @@ mod tests {
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
 
         assert_eq!(parsed.options.message_type, Some(DhcpMessageType::Request));
-        assert_eq!(parsed.options.requested_ip, Some(Ipv4Addr::new(172, 16, 0, 100)));
+        assert_eq!(
+            parsed.options.requested_ip,
+            Some(Ipv4Addr::new(172, 16, 0, 100))
+        );
         assert_eq!(parsed.options.server_id, Some(Ipv4Addr::new(172, 16, 0, 1)));
     }
 

@@ -1,9 +1,7 @@
-use edgerun_hardware_signing::{
-    MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID,
-};
-use edgerun_crypto::p256::ecdsa::Signature;
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
+use edgerun_crypto::p256::ecdsa::Signature;
 use edgerun_crypto::p256::ecdsa::VerifyingKey;
+use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
 
 use super::*;
 
@@ -24,7 +22,9 @@ pub fn sign_frame(frame: &mut MeshFrame, signing_key: &edgerun_crypto::p256::ecd
     sig_input.push(0);
     sig_input.extend_from_slice(&record_hash);
     let full_digest = edgerun_core::crypto::sha256(&sig_input);
-    let sig: Signature = signing_key.sign_prehash(&full_digest).expect("P-256 signing failed");
+    let sig: Signature = signing_key
+        .sign_prehash(&full_digest)
+        .expect("P-256 signing failed");
     frame.signature.copy_from_slice(&sig.to_bytes());
 }
 
@@ -96,4 +96,3 @@ impl LocalNode {
         self.discovery_sequence
     }
 }
-

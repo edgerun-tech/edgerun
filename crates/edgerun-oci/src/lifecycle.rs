@@ -20,21 +20,22 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::json::{OciLinuxResources, OciSpec, OciHook};
 use crate::cgroups::setup_cgroups;
-use crate::hooks::{
-    ContainerState,
-    execute_prestart_hooks, execute_create_runtime_hooks,
-    execute_create_container_hooks, execute_start_container_hooks,
-    execute_poststart_hooks, execute_poststop_hooks,
-};
-use crate::process::{ContainerConfig, setup_container_child, setup_container_child_rootless};
 pub use crate::handle::RunningContainer;
-use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as StateContainerState, is_root};
+use crate::hooks::{
+    execute_create_container_hooks, execute_create_runtime_hooks, execute_poststart_hooks,
+    execute_poststop_hooks, execute_prestart_hooks, execute_start_container_hooks, ContainerState,
+};
+use crate::json::{OciHook, OciLinuxResources, OciSpec};
+use crate::process::{setup_container_child, setup_container_child_rootless, ContainerConfig};
+use crate::state::{
+    container_state_dir, fifo_path, is_root, save_state, ContainerState as StateContainerState,
+};
 
 /// Extract hooks from an OCI spec, returning a default-empty set if absent.
 fn get_hooks(spec: &OciSpec) -> crate::json::OciHooks {
-    spec.linux.as_ref()
+    spec.linux
+        .as_ref()
         .and_then(|l| l.hooks.as_ref())
         .cloned()
         .unwrap_or_default()
@@ -79,7 +80,10 @@ pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Resul
     if let Some(ref create_runtime) = hooks.create_runtime {
         if !create_runtime.is_empty() {
             if let Err(e) = execute_create_runtime_hooks(Some(create_runtime), &state) {
-                return Err(io::Error::other(format!("createRuntime hook failed: {}", e)));
+                return Err(io::Error::other(format!(
+                    "createRuntime hook failed: {}",
+                    e
+                )));
             }
         }
     }
@@ -107,10 +111,7 @@ struct ChildExecContext {
 // ===========================================================================
 
 /// Common child code AFTER namespace setup: hooks, FIFO wait, PID init, exec.
-fn run_child_post_setup(
-    fifo_fd: i32,
-    ctx: &ChildExecContext,
-) {
+fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
     // 1. createContainer hooks (container namespace)
     let cc_state = ContainerState {
         version: ctx.version.clone(),
@@ -181,7 +182,9 @@ fn run_child_post_setup(
         ctx.workload_args[0].clone()
     } else {
         let exe_name = &ctx.workload_args[0];
-        let path_env = ctx.env.iter()
+        let path_env = ctx
+            .env
+            .iter()
             .find(|e| e.starts_with("PATH="))
             .map(|e| &e[5..])
             .unwrap_or("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
@@ -198,16 +201,23 @@ fn run_child_post_setup(
 
     {
         let exe_cstr = CString::new(exe_path.as_bytes()).unwrap();
-        let c_args: Vec<CString> = ctx.workload_args.iter()
+        let c_args: Vec<CString> = ctx
+            .workload_args
+            .iter()
             .map(|a| CString::new(a.as_bytes()).unwrap())
             .collect();
-        let c_ptrs: Vec<*const libc::c_char> = c_args.iter()
+        let c_ptrs: Vec<*const libc::c_char> = c_args
+            .iter()
             .map(|s| s.as_ptr())
             .chain(std::iter::once(std::ptr::null()))
             .collect();
         unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr()) };
     }
-    kmsg(&format!("child: execvp({}) failed: {}", ctx.workload_args[0], io::Error::last_os_error()));
+    kmsg(&format!(
+        "child: execvp({}) failed: {}",
+        ctx.workload_args[0],
+        io::Error::last_os_error()
+    ));
     unsafe { libc::_exit(127) };
 }
 
@@ -231,7 +241,10 @@ fn fork_rooted(
         // Open FIFO
         let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
         if fifo_fd < 0 {
-            kmsg(&format!("child: failed to open start FIFO: {}", io::Error::last_os_error()));
+            kmsg(&format!(
+                "child: failed to open start FIFO: {}",
+                io::Error::last_os_error()
+            ));
             unsafe { libc::_exit(1) };
         }
 
@@ -242,10 +255,7 @@ fn fork_rooted(
         }
 
         // Common post-setup: hooks, FIFO wait, PID init, exec
-        run_child_post_setup(
-            fifo_fd,
-            &ctx,
-        );
+        run_child_post_setup(fifo_fd, &ctx);
         unreachable!();
     }
 
@@ -274,21 +284,24 @@ fn fork_rootless(
         // Open FIFO
         let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
         if fifo_fd < 0 {
-            kmsg(&format!("child: failed to open start FIFO: {}", io::Error::last_os_error()));
+            kmsg(&format!(
+                "child: failed to open start FIFO: {}",
+                io::Error::last_os_error()
+            ));
             unsafe { libc::_exit(1) };
         }
 
         // Rootless container setup (skips NEWUSER+NEWNS — already created by re-exec)
         if let Err(e) = setup_container_child_rootless(cfg) {
-            kmsg(&format!("child: setup_container_child_rootless failed: {}", e));
+            kmsg(&format!(
+                "child: setup_container_child_rootless failed: {}",
+                e
+            ));
             unsafe { libc::_exit(1) };
         }
 
         // Common post-setup: hooks, FIFO wait, PID init, exec
-        run_child_post_setup(
-            fifo_fd,
-            &ctx,
-        );
+        run_child_post_setup(fifo_fd, &ctx);
         unreachable!();
     }
 
@@ -340,7 +353,9 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         }
     }
 
-    let cgroup_path = spec.linux.as_ref()
+    let cgroup_path = spec
+        .linux
+        .as_ref()
         .and_then(|l| l.cgroups_path.as_ref())
         .cloned()
         .unwrap_or_else(|| "/edgerun".into());
@@ -362,8 +377,16 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
 
     // Build the workload command
     let process = spec.process.clone().unwrap_or_default();
-    let args = process.args.clone().unwrap_or_else(|| vec!["/bin/sh".into()]);
-    let env = process.env.clone().unwrap_or_else(|| crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect());
+    let args = process
+        .args
+        .clone()
+        .unwrap_or_else(|| vec!["/bin/sh".into()]);
+    let env = process.env.clone().unwrap_or_else(|| {
+        crate::process::DEFAULT_ENV
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    });
     let cwd = process.cwd.clone().unwrap_or_else(|| "/".into());
 
     // Determine if we're running rootless (user namespace already exists from re-exec)
@@ -417,9 +440,15 @@ pub struct ForkedChild {
 }
 
 impl ForkedChild {
-    pub fn pid(&self) -> u32 { self.pid }
-    pub fn bundle_path(&self) -> &str { &self.bundle_path }
-    pub fn cgroup_path(&self) -> &str { &self.cgroup_path }
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+    pub fn bundle_path(&self) -> &str {
+        &self.bundle_path
+    }
+    pub fn cgroup_path(&self) -> &str {
+        &self.cgroup_path
+    }
 }
 
 // ===========================================================================
@@ -427,7 +456,12 @@ impl ForkedChild {
 // ===========================================================================
 
 /// Save the container state as "created".
-pub fn save_created_state(spec: &OciSpec, container_id: &str, pid: u32, bundle_path: &str) -> io::Result<()> {
+pub fn save_created_state(
+    spec: &OciSpec,
+    container_id: &str,
+    pid: u32,
+    bundle_path: &str,
+) -> io::Result<()> {
     let state = StateContainerState {
         oci_version: spec.version.clone(),
         id: container_id.to_string(),
@@ -456,7 +490,10 @@ pub fn signal_start(container_id: &str) -> io::Result<()> {
 /// Set up cgroups for the container.
 pub fn setup_container_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str) {
     if let Err(e) = setup_cgroups(pid, resources, cgroup_path) {
-        let _ = std::fs::write("/dev/kmsg", format!("edgerun: cgroup setup failed for PID {}: {}", pid, e));
+        let _ = std::fs::write(
+            "/dev/kmsg",
+            format!("edgerun: cgroup setup failed for PID {}: {}", pid, e),
+        );
     }
 }
 
@@ -473,14 +510,20 @@ pub fn run_poststart_hooks(spec: &OciSpec, container_id: &str, pid: u32) -> io::
         id: container_id.to_string(),
         status: "running".into(),
         pid,
-        bundle: spec.root.as_ref().map(|r| r.path.clone()).unwrap_or_default(),
+        bundle: spec
+            .root
+            .as_ref()
+            .map(|r| r.path.clone())
+            .unwrap_or_default(),
         annotations: std::collections::HashMap::new(),
     };
 
     if let Some(ref poststart) = hooks.poststart {
         if !poststart.is_empty() {
             if let Err(e) = execute_poststart_hooks(Some(poststart), &state) {
-                let _ = unsafe { crate::syscalls::kill(pid as std::os::raw::c_int, crate::syscalls::SIGKILL) };
+                let _ = unsafe {
+                    crate::syscalls::kill(pid as std::os::raw::c_int, crate::syscalls::SIGKILL)
+                };
                 return Err(io::Error::other(format!("poststart hook failed: {}", e)));
             }
         }
@@ -530,10 +573,19 @@ pub fn into_running_container(child: ForkedChild) -> RunningContainer {
 // ===========================================================================
 
 /// Run poststop hooks and clean up cgroups.
-pub fn run_poststop_and_cleanup(container_id: &str, pid: u32, bundle_path: &str, cgroup_path: &str, spec: &OciSpec) {
+pub fn run_poststop_and_cleanup(
+    container_id: &str,
+    pid: u32,
+    bundle_path: &str,
+    cgroup_path: &str,
+    spec: &OciSpec,
+) {
     // Poststop hooks
-    let hooks = spec.linux.as_ref()
-        .and_then(|l| l.hooks.as_ref()).cloned()
+    let hooks = spec
+        .linux
+        .as_ref()
+        .and_then(|l| l.hooks.as_ref())
+        .cloned()
         .unwrap_or_default();
 
     let state = ContainerState {
@@ -607,7 +659,11 @@ fn make_state(spec: &OciSpec, container_id: &str, status: &str, pid: u32) -> Con
         id: container_id.to_string(),
         status: status.into(),
         pid,
-        bundle: spec.root.as_ref().map(|r| r.path.clone()).unwrap_or_default(),
+        bundle: spec
+            .root
+            .as_ref()
+            .map(|r| r.path.clone())
+            .unwrap_or_default(),
         annotations: spec.annotations.clone().unwrap_or_default(),
     }
 }
@@ -618,7 +674,9 @@ fn make_state(spec: &OciSpec, container_id: &str, status: &str, pid: u32) -> Con
 
 /// Run a container from a spec (blocking). Extracts ID from spec annotations or uses "default".
 pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
-    let container_id = spec.annotations.as_ref()
+    let container_id = spec
+        .annotations
+        .as_ref()
         .and_then(|a| a.get("org.edgerun.container.id"))
         .cloned()
         .unwrap_or_else(|| "default".to_string());
@@ -626,7 +684,10 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
 }
 
 /// Run a container from a spec with explicit ID (blocking).
-pub fn run_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<std::process::ExitStatus> {
+pub fn run_spec_with_id(
+    spec: &OciSpec,
+    container_id: &str,
+) -> io::Result<std::process::ExitStatus> {
     // Full blocking lifecycle: create → start → wait → delete
     let child = start_spec_with_id(spec, container_id)?;
     child.wait()
@@ -634,7 +695,9 @@ pub fn run_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<std::p
 
 /// Start a container from a spec (non-blocking).
 pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
-    let container_id = spec.annotations.as_ref()
+    let container_id = spec
+        .annotations
+        .as_ref()
         .and_then(|a| a.get("org.edgerun.container.id"))
         .cloned()
         .unwrap_or_else(|| "default".to_string());
@@ -663,11 +726,15 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
         if let Some(ref linux) = spec.linux {
             let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
             let rootless = !is_root();
-            let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
-                .unwrap_or_else(|e| {
-                    let _ = fs::write("/dev/kmsg", format!("edgerun: cgroup resolution failed: {}", e));
-                    raw_cgroup_path.to_string()
-                });
+            let cgroup_path =
+                crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
+                    .unwrap_or_else(|e| {
+                        let _ = fs::write(
+                            "/dev/kmsg",
+                            format!("edgerun: cgroup resolution failed: {}", e),
+                        );
+                        raw_cgroup_path.to_string()
+                    });
             setup_container_cgroups(pid, res, &cgroup_path);
         }
     }
@@ -688,15 +755,23 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
 /// Run an OCI bundle (directory containing config.json + rootfs/).
 pub fn run_bundle(bundle_path: &Path) -> io::Result<std::process::ExitStatus> {
     let config_data = fs::read(bundle_path.join("config.json"))?;
-    let spec: OciSpec = crate::json::parse_oci_spec(&config_data)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid OCI config: {}", e)))?;
+    let spec: OciSpec = crate::json::parse_oci_spec(&config_data).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid OCI config: {}", e),
+        )
+    })?;
     run_spec(&spec)
 }
 
 /// Start a container from an OCI bundle without blocking.
 pub fn start_bundle(bundle_path: &Path) -> io::Result<RunningContainer> {
     let config_data = fs::read(bundle_path.join("config.json"))?;
-    let spec: OciSpec = crate::json::parse_oci_spec(&config_data)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid OCI config: {}", e)))?;
+    let spec: OciSpec = crate::json::parse_oci_spec(&config_data).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid OCI config: {}", e),
+        )
+    })?;
     start_spec(&spec)
 }

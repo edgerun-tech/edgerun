@@ -1,9 +1,9 @@
 use edgerun_clap::Parser;
+use edgerun_mgmt_bluetooth::{MgmtBluetoothBackend, MgmtDiscoveryTransport};
+use edgerun_tcl_ac::{AcMode, AcState, FanSpeed, TclAcClient};
 use std::fs;
 use std::path::PathBuf;
 use std::process;
-use edgerun_tcl_ac::{TclAcClient, AcState, AcMode, FanSpeed};
-use edgerun_mgmt_bluetooth::{MgmtBluetoothBackend, MgmtDiscoveryTransport};
 
 const STATE_FILE: &str = "/tmp/tcl-ac-state.json";
 
@@ -15,24 +15,49 @@ struct SavedState {
 }
 
 enum Command {
-    Scan { timeout: Option<u8> },
-    Connect { address: String },
-    Pair { address: String },
+    Scan {
+        timeout: Option<u8>,
+    },
+    Connect {
+        address: String,
+    },
+    Pair {
+        address: String,
+    },
     Status,
-    Power { power_on: bool, power_off: bool },
-    Temp { temperature: i8 },
-    Mode { mode: String },
-    Fan { speed: String },
-    Swing { swing_on: bool, swing_off: bool },
-    Eco { eco_on: bool, eco_off: bool },
-    Full { power: Option<bool>, temp: Option<i8>, mode: Option<String>, fan: Option<String> },
+    Power {
+        power_on: bool,
+        power_off: bool,
+    },
+    Temp {
+        temperature: i8,
+    },
+    Mode {
+        mode: String,
+    },
+    Fan {
+        speed: String,
+    },
+    Swing {
+        swing_on: bool,
+        swing_off: bool,
+    },
+    Eco {
+        eco_on: bool,
+        eco_off: bool,
+    },
+    Full {
+        power: Option<bool>,
+        temp: Option<i8>,
+        mode: Option<String>,
+        fan: Option<String>,
+    },
     Disconnect,
 }
 
 impl Parser for Command {
     fn command() -> edgerun_clap::cli::Command {
-        edgerun_clap::cli::Command::new("tcl-ac")
-            .about("TCL Air Conditioner Control CLI")
+        edgerun_clap::cli::Command::new("tcl-ac").about("TCL Air Conditioner Control CLI")
     }
 
     fn from(matches: &edgerun_clap::cli::ArgMatches) -> Self {
@@ -85,42 +110,29 @@ fn main() {
     let cmd = Command::parse();
 
     match cmd {
-        Command::Scan { timeout } => {
-            do_scan(timeout.unwrap_or(10) as u64)
-        }
-        Command::Connect { address } => {
-            do_connect(&address)
-        }
-        Command::Pair { address } => {
-            do_pair(&address)
-        }
-        Command::Status => {
-            do_status()
-        }
-        Command::Power { power_on, power_off } => {
-            do_power(power_on, power_off)
-        }
-        Command::Temp { temperature } => {
-            do_temp(temperature)
-        }
-        Command::Mode { mode } => {
-            do_mode(&mode)
-        }
-        Command::Fan { speed } => {
-            do_fan(&speed)
-        }
-        Command::Swing { swing_on, swing_off } => {
-            do_swing(swing_on, swing_off)
-        }
-        Command::Eco { eco_on, eco_off } => {
-            do_eco(eco_on, eco_off)
-        }
-        Command::Full { power, temp, mode, fan } => {
-            do_full(power, temp, mode.as_deref(), fan.as_deref())
-        }
-        Command::Disconnect => {
-            do_disconnect()
-        }
+        Command::Scan { timeout } => do_scan(timeout.unwrap_or(10) as u64),
+        Command::Connect { address } => do_connect(&address),
+        Command::Pair { address } => do_pair(&address),
+        Command::Status => do_status(),
+        Command::Power {
+            power_on,
+            power_off,
+        } => do_power(power_on, power_off),
+        Command::Temp { temperature } => do_temp(temperature),
+        Command::Mode { mode } => do_mode(&mode),
+        Command::Fan { speed } => do_fan(&speed),
+        Command::Swing {
+            swing_on,
+            swing_off,
+        } => do_swing(swing_on, swing_off),
+        Command::Eco { eco_on, eco_off } => do_eco(eco_on, eco_off),
+        Command::Full {
+            power,
+            temp,
+            mode,
+            fan,
+        } => do_full(power, temp, mode.as_deref(), fan.as_deref()),
+        Command::Disconnect => do_disconnect(),
     }
 }
 
@@ -165,7 +177,10 @@ fn do_scan(timeout_secs: u64) {
     println!("Using controller: {}", backend.controller.address);
     println!();
 
-    let result = match backend.discover_nearby(MgmtDiscoveryTransport::LowEnergy, (timeout_secs * 1000) as u32) {
+    let result = match backend.discover_nearby(
+        MgmtDiscoveryTransport::LowEnergy,
+        (timeout_secs * 1000) as u32,
+    ) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Scan failed: {}", e);
@@ -191,7 +206,10 @@ fn do_scan(timeout_secs: u64) {
 
         println!("  {} ({}) - RSSI: {} dBm", obs.device_id, name, rssi);
         if !obs.service_uuids.is_empty() {
-            println!("    Services: {:?}", obs.service_uuids.iter().take(3).collect::<Vec<_>>());
+            println!(
+                "    Services: {:?}",
+                obs.service_uuids.iter().take(3).collect::<Vec<_>>()
+            );
         }
 
         if is_tcl || name.to_lowercase().contains("tcl") || name.to_lowercase().contains("ac") {
@@ -218,20 +236,20 @@ fn do_scan(timeout_secs: u64) {
 
 fn do_connect(address: &str) {
     let client = TclAcClient::new();
-    
+
     println!("Connecting to TCL AC at {}...", address);
-    
+
     match client.connect(address) {
         Ok(()) => {
             println!("Connected successfully!");
-            
+
             if let Some(sh) = client.service_handle() {
                 println!("  Service handle: 0x{:04x}", sh);
             }
             if let Some(ch) = client.characteristic_handle() {
                 println!("  Characteristic handle: 0x{:04x}", ch);
             }
-            
+
             let state = SavedState {
                 address: address.to_string(),
                 service_handle: client.service_handle(),
@@ -281,16 +299,21 @@ fn do_pair(address: &str) {
             Ok(events) => {
                 for event in events {
                     match event {
-                        edgerun_mgmt_bluetooth::MgmtControllerEvent::DeviceConnected { device_id, .. }
-                            if device_id.eq_ignore_ascii_case(address) => {
-                                println!("Pairing successful!");
-                                return;
-                            }
-                        edgerun_mgmt_bluetooth::MgmtControllerEvent::ConnectFailed { device_id, status, .. }
-                            if device_id.eq_ignore_ascii_case(address) => {
-                                eprintln!("Pairing failed with status: 0x{:02x}", status);
-                                process::exit(1);
-                            }
+                        edgerun_mgmt_bluetooth::MgmtControllerEvent::DeviceConnected {
+                            device_id,
+                            ..
+                        } if device_id.eq_ignore_ascii_case(address) => {
+                            println!("Pairing successful!");
+                            return;
+                        }
+                        edgerun_mgmt_bluetooth::MgmtControllerEvent::ConnectFailed {
+                            device_id,
+                            status,
+                            ..
+                        } if device_id.eq_ignore_ascii_case(address) => {
+                            eprintln!("Pairing failed with status: 0x{:02x}", status);
+                            process::exit(1);
+                        }
                         _ => {}
                     }
                 }
@@ -307,17 +330,17 @@ fn do_pair(address: &str) {
 
 fn with_client<F>(f: F)
 where
-    F: FnOnce(&TclAcClient) -> Result<(), edgerun_capabilities::CapabilityError>
+    F: FnOnce(&TclAcClient) -> Result<(), edgerun_capabilities::CapabilityError>,
 {
     let saved = load_saved_state().expect("Not connected - run 'tcl-ac connect <addr>' first");
     let client = TclAcClient::new();
-    
+
     // Reconnect using saved address
     if let Err(e) = client.connect(&saved.address) {
         eprintln!("Reconnection failed: {}", e);
         process::exit(1);
     }
-    
+
     f(&client).unwrap_or_else(|e| {
         eprintln!("Operation failed: {}", e);
         process::exit(1);
@@ -325,16 +348,14 @@ where
 }
 
 fn do_status() {
-    with_client(|client| {
-        match client.read_state() {
-            Ok(state) => {
-                print_state(&state);
-                Ok(())
-            }
-            Err(e) => {
-                eprintln!("Failed to read state: {}", e);
-                Err(e)
-            }
+    with_client(|client| match client.read_state() {
+        Ok(state) => {
+            print_state(&state);
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("Failed to read state: {}", e);
+            Err(e)
         }
     })
 }
@@ -344,7 +365,7 @@ fn do_power(on: bool, off: bool) {
         eprintln!("Specify either --on or --off, not both");
         process::exit(1);
     }
-    
+
     with_client(|client| client.set_power(on))
 }
 
@@ -353,7 +374,7 @@ fn do_temp(temperature: i8) {
         eprintln!("Temperature must be between 16 and 31");
         process::exit(1);
     }
-    
+
     with_client(|client| client.set_temperature(temperature))
 }
 
@@ -372,7 +393,7 @@ fn do_swing(on: bool, off: bool) {
         eprintln!("Specify either --on or --off, not both");
         process::exit(1);
     }
-    
+
     with_client(|client| client.set_wind_swing(on))
 }
 
@@ -381,13 +402,13 @@ fn do_eco(on: bool, off: bool) {
         eprintln!("Specify either --on or --off, not both");
         process::exit(1);
     }
-    
+
     with_client(|client| client.set_eco(on))
 }
 
 fn do_full(power: Option<bool>, temp: Option<i8>, mode: Option<&str>, fan: Option<&str>) {
     let mut state = AcState::default();
-    
+
     if let Some(p) = power {
         state.power = p;
     }
@@ -404,7 +425,7 @@ fn do_full(power: Option<bool>, temp: Option<i8>, mode: Option<&str>, fan: Optio
     if let Some(f) = fan {
         state.fan_speed = parse_fan_speed(f);
     }
-    
+
     with_client(|client| {
         client.full_control(&state)?;
         print_state(&state);
@@ -449,7 +470,10 @@ fn parse_fan_speed(s: &str) -> FanSpeed {
         "turbo" | "max+" | "strong" => FanSpeed::Turbo,
         "quiet" | "silent" => FanSpeed::Quiet,
         _ => {
-            eprintln!("Unknown fan speed: {}. Use: auto|low|medium|high|turbo|quiet", s);
+            eprintln!(
+                "Unknown fan speed: {}. Use: auto|low|medium|high|turbo|quiet",
+                s
+            );
             process::exit(1);
         }
     }
@@ -459,11 +483,20 @@ fn print_state(state: &AcState) {
     println!("┌─────────────────────────────────────┐");
     println!("│         TCL AC Status               │");
     println!("├─────────────────────────────────────┤");
-    println!("│ Power:    {:<25} │", if state.power { "ON" } else { "OFF" });
-    println!("│ Temp:     {}°C                        │", state.temperature);
+    println!(
+        "│ Power:    {:<25} │",
+        if state.power { "ON" } else { "OFF" }
+    );
+    println!(
+        "│ Temp:     {}°C                        │",
+        state.temperature
+    );
     println!("│ Mode:     {:<25} │", format!("{:?}", state.mode));
     println!("│ Fan:      {:<25} │", format!("{:?}", state.fan_speed));
-    println!("│ Swing:    {:<25} │", format!("{:?}", state.wind_direction));
+    println!(
+        "│ Swing:    {:<25} │",
+        format!("{:?}", state.wind_direction)
+    );
     println!("│ Eco:      {:<25} │", state.eco_mode);
     println!("│ Turbo:    {:<25} │", state.turbo_mode);
     println!("│ Quiet:    {:<25} │", state.quiet_mode);

@@ -195,11 +195,7 @@ impl QuicTransport {
     }
 
     /// Record that we received a packet in the given space.
-    pub fn record_received_packet(
-        &mut self,
-        space: PacketNumberSpace,
-        packet_number: u64,
-    ) -> bool {
+    pub fn record_received_packet(&mut self, space: PacketNumberSpace, packet_number: u64) -> bool {
         let idx = space as usize;
         if let Some(largest) = self.pn_state[idx].largest_received {
             if packet_number <= largest {
@@ -253,10 +249,7 @@ impl QuicTransport {
     // ACK generation (RFC 9000 §19.3)
     // -----------------------------------------------------------------------
 
-    pub fn generate_ack_frame(
-        &mut self,
-        space: PacketNumberSpace,
-    ) -> Option<QuicFrame> {
+    pub fn generate_ack_frame(&mut self, space: PacketNumberSpace) -> Option<QuicFrame> {
         let idx = space as usize;
         let received = &self.pn_state[idx].received_packets;
         if received.is_empty() {
@@ -333,15 +326,15 @@ impl QuicTransport {
         if let Some(smoothed) = self.smoothed_rtt {
             let rttvar_sample = smoothed.abs_diff(adjusted_rtt);
             self.rttvar = self.rttvar.mul_f64(0.75) + rttvar_sample.mul_f64(0.25);
-            self.smoothed_rtt = Some(
-                smoothed.mul_f64(0.875) + adjusted_rtt.mul_f64(0.125),
-            );
+            self.smoothed_rtt = Some(smoothed.mul_f64(0.875) + adjusted_rtt.mul_f64(0.125));
         } else {
             self.smoothed_rtt = Some(latest_rtt);
             self.rttvar = latest_rtt / 2;
         }
 
-        self.rtt_estimate = self.smoothed_rtt.unwrap_or(std::time::Duration::from_millis(100));
+        self.rtt_estimate = self
+            .smoothed_rtt
+            .unwrap_or(std::time::Duration::from_millis(100));
     }
 
     pub fn smoothed_rtt(&self) -> Option<std::time::Duration> {
@@ -372,7 +365,6 @@ impl QuicTransport {
         packet_number: u64,
         size: usize,
         has_crypto: bool,
-
     ) {
         let packet = SentPacket {
             packet_number,
@@ -457,11 +449,15 @@ impl QuicTransport {
                 self.congestion.congestion_window += newly_acked_size;
             } else {
                 let mss = self.mtu as u64;
-                let increment = (newly_acked_size * mss).saturating_div(self.congestion.congestion_window);
+                let increment =
+                    (newly_acked_size * mss).saturating_div(self.congestion.congestion_window);
                 self.congestion.congestion_window += increment.max(mss);
             }
 
-            self.congestion.bytes_in_flight = self.congestion.bytes_in_flight.saturating_sub(newly_acked_size);
+            self.congestion.bytes_in_flight = self
+                .congestion
+                .bytes_in_flight
+                .saturating_sub(newly_acked_size);
         }
 
         // Exit recovery if we've acked past recovery start
@@ -475,7 +471,11 @@ impl QuicTransport {
         }
 
         // Update RTT
-        if let Some(acked_pkt) = self.sent_packets.iter().find(|p| p.packet_number == largest_acknowledged && p.acked) {
+        if let Some(acked_pkt) = self
+            .sent_packets
+            .iter()
+            .find(|p| p.packet_number == largest_acknowledged && p.acked)
+        {
             let latest_rtt = acked_pkt.time_sent.elapsed();
             self.update_rtt(latest_rtt, ack_delay);
         }
@@ -489,7 +489,8 @@ impl QuicTransport {
         let idx = space as usize;
         let now = std::time::Instant::now();
 
-        let time_threshold = self.smoothed_rtt
+        let time_threshold = self
+            .smoothed_rtt
             .unwrap_or(self.rtt_estimate)
             .mul_f64(1.125);
 
@@ -502,28 +503,34 @@ impl QuicTransport {
         // Since we track all sent_packets in one flat list, filter by PN range.
         let (pn_min, pn_max) = self.pn_range_for_space(space);
 
-        let lost_pns: Vec<u64> = self.sent_packets.iter().filter_map(|pkt| {
-            if pkt.acked || pkt.lost {
-                return None;
-            }
-            // Filter by packet number space
-            if pkt.packet_number < pn_min || pkt.packet_number >= pn_max {
-                return None;
-            }
+        let lost_pns: Vec<u64> = self
+            .sent_packets
+            .iter()
+            .filter_map(|pkt| {
+                if pkt.acked || pkt.lost {
+                    return None;
+                }
+                // Filter by packet number space
+                if pkt.packet_number < pn_min || pkt.packet_number >= pn_max {
+                    return None;
+                }
 
-            let larger_acked = self.sent_packets.iter().any(|other| {
-                other.acked && other.packet_number > pkt.packet_number
-                    && other.packet_number >= pn_min && other.packet_number < pn_max
-            });
+                let larger_acked = self.sent_packets.iter().any(|other| {
+                    other.acked
+                        && other.packet_number > pkt.packet_number
+                        && other.packet_number >= pn_min
+                        && other.packet_number < pn_max
+                });
 
-            let time_expired = now.duration_since(pkt.time_sent) > time_threshold;
+                let time_expired = now.duration_since(pkt.time_sent) > time_threshold;
 
-            if larger_acked || time_expired {
-                Some(pkt.packet_number)
-            } else {
-                None
-            }
-        }).collect();
+                if larger_acked || time_expired {
+                    Some(pkt.packet_number)
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         let mut lost_size = 0u64;
         for pn in &lost_pns {
@@ -540,7 +547,8 @@ impl QuicTransport {
         }
 
         if lost_size > 0 {
-            self.congestion.bytes_in_flight = self.congestion.bytes_in_flight.saturating_sub(lost_size);
+            self.congestion.bytes_in_flight =
+                self.congestion.bytes_in_flight.saturating_sub(lost_size);
             self.congestion.ssthresh = self.congestion.congestion_window / 2;
             self.congestion.congestion_window = self.congestion.ssthresh.max(self.mtu as u64);
             self.congestion.recovery_start_time = Some(now);
@@ -611,12 +619,7 @@ impl QuicTransport {
         self.last_activity.elapsed() > timeout
     }
 
-    pub fn create_stream_frame(
-        &mut self,
-        stream_id: u64,
-        data: Vec<u8>,
-        fin: bool,
-    ) -> QuicFrame {
+    pub fn create_stream_frame(&mut self, stream_id: u64, data: Vec<u8>, fin: bool) -> QuicFrame {
         QuicFrame::Stream {
             stream_id,
             offset: 0,
@@ -636,13 +639,26 @@ impl QuicTransport {
             QuicFrame::MaxData { max_data } => {
                 self.max_data = *max_data;
             }
-            QuicFrame::MaxStreamData { max_stream_data, .. } => {
+            QuicFrame::MaxStreamData {
+                max_stream_data, ..
+            } => {
                 self.max_stream_data = *max_stream_data;
             }
-            QuicFrame::Ack { largest_acknowledged, ack_delay, first_ack_range, ack_ranges, .. } => {
+            QuicFrame::Ack {
+                largest_acknowledged,
+                ack_delay,
+                first_ack_range,
+                ack_ranges,
+                ..
+            } => {
                 let delay = std::time::Duration::from_micros(*ack_delay);
-                self.on_ack_received(PacketNumberSpace::ApplicationData, *largest_acknowledged,
-                    *first_ack_range, ack_ranges, delay);
+                self.on_ack_received(
+                    PacketNumberSpace::ApplicationData,
+                    *largest_acknowledged,
+                    *first_ack_range,
+                    ack_ranges,
+                    delay,
+                );
             }
             _ => {}
         }
@@ -716,7 +732,10 @@ mod tests {
         let local = ConnectionId::random();
         let remote = ConnectionId::random();
         let transport = QuicTransport::new(local.clone(), remote.clone());
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Initial), 0);
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Initial),
+            0
+        );
         assert_eq!(transport.max_data, 65535);
     }
 
@@ -726,18 +745,36 @@ mod tests {
         let remote = ConnectionId::random();
         let mut transport = QuicTransport::new(local, remote);
 
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Initial), 0);
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Handshake), 0);
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::ApplicationData), 0);
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Initial),
+            0
+        );
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Handshake),
+            0
+        );
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::ApplicationData),
+            0
+        );
 
         let pn_initial = transport.next_packet_number(PacketNumberSpace::Initial);
         assert_eq!(pn_initial, 0);
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Initial), 1);
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Handshake), 0);
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Initial),
+            1
+        );
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Handshake),
+            0
+        );
 
         let pn_hs = transport.next_packet_number(PacketNumberSpace::Handshake);
         assert_eq!(pn_hs, 0);
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Handshake), 1);
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Handshake),
+            1
+        );
     }
 
     #[test]

@@ -105,7 +105,9 @@ impl AsyncL2capSocket {
     pub fn new() -> GattResult<Self> {
         let fd = unsafe { socket(AF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP) };
         if fd < 0 {
-            return Err(GattError::SocketFailed("failed to create L2CAP socket".to_string()));
+            return Err(GattError::SocketFailed(
+                "failed to create L2CAP socket".to_string(),
+            ));
         }
         Ok(Self {
             fd,
@@ -118,11 +120,7 @@ impl AsyncL2capSocket {
         })
     }
 
-    pub async fn connect_to_device(
-        &mut self,
-        device_addr: &str,
-        addr_type: u8,
-    ) -> GattResult<()> {
+    pub async fn connect_to_device(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
         let bdaddr = parse_bdaddr_string(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
@@ -149,7 +147,11 @@ impl AsyncL2capSocket {
         Ok(())
     }
 
-    pub async fn connect_with_le_psm(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
+    pub async fn connect_with_le_psm(
+        &mut self,
+        device_addr: &str,
+        addr_type: u8,
+    ) -> GattResult<()> {
         let bdaddr = parse_bdaddr_string(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
@@ -179,7 +181,14 @@ impl AsyncL2capSocket {
     async fn send_all_async(&self, data: &[u8]) -> GattResult<()> {
         let mut written = 0;
         while written < data.len() {
-            let rc = unsafe { send(self.fd, data[written..].as_ptr().cast(), data.len() - written, 0) };
+            let rc = unsafe {
+                send(
+                    self.fd,
+                    data[written..].as_ptr().cast(),
+                    data.len() - written,
+                    0,
+                )
+            };
             if rc < 0 {
                 return Err(GattError::SendFailed("send failed".to_string()));
             }
@@ -351,12 +360,7 @@ impl AsyncAttProtocol {
         self.send_recv_async(&req).await
     }
 
-    pub async fn read_by_type(
-        &mut self,
-        start: u16,
-        end: u16,
-        uuid: &[u8],
-    ) -> GattResult<Vec<u8>> {
+    pub async fn read_by_type(&mut self, start: u16, end: u16, uuid: &[u8]) -> GattResult<Vec<u8>> {
         let mut req = vec![0x08];
         req.extend_from_slice(&start.to_le_bytes());
         req.extend_from_slice(&end.to_le_bytes());
@@ -583,9 +587,7 @@ mod tests {
         let socket = AsyncL2capSocket::new().unwrap();
         let mut proto = AsyncAttProtocol::new(socket);
         proto.set_mtu(50);
-        let data = vec![
-            0x11, 0x06, 0x01, 0x00, 0x08, 0x00, 0x00, 0x28,
-        ];
+        let data = vec![0x11, 0x06, 0x01, 0x00, 0x08, 0x00, 0x00, 0x28];
         let results = proto.parse_read_by_group_response(&data);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 0x0001);

@@ -1,7 +1,5 @@
 // Re-export types that downstream NPU backends need to implement traits.
-pub use edgerun_capabilities::{
-    CapabilityDescriptor, CapabilityError, CapabilityProvider,
-};
+pub use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 
 use edgerun_capabilities::{
     capability_descriptor, constraint, CapabilityConstraintKind, CapabilityEventKind,
@@ -90,25 +88,19 @@ mod tests {
     fn npu_execution_mode_all_variants() {
         assert_eq!(NpuExecutionMode::Inference, NpuExecutionMode::Inference);
         assert_eq!(NpuExecutionMode::Compilation, NpuExecutionMode::Compilation);
-        assert_eq!(NpuExecutionMode::Preprocessing, NpuExecutionMode::Preprocessing);
         assert_eq!(
-            NpuExecutionMode::Other(42),
-            NpuExecutionMode::Other(42)
+            NpuExecutionMode::Preprocessing,
+            NpuExecutionMode::Preprocessing
         );
+        assert_eq!(NpuExecutionMode::Other(42), NpuExecutionMode::Other(42));
         assert_ne!(NpuExecutionMode::Inference, NpuExecutionMode::Other(0));
-        assert_ne!(
-            NpuExecutionMode::Other(1),
-            NpuExecutionMode::Other(2)
-        );
+        assert_ne!(NpuExecutionMode::Other(1), NpuExecutionMode::Other(2));
     }
 
     #[test]
     fn npu_execution_mode_debug() {
         assert_eq!(format!("{:?}", NpuExecutionMode::Inference), "Inference");
-        assert_eq!(
-            format!("{:?}", NpuExecutionMode::Other(99)),
-            "Other(99)"
-        );
+        assert_eq!(format!("{:?}", NpuExecutionMode::Other(99)), "Other(99)");
     }
 
     #[test]

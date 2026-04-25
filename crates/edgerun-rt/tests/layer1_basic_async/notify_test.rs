@@ -1,5 +1,5 @@
 // Test Notify primitive with the actual runtime.
-use edgerun_rt::{Notify, Runtime, spawn};
+use edgerun_rt::{spawn, Notify, Runtime};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -164,7 +164,10 @@ fn test_notify_concurrent_notify_and_wait() {
         notify.notified().await;
         let elapsed = start.elapsed();
         println!("    waited {:?} for notification", elapsed);
-        assert!(elapsed >= Duration::from_millis(40), "should have waited for the background thread");
+        assert!(
+            elapsed >= Duration::from_millis(40),
+            "should have waited for the background thread"
+        );
     });
 
     std::thread::sleep(Duration::from_millis(150));

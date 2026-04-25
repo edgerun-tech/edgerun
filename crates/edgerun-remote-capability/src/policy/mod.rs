@@ -6,15 +6,16 @@ use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
 use edgerun_capability_policy::{
     PolicyContext, PolicyDecision, PolicyEngine, RevocationReason, SimplePolicyEngine,
 };
-use edgerun_proto::edgerun::v0::capability::{CapabilityGrant, CapabilityRequest, CapabilityRevocation};
+use edgerun_proto::edgerun::v0::capability::{
+    CapabilityGrant, CapabilityRequest, CapabilityRevocation,
+};
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionOpen,
 };
 
 use crate::protocol::{
-    accept_session_open_unchecked, default_remote_requester_opt,
-    RemoteCapabilityProvider, RemoteInvocationResult, session_accept_from_grant,
-    session_reject, session_open_as_request,
+    accept_session_open_unchecked, default_remote_requester_opt, session_accept_from_grant,
+    session_open_as_request, session_reject, RemoteCapabilityProvider, RemoteInvocationResult,
 };
 
 /// Session-to-grant association record.
@@ -174,7 +175,8 @@ where
             granted_access_class: grant.access_class,
         };
         self.sessions.insert(grant.grant_id.clone(), binding);
-        self.session_to_grant.insert(open.session_id.clone(), grant.grant_id);
+        self.session_to_grant
+            .insert(open.session_id.clone(), grant.grant_id);
         Ok(accept)
     }
 
@@ -200,8 +202,10 @@ where
     fn next_event(
         &mut self,
         session_id: &[u8],
-    ) -> Result<Option<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent>, CapabilityError>
-    {
+    ) -> Result<
+        Option<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent>,
+        CapabilityError,
+    > {
         self.inner.next_event(session_id)
     }
 

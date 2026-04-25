@@ -1,5 +1,5 @@
 // Test JoinSet with the actual runtime.
-use edgerun_rt::{JoinSet, Runtime, spawn};
+use edgerun_rt::{spawn, JoinSet, Runtime};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -76,13 +76,15 @@ fn test_tasks_complete_out_of_order() {
             "slow"
         });
         // Fast task second
-        set.spawn(async {
-            "fast"
-        });
+        set.spawn(async { "fast" });
 
         // Fast should complete first
         let first = set.join_next().await.unwrap().unwrap();
-        assert_eq!(first, "fast", "fast task should complete first, got {}", first);
+        assert_eq!(
+            first, "fast",
+            "fast task should complete first, got {}",
+            first
+        );
 
         let second = set.join_next().await.unwrap().unwrap();
         assert_eq!(second, "slow");

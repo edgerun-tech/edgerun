@@ -2,7 +2,7 @@
 
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
-    CapabilityOperation, CapabilityRole, CapabilityProvider,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 
 #[cfg(feature = "android-real")]
@@ -57,7 +57,9 @@ mod real {
                 let name = std::ffi::CString::new("libaaudio.so").unwrap();
                 let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
                 if handle.is_null() {
-                    return Err(CapabilityError::Provider("libaaudio.so not found (requires Android 8.0+)".into()));
+                    return Err(CapabilityError::Provider(
+                        "libaaudio.so not found (requires Android 8.0+)".into(),
+                    ));
                 }
                 fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
                     let c_name = std::ffi::CString::new(name).unwrap();
@@ -88,15 +90,23 @@ mod real {
         LIB_AAUDIO.get_or_try_init(aaudio::AaudioFns::load)
     }
 
-    pub struct AAudioStream { stream: AAUDIOStream }
+    pub struct AAudioStream {
+        stream: AAUDIOStream,
+    }
 
     impl AAudioStream {
-        pub fn open(direction: i32, sample_rate: i32, channels: i32) -> Result<Self, CapabilityError> {
+        pub fn open(
+            direction: i32,
+            sample_rate: i32,
+            channels: i32,
+        ) -> Result<Self, CapabilityError> {
             let fns = ensure_loaded()?;
             unsafe {
                 let mut builder: AAUDIOStreamBuilder = std::ptr::null_mut();
                 if (fns.create_builder)(&mut builder) != 0 {
-                    return Err(CapabilityError::Provider("AAudio_createStreamBuilder failed".into()));
+                    return Err(CapabilityError::Provider(
+                        "AAudio_createStreamBuilder failed".into(),
+                    ));
                 }
                 (fns.set_direction)(builder, direction);
                 (fns.set_format)(builder, AAUDIO_FORMAT_PCM_I16);
@@ -107,7 +117,9 @@ mod real {
                 let result = (fns.open_stream)(builder, &mut stream);
                 (fns.delete_builder)(builder);
                 if result != 0 || stream.is_null() {
-                    return Err(CapabilityError::Provider(format!("AAudioStreamBuilder_openStream failed: {result}")));
+                    return Err(CapabilityError::Provider(format!(
+                        "AAudioStreamBuilder_openStream failed: {result}"
+                    )));
                 }
                 Ok(Self { stream })
             }
@@ -116,57 +128,117 @@ mod real {
         pub fn read(&self, buffer: &mut [i16], frames: i32) -> Result<i32, CapabilityError> {
             let fns = ensure_loaded()?;
             unsafe {
-                let result = (fns.read)(self.stream, buffer.as_mut_ptr() as *mut c_void, frames, 1_000_000_000);
-                if result < 0 { Err(CapabilityError::Provider(format!("AAudioStream_read failed: {result}"))) }
-                else { Ok(result) }
+                let result = (fns.read)(
+                    self.stream,
+                    buffer.as_mut_ptr() as *mut c_void,
+                    frames,
+                    1_000_000_000,
+                );
+                if result < 0 {
+                    Err(CapabilityError::Provider(format!(
+                        "AAudioStream_read failed: {result}"
+                    )))
+                } else {
+                    Ok(result)
+                }
             }
         }
 
         pub fn write(&self, buffer: &[i16], frames: i32) -> Result<i32, CapabilityError> {
             let fns = ensure_loaded()?;
             unsafe {
-                let result = (fns.write)(self.stream, buffer.as_ptr() as *const c_void, frames, 1_000_000_000);
-                if result < 0 { Err(CapabilityError::Provider(format!("AAudioStream_write failed: {result}"))) }
-                else { Ok(result) }
+                let result = (fns.write)(
+                    self.stream,
+                    buffer.as_ptr() as *const c_void,
+                    frames,
+                    1_000_000_000,
+                );
+                if result < 0 {
+                    Err(CapabilityError::Provider(format!(
+                        "AAudioStream_write failed: {result}"
+                    )))
+                } else {
+                    Ok(result)
+                }
             }
         }
     }
 
     impl Drop for AAudioStream {
         fn drop(&mut self) {
-            if let Ok(fns) = ensure_loaded() { unsafe { (fns.close)(self.stream); } }
+            if let Ok(fns) = ensure_loaded() {
+                unsafe {
+                    (fns.close)(self.stream);
+                }
+            }
         }
     }
 
-    pub struct AndroidAudioInputProvider { stream: Option<AAudioStream> }
+    pub struct AndroidAudioInputProvider {
+        stream: Option<AAudioStream>,
+    }
     impl AndroidAudioInputProvider {
-        pub fn new() -> Self { Self { stream: None } }
-        pub fn start_capture(&mut self, sample_rate: i32, channels: i32) -> Result<(), CapabilityError> {
-            self.stream = Some(AAudioStream::open(AAUDIO_DIRECTION_INPUT, sample_rate, channels)?);
+        pub fn new() -> Self {
+            Self { stream: None }
+        }
+        pub fn start_capture(
+            &mut self,
+            sample_rate: i32,
+            channels: i32,
+        ) -> Result<(), CapabilityError> {
+            self.stream = Some(AAudioStream::open(
+                AAUDIO_DIRECTION_INPUT,
+                sample_rate,
+                channels,
+            )?);
             Ok(())
         }
     }
     impl CapabilityProvider for AndroidAudioInputProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-microphone", "android", CapabilityRole::Input,
-                &[CapabilityModality::Auditory], &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+            capability_descriptor(
+                "android-microphone",
+                "android",
+                CapabilityRole::Input,
+                &[CapabilityModality::Auditory],
+                &[edgerun_capabilities::CapabilityEventKind::Text],
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 
-    pub struct AndroidAudioOutputProvider { stream: Option<AAudioStream> }
+    pub struct AndroidAudioOutputProvider {
+        stream: Option<AAudioStream>,
+    }
     impl AndroidAudioOutputProvider {
-        pub fn new() -> Self { Self { stream: None } }
-        pub fn start_playback(&mut self, sample_rate: i32, channels: i32) -> Result<(), CapabilityError> {
-            self.stream = Some(AAudioStream::open(AAUDIO_DIRECTION_OUTPUT, sample_rate, channels)?);
+        pub fn new() -> Self {
+            Self { stream: None }
+        }
+        pub fn start_playback(
+            &mut self,
+            sample_rate: i32,
+            channels: i32,
+        ) -> Result<(), CapabilityError> {
+            self.stream = Some(AAudioStream::open(
+                AAUDIO_DIRECTION_OUTPUT,
+                sample_rate,
+                channels,
+            )?);
             Ok(())
         }
     }
     impl CapabilityProvider for AndroidAudioOutputProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-speaker", "android", CapabilityRole::Output,
-                &[CapabilityModality::Auditory], &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+            capability_descriptor(
+                "android-speaker",
+                "android",
+                CapabilityRole::Output,
+                &[CapabilityModality::Auditory],
+                &[edgerun_capabilities::CapabilityEventKind::Text],
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }
@@ -184,8 +256,12 @@ mod real {
     }
 
     impl AndroidAudioInputProvider {
-        pub fn new() -> Self { Self }
-        pub fn start_capture(&mut self, _sr: i32, _ch: i32) -> Result<(), CapabilityError> { Ok(()) }
+        pub fn new() -> Self {
+            Self
+        }
+        pub fn start_capture(&mut self, _sr: i32, _ch: i32) -> Result<(), CapabilityError> {
+            Ok(())
+        }
     }
     impl Default for AndroidAudioOutputProvider {
         fn default() -> Self {
@@ -194,21 +270,37 @@ mod real {
     }
 
     impl AndroidAudioOutputProvider {
-        pub fn new() -> Self { Self }
-        pub fn start_playback(&mut self, _sr: i32, _ch: i32) -> Result<(), CapabilityError> { Ok(()) }
+        pub fn new() -> Self {
+            Self
+        }
+        pub fn start_playback(&mut self, _sr: i32, _ch: i32) -> Result<(), CapabilityError> {
+            Ok(())
+        }
     }
     impl CapabilityProvider for AndroidAudioInputProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-microphone-stub", "stub", CapabilityRole::Input,
-                &[CapabilityModality::Auditory], &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+            capability_descriptor(
+                "android-microphone-stub",
+                "stub",
+                CapabilityRole::Input,
+                &[CapabilityModality::Auditory],
+                &[edgerun_capabilities::CapabilityEventKind::Text],
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
     impl CapabilityProvider for AndroidAudioOutputProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-speaker-stub", "stub", CapabilityRole::Output,
-                &[CapabilityModality::Auditory], &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+            capability_descriptor(
+                "android-speaker-stub",
+                "stub",
+                CapabilityRole::Output,
+                &[CapabilityModality::Auditory],
+                &[edgerun_capabilities::CapabilityEventKind::Text],
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }

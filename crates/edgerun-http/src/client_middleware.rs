@@ -67,12 +67,12 @@ use crate::client::HttpClient;
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::{Error, Request, Response, Result};
+use edgerun_rt::sync::Mutex;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use edgerun_rt::sync::Mutex;
 
 // ===========================================================================
 // ClientExtensions — type-erased data attached to client requests/responses
@@ -89,7 +89,9 @@ pub struct ClientExtensions {
 
 impl ClientExtensions {
     pub fn new() -> Self {
-        Self { inner: Arc::new(Mutex::new(HashMap::new())) }
+        Self {
+            inner: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub fn insert<T: Send + 'static>(&self, value: T) {
@@ -130,13 +132,17 @@ impl ClientExtensions {
 }
 
 impl Default for ClientExtensions {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl std::fmt::Debug for ClientExtensions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let guard = self.inner.lock();
-        f.debug_struct("ClientExtensions").field("count", &guard.len()).finish()
+        f.debug_struct("ClientExtensions")
+            .field("count", &guard.len())
+            .finish()
     }
 }
 
@@ -155,25 +161,48 @@ pub struct ClientRequest {
 
 impl ClientRequest {
     pub fn new(request: Request) -> Self {
-        Self { request, extensions: ClientExtensions::new() }
+        Self {
+            request,
+            extensions: ClientExtensions::new(),
+        }
     }
 
     pub fn from_builder(builder: crate::request::RequestBuilder) -> Result<Self> {
         Ok(Self::new(builder.build()?))
     }
 
-    pub fn request(&self) -> &Request { &self.request }
-    pub fn request_mut(&mut self) -> &mut Request { &mut self.request }
-    pub fn into_request(self) -> Request { self.request }
+    pub fn request(&self) -> &Request {
+        &self.request
+    }
+    pub fn request_mut(&mut self) -> &mut Request {
+        &mut self.request
+    }
+    pub fn into_request(self) -> Request {
+        self.request
+    }
 
-    pub fn method(&self) -> &Method { self.request.method() }
-    pub fn uri(&self) -> &crate::uri::Uri { self.request.uri() }
-    pub fn headers(&self) -> &HeaderMap { self.request.headers() }
-    pub fn headers_mut(&mut self) -> &mut HeaderMap { self.request.headers_mut() }
-    pub fn body(&self) -> Option<&[u8]> { self.request.body() }
+    pub fn method(&self) -> &Method {
+        self.request.method()
+    }
+    pub fn uri(&self) -> &crate::uri::Uri {
+        self.request.uri()
+    }
+    pub fn headers(&self) -> &HeaderMap {
+        self.request.headers()
+    }
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        self.request.headers_mut()
+    }
+    pub fn body(&self) -> Option<&[u8]> {
+        self.request.body()
+    }
 
-    pub fn extensions(&self) -> &ClientExtensions { &self.extensions }
-    pub fn extensions_mut(&mut self) -> &mut ClientExtensions { &mut self.extensions }
+    pub fn extensions(&self) -> &ClientExtensions {
+        &self.extensions
+    }
+    pub fn extensions_mut(&mut self) -> &mut ClientExtensions {
+        &mut self.extensions
+    }
 }
 
 // ===========================================================================
@@ -279,7 +308,10 @@ impl Chain {
     pub fn build(self) -> Client {
         let mut t = self.transport;
         for mw in self.middlewares.into_iter().rev() {
-            t = Arc::new(ClientMiddlewareLayer { middleware: mw, inner: t });
+            t = Arc::new(ClientMiddlewareLayer {
+                middleware: mw,
+                inner: t,
+            });
         }
         Client { transport: t }
     }

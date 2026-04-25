@@ -5,8 +5,8 @@
 //! supported_groups, and signature_algorithms.
 
 use crate::cipher::NamedGroup;
-use edgerun_crypto::CipherSuite;
 use crate::{Result, TlsError};
+use edgerun_crypto::CipherSuite;
 
 /// Parsed ClientHello from the wire format (RFC 8446 §4.1.2).
 #[derive(Debug)]
@@ -49,9 +49,10 @@ impl ClientHello {
             return Err(TlsError::HandshakeFailure("ClientHello too short".into()));
         }
         if data[0] != 1 {
-            return Err(TlsError::HandshakeFailure(
-                format!("Expected ClientHello (type 1), got {}", data[0]),
-            ));
+            return Err(TlsError::HandshakeFailure(format!(
+                "Expected ClientHello (type 1), got {}",
+                data[0]
+            )));
         }
 
         let msg_len = u32::from_be_bytes([0, data[1], data[2], data[3]]) as usize;
@@ -64,7 +65,9 @@ impl ClientHello {
 
         // Legacy version
         if pos + 2 > msg.len() {
-            return Err(TlsError::Protocol("ClientHello: legacy_version truncated".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: legacy_version truncated".into(),
+            ));
         }
         let legacy_version = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
         pos += 2;
@@ -79,30 +82,42 @@ impl ClientHello {
 
         // Session ID
         if pos >= msg.len() {
-            return Err(TlsError::Protocol("ClientHello: session_id length missing".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: session_id length missing".into(),
+            ));
         }
         let sid_len = msg[pos] as usize;
         pos += 1;
         if sid_len > 32 {
-            return Err(TlsError::Protocol("ClientHello: session_id too long".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: session_id too long".into(),
+            ));
         }
         if pos + sid_len > msg.len() {
-            return Err(TlsError::Protocol("ClientHello: session_id truncated".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: session_id truncated".into(),
+            ));
         }
         let session_id = msg[pos..pos + sid_len].to_vec();
         pos += sid_len;
 
         // Cipher suites
         if pos + 2 > msg.len() {
-            return Err(TlsError::Protocol("ClientHello: cipher_suites length truncated".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: cipher_suites length truncated".into(),
+            ));
         }
         let cs_len = u16::from_be_bytes([msg[pos], msg[pos + 1]]) as usize;
         pos += 2;
         if !cs_len.is_multiple_of(2) {
-            return Err(TlsError::Protocol("ClientHello: cipher_suites length not even".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: cipher_suites length not even".into(),
+            ));
         }
         if pos + cs_len > msg.len() {
-            return Err(TlsError::Protocol("ClientHello: cipher_suites truncated".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: cipher_suites truncated".into(),
+            ));
         }
         let mut cipher_suites = Vec::new();
         let cs_end = pos + cs_len;
@@ -117,12 +132,16 @@ impl ClientHello {
 
         // Legacy compression methods
         if pos >= msg.len() {
-            return Err(TlsError::Protocol("ClientHello: compression length missing".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: compression length missing".into(),
+            ));
         }
         let comp_len = msg[pos] as usize;
         pos += 1;
         if pos + comp_len > msg.len() {
-            return Err(TlsError::Protocol("ClientHello: compression truncated".into()));
+            return Err(TlsError::Protocol(
+                "ClientHello: compression truncated".into(),
+            ));
         }
         let legacy_compression = msg[pos..pos + comp_len].to_vec();
         pos += comp_len;
@@ -278,7 +297,10 @@ impl NamedGroup {
             0x0017 => Ok(NamedGroup::SECP256R1),
             0x0018 => Ok(NamedGroup::SECP384R1),
             0x001D => Ok(NamedGroup::X25519),
-            _ => Err(TlsError::Protocol(format!("Unsupported named group: 0x{:04x}", value))),
+            _ => Err(TlsError::Protocol(format!(
+                "Unsupported named group: 0x{:04x}",
+                value
+            ))),
         }
     }
 }
@@ -318,7 +340,9 @@ mod tests {
         assert_eq!(ch.server_name, Some("example.com".to_string()));
         assert!(ch.client_key_share.is_some());
         assert_eq!(ch.client_key_share_group, Some(NamedGroup::SECP256R1));
-        assert!(ch.cipher_suites.contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
+        assert!(ch
+            .cipher_suites
+            .contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
         assert!(ch.supported_versions.contains(&0x0304));
     }
 
@@ -363,7 +387,11 @@ mod tests {
 
     #[test]
     fn test_named_group_wire_roundtrip() {
-        for group in [NamedGroup::SECP256R1, NamedGroup::SECP384R1, NamedGroup::X25519] {
+        for group in [
+            NamedGroup::SECP256R1,
+            NamedGroup::SECP384R1,
+            NamedGroup::X25519,
+        ] {
             let wire = group.to_wire();
             let parsed = NamedGroup::from_wire(wire).unwrap();
             assert_eq!(parsed, group);
@@ -403,7 +431,11 @@ mod tests {
             .unwrap();
 
         let ch = ClientHello::parse(&ch_bytes).unwrap();
-        assert!(ch.cipher_suites.contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
-        assert!(ch.cipher_suites.contains(&CipherSuite::TLS_AES_256_GCM_SHA384));
+        assert!(ch
+            .cipher_suites
+            .contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
+        assert!(ch
+            .cipher_suites
+            .contains(&CipherSuite::TLS_AES_256_GCM_SHA384));
     }
 }

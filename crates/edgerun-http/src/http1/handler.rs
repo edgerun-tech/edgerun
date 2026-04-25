@@ -48,10 +48,7 @@ use crate::http1::response::Response;
 /// fully parsed [`Request`] and returns a [`Response`].
 pub trait Handler: Send + Sync + 'static {
     /// Handle an incoming request.
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
 }
 
 /// Create a handler from a sync function or closure.
@@ -93,10 +90,7 @@ impl<F> Handler for SyncHandler<F>
 where
     F: Fn(Request) -> Response + Send + Sync + 'static,
 {
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         let resp = (self.f)(request);
         Box::pin(async move { resp })
     }
@@ -126,10 +120,7 @@ where
     F: Fn(Request) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Response> + Send + 'static,
 {
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         let f = &self.f;
         Box::pin(async move { f(request).await })
     }
@@ -149,10 +140,7 @@ where
 // ---------------------------------------------------------------------------
 
 impl Handler for std::sync::Arc<dyn Handler> {
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         let this = self.clone();
         Box::pin(async move { this.handle(request).await })
     }
@@ -161,8 +149,8 @@ impl Handler for std::sync::Arc<dyn Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_rt::Runtime;
     use crate::{Method, StatusCode};
+    use edgerun_rt::Runtime;
 
     #[test]
     fn test_sync_handler() {
@@ -174,9 +162,8 @@ mod tests {
             .unwrap();
 
         let response = rt.block_on(async {
-            let handler = into_handler(|_req: Request| {
-                Response::new(StatusCode::new(200).unwrap())
-            });
+            let handler =
+                into_handler(|_req: Request| Response::new(StatusCode::new(200).unwrap()));
             handler.handle(request).await
         });
         assert!(response.is_success());

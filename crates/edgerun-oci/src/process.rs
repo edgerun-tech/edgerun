@@ -9,15 +9,14 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 
 use crate::json::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
-use crate::rootfs::{setup_rootfs, apply_sysctl, set_rootfs_propagation};
+use crate::rootfs::{apply_sysctl, set_rootfs_propagation, setup_rootfs};
 #[allow(unused_imports)]
 use crate::seccomp::apply_seccomp_from_spec;
 use crate::syscalls::{
-    do_set_hostname, do_unshare, do_setns, do_setrlimit, do_umask, rlimit_name_to_int,
+    do_set_hostname, do_setns, do_setrlimit, do_umask, do_unshare, rlimit_name_to_int,
 };
 use crate::userns::{
-    apply_security_hardening, set_capabilities, do_setgid, do_setuid,
-    set_supplementary_gids,
+    apply_security_hardening, do_setgid, do_setuid, set_capabilities, set_supplementary_gids,
 };
 
 /// Default environment variables when none are specified in the OCI spec.
@@ -28,34 +27,75 @@ pub const DEFAULT_ENV: &[&str] = &[
 
 /// Get the host OS string (e.g., "linux").
 pub fn host_os() -> &'static str {
-    if cfg!(target_os = "linux") { "linux" }
-    else if cfg!(target_os = "windows") { "windows" }
-    else if cfg!(target_os = "solaris") { "solaris" }
-    else { "unknown" }
+    if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "solaris") {
+        "solaris"
+    } else {
+        "unknown"
+    }
 }
 
 /// Get the host architecture string (e.g., "amd64").
 pub fn host_arch() -> &'static str {
-    if cfg!(target_arch = "x86_64") { "amd64" }
-    else if cfg!(target_arch = "aarch64") { "arm64" }
-    else if cfg!(target_arch = "riscv64") { "riscv64" }
-    else if cfg!(target_arch = "arm") { "arm" }
-    else { "unknown" }
+    if cfg!(target_arch = "x86_64") {
+        "amd64"
+    } else if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else if cfg!(target_arch = "riscv64") {
+        "riscv64"
+    } else if cfg!(target_arch = "arm") {
+        "arm"
+    } else {
+        "unknown"
+    }
 }
 
 /// Known Linux capability names (all 5 sets).
 /// Based on Linux capability numbers 0-40.
 const KNOWN_CAPABILITIES: &[&str] = &[
-    "CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_DAC_READ_SEARCH", "CAP_FOWNER",
-    "CAP_FSETID", "CAP_KILL", "CAP_SETGID", "CAP_SETUID",
-    "CAP_SETPCAP", "CAP_LINUX_IMMUTABLE", "CAP_NET_BIND_SERVICE", "CAP_NET_BROADCAST",
-    "CAP_NET_ADMIN", "CAP_NET_RAW", "CAP_IPC_LOCK", "CAP_IPC_OWNER",
-    "CAP_SYS_MODULE", "CAP_SYS_RAWIO", "CAP_SYS_CHROOT", "CAP_SYS_PTRACE",
-    "CAP_SYS_PACCT", "CAP_SYS_ADMIN", "CAP_SYS_BOOT", "CAP_SYS_NICE",
-    "CAP_SYS_RESOURCE", "CAP_SYS_TIME", "CAP_SYS_TTY_CONFIG", "CAP_MKNOD",
-    "CAP_LEASE", "CAP_AUDIT_WRITE", "CAP_AUDIT_CONTROL", "CAP_SETFCAP",
-    "CAP_MAC_OVERRIDE", "CAP_MAC_ADMIN", "CAP_SYSLOG", "CAP_WAKE_ALARM",
-    "CAP_BLOCK_SUSPEND", "CAP_AUDIT_READ", "CAP_PERFMON", "CAP_BPF",
+    "CAP_CHOWN",
+    "CAP_DAC_OVERRIDE",
+    "CAP_DAC_READ_SEARCH",
+    "CAP_FOWNER",
+    "CAP_FSETID",
+    "CAP_KILL",
+    "CAP_SETGID",
+    "CAP_SETUID",
+    "CAP_SETPCAP",
+    "CAP_LINUX_IMMUTABLE",
+    "CAP_NET_BIND_SERVICE",
+    "CAP_NET_BROADCAST",
+    "CAP_NET_ADMIN",
+    "CAP_NET_RAW",
+    "CAP_IPC_LOCK",
+    "CAP_IPC_OWNER",
+    "CAP_SYS_MODULE",
+    "CAP_SYS_RAWIO",
+    "CAP_SYS_CHROOT",
+    "CAP_SYS_PTRACE",
+    "CAP_SYS_PACCT",
+    "CAP_SYS_ADMIN",
+    "CAP_SYS_BOOT",
+    "CAP_SYS_NICE",
+    "CAP_SYS_RESOURCE",
+    "CAP_SYS_TIME",
+    "CAP_SYS_TTY_CONFIG",
+    "CAP_MKNOD",
+    "CAP_LEASE",
+    "CAP_AUDIT_WRITE",
+    "CAP_AUDIT_CONTROL",
+    "CAP_SETFCAP",
+    "CAP_MAC_OVERRIDE",
+    "CAP_MAC_ADMIN",
+    "CAP_SYSLOG",
+    "CAP_WAKE_ALARM",
+    "CAP_BLOCK_SUSPEND",
+    "CAP_AUDIT_READ",
+    "CAP_PERFMON",
+    "CAP_BPF",
     "CAP_CHECKPOINT_RESTORE",
 ];
 
@@ -75,12 +115,18 @@ const KNOWN_NAMESPACES: &[&str] = &[
 pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
     // Root is required
     if spec.root.is_none() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "spec missing root"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "spec missing root",
+        ));
     }
 
     // Process is required
     if spec.process.is_none() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "spec missing process"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "spec missing process",
+        ));
     }
 
     let proc = spec.process.as_ref().unwrap();
@@ -88,11 +134,17 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
     // Process args must not be empty
     if let Some(ref args) = proc.args {
         if args.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "process args must not be empty"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "process args must not be empty",
+            ));
         }
         // First arg (executable) should be absolute or resolvable
         if args[0].is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "process executable path must not be empty"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "process executable path must not be empty",
+            ));
         }
     }
 
@@ -109,8 +161,10 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
             if let Some(caps_list) = cap_set {
                 for cap in caps_list.iter() {
                     if !KNOWN_CAPABILITIES.contains(&cap.as_str()) {
-                        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                            format!("unknown capability: {}", cap)));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("unknown capability: {}", cap),
+                        ));
                     }
                 }
             }
@@ -122,8 +176,10 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
         if let Some(ref namespaces) = linux.namespaces {
             for ns in namespaces {
                 if ns.path.is_none() && !KNOWN_NAMESPACES.contains(&ns.ns_type.as_str()) {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                        format!("unknown namespace type: {}", ns.ns_type)));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("unknown namespace type: {}", ns.ns_type),
+                    ));
                 }
             }
         }
@@ -133,15 +189,28 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
             if let Some(ref rlimits) = proc.rlimits {
                 for rl in rlimits.iter() {
                     let known = [
-                        "RLIMIT_CPU", "RLIMIT_FSIZE", "RLIMIT_DATA", "RLIMIT_STACK",
-                        "RLIMIT_CORE", "RLIMIT_RSS", "RLIMIT_NPROC", "RLIMIT_NOFILE",
-                        "RLIMIT_MEMLOCK", "RLIMIT_AS", "RLIMIT_LOCKS",
-                        "RLIMIT_SIGPENDING", "RLIMIT_MSGQUEUE", "RLIMIT_NICE",
-                        "RLIMIT_RTPRIO", "RLIMIT_RTTIME",
+                        "RLIMIT_CPU",
+                        "RLIMIT_FSIZE",
+                        "RLIMIT_DATA",
+                        "RLIMIT_STACK",
+                        "RLIMIT_CORE",
+                        "RLIMIT_RSS",
+                        "RLIMIT_NPROC",
+                        "RLIMIT_NOFILE",
+                        "RLIMIT_MEMLOCK",
+                        "RLIMIT_AS",
+                        "RLIMIT_LOCKS",
+                        "RLIMIT_SIGPENDING",
+                        "RLIMIT_MSGQUEUE",
+                        "RLIMIT_NICE",
+                        "RLIMIT_RTPRIO",
+                        "RLIMIT_RTTIME",
                     ];
                     if !known.contains(&rl.ns_type.as_str()) {
-                        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                            format!("unknown rlimit type: {}", rl.ns_type)));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("unknown rlimit type: {}", rl.ns_type),
+                        ));
                     }
                 }
             }
@@ -151,26 +220,51 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
         if let Some(ref seccomp) = linux.seccomp {
             if let Some(ref default_action) = seccomp.default_action {
                 let action_str: String = default_action.clone().into();
-                let valid_actions = ["SCMP_ACT_ALLOW", "SCMP_ACT_ERRNO", "SCMP_ACT_KILL",
-                    "SCMP_ACT_KILL_PROCESS", "SCMP_ACT_KILL_THREAD", "SCMP_ACT_TRAP",
-                    "SCMP_ACT_LOG", "SCMP_ACT_TRACE", "SCMP_ACT_NOTIFY"];
+                let valid_actions = [
+                    "SCMP_ACT_ALLOW",
+                    "SCMP_ACT_ERRNO",
+                    "SCMP_ACT_KILL",
+                    "SCMP_ACT_KILL_PROCESS",
+                    "SCMP_ACT_KILL_THREAD",
+                    "SCMP_ACT_TRAP",
+                    "SCMP_ACT_LOG",
+                    "SCMP_ACT_TRACE",
+                    "SCMP_ACT_NOTIFY",
+                ];
                 if !valid_actions.contains(&action_str.as_str()) {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                        format!("unknown seccomp action: {}", action_str)));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("unknown seccomp action: {}", action_str),
+                    ));
                 }
             }
             // Validate seccomp architectures
             if let Some(ref archs) = seccomp.architectures {
-                let valid_archs = ["SCMP_ARCH_X86", "SCMP_ARCH_X86_64", "SCMP_ARCH_X32",
-                    "SCMP_ARCH_ARM", "SCMP_ARCH_AARCH64", "SCMP_ARCH_MIPS",
-                    "SCMP_ARCH_MIPS64", "SCMP_ARCH_MIPS64N32", "SCMP_ARCH_MIPSEL",
-                    "SCMP_ARCH_MIPSEL64", "SCMP_ARCH_MIPSEL64N32", "SCMP_ARCH_PPC",
-                    "SCMP_ARCH_PPC64", "SCMP_ARCH_PPC64LE", "SCMP_ARCH_S390",
-                    "SCMP_ARCH_S390X", "SCMP_ARCH_RISCV64"];
+                let valid_archs = [
+                    "SCMP_ARCH_X86",
+                    "SCMP_ARCH_X86_64",
+                    "SCMP_ARCH_X32",
+                    "SCMP_ARCH_ARM",
+                    "SCMP_ARCH_AARCH64",
+                    "SCMP_ARCH_MIPS",
+                    "SCMP_ARCH_MIPS64",
+                    "SCMP_ARCH_MIPS64N32",
+                    "SCMP_ARCH_MIPSEL",
+                    "SCMP_ARCH_MIPSEL64",
+                    "SCMP_ARCH_MIPSEL64N32",
+                    "SCMP_ARCH_PPC",
+                    "SCMP_ARCH_PPC64",
+                    "SCMP_ARCH_PPC64LE",
+                    "SCMP_ARCH_S390",
+                    "SCMP_ARCH_S390X",
+                    "SCMP_ARCH_RISCV64",
+                ];
                 for arch in archs.iter() {
                     if !valid_archs.contains(&arch.as_str()) {
-                        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                            format!("unknown seccomp architecture: {}", arch)));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("unknown seccomp architecture: {}", arch),
+                        ));
                     }
                 }
             }
@@ -222,14 +316,19 @@ pub struct ContainerConfig {
 impl ContainerConfig {
     /// Extract all config needed for pre_exec from an OCI spec.
     pub fn from_spec(spec: &OciSpec) -> io::Result<Self> {
-        let root = spec.root.clone()
+        let root = spec
+            .root
+            .clone()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no root in OCI spec"))?;
 
         let linux = spec.linux.clone().unwrap_or_default();
         let process = spec.process.clone().unwrap_or_default();
         let user = process.user.clone().unwrap_or_default();
 
-        let ns_list = linux.namespaces.clone().unwrap_or_else(crate::default_namespaces);
+        let ns_list = linux
+            .namespaces
+            .clone()
+            .unwrap_or_else(crate::default_namespaces);
         let ns_flags = crate::namespace_flags(&ns_list);
 
         // Validate namespace types — reject unknown types
@@ -310,7 +409,8 @@ fn serialize_devices(devices: Option<&[OciLinuxDevice]>) -> String {
 
 fn serialize_ns_paths(namespaces: Option<&[crate::json::OciNamespace]>) -> String {
     match namespaces {
-        Some(ns) => ns.iter()
+        Some(ns) => ns
+            .iter()
             .filter_map(|n| n.path.as_ref().map(|p| format!("{}:{}", n.ns_type, p)))
             .collect::<Vec<_>>()
             .join("\n"),
@@ -321,7 +421,8 @@ fn serialize_ns_paths(namespaces: Option<&[crate::json::OciNamespace]>) -> Strin
 fn format_mapping(mappings: Option<&[OciIdMapping]>) -> String {
     if let Some(maps) = mappings {
         if !maps.is_empty() {
-            return maps.iter()
+            return maps
+                .iter()
                 .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
                 .collect();
         }
@@ -368,21 +469,22 @@ fn default_rootless_mapping() -> String {
 }
 
 fn deserialize_devices(json: &str) -> Vec<OciLinuxDevice> {
-    if json.is_empty() { return Vec::new(); }
-    edgerun_json::from_slice::<Vec<OciLinuxDevice>>(json.as_bytes())
-        .unwrap_or_default()
+    if json.is_empty() {
+        return Vec::new();
+    }
+    edgerun_json::from_slice::<Vec<OciLinuxDevice>>(json.as_bytes()).unwrap_or_default()
 }
 
 /// Map an OCI namespace type string to the corresponding CLONE_NEW* flag.
 pub fn ns_type_to_flag(ns_type: &str) -> Option<i32> {
     use crate::syscalls::ns;
     match ns_type {
-        "mount"   => Some(ns::NEWNS),
-        "cgroup"  => Some(ns::NEWCGROUP),
-        "uts"     => Some(ns::NEWUTS),
-        "ipc"     => Some(ns::NEWIPC),
-        "user"    => Some(ns::NEWUSER),
-        "pid"     => Some(ns::NEWPID),
+        "mount" => Some(ns::NEWNS),
+        "cgroup" => Some(ns::NEWCGROUP),
+        "uts" => Some(ns::NEWUTS),
+        "ipc" => Some(ns::NEWIPC),
+        "user" => Some(ns::NEWUSER),
+        "pid" => Some(ns::NEWPID),
         "network" => Some(ns::NEWNET),
         _ => None,
     }
@@ -552,7 +654,11 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         cfg.mounts.as_deref(),
         cfg.masked_paths.as_deref(),
         cfg.readonly_paths.as_deref(),
-        if devices.is_empty() { None } else { Some(&devices) },
+        if devices.is_empty() {
+            None
+        } else {
+            Some(&devices)
+        },
         mount_label,
     )?;
 
@@ -581,12 +687,16 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     // Rootfs setup needs mount/umount2/pivot_root syscalls that are NOT in the
     // workload allow-list. Seccomp requires no_new_privs (set at step 6).
     // Returns Option<listener_fd> when NOTIFY action is used.
-    let _listener_fd = apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
-        )
-    })?;
+    let _listener_fd =
+        apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "seccomp filter failed to apply: {}. Container startup aborted for security.",
+                    e
+                ),
+            )
+        })?;
     // If NOTIFY is used, listener_fd is returned. The runtime doesn't handle
     // seccomp user notifications — the fd is inherited by the workload.
 
@@ -629,15 +739,31 @@ fn apply_scheduler(sched: &crate::json::OciScheduler) -> io::Result<()> {
         "SCHED_BATCH" => SCHED_BATCH,
         "SCHED_IDLE" => SCHED_IDLE,
         "SCHED_DEADLINE" => SCHED_DEADLINE,
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            format!("unknown scheduler policy: {}", sched.policy))),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("unknown scheduler policy: {}", sched.policy),
+            ))
+        }
     };
 
     let nice = sched.nice.unwrap_or(0);
     let priority = sched.priority.unwrap_or(0) as u32;
-    let runtime = sched.deadline.as_ref().and_then(|d| d.runtime_ns).unwrap_or(0);
-    let deadline = sched.deadline.as_ref().and_then(|d| d.deadline_ns).unwrap_or(0);
-    let period = sched.deadline.as_ref().and_then(|d| d.period_ns).unwrap_or(0);
+    let runtime = sched
+        .deadline
+        .as_ref()
+        .and_then(|d| d.runtime_ns)
+        .unwrap_or(0);
+    let deadline = sched
+        .deadline
+        .as_ref()
+        .and_then(|d| d.deadline_ns)
+        .unwrap_or(0);
+    let period = sched
+        .deadline
+        .as_ref()
+        .and_then(|d| d.period_ns)
+        .unwrap_or(0);
 
     // Build sched_attr struct (48 bytes)
     let mut data = [0u8; 48];
@@ -659,9 +785,23 @@ fn apply_scheduler(sched: &crate::json::OciScheduler) -> io::Result<()> {
     data[40..48].copy_from_slice(&period.to_le_bytes());
 
     #[cfg(target_arch = "x86_64")]
-    let ret = unsafe { libc::syscall(314, 0i32 /* self */, &data as *const _ as *const u8, 0u64 /* flags */) as i32 };
+    let ret = unsafe {
+        libc::syscall(
+            314,
+            0i32, /* self */
+            &data as *const _ as *const u8,
+            0u64, /* flags */
+        ) as i32
+    };
     #[cfg(target_arch = "aarch64")]
-    let ret = unsafe { libc::syscall(274, 0i32 /* self */, &data as *const _ as *const u8, 0u64 /* flags */) as i32 };
+    let ret = unsafe {
+        libc::syscall(
+            274,
+            0i32, /* self */
+            &data as *const _ as *const u8,
+            0u64, /* flags */
+        ) as i32
+    };
 
     if ret != 0 {
         Err(io::Error::last_os_error())
@@ -722,15 +862,18 @@ fn setup_intel_rdt(rdt: &crate::json::OciLinuxIntelRdt) -> io::Result<()> {
 }
 
 pub(crate) fn join_explicit_namespaces(ns_paths: &str) -> io::Result<()> {
-    if ns_paths.is_empty() { return Ok(()); }
+    if ns_paths.is_empty() {
+        return Ok(());
+    }
     for entry in ns_paths.split('\n') {
         if let Some((ns_type, path)) = entry.split_once(':') {
             if let Some(flag) = ns_type_to_flag(ns_type) {
-                let fd = fs::File::open(path)
-                    .map_err(|e| io::Error::new(
+                let fd = fs::File::open(path).map_err(|e| {
+                    io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!("cannot open namespace {}: {}", path, e)
-                    ))?;
+                        format!("cannot open namespace {}: {}", path, e),
+                    )
+                })?;
                 do_setns(fd.as_raw_fd(), flag)?;
             }
         }
@@ -791,10 +934,14 @@ fn write_gid_map(content: &str) -> io::Result<()> {
 
 /// Set the NIS domain name via setdomainname(2) syscall.
 fn do_set_domainname(name: &str) -> io::Result<()> {
-    let n = std::ffi::CString::new(name)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let n =
+        std::ffi::CString::new(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { libc::setdomainname(n.as_ptr(), n.as_bytes().len()) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Apply I/O priority via ioprio_set(2) syscall (OCI 1.1.0).
@@ -813,11 +960,19 @@ fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
     let encoded = (ioprio.class << 13) | (priority & 7);
 
     #[cfg(target_arch = "x86_64")]
-    let ret = unsafe { libc::syscall(251, 1i32 /* PRIO_PROCESS */, 0i32, encoded) as i32 };
+    let ret = unsafe {
+        libc::syscall(251, 1i32 /* PRIO_PROCESS */, 0i32, encoded) as i32
+    };
     #[cfg(target_arch = "aarch64")]
-    let ret = unsafe { libc::syscall(31, 1i32 /* PRIO_PROCESS */, 0i32, encoded) as i32 };
+    let ret = unsafe {
+        libc::syscall(31, 1i32 /* PRIO_PROCESS */, 0i32, encoded) as i32
+    };
 
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 // ===========================================================================
@@ -909,7 +1064,11 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
         cfg.mounts.as_deref(),
         cfg.masked_paths.as_deref(),
         cfg.readonly_paths.as_deref(),
-        if devices.is_empty() { None } else { Some(&devices) },
+        if devices.is_empty() {
+            None
+        } else {
+            Some(&devices)
+        },
         mount_label,
     )?;
 
@@ -934,12 +1093,16 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
     do_setuid(cfg.uid)?;
 
     // 16. Seccomp
-    let _listener_fd = apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
-        )
-    })?;
+    let _listener_fd =
+        apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "seccomp filter failed to apply: {}. Container startup aborted for security.",
+                    e
+                ),
+            )
+        })?;
 
     // 17. Intel RDT
     if let Some(ref rdt) = cfg.intel_rdt {
@@ -954,17 +1117,22 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
 /// In rootless mode, the user namespace was already created by the parent,
 /// so we skip joining it (and can't join it anyway — setns on user ns is restricted).
 fn join_explicit_namespaces_non_user(ns_paths: &str) -> io::Result<()> {
-    if ns_paths.is_empty() { return Ok(()); }
+    if ns_paths.is_empty() {
+        return Ok(());
+    }
     for entry in ns_paths.split('\n') {
         if let Some((ns_type, path)) = entry.split_once(':') {
             // Skip user namespace — can't join via setns after creation
-            if ns_type == "user" { continue; }
+            if ns_type == "user" {
+                continue;
+            }
             if let Some(flag) = ns_type_to_flag(ns_type) {
-                let fd = fs::File::open(path)
-                    .map_err(|e| io::Error::new(
+                let fd = fs::File::open(path).map_err(|e| {
+                    io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!("cannot open namespace {}: {}", path, e)
-                    ))?;
+                        format!("cannot open namespace {}: {}", path, e),
+                    )
+                })?;
                 do_setns(fd.as_raw_fd(), flag)?;
             }
         }
@@ -979,7 +1147,10 @@ fn join_explicit_namespaces_non_user(ns_paths: &str) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::json::{OciProcess, OciRoot, OciCapabilities, OciNamespace, OciRlimit, OciLinuxSeccomp, OciSeccompAction};
+    use crate::json::{
+        OciCapabilities, OciLinuxSeccomp, OciNamespace, OciProcess, OciRlimit, OciRoot,
+        OciSeccompAction,
+    };
 
     fn minimal_spec() -> OciSpec {
         OciSpec {
@@ -989,7 +1160,10 @@ mod tests {
                 args: Some(vec!["/bin/true".into()]),
                 ..Default::default()
             }),
-            root: Some(OciRoot { path: "/rootfs".into(), readonly: None }),
+            root: Some(OciRoot {
+                path: "/rootfs".into(),
+                readonly: None,
+            }),
             hostname: None,
             linux: None,
             mounts: None,
@@ -1007,21 +1181,30 @@ mod tests {
     fn validate_spec_rejects_missing_root() {
         let mut spec = minimal_spec();
         spec.root = None;
-        assert!(validate_spec(&spec).unwrap_err().to_string().contains("missing root"));
+        assert!(validate_spec(&spec)
+            .unwrap_err()
+            .to_string()
+            .contains("missing root"));
     }
 
     #[test]
     fn validate_spec_rejects_missing_process() {
         let mut spec = minimal_spec();
         spec.process = None;
-        assert!(validate_spec(&spec).unwrap_err().to_string().contains("missing process"));
+        assert!(validate_spec(&spec)
+            .unwrap_err()
+            .to_string()
+            .contains("missing process"));
     }
 
     #[test]
     fn validate_spec_rejects_empty_args() {
         let mut spec = minimal_spec();
         spec.process.as_mut().unwrap().args = Some(vec![]);
-        assert!(validate_spec(&spec).unwrap_err().to_string().contains("args must not be empty"));
+        assert!(validate_spec(&spec)
+            .unwrap_err()
+            .to_string()
+            .contains("args must not be empty"));
     }
 
     #[test]
@@ -1031,7 +1214,10 @@ mod tests {
             effective: Some(vec!["CAP_BOGUS".into()]),
             ..Default::default()
         });
-        assert!(validate_spec(&spec).unwrap_err().to_string().contains("unknown capability: CAP_BOGUS"));
+        assert!(validate_spec(&spec)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown capability: CAP_BOGUS"));
     }
 
     #[test]
@@ -1054,7 +1240,10 @@ mod tests {
             }]),
             ..Default::default()
         });
-        assert!(validate_spec(&spec).unwrap_err().to_string().contains("unknown namespace type: bogus"));
+        assert!(validate_spec(&spec)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown namespace type: bogus"));
     }
 
     #[test]
@@ -1081,7 +1270,10 @@ mod tests {
             hard: 1024,
             soft: 512,
         }]);
-        assert!(validate_spec(&spec).unwrap_err().to_string().contains("unknown rlimit type: RLIMIT_BOGUS"));
+        assert!(validate_spec(&spec)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown rlimit type: RLIMIT_BOGUS"));
     }
 
     #[test]
@@ -1105,7 +1297,10 @@ mod tests {
     #[test]
     fn host_arch_is_known() {
         let arch = host_arch();
-        assert!(matches!(arch, "amd64" | "arm64" | "riscv64" | "arm" | "unknown"));
+        assert!(matches!(
+            arch,
+            "amd64" | "arm64" | "riscv64" | "arm" | "unknown"
+        ));
     }
 
     #[test]
@@ -1113,9 +1308,13 @@ mod tests {
         use crate::json::OciPlatform;
         let platform = OciPlatform {
             os: Some("linux".into()),
-            arch: Some(if cfg!(target_arch = "x86_64") { "amd64".into() }
-                     else if cfg!(target_arch = "aarch64") { "arm64".into() }
-                     else { "unknown".into() }),
+            arch: Some(if cfg!(target_arch = "x86_64") {
+                "amd64".into()
+            } else if cfg!(target_arch = "aarch64") {
+                "arm64".into()
+            } else {
+                "unknown".into()
+            }),
             os_version: None,
             os_features: None,
         };

@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::io;
 
 use crate::DnsQuery;
-use edgerun_encoding::base64;
-use edgerun_crypto::sha2::{Sha256, Digest};
 use edgerun_crypto::rsa;
+use edgerun_crypto::sha2::{Digest, Sha256};
+use edgerun_encoding::base64;
 
 /// Result of a DKIM verification.
 #[derive(Debug, Clone)]
@@ -126,10 +126,20 @@ fn parse_dkim_tag_list(s: &str) -> io::Result<DkimSignature> {
         .unwrap_or_default();
 
     let signature = base64::standard_decode(tags.get("b").map(|s| s.as_str()).unwrap_or(""))
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid DKIM signature: {}", e)))?;
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid DKIM signature: {}", e),
+            )
+        })?;
 
     let body_hash = base64::standard_decode(tags.get("bh").map(|s| s.as_str()).unwrap_or(""))
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid DKIM body hash: {}", e)))?;
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid DKIM body hash: {}", e),
+            )
+        })?;
 
     let length = tags.get("l").and_then(|l| l.parse::<usize>().ok());
 
@@ -201,15 +211,24 @@ pub async fn verify_signature<D: DnsQuery>(
     }
 
     // Use RSA verification from edgerun-crypto
-    use rsa::RsaPublicKey;
     use rsa::pkcs8::DecodePublicKey;
-    let rsa_key = RsaPublicKey::from_public_key_der(&public_key)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid RSA key: {}", e)))?;
+    use rsa::RsaPublicKey;
+    let rsa_key = RsaPublicKey::from_public_key_der(&public_key).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid RSA key: {}", e),
+        )
+    })?;
 
     let verifying_key = edgerun_crypto::rsa::Pkcs1v15Sign::new::<Sha256>();
     rsa_key
         .verify(verifying_key, &hash, &sig.signature)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("signature verification failed: {}", e)))?;
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("signature verification failed: {}", e),
+            )
+        })?;
 
     Ok(())
 }
@@ -247,7 +266,11 @@ fn canonicalize_body(body: &[u8], canon: Option<&str>) -> io::Result<Vec<u8>> {
 }
 
 /// Canonicalize headers per RFC 6376.
-fn canonicalize_headers(headers: &[u8], sig: &DkimSignature, header_list: &[String]) -> io::Result<Vec<u8>> {
+fn canonicalize_headers(
+    headers: &[u8],
+    sig: &DkimSignature,
+    header_list: &[String],
+) -> io::Result<Vec<u8>> {
     let (header_canon, _) = parse_canonicalization(sig.canonicalization.as_deref());
 
     let headers_str = String::from_utf8_lossy(headers);
@@ -276,7 +299,11 @@ fn canonicalize_headers(headers: &[u8], sig: &DkimSignature, header_list: &[Stri
                     if let Some(colon) = line.find(':') {
                         let name = line[..colon].trim().to_lowercase();
                         let value = line[colon + 1..].trim();
-                        format!("{}: {}", name, value.split_whitespace().collect::<Vec<_>>().join(" "))
+                        format!(
+                            "{}: {}",
+                            name,
+                            value.split_whitespace().collect::<Vec<_>>().join(" ")
+                        )
                     } else {
                         line.to_lowercase()
                     }
@@ -378,8 +405,12 @@ fn parse_dkim_key_record(record: &str) -> io::Result<Vec<u8>> {
         ));
     }
 
-    base64::standard_decode(pub_key_b64)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid DKIM key: {}", e)))
+    base64::standard_decode(pub_key_b64).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid DKIM key: {}", e),
+        )
+    })
 }
 
 #[cfg(test)]

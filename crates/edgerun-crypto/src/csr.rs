@@ -2,8 +2,8 @@
 // PKCS#10 Certificate Signing Request (CSR)
 // ---------------------------------------------------------------------------
 
-use p256::ecdsa::SigningKey;
 use crate::CryptoError;
+use p256::ecdsa::SigningKey;
 
 /// Generate a PKCS#10 CSR for the given domains using P-256 ECDSA.
 ///
@@ -44,10 +44,13 @@ pub fn generate_csr_pem(
         .map_err(|e| CryptoError::CertificateError(e.to_string()))?;
 
     // Generate CSR
-    let csr = params.serialize_request(&key_pair)
+    let csr = params
+        .serialize_request(&key_pair)
         .map_err(|e: RcgenError| CryptoError::CertificateError(e.to_string()))?;
 
     // Get PEM encoding
-    let pem_str = csr.pem().map_err(|e| CryptoError::CertificateError(e.to_string()))?;
+    let pem_str = csr
+        .pem()
+        .map_err(|e| CryptoError::CertificateError(e.to_string()))?;
     Ok(pem_str)
 }

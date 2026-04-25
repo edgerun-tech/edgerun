@@ -190,7 +190,10 @@ mod tests {
         assert_eq!(info.provider, "evdev");
         assert_eq!(info.instance_id, "event1");
         assert_eq!(info.kind, InputDeviceKind::Touch);
-        assert_eq!(info.physical_path.as_deref(), Some("usb-0000:00:14.0-2/input0"));
+        assert_eq!(
+            info.physical_path.as_deref(),
+            Some("usb-0000:00:14.0-2/input0")
+        );
         assert_eq!(info.unique_id.as_deref(), Some("abcdef123"));
     }
 

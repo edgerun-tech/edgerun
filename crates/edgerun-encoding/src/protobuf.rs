@@ -82,7 +82,9 @@ pub trait SignableMessage: CanonicalEncode {
 /// let digest = edgerun_crypto::sha256(&canonical);
 /// // sign digest...
 /// ```
-pub fn canonical_bytes_for_signing<M: SignableMessage>(message: &M) -> Result<Vec<u8>, CanonicalError> {
+pub fn canonical_bytes_for_signing<M: SignableMessage>(
+    message: &M,
+) -> Result<Vec<u8>, CanonicalError> {
     let cleared = message.clear_signature();
     Ok(cleared.encode_to_vec())
 }
@@ -239,7 +241,10 @@ mod tests {
         assert_eq!(encode_varint(127), vec![0x7F]);
         assert_eq!(encode_varint(128), vec![0x80, 0x01]);
         assert_eq!(encode_varint(300), vec![0xAC, 0x02]);
-        assert_eq!(encode_varint(u64::MAX), vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01]);
+        assert_eq!(
+            encode_varint(u64::MAX),
+            vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01]
+        );
     }
 
     #[test]
@@ -260,7 +265,13 @@ mod tests {
     #[test]
     fn test_varint_roundtrip() {
         let test_values: Vec<u64> = vec![
-            0, 1, 127, 128, 255, 256, 300,
+            0,
+            1,
+            127,
+            128,
+            255,
+            256,
+            300,
             u16::MAX as u64,
             u32::MAX as u64,
             u64::MAX,

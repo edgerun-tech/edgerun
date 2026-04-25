@@ -7,7 +7,9 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 
-use crate::protocol::{accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult};
+use crate::protocol::{
+    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
+};
 
 /// Binary-encode input events for remote transport.
 pub fn encode_input_events(events: &[InputEventRecord]) -> Vec<u8> {

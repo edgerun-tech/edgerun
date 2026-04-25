@@ -14,16 +14,16 @@
 //! - Multicast: ff02::1:2 (All_DHCP_Relay_Agents_and_Servers)
 //! - Multicast: ff05::1:3 (All_DHCP_Servers, site-local)
 
-pub mod message;
+pub mod client;
 pub mod duid;
+pub mod lease;
+pub mod message;
 pub mod options;
 pub mod server;
-pub mod client;
-pub mod lease;
 
-pub use message::{Dhcpv6Message, Dhcpv6MsgType, TransactionId};
-pub use duid::{Duid, DuidType};
-pub use options::{Dhcpv6Option, IaNaOption, IaTaOption, IaPdOption};
-pub use server::Dhcpv6Server;
 pub use client::Dhcpv6Client;
-pub use lease::{Dhcpv6Lease, PrefixLease, LeaseState};
+pub use duid::{Duid, DuidType};
+pub use lease::{Dhcpv6Lease, LeaseState, PrefixLease};
+pub use message::{Dhcpv6Message, Dhcpv6MsgType, TransactionId};
+pub use options::{Dhcpv6Option, IaNaOption, IaPdOption, IaTaOption};
+pub use server::Dhcpv6Server;

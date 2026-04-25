@@ -18,7 +18,7 @@ pub mod queue;
 pub mod relay;
 pub mod worker;
 
-pub use bounce::{BounceConfig, send_bounce};
+pub use bounce::{send_bounce, BounceConfig};
 pub use queue::MailIndex;
 pub use relay::OutboundRelay;
 pub use worker::{DeliveryWorker, DeliveryWorkerConfig};

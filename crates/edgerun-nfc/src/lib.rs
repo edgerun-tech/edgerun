@@ -180,10 +180,18 @@ impl NdefMessage {
             let has_id = !record.id.is_empty() && is_first;
 
             let mut flags = tnf;
-            if is_first { flags |= 0x80; } // MB
-            if is_last  { flags |= 0x40; } // ME
-            if is_short { flags |= 0x10; } // SR
-            if has_id   { flags |= 0x08; } // IL
+            if is_first {
+                flags |= 0x80;
+            } // MB
+            if is_last {
+                flags |= 0x40;
+            } // ME
+            if is_short {
+                flags |= 0x10;
+            } // SR
+            if has_id {
+                flags |= 0x08;
+            } // IL
 
             out.push(flags);
             out.push(record.type_name.len() as u8);
@@ -241,12 +249,9 @@ impl NdefMessage {
                 if pos + 4 > data.len() {
                     return None;
                 }
-                let len = u32::from_be_bytes([
-                    data[pos],
-                    data[pos + 1],
-                    data[pos + 2],
-                    data[pos + 3],
-                ]) as usize;
+                let len =
+                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
+                        as usize;
                 pos += 4;
                 len
             };
@@ -455,13 +460,19 @@ mod tests {
         };
         let bytes = msg.to_bytes();
         let parsed = NdefMessage::from_bytes(&bytes).unwrap();
-        assert_eq!(parsed.records[0].as_uri().as_deref(), Some("https://example.com"));
+        assert_eq!(
+            parsed.records[0].as_uri().as_deref(),
+            Some("https://example.com")
+        );
     }
 
     #[test]
     fn ndef_mime_roundtrip() {
         let msg = NdefMessage {
-            records: vec![NdefRecord::mime_record("application/json", b"{\"key\":\"value\"}")],
+            records: vec![NdefRecord::mime_record(
+                "application/json",
+                b"{\"key\":\"value\"}",
+            )],
         };
         let bytes = msg.to_bytes();
         let parsed = NdefMessage::from_bytes(&bytes).unwrap();

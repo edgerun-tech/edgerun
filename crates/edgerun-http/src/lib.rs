@@ -78,11 +78,11 @@
 // ---------------------------------------------------------------------------
 // Shared HTTP types
 // ---------------------------------------------------------------------------
+pub mod error;
 pub mod header;
 pub mod method;
 pub mod status;
 pub mod uri;
-pub mod error;
 
 pub use error::{Error, HttpError, Result};
 pub use header::{is_tchar, HeaderMap, HeaderName, HeaderValue};
@@ -93,25 +93,25 @@ pub use uri::{Scheme, Uri};
 // ---------------------------------------------------------------------------
 // Unified API — cross-protocol server, client, handler, request, response
 // ---------------------------------------------------------------------------
+pub mod client;
 pub mod handler;
 pub mod request;
 pub mod response;
 pub mod server;
-pub mod client;
 pub mod static_handler;
 
-pub use handler::{Handler, into_handler, into_handler_async, SyncHandler, AsyncHandler};
+pub use client::{HttpClient, HttpVersion};
+pub use handler::{into_handler, into_handler_async, AsyncHandler, Handler, SyncHandler};
 pub use request::{Request, RequestBuilder};
 pub use response::Response;
-pub use server::{HttpServer, BoundHttpServer, TlsCertificate};
-pub use client::{HttpClient, HttpVersion};
-pub use static_handler::{StaticHandler, serve_static};
+pub use server::{BoundHttpServer, HttpServer, TlsCertificate};
+pub use static_handler::{serve_static, StaticHandler};
 
 // ---------------------------------------------------------------------------
 // Middleware system
 // ---------------------------------------------------------------------------
 pub mod middleware;
-pub use middleware::{Extensions, Middleware, Next, Chain, middleware_fn, FnMiddleware};
+pub use middleware::{middleware_fn, Chain, Extensions, FnMiddleware, Middleware, Next};
 
 // ---------------------------------------------------------------------------
 // Connection middleware system (gated by feature)
@@ -120,8 +120,7 @@ pub use middleware::{Extensions, Middleware, Next, Chain, middleware_fn, FnMiddl
 pub mod connection_middleware;
 #[cfg(feature = "connection-middleware")]
 pub use connection_middleware::{
-    ConnectionChain, ConnectionHandler, ConnectionMiddleware,
-    PassThroughHandler, MiddlewareAdapter,
+    ConnectionChain, ConnectionHandler, ConnectionMiddleware, MiddlewareAdapter, PassThroughHandler,
 };
 
 // ---------------------------------------------------------------------------
@@ -129,8 +128,8 @@ pub use connection_middleware::{
 // ---------------------------------------------------------------------------
 pub mod client_middleware;
 pub use client_middleware::{
-    ClientExtensions, ClientRequest, ClientMiddleware, ClientNext, ClientTransport,
-    client_middleware_fn, FnClientMiddleware, Chain as ClientChain, Client,
+    client_middleware_fn, Chain as ClientChain, Client, ClientExtensions, ClientMiddleware,
+    ClientNext, ClientRequest, ClientTransport, FnClientMiddleware,
 };
 
 // ---------------------------------------------------------------------------

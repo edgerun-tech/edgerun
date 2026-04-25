@@ -287,8 +287,13 @@ mod real {
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
             // Load the keystore (null KeyStore.LoadParameter means use default)
-            env.call_method(&keystore, "load", "(Ljava/security/KeyStore$LoadStoreParameter;)V", &[])
-                .map_err(|e| AndroidKeystoreError::Provider(format!("keystore.load failed: {e}")))?;
+            env.call_method(
+                &keystore,
+                "load",
+                "(Ljava/security/KeyStore$LoadStoreParameter;)V",
+                &[],
+            )
+            .map_err(|e| AndroidKeystoreError::Provider(format!("keystore.load failed: {e}")))?;
 
             // Check if key exists
             let contains = env
@@ -334,12 +339,7 @@ mod real {
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
             let public_key = env
-                .call_method(
-                    &cert,
-                    "getPublicKey",
-                    "()Ljava/security/PublicKey;",
-                    &[],
-                )
+                .call_method(&cert, "getPublicKey", "()Ljava/security/PublicKey;", &[])
                 .map_err(|e| AndroidKeystoreError::Provider(format!("getPublicKey failed: {e}")))?
                 .l()
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
@@ -378,18 +378,10 @@ mod real {
             algorithm: &AndroidKeystoreSignatureAlgorithm,
         ) -> Result<(), AndroidKeystoreError> {
             let (key_type, digest, key_size) = match algorithm {
-                AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256 => {
-                    ("EC", "SHA256", 256)
-                }
-                AndroidKeystoreSignatureAlgorithm::EcdsaP384Sha384 => {
-                    ("EC", "SHA384", 384)
-                }
-                AndroidKeystoreSignatureAlgorithm::RsaPkcs1v15Sha256 => {
-                    ("RSA", "SHA256", 2048)
-                }
-                AndroidKeystoreSignatureAlgorithm::RsaPssSha256 => {
-                    ("RSA", "SHA256", 2048)
-                }
+                AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256 => ("EC", "SHA256", 256),
+                AndroidKeystoreSignatureAlgorithm::EcdsaP384Sha384 => ("EC", "SHA384", 384),
+                AndroidKeystoreSignatureAlgorithm::RsaPkcs1v15Sha256 => ("RSA", "SHA256", 2048),
+                AndroidKeystoreSignatureAlgorithm::RsaPssSha256 => ("RSA", "SHA256", 2048),
                 AndroidKeystoreSignatureAlgorithm::Eddsa => {
                     // EdDSA is not supported by Android Keystore — fall back to EC P-256
                     return Err(AndroidKeystoreError::UnsupportedAlgorithm(
@@ -406,7 +398,9 @@ mod real {
             // Build KeyGenParameterSpec
             let builder_class = env
                 .find_class("android/security/keystore/KeyGenParameterSpec$Builder")
-                .map_err(|e| AndroidKeystoreError::Provider(format!("find_class Builder failed: {e}")))?;
+                .map_err(|e| {
+                    AndroidKeystoreError::Provider(format!("find_class Builder failed: {e}"))
+                })?;
 
             let builder = env
                 .new_object(
@@ -417,7 +411,9 @@ mod real {
                         JValue::Int(3), // PURPOSE_SIGN = 3
                     ],
                 )
-                .map_err(|e| AndroidKeystoreError::Provider(format!("new_object Builder failed: {e}")))?;
+                .map_err(|e| {
+                    AndroidKeystoreError::Provider(format!("new_object Builder failed: {e}"))
+                })?;
 
             // Set algorithm
             let builder = env
@@ -462,20 +458,27 @@ mod real {
                         "(I)Landroid/security/keystore/KeyGenParameterSpec$Builder;",
                         &[JValue::Int(padding)],
                     )
-                    .map_err(|e| AndroidKeystoreError::Provider(format!("setSignaturePaddings failed: {e}")));
+                    .map_err(|e| {
+                        AndroidKeystoreError::Provider(format!("setSignaturePaddings failed: {e}"))
+                    });
             }
 
             // Build the spec
             let spec = env
-                .call_method(&builder, "build", "()Landroid/security/keystore/KeyGenParameterSpec;", &[])
+                .call_method(
+                    &builder,
+                    "build",
+                    "()Landroid/security/keystore/KeyGenParameterSpec;",
+                    &[],
+                )
                 .map_err(|e| AndroidKeystoreError::Provider(format!("build failed: {e}")))?
                 .l()
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
             // Get KeyGenerator and generate
-            let key_gen_class = env
-                .find_class("javax/crypto/KeyGenerator")
-                .map_err(|e| AndroidKeystoreError::Provider(format!("find_class KeyGenerator failed: {e}")))?;
+            let key_gen_class = env.find_class("javax/crypto/KeyGenerator").map_err(|e| {
+                AndroidKeystoreError::Provider(format!("find_class KeyGenerator failed: {e}"))
+            })?;
             let key_gen = env
                 .call_static_method(
                     key_gen_class,
@@ -483,7 +486,9 @@ mod real {
                     "(Ljava/lang/String;)Ljavax/crypto/KeyGenerator;",
                     &[JValue::Object(&env.new_string("AndroidKeyStore").unwrap())],
                 )
-                .map_err(|e| AndroidKeystoreError::Provider(format!("KeyGenerator.getInstance failed: {e}")))?
+                .map_err(|e| {
+                    AndroidKeystoreError::Provider(format!("KeyGenerator.getInstance failed: {e}"))
+                })?
                 .l()
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
@@ -493,7 +498,9 @@ mod real {
                 "(Ljava/security/spec/AlgorithmParameterSpec;)V",
                 &[JValue::Object(&spec)],
             )
-            .map_err(|e| AndroidKeystoreError::Provider(format!("KeyGenerator.init failed: {e}")))?;
+            .map_err(|e| {
+                AndroidKeystoreError::Provider(format!("KeyGenerator.init failed: {e}"))
+            })?;
 
             env.call_method(&key_gen, "generateKey", "()Ljava/security/Key;", &[])
                 .map_err(|e| AndroidKeystoreError::Provider(format!("generateKey failed: {e}")))?;
@@ -514,7 +521,9 @@ mod real {
                     "(Ljava/lang/String;)[Ljava/security/cert/Certificate;",
                     &[JValue::Object(&env.new_string(alias).unwrap())],
                 )
-                .map_err(|e| AndroidKeystoreError::Provider(format!("getCertificateChain failed: {e}")))?
+                .map_err(|e| {
+                    AndroidKeystoreError::Provider(format!("getCertificateChain failed: {e}"))
+                })?
                 .l()
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
@@ -535,26 +544,23 @@ mod real {
             let mut chain = Vec::with_capacity(len);
             let cert_objs = env
                 .convert_object_array(&chain_array, "java/security/cert/Certificate")
-                .map_err(|e| AndroidKeystoreError::Provider(format!("convert_object_array failed: {e}")))?;
+                .map_err(|e| {
+                    AndroidKeystoreError::Provider(format!("convert_object_array failed: {e}"))
+                })?;
 
             for cert_obj in cert_objs {
                 if cert_obj.is_null() {
                     continue;
                 }
                 let encoded = env
-                    .call_method(
-                        &cert_obj,
-                        "getEncoded",
-                        "()[B",
-                        &[],
-                    )
+                    .call_method(&cert_obj, "getEncoded", "()[B", &[])
                     .map_err(|e| AndroidKeystoreError::Provider(format!("getEncoded failed: {e}")))?
                     .l()
                     .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
-                let bytes = env
-                    .convert_byte_array(encoded.as_raw())
-                    .map_err(|e| AndroidKeystoreError::Provider(format!("convert_byte_array failed: {e}")))?;
+                let bytes = env.convert_byte_array(encoded.as_raw()).map_err(|e| {
+                    AndroidKeystoreError::Provider(format!("convert_byte_array failed: {e}"))
+                })?;
                 chain.push(bytes);
             }
 
@@ -599,9 +605,9 @@ mod real {
                 .l()
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
-            let public_key_bytes = env
-                .convert_byte_array(encoded.as_raw())
-                .map_err(|e| AndroidKeystoreError::Provider(format!("convert_byte_array failed: {e}")))?;
+            let public_key_bytes = env.convert_byte_array(encoded.as_raw()).map_err(|e| {
+                AndroidKeystoreError::Provider(format!("convert_byte_array failed: {e}"))
+            })?;
 
             Ok(AndroidKeystoreKeyInfo {
                 alias: self.alias.clone(),
@@ -631,9 +637,9 @@ mod real {
                 }
             };
 
-            let sig_class = env
-                .find_class("java/security/Signature")
-                .map_err(|e| AndroidKeystoreError::Provider(format!("find_class Signature failed: {e}")))?;
+            let sig_class = env.find_class("java/security/Signature").map_err(|e| {
+                AndroidKeystoreError::Provider(format!("find_class Signature failed: {e}"))
+            })?;
 
             let sig = env
                 .call_static_method(
@@ -654,9 +660,9 @@ mod real {
             )
             .map_err(|e| AndroidKeystoreError::Provider(format!("initSign failed: {e}")))?;
 
-            let msg_arr = env
-                .byte_array_from_slice(message)
-                .map_err(|e| AndroidKeystoreError::Provider(format!("byte_array_from_slice failed: {e}")))?;
+            let msg_arr = env.byte_array_from_slice(message).map_err(|e| {
+                AndroidKeystoreError::Provider(format!("byte_array_from_slice failed: {e}"))
+            })?;
 
             env.call_method(&sig, "update", "([B)V", &[JValue::Object(&msg_arr)])
                 .map_err(|e| AndroidKeystoreError::Provider(format!("update failed: {e}")))?;
@@ -668,7 +674,9 @@ mod real {
                 .map_err(|e| AndroidKeystoreError::Provider(format!("l() failed: {e}")))?;
 
             env.convert_byte_array(sig_bytes.as_raw())
-                .map_err(|e| AndroidKeystoreError::Provider(format!("convert_byte_array failed: {e}")))?
+                .map_err(|e| {
+                    AndroidKeystoreError::Provider(format!("convert_byte_array failed: {e}"))
+                })?
                 .into()
                 .map(Ok)
                 .unwrap_or_else(|| Err(AndroidKeystoreError::Provider("sign returned null".into())))
@@ -677,4 +685,4 @@ mod real {
 }
 
 #[cfg(feature = "android-real")]
-pub use real::{JniKeystoreKey, init_keystore_jvm};
+pub use real::{init_keystore_jvm, JniKeystoreKey};

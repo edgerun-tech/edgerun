@@ -6,13 +6,8 @@
 use std::sync::Arc;
 
 use edgerun_crypto::{
-    p256,
-    pem_encode,
-    p256_signing_key_from_pem, p256_signing_key_from_der,
-    p256_signing_key_to_pem,
-    load_cert_and_key_from_pem,
-    x509_cert_from_pem,
-    CryptoError,
+    load_cert_and_key_from_pem, p256, p256_signing_key_from_der, p256_signing_key_from_pem,
+    p256_signing_key_to_pem, pem_encode, x509_cert_from_pem, CryptoError,
 };
 
 /// A certificate with an associated ECDSA P-256 signing key.
@@ -107,4 +102,3 @@ pub fn signing_key_from_pem(pem_str: &str) -> Result<p256::ecdsa::SigningKey, Cr
 pub fn signing_key_to_pem(key: &p256::ecdsa::SigningKey) -> Result<String, CryptoError> {
     p256_signing_key_to_pem(key)
 }
-

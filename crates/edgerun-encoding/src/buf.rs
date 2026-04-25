@@ -98,8 +98,7 @@ pub trait Buf {
     fn get_u64(&mut self) -> u64 {
         let bytes = self.chunk();
         let val = u64::from_be_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]);
         self.advance(8);
         val
@@ -109,8 +108,7 @@ pub trait Buf {
     fn get_u64_le(&mut self) -> u64 {
         let bytes = self.chunk();
         let val = u64::from_le_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]);
         self.advance(8);
         val
@@ -285,7 +283,9 @@ impl BufMut for Vec<u8> {
     #[inline]
     fn advance(&mut self, n: usize) {
         let new_len = (self.len() + n).min(self.capacity());
-        unsafe { self.set_len(new_len); }
+        unsafe {
+            self.set_len(new_len);
+        }
     }
 }
 

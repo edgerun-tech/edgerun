@@ -92,8 +92,7 @@ impl<R: edgerun_rt::AsyncRead + Unpin> ImapReader<R> {
     /// Read exactly `n` bytes as a UTF-8 string.
     pub async fn read_exact_string(&mut self, n: usize) -> io::Result<String> {
         let bytes = self.read_exact_bytes(n).await?;
-        String::from_utf8(bytes)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 }
 
@@ -135,11 +134,10 @@ fn tokenize_imap(line: &str) -> Vec<String> {
             current.push(ch);
         } else if ch == '(' {
             in_paren += 1;
-            if in_paren == 1
-                && !current.is_empty() {
-                    tokens.push(current);
-                    current = String::new();
-                }
+            if in_paren == 1 && !current.is_empty() {
+                tokens.push(current);
+                current = String::new();
+            }
             current.push(ch);
         } else if ch == ')' {
             current.push(ch);
@@ -218,8 +216,10 @@ pub fn format_untagged(message: &str) -> String {
 /// Format an IMAP greeting (untagged OK).
 pub fn format_greeting(capabilities: &[&str]) -> String {
     let mut resp = String::new();
-    resp.push_str(&format_untagged(&format!("OK [CAPABILITY {}] IMAP4rev1 Service Ready",
-        capabilities.join(" "))));
+    resp.push_str(&format_untagged(&format!(
+        "OK [CAPABILITY {}] IMAP4rev1 Service Ready",
+        capabilities.join(" ")
+    )));
     resp
 }
 
@@ -299,16 +299,7 @@ pub fn format_envelope(envelope: &crate::imap::types::Envelope) -> String {
 
     format_untagged(&format!(
         "ENVELOPE {} {} {} {} {} {} {} {} {} {}",
-        date,
-        subject,
-        from,
-        sender,
-        reply_to,
-        to,
-        cc,
-        bcc,
-        in_reply_to,
-        message_id,
+        date, subject, from, sender, reply_to, to, cc, bcc, in_reply_to, message_id,
     ))
 }
 

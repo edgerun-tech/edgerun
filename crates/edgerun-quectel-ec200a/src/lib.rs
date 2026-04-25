@@ -87,7 +87,6 @@ pub enum NetworkType {
     Auto = 4,
 }
 
-
 /// Module operating state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -103,7 +102,6 @@ pub enum State {
     Connected = 6,
 }
 
-
 /// DTA (Direct Terminal Access) network configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -113,7 +111,6 @@ pub enum DtaNetwork {
     Disabled = 0,
     Enabled = 1,
 }
-
 
 /// EC200A module instance
 pub struct Ec200a<M: ModelVariant> {

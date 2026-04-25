@@ -13,7 +13,6 @@ use std::path::Path;
 use crate::json::OciLinuxNetworkPriority;
 use crate::syscalls::*;
 
-
 // For cgroup skb programs, context is struct __sk_buff:
 //   priority is at offset 0x18 (24 bytes) from the __sk_buff base
 const SKB_PRIORITY_OFF: i16 = 0x18;
@@ -125,7 +124,10 @@ pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8
 }
 
 /// Apply network priority eBPF to a cgroup.
-pub fn setup_netprio_cgroup_ebpf(cgroup_path: &Path, priorities: &[OciLinuxNetworkPriority]) -> io::Result<()> {
+pub fn setup_netprio_cgroup_ebpf(
+    cgroup_path: &Path,
+    priorities: &[OciLinuxNetworkPriority],
+) -> io::Result<()> {
     let insns = build_netprio_bpf_prog(priorities);
 
     if insns.is_empty() {

@@ -3,9 +3,9 @@
 //! Workers `take_for_poll(id)` → poll → `reinsert(id)` if pending,
 //! or drop if complete.
 
+use crate::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::sync::Mutex;
 use std::task::Context;
 
 type PollFn = Box<dyn FnMut(&mut Context<'_>) -> bool + Send>;

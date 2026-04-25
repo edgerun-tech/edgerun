@@ -15,13 +15,10 @@ use alloc::format;
 use alloc::string::String;
 
 const MONTHS: &[&str] = &[
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const DAYS: &[&str] = &[
-    "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun",
-];
+const DAYS: &[&str] = &["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /// Format a unix timestamp (seconds since epoch) as an RFC 2822 date in UTC.
 ///
@@ -49,7 +46,18 @@ pub fn format_rfc2822_utc(unix_secs: u64) -> String {
     // Month and day
     let is_leap = is_leap_year(year);
     let month_days: [u32; 12] = [
-        31, if is_leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31,
+        if is_leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     let mut month = 0usize;
     let mut day = doy;
@@ -93,7 +101,9 @@ fn count_leap_days(start: u64, end: u64) -> u64 {
     }
     // Count leap years in [0, n): years divisible by 4, minus by 100, plus by 400
     let count_leaps = |n: u64| -> u64 {
-        if n == 0 { return 0; }
+        if n == 0 {
+            return 0;
+        }
         let n = n - 1; // up to and including year n-1
         n / 4 - n / 100 + n / 400
     };

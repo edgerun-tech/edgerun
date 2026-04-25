@@ -19,12 +19,11 @@ use std::path::Path;
 use crate::json::OciLinuxDeviceCgroup;
 use crate::syscalls::*;
 
-
 // bpf_cgroup_dev_ctx field offsets (from kernel headers)
-const OFF_ACCESS_TYPE: i16 = 0;   // u32: 'r', 'w', 'm'
-const OFF_MAJOR: i16 = 4;         // u32
-const OFF_MINOR: i16 = 8;         // u32
-const OFF_DEVICE_TYPE: i16 = 12;  // u32: DEV_BLOCK=1, DEV_CHAR=2
+const OFF_ACCESS_TYPE: i16 = 0; // u32: 'r', 'w', 'm'
+const OFF_MAJOR: i16 = 4; // u32
+const OFF_MINOR: i16 = 8; // u32
+const OFF_DEVICE_TYPE: i16 = 12; // u32: DEV_BLOCK=1, DEV_CHAR=2
 
 // Device type constants
 const DEV_BLOCK: u32 = 1;
@@ -88,7 +87,12 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
                 _ => 0,
             };
             // r7 = *(u32*)(r6 + OFF_DEVICE_TYPE)
-            sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_DEVICE_TYPE)));
+            sym.push(SymInsn::Raw(ld_imm(
+                bpf_size::BPF_W,
+                R7,
+                R6,
+                OFF_DEVICE_TYPE,
+            )));
             // if r7 != dev_type → goto skip_label
             sym.push(SymInsn::JmpNe {
                 dst: R7,
@@ -131,7 +135,12 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
                         'm' => b'm' as i32,
                         _ => continue,
                     };
-                    sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_ACCESS_TYPE)));
+                    sym.push(SymInsn::Raw(ld_imm(
+                        bpf_size::BPF_W,
+                        R7,
+                        R6,
+                        OFF_ACCESS_TYPE,
+                    )));
                     sym.push(SymInsn::JmpNe {
                         dst: R7,
                         imm: access_val,
@@ -191,7 +200,10 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
 
     // Fix up forward jump offsets
     for (insn_idx, target_label) in &fwd_refs {
-        let target_idx = label_map.get(target_label).copied().unwrap_or(insns.len() - 1);
+        let target_idx = label_map
+            .get(target_label)
+            .copied()
+            .unwrap_or(insns.len() - 1);
         // off = target - (current + 1)
         let off = (target_idx as isize - (*insn_idx as isize + 1)).max(0) as i16;
         insns[*insn_idx][2..4].copy_from_slice(&off.to_le_bytes());
@@ -210,7 +222,10 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
 /// `rules`: OCI device cgroup rules
 ///
 /// Returns Ok(()) on success, Err if eBPF is not supported or loading fails.
-pub fn setup_device_cgroup_ebpf(cgroup_path: &Path, rules: &[OciLinuxDeviceCgroup]) -> io::Result<()> {
+pub fn setup_device_cgroup_ebpf(
+    cgroup_path: &Path,
+    rules: &[OciLinuxDeviceCgroup],
+) -> io::Result<()> {
     // Generate the eBPF program
     let insns = build_device_bpf_prog(rules);
 

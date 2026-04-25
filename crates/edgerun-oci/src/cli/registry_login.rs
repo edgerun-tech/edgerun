@@ -26,7 +26,10 @@ pub fn cmd_login(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
                     username = Some(args[i + 1].clone());
                     i += 2;
                 } else {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "-u requires a value"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "-u requires a value",
+                    ));
                 }
             }
             "-p" | "--password" => {
@@ -34,11 +37,17 @@ pub fn cmd_login(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
                     password = Some(args[i + 1].clone());
                     i += 2;
                 } else {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "-p requires a value"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "-p requires a value",
+                    ));
                 }
             }
             _ => {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("unknown flag: {}", args[i])));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unknown flag: {}", args[i]),
+                ));
             }
         }
     }
@@ -49,7 +58,10 @@ pub fn cmd_login(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
         prompt_credentials(registry)?
     };
 
-    println!("Storing credential for {} (biometric verification required)...", registry);
+    println!(
+        "Storing credential for {} (biometric verification required)...",
+        registry
+    );
 
     let mut client = SecretClient::connect()?;
     client.open_session()?;

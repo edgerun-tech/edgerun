@@ -16,29 +16,28 @@
 //! ```
 
 use edgerun_crypto::CipherSuite;
-use edgerun_tls::prf::{
-    Hasher, Tls13KeySchedule, TrafficKeys,
-    quic_initial_client_keys, quic_initial_server_keys,
-    quic_traffic_keys, quic_hp_key, INITIAL_SALT_V1,
-};
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
+use edgerun_tls::prf::{
+    quic_hp_key, quic_initial_client_keys, quic_initial_server_keys, quic_traffic_keys, Hasher,
+    Tls13KeySchedule, TrafficKeys, INITIAL_SALT_V1,
+};
 
 use super::crypto::ProtectionKeys;
 use super::ConnectionId;
 use super::QuicFrame;
 
+pub use super::handshake::HandshakeResult;
 pub use super::handshake::QuicTlsHandshaker;
 pub use super::server_handshake::QuicTlsServerHandshaker;
-pub use super::handshake::HandshakeResult;
 pub use super::server_handshake::ServerHandshakeResult;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use edgerun_crypto::getrandom;
-    use edgerun_tls::prf::Hasher;
     use edgerun_tls::handshake::ClientHelloBuilder;
+    use edgerun_tls::prf::Hasher;
 
     const TEST_DCID: [u8; 8] = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
 
@@ -128,13 +127,20 @@ mod tests {
     #[test]
     fn test_quic_frame_crypto_roundtrip() {
         let data = b"Hello, CRYPTO frame!".to_vec();
-        let frame = QuicFrame::Crypto { offset: 0, data: data.clone() };
+        let frame = QuicFrame::Crypto {
+            offset: 0,
+            data: data.clone(),
+        };
 
         let encoded = frame.to_bytes();
         let (decoded, consumed) = QuicFrame::from_bytes(&encoded).unwrap();
 
         assert_eq!(consumed, encoded.len());
-        if let QuicFrame::Crypto { offset, data: decoded_data } = decoded {
+        if let QuicFrame::Crypto {
+            offset,
+            data: decoded_data,
+        } = decoded
+        {
             assert_eq!(offset, 0);
             assert_eq!(decoded_data, data);
         } else {
@@ -156,7 +162,13 @@ mod tests {
         let (decoded, consumed) = QuicFrame::from_bytes(&encoded).unwrap();
 
         assert_eq!(consumed, encoded.len());
-        if let QuicFrame::Stream { stream_id, offset, fin, data: decoded_data } = decoded {
+        if let QuicFrame::Stream {
+            stream_id,
+            offset,
+            fin,
+            data: decoded_data,
+        } = decoded
+        {
             assert_eq!(stream_id, 4);
             assert_eq!(offset, 100);
             assert!(fin);

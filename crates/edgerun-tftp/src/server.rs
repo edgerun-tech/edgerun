@@ -76,7 +76,10 @@ pub struct TftpServer {
 
 impl TftpServer {
     /// Create a new TFTP server.
-    pub fn new(config: TftpServerConfig, provider: impl FileProvider + 'static) -> Result<Self, io::Error> {
+    pub fn new(
+        config: TftpServerConfig,
+        provider: impl FileProvider + 'static,
+    ) -> Result<Self, io::Error> {
         let std_socket = UdpSocket::bind(&config.bind_addr)?;
         let socket = Arc::new(AsyncUdpSocket::from_std(std_socket)?);
 
@@ -128,7 +131,12 @@ impl TftpServer {
         };
 
         match msg {
-            TftpMessage::RRQ { filename, mode, options, .. } => {
+            TftpMessage::RRQ {
+                filename,
+                mode,
+                options,
+                ..
+            } => {
                 if mode.to_lowercase() != "octet" {
                     let err = TftpMessage::error(
                         TftpError::IllegalOperation,
@@ -153,16 +161,16 @@ impl TftpServer {
             }
 
             TftpMessage::DATA { .. } | TftpMessage::OACK { .. } => {
-                let err = TftpMessage::error(
-                    TftpError::IllegalOperation,
-                    "Unexpected message",
-                );
+                let err = TftpMessage::error(TftpError::IllegalOperation, "Unexpected message");
                 let _ = self.socket.send_to(&err.to_wire(), src).await;
             }
 
             TftpMessage::ERROR { code, message } => {
                 edgerun_log::warn!("edgerun-tftp: ERROR from {}: {:?} - {}", src, code, message);
-                self.transfers.lock().await.retain(|(addr, _), _| *addr != src);
+                self.transfers
+                    .lock()
+                    .await
+                    .retain(|(addr, _), _| *addr != src);
             }
         }
 
@@ -233,7 +241,9 @@ impl TftpServer {
             let _ = self.socket.send_to(&wire, client_addr).await;
             edgerun_log::info!(
                 "edgerun-tftp: OACK sent to {} (blksize={}, tsize={})",
-                client_addr, negotiated.blksize, total_size
+                client_addr,
+                negotiated.blksize,
+                total_size
             );
         } else {
             // No options to negotiate, start sending data
@@ -250,7 +260,13 @@ impl TftpServer {
                 .iter()
                 .find(|(k, _)| k.0 == client_addr)
                 .map(|(key, t)| {
-                    (key.clone(), t.current_block, t.offset, t.total_size, t.blksize)
+                    (
+                        key.clone(),
+                        t.current_block,
+                        t.offset,
+                        t.total_size,
+                        t.blksize,
+                    )
                 })
         };
 
@@ -280,7 +296,13 @@ impl TftpServer {
                 .iter()
                 .find(|(addr, _)| addr.0 == *client_addr)
                 .map(|(key, t)| {
-                    (key.clone(), t.filename.clone(), t.offset, t.blksize as usize, t.current_block)
+                    (
+                        key.clone(),
+                        t.filename.clone(),
+                        t.offset,
+                        t.blksize as usize,
+                        t.current_block,
+                    )
                 })
         };
 
@@ -312,10 +334,8 @@ impl TftpServer {
                     }
                 }
                 None => {
-                    let err = TftpMessage::error(
-                        TftpError::NotDefined,
-                        "Failed to read file block",
-                    );
+                    let err =
+                        TftpMessage::error(TftpError::NotDefined, "Failed to read file block");
                     let _ = self.socket.send_to(&err.to_wire(), *client_addr).await;
                     self.transfers.lock().await.remove(&key);
                 }
@@ -326,7 +346,11 @@ impl TftpServer {
     }
 
     /// Internal: send next block given we already know the transfer details.
-    async fn send_next_block_data(&self, client_addr: &SocketAddr, _blksize: u16) -> Result<(), io::Error> {
+    async fn send_next_block_data(
+        &self,
+        client_addr: &SocketAddr,
+        _blksize: u16,
+    ) -> Result<(), io::Error> {
         self.send_next_block(client_addr).await
     }
 

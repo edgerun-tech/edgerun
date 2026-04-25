@@ -1,5 +1,5 @@
 // Test Cursor with the actual runtime.
-use edgerun_rt::{Cursor, Runtime, AsyncReadExt, AsyncWriteExt, spawn};
+use edgerun_rt::{spawn, AsyncReadExt, AsyncWriteExt, Cursor, Runtime};
 use std::io::SeekFrom;
 use std::time::Duration;
 

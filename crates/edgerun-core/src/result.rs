@@ -152,7 +152,10 @@ mod tests {
 
     #[test]
     fn reason_code_version_unsupported() {
-        assert_eq!(ReasonCode::VersionUnsupported.as_str(), "VERSION_UNSUPPORTED");
+        assert_eq!(
+            ReasonCode::VersionUnsupported.as_str(),
+            "VERSION_UNSUPPORTED"
+        );
     }
 
     #[test]
@@ -187,7 +190,10 @@ mod tests {
 
     #[test]
     fn reason_code_canonicalization_failed() {
-        assert_eq!(ReasonCode::CanonicalizationFail.as_str(), "CANONICALIZATION_FAILED");
+        assert_eq!(
+            ReasonCode::CanonicalizationFail.as_str(),
+            "CANONICALIZATION_FAILED"
+        );
     }
 
     #[test]
@@ -197,7 +203,10 @@ mod tests {
 
     #[test]
     fn reason_code_snapshot_base_conflict() {
-        assert_eq!(ReasonCode::SnapshotBaseConflict.as_str(), "SNAPSHOT_BASE_CONFLICT");
+        assert_eq!(
+            ReasonCode::SnapshotBaseConflict.as_str(),
+            "SNAPSHOT_BASE_CONFLICT"
+        );
     }
 
     #[test]
@@ -212,17 +221,26 @@ mod tests {
 
     #[test]
     fn reason_code_assurance_insufficient() {
-        assert_eq!(ReasonCode::AssuranceInsufficient.as_str(), "ASSURANCE_INSUFFICIENT");
+        assert_eq!(
+            ReasonCode::AssuranceInsufficient.as_str(),
+            "ASSURANCE_INSUFFICIENT"
+        );
     }
 
     #[test]
     fn reason_code_control_invariant_failed() {
-        assert_eq!(ReasonCode::ControlInvariantFailed.as_str(), "CONTROL_INVARIANT_FAILED");
+        assert_eq!(
+            ReasonCode::ControlInvariantFailed.as_str(),
+            "CONTROL_INVARIANT_FAILED"
+        );
     }
 
     #[test]
     fn reason_code_representation_invalid() {
-        assert_eq!(ReasonCode::RepresentationInvalid.as_str(), "REPRESENTATION_INVALID");
+        assert_eq!(
+            ReasonCode::RepresentationInvalid.as_str(),
+            "REPRESENTATION_INVALID"
+        );
     }
 
     // ---- Builder functions ----

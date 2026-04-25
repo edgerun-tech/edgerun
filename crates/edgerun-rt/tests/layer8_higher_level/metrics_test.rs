@@ -1,7 +1,7 @@
 // Test RuntimeMetrics with the actual runtime.
-use edgerun_rt::{Builder, RuntimeHandle, spawn};
-use std::sync::Arc;
+use edgerun_rt::{spawn, Builder, RuntimeHandle};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 fn main() {
@@ -67,7 +67,11 @@ fn test_active_tasks() {
         assert_eq!(counter.load(Ordering::SeqCst), 1);
 
         let m = h.metrics();
-        assert!(m.active_tasks() >= 1, "should have at least 1 active task, got {}", m.active_tasks());
+        assert!(
+            m.active_tasks() >= 1,
+            "should have at least 1 active task, got {}",
+            m.active_tasks()
+        );
     });
     println!("  test_active_tasks OK");
 }
@@ -141,7 +145,11 @@ fn test_blocking_pool_metrics() {
         edgerun_rt::sleep(Duration::from_millis(20)).await;
         assert_eq!(started.load(Ordering::SeqCst), 1);
         let m = h.metrics();
-        assert!(m.blocking_active() >= 1, "should have active blocking task, got {}", m.blocking_active());
+        assert!(
+            m.blocking_active() >= 1,
+            "should have active blocking task, got {}",
+            m.blocking_active()
+        );
 
         let _ = hh.await;
         let m = h.metrics();

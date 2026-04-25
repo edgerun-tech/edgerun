@@ -2,9 +2,9 @@
 //!
 //! Generates a `code_verifier` and derives the `code_challenge` via SHA-256.
 
-use edgerun_encoding::base64::base64url_nopad_encode;
 use edgerun_crypto::getrandom;
 use edgerun_crypto::sha256;
+use edgerun_encoding::base64::base64url_nopad_encode;
 
 /// A PKCE code-verifier / code-challenge pair.
 #[derive(Debug, Clone)]
@@ -20,9 +20,8 @@ impl PkcePair {
     /// 32 bytes → 43 base64url characters (no padding).
     pub fn generate() -> std::io::Result<Self> {
         let mut code_verifier_bytes = [0u8; 32];
-        getrandom::fill(&mut code_verifier_bytes).map_err(|e| {
-            std::io::Error::other(format!("random generation failed: {e}"))
-        })?;
+        getrandom::fill(&mut code_verifier_bytes)
+            .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
         let code_verifier = base64url_nopad_encode(&code_verifier_bytes);
 
         // code_challenge = BASE64URL(SHA256(code_verifier))
@@ -81,8 +80,10 @@ mod tests {
         // RFC 7636: ALPHA / DIGIT / "-" / "." / "_" / "~"
         let pkce = PkcePair::generate().unwrap();
         for c in pkce.code_verifier.chars() {
-            assert!(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~',
-                "code_verifier contains invalid char: {c}");
+            assert!(
+                c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~',
+                "code_verifier contains invalid char: {c}"
+            );
         }
     }
 }

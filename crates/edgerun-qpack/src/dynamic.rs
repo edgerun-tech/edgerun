@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap, VecDeque, btree_map::Entry as BTEntry, hash_map::Entry},
+    collections::{btree_map::Entry as BTEntry, hash_map::Entry, BTreeMap, HashMap, VecDeque},
 };
 
 use super::{field::HeaderField, static_::StaticTable};

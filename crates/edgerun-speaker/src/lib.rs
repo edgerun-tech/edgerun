@@ -1,6 +1,6 @@
 use edgerun_capabilities::{
-    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole, capability_descriptor,
+    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -170,14 +170,20 @@ mod tests {
     #[test]
     fn sample_format_equality() {
         assert_eq!(SpeakerSampleFormat::PcmS16Le, SpeakerSampleFormat::PcmS16Le);
-        assert_ne!(SpeakerSampleFormat::PcmS16Le, SpeakerSampleFormat::PcmFloat32Le);
+        assert_ne!(
+            SpeakerSampleFormat::PcmS16Le,
+            SpeakerSampleFormat::PcmFloat32Le
+        );
     }
 
     #[test]
     fn sample_format_debug() {
         assert_eq!(format!("{:?}", SpeakerSampleFormat::PcmS16Le), "PcmS16Le");
         assert_eq!(format!("{:?}", SpeakerSampleFormat::PcmS24Le), "PcmS24Le");
-        assert_eq!(format!("{:?}", SpeakerSampleFormat::PcmFloat32Le), "PcmFloat32Le");
+        assert_eq!(
+            format!("{:?}", SpeakerSampleFormat::PcmFloat32Le),
+            "PcmFloat32Le"
+        );
     }
 
     #[test]
@@ -368,7 +374,10 @@ mod tests {
             target_output_level_percent: None,
         };
         let err = validate_audio_playback_request(&req).unwrap_err();
-        assert_eq!(err, CapabilityError::InvalidRequest("playback duration must be > 0"));
+        assert_eq!(
+            err,
+            CapabilityError::InvalidRequest("playback duration must be > 0")
+        );
     }
 
     #[test]
@@ -383,7 +392,10 @@ mod tests {
             target_output_level_percent: None,
         };
         let err = validate_audio_playback_request(&req).unwrap_err();
-        assert_eq!(err, CapabilityError::InvalidRequest("sample rate must be > 0"));
+        assert_eq!(
+            err,
+            CapabilityError::InvalidRequest("sample rate must be > 0")
+        );
     }
 
     #[test]
@@ -413,7 +425,10 @@ mod tests {
             target_output_level_percent: None,
         };
         let err = validate_audio_playback_request(&req).unwrap_err();
-        assert_eq!(err, CapabilityError::InvalidRequest("audio bytes must be non-empty"));
+        assert_eq!(
+            err,
+            CapabilityError::InvalidRequest("audio bytes must be non-empty")
+        );
     }
 
     #[test]
@@ -428,7 +443,10 @@ mod tests {
             target_output_level_percent: None,
         };
         let err = validate_audio_playback_request(&req).unwrap_err();
-        assert_eq!(err, CapabilityError::InvalidRequest("software gain percent must be <= 400"));
+        assert_eq!(
+            err,
+            CapabilityError::InvalidRequest("software gain percent must be <= 400")
+        );
     }
 
     #[test]
@@ -443,7 +461,10 @@ mod tests {
             target_output_level_percent: Some(101),
         };
         let err = validate_audio_playback_request(&req).unwrap_err();
-        assert_eq!(err, CapabilityError::InvalidRequest("target output level percent must be <= 100"));
+        assert_eq!(
+            err,
+            CapabilityError::InvalidRequest("target output level percent must be <= 100")
+        );
     }
 
     #[test]
@@ -537,8 +558,16 @@ mod tests {
                     supports_output_level_control: false,
                 })
             }
-            fn play_audio(&self, _req: &AudioPlaybackRequest) -> Result<AudioPlaybackResult, CapabilityError> {
-                Ok(AudioPlaybackResult { bytes_written: 0, sample_rate_hz: 0, channels: 0, finished: true })
+            fn play_audio(
+                &self,
+                _req: &AudioPlaybackRequest,
+            ) -> Result<AudioPlaybackResult, CapabilityError> {
+                Ok(AudioPlaybackResult {
+                    bytes_written: 0,
+                    sample_rate_hz: 0,
+                    channels: 0,
+                    finished: true,
+                })
             }
         }
         let device = DummySpeaker;
@@ -565,8 +594,16 @@ mod tests {
                     supports_output_level_control: false,
                 })
             }
-            fn play_audio(&self, _req: &AudioPlaybackRequest) -> Result<AudioPlaybackResult, CapabilityError> {
-                Ok(AudioPlaybackResult { bytes_written: 0, sample_rate_hz: 0, channels: 0, finished: true })
+            fn play_audio(
+                &self,
+                _req: &AudioPlaybackRequest,
+            ) -> Result<AudioPlaybackResult, CapabilityError> {
+                Ok(AudioPlaybackResult {
+                    bytes_written: 0,
+                    sample_rate_hz: 0,
+                    channels: 0,
+                    finished: true,
+                })
             }
         }
         let device = DummySpeaker;

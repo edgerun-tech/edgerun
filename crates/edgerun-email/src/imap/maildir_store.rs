@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
-use crate::imap::server::MailStore;
 use crate::imap::message::StoreAction;
+use crate::imap::server::MailStore;
 use crate::imap::types::{FetchAttr, Flags, Mailbox, MailboxStatus, Message, SearchKey};
 
 // ===========================================================================
@@ -55,7 +55,10 @@ impl MaildirImapStore {
 
     /// Add a user with password.
     pub fn add_user(&self, username: &str, password: &str) {
-        self.users.write().unwrap().insert(username.to_string(), password.to_string());
+        self.users
+            .write()
+            .unwrap()
+            .insert(username.to_string(), password.to_string());
     }
 
     /// Check if a user exists.
@@ -209,7 +212,10 @@ impl MailStore for MaildirImapStore {
 
         let msgs = self.all_messages(user)?;
         let count = msgs.len();
-        let unseen = msgs.iter().filter(|(_, s)| matches!(s, MessageState::New)).count();
+        let unseen = msgs
+            .iter()
+            .filter(|(_, s)| matches!(s, MessageState::New))
+            .count();
 
         Ok(Some(MailboxStatus {
             messages: count as u32,
@@ -229,7 +235,10 @@ impl MailStore for MaildirImapStore {
 
         let msgs = self.all_messages(user)?;
         let count = msgs.len();
-        let unseen = msgs.iter().filter(|(_, s)| matches!(s, MessageState::New)).count();
+        let unseen = msgs
+            .iter()
+            .filter(|(_, s)| matches!(s, MessageState::New))
+            .count();
 
         Ok(Some(Mailbox {
             name: "INBOX".to_string(),
@@ -315,7 +324,10 @@ impl MailStore for MaildirImapStore {
                     }
                 }
                 FetchAttr::Envelope => {
-                    attr_map.insert("ENVELOPE".to_string(), crate::imap::server::format_envelope_imap(&msg.envelope));
+                    attr_map.insert(
+                        "ENVELOPE".to_string(),
+                        crate::imap::server::format_envelope_imap(&msg.envelope),
+                    );
                 }
                 FetchAttr::BodySection(_) => {
                     attr_map.insert("BODY[]".to_string(), format!("{{{}}}", msg.size));
@@ -379,12 +391,17 @@ impl MailStore for MaildirImapStore {
         }
 
         // Handle \Seen flag — move from new/ to cur/
-        if flags.iter().any(|f| f == "\\Seen") && matches!(action, StoreAction::Add | StoreAction::Replace)
-            && path.parent().map(|p| p.file_name().map(|n| n == "new").unwrap_or(false)).unwrap_or(false) {
-                let filename = path.file_name().unwrap().to_string_lossy().to_string();
-                let cur_path = self.inbox_path(user).join("cur").join(&filename);
-                let _ = fs::rename(path, cur_path);
-            }
+        if flags.iter().any(|f| f == "\\Seen")
+            && matches!(action, StoreAction::Add | StoreAction::Replace)
+            && path
+                .parent()
+                .map(|p| p.file_name().map(|n| n == "new").unwrap_or(false))
+                .unwrap_or(false)
+        {
+            let filename = path.file_name().unwrap().to_string_lossy().to_string();
+            let cur_path = self.inbox_path(user).join("cur").join(&filename);
+            let _ = fs::rename(path, cur_path);
+        }
 
         Ok(vec![seq_num])
     }
@@ -406,33 +423,37 @@ impl MailStore for MaildirImapStore {
             for key in keys {
                 match key {
                     SearchKey::All => {}
-                    SearchKey::Seen
-                        if !matches!(state, MessageState::Cur) => {
-                            matches = false;
-                        }
-                    SearchKey::Unseen
-                        if !matches!(state, MessageState::New) => {
-                            matches = false;
-                        }
-                    SearchKey::Deleted
-                        if !self.is_deleted(user, path) => {
-                            matches = false;
-                        }
-                    SearchKey::Undeleted
-                        if self.is_deleted(user, path) => {
-                            matches = false;
-                        }
+                    SearchKey::Seen if !matches!(state, MessageState::Cur) => {
+                        matches = false;
+                    }
+                    SearchKey::Unseen if !matches!(state, MessageState::New) => {
+                        matches = false;
+                    }
+                    SearchKey::Deleted if !self.is_deleted(user, path) => {
+                        matches = false;
+                    }
+                    SearchKey::Undeleted if self.is_deleted(user, path) => {
+                        matches = false;
+                    }
                     SearchKey::Subject(subj) => {
                         let data = fs::read(path)?;
                         let headers = Self::extract_headers(&data);
-                        if !headers.get("Subject").map(|s| s.contains(subj)).unwrap_or(false) {
+                        if !headers
+                            .get("Subject")
+                            .map(|s| s.contains(subj))
+                            .unwrap_or(false)
+                        {
                             matches = false;
                         }
                     }
                     SearchKey::From(from) => {
                         let data = fs::read(path)?;
                         let headers = Self::extract_headers(&data);
-                        if !headers.get("From").map(|s| s.contains(from)).unwrap_or(false) {
+                        if !headers
+                            .get("From")
+                            .map(|s| s.contains(from))
+                            .unwrap_or(false)
+                        {
                             matches = false;
                         }
                     }
@@ -455,7 +476,12 @@ impl MailStore for MaildirImapStore {
         Ok(results)
     }
 
-    fn sort(&self, mailbox: &str, keys: &[SearchKey], criteria: &[(String, bool)]) -> io::Result<Vec<u32>> {
+    fn sort(
+        &self,
+        mailbox: &str,
+        keys: &[SearchKey],
+        criteria: &[(String, bool)],
+    ) -> io::Result<Vec<u32>> {
         // First search for matching UIDs
         let uids = self.search(mailbox, keys)?;
         if uids.is_empty() || criteria.is_empty() {
@@ -510,25 +536,41 @@ impl MailStore for MaildirImapStore {
                 "ARRIVAL" | "DATE" | "SENT" => {
                     entries.sort_by(|a, b| {
                         let ord = a.date.cmp(&b.date);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "SUBJECT" => {
                     entries.sort_by(|a, b| {
                         let ord = a.subject.cmp(&b.subject);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "FROM" => {
                     entries.sort_by(|a, b| {
                         let ord = a.from.cmp(&b.from);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "TO" => {
                     entries.sort_by(|a, b| {
                         let ord = a.to.cmp(&b.to);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "CC" => {
@@ -537,7 +579,11 @@ impl MailStore for MaildirImapStore {
                 "SIZE" => {
                     entries.sort_by(|a, b| {
                         let ord = a.size.cmp(&b.size);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 _ => {} // Unknown criterion, keep order
@@ -575,7 +621,13 @@ impl MailStore for MaildirImapStore {
         Ok(expunged)
     }
 
-    fn append(&self, mailbox: &str, _flags: Flags, _date: Option<SystemTime>, data: &[u8]) -> io::Result<u32> {
+    fn append(
+        &self,
+        mailbox: &str,
+        _flags: Flags,
+        _date: Option<SystemTime>,
+        data: &[u8],
+    ) -> io::Result<u32> {
         let user = mailbox
             .strip_suffix("/INBOX")
             .or(mailbox.strip_suffix("INBOX"))
@@ -638,8 +690,15 @@ impl MailStore for MaildirImapStore {
         Ok(None)
     }
 
-    fn set_quota(&self, _mailbox: &str, _limits: Vec<(&str, u32)>) -> io::Result<crate::imap::server::QuotaInfo> {
-        Err(io::Error::new(io::ErrorKind::Unsupported, "quota not supported"))
+    fn set_quota(
+        &self,
+        _mailbox: &str,
+        _limits: Vec<(&str, u32)>,
+    ) -> io::Result<crate::imap::server::QuotaInfo> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "quota not supported",
+        ))
     }
 
     fn check(&self, _mailbox: &str) -> io::Result<()> {
@@ -671,7 +730,10 @@ mod tests {
         let store = MaildirImapStore::new(&dir).unwrap();
         store.add_user("ken", "secret");
 
-        assert_eq!(store.authenticate("ken", "secret").unwrap(), Some("ken".to_string()));
+        assert_eq!(
+            store.authenticate("ken", "secret").unwrap(),
+            Some("ken".to_string())
+        );
         assert_eq!(store.authenticate("ken", "wrong").unwrap(), None);
         assert_eq!(store.authenticate("unknown", "pass").unwrap(), None);
 
@@ -693,7 +755,8 @@ mod tests {
 
     #[test]
     fn test_extract_headers() {
-        let data = b"From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nBody";
+        let data =
+            b"From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nBody";
         let headers = MaildirImapStore::extract_headers(data);
         assert_eq!(headers.get("From").unwrap(), "sender@example.com");
         assert_eq!(headers.get("To").unwrap(), "recipient@example.com");

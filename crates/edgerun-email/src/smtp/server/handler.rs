@@ -39,11 +39,7 @@ pub trait MailHandler: Send + Sync + 'static {
 
     /// Authenticate a user via SASL mechanism.
     /// Default implementation returns `AuthResult::Unsupported`.
-    fn authenticate(
-        &self,
-        _mechanism: &str,
-        _credentials: &AuthCredentials,
-    ) -> AuthResult {
+    fn authenticate(&self, _mechanism: &str, _credentials: &AuthCredentials) -> AuthResult {
         AuthResult::Unsupported
     }
 
@@ -58,7 +54,9 @@ pub trait MailHandler: Send + Sync + 'static {
     /// should deliver the bounce to the return path address.
     /// Default implementation logs a warning and returns `Ok(())`.
     fn send_bounce(&self, _bounce: &DsnBounce) -> io::Result<()> {
-        edgerun_log::warn!("edgerun-smtp: bounce message generated but no bounce handler configured");
+        edgerun_log::warn!(
+            "edgerun-smtp: bounce message generated but no bounce handler configured"
+        );
         Ok(())
     }
 
@@ -66,12 +64,7 @@ pub trait MailHandler: Send + Sync + 'static {
     /// The implementation can use this to add `Authentication-Results` headers,
     /// log results, or apply policy-based filtering.
     /// Default implementation does nothing.
-    fn on_mail_received(
-        &self,
-        _envelope: &MailEnvelope,
-        _auth_results: &AuthenticationResults,
-    ) {
-    }
+    fn on_mail_received(&self, _envelope: &MailEnvelope, _auth_results: &AuthenticationResults) {}
 }
 
 // ===========================================================================
@@ -151,9 +144,7 @@ impl MailHandler for MemoryMailStore {
 
     fn validate_recipient(&self, address: &str) -> io::Result<()> {
         // postmaster must always be accepted
-        if address.eq_ignore_ascii_case("postmaster")
-            || address.starts_with("postmaster@")
-        {
+        if address.eq_ignore_ascii_case("postmaster") || address.starts_with("postmaster@") {
             return Ok(());
         }
 
@@ -246,7 +237,10 @@ mod tests {
             authc_id: "user@example.com".to_string(),
             password: "wrong".to_string(),
         };
-        assert!(matches!(store.authenticate("PLAIN", &creds), AuthResult::Failed));
+        assert!(matches!(
+            store.authenticate("PLAIN", &creds),
+            AuthResult::Failed
+        ));
     }
 
     #[test]
@@ -257,7 +251,10 @@ mod tests {
             authc_id: "user".to_string(),
             password: "pass".to_string(),
         };
-        assert!(matches!(store.authenticate("CRAM-MD5", &creds), AuthResult::Unsupported));
+        assert!(matches!(
+            store.authenticate("CRAM-MD5", &creds),
+            AuthResult::Unsupported
+        ));
     }
 
     #[test]

@@ -18,7 +18,10 @@ mod tests {
         let provider = AndroidInputProvider::new();
         let desc = provider.descriptor();
         assert_eq!(desc.provider_name, "android-input-stub");
-        assert_eq!(desc.role, edgerun_capabilities::CapabilityRole::Input as i32);
+        assert_eq!(
+            desc.role,
+            edgerun_capabilities::CapabilityRole::Input as i32
+        );
     }
 
     #[test]

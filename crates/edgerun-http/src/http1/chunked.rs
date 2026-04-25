@@ -29,9 +29,8 @@ pub fn parse_chunked_body_with_trailers(mut data: &[u8]) -> Result<(Vec<u8>, Hea
     let mut body = Vec::new();
 
     loop {
-        let crlf = find_crlf(data, 0).ok_or_else(|| {
-            Error::InvalidResponse("Incomplete chunked body".to_string())
-        })?;
+        let crlf = find_crlf(data, 0)
+            .ok_or_else(|| Error::InvalidResponse("Incomplete chunked body".to_string()))?;
 
         let size_hex = std::str::from_utf8(&data[..crlf])
             .map_err(|_| Error::InvalidResponse("Invalid chunk size".to_string()))?;
@@ -49,14 +48,18 @@ pub fn parse_chunked_body_with_trailers(mut data: &[u8]) -> Result<(Vec<u8>, Hea
         }
 
         if data.len() < chunk_size {
-            return Err(Error::InvalidResponse("Incomplete chunked body".to_string()));
+            return Err(Error::InvalidResponse(
+                "Incomplete chunked body".to_string(),
+            ));
         }
 
         body.extend_from_slice(&data[..chunk_size]);
         data = &data[chunk_size..];
 
         if data.len() < 2 || data[0] != b'\r' || data[1] != b'\n' {
-            return Err(Error::InvalidResponse("Missing CRLF after chunk".to_string()));
+            return Err(Error::InvalidResponse(
+                "Missing CRLF after chunk".to_string(),
+            ));
         }
         data = &data[2..];
     }

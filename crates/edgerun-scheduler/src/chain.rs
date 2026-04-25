@@ -1,7 +1,7 @@
 //! On-chain watcher — polls Solana RPC for deployment account changes.
 
 use crate::deployment::DeploymentManager;
-use edgerun_solana::{DeploymentClient, solana_types::Pubkey};
+use edgerun_solana::{solana_types::Pubkey, DeploymentClient};
 
 pub struct ChainWatcher {
     client: DeploymentClient,

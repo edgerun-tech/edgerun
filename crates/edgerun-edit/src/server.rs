@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use edgerun_http::{
     Chain, Extensions, Handler, HttpServer, Method, Middleware, Next, Request, Response, StatusCode,
 };
-use edgerun_json::{json, from_str, to_string, Value};
+use edgerun_json::{from_str, json, to_string, Value};
 use quote::ToTokens;
 
 use crate::edit_ops;
@@ -80,27 +80,47 @@ impl Handler for EditHandler {
                 }
                 Method::POST if request.uri().path() == "/edit" => {}
                 _ => {
-                    return Response::text(StatusCode::NOT_FOUND, "not found — POST /edit or GET /health");
+                    return Response::text(
+                        StatusCode::NOT_FOUND,
+                        "not found — POST /edit or GET /health",
+                    );
                 }
             }
 
             let body = match request.body() {
                 Some(b) => b,
-                None => return Response::json(StatusCode::BAD_REQUEST, r#"{"ok":false,"error":"empty body"}"#),
+                None => {
+                    return Response::json(
+                        StatusCode::BAD_REQUEST,
+                        r#"{"ok":false,"error":"empty body"}"#,
+                    )
+                }
             };
 
             let body_str = match std::str::from_utf8(body) {
                 Ok(s) => s,
-                Err(e) => return Response::json(StatusCode::BAD_REQUEST, &format!(r#"{{"ok":false,"error":"invalid utf8: {e}"}}"#)),
+                Err(e) => {
+                    return Response::json(
+                        StatusCode::BAD_REQUEST,
+                        &format!(r#"{{"ok":false,"error":"invalid utf8: {e}"}}"#),
+                    )
+                }
             };
 
             let req: Value = match from_str(body_str) {
                 Ok(v) => v,
-                Err(e) => return Response::json(StatusCode::BAD_REQUEST, &format!(r#"{{"ok":false,"error":"invalid json: {e}"}}"#)),
+                Err(e) => {
+                    return Response::json(
+                        StatusCode::BAD_REQUEST,
+                        &format!(r#"{{"ok":false,"error":"invalid json: {e}"}}"#),
+                    )
+                }
             };
 
             let resp = handle_edit(&req).await;
-            let body = to_string(&resp).unwrap_or_else(|_| r#"{"ok":false,"error":"failed to serialize response"}"#.to_string());
+            let body = to_string(&resp).unwrap_or_else(|_| {
+                r#"{"ok":false,"error":"failed to serialize response"}"#.to_string()
+            });
             Response::json(StatusCode::OK, &body)
         })
     }
@@ -203,7 +223,13 @@ async fn handle_edit(req: &Value) -> Value {
             "rename_type" => {
                 let old = edit["old"].as_str().unwrap_or("");
                 let new_name = edit["new"].as_str().unwrap_or("");
-                apply_rename_type_cached(&mut file_cache, &project, old, new_name, &mut modified_paths)
+                apply_rename_type_cached(
+                    &mut file_cache,
+                    &project,
+                    old,
+                    new_name,
+                    &mut modified_paths,
+                )
             }
             "add_fn" => {
                 let file = resolve_file(&project, edit);
@@ -211,13 +237,27 @@ async fn handle_edit(req: &Value) -> Value {
                 let args = edit["args"].as_str().unwrap_or("");
                 let ret = edit["ret"].as_str().unwrap_or("");
                 let body = edit["body"].as_str().unwrap_or("");
-                apply_add_fn_cached(&mut file_cache, &file, name, args, ret, body, &mut modified_paths)
+                apply_add_fn_cached(
+                    &mut file_cache,
+                    &file,
+                    name,
+                    args,
+                    ret,
+                    body,
+                    &mut modified_paths,
+                )
             }
             "replace_fn_body" => {
                 let file = resolve_file(&project, edit);
                 let name = edit["name"].as_str().unwrap_or("");
                 let body = edit["body"].as_str().unwrap_or("");
-                apply_replace_fn_body_cached(&mut file_cache, &file, name, body, &mut modified_paths)
+                apply_replace_fn_body_cached(
+                    &mut file_cache,
+                    &file,
+                    name,
+                    body,
+                    &mut modified_paths,
+                )
             }
             "remove_fn" => {
                 let file = resolve_file(&project, edit);
@@ -243,7 +283,13 @@ async fn handle_edit(req: &Value) -> Value {
             "remove_file" => {
                 let path = edit["path"].as_str().unwrap_or("");
                 let force = edit["force"].as_bool().unwrap_or(false);
-                apply_remove_file_cached(&mut file_cache, &project, path, force, &mut modified_paths)
+                apply_remove_file_cached(
+                    &mut file_cache,
+                    &project,
+                    path,
+                    force,
+                    &mut modified_paths,
+                )
             }
             _ => Err(format!("unknown op: {op}")),
         };

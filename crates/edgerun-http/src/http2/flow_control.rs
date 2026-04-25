@@ -127,8 +127,10 @@ impl FlowControlManager {
 
     /// Add a new stream
     pub fn add_stream(&mut self, stream_id: u32) {
-        self.stream_flows
-            .insert(stream_id, FlowController::new(self.connection_flow.initial_window_size()));
+        self.stream_flows.insert(
+            stream_id,
+            FlowController::new(self.connection_flow.initial_window_size()),
+        );
     }
 
     /// Remove a stream

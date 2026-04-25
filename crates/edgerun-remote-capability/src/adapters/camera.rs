@@ -3,8 +3,8 @@
 use edgerun_biometrics::BiometricModality;
 use edgerun_camera_biometrics::{
     CameraBiometricError, CameraBiometricPurpose, CameraBiometricReader, CameraCapture,
-    CameraCaptureQuality, CameraFrame, CameraPixelFormat, CameraStreamRole,
-    FaceBounds, PairedCameraBiometricReader, PairedCameraFrame,
+    CameraCaptureQuality, CameraFrame, CameraPixelFormat, CameraStreamRole, FaceBounds,
+    PairedCameraBiometricReader, PairedCameraFrame,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
@@ -12,7 +12,9 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 
-use crate::protocol::{accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult};
+use crate::protocol::{
+    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
+};
 
 fn map_camera_error(err: CameraBiometricError) -> CapabilityError {
     match err {
@@ -42,7 +44,11 @@ fn camera_pixel_format_from_u32(raw: u32) -> Result<CameraPixelFormat, Capabilit
         4 => CameraPixelFormat::Rgb24,
         5 => CameraPixelFormat::Gray8,
         other if other & 0x8000_0000 != 0 => CameraPixelFormat::Other(other & 0x7fff_ffff),
-        _ => return Err(CapabilityError::InvalidRequest("remote camera pixel format is unknown")),
+        _ => {
+            return Err(CapabilityError::InvalidRequest(
+                "remote camera pixel format is unknown",
+            ))
+        }
     })
 }
 
@@ -59,18 +65,29 @@ fn encode_camera_frame(frame: &CameraFrame) -> Vec<u8> {
 
 fn decode_camera_frame(bytes: &[u8]) -> Result<(CameraFrame, usize), CapabilityError> {
     if bytes.len() < 20 {
-        return Err(CapabilityError::InvalidRequest("remote camera frame payload too short"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote camera frame payload too short",
+        ));
     }
     let width = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
     let height = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
     let stride = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
-    let format = camera_pixel_format_from_u32(u32::from_le_bytes(bytes[12..16].try_into().unwrap()))?;
+    let format =
+        camera_pixel_format_from_u32(u32::from_le_bytes(bytes[12..16].try_into().unwrap()))?;
     let len = u32::from_le_bytes(bytes[16..20].try_into().unwrap()) as usize;
     if bytes.len() < 20 + len {
-        return Err(CapabilityError::InvalidRequest("remote camera frame byte count exceeds payload length"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote camera frame byte count exceeds payload length",
+        ));
     }
     Ok((
-        CameraFrame { width, height, stride, format, bytes: bytes[20..20 + len].to_vec() },
+        CameraFrame {
+            width,
+            height,
+            stride,
+            format,
+            bytes: bytes[20..20 + len].to_vec(),
+        },
         20 + len,
     ))
 }
@@ -90,7 +107,11 @@ fn camera_capture_quality_from_u8(v: u8) -> Result<CameraCaptureQuality, Capabil
         2 => CameraCaptureQuality::Fair,
         3 => CameraCaptureQuality::Good,
         4 => CameraCaptureQuality::Excellent,
-        _ => return Err(CapabilityError::InvalidRequest("remote camera capture quality is invalid")),
+        _ => {
+            return Err(CapabilityError::InvalidRequest(
+                "remote camera capture quality is invalid",
+            ))
+        }
     })
 }
 
@@ -136,25 +157,40 @@ pub fn encode_camera_capture(capture: &CameraCapture) -> Vec<u8> {
 pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityError> {
     let (frame, offset) = decode_camera_frame(bytes)?;
     if bytes.len() < offset + 5 {
-        return Err(CapabilityError::InvalidRequest("remote camera capture payload too short"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote camera capture payload too short",
+        ));
     }
     let quality = camera_capture_quality_from_u8(bytes[offset])?;
     let has_bounds = bytes[offset + 1] != 0;
     let mut cursor = offset + 2;
     let face_bounds = if has_bounds {
         if bytes.len() < cursor + 16 + 4 {
-            return Err(CapabilityError::InvalidRequest("remote camera face bounds payload too short"));
+            return Err(CapabilityError::InvalidRequest(
+                "remote camera face bounds payload too short",
+            ));
         }
-        let x = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()); cursor += 4;
-        let y = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()); cursor += 4;
-        let width = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()); cursor += 4;
-        let height = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()); cursor += 4;
-        Some(FaceBounds { x, y, width, height })
+        let x = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        cursor += 4;
+        let y = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        cursor += 4;
+        let width = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        cursor += 4;
+        let height = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        cursor += 4;
+        Some(FaceBounds {
+            x,
+            y,
+            width,
+            height,
+        })
     } else {
         None
     };
     if bytes.len() != cursor + 4 {
-        return Err(CapabilityError::InvalidRequest("remote camera capture payload length is invalid"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote camera capture payload length is invalid",
+        ));
     }
     let modality = match bytes[cursor + 3] {
         0 => None,
@@ -166,7 +202,9 @@ pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityEr
         _ => None,
     };
     Ok(CameraCapture {
-        frame, quality, face_bounds,
+        frame,
+        quality,
+        face_bounds,
         state: edgerun_biometrics::BiometricState {
             modality,
             verified: bytes[cursor] != 0,
@@ -199,13 +237,17 @@ pub fn decode_paired_camera_frame(bytes: &[u8]) -> Result<PairedCameraFrame, Cap
     let mut depth = None;
     for slot in 0..3 {
         if bytes.len() < cursor + 1 {
-            return Err(CapabilityError::InvalidRequest("remote paired camera payload too short"));
+            return Err(CapabilityError::InvalidRequest(
+                "remote paired camera payload too short",
+            ));
         }
         let present = bytes[cursor] != 0;
         cursor += 1;
         if present {
             if bytes.len() < cursor + 1 {
-                return Err(CapabilityError::InvalidRequest("remote paired camera role missing"));
+                return Err(CapabilityError::InvalidRequest(
+                    "remote paired camera role missing",
+                ));
             }
             let role = bytes[cursor];
             cursor += 1;
@@ -221,9 +263,15 @@ pub fn decode_paired_camera_frame(bytes: &[u8]) -> Result<PairedCameraFrame, Cap
         }
     }
     if cursor != bytes.len() {
-        return Err(CapabilityError::InvalidRequest("remote paired camera payload trailing bytes are invalid"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote paired camera payload trailing bytes are invalid",
+        ));
     }
-    Ok(PairedCameraFrame { rgb, infrared, depth })
+    Ok(PairedCameraFrame {
+        rgb,
+        infrared,
+        depth,
+    })
 }
 
 // --- Stream error ---
@@ -263,7 +311,13 @@ impl<D> CameraRemoteAdapter<D> {
         timeout_ms: u32,
         descriptor: CapabilityDescriptor,
     ) -> Self {
-        Self { device, purpose, timeout_ms, descriptor, next_sequence_no: 1 }
+        Self {
+            device,
+            purpose,
+            timeout_ms,
+            descriptor,
+            next_sequence_no: 1,
+        }
     }
 }
 
@@ -275,16 +329,30 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(&mut self, open: &CapabilitySessionOpen) -> Result<CapabilitySessionAccept, CapabilityError> {
+    fn open_session(
+        &mut self,
+        open: &CapabilitySessionOpen,
+    ) -> Result<CapabilitySessionAccept, CapabilityError> {
         Ok(accept_session_open_unchecked(open))
     }
 
-    fn invoke(&mut self, _session_id: &[u8], invocation: &CapabilityInvocation, _inline_parameters: Option<&[u8]>) -> Result<RemoteInvocationResult, CapabilityError> {
+    fn invoke(
+        &mut self,
+        _session_id: &[u8],
+        invocation: &CapabilityInvocation,
+        _inline_parameters: Option<&[u8]>,
+    ) -> Result<RemoteInvocationResult, CapabilityError> {
         Ok(stream_error(invocation, "camera"))
     }
 
-    fn next_event(&mut self, session_id: &[u8]) -> Result<Option<CapabilitySessionEvent>, CapabilityError> {
-        let capture = self.device.capture(self.purpose, self.timeout_ms).map_err(map_camera_error)?;
+    fn next_event(
+        &mut self,
+        session_id: &[u8],
+    ) -> Result<Option<CapabilitySessionEvent>, CapabilityError> {
+        let capture = self
+            .device
+            .capture(self.purpose, self.timeout_ms)
+            .map_err(map_camera_error)?;
         let sequence_no = self.next_sequence_no;
         self.next_sequence_no += 1;
         Ok(Some(CapabilitySessionEvent {
@@ -316,7 +384,13 @@ impl<D> PairedCameraRemoteAdapter<D> {
         timeout_ms: u32,
         descriptor: CapabilityDescriptor,
     ) -> Self {
-        Self { device, purpose, timeout_ms, descriptor, next_sequence_no: 1 }
+        Self {
+            device,
+            purpose,
+            timeout_ms,
+            descriptor,
+            next_sequence_no: 1,
+        }
     }
 }
 
@@ -328,16 +402,30 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(&mut self, open: &CapabilitySessionOpen) -> Result<CapabilitySessionAccept, CapabilityError> {
+    fn open_session(
+        &mut self,
+        open: &CapabilitySessionOpen,
+    ) -> Result<CapabilitySessionAccept, CapabilityError> {
         Ok(accept_session_open_unchecked(open))
     }
 
-    fn invoke(&mut self, _session_id: &[u8], invocation: &CapabilityInvocation, _inline_parameters: Option<&[u8]>) -> Result<RemoteInvocationResult, CapabilityError> {
+    fn invoke(
+        &mut self,
+        _session_id: &[u8],
+        invocation: &CapabilityInvocation,
+        _inline_parameters: Option<&[u8]>,
+    ) -> Result<RemoteInvocationResult, CapabilityError> {
         Ok(stream_error(invocation, "paired camera"))
     }
 
-    fn next_event(&mut self, session_id: &[u8]) -> Result<Option<CapabilitySessionEvent>, CapabilityError> {
-        let capture = self.device.capture_paired(self.purpose, self.timeout_ms).map_err(map_camera_error)?;
+    fn next_event(
+        &mut self,
+        session_id: &[u8],
+    ) -> Result<Option<CapabilitySessionEvent>, CapabilityError> {
+        let capture = self
+            .device
+            .capture_paired(self.purpose, self.timeout_ms)
+            .map_err(map_camera_error)?;
         let sequence_no = self.next_sequence_no;
         self.next_sequence_no += 1;
         Ok(Some(CapabilitySessionEvent {

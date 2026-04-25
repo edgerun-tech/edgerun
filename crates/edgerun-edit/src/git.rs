@@ -5,10 +5,7 @@ use std::process::Command;
 
 /// Run a git command in the given directory. Returns (stdout, stderr, success).
 fn run_git(dir: &Path, args: &[&str]) -> (String, String, bool) {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output();
+    let output = Command::new("git").args(args).current_dir(dir).output();
     match output {
         Ok(o) => {
             let stdout = String::from_utf8_lossy(&o.stdout).to_string();

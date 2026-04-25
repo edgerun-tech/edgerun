@@ -76,10 +76,13 @@ impl RunningWorkloads {
         if map.contains_key(&info.work_id) {
             return Err(info);
         }
-        map.insert(info.work_id, WorkloadEntry {
-            info: info.clone(),
-            kill_requested: AtomicBool::new(false),
-        });
+        map.insert(
+            info.work_id,
+            WorkloadEntry {
+                info: info.clone(),
+                kill_requested: AtomicBool::new(false),
+            },
+        );
         self.total_started.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
@@ -119,28 +122,35 @@ impl RunningWorkloads {
     /// Kill the container associated with a workload info record.
     fn kill_container(info: &RunningWorkloadInfo) {
         // Method 1: cgroup v2 kill (kernel 5.15+, kills all processes in cgroup)
-        let cgroup_root = std::path::Path::new("/sys/fs/cgroup")
-            .join(info.cgroup_path.trim_start_matches('/'));
+        let cgroup_root =
+            std::path::Path::new("/sys/fs/cgroup").join(info.cgroup_path.trim_start_matches('/'));
         if std::fs::write(cgroup_root.join("cgroup.kill"), "1").is_ok() {
-            edgerun_log::info!("killed workload {} via cgroup.kill (pid {})",
+            edgerun_log::info!(
+                "killed workload {} via cgroup.kill (pid {})",
                 edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
-                info.pid);
+                info.pid
+            );
             return;
         }
 
         // Method 2: SIGTERM → wait 5s → SIGKILL on init PID
         let term_result = unsafe { libc::kill(info.pid as libc::pid_t, libc::SIGTERM) };
         if term_result != 0 {
-            edgerun_log::warn!("SIGTERM failed for workload {} (pid {}): {}",
+            edgerun_log::warn!(
+                "SIGTERM failed for workload {} (pid {}): {}",
                 edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
-                info.pid, std::io::Error::last_os_error());
+                info.pid,
+                std::io::Error::last_os_error()
+            );
         }
 
         for _ in 0..50 {
             if !Self::process_exists(info.pid) {
-                edgerun_log::info!("workload {} exited gracefully (pid {})",
+                edgerun_log::info!(
+                    "workload {} exited gracefully (pid {})",
                     edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
-                    info.pid);
+                    info.pid
+                );
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -149,13 +159,18 @@ impl RunningWorkloads {
         // SIGKILL if still alive
         let kill_result = unsafe { libc::kill(info.pid as libc::pid_t, libc::SIGKILL) };
         if kill_result != 0 {
-            edgerun_log::error!("SIGKILL failed for workload {} (pid {}): {}",
+            edgerun_log::error!(
+                "SIGKILL failed for workload {} (pid {}): {}",
                 edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
-                info.pid, std::io::Error::last_os_error());
+                info.pid,
+                std::io::Error::last_os_error()
+            );
         } else {
-            edgerun_log::info!("force-killed workload {} via SIGKILL (pid {})",
+            edgerun_log::info!(
+                "force-killed workload {} via SIGKILL (pid {})",
                 edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
-                info.pid);
+                info.pid
+            );
         }
     }
 
@@ -167,7 +182,9 @@ impl RunningWorkloads {
     /// Check if kill was requested for a workload (for the background thread).
     pub fn is_kill_requested(&self, work_id: &[u8; 32]) -> bool {
         let map = self.workloads.read().expect("workloads map poisoned");
-        map.get(work_id).map(|e| e.kill_requested.load(Ordering::Acquire)).unwrap_or(false)
+        map.get(work_id)
+            .map(|e| e.kill_requested.load(Ordering::Acquire))
+            .unwrap_or(false)
     }
 
     /// Unregister a workload after the background thread has completed cleanup.
@@ -200,7 +217,10 @@ impl RunningWorkloads {
 
     /// Return the number of currently running workloads.
     pub fn count(&self) -> usize {
-        self.workloads.write().expect("workloads map poisoned").len()
+        self.workloads
+            .write()
+            .expect("workloads map poisoned")
+            .len()
     }
 
     /// Total workloads ever started since this registry was created.

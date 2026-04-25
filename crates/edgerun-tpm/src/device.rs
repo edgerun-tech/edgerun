@@ -5,8 +5,11 @@ use std::path::{Path, PathBuf};
 use crate::constants::*;
 use crate::traits::TpmTransport;
 use crate::types::*;
-use crate::wire::parse::{ensure_success_response, parse_read_public_response, parse_sign_response, parse_hash_response, parse_start_auth_session_response, key_info_from_read_public};
 use crate::wire::commands::*;
+use crate::wire::parse::{
+    ensure_success_response, key_info_from_read_public, parse_hash_response,
+    parse_read_public_response, parse_sign_response, parse_start_auth_session_response,
+};
 use crate::wire::{read_u16, read_u32};
 
 /// Generic TPM device wrapping any transport.
@@ -195,8 +198,11 @@ impl<T: TpmTransport> TpmDevice<T> {
             session_attributes: 0,
             hmac: vec![],
         });
-        let params_size = 2 + pub_bytes.len() as u16 + sensitive.len() as u16
-            + outside_info.len() as u16 + creation_pcr.len() as u16;
+        let params_size = 2
+            + pub_bytes.len() as u16
+            + sensitive.len() as u16
+            + outside_info.len() as u16
+            + creation_pcr.len() as u16;
         let total_size = 10 + auth_area.len() + params_size as usize;
 
         let mut cmd = Vec::new();
@@ -221,18 +227,23 @@ impl<T: TpmTransport> TpmDevice<T> {
         let out_public_start = offset;
         offset += out_public_size;
 
-        let creation_data_size = read_u16(&response, &mut offset, "createPrimary:creationData")? as usize;
+        let creation_data_size =
+            read_u16(&response, &mut offset, "createPrimary:creationData")? as usize;
         offset += creation_data_size;
-        let creation_hash_size = read_u16(&response, &mut offset, "createPrimary:creationHash")? as usize;
+        let creation_hash_size =
+            read_u16(&response, &mut offset, "createPrimary:creationHash")? as usize;
         offset += creation_hash_size;
-        let creation_ticket_size = read_u16(&response, &mut offset, "createPrimary:creationTicket")? as usize;
+        let creation_ticket_size =
+            read_u16(&response, &mut offset, "createPrimary:creationTicket")? as usize;
         offset += creation_ticket_size;
         let name_size = read_u16(&response, &mut offset, "createPrimary:name")? as usize;
         let name_start = offset;
 
         let pub_data = &response[out_public_start..out_public_start + out_public_size];
         if pub_data.len() < 10 {
-            return Err(TpmError::Protocol("CreatePrimary: outPublic too short".into()));
+            return Err(TpmError::Protocol(
+                "CreatePrimary: outPublic too short".into(),
+            ));
         }
         let pub_type = u16::from_be_bytes([pub_data[0], pub_data[1]]);
         if pub_type != TPM_ALG_ECC {
@@ -242,7 +253,9 @@ impl<T: TpmTransport> TpmDevice<T> {
         }
         let auth_policy_len = u16::from_be_bytes([pub_data[8], pub_data[9]]) as usize;
         if pub_data.len() < 10 + auth_policy_len {
-            return Err(TpmError::Protocol("CreatePrimary: authPolicy overrun".into()));
+            return Err(TpmError::Protocol(
+                "CreatePrimary: authPolicy overrun".into(),
+            ));
         }
         let params_offset = 10 + auth_policy_len;
         if pub_data.len() < params_offset + 10 {
@@ -250,19 +263,25 @@ impl<T: TpmTransport> TpmDevice<T> {
         }
         let unique_offset = params_offset + 10;
         if pub_data.len() < unique_offset + 2 {
-            return Err(TpmError::Protocol("CreatePrimary: unique.x size missing".into()));
+            return Err(TpmError::Protocol(
+                "CreatePrimary: unique.x size missing".into(),
+            ));
         }
-        let x_len = u16::from_be_bytes([pub_data[unique_offset], pub_data[unique_offset + 1]]) as usize;
+        let x_len =
+            u16::from_be_bytes([pub_data[unique_offset], pub_data[unique_offset + 1]]) as usize;
         let x_start = unique_offset + 2;
         if pub_data.len() < x_start + 2 {
-            return Err(TpmError::Protocol("CreatePrimary: unique.y size missing".into()));
+            return Err(TpmError::Protocol(
+                "CreatePrimary: unique.y size missing".into(),
+            ));
         }
         let y_start = x_start + x_len;
         let y_len = u16::from_be_bytes([pub_data[y_start], pub_data[y_start + 1]]) as usize;
         let public_key_bytes = [
             &pub_data[x_start + 2..x_start + 2 + x_len],
             &pub_data[y_start + 2..y_start + 2 + y_len],
-        ].concat();
+        ]
+        .concat();
 
         let name = response[name_start..name_start + name_size].to_vec();
 

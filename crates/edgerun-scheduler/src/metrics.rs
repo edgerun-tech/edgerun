@@ -1,7 +1,7 @@
-use edgerun_rt::sync::RwLock;
-use std::time::{SystemTime, UNIX_EPOCH};
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
-use serde::{Serialize, Deserialize};
+use edgerun_rt::sync::RwLock;
+use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderMetrics {
@@ -39,7 +39,7 @@ impl ProviderMetrics {
             active_deployments: 0,
         }
     }
-    
+
     pub fn from_mesh_payload(node_id: [u8; 32], payload: &MetricsReportPayload) -> Self {
         Self {
             node_id,
@@ -56,14 +56,14 @@ impl ProviderMetrics {
             active_deployments: payload.deployments.len() as u32,
         }
     }
-    
+
     pub fn cpu_utilization(&self) -> f64 {
         if self.cpu_cores_available == 0 {
             return 0.0;
         }
         (self.cpu_cores_used as f64 / self.cpu_cores_available as f64) * 100.0
     }
-    
+
     pub fn memory_utilization(&self) -> f64 {
         if self.memory_bytes_available == 0 {
             return 0.0;
@@ -82,7 +82,7 @@ impl MetricsReceiver {
             history: RwLock::new(Vec::new()),
         }
     }
-    
+
     pub fn receive(&self, metrics: ProviderMetrics) -> Result<(), String> {
         if metrics.cpu_cores_available == 0 {
             return Err("Invalid metrics: cpu_cores_available is 0".to_string());
@@ -93,35 +93,47 @@ impl MetricsReceiver {
         self.history.write().push(metrics);
         Ok(())
     }
-    
-    pub fn receive_from_mesh(&self, node_id: [u8; 32], payload: &MetricsReportPayload) -> Result<ProviderMetrics, String> {
+
+    pub fn receive_from_mesh(
+        &self,
+        node_id: [u8; 32],
+        payload: &MetricsReportPayload,
+    ) -> Result<ProviderMetrics, String> {
         let metrics = ProviderMetrics::from_mesh_payload(node_id, payload);
         self.receive(metrics.clone())?;
         Ok(metrics)
     }
-    
+
     pub fn get_history(&self, node_id: &[u8; 32]) -> Vec<ProviderMetrics> {
-        self.history.read()
+        self.history
+            .read()
             .iter()
             .filter(|m| &m.node_id == node_id)
             .cloned()
             .collect()
     }
-    
+
     pub fn aggregate_metrics(&self, node_id: &[u8; 32]) -> Option<ProviderMetrics> {
         let history = self.history.read();
-        let samples: Vec<_> = history.iter()
-            .filter(|m| &m.node_id == node_id)
-            .collect();
-        
+        let samples: Vec<_> = history.iter().filter(|m| &m.node_id == node_id).collect();
+
         if samples.is_empty() {
             return None;
         }
-        
-        let avg_cpu = samples.iter().map(|m| m.cpu_cores_used as f64).sum::<f64>() / samples.len() as f64;
-        let avg_mem = samples.iter().map(|m| m.memory_bytes_used as f64).sum::<f64>() / samples.len() as f64;
-        let avg_net = samples.iter().map(|m| m.network_bytes_sent as f64).sum::<f64>() / samples.len() as f64;
-        
+
+        let avg_cpu =
+            samples.iter().map(|m| m.cpu_cores_used as f64).sum::<f64>() / samples.len() as f64;
+        let avg_mem = samples
+            .iter()
+            .map(|m| m.memory_bytes_used as f64)
+            .sum::<f64>()
+            / samples.len() as f64;
+        let avg_net = samples
+            .iter()
+            .map(|m| m.network_bytes_sent as f64)
+            .sum::<f64>()
+            / samples.len() as f64;
+
         let latest = samples.last()?;
         Some(ProviderMetrics {
             node_id: *node_id,
@@ -160,7 +172,7 @@ mod tests {
     #[test]
     fn test_metrics_from_mesh_payload() {
         use edgerun_mesh::mesh_payload::MetricsReportPayload;
-        
+
         let payload = MetricsReportPayload {
             timestamp: 1000,
             cpu_cores_used: 2,
@@ -174,10 +186,10 @@ mod tests {
             container_count: 2,
             deployments: vec![],
         };
-        
+
         let node_id = [1u8; 32];
         let metrics = ProviderMetrics::from_mesh_payload(node_id, &payload);
-        
+
         assert_eq!(metrics.node_id, node_id);
         assert_eq!(metrics.timestamp, 1000);
         assert_eq!(metrics.cpu_cores_used, 2);
@@ -201,7 +213,7 @@ mod tests {
             container_count: 0,
             active_deployments: 0,
         };
-        
+
         assert!((metrics.cpu_utilization() - 50.0).abs() < 0.01);
     }
 
@@ -221,7 +233,7 @@ mod tests {
             container_count: 0,
             active_deployments: 0,
         };
-        
+
         assert!((metrics.memory_utilization() - 50.0).abs() < 0.01);
     }
 

@@ -3,11 +3,11 @@
 //! A `CancellationToken` can be cloned and shared across tasks. When
 //! `cancel()` is called, all clones observe the cancellation.
 
+use crate::sync::{Condvar, Mutex};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
 struct Inner {
@@ -56,7 +56,10 @@ impl CancellationToken {
 
     /// Wait until the token is cancelled.
     pub fn cancelled(&self) -> Cancelled<'_> {
-        Cancelled { token: self, registered: false }
+        Cancelled {
+            token: self,
+            registered: false,
+        }
     }
 
     /// Blocking wait until cancelled.
@@ -115,22 +118,16 @@ impl Future for Cancelled<'_> {
 mod tests {
     use super::*;
 
-    static NOOP_WAKER: std::sync::LazyLock<Waker> =
-        std::sync::LazyLock::new(|| {
-            static VTABLE: std::task::RawWakerVTable =
-                std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-            const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-                std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-            }
-            const fn wake_noop(_: *const ()) {}
-            const fn drop_noop(_: *const ()) {}
-            unsafe {
-                Waker::from_raw(std::task::RawWaker::new(
-                    std::ptr::null(),
-                    &VTABLE,
-                ))
-            }
-        });
+    static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
+        static VTABLE: std::task::RawWakerVTable =
+            std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
+        const fn clone_noop(_: *const ()) -> std::task::RawWaker {
+            std::task::RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        const fn wake_noop(_: *const ()) {}
+        const fn drop_noop(_: *const ()) {}
+        unsafe { Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+    });
 
     fn cx() -> Context<'static> {
         Context::from_waker(&NOOP_WAKER)
@@ -163,7 +160,10 @@ mod tests {
         let token = CancellationToken::new();
         token.cancel();
         let mut fut = token.cancelled();
-        assert!(matches!(Pin::new(&mut fut).poll(&mut cx()), Poll::Ready(())));
+        assert!(matches!(
+            Pin::new(&mut fut).poll(&mut cx()),
+            Poll::Ready(())
+        ));
     }
 
     #[test]

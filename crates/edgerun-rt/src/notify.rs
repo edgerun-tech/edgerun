@@ -9,10 +9,10 @@
 //! All state (permit counter + waiters queue) is under a single Mutex,
 //! eliminating races between `notify_one()` and `Notified::poll()`.
 
+use crate::sync::Mutex;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
-use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 struct NotifyInner {

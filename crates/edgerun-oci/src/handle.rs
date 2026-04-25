@@ -23,11 +23,11 @@ impl RunningContainer {
         // Use waitpid directly since we have the PID from raw fork()
         let mut status: c_int = 0;
         let result = unsafe { libc::waitpid(self.pid as i32, &mut status, 0) };
-        
+
         if result < 0 {
             return Err(io::Error::last_os_error());
         }
-        
+
         // Convert wait status to ExitStatus using ExitStatusExt::from_raw
         Ok(std::process::ExitStatus::from_raw(status as i32))
     }
@@ -48,7 +48,7 @@ impl RunningContainer {
         }
 
         let _ = unsafe { kill(pid as c_int, SIGKILL) };
-        
+
         // Wait for final exit
         let mut status: c_int = 0;
         unsafe { libc::waitpid(pid as i32, &mut status, 0) };
@@ -58,7 +58,8 @@ impl RunningContainer {
     /// Kill the container cgroup (kills all processes in the cgroup).
     /// More reliable than killing a single PID for container preemption.
     pub fn kill_cgroup(&self) {
-        let cgroup_root = Path::new("/sys/fs/cgroup").join(self.cgroup_path.trim_start_matches('/'));
+        let cgroup_root =
+            Path::new("/sys/fs/cgroup").join(self.cgroup_path.trim_start_matches('/'));
         let _ = fs::write(cgroup_root.join("cgroup.kill"), "1");
     }
 

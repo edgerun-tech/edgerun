@@ -83,12 +83,14 @@ impl Handler for StaticHandler {
         let root = self.root.clone();
 
         Box::pin(async move {
-            let handler = Self { root, default_file: self.default_file.clone() };
+            let handler = Self {
+                root,
+                default_file: self.default_file.clone(),
+            };
             let path = match handler.map_path(&uri) {
                 Some(p) => p,
                 None => {
-                    return Response::new(StatusCode::NOT_FOUND)
-                        .with_body("404 Not Found");
+                    return Response::new(StatusCode::NOT_FOUND).with_body("404 Not Found");
                 }
             };
 
@@ -99,10 +101,8 @@ impl Handler for StaticHandler {
                         .with_header("Content-Type", mime)
                         .with_body(content)
                 }
-                Err(e) => {
-                    Response::new(StatusCode::INTERNAL_SERVER_ERROR)
-                        .with_body(format!("500 Internal Server Error: {}", e))
-                }
+                Err(e) => Response::new(StatusCode::INTERNAL_SERVER_ERROR)
+                    .with_body(format!("500 Internal Server Error: {}", e)),
             }
         })
     }

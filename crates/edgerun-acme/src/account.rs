@@ -1,7 +1,8 @@
-
-use edgerun_crypto::{random_p256_signing_key, p256_signing_key_to_pem, p256_signing_key_from_pem, SigningKey, Digest};
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use edgerun_crypto::p256::ecdsa::Signature;
+use edgerun_crypto::{
+    p256_signing_key_from_pem, p256_signing_key_to_pem, random_p256_signing_key, Digest, SigningKey,
+};
 use edgerun_encoding::base64::base64url_nopad_encode;
 
 use crate::types::Jwk;
@@ -20,8 +21,7 @@ impl AccountKey {
     }
 
     pub fn from_pem(pem: &str) -> Result<Self, AcmeError> {
-        let key = p256_signing_key_from_pem(pem)
-            .map_err(|e| AcmeError::Crypto(e.to_string()))?;
+        let key = p256_signing_key_from_pem(pem).map_err(|e| AcmeError::Crypto(e.to_string()))?;
         Ok(Self {
             key,
             pem: pem.to_string(),
@@ -32,10 +32,10 @@ impl AccountKey {
         let pk = self.key.verifying_key();
         let encoded = pk.to_encoded_point(true);
         let bytes = encoded.as_bytes();
-        
+
         let x = &bytes[1..33];
         let y = &bytes[33..65];
-        
+
         Jwk::EC {
             crv: "P-256".to_string(),
             x: base64url_nopad_encode(x),

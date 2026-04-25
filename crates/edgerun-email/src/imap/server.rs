@@ -15,23 +15,22 @@ use std::task::{Context, Poll};
 use std::time::SystemTime;
 
 use edgerun_rt::{
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
-    AsyncTcpListener, AsyncTcpStream,
+    AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
     CancellationToken, Mutex,
 };
 
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
 
-use crate::server::ConnectionInterceptor;
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult, StoreAction};
 use crate::imap::parser::{self, ImapReader};
 use crate::imap::types::{
-    Envelope, FetchAttr, Flags, ImapState, Mailbox, MailboxStatus, Message, SearchKey, Address,
+    Address, Envelope, FetchAttr, Flags, ImapState, Mailbox, MailboxStatus, Message, SearchKey,
 };
+use crate::server::ConnectionInterceptor;
 
 // ===========================================================================
 // IMAP Session Extension Types
@@ -83,9 +82,9 @@ const CAPABILITIES: &[&str] = &[
 pub struct QuotaInfo {
     pub mailbox: String,
     pub storage_used: u32,  // KB used
-    pub storage_limit: u32,  // KB limit
-    pub message_count: u32,  // current messages
-    pub message_limit: u32,  // max messages
+    pub storage_limit: u32, // KB limit
+    pub message_count: u32, // current messages
+    pub message_limit: u32, // max messages
 }
 
 /// Internal quota tracking struct.
@@ -124,14 +123,9 @@ impl ImapTransport {
 
     /// Upgrade a plain transport to TLS in place.
     #[cfg(feature = "tls")]
-    pub async fn upgrade_tls(
-        self,
-        cert_and_key: &CertificateAndKey,
-    ) -> io::Result<ImapTransport> {
+    pub async fn upgrade_tls(self, cert_and_key: &CertificateAndKey) -> io::Result<ImapTransport> {
         match self {
-            ImapTransport::Tls(_) => {
-                Err(io::Error::other("already using TLS"))
-            }
+            ImapTransport::Tls(_) => Err(io::Error::other("already using TLS")),
             ImapTransport::Plain(stream) => {
                 let fd = stream.into_fd();
                 let tcp = AsyncTcpStream::from_raw(fd);
@@ -220,23 +214,45 @@ pub trait MailStore: Send + Sync + 'static {
     fn rename(&self, old: &str, new: &str) -> io::Result<bool>;
 
     /// Fetch messages matching a sequence set.
-    fn fetch(&self, mailbox: &str, sequence: &str, attrs: &[FetchAttr]) -> io::Result<Vec<(u32, HashMap<String, String>)>>;
+    fn fetch(
+        &self,
+        mailbox: &str,
+        sequence: &str,
+        attrs: &[FetchAttr],
+    ) -> io::Result<Vec<(u32, HashMap<String, String>)>>;
 
     /// Store flags on messages.
-    fn store(&self, mailbox: &str, sequence: &str, action: &StoreAction, flags: &[String]) -> io::Result<Vec<u32>>;
+    fn store(
+        &self,
+        mailbox: &str,
+        sequence: &str,
+        action: &StoreAction,
+        flags: &[String],
+    ) -> io::Result<Vec<u32>>;
 
     /// Search for messages matching criteria.
     fn search(&self, mailbox: &str, keys: &[SearchKey]) -> io::Result<Vec<u32>>;
 
     /// Sort messages matching search criteria, returning UIDs in sorted order.
     /// Each criterion can optionally be reversed (descending).
-    fn sort(&self, mailbox: &str, keys: &[SearchKey], criteria: &[(String, bool)]) -> io::Result<Vec<u32>>;
+    fn sort(
+        &self,
+        mailbox: &str,
+        keys: &[SearchKey],
+        criteria: &[(String, bool)],
+    ) -> io::Result<Vec<u32>>;
 
     /// Expunge deleted messages.
     fn expunge(&self, mailbox: &str) -> io::Result<Vec<u32>>;
 
     /// Append a message to a mailbox.
-    fn append(&self, mailbox: &str, flags: Flags, date: Option<SystemTime>, data: &[u8]) -> io::Result<u32>;
+    fn append(
+        &self,
+        mailbox: &str,
+        flags: Flags,
+        date: Option<SystemTime>,
+        data: &[u8],
+    ) -> io::Result<u32>;
 
     /// Copy messages to another mailbox.
     fn copy_messages(&self, mailbox: &str, sequence: &str, dest: &str) -> io::Result<Vec<u32>>;
@@ -286,19 +302,32 @@ impl MemoryStore {
             next_uid: std::sync::Mutex::new(1),
         };
         // Create default INBOX
-        store.mailboxes.lock().unwrap().insert("INBOX".to_string(), Vec::new());
+        store
+            .mailboxes
+            .lock()
+            .unwrap()
+            .insert("INBOX".to_string(), Vec::new());
         // Add default user
-        store.users.lock().unwrap().insert("user".to_string(), "pass".to_string());
+        store
+            .users
+            .lock()
+            .unwrap()
+            .insert("user".to_string(), "pass".to_string());
         store
     }
 
     pub fn add_user(&self, username: &str, password: &str) {
-        self.users.lock().unwrap().insert(username.to_string(), password.to_string());
+        self.users
+            .lock()
+            .unwrap()
+            .insert(username.to_string(), password.to_string());
     }
 }
 
 impl Default for MemoryStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MailStore for MemoryStore {
@@ -384,7 +413,12 @@ impl MailStore for MemoryStore {
         }
     }
 
-    fn fetch(&self, mailbox: &str, sequence: &str, attrs: &[FetchAttr]) -> io::Result<Vec<(u32, HashMap<String, String>)>> {
+    fn fetch(
+        &self,
+        mailbox: &str,
+        sequence: &str,
+        attrs: &[FetchAttr],
+    ) -> io::Result<Vec<(u32, HashMap<String, String>)>> {
         let mailboxes = self.mailboxes.lock().unwrap();
         if let Some(msgs) = mailboxes.get(mailbox) {
             let mut results = Vec::new();
@@ -394,9 +428,21 @@ impl MailStore for MemoryStore {
                 // Handle ranges like "1:5" or "*"
                 let seq_nums = if seq_str.contains(':') {
                     let parts: Vec<&str> = seq_str.splitn(2, ':').collect();
-                    let start = if parts[0] == "*" { msgs.len() as u32 } else { parts[0].parse::<u32>().unwrap_or(0) };
-                    let end = if parts[1] == "*" { msgs.len() as u32 } else { parts[1].parse::<u32>().unwrap_or(0) };
-                    let (s, e) = if start <= end { (start, end) } else { (end, start) };
+                    let start = if parts[0] == "*" {
+                        msgs.len() as u32
+                    } else {
+                        parts[0].parse::<u32>().unwrap_or(0)
+                    };
+                    let end = if parts[1] == "*" {
+                        msgs.len() as u32
+                    } else {
+                        parts[1].parse::<u32>().unwrap_or(0)
+                    };
+                    let (s, e) = if start <= end {
+                        (start, end)
+                    } else {
+                        (end, start)
+                    };
                     (s..=e).collect::<Vec<_>>()
                 } else if seq_str == "*" {
                     vec![msgs.len() as u32]
@@ -426,15 +472,20 @@ impl MailStore for MemoryStore {
                                 }
                                 FetchAttr::Rfc822Header => {
                                     // Extract headers (everything before first blank line)
-                                    let header_end = msg.rfc822.windows(4)
+                                    let header_end = msg
+                                        .rfc822
+                                        .windows(4)
                                         .position(|w| w == b"\r\n\r\n")
                                         .unwrap_or(msg.rfc822.len());
-                                    let headers = String::from_utf8_lossy(&msg.rfc822[..header_end]);
+                                    let headers =
+                                        String::from_utf8_lossy(&msg.rfc822[..header_end]);
                                     data.insert("RFC822.HEADER".to_string(), headers.into_owned());
                                 }
                                 FetchAttr::Rfc822Text => {
                                     // Extract body (everything after first blank line)
-                                    let header_end = msg.rfc822.windows(4)
+                                    let header_end = msg
+                                        .rfc822
+                                        .windows(4)
                                         .position(|w| w == b"\r\n\r\n")
                                         .map(|p| p + 4)
                                         .unwrap_or(0);
@@ -442,7 +493,10 @@ impl MailStore for MemoryStore {
                                     data.insert("RFC822.TEXT".to_string(), body.into_owned());
                                 }
                                 FetchAttr::Envelope => {
-                                    data.insert("ENVELOPE".to_string(), format_envelope_imap(&msg.envelope));
+                                    data.insert(
+                                        "ENVELOPE".to_string(),
+                                        format_envelope_imap(&msg.envelope),
+                                    );
                                 }
                                 FetchAttr::InternalDate => {
                                     // Format as IMAP internal date: DD-Mon-YYYY HH:MM:SS +ZZZZ
@@ -452,25 +506,43 @@ impl MailStore for MemoryStore {
                                 FetchAttr::BodySection(section) => {
                                     if section.is_empty() {
                                         // BODY[] = full message
-                                        data.insert("BODY[]".to_string(), format!("{{{}}}", msg.size));
-                                        data.insert("__BODY_DATA__".to_string(), String::from_utf8_lossy(&msg.rfc822).into_owned());
+                                        data.insert(
+                                            "BODY[]".to_string(),
+                                            format!("{{{}}}", msg.size),
+                                        );
+                                        data.insert(
+                                            "__BODY_DATA__".to_string(),
+                                            String::from_utf8_lossy(&msg.rfc822).into_owned(),
+                                        );
                                     } else if section.to_uppercase() == "HEADER" {
-                                        let header_end = msg.rfc822.windows(4)
+                                        let header_end = msg
+                                            .rfc822
+                                            .windows(4)
                                             .position(|w| w == b"\r\n\r\n")
                                             .unwrap_or(msg.rfc822.len());
-                                        let headers = String::from_utf8_lossy(&msg.rfc822[..header_end]);
-                                        data.insert("BODY[HEADER]".to_string(), headers.into_owned());
+                                        let headers =
+                                            String::from_utf8_lossy(&msg.rfc822[..header_end]);
+                                        data.insert(
+                                            "BODY[HEADER]".to_string(),
+                                            headers.into_owned(),
+                                        );
                                     } else if section.to_uppercase() == "TEXT" {
-                                        let header_end = msg.rfc822.windows(4)
+                                        let header_end = msg
+                                            .rfc822
+                                            .windows(4)
                                             .position(|w| w == b"\r\n\r\n")
                                             .map(|p| p + 4)
                                             .unwrap_or(0);
-                                        let body = String::from_utf8_lossy(&msg.rfc822[header_end..]);
+                                        let body =
+                                            String::from_utf8_lossy(&msg.rfc822[header_end..]);
                                         data.insert("BODY[TEXT]".to_string(), body.into_owned());
                                     }
                                 }
                                 FetchAttr::BodyStructure => {
-                                    data.insert("BODYSTRUCTURE".to_string(), format_body_structure(msg));
+                                    data.insert(
+                                        "BODYSTRUCTURE".to_string(),
+                                        format_body_structure(msg),
+                                    );
                                 }
                                 FetchAttr::MsgSize => {
                                     data.insert("RFC822.SIZE".to_string(), msg.size.to_string());
@@ -487,7 +559,13 @@ impl MailStore for MemoryStore {
         }
     }
 
-    fn store(&self, mailbox: &str, sequence: &str, action: &StoreAction, flags: &[String]) -> io::Result<Vec<u32>> {
+    fn store(
+        &self,
+        mailbox: &str,
+        sequence: &str,
+        action: &StoreAction,
+        flags: &[String],
+    ) -> io::Result<Vec<u32>> {
         let mut mailboxes = self.mailboxes.lock().unwrap();
         if let Some(msgs) = mailboxes.get_mut(mailbox) {
             let mut updated = Vec::new();
@@ -496,9 +574,21 @@ impl MailStore for MemoryStore {
             for seq_str in &seq_set {
                 let seq_nums = if seq_str.contains(':') {
                     let parts: Vec<&str> = seq_str.splitn(2, ':').collect();
-                    let start = if parts[0] == "*" { msgs.len() as u32 } else { parts[0].parse::<u32>().unwrap_or(0) };
-                    let end = if parts[1] == "*" { msgs.len() as u32 } else { parts[1].parse::<u32>().unwrap_or(0) };
-                    let (s, e) = if start <= end { (start, end) } else { (end, start) };
+                    let start = if parts[0] == "*" {
+                        msgs.len() as u32
+                    } else {
+                        parts[0].parse::<u32>().unwrap_or(0)
+                    };
+                    let end = if parts[1] == "*" {
+                        msgs.len() as u32
+                    } else {
+                        parts[1].parse::<u32>().unwrap_or(0)
+                    };
+                    let (s, e) = if start <= end {
+                        (start, end)
+                    } else {
+                        (end, start)
+                    };
                     (s..=e).collect::<Vec<_>>()
                 } else if seq_str == "*" {
                     vec![msgs.len() as u32]
@@ -548,7 +638,9 @@ impl MailStore for MemoryStore {
                                 msg.flags.flagged &= !new_flags.flagged;
                                 msg.flags.deleted &= !new_flags.deleted;
                                 msg.flags.draft &= !new_flags.draft;
-                                msg.flags.keywords.retain(|k| !new_flags.keywords.contains(k));
+                                msg.flags
+                                    .keywords
+                                    .retain(|k| !new_flags.keywords.contains(k));
                             }
                             StoreAction::RemoveSilent => {
                                 msg.flags.seen &= !new_flags.seen;
@@ -556,7 +648,9 @@ impl MailStore for MemoryStore {
                                 msg.flags.flagged &= !new_flags.flagged;
                                 msg.flags.deleted &= !new_flags.deleted;
                                 msg.flags.draft &= !new_flags.draft;
-                                msg.flags.keywords.retain(|k| !new_flags.keywords.contains(k));
+                                msg.flags
+                                    .keywords
+                                    .retain(|k| !new_flags.keywords.contains(k));
                             }
                         }
                         updated.push(msg.uid);
@@ -584,14 +678,20 @@ impl MailStore for MemoryStore {
         }
     }
 
-    fn sort(&self, mailbox: &str, keys: &[SearchKey], criteria: &[(String, bool)]) -> io::Result<Vec<u32>> {
+    fn sort(
+        &self,
+        mailbox: &str,
+        keys: &[SearchKey],
+        criteria: &[(String, bool)],
+    ) -> io::Result<Vec<u32>> {
         let mailboxes = self.mailboxes.lock().unwrap();
         let Some(msgs) = mailboxes.get(mailbox) else {
             return Ok(Vec::new());
         };
 
         // Filter by search keys
-        let mut matching: Vec<&Message> = msgs.iter()
+        let mut matching: Vec<&Message> = msgs
+            .iter()
             .filter(|m| matches_keys(m, keys, msgs))
             .collect();
 
@@ -606,13 +706,21 @@ impl MailStore for MemoryStore {
                 "ARRIVAL" => {
                     matching.sort_by(|a, b| {
                         let ord = a.internal_date.cmp(&b.internal_date);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "DATE" | "SENT" => {
                     matching.sort_by(|a, b| {
                         let ord = a.internal_date.cmp(&b.internal_date);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "SUBJECT" => {
@@ -620,43 +728,87 @@ impl MailStore for MemoryStore {
                         let subj_a = a.envelope.subject.as_deref().unwrap_or("");
                         let subj_b = b.envelope.subject.as_deref().unwrap_or("");
                         let ord = subj_a.cmp(subj_b);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "FROM" => {
                     matching.sort_by(|a, b| {
-                        let from_a = a.envelope.from.first()
-                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
-                        let from_b = b.envelope.from.first()
-                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let from_a = a
+                            .envelope
+                            .from
+                            .first()
+                            .and_then(|addr| addr.name.as_deref())
+                            .unwrap_or("");
+                        let from_b = b
+                            .envelope
+                            .from
+                            .first()
+                            .and_then(|addr| addr.name.as_deref())
+                            .unwrap_or("");
                         let ord = from_a.cmp(from_b);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "TO" => {
                     matching.sort_by(|a, b| {
-                        let to_a = a.envelope.to.first()
-                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
-                        let to_b = b.envelope.to.first()
-                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let to_a = a
+                            .envelope
+                            .to
+                            .first()
+                            .and_then(|addr| addr.name.as_deref())
+                            .unwrap_or("");
+                        let to_b = b
+                            .envelope
+                            .to
+                            .first()
+                            .and_then(|addr| addr.name.as_deref())
+                            .unwrap_or("");
                         let ord = to_a.cmp(to_b);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "CC" => {
                     matching.sort_by(|a, b| {
-                        let cc_a = a.envelope.cc.first()
-                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
-                        let cc_b = b.envelope.cc.first()
-                            .and_then(|addr| addr.name.as_deref()).unwrap_or("");
+                        let cc_a = a
+                            .envelope
+                            .cc
+                            .first()
+                            .and_then(|addr| addr.name.as_deref())
+                            .unwrap_or("");
+                        let cc_b = b
+                            .envelope
+                            .cc
+                            .first()
+                            .and_then(|addr| addr.name.as_deref())
+                            .unwrap_or("");
                         let ord = cc_a.cmp(cc_b);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 "SIZE" => {
                     matching.sort_by(|a, b| {
                         let ord = a.size.cmp(&b.size);
-                        if rev { ord.reverse() } else { ord }
+                        if rev {
+                            ord.reverse()
+                        } else {
+                            ord
+                        }
                     });
                 }
                 _ => {} // Unknown criterion, keep order
@@ -688,7 +840,13 @@ impl MailStore for MemoryStore {
         }
     }
 
-    fn append(&self, mailbox: &str, flags: Flags, date: Option<SystemTime>, data: &[u8]) -> io::Result<u32> {
+    fn append(
+        &self,
+        mailbox: &str,
+        flags: Flags,
+        date: Option<SystemTime>,
+        data: &[u8],
+    ) -> io::Result<u32> {
         let mut mailboxes = self.mailboxes.lock().unwrap();
         if let Some(msgs) = mailboxes.get_mut(mailbox) {
             let mut next_uid = self.next_uid.lock().unwrap();
@@ -710,7 +868,7 @@ impl MailStore for MemoryStore {
 
     fn copy_messages(&self, mailbox: &str, sequence: &str, dest: &str) -> io::Result<Vec<u32>> {
         let mut mailboxes = self.mailboxes.lock().unwrap();
-        
+
         // Get source messages
         if let Some(src_msgs) = mailboxes.get(mailbox) {
             let mut msgs_to_copy = Vec::new();
@@ -719,9 +877,21 @@ impl MailStore for MemoryStore {
             for seq_str in &seq_set {
                 let seq_nums = if seq_str.contains(':') {
                     let parts: Vec<&str> = seq_str.splitn(2, ':').collect();
-                    let start = if parts[0] == "*" { src_msgs.len() as u32 } else { parts[0].parse::<u32>().unwrap_or(0) };
-                    let end = if parts[1] == "*" { src_msgs.len() as u32 } else { parts[1].parse::<u32>().unwrap_or(0) };
-                    let (s, e) = if start <= end { (start, end) } else { (end, start) };
+                    let start = if parts[0] == "*" {
+                        src_msgs.len() as u32
+                    } else {
+                        parts[0].parse::<u32>().unwrap_or(0)
+                    };
+                    let end = if parts[1] == "*" {
+                        src_msgs.len() as u32
+                    } else {
+                        parts[1].parse::<u32>().unwrap_or(0)
+                    };
+                    let (s, e) = if start <= end {
+                        (start, end)
+                    } else {
+                        (end, start)
+                    };
                     (s..=e).collect::<Vec<_>>()
                 } else if seq_str == "*" {
                     vec![src_msgs.len() as u32]
@@ -753,7 +923,10 @@ impl MailStore for MemoryStore {
                 }
                 Ok(copied_uids)
             } else {
-                Err(io::Error::new(io::ErrorKind::NotFound, "destination mailbox not found"))
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "destination mailbox not found",
+                ))
             }
         } else {
             Ok(Vec::new())
@@ -805,7 +978,9 @@ impl MailStore for MemoryStore {
         let mailboxes = self.mailboxes.lock().unwrap();
         let msgs = mailboxes.get(mailbox);
         let msg_count = msgs.map(|m| m.len() as u32).unwrap_or(0);
-        let storage_used = msgs.map(|m| m.iter().map(|m| m.size).sum::<usize>() as u32).unwrap_or(0);
+        let storage_used = msgs
+            .map(|m| m.iter().map(|m| m.size).sum::<usize>() as u32)
+            .unwrap_or(0);
 
         if let Some(q) = quotas.get(mailbox) {
             Ok(Some(QuotaInfo {
@@ -838,11 +1013,19 @@ impl MailStore for MemoryStore {
                 _ => {}
             }
         }
-        quotas.insert(mailbox.to_string(), Quota { storage_limit, message_limit });
+        quotas.insert(
+            mailbox.to_string(),
+            Quota {
+                storage_limit,
+                message_limit,
+            },
+        );
         let mailboxes = self.mailboxes.lock().unwrap();
         let msgs = mailboxes.get(mailbox);
         let msg_count = msgs.map(|m| m.len() as u32).unwrap_or(0);
-        let storage_used = msgs.map(|m| m.iter().map(|m| m.size).sum::<usize>() as u32).unwrap_or(0);
+        let storage_used = msgs
+            .map(|m| m.iter().map(|m| m.size).sum::<usize>() as u32)
+            .unwrap_or(0);
         drop(mailboxes);
 
         Ok(QuotaInfo {
@@ -895,8 +1078,10 @@ pub fn format_envelope_imap(env: &Envelope) -> String {
     let in_reply_to = format_string_or_nil_imap(&env.in_reply_to);
     let message_id = format_string_or_nil_imap(&env.message_id);
 
-    format!("({} {} {} {} {} {} {} {} {} {})",
-        date, subject, from, sender, reply_to, to, cc, bcc, in_reply_to, message_id)
+    format!(
+        "({} {} {} {} {} {} {} {} {} {})",
+        date, subject, from, sender, reply_to, to, cc, bcc, in_reply_to, message_id
+    )
 }
 
 fn format_string_or_nil_imap(s: &Option<String>) -> String {
@@ -907,7 +1092,9 @@ fn format_string_or_nil_imap(s: &Option<String>) -> String {
 }
 
 fn format_address_list_imap(addrs: &[Address]) -> String {
-    if addrs.is_empty() { return "NIL".to_string(); }
+    if addrs.is_empty() {
+        return "NIL".to_string();
+    }
     let parts: Vec<String> = addrs.iter().map(format_address_imap).collect();
     format!("({})", parts.join(" "))
 }
@@ -935,39 +1122,73 @@ pub fn format_internal_date(t: SystemTime) -> String {
     let hours = time_secs / 3600;
     let mins = (time_secs % 3600) / 60;
     let secs = time_secs % 60;
-    
+
     // Approximate date calculation
     let days = secs / 86400;
     let year = 1970 + days / 365;
     let day_of_year = days % 365;
     let month = (day_of_year / 30) + 1;
     let day = (day_of_year % 30) + 1;
-    
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
     let mon = MONTHS.get((month - 1) as usize).copied().unwrap_or("Jan");
-    
-    format!("{:02}-{}-{} {:02}:{:02}:{:02} +0000", day.min(28), mon, year, hours, mins, secs)
+
+    format!(
+        "{:02}-{}-{} {:02}:{:02}:{:02} +0000",
+        day.min(28),
+        mon,
+        year,
+        hours,
+        mins,
+        secs
+    )
 }
 
 fn format_body_structure(msg: &Message) -> String {
     let line_count = msg.rfc822.split(|&b| b == b'\n').count() as u32;
-    format!(r#"("text" "plain" ("charset" "utf-8") NIL NIL "7bit" {} {})"#, msg.size, line_count)
+    format!(
+        r#"("text" "plain" ("charset" "utf-8") NIL NIL "7bit" {} {})"#,
+        msg.size, line_count
+    )
 }
 
 fn parse_imap_date(s: &str) -> Result<SystemTime, ()> {
-    let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    let parts: Vec<&str> = s.split_whitespace().next().unwrap_or(s).split('-').collect();
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let parts: Vec<&str> = s
+        .split_whitespace()
+        .next()
+        .unwrap_or(s)
+        .split('-')
+        .collect();
     if parts.len() >= 3 {
         let day: u32 = parts[0].parse().map_err(|_| ())?;
         let month_str = parts[1];
         let year: u32 = parts[2].parse().map_err(|_| ())?;
-        let month = months.iter().position(|&m| m.eq_ignore_ascii_case(month_str)).ok_or(())? as u32 + 1;
-        
+        let month = months
+            .iter()
+            .position(|&m| m.eq_ignore_ascii_case(month_str))
+            .ok_or(())? as u32
+            + 1;
+
         use std::time::{Duration, UNIX_EPOCH};
         let days_from_year = (year - 1970) as u64 * 365 + (year - 1969) as u64 / 4;
         let days_in_months: u64 = match month {
-            1 => 0, 2 => 31, 3 => 59, 4 => 90, 5 => 120, 6 => 151,
-            7 => 181, 8 => 212, 9 => 243, 10 => 273, 11 => 304, 12 => 334,
+            1 => 0,
+            2 => 31,
+            3 => 59,
+            4 => 90,
+            5 => 120,
+            6 => 151,
+            7 => 181,
+            8 => 212,
+            9 => 243,
+            10 => 273,
+            11 => 304,
+            12 => 334,
             _ => 0,
         };
         let total_days = days_from_year + days_in_months + (day as u64 - 1);
@@ -1083,7 +1304,8 @@ fn unfold_encoded_word(s: &str) -> String {
                             i += 1;
                         } else if bytes[i] == b'=' && i + 2 < bytes.len() {
                             if let Ok(val) = u8::from_str_radix(
-                                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("00"), 16
+                                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("00"),
+                                16,
                             ) {
                                 decoded.push(val);
                             }
@@ -1154,7 +1376,9 @@ fn parse_imap_address_first(s: &str) -> Option<Address> {
 }
 
 fn parse_imap_address(s: &str) -> Option<Address> {
-    if s.is_empty() || s == "NIL" { return None; }
+    if s.is_empty() || s == "NIL" {
+        return None;
+    }
 
     // Remove display name and quoted-string prefix
     let s = s.trim();
@@ -1211,31 +1435,45 @@ fn matches_keys(msg: &Message, keys: &[SearchKey], all_msgs: &[Message]) -> bool
             SearchKey::Unseen => !msg.flags.seen,
             SearchKey::Not(sub_key) => !matches_keys(msg, &[(**sub_key).clone()], all_msgs),
             SearchKey::And(k1, k2) => {
-                matches_keys(msg, &[(**k1).clone()], all_msgs) && matches_keys(msg, &[(**k2).clone()], all_msgs)
+                matches_keys(msg, &[(**k1).clone()], all_msgs)
+                    && matches_keys(msg, &[(**k2).clone()], all_msgs)
             }
             SearchKey::Or(k1, k2) => {
-                matches_keys(msg, &[(**k1).clone()], all_msgs) || matches_keys(msg, &[(**k2).clone()], all_msgs)
+                matches_keys(msg, &[(**k1).clone()], all_msgs)
+                    || matches_keys(msg, &[(**k2).clone()], all_msgs)
             }
             SearchKey::Smaller(n) => msg.size < *n as usize,
             SearchKey::Larger(n) => msg.size > *n as usize,
-            SearchKey::Subject(sub) => {
-                msg.envelope.subject.as_ref()
-                    .map(|s| s.to_lowercase().contains(&sub.to_lowercase()))
+            SearchKey::Subject(sub) => msg
+                .envelope
+                .subject
+                .as_ref()
+                .map(|s| s.to_lowercase().contains(&sub.to_lowercase()))
+                .unwrap_or(false),
+            SearchKey::From(addr) => msg.envelope.from.iter().any(|a| {
+                a.mailbox
+                    .as_ref()
+                    .map(|m| m.to_lowercase().contains(&addr.to_lowercase()))
                     .unwrap_or(false)
-            }
-            SearchKey::From(addr) => {
-                msg.envelope.from.iter().any(|a| {
-                    a.mailbox.as_ref().map(|m| m.to_lowercase().contains(&addr.to_lowercase())).unwrap_or(false)
-                    || a.host.as_ref().map(|h| h.to_lowercase().contains(&addr.to_lowercase())).unwrap_or(false)
-                    || a.name.as_ref().map(|n| n.to_lowercase().contains(&addr.to_lowercase())).unwrap_or(false)
-                })
-            }
-            SearchKey::To(addr) => {
-                msg.envelope.to.iter().any(|a| {
-                    a.mailbox.as_ref().map(|m| m.to_lowercase().contains(&addr.to_lowercase())).unwrap_or(false)
-                    || a.host.as_ref().map(|h| h.to_lowercase().contains(&addr.to_lowercase())).unwrap_or(false)
-                })
-            }
+                    || a.host
+                        .as_ref()
+                        .map(|h| h.to_lowercase().contains(&addr.to_lowercase()))
+                        .unwrap_or(false)
+                    || a.name
+                        .as_ref()
+                        .map(|n| n.to_lowercase().contains(&addr.to_lowercase()))
+                        .unwrap_or(false)
+            }),
+            SearchKey::To(addr) => msg.envelope.to.iter().any(|a| {
+                a.mailbox
+                    .as_ref()
+                    .map(|m| m.to_lowercase().contains(&addr.to_lowercase()))
+                    .unwrap_or(false)
+                    || a.host
+                        .as_ref()
+                        .map(|h| h.to_lowercase().contains(&addr.to_lowercase()))
+                        .unwrap_or(false)
+            }),
             SearchKey::Body(text) => {
                 let body = String::from_utf8_lossy(&msg.rfc822).to_lowercase();
                 body.contains(&text.to_lowercase())
@@ -1243,9 +1481,20 @@ fn matches_keys(msg: &Message, keys: &[SearchKey], all_msgs: &[Message]) -> bool
             SearchKey::Text(text) => {
                 // Text matches subject, from, to, or body
                 let text_lower = text.to_lowercase();
-                msg.envelope.subject.as_ref().map(|s| s.to_lowercase().contains(&text_lower)).unwrap_or(false)
-                    || msg.envelope.from.iter().any(|a| a.mailbox.as_ref().map(|m| m.to_lowercase().contains(&text_lower)).unwrap_or(false))
-                    || String::from_utf8_lossy(&msg.rfc822).to_lowercase().contains(&text_lower)
+                msg.envelope
+                    .subject
+                    .as_ref()
+                    .map(|s| s.to_lowercase().contains(&text_lower))
+                    .unwrap_or(false)
+                    || msg.envelope.from.iter().any(|a| {
+                        a.mailbox
+                            .as_ref()
+                            .map(|m| m.to_lowercase().contains(&text_lower))
+                            .unwrap_or(false)
+                    })
+                    || String::from_utf8_lossy(&msg.rfc822)
+                        .to_lowercase()
+                        .contains(&text_lower)
             }
             SearchKey::SeqSet(seq_str) => {
                 // Match sequence numbers
@@ -1255,12 +1504,22 @@ fn matches_keys(msg: &Message, keys: &[SearchKey], all_msgs: &[Message]) -> bool
                         let parts: Vec<&str> = s.splitn(2, ':').collect();
                         let start: u32 = parts[0].parse().unwrap_or(0);
                         let end: u32 = parts[1].parse().unwrap_or(all_msgs.len() as u32);
-                        let (lo, hi) = if start <= end { (start, end) } else { (end, start) };
-                        if msg.seq >= lo && msg.seq <= hi { return true; }
+                        let (lo, hi) = if start <= end {
+                            (start, end)
+                        } else {
+                            (end, start)
+                        };
+                        if msg.seq >= lo && msg.seq <= hi {
+                            return true;
+                        }
                     } else if s == "*" {
-                        if msg.seq == all_msgs.len() as u32 { return true; }
+                        if msg.seq == all_msgs.len() as u32 {
+                            return true;
+                        }
                     } else if let Ok(n) = s.parse::<u32>() {
-                        if msg.seq == n { return true; }
+                        if msg.seq == n {
+                            return true;
+                        }
                     }
                 }
                 false
@@ -1273,12 +1532,20 @@ fn matches_keys(msg: &Message, keys: &[SearchKey], all_msgs: &[Message]) -> bool
                         let parts: Vec<&str> = u.splitn(2, ':').collect();
                         let start: u32 = parts[0].parse().unwrap_or(0);
                         let end: u32 = parts[1].parse().unwrap_or(u32::MAX);
-                        let (lo, hi) = if start <= end { (start, end) } else { (end, start) };
-                        if msg.uid >= lo && msg.uid <= hi { return true; }
+                        let (lo, hi) = if start <= end {
+                            (start, end)
+                        } else {
+                            (end, start)
+                        };
+                        if msg.uid >= lo && msg.uid <= hi {
+                            return true;
+                        }
                     } else if u == "*" {
                         return false; // Can't match "*" as UID without knowing last UID
                     } else if let Ok(n) = u.parse::<u32>() {
-                        if msg.uid == n { return true; }
+                        if msg.uid == n {
+                            return true;
+                        }
                     }
                 }
                 false
@@ -1287,24 +1554,32 @@ fn matches_keys(msg: &Message, keys: &[SearchKey], all_msgs: &[Message]) -> bool
             SearchKey::Before(date_str) | SearchKey::SentBefore(date_str) => {
                 if let Ok(target) = parse_imap_date(date_str) {
                     msg.internal_date < target
-                } else { true }
+                } else {
+                    true
+                }
             }
             SearchKey::Since(date_str) | SearchKey::SentSince(date_str) => {
                 if let Ok(target) = parse_imap_date(date_str) {
                     msg.internal_date >= target
-                } else { true }
+                } else {
+                    true
+                }
             }
             SearchKey::On(date_str) | SearchKey::SentOn(date_str) => {
                 if let Ok(target) = parse_imap_date(date_str) {
                     let next_day = target + std::time::Duration::from_secs(86400);
                     msg.internal_date >= target && msg.internal_date < next_day
-                } else { true }
+                } else {
+                    true
+                }
             }
             SearchKey::Header(name, value) => {
                 let headers = String::from_utf8_lossy(&msg.rfc822);
                 for line in headers.lines() {
                     if let Some((h, v)) = line.split_once(':') {
-                        if h.trim().eq_ignore_ascii_case(name) && v.trim().to_lowercase().contains(&value.to_lowercase()) {
+                        if h.trim().eq_ignore_ascii_case(name)
+                            && v.trim().to_lowercase().contains(&value.to_lowercase())
+                        {
                             return true;
                         }
                     }
@@ -1430,8 +1705,11 @@ impl ImapServer {
 
     /// Run the server until shutdown is cancelled.
     pub async fn run(&self, shutdown: CancellationToken) -> io::Result<()> {
-        edgerun_log::info!("edgerun-imap: server listening on {} (IMAPS: {})",
-            self.listener.local_addr()?, self.imaps);
+        edgerun_log::info!(
+            "edgerun-imap: server listening on {} (IMAPS: {})",
+            self.listener.local_addr()?,
+            self.imaps
+        );
 
         while !shutdown.is_cancelled() {
             match self.listener.accept().await {
@@ -1446,7 +1724,8 @@ impl ImapServer {
                             Err(e) => {
                                 edgerun_log::info!(
                                     "edgerun-imap: connection from {} rejected: {}",
-                                    peer, e
+                                    peer,
+                                    e
                                 );
                                 continue;
                             }
@@ -1461,13 +1740,22 @@ impl ImapServer {
                     let command_middleware = self.command_middleware.clone();
                     edgerun_rt::spawn(async move {
                         if let Err(e) = handle_connection(
-                            stream, peer, store, domain,
+                            stream,
+                            peer,
+                            store,
+                            domain,
                             #[cfg(feature = "tls")]
                             tls_cert,
                             imaps,
                             command_middleware,
-                        ).await {
-                            edgerun_log::warn!("edgerun-imap: connection error from {}: {}", peer, e);
+                        )
+                        .await
+                        {
+                            edgerun_log::warn!(
+                                "edgerun-imap: connection error from {}: {}",
+                                peer,
+                                e
+                            );
                         }
                     });
                 }
@@ -1593,16 +1881,26 @@ async fn handle_connection(
                 write_response(&mut transport, &resp).await?;
 
                 let cert = tls_cert.as_ref().unwrap();
-                let old = std::mem::replace(&mut transport, ImapTransport::Plain(
-                    AsyncTcpStream::from_raw(0) // placeholder, immediately replaced
-                ));
+                let old = std::mem::replace(
+                    &mut transport,
+                    ImapTransport::Plain(
+                        AsyncTcpStream::from_raw(0), // placeholder, immediately replaced
+                    ),
+                );
                 match old.upgrade_tls(cert).await {
                     Ok(new) => {
                         transport = new;
-                        edgerun_log::info!("edgerun-imap: STARTTLS handshake complete for {}", peer);
+                        edgerun_log::info!(
+                            "edgerun-imap: STARTTLS handshake complete for {}",
+                            peer
+                        );
                     }
                     Err(e) => {
-                        edgerun_log::warn!("edgerun-imap: STARTTLS handshake failed for {}: {}", peer, e);
+                        edgerun_log::warn!(
+                            "edgerun-imap: STARTTLS handshake failed for {}: {}",
+                            peer,
+                            e
+                        );
                         return Err(e);
                     }
                 }
@@ -1619,11 +1917,13 @@ async fn handle_connection(
         // ── Middleware pre-filter (if configured) ──────────────────
         if !command_middleware.is_empty() {
             let session = SessionExtensions::new();
-            session.insert(ImapConnState {
-                state,
-                mailbox: current_mailbox.clone(),
-                authenticated_user: authenticated_user.clone(),
-            }).await;
+            session
+                .insert(ImapConnState {
+                    state,
+                    mailbox: current_mailbox.clone(),
+                    authenticated_user: authenticated_user.clone(),
+                })
+                .await;
 
             let mut blocked = false;
             for mw in &command_middleware {
@@ -1670,7 +1970,8 @@ async fn handle_connection(
             &store,
             &domain,
             &mut transport,
-        ).await?;
+        )
+        .await?;
 
         write_response(&mut transport, &response).await?;
 
@@ -1704,10 +2005,7 @@ async fn read_imap_line(transport: &mut ImapTransport) -> io::Result<Option<Stri
 }
 
 /// Write a response to the transport.
-async fn write_response(
-    transport: &mut ImapTransport,
-    resp: &ImapResponse,
-) -> io::Result<()> {
+async fn write_response(transport: &mut ImapTransport, resp: &ImapResponse) -> io::Result<()> {
     let wire = resp.to_wire();
     transport.write_all(wire.as_bytes()).await?;
     transport.flush().await?;
@@ -1738,13 +2036,13 @@ async fn dispatch_command(
             Ok(ImapResponse::ok(tag, "CAPABILITY completed"))
         }
 
-        ImapCommand::Noop => {
-            Ok(ImapResponse::ok(tag, "NOOP completed"))
-        }
+        ImapCommand::Noop => Ok(ImapResponse::ok(tag, "NOOP completed")),
 
         ImapCommand::Logout => {
             *state = ImapState::Logout;
-            transport.write_all(parser::format_untagged("BYE Logging out").as_bytes()).await?;
+            transport
+                .write_all(parser::format_untagged("BYE Logging out").as_bytes())
+                .await?;
             transport.flush().await?;
 
             Ok(ImapResponse::ok(tag, "LOGOUT completed"))
@@ -1760,7 +2058,10 @@ async fn dispatch_command(
                     *state = ImapState::Authenticated;
                     *authenticated_user = Some(username.clone());
                     edgerun_log::info!("edgerun-imap: user {} authenticated", username);
-                    Ok(ImapResponse::ok(tag, &format!("LOGIN completed for {}", username)))
+                    Ok(ImapResponse::ok(
+                        tag,
+                        &format!("LOGIN completed for {}", username),
+                    ))
                 }
                 _ => Ok(ImapResponse::no(tag, "LOGIN failed")),
             }
@@ -1790,15 +2091,24 @@ async fn dispatch_command(
                                 Ok(Some(uname)) => {
                                     *state = ImapState::Authenticated;
                                     *authenticated_user = Some(uname.clone());
-                                    edgerun_log::info!("edgerun-imap: user {} authenticated (PLAIN)", uname);
-                                    return Ok(ImapResponse::ok(tag, &format!("AUTHENTICATE completed for {}", uname)));
+                                    edgerun_log::info!(
+                                        "edgerun-imap: user {} authenticated (PLAIN)",
+                                        uname
+                                    );
+                                    return Ok(ImapResponse::ok(
+                                        tag,
+                                        &format!("AUTHENTICATE completed for {}", uname),
+                                    ));
                                 }
                                 _ => return Ok(ImapResponse::no(tag, "AUTHENTICATE failed")),
                             }
                         }
                     }
                 }
-                Ok(ImapResponse::no(tag, "AUTHENTICATE failed: invalid credentials"))
+                Ok(ImapResponse::no(
+                    tag,
+                    "AUTHENTICATE failed: invalid credentials",
+                ))
             } else if mech == "LOGIN" {
                 // LOGIN mechanism: two base64 challenge/responses
                 // Challenge 1: "Username:"
@@ -1807,9 +2117,14 @@ async fn dispatch_command(
 
                 let username_b64 = read_imap_line(transport).await?.unwrap_or_default();
                 let username = if let Ok(bytes) = base64_decode(&username_b64) {
-                    String::from_utf8(bytes).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid username"))?
+                    String::from_utf8(bytes).map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidData, "invalid username")
+                    })?
                 } else {
-                    return Ok(ImapResponse::no(tag, "AUTHENTICATE failed: invalid username"));
+                    return Ok(ImapResponse::no(
+                        tag,
+                        "AUTHENTICATE failed: invalid username",
+                    ));
                 };
 
                 // Challenge 2: "Password:"
@@ -1818,9 +2133,14 @@ async fn dispatch_command(
 
                 let password_b64 = read_imap_line(transport).await?.unwrap_or_default();
                 let password = if let Ok(bytes) = base64_decode(&password_b64) {
-                    String::from_utf8(bytes).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid password"))?
+                    String::from_utf8(bytes).map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidData, "invalid password")
+                    })?
                 } else {
-                    return Ok(ImapResponse::no(tag, "AUTHENTICATE failed: invalid password"));
+                    return Ok(ImapResponse::no(
+                        tag,
+                        "AUTHENTICATE failed: invalid password",
+                    ));
                 };
 
                 match store.authenticate(&username, &password) {
@@ -1828,12 +2148,18 @@ async fn dispatch_command(
                         *state = ImapState::Authenticated;
                         *authenticated_user = Some(uname.clone());
                         edgerun_log::info!("edgerun-imap: user {} authenticated (LOGIN)", uname);
-                        Ok(ImapResponse::ok(tag, &format!("AUTHENTICATE completed for {}", uname)))
+                        Ok(ImapResponse::ok(
+                            tag,
+                            &format!("AUTHENTICATE completed for {}", uname),
+                        ))
                     }
                     _ => Ok(ImapResponse::no(tag, "AUTHENTICATE failed")),
                 }
             } else {
-                Ok(ImapResponse::no(tag, &format!("Unsupported mechanism: {}", mechanism)))
+                Ok(ImapResponse::no(
+                    tag,
+                    &format!("Unsupported mechanism: {}", mechanism),
+                ))
             }
         }
 
@@ -1847,21 +2173,29 @@ async fn dispatch_command(
                     *state = ImapState::Selected;
                     *current_mailbox = Some(mailbox.clone());
 
-
                     // Send mailbox status
                     if let Some(status) = &mb.status {
-                        transport.write_all(parser::format_exists(status.messages).as_bytes()).await?;
-                        transport.write_all(parser::format_recent(status.recent).as_bytes()).await?;
+                        transport
+                            .write_all(parser::format_exists(status.messages).as_bytes())
+                            .await?;
+                        transport
+                            .write_all(parser::format_recent(status.recent).as_bytes())
+                            .await?;
 
                         let flags = ["\\Seen", "\\Answered", "\\Flagged", "\\Deleted", "\\Draft"];
-                        transport.write_all(parser::format_flags(&flags).as_bytes()).await?;
+                        transport
+                            .write_all(parser::format_flags(&flags).as_bytes())
+                            .await?;
 
-                        transport.write_all(parser::format_uid_validity(status.uid_validity).as_bytes()).await?;
-                        transport.write_all(parser::format_uid_next(status.uid_next).as_bytes()).await?;
+                        transport
+                            .write_all(parser::format_uid_validity(status.uid_validity).as_bytes())
+                            .await?;
+                        transport
+                            .write_all(parser::format_uid_next(status.uid_next).as_bytes())
+                            .await?;
                     }
 
                     transport.flush().await?;
-
 
                     Ok(ImapResponse::ok(tag, "[READ-WRITE] SELECT completed"))
                 }
@@ -1881,15 +2215,24 @@ async fn dispatch_command(
                     *current_mailbox = Some(mailbox.clone());
 
                     if let Some(status) = &mb.status {
-                        transport.write_all(parser::format_exists(status.messages).as_bytes()).await?;
-                        transport.write_all(parser::format_recent(status.recent).as_bytes()).await?;
+                        transport
+                            .write_all(parser::format_exists(status.messages).as_bytes())
+                            .await?;
+                        transport
+                            .write_all(parser::format_recent(status.recent).as_bytes())
+                            .await?;
                         let flags = ["\\Seen", "\\Answered", "\\Flagged", "\\Deleted", "\\Draft"];
-                        transport.write_all(parser::format_flags(&flags).as_bytes()).await?;
-                        transport.write_all(parser::format_uid_validity(status.uid_validity).as_bytes()).await?;
-                        transport.write_all(parser::format_uid_next(status.uid_next).as_bytes()).await?;
+                        transport
+                            .write_all(parser::format_flags(&flags).as_bytes())
+                            .await?;
+                        transport
+                            .write_all(parser::format_uid_validity(status.uid_validity).as_bytes())
+                            .await?;
+                        transport
+                            .write_all(parser::format_uid_next(status.uid_next).as_bytes())
+                            .await?;
                     }
                     transport.flush().await?;
-
 
                     Ok(ImapResponse::ok(tag, "[READ-ONLY] EXAMINE completed"))
                 }
@@ -1907,8 +2250,11 @@ async fn dispatch_command(
                 Ok(mailboxes) => {
                     for mb in &mailboxes {
                         let attrs: Vec<&str> = mb.attributes.iter().map(|s| s.as_str()).collect();
-                        let resp = parser::format_list(&attrs,
-                            mb.delimiter.as_deref().unwrap_or("/"), &mb.name);
+                        let resp = parser::format_list(
+                            &attrs,
+                            mb.delimiter.as_deref().unwrap_or("/"),
+                            &mb.name,
+                        );
                         transport.write_all(resp.as_bytes()).await?;
                     }
                     transport.flush().await?;
@@ -1919,7 +2265,10 @@ async fn dispatch_command(
             }
         }
 
-        ImapCommand::Fetch { sequence, attributes } => {
+        ImapCommand::Fetch {
+            sequence,
+            attributes,
+        } => {
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
@@ -1928,9 +2277,8 @@ async fn dispatch_command(
                 match store.fetch(mailbox, sequence, attributes) {
                     Ok(results) => {
                         for (uid, data) in &results {
-                            let parts: Vec<String> = data.iter()
-                                .map(|(k, v)| format!("{} {}", k, v))
-                                .collect();
+                            let parts: Vec<String> =
+                                data.iter().map(|(k, v)| format!("{} {}", k, v)).collect();
                             let resp = parser::format_fetch(*uid, &parts.join(" "));
                             transport.write_all(resp.as_bytes()).await?;
                         }
@@ -1953,7 +2301,9 @@ async fn dispatch_command(
             if let Some(ref mailbox) = current_mailbox {
                 match store.search(mailbox, keys) {
                     Ok(ids) => {
-                        transport.write_all(parser::format_search(&ids).as_bytes()).await?;
+                        transport
+                            .write_all(parser::format_search(&ids).as_bytes())
+                            .await?;
                         transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "SEARCH completed"))
@@ -2002,13 +2352,22 @@ async fn dispatch_command(
                             "MESSAGES" => parts.push(format!("MESSAGES {}", status.messages)),
                             "RECENT" => parts.push(format!("RECENT {}", status.recent)),
                             "UIDNEXT" => parts.push(format!("UIDNEXT {}", status.uid_next)),
-                            "UIDVALIDITY" => parts.push(format!("UIDVALIDITY {}", status.uid_validity)),
+                            "UIDVALIDITY" => {
+                                parts.push(format!("UIDVALIDITY {}", status.uid_validity))
+                            }
                             _ => {}
                         }
                     }
-                    transport.write_all(parser::format_untagged(&format!(
-                        "STATUS {} ({})", mailbox, parts.join(" ")
-                    )).as_bytes()).await?;
+                    transport
+                        .write_all(
+                            parser::format_untagged(&format!(
+                                "STATUS {} ({})",
+                                mailbox,
+                                parts.join(" ")
+                            ))
+                            .as_bytes(),
+                        )
+                        .await?;
                     transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "STATUS completed"))
@@ -2042,7 +2401,9 @@ async fn dispatch_command(
                 match store.expunge(mailbox) {
                     Ok(removed) => {
                         for seq in &removed {
-                            transport.write_all(parser::format_expunge(*seq).as_bytes()).await?;
+                            transport
+                                .write_all(parser::format_expunge(*seq).as_bytes())
+                                .await?;
                         }
                         transport.flush().await?;
 
@@ -2055,7 +2416,11 @@ async fn dispatch_command(
             }
         }
 
-        ImapCommand::Store { sequence, action, flags } => {
+        ImapCommand::Store {
+            sequence,
+            action,
+            flags,
+        } => {
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
@@ -2125,8 +2490,11 @@ async fn dispatch_command(
                         } else {
                             mb.attributes.iter().map(|s| s.as_str()).collect()
                         };
-                        let resp = parser::format_list(&attrs,
-                            mb.delimiter.as_deref().unwrap_or("/"), &mb.name);
+                        let resp = parser::format_list(
+                            &attrs,
+                            mb.delimiter.as_deref().unwrap_or("/"),
+                            &mb.name,
+                        );
                         transport.write_all(resp.as_bytes()).await?;
                     }
                     transport.flush().await?;
@@ -2145,7 +2513,11 @@ async fn dispatch_command(
             if let Some(ref src_mailbox) = current_mailbox {
                 match store.copy_messages(src_mailbox, sequence, mailbox) {
                     Ok(uids) => {
-                        edgerun_log::debug!("edgerun-imap: COPY {} messages to {}", uids.len(), mailbox);
+                        edgerun_log::debug!(
+                            "edgerun-imap: COPY {} messages to {}",
+                            uids.len(),
+                            mailbox
+                        );
                         Ok(ImapResponse::ok(tag, "COPY completed"))
                     }
                     Err(e) => Ok(ImapResponse::no(tag, &format!("COPY failed: {}", e))),
@@ -2155,7 +2527,12 @@ async fn dispatch_command(
             }
         }
 
-        ImapCommand::Append { mailbox, flags, date, literal_size } => {
+        ImapCommand::Append {
+            mailbox,
+            flags,
+            date,
+            literal_size,
+        } => {
             if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
@@ -2173,7 +2550,8 @@ async fn dispatch_command(
             read_imap_line(transport).await?;
 
             // Parse flags if provided
-            let msg_flags = flags.as_ref()
+            let msg_flags = flags
+                .as_ref()
                 .map(|f| Flags::parse(&f.join(" ")))
                 .unwrap_or_else(Flags::new);
 
@@ -2181,7 +2559,10 @@ async fn dispatch_command(
             let msg_date = date.as_ref().map(|_| SystemTime::now()); // Simplified
 
             match store.append(mailbox, msg_flags, msg_date, &data) {
-                Ok(uid) => Ok(ImapResponse::ok(tag, &format!("APPEND completed [UIDNEXT {}]", uid + 1))),
+                Ok(uid) => Ok(ImapResponse::ok(
+                    tag,
+                    &format!("APPEND completed [UIDNEXT {}]", uid + 1),
+                )),
                 Err(e) => Ok(ImapResponse::no(tag, &format!("APPEND failed: {}", e))),
             }
         }
@@ -2203,7 +2584,17 @@ async fn dispatch_command(
         ImapCommand::Uid { command } => {
             // UID commands are dispatched to the inner command
             // The inner command has already been parsed with UID context
-            Box::pin(dispatch_command(command, tag, state, current_mailbox, authenticated_user, store, domain, transport)).await
+            Box::pin(dispatch_command(
+                command,
+                tag,
+                state,
+                current_mailbox,
+                authenticated_user,
+                store,
+                domain,
+                transport,
+            ))
+            .await
         }
 
         ImapCommand::Idle => {
@@ -2233,14 +2624,19 @@ async fn dispatch_command(
                 if line.to_uppercase() == "DONE" {
                     // Send any pending EXISTS updates
                     if let Some(ref mailbox) = current_mailbox {
-                        let msg_count = store.status(mailbox)
+                        let msg_count = store
+                            .status(mailbox)
                             .ok()
                             .flatten()
                             .map(|s| s.messages)
                             .unwrap_or(0);
-                        transport.write_all(parser::format_untagged(&format!("EXISTS {}", msg_count)).as_bytes()).await?;
+                        transport
+                            .write_all(
+                                parser::format_untagged(&format!("EXISTS {}", msg_count))
+                                    .as_bytes(),
+                            )
+                            .await?;
                         transport.flush().await?;
-
                     }
                     return Ok(ImapResponse::ok(tag, "IDLE completed"));
                 }
@@ -2264,7 +2660,12 @@ async fn dispatch_command(
                 }
             }
             if !enabled.is_empty() {
-                transport.write_all(parser::format_untagged(&format!("ENABLED {}", enabled.join(" "))).as_bytes()).await?;
+                transport
+                    .write_all(
+                        parser::format_untagged(&format!("ENABLED {}", enabled.join(" ")))
+                            .as_bytes(),
+                    )
+                    .await?;
             }
             transport.flush().await?;
 
@@ -2291,9 +2692,18 @@ async fn dispatch_command(
                 match store.copy_messages(src_mailbox, sequence, mailbox) {
                     Ok(uids) => {
                         // Mark original messages as deleted
-                        let _ = store.store(src_mailbox, sequence, &StoreAction::Add, &["\\Deleted".to_string()]);
+                        let _ = store.store(
+                            src_mailbox,
+                            sequence,
+                            &StoreAction::Add,
+                            &["\\Deleted".to_string()],
+                        );
                         let _ = store.expunge(src_mailbox);
-                        edgerun_log::debug!("edgerun-imap: MOVE {} messages to {}", uids.len(), mailbox);
+                        edgerun_log::debug!(
+                            "edgerun-imap: MOVE {} messages to {}",
+                            uids.len(),
+                            mailbox
+                        );
                         Ok(ImapResponse::ok(tag, "MOVE completed"))
                     }
                     Err(e) => Ok(ImapResponse::no(tag, &format!("MOVE failed: {}", e))),
@@ -2311,7 +2721,12 @@ async fn dispatch_command(
             if let Some(ref src_mailbox) = current_mailbox {
                 match store.copy_messages(src_mailbox, sequence, mailbox) {
                     Ok(uids) => {
-                        let _ = store.store(src_mailbox, sequence, &StoreAction::Add, &["\\Deleted".to_string()]);
+                        let _ = store.store(
+                            src_mailbox,
+                            sequence,
+                            &StoreAction::Add,
+                            &["\\Deleted".to_string()],
+                        );
                         let _ = store.expunge(src_mailbox);
                         Ok(ImapResponse::ok(tag, "MOVE completed"))
                     }
@@ -2326,9 +2741,9 @@ async fn dispatch_command(
             if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            transport.write_all(parser::format_untagged(
-                r#"NAMESPACE (("" "/")) NIL NIL"#
-            ).as_bytes()).await?;
+            transport
+                .write_all(parser::format_untagged(r#"NAMESPACE (("" "/")) NIL NIL"#).as_bytes())
+                .await?;
             transport.flush().await?;
 
             Ok(ImapResponse::ok(tag, "NAMESPACE completed"))
@@ -2340,10 +2755,19 @@ async fn dispatch_command(
             }
             match store.get_quota(mailbox) {
                 Ok(Some(qi)) => {
-                    transport.write_all(parser::format_untagged(&format!(
-                        r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
-                        qi.mailbox, qi.storage_used, qi.storage_limit, qi.message_count, qi.message_limit
-                    )).as_bytes()).await?;
+                    transport
+                        .write_all(
+                            parser::format_untagged(&format!(
+                                r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
+                                qi.mailbox,
+                                qi.storage_used,
+                                qi.storage_limit,
+                                qi.message_count,
+                                qi.message_limit
+                            ))
+                            .as_bytes(),
+                        )
+                        .await?;
                     transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "QUOTA completed"))
@@ -2357,12 +2781,24 @@ async fn dispatch_command(
             if *state != ImapState::Authenticated && *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
-            match store.set_quota(mailbox, limits.iter().map(|(k, v)| (k.as_str(), *v)).collect()) {
+            match store.set_quota(
+                mailbox,
+                limits.iter().map(|(k, v)| (k.as_str(), *v)).collect(),
+            ) {
                 Ok(qi) => {
-                    transport.write_all(parser::format_untagged(&format!(
-                        r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
-                        qi.mailbox, qi.storage_used, qi.storage_limit, qi.message_count, qi.message_limit
-                    )).as_bytes()).await?;
+                    transport
+                        .write_all(
+                            parser::format_untagged(&format!(
+                                r#"QUOTA "{}" (STORAGE {} {} MESSAGES {} {})"#,
+                                qi.mailbox,
+                                qi.storage_used,
+                                qi.storage_limit,
+                                qi.message_count,
+                                qi.message_limit
+                            ))
+                            .as_bytes(),
+                        )
+                        .await?;
                     transport.flush().await?;
 
                     Ok(ImapResponse::ok(tag, "SETQUOTA completed"))
@@ -2371,7 +2807,11 @@ async fn dispatch_command(
             }
         }
 
-        ImapCommand::Sort { sort_criteria, charset, search_criteria } => {
+        ImapCommand::Sort {
+            sort_criteria,
+            charset,
+            search_criteria,
+        } => {
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
@@ -2379,19 +2819,27 @@ async fn dispatch_command(
             if let Some(ref mailbox) = current_mailbox {
                 let keys = parse_search_keys_simple(search_criteria);
                 // Parse sort criteria with optional REVERSE prefix
-                let parsed_criteria: Vec<(String, bool)> = sort_criteria.iter().map(|c| {
-                    let upper = c.to_uppercase();
-                    if let Some(stripped) = upper.strip_prefix("REVERSE ") {
-                        (stripped.to_string(), true)
-                    } else {
-                        (upper, false)
-                    }
-                }).collect();
+                let parsed_criteria: Vec<(String, bool)> = sort_criteria
+                    .iter()
+                    .map(|c| {
+                        let upper = c.to_uppercase();
+                        if let Some(stripped) = upper.strip_prefix("REVERSE ") {
+                            (stripped.to_string(), true)
+                        } else {
+                            (upper, false)
+                        }
+                    })
+                    .collect();
 
                 match store.sort(mailbox, &keys, &parsed_criteria) {
                     Ok(ids) => {
                         let id_str: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
-                        transport.write_all(parser::format_untagged(&format!("SORT {}", id_str.join(" "))).as_bytes()).await?;
+                        transport
+                            .write_all(
+                                parser::format_untagged(&format!("SORT {}", id_str.join(" ")))
+                                    .as_bytes(),
+                            )
+                            .await?;
                         transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "SORT completed"))
@@ -2403,7 +2851,11 @@ async fn dispatch_command(
             }
         }
 
-        ImapCommand::Thread { algorithm, charset, search_criteria } => {
+        ImapCommand::Thread {
+            algorithm,
+            charset,
+            search_criteria,
+        } => {
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
@@ -2414,9 +2866,18 @@ async fn dispatch_command(
                     Ok(ids) => {
                         // Simple threading: group by In-Reply-To / References
                         // For now, return each message as its own thread
-                        let thread_str: Vec<String> = ids.iter().map(|i| format!("({})", i)).collect();
-                        transport.write_all(parser::format_untagged(&format!("THREAD ({} {})",
-                            algorithm.to_uppercase(), thread_str.join(") ("))).as_bytes()).await?;
+                        let thread_str: Vec<String> =
+                            ids.iter().map(|i| format!("({})", i)).collect();
+                        transport
+                            .write_all(
+                                parser::format_untagged(&format!(
+                                    "THREAD ({} {})",
+                                    algorithm.to_uppercase(),
+                                    thread_str.join(") (")
+                                ))
+                                .as_bytes(),
+                            )
+                            .await?;
                         transport.flush().await?;
 
                         Ok(ImapResponse::ok(tag, "THREAD completed"))
@@ -2438,7 +2899,10 @@ async fn dispatch_command(
             Ok(ImapResponse::ok(tag, "ID completed"))
         }
 
-        _ => Ok(ImapResponse::no(tag, "Command not implemented in current state")),
+        _ => Ok(ImapResponse::no(
+            tag,
+            "Command not implemented in current state",
+        )),
     }
 }
 

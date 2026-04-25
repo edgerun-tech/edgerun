@@ -35,26 +35,47 @@ fn extract_public_items(source_dir: &Path) -> BTreeSet<(String, String)> {
 
                         for line in content.lines() {
                             let trimmed = line.trim();
-                            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.is_empty() {
+                            if trimmed.starts_with("//")
+                                || trimmed.starts_with("/*")
+                                || trimmed.is_empty()
+                            {
                                 continue;
                             }
                             if let Some(name) = trimmed
                                 .strip_prefix("pub fn ")
                                 .map(|s| s.split('(').next().unwrap_or(s).trim())
-                                .filter(|s| !s.is_empty() && s.chars().next().unwrap().is_ascii_alphabetic())
+                                .filter(|s| {
+                                    !s.is_empty() && s.chars().next().unwrap().is_ascii_alphabetic()
+                                })
                             {
                                 items.insert((module.clone(), format!("fn {name}")));
                             }
                             if let Some(name) = trimmed
                                 .strip_prefix("pub struct ")
-                                .map(|s| s.split('<').next().unwrap_or(s).split('{').next().unwrap_or(s).trim())
+                                .map(|s| {
+                                    s.split('<')
+                                        .next()
+                                        .unwrap_or(s)
+                                        .split('{')
+                                        .next()
+                                        .unwrap_or(s)
+                                        .trim()
+                                })
                                 .filter(|s| !s.is_empty())
                             {
                                 items.insert((module.clone(), format!("struct {name}")));
                             }
                             if let Some(name) = trimmed
                                 .strip_prefix("pub enum ")
-                                .map(|s| s.split('<').next().unwrap_or(s).split('{').next().unwrap_or(s).trim())
+                                .map(|s| {
+                                    s.split('<')
+                                        .next()
+                                        .unwrap_or(s)
+                                        .split('{')
+                                        .next()
+                                        .unwrap_or(s)
+                                        .trim()
+                                })
                                 .filter(|s| !s.is_empty())
                             {
                                 items.insert((module.clone(), format!("enum {name}")));
@@ -72,16 +93,31 @@ fn extract_public_items(source_dir: &Path) -> BTreeSet<(String, String)> {
                                     let name = if parts.len() == 2 {
                                         parts[1].trim().trim_end_matches(';').trim()
                                     } else {
-                                        after_use.split("::").last().unwrap_or("").trim_end_matches(';').trim()
+                                        after_use
+                                            .split("::")
+                                            .last()
+                                            .unwrap_or("")
+                                            .trim_end_matches(';')
+                                            .trim()
                                     };
-                                    if !name.is_empty() && name.chars().next().unwrap().is_ascii_alphabetic() {
+                                    if !name.is_empty()
+                                        && name.chars().next().unwrap().is_ascii_alphabetic()
+                                    {
                                         items.insert((module.clone(), format!("use {name}")));
                                     }
                                 }
                             }
                             if let Some(name) = trimmed
                                 .strip_prefix("pub mod ")
-                                .map(|s| s.split('{').next().unwrap_or(s).split(';').next().unwrap_or(s).trim())
+                                .map(|s| {
+                                    s.split('{')
+                                        .next()
+                                        .unwrap_or(s)
+                                        .split(';')
+                                        .next()
+                                        .unwrap_or(s)
+                                        .trim()
+                                })
                                 .filter(|s| !s.is_empty())
                             {
                                 items.insert((module.clone(), format!("mod {name}")));

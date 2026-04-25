@@ -176,7 +176,11 @@ impl DnsCache {
         CacheStats {
             total: guard.len(),
             expired,
-            avg_ttl_secs: if guard.is_empty() { 0 } else { total_ttl / guard.len() as u64 },
+            avg_ttl_secs: if guard.is_empty() {
+                0
+            } else {
+                total_ttl / guard.len() as u64
+            },
         }
     }
 }
@@ -236,7 +240,12 @@ mod tests {
     fn test_cache_different_types() {
         let cache = DnsCache::new();
         cache.insert("example.com", DnsRecordType::A, make_a("1.2.3.4", 300), 300);
-        cache.insert("example.com", DnsRecordType::MX, make_a("5.6.7.8", 600), 600);
+        cache.insert(
+            "example.com",
+            DnsRecordType::MX,
+            make_a("5.6.7.8", 600),
+            600,
+        );
 
         assert!(cache.get("example.com", DnsRecordType::A).is_some());
         assert!(cache.get("example.com", DnsRecordType::MX).is_some());

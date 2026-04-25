@@ -2,11 +2,11 @@
 //! Supports P-256 (SECP256R1) and X25519.
 //! All crypto flows through edgerun-crypto.
 
+use edgerun_crypto::getrandom;
 use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::p256::EncodedPoint;
-use edgerun_crypto::getrandom;
+use edgerun_crypto::x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
 use edgerun_crypto::OsRng;
-use edgerun_crypto::x25519_dalek::{StaticSecret as X25519Secret, PublicKey as X25519PublicKey};
 
 /// Named group for key exchange
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,15 +106,17 @@ impl EcdhKeyPair {
     pub fn exchange(&self, peer_pk: &[u8]) -> Result<Vec<u8>, String> {
         match self {
             EcdhKeyPair::P256 { secret, .. } => {
-                let peer_pk =
-                    edgerun_crypto::p256::PublicKey::from_sec1_bytes(peer_pk)
-                        .map_err(|e| format!("Invalid P-256 public key: {:?}", e))?;
+                let peer_pk = edgerun_crypto::p256::PublicKey::from_sec1_bytes(peer_pk)
+                    .map_err(|e| format!("Invalid P-256 public key: {:?}", e))?;
                 let shared = secret.diffie_hellman(&peer_pk);
                 Ok(shared.raw_secret_bytes().to_vec())
             }
             EcdhKeyPair::X25519 { secret, .. } => {
                 if peer_pk.len() != 32 {
-                    return Err(format!("X25519 public key must be 32 bytes, got {}", peer_pk.len()));
+                    return Err(format!(
+                        "X25519 public key must be 32 bytes, got {}",
+                        peer_pk.len()
+                    ));
                 }
                 let mut pk_bytes = [0u8; 32];
                 pk_bytes.copy_from_slice(peer_pk);

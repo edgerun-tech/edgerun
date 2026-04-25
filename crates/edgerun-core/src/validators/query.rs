@@ -1,5 +1,5 @@
-use super::helpers::*;
 use super::delegation::validate_delegation_case;
+use super::helpers::*;
 pub fn validate_query_case(
     semantic_input: &BTreeMap<String, Value>,
     local_state: &BTreeMap<String, Value>,

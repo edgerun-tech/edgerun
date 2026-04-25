@@ -10,16 +10,14 @@ use crate::SecretClient;
 pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     let (image_ref, images_dir, store_path) = parse_pull_args(args)?;
 
-    let image: ImageRef = image_ref.parse().map_err(|e: String| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
-    })?;
+    let image: ImageRef = image_ref
+        .parse()
+        .map_err(|e: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
 
     let auth = resolve_registry_auth(&image.registry)?;
     let mut client = RegistryClient::new().with_auth(auth);
 
-    let bundle_path = images_dir
-        .join(&image.repository)
-        .join(&image.tag);
+    let bundle_path = images_dir.join(&image.repository).join(&image.tag);
 
     println!("Pulling {}...", image_ref);
 
@@ -31,18 +29,15 @@ pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     let image_clone = image.clone();
     let bundle_clone = bundle_path.clone();
     let store_clone = store_path.clone();
-    let result = rt.block_on(async move {
-        client.pull(&image_clone, &bundle_clone, &store_clone).await
-    });
+    let result =
+        rt.block_on(async move { client.pull(&image_clone, &bundle_clone, &store_clone).await });
 
     match result {
         Ok(path) => {
             println!("Pulled {} to {}", image_ref, path.display());
             Ok(())
         }
-        Err(e) => Err(std::io::Error::other(
-            format!("pull failed: {}", e),
-        )),
+        Err(e) => Err(std::io::Error::other(format!("pull failed: {}", e))),
     }
 }
 
@@ -62,7 +57,10 @@ fn parse_pull_args(args: &[String]) -> std::io::Result<(String, PathBuf, PathBuf
                     images_dir = PathBuf::from(&args[i + 1]);
                     i += 2;
                 } else {
-                    return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "--images-dir requires a path"));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "--images-dir requires a path",
+                    ));
                 }
             }
             "--store" => {
@@ -70,7 +68,10 @@ fn parse_pull_args(args: &[String]) -> std::io::Result<(String, PathBuf, PathBuf
                     store_path = PathBuf::from(&args[i + 1]);
                     i += 2;
                 } else {
-                    return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "--store requires a path"));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "--store requires a path",
+                    ));
                 }
             }
             _ if !args[i].starts_with('-') => {
@@ -78,13 +79,19 @@ fn parse_pull_args(args: &[String]) -> std::io::Result<(String, PathBuf, PathBuf
                 i += 1;
             }
             _ => {
-                return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("unknown flag: {}", args[i])));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("unknown flag: {}", args[i]),
+                ));
             }
         }
     }
 
     let image = image.ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "Usage: ert pull [--images-dir DIR] [--store DIR] <image>")
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Usage: ert pull [--images-dir DIR] [--store DIR] <image>",
+        )
     })?;
 
     Ok((image, images_dir, store_path))
@@ -103,19 +110,23 @@ fn resolve_registry_auth(registry: &str) -> std::io::Result<crate::RegistryAuth>
     match secret_client.get_registry_credential(registry) {
         Ok(secret_bytes) => {
             let secret_str = String::from_utf8(secret_bytes).map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid credential encoding")
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid credential encoding",
+                )
             })?;
             let (username, password) = secret_str.split_once(':').ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "credential must be username:password")
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "credential must be username:password",
+                )
             })?;
             Ok(crate::RegistryAuth::Basic {
                 username: username.to_string(),
                 password: password.to_string(),
             })
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            Ok(crate::RegistryAuth::Anonymous)
-        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(crate::RegistryAuth::Anonymous),
         Err(_) => Ok(crate::RegistryAuth::Anonymous),
     }
 }

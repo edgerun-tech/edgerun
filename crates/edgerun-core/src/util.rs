@@ -4,7 +4,9 @@ use prost_types::Timestamp;
 // RFC3339 timestamp handling — delegates to edgerun-encoding
 // ---------------------------------------------------------------------------
 
-pub use edgerun_encoding::rfc3339::{DateTimeUtc, ParseRfc3339Error, canonical_time_string, format_rfc3339_utc, parse_rfc3339};
+pub use edgerun_encoding::rfc3339::{
+    canonical_time_string, format_rfc3339_utc, parse_rfc3339, DateTimeUtc, ParseRfc3339Error,
+};
 
 /// Parse an RFC3339 timestamp into `(seconds, nanos)` for `prost_types::Timestamp`.
 pub fn timestamp_parts(value: &str) -> Result<(i64, i32), ParseRfc3339Error> {
@@ -20,7 +22,9 @@ pub fn parse_timestamp_value(value: &str) -> Result<Timestamp, ParseRfc3339Error
 
 /// Convert `SystemTime` to a `prost_types::Timestamp`.
 pub fn system_time_to_prost(time: std::time::SystemTime) -> prost_types::Timestamp {
-    let duration = time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let duration = time
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
     prost_types::Timestamp {
         seconds: duration.as_secs() as i64,
         nanos: duration.subsec_nanos() as i32,
@@ -48,8 +52,8 @@ impl std::error::Error for HexError {}
 
 fn map_hex_error(e: edgerun_encoding::hex::HexError) -> HexError {
     match e {
-        edgerun_encoding::hex::HexError::InvalidCharacter(_) |
-        edgerun_encoding::hex::HexError::InvalidLength => HexError::InvalidChar,
+        edgerun_encoding::hex::HexError::InvalidCharacter(_)
+        | edgerun_encoding::hex::HexError::InvalidLength => HexError::InvalidChar,
     }
 }
 

@@ -51,14 +51,14 @@ compile_error!(
      Use `--features alloc` for no_std mode, or enable default features for std."
 );
 
-#[cfg(feature = "yaml")]
-pub mod yaml;
-#[cfg(feature = "yaml")]
-mod yaml_api;
 #[cfg(feature = "toml")]
 pub mod toml;
 #[cfg(feature = "toml")]
 mod toml_api;
+#[cfg(feature = "yaml")]
+pub mod yaml;
+#[cfg(feature = "yaml")]
+mod yaml_api;
 
 mod borrowed_value;
 mod error;
@@ -108,14 +108,14 @@ pub use raw::{to_raw_value, RawValue};
 pub use serde_deserialize::JsonValueDeserializer;
 #[cfg(feature = "serde")]
 pub use serde_error::{Category, Error};
+#[cfg(feature = "toml")]
+pub use toml::{
+    from_toml_str, json_to_toml, parse_toml_value, to_toml_string, toml_to_json, TomlError,
+    TomlValue,
+};
 #[cfg(feature = "yaml")]
 pub use yaml::{
     from_yaml_str, parse_yaml_value, to_yaml_string, YamlDeserializer, YamlError, YamlValue,
-};
-#[cfg(feature = "toml")]
-pub use toml::{
-    from_toml_str, parse_toml_value, to_toml_string, toml_to_json, json_to_toml,
-    TomlError, TomlValue,
 };
 
 #[cfg(feature = "serde")]
@@ -125,11 +125,11 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 mod tests {
     use super::*;
     #[cfg(not(feature = "std"))]
-    use alloc::vec;
+    use alloc::borrow::ToOwned;
     #[cfg(not(feature = "std"))]
     use alloc::string::ToString;
     #[cfg(not(feature = "std"))]
-    use alloc::borrow::ToOwned;
+    use alloc::vec;
     use std::borrow::Cow;
 
     #[test]

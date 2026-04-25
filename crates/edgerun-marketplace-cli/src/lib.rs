@@ -1,7 +1,7 @@
 //! Marketplace CLI — interact with Edgerun on-chain programs via Solana RPC.
 
-mod provider;
 mod deployment;
+mod provider;
 
 pub struct Cli {
     pub rpc_url: String,
@@ -15,7 +15,9 @@ pub enum Command {
     Status,
 }
 
-pub fn load_keypair(path: &std::path::Path) -> Result<edgerun_solana::signers::Ed25519Signer, Box<dyn std::error::Error>> {
+pub fn load_keypair(
+    path: &std::path::Path,
+) -> Result<edgerun_solana::signers::Ed25519Signer, Box<dyn std::error::Error>> {
     let bytes = std::fs::read(path)?;
     if bytes.len() != 32 {
         return Err("Keypair must be 32 bytes".into());
@@ -29,16 +31,16 @@ impl Cli {
     pub fn parse() -> Self {
         let mut args = std::env::args();
         let _ = args.next();
-        
+
         let rpc_url = std::env::var("SOLANA_RPC_URL")
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        
-        let keypair_path = std::env::var("SOLANA_KEYPAIR").ok().map(std::path::PathBuf::from);
-        
+
+        let keypair_path = std::env::var("SOLANA_KEYPAIR")
+            .ok()
+            .map(std::path::PathBuf::from);
+
         let cmd = match args.next().as_deref() {
-            Some("provider") | Some("p") => {
-                Command::Provider(provider::parse_provider_command())
-            }
+            Some("provider") | Some("p") => Command::Provider(provider::parse_provider_command()),
             Some("deployment") | Some("d") => {
                 Command::Deployment(deployment::parse_deployment_command())
             }
@@ -48,7 +50,7 @@ impl Cli {
                 std::process::exit(1);
             }
         };
-        
+
         Self {
             rpc_url,
             keypair_path,
@@ -72,22 +74,23 @@ fn print_usage() {
 
 pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
-    
+
     let signer = match &cli.keypair_path {
-        Some(path) => {
-            match load_keypair(path) {
-                Ok(s) => Some(s),
-                Err(e) => {
-                    eprintln!("Warning: Failed to load keypair: {}. Transactions will not be signed.", e);
-                    None
-                }
+        Some(path) => match load_keypair(path) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to load keypair: {}. Transactions will not be signed.",
+                    e
+                );
+                None
             }
-        }
+        },
         None => None,
     };
-    
+
     let rt = edgerun_rt::Builder::new_multi_thread().build()?;
-    
+
     match cli.command {
         Command::Provider(cmd) => {
             let rpc_url = cli.rpc_url.clone();

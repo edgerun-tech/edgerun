@@ -17,7 +17,6 @@ pub const ESMTP_EXTENSIONS: &[&str] = &[
     "CHUNKING",
 ];
 
-
 /// Owned line reader — wraps any `AsyncRead + Unpin` and reads `\r\n`-delimited lines.
 ///
 /// Used by the SMTP client which stores the reader as a field.

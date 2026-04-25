@@ -3,8 +3,8 @@
 #[cfg(test)]
 mod tests {
     use edgerun_android_hardware::AndroidBiometricProvider;
-    use edgerun_capabilities::CapabilityProvider;
     use edgerun_biometrics::{BiometricAssuranceStrength, BiometricModality, BiometricState};
+    use edgerun_capabilities::CapabilityProvider;
 
     // =========================================================================
     // Stub implementation tests (non-Android targets)
@@ -15,25 +15,28 @@ mod tests {
         let provider = AndroidBiometricProvider::new();
         let desc = provider.descriptor();
         assert_eq!(desc.provider_name, "android-biometric-stub");
-        assert_eq!(desc.role, edgerun_capabilities::CapabilityRole::SecureElement as i32);
+        assert_eq!(
+            desc.role,
+            edgerun_capabilities::CapabilityRole::SecureElement as i32
+        );
     }
 
     #[test]
     fn biometric_provider_has_biometric_modality() {
         let provider = AndroidBiometricProvider::new();
         let desc = provider.descriptor();
-        assert!(desc.modalities.contains(
-            &(edgerun_capabilities::CapabilityModality::Biometric as i32)
-        ));
+        assert!(desc
+            .modalities
+            .contains(&(edgerun_capabilities::CapabilityModality::Biometric as i32)));
     }
 
     #[test]
     fn biometric_provider_has_query_operation() {
         let provider = AndroidBiometricProvider::new();
         let desc = provider.descriptor();
-        assert!(desc.operations.contains(
-            &(edgerun_capabilities::CapabilityOperation::Query as i32)
-        ));
+        assert!(desc
+            .operations
+            .contains(&(edgerun_capabilities::CapabilityOperation::Query as i32)));
     }
 
     #[test]
@@ -128,8 +131,13 @@ mod tests {
     #[test]
     fn biometric_strength_ordering() {
         assert!(BiometricAssuranceStrength::None < BiometricAssuranceStrength::UserPresence);
-        assert!(BiometricAssuranceStrength::UserPresence < BiometricAssuranceStrength::BiometricMatch);
-        assert!(BiometricAssuranceStrength::BiometricMatch < BiometricAssuranceStrength::HardwareProtectedBiometric);
+        assert!(
+            BiometricAssuranceStrength::UserPresence < BiometricAssuranceStrength::BiometricMatch
+        );
+        assert!(
+            BiometricAssuranceStrength::BiometricMatch
+                < BiometricAssuranceStrength::HardwareProtectedBiometric
+        );
     }
 
     #[test]
@@ -164,7 +172,10 @@ mod tests {
 
     #[test]
     fn biometric_modality_variants() {
-        assert_eq!(BiometricModality::Fingerprint, BiometricModality::Fingerprint);
+        assert_eq!(
+            BiometricModality::Fingerprint,
+            BiometricModality::Fingerprint
+        );
         assert_ne!(BiometricModality::Fingerprint, BiometricModality::Face);
         assert_ne!(BiometricModality::Face, BiometricModality::Iris);
         assert_ne!(BiometricModality::Iris, BiometricModality::Voice);

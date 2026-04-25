@@ -8,7 +8,7 @@ use std::io::{self};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
+use crate::io_traits::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 // ===========================================================================
 // copy
@@ -74,7 +74,9 @@ where
             Ok(n) => n,
             Err(_) => break,
         };
-        if b.write_all(&buf_a[..n]).await.is_err() { break; }
+        if b.write_all(&buf_a[..n]).await.is_err() {
+            break;
+        }
         a_to_b += n as u64;
 
         // Read from B, write to A.
@@ -83,7 +85,9 @@ where
             Ok(n) => n,
             Err(_) => break,
         };
-        if a.write_all(&buf_b[..n]).await.is_err() { break; }
+        if a.write_all(&buf_b[..n]).await.is_err() {
+            break;
+        }
         b_to_a += n as u64;
     }
 

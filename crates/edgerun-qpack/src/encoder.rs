@@ -3,7 +3,6 @@ use std::{cmp, io::Cursor};
 use edgerun_encoding::buf::{Buf, BufMut};
 
 use super::{
-    HeaderField,
     block::{
         HeaderPrefix, Indexed, IndexedWithPostBase, Literal, LiteralWithNameRef,
         LiteralWithPostBaseNameRef,
@@ -20,6 +19,7 @@ use super::{
         DecoderInstruction, Duplicate, DynamicTableSizeUpdate, HeaderAck, InsertCountIncrement,
         InsertWithNameRef, InsertWithoutNameRef, StreamCancel,
     },
+    HeaderField,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -296,7 +296,7 @@ impl From<ParseError> for EncoderError {
 mod tests {
     use super::*;
 
-    use crate::tests::helpers::{TABLE_SIZE, build_table};
+    use crate::tests::helpers::{build_table, TABLE_SIZE};
 
     #[allow(clippy::type_complexity)]
     fn check_encode_field(

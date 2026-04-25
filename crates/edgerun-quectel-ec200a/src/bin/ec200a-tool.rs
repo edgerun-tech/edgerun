@@ -46,7 +46,7 @@ for l in lines:
 
 fn test_dta_simulation() -> Result<(), String> {
     println!("=== Testing Quectel EC200A with DTA Network ===");
-    
+
     // Simulate DTA network AT command sequence
     let commands = [
         ("AT+CFUN=1", "Power on and register"),
@@ -56,7 +56,7 @@ fn test_dta_simulation() -> Result<(), String> {
         ("AT+CIMI", "Get IMSI"),
         ("ATI", "Get module info"),
     ];
-    
+
     for (cmd, desc) in commands.iter() {
         println!("\n--- {} ---", desc);
         println!("Command: AT{}", cmd);
@@ -65,14 +65,16 @@ fn test_dta_simulation() -> Result<(), String> {
         match *cmd {
             "AT+CFUN=1" => println!("Response: OK (Radio on, registering...)"),
             "AT+CREG?" => println!("Response: +CREG: 0,5\r\nOK (Registered on DTA network)"),
-            "AT+COPS?" => println!("Response: +COPS: 0,0,\"DTA_NET\",2\r\nOK (DTA network detected)"),
+            "AT+COPS?" => {
+                println!("Response: +COPS: 0,0,\"DTA_NET\",2\r\nOK (DTA network detected)")
+            }
             "AT+CSQ" => println!("Response: +CSQ: 18,99\r\nOK (Signal quality: 18/31)"),
             "AT+CIMI" => println!("Response: 123456789012345\r\nOK (IMSI retrieved)"),
             "ATI" => println!("Response: Quectel EC200A-EU Rev1.0\r\nOK (Module identified)"),
             _ => println!("Response: (simulated)"),
         }
     }
-    
+
     println!("\n=== DTA Network Connection Test Complete ===");
     Ok(())
 }
@@ -86,7 +88,7 @@ fn main() {
                 eprintln!("Test failed: {}", e);
                 std::process::exit(1);
             }
-        },
+        }
         Some("list") => {
             println!("Serial ports:");
             println!("  /dev/ttyUSB0  Debug log");
@@ -135,7 +137,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_dta_network_registration() {
         let result = test_dta_simulation();

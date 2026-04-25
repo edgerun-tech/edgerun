@@ -189,15 +189,22 @@ mod tests {
 
     #[test]
     fn test_incomplete() {
-        assert_eq!(
-            decode_varint(&[0x40]),
-            Err(VarintError::Incomplete(2, 1))
-        );
+        assert_eq!(decode_varint(&[0x40]), Err(VarintError::Incomplete(2, 1)));
     }
 
     #[test]
     fn test_roundtrip_all_sizes() {
-        for v in [0, 1, 63, 64, 16_383, 16_384, 1_073_741_823, 1_073_741_824, u64::MAX >> 2] {
+        for v in [
+            0,
+            1,
+            63,
+            64,
+            16_383,
+            16_384,
+            1_073_741_823,
+            1_073_741_824,
+            u64::MAX >> 2,
+        ] {
             let encoded = encode_varint_vec(v);
             let (decoded, len) = decode_varint(&encoded).unwrap();
             assert_eq!(decoded, v);

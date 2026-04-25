@@ -1,13 +1,16 @@
 //! OAuth 2.0 client — device flow, authorization code flow, token refresh.
 
-use edgerun_encoding::base64::base64url_nopad_encode;
 use crate::discovery::OidcDiscoveryDocument;
 use crate::errors::{DeviceError, OAuthError, OAuthResult};
 use crate::jwt::IdToken;
 use crate::pkce::PkcePair;
 use crate::token_store::TokenStore;
-use crate::types::{ClientConfig, Credentials, DeviceAuthorizationRequest, DeviceAuthorizationResponse, TokenRequest, TokenResponse};
+use crate::types::{
+    ClientConfig, Credentials, DeviceAuthorizationRequest, DeviceAuthorizationResponse,
+    TokenRequest, TokenResponse,
+};
 use edgerun_crypto::sha256;
+use edgerun_encoding::base64::base64url_nopad_encode;
 use edgerun_http::HttpClient;
 use edgerun_rt::sleep;
 use std::time::{Duration, Instant};
@@ -65,12 +68,14 @@ impl OAuthClient {
         );
 
         // Step 4: Poll for token
-        let creds = self.poll_for_token(
-            &device_resp.device_code,
-            &pkce.code_verifier,
-            self.config.device_flow_timeout_secs,
-            device_resp.interval,
-        ).await?;
+        let creds = self
+            .poll_for_token(
+                &device_resp.device_code,
+                &pkce.code_verifier,
+                self.config.device_flow_timeout_secs,
+                device_resp.interval,
+            )
+            .await?;
 
         // Save to token store if available
         if let Some(ref store) = self.token_store {
@@ -81,7 +86,10 @@ impl OAuthClient {
     }
 
     /// Request a device code from the authorization server.
-    async fn request_device_code(&self, _pkce: &PkcePair) -> OAuthResult<DeviceAuthorizationResponse> {
+    async fn request_device_code(
+        &self,
+        _pkce: &PkcePair,
+    ) -> OAuthResult<DeviceAuthorizationResponse> {
         let req = DeviceAuthorizationRequest {
             client_id: self.config.client_id.clone(),
             scope: crate::types::Scope::format_list(&self.config.scopes),
@@ -90,21 +98,33 @@ impl OAuthClient {
         };
         let body = req.to_form_body();
 
-        let resp = self.http.post(&self.config.device_code_url(), body.as_bytes()).await
+        let resp = self
+            .http
+            .post(&self.config.device_code_url(), body.as_bytes())
+            .await
             .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
         let body = String::from_utf8_lossy(resp.body()).to_string();
 
         if resp.status().as_u16() != 200 {
             let token_resp = TokenResponse::from_json(&body).unwrap_or(TokenResponse {
-                access_token: None, token_type: None, expires_in: None,
-                refresh_token: None, id_token: None, scope: None,
+                access_token: None,
+                token_type: None,
+                expires_in: None,
+                refresh_token: None,
+                id_token: None,
+                scope: None,
                 error: Some("unknown".into()),
                 error_description: Some(body.chars().take(200).collect()),
             });
             let error = token_resp.error.unwrap_or_else(|| "unknown".into());
-            let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-            return Err(OAuthError::ServerError { error, error_description: desc });
+            let desc = token_resp
+                .error_description
+                .unwrap_or_else(|| "Unknown error".into());
+            return Err(OAuthError::ServerError {
+                error,
+                error_description: desc,
+            });
         }
 
         DeviceAuthorizationResponse::from_json(&body)
@@ -143,12 +163,14 @@ impl OAuthClient {
             };
             let body = req.to_form_body();
 
-            let resp = self.http.post(&self.config.token_url(), body.as_bytes()).await
+            let resp = self
+                .http
+                .post(&self.config.token_url(), body.as_bytes())
+                .await
                 .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
             let resp_body = String::from_utf8_lossy(resp.body()).to_string();
-            let token_resp = TokenResponse::from_json(&resp_body)
-                .map_err(OAuthError::JsonError)?;
+            let token_resp = TokenResponse::from_json(&resp_body).map_err(OAuthError::JsonError)?;
 
             if let Some(error) = token_resp.error {
                 match error.as_str() {
@@ -160,8 +182,13 @@ impl OAuthClient {
                     "expired_token" => return Err(OAuthError::DeviceError(DeviceError::Expired)),
                     "access_denied" => return Err(OAuthError::DeviceError(DeviceError::Denied)),
                     _ => {
-                        let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-                        return Err(OAuthError::ServerError { error, error_description: desc });
+                        let desc = token_resp
+                            .error_description
+                            .unwrap_or_else(|| "Unknown error".into());
+                        return Err(OAuthError::ServerError {
+                            error,
+                            error_description: desc,
+                        });
                     }
                 }
             }
@@ -177,7 +204,11 @@ impl OAuthClient {
     /// Generate the authorization URL for the user to visit.
     ///
     /// Returns the URL and the PKCE pair (needed for token exchange).
-    pub fn authorization_code_url(&self, redirect_uri: &str, state: &str) -> OAuthResult<(String, PkcePair)> {
+    pub fn authorization_code_url(
+        &self,
+        redirect_uri: &str,
+        state: &str,
+    ) -> OAuthResult<(String, PkcePair)> {
         let pkce = PkcePair::generate().map_err(|e| OAuthError::PkceError(e.to_string()))?;
 
         let mut params = Vec::new();
@@ -190,7 +221,8 @@ impl OAuthClient {
         params.push(("code_challenge", pkce.code_challenge.as_str()));
         params.push(("code_challenge_method", "S256"));
 
-        let query: String = params.iter()
+        let query: String = params
+            .iter()
             .map(|(k, v)| edgerun_encoding::percent::url_encode_pair(k, v))
             .collect::<Vec<_>>()
             .join("&");
@@ -200,7 +232,12 @@ impl OAuthClient {
     }
 
     /// Exchange an authorization code for tokens (second step of auth code flow).
-    pub async fn exchange_code(&self, code: &str, redirect_uri: &str, pkce: &PkcePair) -> OAuthResult<Credentials> {
+    pub async fn exchange_code(
+        &self,
+        code: &str,
+        redirect_uri: &str,
+        pkce: &PkcePair,
+    ) -> OAuthResult<Credentials> {
         let req = TokenRequest {
             grant_type: "authorization_code".into(),
             client_id: self.config.client_id.clone(),
@@ -214,7 +251,10 @@ impl OAuthClient {
         };
         let body = req.to_form_body();
 
-        let resp = self.http.post(&self.config.token_url(), body.as_bytes()).await
+        let resp = self
+            .http
+            .post(&self.config.token_url(), body.as_bytes())
+            .await
             .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
         let resp_body = String::from_utf8_lossy(resp.body()).to_string();
@@ -224,8 +264,13 @@ impl OAuthClient {
 
         let token_resp = TokenResponse::from_json(&resp_body).map_err(OAuthError::JsonError)?;
         if let Some(error) = token_resp.error {
-            let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-            return Err(OAuthError::ServerError { error, error_description: desc });
+            let desc = token_resp
+                .error_description
+                .unwrap_or_else(|| "Unknown error".into());
+            return Err(OAuthError::ServerError {
+                error,
+                error_description: desc,
+            });
         }
 
         let creds = token_resp.into_credentials();
@@ -256,7 +301,10 @@ impl OAuthClient {
         };
         let body = req.to_form_body();
 
-        let resp = self.http.post(&self.config.token_url(), body.as_bytes()).await
+        let resp = self
+            .http
+            .post(&self.config.token_url(), body.as_bytes())
+            .await
             .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
         let resp_body = String::from_utf8_lossy(resp.body()).to_string();
@@ -266,8 +314,13 @@ impl OAuthClient {
 
         let token_resp = TokenResponse::from_json(&resp_body).map_err(OAuthError::JsonError)?;
         if let Some(error) = token_resp.error {
-            let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-            return Err(OAuthError::ServerError { error, error_description: desc });
+            let desc = token_resp
+                .error_description
+                .unwrap_or_else(|| "Unknown error".into());
+            return Err(OAuthError::ServerError {
+                error,
+                error_description: desc,
+            });
         }
 
         let creds = token_resp.into_credentials();
@@ -292,7 +345,10 @@ impl OAuthClient {
         }
 
         // Load from file (may be expired)
-        if let Some(creds) = store.load().map_err(|e| OAuthError::IoError(e.to_string()))? {
+        if let Some(creds) = store
+            .load()
+            .map_err(|e| OAuthError::IoError(e.to_string()))?
+        {
             if let Some(ref refresh_token) = creds.refresh_token {
                 return self.refresh_token(refresh_token).await.map(Some);
             }
@@ -329,7 +385,9 @@ impl OAuthClient {
 
         // Validate OIDC claims
         if !token.payload.verify_aud(&self.config.client_id) {
-            return Err(OAuthError::JwtError("aud claim does not match client_id".into()));
+            return Err(OAuthError::JwtError(
+                "aud claim does not match client_id".into(),
+            ));
         }
 
         if token.payload.is_expired(30) {
@@ -359,7 +417,12 @@ impl OAuthClient {
             error_description: Some(body.chars().take(200).collect()),
         });
         let error = token_resp.error.unwrap_or_else(|| "unknown".into());
-        let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-        Err(OAuthError::ServerError { error, error_description: desc })
+        let desc = token_resp
+            .error_description
+            .unwrap_or_else(|| "Unknown error".into());
+        Err(OAuthError::ServerError {
+            error,
+            error_description: desc,
+        })
     }
 }

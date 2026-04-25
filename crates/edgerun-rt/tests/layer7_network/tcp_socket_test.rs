@@ -1,5 +1,5 @@
 // Test TcpSocket with the actual runtime.
-use edgerun_rt::{TcpSocket, Runtime, AsyncReadExt, AsyncWriteExt};
+use edgerun_rt::{AsyncReadExt, AsyncWriteExt, Runtime, TcpSocket};
 use std::net::{SocketAddr, TcpListener as StdTcpListener};
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -62,7 +62,9 @@ fn test_connect_with_nodelay() {
 
     // Start a simple echo server using std
     let server = std::net::TcpListener::bind(addr).expect("bind failed");
-    server.set_nonblocking(true).expect("set_nonblocking failed");
+    server
+        .set_nonblocking(true)
+        .expect("set_nonblocking failed");
 
     let h = edgerun_rt::spawn(async move {
         let mut socket = TcpSocket::new_v4().expect("new_v4 failed");
@@ -88,7 +90,9 @@ fn test_connect_with_ttl() {
     let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
 
     let server = std::net::TcpListener::bind(addr).expect("bind failed");
-    server.set_nonblocking(true).expect("set_nonblocking failed");
+    server
+        .set_nonblocking(true)
+        .expect("set_nonblocking failed");
 
     let h = edgerun_rt::spawn(async move {
         let mut socket = TcpSocket::new_v4().expect("new_v4 failed");

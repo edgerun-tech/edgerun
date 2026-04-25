@@ -224,7 +224,8 @@ mod tests {
 
     #[test]
     fn discover_connectors_nonexistent_root() {
-        let connectors = discover_drm_connectors_in(Path::new("/nonexistent/path/that/does/not/exist"));
+        let connectors =
+            discover_drm_connectors_in(Path::new("/nonexistent/path/that/does/not/exist"));
         assert!(connectors.is_ok());
         assert!(connectors.unwrap().is_empty());
     }
@@ -394,7 +395,7 @@ mod tests {
             sysfs_root: PathBuf::from("/sys/class/drm"),
             connector: DrmConnectorInfo {
                 sysfs_path: PathBuf::from("/sys/class/drm/card0-LVDS-1"),
-                connector_name: "LVDS-1".into(),  // starts with "LVDS"
+                connector_name: "LVDS-1".into(), // starts with "LVDS"
                 enabled: true,
                 connected: true,
                 current_mode: Some(DisplayMode {

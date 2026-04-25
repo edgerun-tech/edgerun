@@ -3,24 +3,20 @@
 mod serve;
 mod session;
 
-pub use serve::{serve_one, pump_one_event, capability_error_result};
+pub use serve::{capability_error_result, pump_one_event, serve_one};
 pub use session::{
-    default_remote_requester, default_remote_requester_opt,
-    session_open_as_request,
-    session_accept_from_grant,
-    session_reject,
-    accept_session_open_unchecked,
+    accept_session_open_unchecked, default_remote_requester, default_remote_requester_opt,
+    session_accept_from_grant, session_open_as_request, session_reject,
 };
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
 use edgerun_proto::edgerun::v0::capability::{
-    CapabilityGrant, CapabilityInvocation, CapabilityRequest,
-    CapabilityRevocation,
+    CapabilityGrant, CapabilityInvocation, CapabilityRequest, CapabilityRevocation,
 };
 pub use edgerun_proto::edgerun::v0::capability_runtime::{
     capability_remote_envelope, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
-    CapabilityResultFrame, CapabilitySessionAccept, CapabilitySessionClose,
-    CapabilitySessionEvent, CapabilitySessionMode, CapabilitySessionOpen,
+    CapabilityResultFrame, CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
+    CapabilitySessionMode, CapabilitySessionOpen,
 };
 
 /// Result of a remote capability invocation.

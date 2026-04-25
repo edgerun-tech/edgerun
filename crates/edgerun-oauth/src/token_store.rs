@@ -42,7 +42,13 @@ impl TokenStore {
         let json = credentials_to_json(creds);
         let attrs = vec![("type".into(), "oauth-token".into())];
         let mut be = self.backend.lock().unwrap();
-        be.put(COLLECTION, "default", json.as_bytes(), "OAuth Token", &attrs)
+        be.put(
+            COLLECTION,
+            "default",
+            json.as_bytes(),
+            "OAuth Token",
+            &attrs,
+        )
     }
 
     /// Load credentials from the secret store.
@@ -111,15 +117,35 @@ fn credentials_from_json(s: &str) -> Result<Credentials, String> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let access_token = value.get("access_token").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let refresh_token = value.get("refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let id_token = value.get("id_token").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let token_type = value.get("token_type").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let scope = value.get("scope").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let access_token = value
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let refresh_token = value
+        .get("refresh_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let id_token = value
+        .get("id_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let token_type = value
+        .get("token_type")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let scope = value
+        .get("scope")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
     let expiry_date = if let Some(exp) = value.get("expiry_date").and_then(|v| v.as_u64()) {
         Some(exp)
-    } else { value.get("expires_in").and_then(|v| v.as_u64()).map(|ei| now + ei) };
+    } else {
+        value
+            .get("expires_in")
+            .and_then(|v| v.as_u64())
+            .map(|ei| now + ei)
+    };
 
     Ok(Credentials {
         access_token,

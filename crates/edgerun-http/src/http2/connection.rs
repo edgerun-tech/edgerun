@@ -1,12 +1,12 @@
 //! HTTP/2 connection management
 
-use super::Http2Error;
 use super::flow_control::FlowControlManager;
 use super::frame::{
     ContinuationFrame, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame,
     PriorityFrame, PushPromiseFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
 use super::stream::{Stream, StreamManager};
+use super::Http2Error;
 use super::{ErrorCode, Result};
 use super::{Settings, CONNECTION_PREFACE};
 use std::collections::HashMap;
@@ -160,7 +160,10 @@ impl<S: Read + Write> Connection<S> {
         let length = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) | (header[2] as u32);
 
         // Validate frame size BEFORE allocating payload buffer (prevent unbounded allocation)
-        let max_frame_size = self.remote_settings.max_frame_size.max(Frame::DEFAULT_MAX_FRAME_SIZE);
+        let max_frame_size = self
+            .remote_settings
+            .max_frame_size
+            .max(Frame::DEFAULT_MAX_FRAME_SIZE);
         if length > max_frame_size {
             return Err(Http2Error::FrameParse(format!(
                 "Frame size {} exceeds maximum {}",
@@ -318,9 +321,7 @@ impl<S: Read + Write> Connection<S> {
     /// Process HEADERS frame
     fn process_headers(&mut self, headers_frame: &HeadersFrame) -> Result<()> {
         // Get or create stream
-        let stream = self
-            .streams
-            .get_or_create_stream(headers_frame.stream_id)?;
+        let stream = self.streams.get_or_create_stream(headers_frame.stream_id)?;
 
         // Transition stream state
         if stream.state == super::stream::StreamState::Idle {
@@ -374,17 +375,20 @@ impl<S: Read + Write> Connection<S> {
     fn process_priority(&mut self, priority_frame: &PriorityFrame) -> Result<()> {
         // PRIORITY on stream 0 is a connection error
         if priority_frame.stream_id == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "PRIORITY frame on stream 0",
-            )
-            .into());
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidData, "PRIORITY frame on stream 0").into(),
+            );
         }
 
         // Update stream dependency info if the stream exists
         // (Priority scheduling is not implemented, but we record the dependency)
         if let Some(stream) = self.streams.get_stream_mut(priority_frame.stream_id) {
-            let _ = (stream, priority_frame.exclusive, priority_frame.stream_dependency, priority_frame.weight);
+            let _ = (
+                stream,
+                priority_frame.exclusive,
+                priority_frame.stream_dependency,
+                priority_frame.weight,
+            );
         }
 
         Ok(())
@@ -405,7 +409,8 @@ impl<S: Read + Write> Connection<S> {
         // Promised stream ID must be even (server-initiated)
         if pp_frame.promised_stream_id.is_multiple_of(2) {
             // Create the promised stream
-            self.streams.create_server_stream(pp_frame.promised_stream_id)?;
+            self.streams
+                .create_server_stream(pp_frame.promised_stream_id)?;
         }
 
         // The HEADERS on the promised stream will follow separately
@@ -431,11 +436,7 @@ impl<S: Read + Write> Connection<S> {
     }
 
     /// Send a request on a new stream
-    pub fn send_request(
-        &mut self,
-        headers: Vec<u8>,
-        body: Option<Vec<u8>>,
-    ) -> Result<u32> {
+    pub fn send_request(&mut self, headers: Vec<u8>, body: Option<Vec<u8>>) -> Result<u32> {
         // Create new stream
         let stream_id = self.streams.create_client_stream()?;
 

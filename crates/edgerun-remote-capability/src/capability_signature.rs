@@ -21,13 +21,13 @@
 //! 4. SHA-256 hash the bytes
 //! 5. Verify ECDSA P-256 signature using sender's NodeID as public key
 
+use edgerun_crypto::p256::ecdsa::VerifyingKey;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_proto::edgerun::v0::capability::{
     CapabilityGrant, CapabilityInvocation, CapabilityRequest, CapabilityResult,
     CapabilityRevocation,
 };
 use edgerun_proto::edgerun::v0::common::{signature, Signature};
-use edgerun_crypto::p256::ecdsa::VerifyingKey;
 use prost::Message;
 
 /// The ECDSA P-256 algorithm identifier used in protobuf Signature messages.
@@ -50,13 +50,13 @@ pub fn sign_message<M: Message>(
     // Clear signature and serialize
     clear_sig(msg);
     let mut buf = Vec::new();
-    msg.encode(&mut buf).map_err(|e| format!("proto encode: {e}"))?;
+    msg.encode(&mut buf)
+        .map_err(|e| format!("proto encode: {e}"))?;
 
     // Sign with domain separation for capability protocol messages
-    let sig_bytes = signer.sign_record(
-        "edgerun:v0:sig:capability-message",
-        &buf,
-    ).map_err(|e| format!("sign: {e}"))?;
+    let sig_bytes = signer
+        .sign_record("edgerun:v0:sig:capability-message", &buf)
+        .map_err(|e| format!("sign: {e}"))?;
 
     // Set signature
     set_sig(
@@ -81,7 +81,10 @@ pub fn verify_message<M: Message + Clone>(
 ) -> Result<(), String> {
     let sig = get_sig(msg).ok_or("message has no signature")?;
     if sig.algorithm != SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 {
-        return Err(format!("unsupported signature algorithm: {}", sig.algorithm));
+        return Err(format!(
+            "unsupported signature algorithm: {}",
+            sig.algorithm
+        ));
     }
     if sig.value.len() != 64 {
         return Err(format!("invalid signature length: {}", sig.value.len()));
@@ -90,7 +93,9 @@ pub fn verify_message<M: Message + Clone>(
     // Clear signature and re-serialize
     let msg_clone = clear_sig(msg);
     let mut buf = Vec::new();
-    msg_clone.encode(&mut buf).map_err(|e| format!("proto encode: {e}"))?;
+    msg_clone
+        .encode(&mut buf)
+        .map_err(|e| format!("proto encode: {e}"))?;
 
     // Build the same domain-separated prehash that MeshSigner::sign_record uses:
     //   digest = SHA-256(domain_tag || 0x00 || SHA-256(message_bytes))
@@ -132,10 +137,7 @@ macro_rules! impl_sign_verify {
         fn $set(msg: &mut $msg, sig: Signature) {
             msg.signature = Some(sig);
         }
-        pub fn $sign(
-            signer: &dyn MeshSigner,
-            msg: &mut $msg,
-        ) -> Result<(), String> {
+        pub fn $sign(signer: &dyn MeshSigner, msg: &mut $msg) -> Result<(), String> {
             sign_message(signer, msg, $clear, $set)
         }
         pub fn $verify(msg: &$msg, sender: NodeID) -> Result<(), String> {
@@ -196,9 +198,8 @@ impl_sign_verify!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_hardware_signing::MeshSigner;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-
+    use edgerun_hardware_signing::MeshSigner;
 
     struct TestSigner {
         node_id: NodeID,
@@ -229,10 +230,10 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: edgerun_crypto::p256::ecdsa::Signature = self
-                .key
-                .sign_prehash(digest)
-                .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
+                self.key.sign_prehash(digest).map_err(|e| {
+                    edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string())
+                })?;
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());
             Ok(bytes)
@@ -290,10 +291,17 @@ mod tests {
             key: edgerun_crypto::p256::ecdsa::SigningKey,
         }
         impl MeshSigner for KeySigner {
-            fn node_id(&self) -> NodeID { self.node_id }
-            fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-                let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(digest)
-                    .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
+            fn node_id(&self) -> NodeID {
+                self.node_id
+            }
+            fn sign_digest(
+                &self,
+                digest: &[u8; 32],
+            ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
+                let sig: edgerun_crypto::p256::ecdsa::Signature =
+                    self.key.sign_prehash(digest).map_err(|e| {
+                        edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string())
+                    })?;
                 let mut bytes = [0u8; 64];
                 bytes.copy_from_slice(&sig.to_bytes());
                 Ok(bytes)

@@ -90,8 +90,10 @@ impl<T> Resource<T> {
 impl<T: serde::Serialize + serde::de::DeserializeOwned> Resource<T> {
     /// Serialize to YAML string.
     pub fn to_yaml(&self) -> Result<String, edgerun_json::yaml::YamlError> {
-        let json = edgerun_json::to_value(self).map_err(|_| edgerun_json::yaml::YamlError::IoError("serialization error".to_string()))?;
-        
+        let json = edgerun_json::to_value(self).map_err(|_| {
+            edgerun_json::yaml::YamlError::IoError("serialization error".to_string())
+        })?;
+
         edgerun_json::yaml::to_yaml_string(&edgerun_json::yaml::json_to_yaml(json))
     }
 
@@ -99,7 +101,9 @@ impl<T: serde::Serialize + serde::de::DeserializeOwned> Resource<T> {
     pub fn from_yaml(yaml: &str) -> Result<Self, edgerun_json::yaml::YamlError> {
         let yaml_value = edgerun_json::yaml::from_yaml_str(yaml)?;
         let json = edgerun_json::yaml::yaml_to_json(yaml_value);
-        edgerun_json::from_value(json).map_err(|_| edgerun_json::yaml::YamlError::IoError("deserialization error".to_string()))
+        edgerun_json::from_value(json).map_err(|_| {
+            edgerun_json::yaml::YamlError::IoError("deserialization error".to_string())
+        })
     }
 }
 
@@ -478,8 +482,12 @@ pub struct Dhcpv6ServerSpec {
     pub reservations: Option<Vec<Dhcpv6Reservation>>,
 }
 
-fn default_3600() -> u32 { 3600 }
-fn default_7200() -> u32 { 7200 }
+fn default_3600() -> u32 {
+    3600
+}
+fn default_7200() -> u32 {
+    7200
+}
 
 /// DHCPv6 static reservation.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1480,8 +1488,7 @@ pub struct SecretSpec {
     pub blob_ref: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub enum SecretType {
     #[default]
     Opaque,
@@ -1490,7 +1497,6 @@ pub enum SecretType {
     TLS,
     BootstrapToken,
 }
-
 
 // ---------------------------------------------------------------------------
 // Default helpers
@@ -1504,13 +1510,33 @@ fn default_serial() -> u32 {
     ((secs / 86400) as u32) * 100 + 1 // YYYYMMDDNN format
 }
 
-fn default_900() -> u32 { 900 }
-fn default_604800() -> u32 { 604800 }
-fn default_86400() -> u32 { 86400 }
-fn default_30d() -> u32 { 30 * 86400 }
-fn default_ksk() -> u16 { 257 }
-fn default_100() -> u32 { 100 }
-fn default_200() -> u32 { 200 }
-fn default_60() -> u32 { 60 }
-fn default_pull_always() -> String { "Always".to_string() }
-fn default_dns_policy() -> String { "ClusterFirst".to_string() }
+fn default_900() -> u32 {
+    900
+}
+fn default_604800() -> u32 {
+    604800
+}
+fn default_86400() -> u32 {
+    86400
+}
+fn default_30d() -> u32 {
+    30 * 86400
+}
+fn default_ksk() -> u16 {
+    257
+}
+fn default_100() -> u32 {
+    100
+}
+fn default_200() -> u32 {
+    200
+}
+fn default_60() -> u32 {
+    60
+}
+fn default_pull_always() -> String {
+    "Always".to_string()
+}
+fn default_dns_policy() -> String {
+    "ClusterFirst".to_string()
+}

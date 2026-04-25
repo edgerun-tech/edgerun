@@ -18,10 +18,7 @@
 //! When XCLBIN overlay models are loaded on the NPU, the integral image
 //! computation can be offloaded, reducing to ~5-15ms.
 
-use edgerun_camera_biometrics::{
-    CameraCaptureQuality, CameraFrame, CameraPixelFormat,
-    FaceBounds,
-};
+use edgerun_camera_biometrics::{CameraCaptureQuality, CameraFrame, CameraPixelFormat, FaceBounds};
 
 pub type RawDetection = (i32, i32, i32, i32, f32);
 pub type NmsResult = (RawDetection, u32);
@@ -105,8 +102,7 @@ impl IntegralImage {
     #[inline(always)]
     pub fn rect_sum(&self, x1: usize, y1: usize, x2: usize, y2: usize) -> u32 {
         debug_assert!(x1 <= x2 && y1 <= y2);
-        self.data[y2 * self.stride + x2]
-            + self.data[y1 * self.stride + x1]
+        self.data[y2 * self.stride + x2] + self.data[y1 * self.stride + x1]
             - self.data[y1 * self.stride + x2]
             - self.data[y2 * self.stride + x1]
     }
@@ -230,115 +226,496 @@ struct Stage {
 
 static STAGE0_FEATURES: &[HaarFeature] = &[
     // Eye region: eyes darker than forehead (strong rejector)
-    HaarFeature { x: 4, y: 2, w: 16, h: 6, shape: 0, threshold: 0.0, left_val: 1.0, right_val: -1.0 },
+    HaarFeature {
+        x: 4,
+        y: 2,
+        w: 16,
+        h: 6,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 1.0,
+        right_val: -1.0,
+    },
     // Nose bridge: nose bridge brighter than sides
-    HaarFeature { x: 9, y: 7, w: 6, h: 8, shape: 2, threshold: -1.0, left_val: 1.0, right_val: -0.8 },
+    HaarFeature {
+        x: 9,
+        y: 7,
+        w: 6,
+        h: 8,
+        shape: 2,
+        threshold: -1.0,
+        left_val: 1.0,
+        right_val: -0.8,
+    },
 ];
 
 static STAGE1_FEATURES: &[HaarFeature] = &[
     // Eye line: eyes are darker horizontally
-    HaarFeature { x: 3, y: 5, w: 18, h: 4, shape: 1, threshold: 1.0, left_val: 1.0, right_val: -0.9 },
+    HaarFeature {
+        x: 3,
+        y: 5,
+        w: 18,
+        h: 4,
+        shape: 1,
+        threshold: 1.0,
+        left_val: 1.0,
+        right_val: -0.9,
+    },
     // Cheek shadows
-    HaarFeature { x: 2, y: 10, w: 8, h: 6, shape: 2, threshold: -2.0, left_val: 0.8, right_val: -1.0 },
-    HaarFeature { x: 14, y: 10, w: 8, h: 6, shape: 2, threshold: -2.0, left_val: 0.8, right_val: -1.0 },
+    HaarFeature {
+        x: 2,
+        y: 10,
+        w: 8,
+        h: 6,
+        shape: 2,
+        threshold: -2.0,
+        left_val: 0.8,
+        right_val: -1.0,
+    },
+    HaarFeature {
+        x: 14,
+        y: 10,
+        w: 8,
+        h: 6,
+        shape: 2,
+        threshold: -2.0,
+        left_val: 0.8,
+        right_val: -1.0,
+    },
 ];
 
 static STAGE2_FEATURES: &[HaarFeature] = &[
     // Mouth region: mouth darker than chin
-    HaarFeature { x: 6, y: 16, w: 12, h: 4, shape: 0, threshold: 0.5, left_val: 1.0, right_val: -0.7 },
+    HaarFeature {
+        x: 6,
+        y: 16,
+        w: 12,
+        h: 4,
+        shape: 0,
+        threshold: 0.5,
+        left_val: 1.0,
+        right_val: -0.7,
+    },
     // Jaw line
-    HaarFeature { x: 4, y: 14, w: 16, h: 4, shape: 1, threshold: 0.0, left_val: 0.5, right_val: -0.5 },
+    HaarFeature {
+        x: 4,
+        y: 14,
+        w: 16,
+        h: 4,
+        shape: 1,
+        threshold: 0.0,
+        left_val: 0.5,
+        right_val: -0.5,
+    },
     // Eye corners (diagonal features)
-    HaarFeature { x: 2, y: 4, w: 6, h: 4, shape: 3, threshold: 1.0, left_val: 0.6, right_val: -0.4 },
-    HaarFeature { x: 16, y: 4, w: 6, h: 4, shape: 3, threshold: 1.0, left_val: 0.6, right_val: -0.4 },
+    HaarFeature {
+        x: 2,
+        y: 4,
+        w: 6,
+        h: 4,
+        shape: 3,
+        threshold: 1.0,
+        left_val: 0.6,
+        right_val: -0.4,
+    },
+    HaarFeature {
+        x: 16,
+        y: 4,
+        w: 6,
+        h: 4,
+        shape: 3,
+        threshold: 1.0,
+        left_val: 0.6,
+        right_val: -0.4,
+    },
 ];
 
 static STAGE3_FEATURES: &[HaarFeature] = &[
     // Eyebrow region: darker than forehead
-    HaarFeature { x: 4, y: 1, w: 16, h: 3, shape: 0, threshold: 0.0, left_val: 0.5, right_val: -0.5 },
+    HaarFeature {
+        x: 4,
+        y: 1,
+        w: 16,
+        h: 3,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 0.5,
+        right_val: -0.5,
+    },
     // Nose tip
-    HaarFeature { x: 9, y: 10, w: 6, h: 4, shape: 0, threshold: -0.5, left_val: 0.4, right_val: -0.6 },
+    HaarFeature {
+        x: 9,
+        y: 10,
+        w: 6,
+        h: 4,
+        shape: 0,
+        threshold: -0.5,
+        left_val: 0.4,
+        right_val: -0.6,
+    },
     // Cheekbone structure
-    HaarFeature { x: 1, y: 8, w: 6, h: 8, shape: 1, threshold: 1.0, left_val: 0.4, right_val: -0.4 },
-    HaarFeature { x: 17, y: 8, w: 6, h: 8, shape: 1, threshold: 1.0, left_val: 0.4, right_val: -0.4 },
+    HaarFeature {
+        x: 1,
+        y: 8,
+        w: 6,
+        h: 8,
+        shape: 1,
+        threshold: 1.0,
+        left_val: 0.4,
+        right_val: -0.4,
+    },
+    HaarFeature {
+        x: 17,
+        y: 8,
+        w: 6,
+        h: 8,
+        shape: 1,
+        threshold: 1.0,
+        left_val: 0.4,
+        right_val: -0.4,
+    },
 ];
 
 static STAGE4_FEATURES: &[HaarFeature] = &[
     // Fine eye structure
-    HaarFeature { x: 5, y: 6, w: 14, h: 2, shape: 0, threshold: 0.5, left_val: 0.3, right_val: -0.3 },
+    HaarFeature {
+        x: 5,
+        y: 6,
+        w: 14,
+        h: 2,
+        shape: 0,
+        threshold: 0.5,
+        left_val: 0.3,
+        right_val: -0.3,
+    },
     // Nose bottom
-    HaarFeature { x: 8, y: 12, w: 8, h: 3, shape: 2, threshold: -1.0, left_val: 0.3, right_val: -0.3 },
+    HaarFeature {
+        x: 8,
+        y: 12,
+        w: 8,
+        h: 3,
+        shape: 2,
+        threshold: -1.0,
+        left_val: 0.3,
+        right_val: -0.3,
+    },
     // Left cheek
-    HaarFeature { x: 3, y: 3, w: 4, h: 6, shape: 1, threshold: 0.0, left_val: 0.3, right_val: -0.3 },
+    HaarFeature {
+        x: 3,
+        y: 3,
+        w: 4,
+        h: 6,
+        shape: 1,
+        threshold: 0.0,
+        left_val: 0.3,
+        right_val: -0.3,
+    },
     // Right cheek
-    HaarFeature { x: 17, y: 3, w: 4, h: 6, shape: 1, threshold: 0.0, left_val: 0.3, right_val: -0.3 },
+    HaarFeature {
+        x: 17,
+        y: 3,
+        w: 4,
+        h: 6,
+        shape: 1,
+        threshold: 0.0,
+        left_val: 0.3,
+        right_val: -0.3,
+    },
     // Upper lip
-    HaarFeature { x: 8, y: 17, w: 8, h: 2, shape: 0, threshold: 0.3, left_val: 0.3, right_val: -0.3 },
+    HaarFeature {
+        x: 8,
+        y: 17,
+        w: 8,
+        h: 2,
+        shape: 0,
+        threshold: 0.3,
+        left_val: 0.3,
+        right_val: -0.3,
+    },
 ];
 
 static STAGE5_FEATURES: &[HaarFeature] = &[
     // Forehead texture
-    HaarFeature { x: 6, y: 0, w: 12, h: 3, shape: 1, threshold: 0.5, left_val: 0.25, right_val: -0.25 },
+    HaarFeature {
+        x: 6,
+        y: 0,
+        w: 12,
+        h: 3,
+        shape: 1,
+        threshold: 0.5,
+        left_val: 0.25,
+        right_val: -0.25,
+    },
     // Temple region left
-    HaarFeature { x: 0, y: 5, w: 4, h: 5, shape: 0, threshold: 0.0, left_val: 0.25, right_val: -0.25 },
+    HaarFeature {
+        x: 0,
+        y: 5,
+        w: 4,
+        h: 5,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 0.25,
+        right_val: -0.25,
+    },
     // Temple region right
-    HaarFeature { x: 20, y: 5, w: 4, h: 5, shape: 0, threshold: 0.0, left_val: 0.25, right_val: -0.25 },
+    HaarFeature {
+        x: 20,
+        y: 5,
+        w: 4,
+        h: 5,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 0.25,
+        right_val: -0.25,
+    },
     // Chin brightness
-    HaarFeature { x: 8, y: 19, w: 8, h: 4, shape: 0, threshold: -0.5, left_val: 0.25, right_val: -0.25 },
+    HaarFeature {
+        x: 8,
+        y: 19,
+        w: 8,
+        h: 4,
+        shape: 0,
+        threshold: -0.5,
+        left_val: 0.25,
+        right_val: -0.25,
+    },
 ];
 
 static STAGE6_FEATURES: &[HaarFeature] = &[
     // Pupil-dark regions
-    HaarFeature { x: 6, y: 7, w: 4, h: 3, shape: 0, threshold: 0.0, left_val: 0.2, right_val: -0.2 },
-    HaarFeature { x: 14, y: 7, w: 4, h: 3, shape: 0, threshold: 0.0, left_val: 0.2, right_val: -0.2 },
+    HaarFeature {
+        x: 6,
+        y: 7,
+        w: 4,
+        h: 3,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 0.2,
+        right_val: -0.2,
+    },
+    HaarFeature {
+        x: 14,
+        y: 7,
+        w: 4,
+        h: 3,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 0.2,
+        right_val: -0.2,
+    },
     // Nostril regions
-    HaarFeature { x: 9, y: 12, w: 3, h: 2, shape: 0, threshold: 0.0, left_val: 0.2, right_val: -0.2 },
-    HaarFeature { x: 12, y: 12, w: 3, h: 2, shape: 0, threshold: 0.0, left_val: 0.2, right_val: -0.2 },
+    HaarFeature {
+        x: 9,
+        y: 12,
+        w: 3,
+        h: 2,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 0.2,
+        right_val: -0.2,
+    },
+    HaarFeature {
+        x: 12,
+        y: 12,
+        w: 3,
+        h: 2,
+        shape: 0,
+        threshold: 0.0,
+        left_val: 0.2,
+        right_val: -0.2,
+    },
     // Mouth corners
-    HaarFeature { x: 7, y: 16, w: 3, h: 2, shape: 3, threshold: 0.5, left_val: 0.2, right_val: -0.2 },
-    HaarFeature { x: 14, y: 16, w: 3, h: 2, shape: 3, threshold: 0.5, left_val: 0.2, right_val: -0.2 },
+    HaarFeature {
+        x: 7,
+        y: 16,
+        w: 3,
+        h: 2,
+        shape: 3,
+        threshold: 0.5,
+        left_val: 0.2,
+        right_val: -0.2,
+    },
+    HaarFeature {
+        x: 14,
+        y: 16,
+        w: 3,
+        h: 2,
+        shape: 3,
+        threshold: 0.5,
+        left_val: 0.2,
+        right_val: -0.2,
+    },
 ];
 
 static STAGE7_FEATURES: &[HaarFeature] = &[
     // Overall face oval — face region brighter than background
-    HaarFeature { x: 2, y: 4, w: 20, h: 16, shape: 0, threshold: 2.0, left_val: 0.2, right_val: -0.15 },
+    HaarFeature {
+        x: 2,
+        y: 4,
+        w: 20,
+        h: 16,
+        shape: 0,
+        threshold: 2.0,
+        left_val: 0.2,
+        right_val: -0.15,
+    },
     // Background check — sides should be darker than center
-    HaarFeature { x: 0, y: 6, w: 4, h: 12, shape: 1, threshold: 1.0, left_val: 0.15, right_val: -0.15 },
-    HaarFeature { x: 20, y: 6, w: 4, h: 12, shape: 1, threshold: 1.0, left_val: 0.15, right_val: -0.15 },
+    HaarFeature {
+        x: 0,
+        y: 6,
+        w: 4,
+        h: 12,
+        shape: 1,
+        threshold: 1.0,
+        left_val: 0.15,
+        right_val: -0.15,
+    },
+    HaarFeature {
+        x: 20,
+        y: 6,
+        w: 4,
+        h: 12,
+        shape: 1,
+        threshold: 1.0,
+        left_val: 0.15,
+        right_val: -0.15,
+    },
 ];
 
 static STAGE8_FEATURES: &[HaarFeature] = &[
     // Inner face symmetry check
-    HaarFeature { x: 4, y: 4, w: 16, h: 16, shape: 1, threshold: 0.5, left_val: 0.15, right_val: -0.15 },
+    HaarFeature {
+        x: 4,
+        y: 4,
+        w: 16,
+        h: 16,
+        shape: 1,
+        threshold: 0.5,
+        left_val: 0.15,
+        right_val: -0.15,
+    },
     // Upper/lower face contrast
-    HaarFeature { x: 6, y: 2, w: 12, h: 10, shape: 0, threshold: 1.0, left_val: 0.15, right_val: -0.15 },
+    HaarFeature {
+        x: 6,
+        y: 2,
+        w: 12,
+        h: 10,
+        shape: 0,
+        threshold: 1.0,
+        left_val: 0.15,
+        right_val: -0.15,
+    },
     // Eye-to-mouth contrast
-    HaarFeature { x: 6, y: 5, w: 12, h: 14, shape: 0, threshold: 1.5, left_val: 0.15, right_val: -0.15 },
+    HaarFeature {
+        x: 6,
+        y: 5,
+        w: 12,
+        h: 14,
+        shape: 0,
+        threshold: 1.5,
+        left_val: 0.15,
+        right_val: -0.15,
+    },
     // Fine nose detail
-    HaarFeature { x: 10, y: 8, w: 4, h: 6, shape: 2, threshold: -0.3, left_val: 0.15, right_val: -0.15 },
+    HaarFeature {
+        x: 10,
+        y: 8,
+        w: 4,
+        h: 6,
+        shape: 2,
+        threshold: -0.3,
+        left_val: 0.15,
+        right_val: -0.15,
+    },
 ];
 
 static STAGE9_FEATURES: &[HaarFeature] = &[
     // Skin texture uniformity
-    HaarFeature { x: 4, y: 10, w: 16, h: 8, shape: 1, threshold: 0.3, left_val: 0.12, right_val: -0.12 },
+    HaarFeature {
+        x: 4,
+        y: 10,
+        w: 16,
+        h: 8,
+        shape: 1,
+        threshold: 0.3,
+        left_val: 0.12,
+        right_val: -0.12,
+    },
     // Left-right eye symmetry
-    HaarFeature { x: 4, y: 6, w: 16, h: 4, shape: 1, threshold: 0.2, left_val: 0.12, right_val: -0.12 },
+    HaarFeature {
+        x: 4,
+        y: 6,
+        w: 16,
+        h: 4,
+        shape: 1,
+        threshold: 0.2,
+        left_val: 0.12,
+        right_val: -0.12,
+    },
     // Cheek smoothness
-    HaarFeature { x: 2, y: 12, w: 8, h: 4, shape: 0, threshold: 0.5, left_val: 0.12, right_val: -0.12 },
-    HaarFeature { x: 14, y: 12, w: 8, h: 4, shape: 0, threshold: 0.5, left_val: 0.12, right_val: -0.12 },
+    HaarFeature {
+        x: 2,
+        y: 12,
+        w: 8,
+        h: 4,
+        shape: 0,
+        threshold: 0.5,
+        left_val: 0.12,
+        right_val: -0.12,
+    },
+    HaarFeature {
+        x: 14,
+        y: 12,
+        w: 8,
+        h: 4,
+        shape: 0,
+        threshold: 0.5,
+        left_val: 0.12,
+        right_val: -0.12,
+    },
 ];
 
 static STAGES: &[Stage] = &[
-    Stage { features: STAGE0_FEATURES, threshold: -0.5 },
-    Stage { features: STAGE1_FEATURES, threshold: -0.8 },
-    Stage { features: STAGE2_FEATURES, threshold: -1.0 },
-    Stage { features: STAGE3_FEATURES, threshold: -1.2 },
-    Stage { features: STAGE4_FEATURES, threshold: -0.5 },
-    Stage { features: STAGE5_FEATURES, threshold: -0.4 },
-    Stage { features: STAGE6_FEATURES, threshold: -0.4 },
-    Stage { features: STAGE7_FEATURES, threshold: -0.3 },
-    Stage { features: STAGE8_FEATURES, threshold: -0.3 },
-    Stage { features: STAGE9_FEATURES, threshold: -0.2 },
+    Stage {
+        features: STAGE0_FEATURES,
+        threshold: -0.5,
+    },
+    Stage {
+        features: STAGE1_FEATURES,
+        threshold: -0.8,
+    },
+    Stage {
+        features: STAGE2_FEATURES,
+        threshold: -1.0,
+    },
+    Stage {
+        features: STAGE3_FEATURES,
+        threshold: -1.2,
+    },
+    Stage {
+        features: STAGE4_FEATURES,
+        threshold: -0.5,
+    },
+    Stage {
+        features: STAGE5_FEATURES,
+        threshold: -0.4,
+    },
+    Stage {
+        features: STAGE6_FEATURES,
+        threshold: -0.4,
+    },
+    Stage {
+        features: STAGE7_FEATURES,
+        threshold: -0.3,
+    },
+    Stage {
+        features: STAGE8_FEATURES,
+        threshold: -0.3,
+    },
+    Stage {
+        features: STAGE9_FEATURES,
+        threshold: -0.2,
+    },
 ];
 
 // ===========================================================================
@@ -426,7 +803,13 @@ impl FaceDetector {
                         if passed {
                             let conf = (score / STAGES.len() as f32).clamp(0.0, 1.0);
                             if conf >= self.threshold {
-                                candidates.push((x as i32, y as i32, win_w as i32, win_h as i32, conf));
+                                candidates.push((
+                                    x as i32,
+                                    y as i32,
+                                    win_w as i32,
+                                    win_h as i32,
+                                    conf,
+                                ));
                             }
                         }
                     }
@@ -452,7 +835,12 @@ impl FaceDetector {
         // Build output faces with tracking and landmarks
         let mut faces = Vec::with_capacity(filtered.len());
         for (x, y, w, h, conf) in filtered {
-            let rect = FaceRect { x, y, width: w, height: h };
+            let rect = FaceRect {
+                x,
+                y,
+                width: w,
+                height: h,
+            };
             let id = self.assign_tracking_id(&rect);
             let landmarks = self.estimate_landmarks(&rect);
             faces.push(DetectedFace {
@@ -496,24 +884,35 @@ impl FaceDetector {
 
         // Sort by confidence descending
         let mut idxs: Vec<usize> = (0..detections.len()).collect();
-        idxs.sort_by(|&a, &b| detections[b].4.partial_cmp(&detections[a].4).unwrap_or(std::cmp::Ordering::Equal));
+        idxs.sort_by(|&a, &b| {
+            detections[b]
+                .4
+                .partial_cmp(&detections[a].4)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut suppressed = vec![false; detections.len()];
         let mut output = Vec::new();
 
         for &i in &idxs {
-            if suppressed[i] { continue; }
+            if suppressed[i] {
+                continue;
+            }
 
             let (ax, ay, aw, ah, aconf) = detections[i];
             let mut neighbor_count = 1u32;
 
             for &j in &idxs {
-                if j <= i || suppressed[j] { continue; }
+                if j <= i || suppressed[j] {
+                    continue;
+                }
                 let (bx, by, bw, bh, _) = detections[j];
 
                 let ox = (ax + aw).min(bx + bw) - ax.max(bx);
                 let oy = (ay + ah).min(by + bh) - ay.max(by);
-                if ox <= 0 || oy <= 0 { continue; }
+                if ox <= 0 || oy <= 0 {
+                    continue;
+                }
 
                 let inter = (ox * oy) as f32;
                 let union = (aw * ah + bw * bh) as f32 - inter;
@@ -571,15 +970,30 @@ impl FaceDetector {
 
         [
             // Left eye
-            Landmark { x: cx - ew, y: cy - eh },
+            Landmark {
+                x: cx - ew,
+                y: cy - eh,
+            },
             // Right eye
-            Landmark { x: cx + ew, y: cy - eh },
+            Landmark {
+                x: cx + ew,
+                y: cy - eh,
+            },
             // Nose
-            Landmark { x: cx, y: cy + rect.height / 8 },
+            Landmark {
+                x: cx,
+                y: cy + rect.height / 8,
+            },
             // Left mouth
-            Landmark { x: cx - ew / 2, y: cy + eh + rect.height / 8 },
+            Landmark {
+                x: cx - ew / 2,
+                y: cy + eh + rect.height / 8,
+            },
             // Right mouth
-            Landmark { x: cx + ew / 2, y: cy + eh + rect.height / 8 },
+            Landmark {
+                x: cx + ew / 2,
+                y: cy + eh + rect.height / 8,
+            },
         ]
     }
 
@@ -587,11 +1001,15 @@ impl FaceDetector {
     // Pixel format conversion
     // -----------------------------------------------------------------------
 
-    fn to_grayscale(&self, pixels: &[u8], format: CameraPixelFormat, w: usize, h: usize) -> Vec<u8> {
+    fn to_grayscale(
+        &self,
+        pixels: &[u8],
+        format: CameraPixelFormat,
+        w: usize,
+        h: usize,
+    ) -> Vec<u8> {
         match format {
-            CameraPixelFormat::Gray8 | CameraPixelFormat::Other(_) => {
-                pixels[..w * h].to_vec()
-            }
+            CameraPixelFormat::Gray8 | CameraPixelFormat::Other(_) => pixels[..w * h].to_vec(),
             CameraPixelFormat::Rgb24 => {
                 let mut gray = Vec::with_capacity(w * h);
                 for chunk in pixels.chunks_exact(3) {
@@ -630,26 +1048,32 @@ impl FaceDetector {
 
 /// Convert detected faces to camera biometrics types.
 pub fn faces_to_bounds(faces: &[DetectedFace]) -> Vec<(FaceBounds, CameraCaptureQuality)> {
-    faces.iter().filter_map(|f| {
-        if f.confidence < 0.2 {
-            return None;
-        }
-        let quality = if f.confidence > 0.8 {
-            CameraCaptureQuality::Excellent
-        } else if f.confidence > 0.6 {
-            CameraCaptureQuality::Good
-        } else if f.confidence > 0.4 {
-            CameraCaptureQuality::Fair
-        } else {
-            CameraCaptureQuality::Poor
-        };
-        Some((FaceBounds {
-            x: f.bounds.x.max(0) as u32,
-            y: f.bounds.y.max(0) as u32,
-            width: f.bounds.width.max(0) as u32,
-            height: f.bounds.height.max(0) as u32,
-        }, quality))
-    }).collect()
+    faces
+        .iter()
+        .filter_map(|f| {
+            if f.confidence < 0.2 {
+                return None;
+            }
+            let quality = if f.confidence > 0.8 {
+                CameraCaptureQuality::Excellent
+            } else if f.confidence > 0.6 {
+                CameraCaptureQuality::Good
+            } else if f.confidence > 0.4 {
+                CameraCaptureQuality::Fair
+            } else {
+                CameraCaptureQuality::Poor
+            };
+            Some((
+                FaceBounds {
+                    x: f.bounds.x.max(0) as u32,
+                    y: f.bounds.y.max(0) as u32,
+                    width: f.bounds.width.max(0) as u32,
+                    height: f.bounds.height.max(0) as u32,
+                },
+                quality,
+            ))
+        })
+        .collect()
 }
 
 // ===========================================================================
@@ -746,7 +1170,11 @@ pub struct HeadPose {
 ///
 /// Uses a simplified PnP solve with known 3D model points.
 /// Returns `None` if landmarks or face dimensions are invalid.
-pub fn estimate_head_pose(landmarks: &[Landmark; 5], face_width: i32, face_height: i32) -> Option<HeadPose> {
+pub fn estimate_head_pose(
+    landmarks: &[Landmark; 5],
+    face_width: i32,
+    face_height: i32,
+) -> Option<HeadPose> {
     if face_width < 20 || face_height < 20 {
         return None;
     }
@@ -861,7 +1289,12 @@ mod tests {
 
         // Simulate first frame
         let faces1 = vec![DetectedFace {
-            bounds: FaceRect { x: 50, y: 50, width: 40, height: 40 },
+            bounds: FaceRect {
+                x: 50,
+                y: 50,
+                width: 40,
+                height: 40,
+            },
             confidence: 0.8,
             landmarks: [Landmark { x: 0, y: 0 }; 5],
             tracking_id: Some(1),
@@ -869,7 +1302,12 @@ mod tests {
         det.prev_faces = faces1;
 
         // Second frame: face moved slightly
-        let id = det.assign_tracking_id(&FaceRect { x: 52, y: 53, width: 40, height: 40 });
+        let id = det.assign_tracking_id(&FaceRect {
+            x: 52,
+            y: 53,
+            width: 40,
+            height: 40,
+        });
         assert_eq!(id, 1);
     }
 
@@ -877,10 +1315,7 @@ mod tests {
     fn nms_merges_overlapping() {
         let det = FaceDetector::new(FaceDetectionModel::Fast);
         // Two identical detections
-        let dets = vec![
-            (10, 10, 50, 50, 0.9f32),
-            (12, 12, 50, 50, 0.8f32),
-        ];
+        let dets = vec![(10, 10, 50, 50, 0.9f32), (12, 12, 50, 50, 0.8f32)];
         let result = det.nms(&dets, 0.35);
         // Should merge into one with 2 neighbors
         assert_eq!(result.len(), 1);
@@ -891,10 +1326,7 @@ mod tests {
     fn nms_keeps_separate() {
         let det = FaceDetector::new(FaceDetectionModel::Fast);
         // Two far-apart detections
-        let dets = vec![
-            (0, 0, 50, 50, 0.9f32),
-            (200, 200, 50, 50, 0.8f32),
-        ];
+        let dets = vec![(0, 0, 50, 50, 0.9f32), (200, 200, 50, 50, 0.8f32)];
         let result = det.nms(&dets, 0.35);
         assert_eq!(result.len(), 2);
     }
@@ -902,8 +1334,28 @@ mod tests {
     #[test]
     fn faces_to_bounds_filters_low_confidence() {
         let faces = vec![
-            DetectedFace { bounds: FaceRect { x: 10, y: 10, width: 50, height: 50 }, confidence: 0.1, landmarks: [Landmark { x: 0, y: 0 }; 5], tracking_id: Some(1) },
-            DetectedFace { bounds: FaceRect { x: 100, y: 100, width: 50, height: 50 }, confidence: 0.9, landmarks: [Landmark { x: 0, y: 0 }; 5], tracking_id: Some(2) },
+            DetectedFace {
+                bounds: FaceRect {
+                    x: 10,
+                    y: 10,
+                    width: 50,
+                    height: 50,
+                },
+                confidence: 0.1,
+                landmarks: [Landmark { x: 0, y: 0 }; 5],
+                tracking_id: Some(1),
+            },
+            DetectedFace {
+                bounds: FaceRect {
+                    x: 100,
+                    y: 100,
+                    width: 50,
+                    height: 50,
+                },
+                confidence: 0.9,
+                landmarks: [Landmark { x: 0, y: 0 }; 5],
+                tracking_id: Some(2),
+            },
         ];
         let bounds = faces_to_bounds(&faces);
         assert_eq!(bounds.len(), 1);
@@ -912,7 +1364,12 @@ mod tests {
 
     #[test]
     fn face_rect_clone_debug() {
-        let rect = FaceRect { x: 10, y: 20, width: 50, height: 60 };
+        let rect = FaceRect {
+            x: 10,
+            y: 20,
+            width: 50,
+            height: 60,
+        };
         let _ = format!("{:?}", rect);
         let cloned = rect;
         assert_eq!(rect, cloned);
@@ -921,7 +1378,12 @@ mod tests {
     #[test]
     fn blink_detection_requires_prev_face() {
         let face = DetectedFace {
-            bounds: FaceRect { x: 50, y: 50, width: 40, height: 40 },
+            bounds: FaceRect {
+                x: 50,
+                y: 50,
+                width: 40,
+                height: 40,
+            },
             confidence: 0.8,
             landmarks: [Landmark { x: 0, y: 0 }; 5],
             tracking_id: Some(1),
@@ -936,14 +1398,24 @@ mod tests {
         let mut frame = vec![128u8; 100 * 100];
         // Previous face: high variance eye region
         let prev_face = DetectedFace {
-            bounds: FaceRect { x: 30, y: 20, width: 40, height: 50 },
+            bounds: FaceRect {
+                x: 30,
+                y: 20,
+                width: 40,
+                height: 50,
+            },
             confidence: 0.8,
             landmarks: [Landmark { x: 0, y: 0 }; 5],
             tracking_id: Some(1),
         };
         // Current face: lower variance (simulating closed eye)
         let curr_face = DetectedFace {
-            bounds: FaceRect { x: 31, y: 21, width: 40, height: 50 },
+            bounds: FaceRect {
+                x: 31,
+                y: 21,
+                width: 40,
+                height: 50,
+            },
             confidence: 0.8,
             landmarks: [Landmark { x: 0, y: 0 }; 5],
             tracking_id: Some(1),
@@ -966,11 +1438,11 @@ mod tests {
     #[test]
     fn head_pose_frontal_face() {
         let landmarks = [
-            Landmark { x: 40, y: 30 },  // left eye
-            Landmark { x: 60, y: 30 },  // right eye
-            Landmark { x: 50, y: 45 },  // nose
-            Landmark { x: 45, y: 60 },  // left mouth
-            Landmark { x: 55, y: 60 },  // right mouth
+            Landmark { x: 40, y: 30 }, // left eye
+            Landmark { x: 60, y: 30 }, // right eye
+            Landmark { x: 50, y: 45 }, // nose
+            Landmark { x: 45, y: 60 }, // left mouth
+            Landmark { x: 55, y: 60 }, // right mouth
         ];
         let pose = estimate_head_pose(&landmarks, 100, 100).unwrap();
         // Frontal face should have near-zero yaw and pitch
@@ -982,29 +1454,37 @@ mod tests {
     #[test]
     fn head_pose_turned_right() {
         let landmarks = [
-            Landmark { x: 30, y: 30 },  // left eye (appears smaller)
-            Landmark { x: 55, y: 30 },  // right eye
-            Landmark { x: 50, y: 45 },  // nose shifted right
-            Landmark { x: 40, y: 60 },  // left mouth
-            Landmark { x: 55, y: 60 },  // right mouth
+            Landmark { x: 30, y: 30 }, // left eye (appears smaller)
+            Landmark { x: 55, y: 30 }, // right eye
+            Landmark { x: 50, y: 45 }, // nose shifted right
+            Landmark { x: 40, y: 60 }, // left mouth
+            Landmark { x: 55, y: 60 }, // right mouth
         ];
         let pose = estimate_head_pose(&landmarks, 100, 100).unwrap();
         // Turned right → positive yaw
-        assert!(pose.yaw > 5.0, "yaw should be positive for right turn, got {}", pose.yaw);
+        assert!(
+            pose.yaw > 5.0,
+            "yaw should be positive for right turn, got {}",
+            pose.yaw
+        );
     }
 
     #[test]
     fn head_pose_rolled_head() {
         let landmarks = [
-            Landmark { x: 35, y: 25 },  // left eye higher
-            Landmark { x: 65, y: 35 },  // right eye lower
-            Landmark { x: 50, y: 45 },  // nose
-            Landmark { x: 42, y: 62 },  // left mouth
-            Landmark { x: 58, y: 58 },  // right mouth
+            Landmark { x: 35, y: 25 }, // left eye higher
+            Landmark { x: 65, y: 35 }, // right eye lower
+            Landmark { x: 50, y: 45 }, // nose
+            Landmark { x: 42, y: 62 }, // left mouth
+            Landmark { x: 58, y: 58 }, // right mouth
         ];
         let pose = estimate_head_pose(&landmarks, 100, 100).unwrap();
         // Roll should be positive (right eye lower = clockwise roll)
-        assert!(pose.roll > 5.0, "roll should be positive, got {}", pose.roll);
+        assert!(
+            pose.roll > 5.0,
+            "roll should be positive, got {}",
+            pose.roll
+        );
     }
 
     #[test]

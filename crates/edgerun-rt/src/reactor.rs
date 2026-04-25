@@ -15,13 +15,13 @@
 //! sequence, eliminating TOCTOU races between concurrent waker registration
 //! and epoll event updates.
 
+use crate::sync::Mutex;
 use std::collections::BinaryHeap;
 use std::io::{self};
 use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
-use crate::sync::Mutex;
 use std::task::Waker;
+use std::time::Duration;
 
 use crate::ready_queue::ReadyQueue;
 pub use std::time::Instant;
@@ -99,7 +99,9 @@ impl TimerNotify {
         if ret < 0 {
             // EAGAIN means the counter is already non-zero — reactor will wake.
             let err = io::Error::last_os_error();
-            if err.raw_os_error() != Some(libc::EAGAIN) && err.raw_os_error() != Some(libc::EWOULDBLOCK) {
+            if err.raw_os_error() != Some(libc::EAGAIN)
+                && err.raw_os_error() != Some(libc::EWOULDBLOCK)
+            {
                 edgerun_log::warn!("timer notify write error: {}", err);
             }
         }
@@ -117,7 +119,9 @@ impl TimerNotify {
         };
         if ret < 0 {
             let err = io::Error::last_os_error();
-            if err.raw_os_error() != Some(libc::EAGAIN) && err.raw_os_error() != Some(libc::EWOULDBLOCK) {
+            if err.raw_os_error() != Some(libc::EAGAIN)
+                && err.raw_os_error() != Some(libc::EWOULDBLOCK)
+            {
                 edgerun_log::warn!("timer notify drain error: {}", err);
             }
         }
@@ -141,7 +145,9 @@ pub(crate) struct FdInterest {
 
 impl FdInterest {
     fn new() -> Self {
-        Self { state: Mutex::new((None, None)) }
+        Self {
+            state: Mutex::new((None, None)),
+        }
     }
 
     fn take_read_waker(&self) -> Option<Waker> {
@@ -171,12 +177,18 @@ impl FdInterest {
         // Step 1: Take wakers under lock.
         let (read_waker, write_waker) = {
             let mut state = self.state.lock();
-            let rw = if (event_bits & (libc::EPOLLIN as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32)) != 0 {
+            let rw = if (event_bits
+                & (libc::EPOLLIN as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32))
+                != 0
+            {
                 state.0.take()
             } else {
                 None
             };
-            let ww = if (event_bits & (libc::EPOLLOUT as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32)) != 0 {
+            let ww = if (event_bits
+                & (libc::EPOLLOUT as u32 | libc::EPOLLHUP as u32 | libc::EPOLLERR as u32))
+                != 0
+            {
                 state.1.take()
             } else {
                 None
@@ -211,7 +223,10 @@ impl FdInterest {
                 events |= libc::EPOLLOUT as u32;
             }
             drop(state); // release lock before epoll_ctl
-            let mut ev = libc::epoll_event { events: events as _, u64: fd as u64 };
+            let mut ev = libc::epoll_event {
+                events: events as _,
+                u64: fd as u64,
+            };
             let _ = epoll.ctl(libc::EPOLL_CTL_MOD, fd, &mut ev);
             true
         } else {
@@ -231,7 +246,13 @@ impl FdInterest {
     /// Set both wakers and update epoll events atomically.
     /// Used by `wait_read`/`wait_write` to ensure the fd is properly
     /// registered with epoll before returning.
-    fn set_and_update(&self, epoll: &EpollFd, fd: RawFd, read: Option<Waker>, write: Option<Waker>) {
+    fn set_and_update(
+        &self,
+        epoll: &EpollFd,
+        fd: RawFd,
+        read: Option<Waker>,
+        write: Option<Waker>,
+    ) {
         let mut state = self.state.lock();
         if let Some(w) = read {
             state.0 = Some(w);
@@ -251,7 +272,10 @@ impl FdInterest {
             if has_write {
                 events |= libc::EPOLLOUT as u32;
             }
-            let mut ev = libc::epoll_event { events: events as _, u64: fd as u64 };
+            let mut ev = libc::epoll_event {
+                events: events as _,
+                u64: fd as u64,
+            };
             let _ = epoll.ctl(libc::EPOLL_CTL_MOD, fd, &mut ev);
         }
     }
@@ -338,7 +362,9 @@ impl Reactor {
     }
 
     pub(crate) fn deregister_fd(&self, fd: RawFd) {
-        let _ = self.epoll.ctl(libc::EPOLL_CTL_DEL, fd, std::ptr::null_mut());
+        let _ = self
+            .epoll
+            .ctl(libc::EPOLL_CTL_DEL, fd, std::ptr::null_mut());
         self.fds.lock().remove(&fd);
     }
 
@@ -378,7 +404,8 @@ impl Reactor {
             let ms = {
                 let timers = self.timers.lock();
                 if let Some(t) = timers.peek() {
-                    let remaining = t.deadline
+                    let remaining = t
+                        .deadline
                         .saturating_duration_since(Instant::now())
                         .as_millis()
                         .min(i32::MAX as u128) as i32;

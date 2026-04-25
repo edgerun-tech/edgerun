@@ -16,17 +16,20 @@ const CURRENT_ARCH: u32 = AUDIT_ARCH_X86_64;
 #[cfg(target_arch = "aarch64")]
 const CURRENT_ARCH: u32 = AUDIT_ARCH_AARCH64;
 
-mod syscall;
+mod actions;
 mod bpf;
 mod rules;
-mod actions;
+mod syscall;
 
-use std::io;
-use std::os::raw::c_void;
 use crate::json::{OciLinuxSeccomp, OciSeccompAction};
-use crate::syscalls::{do_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, SECCOMP_FILTER_FLAG_NEW_LISTENER};
+use crate::syscalls::{
+    do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
+    SECCOMP_SET_MODE_FILTER,
+};
 use bpf::{bpf_insn, bpf_long_skip};
 pub use rules::{build_seccomp_prog, seccomp_bpf_prog};
+use std::io;
+use std::os::raw::c_void;
 pub use syscall::syscall_nr;
 
 #[cfg(test)]
@@ -35,12 +38,18 @@ mod tests;
 /// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.
 pub fn apply_seccomp() -> io::Result<()> {
     let (_insn_bytes, prog) = seccomp_bpf_prog();
-    let ret = unsafe { do_seccomp(
-        SECCOMP_SET_MODE_FILTER,
-        SECCOMP_FILTER_FLAG_TSYNC,
-        prog.as_ptr() as *const c_void,
-    ) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    let ret = unsafe {
+        do_seccomp(
+            SECCOMP_SET_MODE_FILTER,
+            SECCOMP_FILTER_FLAG_TSYNC,
+            prog.as_ptr() as *const c_void,
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Check if the seccomp spec uses the NOTIFY action.
@@ -49,9 +58,10 @@ pub fn apply_seccomp() -> io::Result<()> {
 /// listener fd (via SECCOMP_FILTER_FLAG_NEW_LISTENER) to handle blocked syscalls.
 pub fn uses_notify_action(spec: &OciLinuxSeccomp) -> bool {
     let entries = spec.syscalls.as_deref().unwrap_or(&[]);
-    entries.iter().any(|e| {
-        e.action.as_ref() == Some(&OciSeccompAction::Notify)
-    }) || spec.default_action.as_ref() == Some(&OciSeccompAction::Notify)
+    entries
+        .iter()
+        .any(|e| e.action.as_ref() == Some(&OciSeccompAction::Notify))
+        || spec.default_action.as_ref() == Some(&OciSeccompAction::Notify)
 }
 
 /// Apply seccomp filtering from OCI spec rules.
@@ -66,8 +76,12 @@ pub fn uses_notify_action(spec: &OciLinuxSeccomp) -> bool {
 ///
 /// Note: Does NOT use TSYNC flag — the container child is single-threaded at this
 /// point (just forked). TSYNC requires CAP_SYS_ADMIN even with no_new_privs.
-pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>, bundle_path: &str) -> io::Result<Option<i32>> {
-    let has_rules = spec.as_ref()
+pub fn apply_seccomp_from_spec(
+    spec: Option<&OciLinuxSeccomp>,
+    bundle_path: &str,
+) -> io::Result<Option<i32>> {
+    let has_rules = spec
+        .as_ref()
         .and_then(|s| s.syscalls.as_ref())
         .map(|s| !s.is_empty())
         .unwrap_or(false);
@@ -82,13 +96,19 @@ pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>, bundle_path: &str
 
     // Detect if NOTIFY action is used — requires NEW_LISTENER flag
     let use_listener = spec.map(uses_notify_action).unwrap_or(false);
-    let flags = if use_listener { SECCOMP_FILTER_FLAG_NEW_LISTENER } else { 0 };
+    let flags = if use_listener {
+        SECCOMP_FILTER_FLAG_NEW_LISTENER
+    } else {
+        0
+    };
 
-    let ret = unsafe { do_seccomp(
-        SECCOMP_SET_MODE_FILTER,
-        flags,
-        prog.as_ptr() as *const c_void,
-    ) };
+    let ret = unsafe {
+        do_seccomp(
+            SECCOMP_SET_MODE_FILTER,
+            flags,
+            prog.as_ptr() as *const c_void,
+        )
+    };
 
     // Write listenerMetadata to bundle directory if specified
     if let Some(metadata) = spec.and_then(|s| s.listener_metadata.as_ref()) {
@@ -100,8 +120,10 @@ pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>, bundle_path: &str
         Err(io::Error::last_os_error())
     } else if use_listener {
         // seccomp syscall returns the listener fd when NEW_LISTENER flag is set
-        let _ = std::fs::write("/dev/kmsg",
-            "edgerun: seccomp NOTIFY listener created (fd not handled by runtime)");
+        let _ = std::fs::write(
+            "/dev/kmsg",
+            "edgerun: seccomp NOTIFY listener created (fd not handled by runtime)",
+        );
         Ok(Some(ret))
     } else {
         Ok(None)

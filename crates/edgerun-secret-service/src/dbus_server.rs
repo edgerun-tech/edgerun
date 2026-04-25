@@ -9,8 +9,10 @@ use std::path::Path;
 use crate::backend::Backend;
 use crate::dbus_bus::BusConnection;
 use crate::dbus_types::*;
-use crate::dbus_wire::{encode_msg, decode_msg};
-use crate::session::{SessionManager, BiometricVerifier, NoBiometricVerifier, DEFAULT_IDLE_TIMEOUT_US};
+use crate::dbus_wire::{decode_msg, encode_msg};
+use crate::session::{
+    BiometricVerifier, NoBiometricVerifier, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
+};
 
 // ===========================================================================
 // Server
@@ -55,12 +57,21 @@ impl Server {
 
         // Default "default" alias
         let mut aliases = HashMap::new();
-        aliases.insert("default".into(), "/org/freedesktop/secrets/collections/default".into());
+        aliases.insert(
+            "default".into(),
+            "/org/freedesktop/secrets/collections/default".into(),
+        );
 
         if bus.is_some() {
-            eprintln!("edgerun-secret-service: listening on {} + D-Bus session bus", socket_path.display());
+            eprintln!(
+                "edgerun-secret-service: listening on {} + D-Bus session bus",
+                socket_path.display()
+            );
         } else {
-            eprintln!("edgerun-secret-service: listening on {} (no D-Bus session bus found)", socket_path.display());
+            eprintln!(
+                "edgerun-secret-service: listening on {} (no D-Bus session bus found)",
+                socket_path.display()
+            );
         }
 
         Ok(Self {
@@ -107,7 +118,12 @@ impl Server {
             let reply = self.handle_message(sender, &msg);
             return encode_msg(&reply);
         }
-        let err = Msg::err(0, sender, "org.freedesktop.DBus.Error.InvalidArgs", "could not decode message");
+        let err = Msg::err(
+            0,
+            sender,
+            "org.freedesktop.DBus.Error.InvalidArgs",
+            "could not decode message",
+        );
         encode_msg(&err)
     }
 
@@ -145,11 +161,19 @@ impl Server {
 
     /// Handle a single D-Bus message and produce a reply.
     fn handle_message(&mut self, client: &str, msg: &Msg) -> Msg {
-        let ser = { self.serial += 1; self.serial };
+        let ser = {
+            self.serial += 1;
+            self.serial
+        };
 
         match msg.mt {
             MType::Call => self.handle_call(client, msg, ser),
-            _ => Msg::err(ser, client, "org.freedesktop.DBus.Error.UnknownMethod", "unsupported message type"),
+            _ => Msg::err(
+                ser,
+                client,
+                "org.freedesktop.DBus.Error.UnknownMethod",
+                "unsupported message type",
+            ),
         }
     }
 
@@ -159,9 +183,15 @@ impl Server {
 
         match (iface, member) {
             // org.freedesktop.Secret.Service
-            ("org.freedesktop.Secret.Service", "OpenSession") => self.open_session(client, msg, ser),
-            ("org.freedesktop.Secret.Service", "CreateCollection") => self.create_collection(client, msg, ser),
-            ("org.freedesktop.Secret.Service", "SearchItems") => self.search_items(client, msg, ser),
+            ("org.freedesktop.Secret.Service", "OpenSession") => {
+                self.open_session(client, msg, ser)
+            }
+            ("org.freedesktop.Secret.Service", "CreateCollection") => {
+                self.create_collection(client, msg, ser)
+            }
+            ("org.freedesktop.Secret.Service", "SearchItems") => {
+                self.search_items(client, msg, ser)
+            }
             ("org.freedesktop.Secret.Service", "Unlock") => self.unlock(client, msg, ser),
             ("org.freedesktop.Secret.Service", "Lock") => self.lock(client, msg, ser),
             ("org.freedesktop.Secret.Service", "GetSecrets") => self.get_secrets(client, msg, ser),
@@ -170,8 +200,12 @@ impl Server {
 
             // org.freedesktop.Secret.Collection
             ("org.freedesktop.Secret.Collection", "ListItems") => self.list_items(client, msg, ser),
-            ("org.freedesktop.Secret.Collection", "CreateItem") => self.create_item(client, msg, ser),
-            ("org.freedesktop.Secret.Collection", "Delete") => self.delete_collection(client, msg, ser),
+            ("org.freedesktop.Secret.Collection", "CreateItem") => {
+                self.create_item(client, msg, ser)
+            }
+            ("org.freedesktop.Secret.Collection", "Delete") => {
+                self.delete_collection(client, msg, ser)
+            }
 
             // org.freedesktop.Secret.Item
             ("org.freedesktop.Secret.Item", "GetSecret") => self.get_secret(client, msg, ser),
@@ -181,11 +215,19 @@ impl Server {
             ("org.freedesktop.Secret.Session", "Close") => self.close_session(client, msg, ser),
 
             // Introspection
-            ("org.freedesktop.DBus.Introspectable", "Introspect") => self.introspect(client, msg, ser),
-            ("org.freedesktop.DBus.Properties", "GetAll") => self.properties_get_all(client, msg, ser),
+            ("org.freedesktop.DBus.Introspectable", "Introspect") => {
+                self.introspect(client, msg, ser)
+            }
+            ("org.freedesktop.DBus.Properties", "GetAll") => {
+                self.properties_get_all(client, msg, ser)
+            }
 
-            _ => Msg::err(ser, client, "org.freedesktop.DBus.Error.UnknownMethod",
-                &format!("unknown method {}/{}", iface, member)),
+            _ => Msg::err(
+                ser,
+                client,
+                "org.freedesktop.DBus.Error.UnknownMethod",
+                &format!("unknown method {}/{}", iface, member),
+            ),
         }
     }
 
@@ -205,12 +247,16 @@ impl Server {
         let has_biometrics = self.verifier.is_available();
 
         // Output: variant with available modalities info
-        let info_map = vec![(Val::S("has-biometrics".into()), Val::Var(Box::new(Val::B(has_biometrics))))];
+        let mut info_map = Vec::new();
+        info_map.push((
+            Val::S("has-biometrics".into()),
+            Val::Var(Box::new(Val::B(has_biometrics))),
+        ));
 
-        Msg::ret(ser, client).body(vec![
-            Val::Var(Box::new(Val::Dict(info_map))),
-            Val::O(path),
-        ], "vo")
+        Msg::ret(ser, client).body(
+            vec![Val::Var(Box::new(Val::Dict(info_map))), Val::O(path)],
+            "vo",
+        )
     }
 
     /// CreateCollection (IN Dict<String,Variant> properties, IN String alias, OUT ObjectPath collection, OUT ObjectPath prompt)
@@ -218,12 +264,16 @@ impl Server {
         let properties = msg.body.first().and_then(Val::dict_ss).unwrap_or_default();
         let _alias = msg.body.get(1).and_then(Val::s).unwrap_or("");
 
-        let label = properties.iter()
+        let label = properties
+            .iter()
             .find(|(k, _)| k == "org.freedesktop.Secret.Collection.Label")
             .map(|(_, v)| v.as_str())
             .unwrap_or("unnamed");
 
-        let coll_path = format!("/org/freedesktop/secrets/collections/{}", label.replace(' ', "_"));
+        let coll_path = format!(
+            "/org/freedesktop/secrets/collections/{}",
+            label.replace(' ', "_")
+        );
 
         // Ensure the collection namespace exists (put a dummy entry to create it)
         if !self.backend.collection_exists(&coll_path) {
@@ -231,10 +281,13 @@ impl Server {
             let _ = self.backend.list(&coll_path);
         }
 
-        Msg::ret(ser, client).body(vec![
-            Val::O(coll_path),
-            Val::O("/".into()), // No prompt needed
-        ], "oo")
+        Msg::ret(ser, client).body(
+            vec![
+                Val::O(coll_path),
+                Val::O("/".into()), // No prompt needed
+            ],
+            "oo",
+        )
     }
 
     /// SearchItems (IN Dict<String,String> attributes, OUT Array<ObjectPath> unlocked, OUT Array<ObjectPath> locked)
@@ -260,10 +313,7 @@ impl Server {
 
         // Items are all potentially unlockable — locked array is empty
         // until we implement per-item lock states
-        Msg::ret(ser, client).body(vec![
-            Val::Arr(unlocked),
-            Val::Arr(vec![]),
-        ], "aoao")
+        Msg::ret(ser, client).body(vec![Val::Arr(unlocked), Val::Arr(vec![])], "aoao")
     }
 
     /// Unlock (IN Array<ObjectPath> objects, OUT Array<ObjectPath> unlocked, OUT ObjectPath prompt)
@@ -275,16 +325,22 @@ impl Server {
 
         // Run biometric verification
         if !self.verifier.is_available() {
-            return Msg::err(ser, client,
+            return Msg::err(
+                ser,
+                client,
                 "org.freedesktop.Secret.Error.IsLocked",
-                "no biometric hardware available — cannot unlock");
+                "no biometric hardware available — cannot unlock",
+            );
         }
 
         let bio_state = self.verifier.verify();
         if !bio_state.verified {
-            return Msg::err(ser, client,
+            return Msg::err(
+                ser,
+                client,
                 "org.freedesktop.Secret.Error.IsLocked",
-                "biometric verification failed");
+                "biometric verification failed",
+            );
         }
 
         // Verify all sessions for this client
@@ -297,10 +353,13 @@ impl Server {
 
         let unlocked: Vec<Val> = objects.into_iter().map(Val::O).collect();
 
-        Msg::ret(ser, client).body(vec![
-            Val::Arr(unlocked),
-            Val::O("/".into()), // No prompt needed
-        ], "ao")
+        Msg::ret(ser, client).body(
+            vec![
+                Val::Arr(unlocked),
+                Val::O("/".into()), // No prompt needed
+            ],
+            "ao",
+        )
     }
 
     /// Lock (IN Array<ObjectPath> objects, OUT Array<ObjectPath> locked, OUT ObjectPath prompt)
@@ -316,10 +375,7 @@ impl Server {
         // Return all requested objects as locked
         let locked: Vec<Val> = objects.into_iter().map(Val::O).collect();
 
-        Msg::ret(ser, client).body(vec![
-            Val::Arr(locked),
-            Val::O("/".into()),
-        ], "ao")
+        Msg::ret(ser, client).body(vec![Val::Arr(locked), Val::O("/".into())], "ao")
     }
 
     /// GetSecrets (IN Array<ObjectPath> items, IN ObjectPath session, OUT Dict<ObjectPath,Secret> secrets)
@@ -332,13 +388,21 @@ impl Server {
 
         // Look up the session
         let Some(session) = self.sessions.get(session_path) else {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.NoSuchSession",
-                "session not found");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.NoSuchSession",
+                "session not found",
+            );
         };
 
         if session.closed {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.NoSuchSession",
-                "session is closed");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.NoSuchSession",
+                "session is closed",
+            );
         }
 
         // Check biometric verification
@@ -348,8 +412,12 @@ impl Server {
             .as_micros() as u64;
 
         if !session.is_verified(now) {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.IsLocked",
-                "session is locked — call Unlock with biometric verification first");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.IsLocked",
+                "session is locked — call Unlock with biometric verification first",
+            );
         }
 
         // Resolve each item path to (collection, key)
@@ -357,7 +425,8 @@ impl Server {
         for item_path in &item_paths {
             if let Some((coll, key)) = resolve_item_path(item_path) {
                 if let Ok(Some((secret_bytes, _meta))) = self.backend.get(&coll, &key) {
-                    let secret_bytes_val: Vec<Val> = secret_bytes.iter().map(|&b| Val::Y(b)).collect();
+                    let secret_bytes_val: Vec<Val> =
+                        secret_bytes.iter().map(|&b| Val::Y(b)).collect();
                     let content_type = "text/plain; charset=utf8";
 
                     // Secret struct: (oa{sv}ays)
@@ -368,26 +437,25 @@ impl Server {
                         Val::S(content_type.into()),
                     ]);
 
-                    secrets_dict.push((Val::O(item_path.clone()), Val::Var(Box::new(secret_struct))));
+                    secrets_dict
+                        .push((Val::O(item_path.clone()), Val::Var(Box::new(secret_struct))));
                 }
             }
         }
 
-        Msg::ret(ser, client).body(vec![
-            Val::Dict(secrets_dict),
-        ], "a{o(v)}")
+        Msg::ret(ser, client).body(vec![Val::Dict(secrets_dict)], "a{o(v)}")
     }
 
     /// ReadAlias (IN String name, OUT ObjectPath collection)
     fn read_alias(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
         let name = msg.body.first().and_then(Val::s).unwrap_or("");
-        let collection = self.aliases.get(name)
+        let collection = self
+            .aliases
+            .get(name)
             .cloned()
             .unwrap_or_else(|| "/".into());
 
-        Msg::ret(ser, client).body(vec![
-            Val::O(collection),
-        ], "o")
+        Msg::ret(ser, client).body(vec![Val::O(collection)], "o")
     }
 
     /// SetAlias (IN String name, IN ObjectPath collection)
@@ -396,11 +464,16 @@ impl Server {
         let collection = msg.body.get(1).and_then(Val::o).unwrap_or("");
 
         if name.is_empty() || collection.is_empty() {
-            return Msg::err(ser, client, "org.freedesktop.DBus.Error.InvalidArgs",
-                "name and collection must be non-empty");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.DBus.Error.InvalidArgs",
+                "name and collection must be non-empty",
+            );
         }
 
-        self.aliases.insert(name.to_string(), collection.to_string());
+        self.aliases
+            .insert(name.to_string(), collection.to_string());
 
         Msg::ret(ser, client).body(vec![], "")
     }
@@ -414,13 +487,12 @@ impl Server {
         let coll = msg.path().unwrap_or("");
         let items = self.backend.list(coll).unwrap_or_default();
 
-        let item_paths: Vec<Val> = items.into_iter()
+        let item_paths: Vec<Val> = items
+            .into_iter()
             .map(|(key, _)| Val::O(Backend::item_path(coll, &key)))
             .collect();
 
-        Msg::ret(ser, client).body(vec![
-            Val::Arr(item_paths),
-        ], "ao")
+        Msg::ret(ser, client).body(vec![Val::Arr(item_paths)], "ao")
     }
 
     /// CreateItem (IN Dict<String,Variant> properties, IN Secret secret, IN Boolean replace,
@@ -429,30 +501,52 @@ impl Server {
         let coll = msg.path().unwrap_or("");
 
         let properties = msg.body.first().and_then(Val::dict_ss).unwrap_or_default();
-        let label = properties.iter()
+        let label = properties
+            .iter()
             .find(|(k, _)| k == "org.freedesktop.Secret.Item.Label")
             .map(|(_, v)| v.as_str())
             .unwrap_or("unnamed")
             .to_string();
 
-        let attrs: Vec<(String, String)> = properties.iter()
+        let attrs: Vec<(String, String)> = properties
+            .iter()
             .filter(|(k, _)| k.starts_with("org.freedesktop.Secret.Item.Attribute."))
-            .map(|(k, v)| (k.strip_prefix("org.freedesktop.Secret.Item.Attribute.").unwrap_or(k).to_string(), v.clone()))
+            .map(|(k, v)| {
+                (
+                    k.strip_prefix("org.freedesktop.Secret.Item.Attribute.")
+                        .unwrap_or(k)
+                        .to_string(),
+                    v.clone(),
+                )
+            })
             .collect();
 
         // Parse secret struct: (oa{sv}ays)
         let Some(secret_val) = msg.body.get(1) else {
-            return Msg::err(ser, client, "org.freedesktop.DBus.Error.InvalidArgs",
-                "secret is required");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.DBus.Error.InvalidArgs",
+                "secret is required",
+            );
         };
 
         let secret_bytes = if let Val::Str(fields) = secret_val.clone() {
             if fields.len() >= 3 {
                 if let Val::Arr(bytes) = &fields[2] {
-                    bytes.iter().filter_map(|b| if let Val::Y(v) = b { Some(*v) } else { None }).collect()
-                } else { Vec::new() }
-            } else { Vec::new() }
-        } else { Vec::new() };
+                    bytes
+                        .iter()
+                        .filter_map(|b| if let Val::Y(v) = b { Some(*v) } else { None })
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
 
         // Generate a stable item key from label + attributes
         let item_key = Backend::item_key(&label, &attrs);
@@ -463,17 +557,21 @@ impl Server {
             let _ = self.backend.delete(coll, &item_key);
         }
 
-        if let Err(e) = self.backend.put(coll, &item_key, &secret_bytes, &label, &attrs) {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.Failed",
-                &e.to_string());
+        if let Err(e) = self
+            .backend
+            .put(coll, &item_key, &secret_bytes, &label, &attrs)
+        {
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.Failed",
+                &e.to_string(),
+            );
         }
 
         let item_path = Backend::item_path(coll, &item_key);
 
-        Msg::ret(ser, client).body(vec![
-            Val::O(item_path),
-            Val::O("/".into()),
-        ], "oo")
+        Msg::ret(ser, client).body(vec![Val::O(item_path), Val::O("/".into())], "oo")
     }
 
     /// Delete a collection
@@ -488,9 +586,7 @@ impl Server {
         // Remove alias if present
         self.aliases.retain(|_, v| v == coll);
 
-        Msg::ret(ser, client).body(vec![
-            Val::O("/".into()),
-        ], "o")
+        Msg::ret(ser, client).body(vec![Val::O("/".into())], "o")
     }
 
     // ===========================================================================
@@ -503,23 +599,39 @@ impl Server {
         let item_path = msg.path().unwrap_or("");
 
         let Some(session) = self.sessions.get(session_path) else {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.NoSuchSession",
-                "session not found");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.NoSuchSession",
+                "session not found",
+            );
         };
 
         if session.closed {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.NoSuchSession",
-                "session is closed");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.NoSuchSession",
+                "session is closed",
+            );
         }
 
         let Some((coll, key)) = resolve_item_path(item_path) else {
-            return Msg::err(ser, client, "org.freedesktop.DBus.Error.InvalidArgs",
-                "invalid item path");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.DBus.Error.InvalidArgs",
+                "invalid item path",
+            );
         };
 
         let Ok(Some((secret_bytes, _meta))) = self.backend.get(&coll, &key) else {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.NoSuchItem",
-                "item not found");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.NoSuchItem",
+                "item not found",
+            );
         };
 
         // Return as-is (plain mode)
@@ -532,9 +644,7 @@ impl Server {
             Val::S("text/plain; charset=utf8".into()),
         ]);
 
-        Msg::ret(ser, client).body(vec![
-            Val::Var(Box::new(secret_struct)),
-        ], "v")
+        Msg::ret(ser, client).body(vec![Val::Var(Box::new(secret_struct))], "v")
     }
 
     /// Delete an item
@@ -542,19 +652,25 @@ impl Server {
         let item_path = msg.path().unwrap_or("");
 
         let Some((coll, key)) = resolve_item_path(item_path) else {
-            return Msg::err(ser, client, "org.freedesktop.DBus.Error.InvalidArgs",
-                "invalid item path");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.DBus.Error.InvalidArgs",
+                "invalid item path",
+            );
         };
 
         let existed = self.backend.delete(&coll, &key).unwrap_or(false);
         if !existed {
-            return Msg::err(ser, client, "org.freedesktop.Secret.Error.NoSuchItem",
-                "item not found");
+            return Msg::err(
+                ser,
+                client,
+                "org.freedesktop.Secret.Error.NoSuchItem",
+                "item not found",
+            );
         }
 
-        Msg::ret(ser, client).body(vec![
-            Val::O("/".into()),
-        ], "o")
+        Msg::ret(ser, client).body(vec![Val::O("/".into())], "o")
     }
 
     // ===========================================================================
@@ -619,7 +735,8 @@ fn build_introspect_xml(path: &str) -> String {
     let mut xml = String::from("<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n<node>\n");
 
     if path == "/org/freedesktop/secrets" {
-        xml.push_str(r#"<interface name="org.freedesktop.Secret.Service">
+        xml.push_str(
+            r#"<interface name="org.freedesktop.Secret.Service">
 <method name="OpenSession">
 <arg name="algorithm" type="s" direction="in"/>
 <arg name="input" type="v" direction="in"/>
@@ -664,19 +781,24 @@ fn build_introspect_xml(path: &str) -> String {
 <signal name="CollectionDeleted"><arg name="collection" type="o"/></signal>
 <signal name="CollectionChanged"><arg name="collection" type="o"/></signal>
 </interface>
-"#);
+"#,
+        );
     }
 
-    xml.push_str(r#"<interface name="org.freedesktop.DBus.Introspectable">
+    xml.push_str(
+        r#"<interface name="org.freedesktop.DBus.Introspectable">
 <method name="Introspect"><arg name="data" type="s" direction="out"/></method>
 </interface>
-"#);
+"#,
+    );
 
     // Add collection child nodes
     if path == "/org/freedesktop/secrets" {
-        xml.push_str(r#"<node name="collection"/>
+        xml.push_str(
+            r#"<node name="collection"/>
 <node name="aliases"/>
-"#);
+"#,
+        );
     }
 
     xml.push_str("</node>\n");
@@ -699,7 +821,8 @@ mod tests {
 
     #[test]
     fn resolve_item_path_valid() {
-        let (coll, key) = resolve_item_path("/org/freedesktop/secrets/collections/default/mykey").unwrap();
+        let (coll, key) =
+            resolve_item_path("/org/freedesktop/secrets/collections/default/mykey").unwrap();
         assert_eq!(coll, "/org/freedesktop/secrets/collections/default");
         assert_eq!(key, "mykey");
     }
@@ -712,7 +835,10 @@ mod tests {
 
     #[test]
     fn coll_to_ns() {
-        assert_eq!(Backend::coll_to_ns("/org/freedesktop/secrets/collections/default"), "default");
+        assert_eq!(
+            Backend::coll_to_ns("/org/freedesktop/secrets/collections/default"),
+            "default"
+        );
     }
 
     #[test]
@@ -726,28 +852,37 @@ mod tests {
     #[test]
     fn open_session_returns_path() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
                 Val::S("plain".into()),
                 Val::Var(Box::new(Val::S("".into()))),
-            ], "sv");
+            ],
+            "sv",
+        );
 
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         assert_eq!(reply.body.len(), 2);
         if let Val::O(session_path) = &reply.body[1] {
             assert!(session_path.starts_with("/org/freedesktop/secrets/session/"));
-        } else { panic!("expected ObjectPath, got {:?}", reply.body[1]); }
+        } else {
+            panic!("expected ObjectPath, got {:?}", reply.body[1]);
+        }
 
         // No biometrics by default
         if let Val::Dict(info) = &reply.body[0] {
             // has-biometrics should be false
-            if let Some((_, Val::Var(inner))) = info.iter().find(|(k, _)| k.s() == Some("has-biometrics")) {
+            if let Some((_, Val::Var(inner))) =
+                info.iter().find(|(k, _)| k.s() == Some("has-biometrics"))
+            {
                 if let Val::B(has_bio) = inner.as_ref() {
                     assert!(!has_bio);
                 }
@@ -758,21 +893,37 @@ mod tests {
     #[test]
     fn unlock_requires_biometrics() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         // Open session first
-        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
         server.handle_message(":1.1", &open_msg);
 
         // Unlock without biometrics → error
-        let unlock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
-            .body(vec![
-                Val::Arr(vec![Val::O("/org/freedesktop/secrets/collections/default/item1".into())]),
-            ], "ao");
+        let unlock_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Unlock",
+            ":1.1",
+        )
+        .body(
+            vec![Val::Arr(vec![Val::O(
+                "/org/freedesktop/secrets/collections/default/item1".into(),
+            )])],
+            "ao",
+        );
 
         let reply = server.handle_message(":1.1", &unlock_msg);
         assert_eq!(reply.mt, MType::Err);
@@ -782,71 +933,101 @@ mod tests {
     #[test]
     fn read_alias_default() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "ReadAlias", ":1.1")
-            .body(vec![Val::S("default".into())], "s");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "ReadAlias",
+            ":1.1",
+        )
+        .body(vec![Val::S("default".into())], "s");
 
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         if let Val::O(collection) = &reply.body[0] {
             assert_eq!(collection, "/org/freedesktop/secrets/collections/default");
-        } else { panic!("expected ObjectPath"); }
+        } else {
+            panic!("expected ObjectPath");
+        }
     }
 
     #[test]
     fn set_alias_and_read() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         // Set alias
-        let set_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "SetAlias", ":1.1")
-            .body(vec![
+        let set_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "SetAlias",
+            ":1.1",
+        )
+        .body(
+            vec![
                 Val::S("myalias".into()),
                 Val::O("/org/freedesktop/secrets/collections/custom".into()),
-            ], "so");
+            ],
+            "so",
+        );
 
         let set_reply = server.handle_message(":1.1", &set_msg);
         assert_eq!(set_reply.mt, MType::Return);
 
         // Read it back
-        let read_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "ReadAlias", ":1.1")
-            .body(vec![Val::S("myalias".into())], "s");
+        let read_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "ReadAlias",
+            ":1.1",
+        )
+        .body(vec![Val::S("myalias".into())], "s");
 
         let read_reply = server.handle_message(":1.1", &read_msg);
         assert_eq!(read_reply.mt, MType::Return);
         if let Val::O(collection) = &read_reply.body[0] {
             assert_eq!(collection, "/org/freedesktop/secrets/collections/custom");
-        } else { panic!("expected ObjectPath"); }
+        } else {
+            panic!("expected ObjectPath");
+        }
     }
 
     #[test]
     fn unlock_returns_error_without_biometrics() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         // Open session first
-        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
         server.handle_message(":1.1", &open_msg);
 
         // Unlock without biometrics → error
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
-            .body(vec![
-                Val::Arr(vec![
-                    Val::O("/org/freedesktop/secrets/collections/default/item1".into()),
-                    Val::O("/org/freedesktop/secrets/collections/default/item2".into()),
-                ]),
-            ], "ao");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Unlock",
+            ":1.1",
+        )
+        .body(
+            vec![Val::Arr(vec![
+                Val::O("/org/freedesktop/secrets/collections/default/item1".into()),
+                Val::O("/org/freedesktop/secrets/collections/default/item2".into()),
+            ])],
+            "ao",
+        );
 
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Err);
@@ -855,38 +1036,51 @@ mod tests {
     #[test]
     fn lock_returns_requested_objects_as_locked() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Lock", ":1.1")
-            .body(vec![
-                Val::Arr(vec![
-                    Val::O("/org/freedesktop/secrets/collections/default/item1".into()),
-                    Val::O("/org/freedesktop/secrets/collections/default/item2".into()),
-                ]),
-            ], "ao");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Lock",
+            ":1.1",
+        )
+        .body(
+            vec![Val::Arr(vec![
+                Val::O("/org/freedesktop/secrets/collections/default/item1".into()),
+                Val::O("/org/freedesktop/secrets/collections/default/item2".into()),
+            ])],
+            "ao",
+        );
 
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         // All requested objects are returned as locked
         if let Val::Arr(locked) = &reply.body[0] {
             assert_eq!(locked.len(), 2);
-        } else { panic!("expected array"); }
+        } else {
+            panic!("expected array");
+        }
     }
 
     #[test]
     fn close_session() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         // Open a session
-        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
         let open_reply = server.handle_message(":1.1", &open_msg);
         let session_path = match &open_reply.body[1] {
             Val::O(p) => p.clone(),
@@ -894,7 +1088,12 @@ mod tests {
         };
 
         // Close it
-        let close_msg = Msg::call(&session_path, "org.freedesktop.Secret.Session", "Close", ":1.1");
+        let close_msg = Msg::call(
+            &session_path,
+            "org.freedesktop.Secret.Session",
+            "Close",
+            ":1.1",
+        );
         let close_reply = server.handle_message(":1.1", &close_msg);
         assert_eq!(close_reply.mt, MType::Return);
 
@@ -906,14 +1105,22 @@ mod tests {
     #[test]
     fn get_secrets_requires_unlock() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         // Open session
-        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
         let open_reply = server.handle_message(":1.1", &open_msg);
         let session_path = match &open_reply.body[1] {
             Val::O(p) => p.clone(),
@@ -921,11 +1128,21 @@ mod tests {
         };
 
         // Try to get secrets without unlock → error
-        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
-            .body(vec![
-                Val::Arr(vec![Val::O("/org/freedesktop/secrets/collections/default/item1".into())]),
+        let get_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "GetSecrets",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::Arr(vec![Val::O(
+                    "/org/freedesktop/secrets/collections/default/item1".into(),
+                )]),
                 Val::O(session_path.clone()),
-            ], "ao");
+            ],
+            "ao",
+        );
 
         let reply = server.handle_message(":1.1", &get_msg);
         assert_eq!(reply.mt, MType::Err);
@@ -937,26 +1154,46 @@ mod tests {
         use crate::session::BiometricVerifier;
         use edgerun_biometrics::BiometricState;
 
-        struct MockVerifier { available: bool, verified: bool }
+        struct MockVerifier {
+            available: bool,
+            verified: bool,
+        }
         impl BiometricVerifier for MockVerifier {
             fn verify(&self) -> BiometricState {
                 let mut s = BiometricState::default();
                 s.verified = self.verified;
                 s
             }
-            fn is_available(&self) -> bool { self.available }
+            fn is_available(&self) -> bool {
+                self.available
+            }
         }
 
         let root = tmp_root();
         let mut server = Server::bind_with_verifier(
             &root.join("test.sock"),
             root.clone(),
-            Box::new(MockVerifier { available: true, verified: true }),
-        ).unwrap();
+            Box::new(MockVerifier {
+                available: true,
+                verified: true,
+            }),
+        )
+        .unwrap();
 
         // Open session
-        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
         let open_reply = server.handle_message(":1.1", &open_msg);
         let session_path = match &open_reply.body[1] {
             Val::O(p) => p.clone(),
@@ -965,46 +1202,77 @@ mod tests {
 
         // Put a secret first
         let key = Backend::item_key("Test", &[("key".into(), "value".into())]);
-        server.backend.put(
-            "/org/freedesktop/secrets/collections/default",
-            &key,
-            b"super-secret",
-            "Test",
-            &[("key".into(), "value".into())],
-        ).unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/default",
+                &key,
+                b"super-secret",
+                "Test",
+                &[("key".into(), "value".into())],
+            )
+            .unwrap();
 
         let item_path = Backend::item_path("/org/freedesktop/secrets/collections/default", &key);
 
         // Unlock → should succeed with biometrics
-        let unlock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
-            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        let unlock_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Unlock",
+            ":1.1",
+        )
+        .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
         let unlock_reply = server.handle_message(":1.1", &unlock_msg);
         assert_eq!(unlock_reply.mt, MType::Return);
 
         // Get secrets → should succeed
-        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
-            .body(vec![
+        let get_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "GetSecrets",
+            ":1.1",
+        )
+        .body(
+            vec![
                 Val::Arr(vec![Val::O(item_path.clone())]),
                 Val::O(session_path.clone()),
-            ], "ao");
+            ],
+            "ao",
+        );
         let get_reply = server.handle_message(":1.1", &get_msg);
         assert_eq!(get_reply.mt, MType::Return);
         if let Val::Dict(secrets) = &get_reply.body[0] {
             assert_eq!(secrets.len(), 1);
-        } else { panic!("expected dict"); }
+        } else {
+            panic!("expected dict");
+        }
 
         // Lock → should clear session verification
-        let lock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Lock", ":1.1")
-            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        let lock_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Lock",
+            ":1.1",
+        )
+        .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
         let lock_reply = server.handle_message(":1.1", &lock_msg);
         assert_eq!(lock_reply.mt, MType::Return);
 
         // Get secrets again → should fail (locked)
-        let get_msg2 = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
-            .body(vec![
+        let get_msg2 = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "GetSecrets",
+            ":1.1",
+        )
+        .body(
+            vec![
                 Val::Arr(vec![Val::O(item_path.clone())]),
                 Val::O(session_path.clone()),
-            ], "ao");
+            ],
+            "ao",
+        );
         let get_reply2 = server.handle_message(":1.1", &get_msg2);
         assert_eq!(get_reply2.mt, MType::Err);
     }
@@ -1012,82 +1280,103 @@ mod tests {
     #[test]
     fn search_items_empty_attrs() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         // Put an item first
         let key = Backend::item_key("Test", &[("key".into(), "value".into())]);
-        server.backend.put(
-            "/org/freedesktop/secrets/collections/default",
-            &key,
-            b"secret",
-            "Test",
-            &[("key".into(), "value".into())],
-        ).unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/default",
+                &key,
+                b"secret",
+                "Test",
+                &[("key".into(), "value".into())],
+            )
+            .unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "SearchItems", ":1.1")
-            .body(vec![Val::Dict(vec![
-                (Val::S("key".into()), Val::S("value".into())),
-            ])], "a{ss}");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "SearchItems",
+            ":1.1",
+        )
+        .body(
+            vec![Val::Dict(vec![(
+                Val::S("key".into()),
+                Val::S("value".into()),
+            )])],
+            "a{ss}",
+        );
 
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         if let Val::Arr(unlocked) = &reply.body[0] {
             assert_eq!(unlocked.len(), 1);
-        } else { panic!("expected array"); }
+        } else {
+            panic!("expected array");
+        }
     }
 
     #[test]
     fn introspect_service() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.DBus.Introspectable", "Introspect", ":1.1");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.DBus.Introspectable",
+            "Introspect",
+            ":1.1",
+        );
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         if let Val::S(xml) = &reply.body[0] {
             assert!(xml.contains("org.freedesktop.Secret.Service"));
             assert!(xml.contains("OpenSession"));
-        } else { panic!("expected XML string"); }
+        } else {
+            panic!("expected XML string");
+        }
     }
 
     #[test]
     fn delete_item() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         let key = Backend::item_key("Test", &[]);
-        server.backend.put(
-            "/org/freedesktop/secrets/collections/default",
-            &key, b"secret", "Test", &[],
-        ).unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/default",
+                &key,
+                b"secret",
+                "Test",
+                &[],
+            )
+            .unwrap();
         let item_path = Backend::item_path("/org/freedesktop/secrets/collections/default", &key);
 
         let msg = Msg::call(&item_path, "org.freedesktop.Secret.Item", "Delete", ":1.1");
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
-        assert!(server.backend.get("/org/freedesktop/secrets/collections/default", &key).unwrap().is_none());
+        assert!(server
+            .backend
+            .get("/org/freedesktop/secrets/collections/default", &key)
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn delete_nonexistent_item_returns_error() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         let msg = Msg::call(
             "/org/freedesktop/secrets/collections/default/ghost",
-            "org.freedesktop.Secret.Item", "Delete", ":1.1",
+            "org.freedesktop.Secret.Item",
+            "Delete",
+            ":1.1",
         );
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Err);
@@ -1096,38 +1385,56 @@ mod tests {
     #[test]
     fn delete_collection_removes_all_items() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         for i in 0..3 {
             let key = Backend::item_key(&format!("Item {}", i), &[]);
-            server.backend.put(
-                "/org/freedesktop/secrets/collections/default",
-                &key, format!("secret-{}", i).as_bytes(), &format!("Item {}", i), &[],
-            ).unwrap();
+            server
+                .backend
+                .put(
+                    "/org/freedesktop/secrets/collections/default",
+                    &key,
+                    format!("secret-{}", i).as_bytes(),
+                    &format!("Item {}", i),
+                    &[],
+                )
+                .unwrap();
         }
-        assert_eq!(server.backend.list("/org/freedesktop/secrets/collections/default").unwrap().len(), 3);
+        assert_eq!(
+            server
+                .backend
+                .list("/org/freedesktop/secrets/collections/default")
+                .unwrap()
+                .len(),
+            3
+        );
 
         let msg = Msg::call(
             "/org/freedesktop/secrets/collections/default",
-            "org.freedesktop.Secret.Collection", "Delete", ":1.1",
+            "org.freedesktop.Secret.Collection",
+            "Delete",
+            ":1.1",
         );
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
-        assert!(server.backend.list("/org/freedesktop/secrets/collections/default").unwrap().is_empty());
+        assert!(server
+            .backend
+            .list("/org/freedesktop/secrets/collections/default")
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
     fn unknown_method_returns_error() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "NonExistent", ":1.1");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "NonExistent",
+            ":1.1",
+        );
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Err);
     }
@@ -1135,12 +1442,14 @@ mod tests {
     #[test]
     fn unknown_interface_returns_error() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.Unknown.Interface", "Method", ":1.1");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.Unknown.Interface",
+            "Method",
+            ":1.1",
+        );
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Err);
     }
@@ -1148,21 +1457,42 @@ mod tests {
     #[test]
     fn close_session_then_get_secrets_fails() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
         let open_reply = server.handle_message(":1.1", &open_msg);
-        let session_path = match &open_reply.body[1] { Val::O(p) => p.clone(), _ => panic!("expected path") };
+        let session_path = match &open_reply.body[1] {
+            Val::O(p) => p.clone(),
+            _ => panic!("expected path"),
+        };
 
-        let close_msg = Msg::call(&session_path, "org.freedesktop.Secret.Session", "Close", ":1.1");
+        let close_msg = Msg::call(
+            &session_path,
+            "org.freedesktop.Secret.Session",
+            "Close",
+            ":1.1",
+        );
         server.handle_message(":1.1", &close_msg);
 
-        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
-            .body(vec![Val::Arr(vec![]), Val::O(session_path.clone())], "ao");
+        let get_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "GetSecrets",
+            ":1.1",
+        )
+        .body(vec![Val::Arr(vec![]), Val::O(session_path.clone())], "ao");
         let reply = server.handle_message(":1.1", &get_msg);
         assert_eq!(reply.mt, MType::Err);
     }
@@ -1179,52 +1509,110 @@ mod tests {
                 s.verified = true;
                 s
             }
-            fn is_available(&self) -> bool { true }
+            fn is_available(&self) -> bool {
+                true
+            }
         }
 
         let root = tmp_root();
         let mut server = Server::bind_with_verifier(
-            &root.join("test.sock"), root.clone(), Box::new(MockVerifier),
-        ).unwrap();
+            &root.join("test.sock"),
+            root.clone(),
+            Box::new(MockVerifier),
+        )
+        .unwrap();
 
         // Open session
-        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
         let open_reply = server.handle_message(":1.1", &open_msg);
-        let session_path = match &open_reply.body[1] { Val::O(p) => p.clone(), _ => panic!("expected path") };
+        let session_path = match &open_reply.body[1] {
+            Val::O(p) => p.clone(),
+            _ => panic!("expected path"),
+        };
 
         // Put a secret
         let key = Backend::item_key("My Password", &[("service".into(), "example.com".into())]);
-        server.backend.put(
-            "/org/freedesktop/secrets/collections/default", &key,
-            b"my-super-secret-password", "My Password",
-            &[("service".into(), "example.com".into())],
-        ).unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/default",
+                &key,
+                b"my-super-secret-password",
+                "My Password",
+                &[("service".into(), "example.com".into())],
+            )
+            .unwrap();
         let item_path = Backend::item_path("/org/freedesktop/secrets/collections/default", &key);
 
         // Unlock
-        let unlock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
-            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        let unlock_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Unlock",
+            ":1.1",
+        )
+        .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
         let unlock_reply = server.handle_message(":1.1", &unlock_msg);
         assert_eq!(unlock_reply.mt, MType::Return);
 
         // Get secrets → should succeed
-        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
-            .body(vec![Val::Arr(vec![Val::O(item_path.clone())]), Val::O(session_path.clone())], "ao");
+        let get_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "GetSecrets",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::Arr(vec![Val::O(item_path.clone())]),
+                Val::O(session_path.clone()),
+            ],
+            "ao",
+        );
         let get_reply = server.handle_message(":1.1", &get_msg);
         assert_eq!(get_reply.mt, MType::Return);
         if let Val::Dict(secrets) = &get_reply.body[0] {
             assert_eq!(secrets.len(), 1);
-        } else { panic!("expected dict"); }
+        } else {
+            panic!("expected dict");
+        }
 
         // Lock
-        let lock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Lock", ":1.1")
-            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        let lock_msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Lock",
+            ":1.1",
+        )
+        .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
         server.handle_message(":1.1", &lock_msg);
 
         // Get secrets → should fail
-        let get_msg2 = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
-            .body(vec![Val::Arr(vec![Val::O(item_path.clone())]), Val::O(session_path.clone())], "ao");
+        let get_msg2 = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "GetSecrets",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::Arr(vec![Val::O(item_path.clone())]),
+                Val::O(session_path.clone()),
+            ],
+            "ao",
+        );
         let get_reply2 = server.handle_message(":1.1", &get_msg2);
         assert_eq!(get_reply2.mt, MType::Err);
     }
@@ -1232,78 +1620,130 @@ mod tests {
     #[test]
     fn search_across_multiple_collections() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         let key1 = Backend::item_key("GH", &[("server".into(), "github.com".into())]);
         let key2 = Backend::item_key("GL", &[("server".into(), "gitlab.com".into())]);
         let key3 = Backend::item_key("GH2", &[("server".into(), "github.com".into())]);
-        server.backend.put("/org/freedesktop/secrets/collections/default", &key1, b"gh1", "GH", &[("server".into(), "github.com".into())]).unwrap();
-        server.backend.put("/org/freedesktop/secrets/collections/login", &key2, b"gl1", "GL", &[("server".into(), "gitlab.com".into())]).unwrap();
-        server.backend.put("/org/freedesktop/secrets/collections/default", &key3, b"gh2", "GH2", &[("server".into(), "github.com".into())]).unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/default",
+                &key1,
+                b"gh1",
+                "GH",
+                &[("server".into(), "github.com".into())],
+            )
+            .unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/login",
+                &key2,
+                b"gl1",
+                "GL",
+                &[("server".into(), "gitlab.com".into())],
+            )
+            .unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/default",
+                &key3,
+                b"gh2",
+                "GH2",
+                &[("server".into(), "github.com".into())],
+            )
+            .unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "SearchItems", ":1.1")
-            .body(vec![Val::Dict(vec![(Val::S("server".into()), Val::S("github.com".into()))])], "a{ss}");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "SearchItems",
+            ":1.1",
+        )
+        .body(
+            vec![Val::Dict(vec![(
+                Val::S("server".into()),
+                Val::S("github.com".into()),
+            )])],
+            "a{ss}",
+        );
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         if let Val::Arr(unlocked) = &reply.body[0] {
             assert_eq!(unlocked.len(), 2);
-        } else { panic!("expected array"); }
+        } else {
+            panic!("expected array");
+        }
     }
 
     #[test]
     fn read_alias_nonexistent() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "ReadAlias", ":1.1")
-            .body(vec![Val::S("nonexistent".into())], "s");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "ReadAlias",
+            ":1.1",
+        )
+        .body(vec![Val::S("nonexistent".into())], "s");
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         if let Val::O(c) = &reply.body[0] {
             assert_eq!(c, "/");
-        } else { panic!("expected ObjectPath"); }
+        } else {
+            panic!("expected ObjectPath");
+        }
     }
 
     #[test]
     fn properties_get_all() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.DBus.Properties", "GetAll", ":1.1")
-            .body(vec![Val::S("org.freedesktop.Secret.Service".into())], "s");
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.DBus.Properties",
+            "GetAll",
+            ":1.1",
+        )
+        .body(vec![Val::S("org.freedesktop.Secret.Service".into())], "s");
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         if let Val::Dict(d) = &reply.body[0] {
             assert!(d.is_empty());
-        } else { panic!("expected dict"); }
+        } else {
+            panic!("expected dict");
+        }
     }
 
     #[test]
     fn rebuild_preserves_server_access() {
         let root = tmp_root();
-        let mut server = Server::bind(
-            &root.join("test.sock"),
-            root.clone(),
-        ).unwrap();
+        let mut server = Server::bind(&root.join("test.sock"), root.clone()).unwrap();
 
         let key = Backend::item_key("Test", &[("k".into(), "v".into())]);
-        server.backend.put(
-            "/org/freedesktop/secrets/collections/default", &key, b"secret", "Test",
-            &[("k".into(), "v".into())],
-        ).unwrap();
+        server
+            .backend
+            .put(
+                "/org/freedesktop/secrets/collections/default",
+                &key,
+                b"secret",
+                "Test",
+                &[("k".into(), "v".into())],
+            )
+            .unwrap();
 
         // No-op rebuild — standalone daemon has no event stream
 
-        let (secret, meta) = server.backend.get("/org/freedesktop/secrets/collections/default", &key).unwrap().unwrap();
+        let (secret, meta) = server
+            .backend
+            .get("/org/freedesktop/secrets/collections/default", &key)
+            .unwrap()
+            .unwrap();
         assert_eq!(secret, b"secret");
         assert_eq!(meta.label, "Test");
     }

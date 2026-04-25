@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use edgerun_dns::zone::DnsZone;
+use edgerun_crypto::{Digest, Sha256};
 use edgerun_dns::record::DnsRecordType;
-use edgerun_crypto::{Sha256, Digest};
+use edgerun_dns::zone::DnsZone;
 use edgerun_encoding::base64url_nopad_encode;
 
 use crate::account::AccountKey;
@@ -21,14 +21,14 @@ impl DnsChallenge {
     pub fn new(domain: &str, token: &str, account_key: &AccountKey) -> Self {
         let thumbprint = account_key.thumbprint_b64();
         let key_authorization = format!("{}.{}", token, thumbprint);
-        
+
         let mut hasher = Sha256::new();
         hasher.update(key_authorization.as_bytes());
         let digest = hasher.finalize();
         let txt_value = base64url_nopad_encode(&digest);
-        
+
         let txt_record_name = format!("_acme-challenge.{}", domain);
-        
+
         Self {
             domain: domain.to_string(),
             token: token.to_string(),
@@ -70,9 +70,12 @@ impl DnsChallengeManager {
 
     pub fn create_challenge(&self, domain: &str, token: &str) -> DnsChallenge {
         let challenge = DnsChallenge::new(domain, token, &self.account_key);
-        
-        self.active_challenges.write().unwrap().push(challenge.clone());
-        
+
+        self.active_challenges
+            .write()
+            .unwrap()
+            .push(challenge.clone());
+
         challenge
     }
 

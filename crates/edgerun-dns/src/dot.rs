@@ -9,12 +9,12 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use edgerun_rt::{AsyncTcpListener, AsyncTcpStream, AsyncRead, AsyncWrite};
-use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
+use edgerun_rt::{AsyncRead, AsyncTcpListener, AsyncTcpStream, AsyncWrite};
 use edgerun_tls::record::TlsRecord;
+use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
 
-use super::server::{ServerState, RateLimiter};
 use super::message::{DnsMessage, DnsResponseCode};
+use super::server::{RateLimiter, ServerState};
 
 /// DNS-over-TLS server configuration.
 #[derive(Clone)]
@@ -54,7 +54,9 @@ impl DotServer {
         let local = tcp_listener.local_addr().unwrap();
 
         let cert_and_key = config.cert_and_key.unwrap_or_else(|| {
-            edgerun_log::warn!("edgerun-dns: no TLS cert/key provided, using self-signed for localhost");
+            edgerun_log::warn!(
+                "edgerun-dns: no TLS cert/key provided, using self-signed for localhost"
+            );
             edgerun_tls::generate_self_signed(&["localhost"])
                 .expect("self-signed cert generation should not fail")
         });
@@ -89,7 +91,8 @@ impl DotServer {
             self.rate_limiter.clone(),
             Arc::clone(&self.shutdown_flag),
             &self.cert_and_key,
-        ).await
+        )
+        .await
     }
 
     /// Signal shutdown.
@@ -119,7 +122,10 @@ async fn dot_accept_loop(
                 let rate_limiter = rate_limiter.clone();
                 let cert_and_key = cert_and_key.clone();
                 edgerun_rt::spawn(async move {
-                    if let Err(e) = handle_dot_connection(stream, peer, &state, &rate_limiter, &cert_and_key).await {
+                    if let Err(e) =
+                        handle_dot_connection(stream, peer, &state, &rate_limiter, &cert_and_key)
+                            .await
+                    {
                         edgerun_log::warn!("edgerun-dns: DoT error from {}: {}", peer, e);
                     }
                 });
@@ -146,7 +152,10 @@ async fn handle_dot_connection(
     let mut tls_stream = match AsyncTlsServerStream::accept(stream, cert_and_key).await {
         Ok(s) => s,
         Err(e) => {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, format!("TLS handshake failed: {e}")));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("TLS handshake failed: {e}"),
+            ));
         }
     };
 
@@ -160,12 +169,20 @@ async fn handle_dot_connection(
         match tls_read_exact(&stream_mutex, &mut len_buf).await {
             Ok(0) => return Ok(()),
             Ok(2) => {}
-            Ok(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "incomplete TCP length")),
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "incomplete TCP length",
+                ))
+            }
             Err(e) => return Err(e),
         }
         let msg_len = u16::from_be_bytes(len_buf) as usize;
         if msg_len == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "zero TCP message length"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "zero TCP message length",
+            ));
         }
 
         let mut query_buf = vec![0u8; msg_len];
@@ -182,10 +199,14 @@ async fn handle_dot_connection(
         // Parse and handle the DNS query
         match DnsMessage::from_wire(&query_buf) {
             Ok(query) => {
-                let (response_wire, _needs_tcp) = super::server::query::handle_query(&query_buf, state).await.unwrap_or_else(|_| {
-                    let err_resp = DnsMessage::response(0, DnsResponseCode::FormErr, Vec::new());
-                    (err_resp.to_wire(), false)
-                });
+                let (response_wire, _needs_tcp) =
+                    super::server::query::handle_query(&query_buf, state)
+                        .await
+                        .unwrap_or_else(|_| {
+                            let err_resp =
+                                DnsMessage::response(0, DnsResponseCode::FormErr, Vec::new());
+                            (err_resp.to_wire(), false)
+                        });
                 tls_write_length_prefixed(&stream_mutex, &response_wire).await?;
             }
             Err(e) => {
@@ -202,8 +223,8 @@ async fn tls_read_exact<S: AsyncRead + Unpin>(
     stream_mutex: &Arc<std::sync::Mutex<S>>,
     buf: &mut [u8],
 ) -> io::Result<usize> {
-    use std::task::Poll;
     use std::future::poll_fn;
+    use std::task::Poll;
 
     let mut total = 0;
     let n = buf.len();
@@ -211,11 +232,17 @@ async fn tls_read_exact<S: AsyncRead + Unpin>(
         let read = poll_fn(|cx| {
             let mut guard = stream_mutex.lock().unwrap();
             Pin::new(&mut *guard).poll_read(cx, &mut buf[total..n])
-        }).await?;
+        })
+        .await?;
 
         if read == 0 {
-            return if total == 0 { Ok(0) } else {
-                Err(io::Error::new(io::ErrorKind::UnexpectedEof, "incomplete TCP read"))
+            return if total == 0 {
+                Ok(0)
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "incomplete TCP read",
+                ))
             };
         }
         total += read;
@@ -228,8 +255,8 @@ async fn tls_write_length_prefixed<S: AsyncWrite + Unpin>(
     stream_mutex: &Arc<std::sync::Mutex<S>>,
     data: &[u8],
 ) -> io::Result<()> {
-    use std::task::Poll;
     use std::future::poll_fn;
+    use std::task::Poll;
 
     let len_bytes = (data.len() as u16).to_be_bytes();
 
@@ -243,7 +270,8 @@ async fn tls_write_length_prefixed<S: AsyncWrite + Unpin>(
         let n = poll_fn(|cx| {
             let mut guard = stream_mutex.lock().unwrap();
             Pin::new(&mut *guard).poll_write(cx, &buf[written..])
-        }).await?;
+        })
+        .await?;
         if n == 0 {
             return Err(io::Error::new(io::ErrorKind::WriteZero, "TCP write zero"));
         }
@@ -254,7 +282,8 @@ async fn tls_write_length_prefixed<S: AsyncWrite + Unpin>(
     poll_fn(|cx| {
         let mut guard = stream_mutex.lock().unwrap();
         Pin::new(&mut *guard).poll_flush(cx)
-    }).await
+    })
+    .await
 }
 
 #[cfg(test)]

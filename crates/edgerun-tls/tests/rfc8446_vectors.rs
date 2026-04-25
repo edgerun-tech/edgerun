@@ -6,7 +6,10 @@
 //!
 //! Source: draft-ietf-tls-tls13-vectors-latest (Martin Thomson, Mozilla)
 
-use edgerun_tls::prf::{Hasher, client_write_keys, server_write_keys, client_app_write_keys, server_app_write_keys, hmac_sha256};
+use edgerun_tls::prf::{
+    client_app_write_keys, client_write_keys, hmac_sha256, server_app_write_keys,
+    server_write_keys, Hasher,
+};
 
 /// Compile-time hex parser — takes a string with optional spaces/newlines
 const fn hex_bytes(s: &str) -> Vec<u8> {
@@ -17,7 +20,9 @@ const fn hex_bytes(s: &str) -> Vec<u8> {
 
 /// Runtime hex parser
 fn h(s: &str) -> Vec<u8> {
-    s.as_bytes().iter().filter(|&&b| b != b' ' && b != b'\n' && b != b'\t' && b != b'\\')
+    s.as_bytes()
+        .iter()
+        .filter(|&&b| b != b' ' && b != b'\n' && b != b'\t' && b != b'\\')
         .collect::<Vec<_>>()
         .chunks(2)
         .map(|chunk| {
@@ -123,14 +128,20 @@ fn test_derived_secret_after_early() {
     let hash = Hasher::Sha256;
     let v = vectors();
     // Derive-Secret uses Hash(messages) as context; empty messages = Hash("")
-    assert_eq!(hash.derive_secret(&v.early_secret, "derived", &[]), v.derived_after_early);
+    assert_eq!(
+        hash.derive_secret(&v.early_secret, "derived", &[]),
+        v.derived_after_early
+    );
 }
 
 #[test]
 fn test_handshake_secret() {
     let hash = Hasher::Sha256;
     let v = vectors();
-    assert_eq!(hash.extract(&v.derived_after_early, &v.shared_secret), v.handshake_secret);
+    assert_eq!(
+        hash.extract(&v.derived_after_early, &v.shared_secret),
+        v.handshake_secret
+    );
 }
 
 #[test]
@@ -148,7 +159,12 @@ fn test_client_handshake_traffic_secret() {
     let hash = Hasher::Sha256;
     let v = vectors();
     assert_eq!(
-        hash.expand_label(&v.handshake_secret, "c hs traffic", &v.ch_sh_transcript_hash, hash.len()),
+        hash.expand_label(
+            &v.handshake_secret,
+            "c hs traffic",
+            &v.ch_sh_transcript_hash,
+            hash.len()
+        ),
         v.client_hs_traffic_secret
     );
 }
@@ -158,7 +174,12 @@ fn test_server_handshake_traffic_secret() {
     let hash = Hasher::Sha256;
     let v = vectors();
     assert_eq!(
-        hash.expand_label(&v.handshake_secret, "s hs traffic", &v.ch_sh_transcript_hash, hash.len()),
+        hash.expand_label(
+            &v.handshake_secret,
+            "s hs traffic",
+            &v.ch_sh_transcript_hash,
+            hash.len()
+        ),
         v.server_hs_traffic_secret
     );
 }
@@ -185,7 +206,10 @@ fn test_server_handshake_keys() {
 fn test_derived_secret_after_handshake() {
     let hash = Hasher::Sha256;
     let v = vectors();
-    assert_eq!(hash.derive_secret(&v.handshake_secret, "derived", &[]), v.derived_after_handshake);
+    assert_eq!(
+        hash.derive_secret(&v.handshake_secret, "derived", &[]),
+        v.derived_after_handshake
+    );
 }
 
 #[test]
@@ -193,7 +217,10 @@ fn test_master_secret() {
     let hash = Hasher::Sha256;
     let v = vectors();
     let zero = vec![0u8; 32];
-    assert_eq!(hash.extract(&v.derived_after_handshake, &zero), v.master_secret);
+    assert_eq!(
+        hash.extract(&v.derived_after_handshake, &zero),
+        v.master_secret
+    );
 }
 
 #[test]
@@ -202,7 +229,12 @@ fn test_client_application_traffic_secret() {
     let v = vectors();
     // The stored app_transcript_hash is already Hash(messages), so use expand_label directly
     assert_eq!(
-        hash.expand_label(&v.master_secret, "c ap traffic", &v.app_transcript_hash, hash.len()),
+        hash.expand_label(
+            &v.master_secret,
+            "c ap traffic",
+            &v.app_transcript_hash,
+            hash.len()
+        ),
         v.client_app_traffic_secret
     );
 }
@@ -212,7 +244,12 @@ fn test_server_application_traffic_secret() {
     let hash = Hasher::Sha256;
     let v = vectors();
     assert_eq!(
-        hash.expand_label(&v.master_secret, "s ap traffic", &v.app_transcript_hash, hash.len()),
+        hash.expand_label(
+            &v.master_secret,
+            "s ap traffic",
+            &v.app_transcript_hash,
+            hash.len()
+        ),
         v.server_app_traffic_secret
     );
 }
@@ -242,8 +279,9 @@ fn test_server_finished_verify_data() {
     // Verify finished_key derivation (HMAC input requires full transcript which we don't have)
     let finished_key = hash.expand_label(&v.server_hs_traffic_secret, "finished", &[], hash.len());
     let expected_key: [u8; 32] = [
-        0x24, 0x56, 0xe4, 0xd4, 0xc3, 0xcc, 0x52, 0x6c, 0xad, 0x20, 0xc0, 0x11, 0x32, 0x72, 0x77, 0xe2,
-        0xb8, 0x83, 0x4d, 0xf5, 0x14, 0xfa, 0x50, 0xdb, 0x92, 0x11, 0x01, 0x29, 0x3c, 0xc6, 0x27, 0xa8
+        0x24, 0x56, 0xe4, 0xd4, 0xc3, 0xcc, 0x52, 0x6c, 0xad, 0x20, 0xc0, 0x11, 0x32, 0x72, 0x77,
+        0xe2, 0xb8, 0x83, 0x4d, 0xf5, 0x14, 0xfa, 0x50, 0xdb, 0x92, 0x11, 0x01, 0x29, 0x3c, 0xc6,
+        0x27, 0xa8,
     ];
     assert_eq!(finished_key, expected_key, "Server finished_key mismatch");
     // The actual verify_data = HMAC(finished_key, Hash(CH||SH||EE||Cert||CV))
@@ -257,8 +295,9 @@ fn test_client_finished_verify_data() {
     let v = vectors();
     let finished_key = hash.expand_label(&v.client_hs_traffic_secret, "finished", &[], hash.len());
     let expected_key: [u8; 32] = [
-        0x34, 0xe8, 0xb7, 0x81, 0xa8, 0x64, 0x3a, 0x16, 0x6b, 0xc1, 0x0e, 0xc4, 0x0c, 0x6c, 0x23, 0x9f,
-        0x5d, 0x76, 0x00, 0x5b, 0x35, 0xc6, 0xf3, 0x5f, 0xf7, 0xf0, 0x10, 0x75, 0xc3, 0x6a, 0xaa, 0x66
+        0x34, 0xe8, 0xb7, 0x81, 0xa8, 0x64, 0x3a, 0x16, 0x6b, 0xc1, 0x0e, 0xc4, 0x0c, 0x6c, 0x23,
+        0x9f, 0x5d, 0x76, 0x00, 0x5b, 0x35, 0xc6, 0xf3, 0x5f, 0xf7, 0xf0, 0x10, 0x75, 0xc3, 0x6a,
+        0xaa, 0x66,
     ];
     assert_eq!(finished_key, expected_key, "Client finished_key mismatch");
 }
@@ -269,7 +308,12 @@ fn test_resumption_master_secret() {
     let v = vectors();
     // The stored res_transcript_hash is already Hash(messages)
     assert_eq!(
-        hash.expand_label(&v.master_secret, "res master", &v.res_transcript_hash, hash.len()),
+        hash.expand_label(
+            &v.master_secret,
+            "res master",
+            &v.res_transcript_hash,
+            hash.len()
+        ),
         v.resumption_master_secret
     );
 }
@@ -281,7 +325,12 @@ fn test_resumption_secret() {
     // The ticket_nonce in the vectors is 2 bytes: [0x00, 0x00]
     // (from the NewSessionTicket: ticket_nonce_length=2, ticket_nonce=00 00)
     assert_eq!(
-        hash.expand_label(&v.resumption_master_secret, "resumption", &[0x00, 0x00], hash.len()),
+        hash.expand_label(
+            &v.resumption_master_secret,
+            "resumption",
+            &[0x00, 0x00],
+            hash.len()
+        ),
         v.resumption_secret
     );
 }
@@ -306,8 +355,18 @@ fn test_full_key_schedule_from_scratch() {
     assert_eq!(handshake_secret, v.handshake_secret);
 
     // Step 4: Client/Server handshake traffic secrets
-    let client_hs = hash.expand_label(&handshake_secret, "c hs traffic", &v.ch_sh_transcript_hash, hash.len());
-    let server_hs = hash.expand_label(&handshake_secret, "s hs traffic", &v.ch_sh_transcript_hash, hash.len());
+    let client_hs = hash.expand_label(
+        &handshake_secret,
+        "c hs traffic",
+        &v.ch_sh_transcript_hash,
+        hash.len(),
+    );
+    let server_hs = hash.expand_label(
+        &handshake_secret,
+        "s hs traffic",
+        &v.ch_sh_transcript_hash,
+        hash.len(),
+    );
     assert_eq!(client_hs, v.client_hs_traffic_secret);
     assert_eq!(server_hs, v.server_hs_traffic_secret);
 
@@ -320,8 +379,18 @@ fn test_full_key_schedule_from_scratch() {
     assert_eq!(master_secret, v.master_secret);
 
     // Step 7: Application traffic secrets (Derive-Secret with transcript hash)
-    let client_app = hash.expand_label(&master_secret, "c ap traffic", &v.app_transcript_hash, hash.len());
-    let server_app = hash.expand_label(&master_secret, "s ap traffic", &v.app_transcript_hash, hash.len());
+    let client_app = hash.expand_label(
+        &master_secret,
+        "c ap traffic",
+        &v.app_transcript_hash,
+        hash.len(),
+    );
+    let server_app = hash.expand_label(
+        &master_secret,
+        "s ap traffic",
+        &v.app_transcript_hash,
+        hash.len(),
+    );
     assert_eq!(client_app, v.client_app_traffic_secret);
     assert_eq!(server_app, v.server_app_traffic_secret);
 
@@ -337,17 +406,24 @@ fn test_full_key_schedule_from_scratch() {
     let client_finished_key = hash.expand_label(&client_hs, "finished", &[], hash.len());
     let server_finished_key = hash.expand_label(&server_hs, "finished", &[], hash.len());
     let expected_client_fk: [u8; 32] = [
-        0x34, 0xe8, 0xb7, 0x81, 0xa8, 0x64, 0x3a, 0x16, 0x6b, 0xc1, 0x0e, 0xc4, 0x0c, 0x6c, 0x23, 0x9f,
-        0x5d, 0x76, 0x00, 0x5b, 0x35, 0xc6, 0xf3, 0x5f, 0xf7, 0xf0, 0x10, 0x75, 0xc3, 0x6a, 0xaa, 0x66
+        0x34, 0xe8, 0xb7, 0x81, 0xa8, 0x64, 0x3a, 0x16, 0x6b, 0xc1, 0x0e, 0xc4, 0x0c, 0x6c, 0x23,
+        0x9f, 0x5d, 0x76, 0x00, 0x5b, 0x35, 0xc6, 0xf3, 0x5f, 0xf7, 0xf0, 0x10, 0x75, 0xc3, 0x6a,
+        0xaa, 0x66,
     ];
     let expected_server_fk: [u8; 32] = [
-        0x24, 0x56, 0xe4, 0xd4, 0xc3, 0xcc, 0x52, 0x6c, 0xad, 0x20, 0xc0, 0x11, 0x32, 0x72, 0x77, 0xe2,
-        0xb8, 0x83, 0x4d, 0xf5, 0x14, 0xfa, 0x50, 0xdb, 0x92, 0x11, 0x01, 0x29, 0x3c, 0xc6, 0x27, 0xa8
+        0x24, 0x56, 0xe4, 0xd4, 0xc3, 0xcc, 0x52, 0x6c, 0xad, 0x20, 0xc0, 0x11, 0x32, 0x72, 0x77,
+        0xe2, 0xb8, 0x83, 0x4d, 0xf5, 0x14, 0xfa, 0x50, 0xdb, 0x92, 0x11, 0x01, 0x29, 0x3c, 0xc6,
+        0x27, 0xa8,
     ];
     assert_eq!(client_finished_key, expected_client_fk);
     assert_eq!(server_finished_key, expected_server_fk);
 
     // Step 10: Resumption master secret
-    let res_master = hash.expand_label(&master_secret, "res master", &v.res_transcript_hash, hash.len());
+    let res_master = hash.expand_label(
+        &master_secret,
+        "res master",
+        &v.res_transcript_hash,
+        hash.len(),
+    );
     assert_eq!(res_master, v.resumption_master_secret);
 }

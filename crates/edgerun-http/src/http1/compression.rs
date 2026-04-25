@@ -137,8 +137,8 @@ fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
 
 /// Compress to brotli format
 fn compress_brotli(data: &[u8]) -> Vec<u8> {
-    use brotli::enc::BrotliEncoderParams;
     use brotli::enc::backward_references::BrotliEncoderMode;
+    use brotli::enc::BrotliEncoderParams;
     let mut out = Vec::with_capacity(data.len());
     let mut params = BrotliEncoderParams::default();
     params.mode = BrotliEncoderMode::BROTLI_MODE_GENERIC;

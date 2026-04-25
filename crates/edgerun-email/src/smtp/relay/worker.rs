@@ -6,9 +6,9 @@ use std::time::Duration;
 
 use edgerun_rt::CancellationToken;
 
+use crate::smtp::relay::bounce::{send_bounce, BounceConfig};
 use crate::smtp::relay::queue::MailIndex;
 use crate::smtp::relay::relay::OutboundRelay;
-use crate::smtp::relay::bounce::{BounceConfig, send_bounce};
 use crate::smtp::types::MailEnvelope;
 
 /// Configuration for the delivery worker.
@@ -32,8 +32,8 @@ impl Default for DeliveryWorkerConfig {
     fn default() -> Self {
         Self {
             batch_size: 10,
-            min_retry_interval: Duration::from_secs(300),      // 5 minutes
-            max_retry_interval: Duration::from_secs(86400),    // 24 hours
+            min_retry_interval: Duration::from_secs(300), // 5 minutes
+            max_retry_interval: Duration::from_secs(86400), // 24 hours
             max_retries: 8,
             poll_interval: Duration::from_secs(10),
             bounce_config: BounceConfig::default(),
@@ -50,7 +50,11 @@ pub struct DeliveryWorker {
 
 impl DeliveryWorker {
     pub fn new(config: DeliveryWorkerConfig, relay: OutboundRelay, queue: Arc<MailIndex>) -> Self {
-        Self { config, relay, queue }
+        Self {
+            config,
+            relay,
+            queue,
+        }
     }
 
     /// Run the delivery worker loop until shutdown is cancelled.
@@ -98,32 +102,50 @@ impl DeliveryWorker {
 
         for recipient in &msg.recipients {
             // Skip already delivered recipients
-            if self.queue.is_recipient_delivered(&msg.message_id, recipient).await {
+            if self
+                .queue
+                .is_recipient_delivered(&msg.message_id, recipient)
+                .await
+            {
                 continue;
             }
 
             edgerun_log::info!(
                 "edgerun-smtp: delivering message {} to {} (attempt {})",
-                msg.message_id, recipient, msg.retry_count + 1
+                msg.message_id,
+                recipient,
+                msg.retry_count + 1
             );
 
             match self.relay.deliver_to_recipient(&envelope, recipient).await {
                 Ok(remote_mta) => {
                     edgerun_log::info!(
                         "edgerun-smtp: delivered message {} to {} via {}",
-                        msg.message_id, recipient, remote_mta
+                        msg.message_id,
+                        recipient,
+                        remote_mta
                     );
-                    if let Err(e) = self.queue.mark_delivered(&msg.message_id, recipient, Some(&remote_mta)).await {
+                    if let Err(e) = self
+                        .queue
+                        .mark_delivered(&msg.message_id, recipient, Some(&remote_mta))
+                        .await
+                    {
                         edgerun_log::error!("edgerun-smtp: failed to mark delivered: {}", e);
                     }
                 }
                 Err(reason) => {
                     edgerun_log::warn!(
                         "edgerun-smtp: delivery failed for message {} to {}: {}",
-                        msg.message_id, recipient, reason
+                        msg.message_id,
+                        recipient,
+                        reason
                     );
                     any_failed = true;
-                    if let Err(e) = self.queue.mark_failed(&msg.message_id, recipient, &reason, None).await {
+                    if let Err(e) = self
+                        .queue
+                        .mark_failed(&msg.message_id, recipient, &reason, None)
+                        .await
+                    {
                         edgerun_log::error!("edgerun-smtp: failed to mark failed: {}", e);
                     }
                 }
@@ -139,7 +161,8 @@ impl DeliveryWorker {
                 // Max retries exceeded — send DSN bounce
                 edgerun_log::error!(
                     "edgerun-smtp: message {} exceeded max retries ({}), bouncing",
-                    msg.message_id, self.config.max_retries
+                    msg.message_id,
+                    self.config.max_retries
                 );
 
                 // Get failed recipients
@@ -151,17 +174,21 @@ impl DeliveryWorker {
                     &failed,
                     &msg.data,
                     &self.config.bounce_config,
-                ).await {
+                )
+                .await
+                {
                     Ok(()) => {
                         edgerun_log::info!(
                             "edgerun-smtp: bounce sent to {} for message {}",
-                            msg.envelope_sender, msg.message_id,
+                            msg.envelope_sender,
+                            msg.message_id,
                         );
                     }
                     Err(e) => {
                         edgerun_log::error!(
                             "edgerun-smtp: failed to send bounce for message {}: {}",
-                            msg.message_id, e,
+                            msg.message_id,
+                            e,
                         );
                     }
                 }
@@ -174,9 +201,16 @@ impl DeliveryWorker {
                 let next_retry_time = current_time_secs() + delay.as_secs() as i64;
                 edgerun_log::info!(
                     "edgerun-smtp: scheduling retry for message {} in {}s (attempt {}/{})",
-                    msg.message_id, delay.as_secs(), next_retry, self.config.max_retries
+                    msg.message_id,
+                    delay.as_secs(),
+                    next_retry,
+                    self.config.max_retries
                 );
-                if let Err(e) = self.queue.schedule_retry(&msg.message_id, next_retry, next_retry_time).await {
+                if let Err(e) = self
+                    .queue
+                    .schedule_retry(&msg.message_id, next_retry, next_retry_time)
+                    .await
+                {
                     edgerun_log::error!("edgerun-smtp: failed to schedule retry: {}", e);
                 }
             }

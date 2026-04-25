@@ -5,12 +5,15 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use crate::Instant;
 use crate::Elapsed;
+use crate::Instant;
 
 /// Sleep until the given deadline.
 pub fn sleep_until(deadline: Instant) -> SleepUntil {
-    SleepUntil { deadline, registered: false }
+    SleepUntil {
+        deadline,
+        registered: false,
+    }
 }
 
 /// Future returned by [`sleep_until()`].
@@ -47,7 +50,11 @@ impl Future for SleepUntil {
 
 /// Timeout at a specific [`Instant`] instead of after a [`Duration`].
 pub fn timeout_at<F>(deadline: Instant, f: F) -> TimeoutAt<F> {
-    TimeoutAt { inner: Some(f), deadline, registered: false }
+    TimeoutAt {
+        inner: Some(f),
+        deadline,
+        registered: false,
+    }
 }
 
 /// Future returned by [`timeout_at()`].
@@ -92,22 +99,16 @@ impl<F: Future> Future for TimeoutAt<F> {
 mod tests {
     use super::*;
 
-    static NOOP_WAKER: std::sync::LazyLock<std::task::Waker> =
-        std::sync::LazyLock::new(|| {
-            static VTABLE: std::task::RawWakerVTable =
-                std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-            const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-                std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-            }
-            const fn wake_noop(_: *const ()) {}
-            const fn drop_noop(_: *const ()) {}
-            unsafe {
-                std::task::Waker::from_raw(std::task::RawWaker::new(
-                    std::ptr::null(),
-                    &VTABLE,
-                ))
-            }
-        });
+    static NOOP_WAKER: std::sync::LazyLock<std::task::Waker> = std::sync::LazyLock::new(|| {
+        static VTABLE: std::task::RawWakerVTable =
+            std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
+        const fn clone_noop(_: *const ()) -> std::task::RawWaker {
+            std::task::RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        const fn wake_noop(_: *const ()) {}
+        const fn drop_noop(_: *const ()) {}
+        unsafe { std::task::Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+    });
 
     fn cx() -> Context<'static> {
         Context::from_waker(&NOOP_WAKER)
@@ -117,7 +118,10 @@ mod tests {
     fn sleep_until_past() {
         let deadline = Instant::now() - Duration::from_millis(1);
         let mut fut = sleep_until(deadline);
-        assert!(matches!(Pin::new(&mut fut).poll(&mut cx()), Poll::Ready(())));
+        assert!(matches!(
+            Pin::new(&mut fut).poll(&mut cx()),
+            Poll::Ready(())
+        ));
     }
 
     #[test]
@@ -131,13 +135,19 @@ mod tests {
     fn timeout_at_expired() {
         let deadline = Instant::now() - Duration::from_millis(1);
         let mut fut = timeout_at(deadline, std::future::ready(42));
-        assert!(matches!(Pin::new(&mut fut).poll(&mut cx()), Poll::Ready(Err(_))));
+        assert!(matches!(
+            Pin::new(&mut fut).poll(&mut cx()),
+            Poll::Ready(Err(_))
+        ));
     }
 
     #[test]
     fn timeout_at_ready() {
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut fut = timeout_at(deadline, std::future::ready(42));
-        assert!(matches!(Pin::new(&mut fut).poll(&mut cx()), Poll::Ready(Ok(42))));
+        assert!(matches!(
+            Pin::new(&mut fut).poll(&mut cx()),
+            Poll::Ready(Ok(42))
+        ));
     }
 }

@@ -34,10 +34,18 @@ pub fn parse_subid_file(path: &Path) -> io::Result<Vec<SubIdRange>> {
             continue;
         }
         let name = parts[0].trim().to_string();
-        let start: u32 = parts[1].trim().parse()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid subid start: {}", e)))?;
-        let count: u32 = parts[2].trim().parse()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid subid count: {}", e)))?;
+        let start: u32 = parts[1].trim().parse().map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid subid start: {}", e),
+            )
+        })?;
+        let count: u32 = parts[2].trim().parse().map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid subid count: {}", e),
+            )
+        })?;
         ranges.push(SubIdRange { name, start, count });
     }
     Ok(ranges)
@@ -77,7 +85,10 @@ pub fn get_current_username() -> io::Result<String> {
             }
         }
     }
-    Err(io::Error::new(io::ErrorKind::NotFound, "could not determine username"))
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "could not determine username",
+    ))
 }
 
 /// Generate a uid_map string for rootless mode.
@@ -147,7 +158,10 @@ pub fn resolve_cgroup_delegation_path() -> io::Result<String> {
 /// user's delegated cgroup path.
 ///
 /// In root mode, this returns the cgroupPath as-is.
-pub fn resolve_container_cgroup_path(rootless: bool, container_cgroup_path: &str) -> io::Result<String> {
+pub fn resolve_container_cgroup_path(
+    rootless: bool,
+    container_cgroup_path: &str,
+) -> io::Result<String> {
     if !rootless {
         // Root mode: use the cgroup path as-is, default to /edgerun
         if container_cgroup_path.is_empty() {
@@ -308,8 +322,16 @@ mod tests {
     #[test]
     fn generate_gid_map_uses_subgid_ranges() {
         let ranges = vec![
-            SubIdRange { name: "ken".into(), start: 100000, count: 65536 },
-            SubIdRange { name: "ken".into(), start: 200000, count: 1000 },
+            SubIdRange {
+                name: "ken".into(),
+                start: 100000,
+                count: 65536,
+            },
+            SubIdRange {
+                name: "ken".into(),
+                start: 200000,
+                count: 1000,
+            },
         ];
         let map = generate_gid_map(1000, &ranges);
         assert_eq!(map, "0 1000 1\n1 100000 65536\n1 200000 1000\n");

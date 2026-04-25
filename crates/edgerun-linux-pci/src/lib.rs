@@ -235,7 +235,9 @@ mod tests {
         fs::create_dir_all(root.join("0000:00:1f.0")).unwrap();
         fs::write(root.join("0000:00:1f.0/vendor"), "0x8086\n").unwrap();
         fs::write(root.join("0000:00:1f.0/device"), "0x9d84\n").unwrap();
-        let backend = LinuxPciBackend { root_path: root.clone() };
+        let backend = LinuxPciBackend {
+            root_path: root.clone(),
+        };
         let devices = backend.list_devices().unwrap();
         assert_eq!(devices.len(), 1);
         assert_eq!(devices[0].vendor_id, Some(0x8086));
@@ -316,7 +318,9 @@ mod tests {
     #[test]
     fn linux_pci_backend_list_empty_root() {
         let root = temp_root("edgerun-linux-pci-empty");
-        let backend = LinuxPciBackend { root_path: root.clone() };
+        let backend = LinuxPciBackend {
+            root_path: root.clone(),
+        };
         let devices = backend.list_devices().unwrap();
         assert!(devices.is_empty());
     }

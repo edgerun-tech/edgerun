@@ -36,20 +36,16 @@ pub mod key_exchange;
 pub mod prf;
 pub mod record;
 pub mod server;
-pub mod tls_alpn;
 pub mod session_cache;
+pub mod tls_alpn;
 
-pub use async_tls::{AsyncTlsStream, AsyncTlsServerStream};
-pub use session_cache::{SessionCache, SessionTicket, parse_new_session_ticket};
+pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
+pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
 
 pub use alert::{Alert, AlertLevel};
 pub use certificate_gen::{
-    CertificateAndKey,
-    generate_self_signed,
-    generate_self_signed_pem,
-    cert_from_pem,
-    signing_key_from_pem,
-    signing_key_to_pem,
+    cert_from_pem, generate_self_signed, generate_self_signed_pem, signing_key_from_pem,
+    signing_key_to_pem, CertificateAndKey,
 };
 pub use tls_alpn::ACME_TLS_ALPN_PROTOCOL;
 
@@ -122,12 +118,12 @@ pub use crate::prf::{hmac_sha256, hmac_sha384};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handshake::ClientHelloBuilder;
-    use edgerun_crypto::CipherSuite;
-    use crate::cipher::NamedGroup;
-    use crate::server::ClientHello;
-    use crate::certificate_gen::generate_self_signed;
     use crate::async_tls::generate_random;
+    use crate::certificate_gen::generate_self_signed;
+    use crate::cipher::NamedGroup;
+    use crate::handshake::ClientHelloBuilder;
+    use crate::server::ClientHello;
+    use edgerun_crypto::CipherSuite;
 
     #[test]
     fn test_tls_error_display() {

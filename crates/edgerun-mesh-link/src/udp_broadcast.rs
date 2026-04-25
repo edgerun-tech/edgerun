@@ -12,13 +12,13 @@
 //! attaches the sender's MAC to incoming raw Ethernet frames so the
 //! router can learn peer identities from Ethernet source addresses.
 
+use super::*;
+use crate::multicast::SockaddrIn;
 use edgerun_hardware_signing::NodeID;
 use edgerun_mesh::{DiscoveryPacket, FrameType, MeshFrame, MeshRouter};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};
-use super::*;
-use crate::multicast::SockaddrIn;
 
 // UDP broadcast socket (works without root)
 // ---------------------------------------------------------------------------
@@ -54,7 +54,13 @@ impl UdpBroadcastSocket {
         // Enable broadcast
         let broadcast: c_int = 1;
         unsafe {
-            setsockopt(fd, SOL_SOCKET, 6, &broadcast as *const _ as *const c_void, 4);
+            setsockopt(
+                fd,
+                SOL_SOCKET,
+                6,
+                &broadcast as *const _ as *const c_void,
+                4,
+            );
         }
 
         // Bind to 0.0.0.0:port
@@ -65,7 +71,11 @@ impl UdpBroadcastSocket {
             sin_zero: [0; 8],
         };
         let rc = unsafe {
-            bind(fd, &addr as *const _ as *const c_void, std::mem::size_of::<SockaddrIn>() as u32)
+            bind(
+                fd,
+                &addr as *const _ as *const c_void,
+                std::mem::size_of::<SockaddrIn>() as u32,
+            )
         };
         if rc < 0 {
             let err = io::Error::last_os_error();

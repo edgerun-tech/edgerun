@@ -1,7 +1,7 @@
 use super::helpers::*;
 use super::*;
-use crate::value::yi64;
 use crate::crypto::sha256;
+use crate::value::yi64;
 
 struct TestVerifier;
 

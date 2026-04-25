@@ -57,7 +57,11 @@ fn resolve_alpine_manifest() {
         client.resolve_manifest(&image).await
     });
 
-    assert!(result.is_ok(), "resolve alpine manifest failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "resolve alpine manifest failed: {:?}",
+        result
+    );
     let manifest = result.unwrap();
     match manifest {
         edgerun_oci::ImageManifest::Single(m) => {
@@ -83,5 +87,9 @@ fn resolve_busybox_manifest() {
         client.resolve_manifest(&image).await
     });
 
-    assert!(result.is_ok(), "resolve busybox manifest failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "resolve busybox manifest failed: {:?}",
+        result
+    );
 }

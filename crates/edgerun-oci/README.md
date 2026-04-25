@@ -61,7 +61,7 @@ delete  →  (poststop + cgroup cleanup)                                     →
 
 ## Test Results
 
-**Last run:** 2025-04-11 | **All green:** 149 tests (125 unit + 24 integration), 0 clippy warnings
+**Last run:** 2026-04-24 | **All green:** 149 tests (125 unit + 24 integration), 0 clippy warnings
 
 ### Unit tests: 125 passed, 0 failed
 
@@ -88,9 +88,8 @@ delete  →  (poststop + cgroup cleanup)                                     →
 | **`time_namespace_accepted_by_validator`** | "time" in KNOWN_NAMESPACES — validates spec with time namespace |
 | **`cgroup_weight_device_per_device_written`** | weightDevice global weight written to cgroup (per-device needs BFQ scheduler) |
 
-<<<<<<< Updated upstream
 Run integration tests with: `sudo cargo test -p edgerun-oci-runtime --test conformance -- --test-threads=1`
-=======
+
 ## OCI Spec Compliance
 
 ### Target Version: v1.0.2
@@ -143,9 +142,6 @@ Run integration tests with: `sudo cargo test -p edgerun-oci-runtime --test confo
 - ~~`--root` override~~ — `state::set_state_dir()`
 - ~~State bundle path~~ — uses `--bundle` from CLI
 - ~~Poststop error logging~~ — stderr + kmsg fallback
-
-## Identified Gaps
->>>>>>> Stashed changes
 
 ## OCI Spec Compliance
 

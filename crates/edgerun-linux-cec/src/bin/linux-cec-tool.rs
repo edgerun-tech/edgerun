@@ -68,11 +68,12 @@ fn main() {
                 usage();
                 std::process::exit(2);
             };
-            edgerun_linux_cec::wake_gpu_connector(gpu_instance_id, connector_name)
-                .unwrap_or_else(|err| {
+            edgerun_linux_cec::wake_gpu_connector(gpu_instance_id, connector_name).unwrap_or_else(
+                |err| {
                     eprintln!("wake-gpu error: {err}");
                     std::process::exit(1);
-                });
+                },
+            );
             println!("ok");
         }
         _ => {

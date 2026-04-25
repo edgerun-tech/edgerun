@@ -5,8 +5,8 @@ use edgerun_bluetooth_gatt::{
     GattDescriptor, GattError, GattProperty, GattService, GattUuid, L2capSocket,
 };
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
-use edgerun_crypto::{sha256, hkdf_sha256, OsRng, RngCore};
-use std::sync::{RwLock, Mutex};
+use edgerun_crypto::{hkdf_sha256, sha256, OsRng, RngCore};
+use std::sync::{Mutex, RwLock};
 
 pub const TCL_SERVICE_UUID: &str = "0000f100-0000-1000-8000-00805f9b34fb";
 pub const TCL_WRITE_CHAR_UUID: &str = "0000ff01-0000-1000-8000-00805f9b34fb";
@@ -187,15 +187,18 @@ impl TclAcClient {
         let mut proto = self.create_protocol()?;
 
         let primary_service_type: [u8; 2] = [0x00, 0x28];
-        let data = proto.read_by_group_type(0x0001, 0xFFFF, &primary_service_type)
-            .map_err(|e| CapabilityError::Provider(format!("failed to discover services: {}", e)))?;
+        let data = proto
+            .read_by_group_type(0x0001, 0xFFFF, &primary_service_type)
+            .map_err(|e| {
+                CapabilityError::Provider(format!("failed to discover services: {}", e))
+            })?;
 
         let services = proto.parse_read_by_group_response(&data);
 
         for (start, end, uuid) in services {
             let uuid_str = format_gatt_uuid(&uuid).replace("-", "");
             let tcl_str = TCL_SERVICE_UUID.replace("-", "");
-            if uuid_str.ends_with(&tcl_str[tcl_str.len()-8..]) {
+            if uuid_str.ends_with(&tcl_str[tcl_str.len() - 8..]) {
                 *self.service_handle.write().unwrap() = Some(start);
                 self.discover_characteristics_in_range(start, end)?;
                 return Ok(());
@@ -206,12 +209,17 @@ impl TclAcClient {
         Ok(())
     }
 
-    fn discover_characteristics_in_range(&self, start: u16, end: u16) -> Result<(), CapabilityError> {
+    fn discover_characteristics_in_range(
+        &self,
+        start: u16,
+        end: u16,
+    ) -> Result<(), CapabilityError> {
         let mut proto = self.create_protocol()?;
 
         let char_type: [u8; 2] = [0x03, 0x28];
-        let data = proto.read_by_type(start, end, &char_type)
-            .map_err(|e| CapabilityError::Provider(format!("failed to discover characteristics: {}", e)))?;
+        let data = proto.read_by_type(start, end, &char_type).map_err(|e| {
+            CapabilityError::Provider(format!("failed to discover characteristics: {}", e))
+        })?;
 
         let chars = proto.parse_read_by_type_response(&data);
 
@@ -225,9 +233,9 @@ impl TclAcClient {
             let uuid = value[2..].to_vec();
             let uuid_str = format_gatt_uuid(&uuid).replace("-", "");
 
-            if uuid_str.ends_with(&write_str[write_str.len()-8..]) {
+            if uuid_str.ends_with(&write_str[write_str.len() - 8..]) {
                 *self.write_char_handle.write().unwrap() = Some(handle);
-            } else if uuid_str.ends_with(&indicate_str[indicate_str.len()-8..]) {
+            } else if uuid_str.ends_with(&indicate_str[indicate_str.len() - 8..]) {
                 *self.indicate_char_handle.write().unwrap() = Some(handle);
             }
         }
@@ -248,9 +256,7 @@ impl TclAcClient {
 
     fn create_protocol_gatt(&self) -> Result<AttProtocol, GattError> {
         let socket_guard = self.socket.read().unwrap();
-        let socket = socket_guard
-            .as_ref()
-            .ok_or(GattError::NotConnected)?;
+        let socket = socket_guard.as_ref().ok_or(GattError::NotConnected)?;
         let mut proto = AttProtocol::new(socket.clone());
         let mtu = *self.mtu.read().unwrap();
         proto.set_mtu(mtu);
@@ -271,7 +277,8 @@ impl TclAcClient {
     fn perform_key_exchange(&self) -> Result<(), CapabilityError> {
         let write_handle = {
             let guard = self.write_char_handle.read().unwrap();
-            guard.ok_or_else(|| CapabilityError::Provider("write characteristic not found".into()))?
+            guard
+                .ok_or_else(|| CapabilityError::Provider("write characteristic not found".into()))?
         };
 
         let mut local_random: [u8; 32] = [0; 32];
@@ -285,21 +292,29 @@ impl TclAcClient {
 
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        let response = proto.read_value(write_handle)
-            .map_err(|e| CapabilityError::Provider(format!("failed to read key exchange response: {}", e)))?;
+        let response = proto.read_value(write_handle).map_err(|e| {
+            CapabilityError::Provider(format!("failed to read key exchange response: {}", e))
+        })?;
 
-        let parsed = self.parse_protocol_packet(&response)
+        let parsed = self
+            .parse_protocol_packet(&response)
             .ok_or_else(|| CapabilityError::Provider("invalid key exchange response".into()))?;
 
         if parsed.0 != CMD_SEND_DEVICE_RANDOM {
-            return Err(CapabilityError::Provider(format!("unexpected response cmd: {}", parsed.0)));
+            return Err(CapabilityError::Provider(format!(
+                "unexpected response cmd: {}",
+                parsed.0
+            )));
         }
 
-        let decrypted = self.decrypt_payload(&parsed.1)
+        let decrypted = self
+            .decrypt_payload(&parsed.1)
             .ok_or_else(|| CapabilityError::Provider("failed to decrypt remote random".into()))?;
 
         if decrypted.len() != 32 {
-            return Err(CapabilityError::Provider("invalid remote random length".into()));
+            return Err(CapabilityError::Provider(
+                "invalid remote random length".into(),
+            ));
         }
 
         let mut remote_random = [0u8; 32];
@@ -334,7 +349,10 @@ impl TclAcClient {
 
         type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
         let cipher = Aes128CbcDec::new(key.into(), PRESET_IV.into());
-        cipher.decrypt_padded_vec_mut::<Pkcs7>(payload).ok().map(|v| v.to_vec())
+        cipher
+            .decrypt_padded_vec_mut::<Pkcs7>(payload)
+            .ok()
+            .map(|v| v.to_vec())
     }
 
     fn build_protocol_packet(&self, cmd: u8, payload: &[u8]) -> Vec<u8> {
@@ -346,13 +364,13 @@ impl TclAcClient {
         packet[1] = cmd;
         packet[2] = ((payload_len >> 8) & 0xFF) as u8;
         packet[3] = (payload_len & 0xFF) as u8;
-        packet[4..4+payload_len].copy_from_slice(payload);
+        packet[4..4 + payload_len].copy_from_slice(payload);
 
         let sha = sha256(payload);
-        packet[4+payload_len..4+payload_len+32].copy_from_slice(&sha);
+        packet[4 + payload_len..4 + payload_len + 32].copy_from_slice(&sha);
 
-        let crc = Self::calculate_crc8(&packet[..total_len-1]);
-        packet[total_len-1] = crc;
+        let crc = Self::calculate_crc8(&packet[..total_len - 1]);
+        packet[total_len - 1] = crc;
 
         packet
     }
@@ -371,11 +389,11 @@ impl TclAcClient {
         }
 
         let mut payload = vec![0u8; payload_len];
-        payload.copy_from_slice(&data[4..4+payload_len]);
+        payload.copy_from_slice(&data[4..4 + payload_len]);
 
-        let mut packet_for_crc = data[..data.len()-1].to_vec();
+        let mut packet_for_crc = data[..data.len() - 1].to_vec();
         let crc = Self::calculate_crc8(&packet_for_crc);
-        if crc != data[data.len()-1] {
+        if crc != data[data.len() - 1] {
             return None;
         }
 
@@ -415,7 +433,8 @@ impl TclAcClient {
     pub fn send_encrypted_command(&self, cmd: u8, payload: &[u8]) -> Result<(), CapabilityError> {
         let write_handle = {
             let guard = self.write_char_handle.read().unwrap();
-            guard.ok_or_else(|| CapabilityError::Provider("write characteristic not found".into()))?
+            guard
+                .ok_or_else(|| CapabilityError::Provider("write characteristic not found".into()))?
         };
 
         let encrypted = self.encrypt_payload(payload);
@@ -428,7 +447,9 @@ impl TclAcClient {
     pub fn get_device_info(&self) -> Result<String, CapabilityError> {
         let indicate_handle = {
             let guard = self.indicate_char_handle.read().unwrap();
-            guard.ok_or_else(|| CapabilityError::Provider("indicate characteristic not found".into()))?
+            guard.ok_or_else(|| {
+                CapabilityError::Provider("indicate characteristic not found".into())
+            })?
         };
 
         self.send_encrypted_command(CMD_GET_DEVICE_INFO, b"")?;
@@ -436,17 +457,23 @@ impl TclAcClient {
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         let mut proto = self.create_protocol()?;
-        let response = proto.read_value(indicate_handle)
+        let response = proto
+            .read_value(indicate_handle)
             .map_err(|e| CapabilityError::Provider(format!("failed to read device info: {}", e)))?;
 
-        let parsed = self.parse_protocol_packet(&response)
+        let parsed = self
+            .parse_protocol_packet(&response)
             .ok_or_else(|| CapabilityError::Provider("invalid device info response".into()))?;
 
         if parsed.0 != CMD_GET_DEVICE_INFO_RESPONSE {
-            return Err(CapabilityError::Provider(format!("unexpected response cmd: {}", parsed.0)));
+            return Err(CapabilityError::Provider(format!(
+                "unexpected response cmd: {}",
+                parsed.0
+            )));
         }
 
-        let decrypted = self.decrypt_payload(&parsed.1)
+        let decrypted = self
+            .decrypt_payload(&parsed.1)
             .ok_or_else(|| CapabilityError::Provider("failed to decrypt device info".into()))?;
 
         String::from_utf8(decrypted)
@@ -464,7 +491,9 @@ impl TclAcClient {
         };
 
         if char_handle.is_none() {
-            return Err(CapabilityError::Provider("characteristic not discovered".into()));
+            return Err(CapabilityError::Provider(
+                "characteristic not discovered".into(),
+            ));
         }
 
         let mut proto = self.create_protocol()?;
@@ -569,9 +598,15 @@ impl TclAcClient {
         ];
 
         let mut flags = 0u8;
-        if state.eco_mode { flags |= 0x01; }
-        if state.turbo_mode { flags |= 0x02; }
-        if state.quiet_mode { flags |= 0x04; }
+        if state.eco_mode {
+            flags |= 0x01;
+        }
+        if state.turbo_mode {
+            flags |= 0x02;
+        }
+        if state.quiet_mode {
+            flags |= 0x04;
+        }
 
         payload.push(flags);
         payload.push(match state.wind_direction {
@@ -617,7 +652,14 @@ mod tests {
 
     #[test]
     fn ac_mode_roundtrip() {
-        let modes = [AcMode::Cool, AcMode::Heat, AcMode::Auto, AcMode::Dry, AcMode::Fan, AcMode::Eco];
+        let modes = [
+            AcMode::Cool,
+            AcMode::Heat,
+            AcMode::Auto,
+            AcMode::Dry,
+            AcMode::Fan,
+            AcMode::Eco,
+        ];
         for mode in modes {
             assert_eq!(AcMode::from_u8(mode.to_u8()), mode);
         }
@@ -625,7 +667,14 @@ mod tests {
 
     #[test]
     fn fan_speed_roundtrip() {
-        let speeds = [FanSpeed::Auto, FanSpeed::Low, FanSpeed::Medium, FanSpeed::High, FanSpeed::Turbo, FanSpeed::Quiet];
+        let speeds = [
+            FanSpeed::Auto,
+            FanSpeed::Low,
+            FanSpeed::Medium,
+            FanSpeed::High,
+            FanSpeed::Turbo,
+            FanSpeed::Quiet,
+        ];
         for speed in speeds {
             assert_eq!(FanSpeed::from_u8(speed.to_u8()), speed);
         }

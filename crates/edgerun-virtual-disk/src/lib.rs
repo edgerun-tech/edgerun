@@ -176,19 +176,42 @@ mod tests {
 
     #[test]
     fn block_request_variants() {
-        let _handshake = BlockRequest::Handshake { protocol_version: 1 };
+        let _handshake = BlockRequest::Handshake {
+            protocol_version: 1,
+        };
         let _get_info = BlockRequest::GetInfo;
-        let _read = BlockRequest::Read { request_id: 1, lba: 0, blocks: 8 };
-        let _write = BlockRequest::Write { request_id: 2, lba: 0, blocks: 8, data: vec![0u8; 4096] };
+        let _read = BlockRequest::Read {
+            request_id: 1,
+            lba: 0,
+            blocks: 8,
+        };
+        let _write = BlockRequest::Write {
+            request_id: 2,
+            lba: 0,
+            blocks: 8,
+            data: vec![0u8; 4096],
+        };
         let _flush = BlockRequest::Flush { request_id: 3 };
-        let _discard = BlockRequest::Discard { request_id: 4, lba: 0, blocks: 8 };
-        let _write_zeroes = BlockRequest::WriteZeroes { request_id: 5, lba: 0, blocks: 8 };
+        let _discard = BlockRequest::Discard {
+            request_id: 4,
+            lba: 0,
+            blocks: 8,
+        };
+        let _write_zeroes = BlockRequest::WriteZeroes {
+            request_id: 5,
+            lba: 0,
+            blocks: 8,
+        };
         let _ping = BlockRequest::Ping;
     }
 
     #[test]
     fn block_request_clone_debug() {
-        let request = BlockRequest::Read { request_id: 1, lba: 0, blocks: 8 };
+        let request = BlockRequest::Read {
+            request_id: 1,
+            lba: 0,
+            blocks: 8,
+        };
         let cloned = request.clone();
         assert_eq!(request, cloned);
         let debug_str = format!("{request:?}");
@@ -197,7 +220,9 @@ mod tests {
 
     #[test]
     fn block_response_variants() {
-        let _handshake = BlockResponse::HandshakeAck { protocol_version: 1 };
+        let _handshake = BlockResponse::HandshakeAck {
+            protocol_version: 1,
+        };
         let _pong = BlockResponse::Pong;
         let _write_ack = BlockResponse::WriteAck { request_id: 1 };
         let _flush_ack = BlockResponse::FlushAck { request_id: 1 };
@@ -296,33 +321,63 @@ mod tests {
     #[test]
     fn handle_request_handshake() {
         let info = BlockDeviceInfo {
-            block_size: 512, block_count: 8, readonly: false,
-            supports_flush: true, supports_discard: false, supports_write_zeroes: false,
-            model: "mem".into(), serial: "0".into(),
+            block_size: 512,
+            block_count: 8,
+            readonly: false,
+            supports_flush: true,
+            supports_discard: false,
+            supports_write_zeroes: false,
+            model: "mem".into(),
+            serial: "0".into(),
         };
         let backend = MemoryBlockBackend::new(info).unwrap();
-        let resp = handle_request(&backend, BlockRequest::Handshake { protocol_version: 1 });
-        assert!(matches!(resp, BlockResponse::HandshakeAck { protocol_version: 1 }));
+        let resp = handle_request(
+            &backend,
+            BlockRequest::Handshake {
+                protocol_version: 1,
+            },
+        );
+        assert!(matches!(
+            resp,
+            BlockResponse::HandshakeAck {
+                protocol_version: 1
+            }
+        ));
     }
 
     #[test]
     fn handle_request_handshake_bad_version() {
         let info = BlockDeviceInfo {
-            block_size: 512, block_count: 8, readonly: false,
-            supports_flush: true, supports_discard: false, supports_write_zeroes: false,
-            model: "mem".into(), serial: "0".into(),
+            block_size: 512,
+            block_count: 8,
+            readonly: false,
+            supports_flush: true,
+            supports_discard: false,
+            supports_write_zeroes: false,
+            model: "mem".into(),
+            serial: "0".into(),
         };
         let backend = MemoryBlockBackend::new(info).unwrap();
-        let resp = handle_request(&backend, BlockRequest::Handshake { protocol_version: 99 });
+        let resp = handle_request(
+            &backend,
+            BlockRequest::Handshake {
+                protocol_version: 99,
+            },
+        );
         assert!(matches!(resp, BlockResponse::Error { .. }));
     }
 
     #[test]
     fn handle_request_get_info() {
         let info = BlockDeviceInfo {
-            block_size: 4096, block_count: 16, readonly: false,
-            supports_flush: true, supports_discard: false, supports_write_zeroes: false,
-            model: "mem".into(), serial: "0".into(),
+            block_size: 4096,
+            block_count: 16,
+            readonly: false,
+            supports_flush: true,
+            supports_discard: false,
+            supports_write_zeroes: false,
+            model: "mem".into(),
+            serial: "0".into(),
         };
         let backend = MemoryBlockBackend::new(info.clone()).unwrap();
         let resp = handle_request(&backend, BlockRequest::GetInfo);
@@ -338,9 +393,14 @@ mod tests {
     #[test]
     fn handle_request_ping() {
         let info = BlockDeviceInfo {
-            block_size: 512, block_count: 8, readonly: false,
-            supports_flush: true, supports_discard: false, supports_write_zeroes: false,
-            model: "mem".into(), serial: "0".into(),
+            block_size: 512,
+            block_count: 8,
+            readonly: false,
+            supports_flush: true,
+            supports_discard: false,
+            supports_write_zeroes: false,
+            model: "mem".into(),
+            serial: "0".into(),
         };
         let backend = MemoryBlockBackend::new(info).unwrap();
         let resp = handle_request(&backend, BlockRequest::Ping);
@@ -350,9 +410,14 @@ mod tests {
     #[test]
     fn validate_range_checks() {
         let info = BlockDeviceInfo {
-            block_size: 512, block_count: 10, readonly: false,
-            supports_flush: true, supports_discard: false, supports_write_zeroes: false,
-            model: "mem".into(), serial: "0".into(),
+            block_size: 512,
+            block_count: 10,
+            readonly: false,
+            supports_flush: true,
+            supports_discard: false,
+            supports_write_zeroes: false,
+            model: "mem".into(),
+            serial: "0".into(),
         };
         // Valid range
         assert!(validate_range(&info, 0, 10).is_ok());

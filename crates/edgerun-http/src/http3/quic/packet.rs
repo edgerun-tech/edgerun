@@ -137,11 +137,7 @@ impl QuicPacket {
     }
 
     /// Create a 1-RTT packet
-    pub fn one_rtt(
-        dst_cid: Vec<u8>,
-        packet_number: u64,
-        payload: Vec<u8>,
-    ) -> Self {
+    pub fn one_rtt(dst_cid: Vec<u8>, packet_number: u64, payload: Vec<u8>) -> Self {
         QuicPacket {
             header: QuicPacketHeader {
                 packet_type: PacketType::OneRtt,
@@ -240,8 +236,8 @@ impl QuicPacket {
             return Err("Header too short".to_string());
         }
 
-        let packet_type = PacketType::from_byte(data[0])
-            .ok_or_else(|| "Invalid packet type".to_string())?;
+        let packet_type =
+            PacketType::from_byte(data[0]).ok_or_else(|| "Invalid packet type".to_string())?;
 
         let version = u32::from_be_bytes([data[1], data[2], data[3], data[4]]);
 
@@ -272,7 +268,9 @@ impl QuicPacket {
                 return Err("Token length missing".to_string());
             }
             let token_len = u64::from_be_bytes(
-                data[pos..pos + 8].try_into().map_err(|_| "Token len parse error")?,
+                data[pos..pos + 8]
+                    .try_into()
+                    .map_err(|_| "Token len parse error")?,
             ) as usize;
             pos += 8;
             if pos + token_len > data.len() {
@@ -283,8 +281,8 @@ impl QuicPacket {
         }
 
         // Payload length
-        let (payload_len, bytes_read) = Self::decode_varint(&data[pos..])
-            .map_err(|e| e.to_string())?;
+        let (payload_len, bytes_read) =
+            Self::decode_varint(&data[pos..]).map_err(|e| e.to_string())?;
         pos += bytes_read;
 
         // Packet number (4 bytes)
@@ -292,7 +290,14 @@ impl QuicPacket {
             return Err("Packet number missing".to_string());
         }
         let packet_number = u64::from_be_bytes([
-            0, 0, 0, 0, data[pos], data[pos + 1], data[pos + 2], data[pos + 3],
+            0,
+            0,
+            0,
+            0,
+            data[pos],
+            data[pos + 1],
+            data[pos + 2],
+            data[pos + 3],
         ]);
         pos += 4;
 
@@ -378,7 +383,11 @@ impl QuicPacket {
 
 /// Get packet number length from first byte (RFC 9000 bits 0-1, 0 means 4)
 pub fn get_packet_number_length(first_byte: u8) -> usize {
-    if first_byte & 0x03 == 0 { 4 } else { (first_byte & 0x03) as usize }
+    if first_byte & 0x03 == 0 {
+        4
+    } else {
+        (first_byte & 0x03) as usize
+    }
 }
 
 /// Get AAD for AEAD - use this instead of manual parsing
@@ -393,8 +402,7 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     }
 
     let first_byte = data[0];
-    let packet_type = PacketType::from_byte(first_byte)
-        .ok_or("Invalid packet type")?;
+    let packet_type = PacketType::from_byte(first_byte).ok_or("Invalid packet type")?;
 
     // Start after first byte (version is at data[1..5])
     let mut pos = 1;
@@ -406,13 +414,12 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     pos += 1 + src_cid_len;
 
     if packet_type == PacketType::Initial {
-        let (token_len, consumed) = decode_varint_public(&data[pos..])
-            .ok_or("Invalid token length")?;
+        let (token_len, consumed) =
+            decode_varint_public(&data[pos..]).ok_or("Invalid token length")?;
         pos += consumed + token_len as usize;
     }
 
-    let (_, consumed) = decode_varint_public(&data[pos..])
-        .ok_or("Invalid length varint")?;
+    let (_, consumed) = decode_varint_public(&data[pos..]).ok_or("Invalid length varint")?;
     pos += consumed;
 
     let pn_length = get_packet_number_length(first_byte);
@@ -489,16 +496,16 @@ mod tests {
     #[test]
     fn test_get_long_header_payload_offset() {
         let packet = vec![
-            0xC0, 0x00, 0x00, 0x00, 0x01,  // first_byte + version
-            8, 1,2,3,4,5,6,7,8,           // dst_cid
-            8, 9,10,11,12,13,14,15,16,     // src_cid
-            0,                               // token_len = 0
-            4,                               // payload length
-            0,0,0,0,                        // packet number
+            0xC0, 0x00, 0x00, 0x00, 0x01, // first_byte + version
+            8, 1, 2, 3, 4, 5, 6, 7, 8, // dst_cid
+            8, 9, 10, 11, 12, 13, 14, 15, 16, // src_cid
+            0,  // token_len = 0
+            4,  // payload length
+            0, 0, 0, 0, // packet number
         ];
-        
+
         let offset = get_long_header_payload_offset(&packet).unwrap();
-        
+
         // Just verify offset is valid (within packet bounds)
         assert!(offset >= 5, "Offset should be >= 5");
         assert!(offset < packet.len(), "Offset should be < packet len");

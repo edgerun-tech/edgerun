@@ -24,9 +24,7 @@ fn require_hardware() {
 /// This wraps any `RemoteCapabilityProvider` and bypasses the grant-request
 /// cycle so sessions always succeed.
 pub(crate) mod test_policy {
-    use edgerun_capabilities::{
-        CapabilityError, CapabilityInvocation,
-    };
+    use edgerun_capabilities::{CapabilityError, CapabilityInvocation};
     use edgerun_proto::edgerun::v0::capability_runtime::{
         CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
         CapabilitySessionOpen,
@@ -94,7 +92,7 @@ pub(crate) mod session_harness {
         CapabilitySessionOpen,
     };
     use edgerun_remote_capability::{
-        FramedRemoteTransport, RemoteCapabilityProvider, RemoteCapabilityTransport, serve_one,
+        serve_one, FramedRemoteTransport, RemoteCapabilityProvider, RemoteCapabilityTransport,
     };
     use std::os::unix::net::UnixStream;
     use std::thread;
@@ -113,7 +111,10 @@ pub(crate) mod session_harness {
         let mut server_transport = FramedRemoteTransport::new(server_sock);
 
         thread::spawn(move || {
-            let _ = serve_one(&mut super::test_policy::TestGrantedProvider::new(provider), &mut server_transport);
+            let _ = serve_one(
+                &mut super::test_policy::TestGrantedProvider::new(provider),
+                &mut server_transport,
+            );
         });
 
         // Let the server thread start

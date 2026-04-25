@@ -37,5 +37,7 @@ impl std::error::Error for StorageError {
 }
 
 impl From<std::io::Error> for StorageError {
-    fn from(e: std::io::Error) -> Self { Self::Io(e) }
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
 }

@@ -8,7 +8,7 @@ pub mod types;
 pub use client::ImapClient;
 pub use maildir_store::MaildirImapStore;
 pub use message::{ImapCommand, ImapResponse, ImapResult};
-pub use server::{ImapServer, ImapServerConfig, MemoryStore, MailStore, base64_decode};
+pub use server::{base64_decode, ImapServer, ImapServerConfig, MailStore, MemoryStore};
 pub use types::{
     Envelope, FetchAttr, Flags, ImapState, Mailbox, MailboxStatus, Message, SearchKey,
 };

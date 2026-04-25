@@ -12,13 +12,13 @@
 //! attaches the sender's MAC to incoming raw Ethernet frames so the
 //! router can learn peer identities from Ethernet source addresses.
 
+use super::*;
+use crate::multicast::SockaddrIn;
 use edgerun_hardware_signing::NodeID;
 use edgerun_mesh::{DiscoveryPacket, FrameType, MeshFrame, MeshRouter};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};
-use super::*;
-use crate::multicast::SockaddrIn;
 
 // Mesh link manager
 // ---------------------------------------------------------------------------
@@ -67,10 +67,7 @@ impl MeshLink {
     }
 
     /// Adds a raw Ethernet socket on the given interface.
-    pub fn add_raw_ethernet(
-        &mut self,
-        ifindex: c_int,
-    ) -> Result<(), io::Error> {
+    pub fn add_raw_ethernet(&mut self, ifindex: c_int) -> Result<(), io::Error> {
         let socket = RawEthernetSocket::open(ifindex)?;
         self.raw_sockets.insert(ifindex, socket);
         Ok(())
@@ -301,19 +298,27 @@ impl MeshLink {
         // The MAC is learned from the raw Ethernet socket's recv which gives us src_mac
 
         // Check if this frame is destined for us
-        let is_for_us = frame.header.dest == router.node_id()
-            || frame.header.dest.0 == [0u8; 64]; // broadcast
+        let is_for_us = frame.header.dest == router.node_id() || frame.header.dest.0 == [0u8; 64]; // broadcast
 
         if is_for_us {
             // Frame is for us — process by type
             match frame.header.frame_type {
                 FrameType::Discovery => {
                     if let Some(packet) = DiscoveryPacket::decode(&frame.payload) {
-                        let _changed =
-                            router.process_discovery(frame.header.src, &packet, current_unix_secs());
+                        let _changed = router.process_discovery(
+                            frame.header.src,
+                            &packet,
+                            current_unix_secs(),
+                        );
                     }
                 }
-                FrameType::Data | FrameType::RouteAdv | FrameType::HandshakeInit | FrameType::HandshakeAccept | FrameType::MetricsReport | FrameType::MigrationOrder | FrameType::MigrationComplete => {
+                FrameType::Data
+                | FrameType::RouteAdv
+                | FrameType::HandshakeInit
+                | FrameType::HandshakeAccept
+                | FrameType::MetricsReport
+                | FrameType::MigrationOrder
+                | FrameType::MigrationComplete => {
                     // Queue for capability/handshake dispatcher delivery
                     self.inbound_data_frames.push_back(frame);
                 }

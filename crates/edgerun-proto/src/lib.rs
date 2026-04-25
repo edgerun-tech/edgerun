@@ -466,7 +466,10 @@ mod tests {
         let decoded = roundtrip(&cl);
         assert_eq!(decoded.max_results, cl.max_results);
         assert_eq!(decoded.max_total_bytes, cl.max_total_bytes);
-        assert_eq!(decoded.max_federated_responders, cl.max_federated_responders);
+        assert_eq!(
+            decoded.max_federated_responders,
+            cl.max_federated_responders
+        );
     }
 
     #[test]
@@ -1014,9 +1017,9 @@ mod tests {
             correlation_id: vec![],
         };
         let envelope = capability_runtime::CapabilityRemoteEnvelope {
-            message: Some(capability_runtime::capability_remote_envelope::Message::SessionOpen(
-                s.clone(),
-            )),
+            message: Some(
+                capability_runtime::capability_remote_envelope::Message::SessionOpen(s.clone()),
+            ),
         };
         let decoded = roundtrip(&envelope);
         assert!(decoded.message.is_some());
@@ -1037,9 +1040,9 @@ mod tests {
             reason: "closed".to_string(),
         };
         let envelope = capability_runtime::CapabilityRemoteEnvelope {
-            message: Some(capability_runtime::capability_remote_envelope::Message::SessionClose(
-                s.clone(),
-            )),
+            message: Some(
+                capability_runtime::capability_remote_envelope::Message::SessionClose(s.clone()),
+            ),
         };
         let decoded = roundtrip(&envelope);
         match decoded.message.unwrap() {
@@ -1195,8 +1198,14 @@ mod tests {
             signature: None,
         };
         let decoded = roundtrip(&h);
-        assert_eq!(decoded.supported_transport_features, h.supported_transport_features);
-        assert_eq!(decoded.supported_protocol_versions, h.supported_protocol_versions);
+        assert_eq!(
+            decoded.supported_transport_features,
+            h.supported_transport_features
+        );
+        assert_eq!(
+            decoded.supported_protocol_versions,
+            h.supported_protocol_versions
+        );
     }
 
     #[test]
@@ -1212,7 +1221,10 @@ mod tests {
             signature: None,
         };
         let decoded = roundtrip(&a);
-        assert_eq!(decoded.selected_protocol_version, a.selected_protocol_version);
+        assert_eq!(
+            decoded.selected_protocol_version,
+            a.selected_protocol_version
+        );
     }
 
     #[test]
@@ -2104,9 +2116,7 @@ mod tests {
     #[test]
     fn empty_byte_vec_fields_roundtrip() {
         // Ensure empty Vec<u8> fields encode/decode correctly.
-        let r = common::NodeRef {
-            node_id: vec![],
-        };
+        let r = common::NodeRef { node_id: vec![] };
         let decoded = roundtrip(&r);
         assert!(decoded.node_id.is_empty());
     }
@@ -2182,4 +2192,3 @@ mod tests {
         assert!(decoded.target.is_none());
     }
 }
-

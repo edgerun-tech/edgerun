@@ -11,7 +11,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture};
+use edgerun_rt::{
+    AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture,
+};
 
 use crate::server::read_line;
 use crate::smtp::types::{SmtpResponse, SmtpResponseCode};
@@ -47,14 +49,9 @@ impl ClientTransport {
     }
 
     #[cfg(feature = "tls")]
-    async fn upgrade_tls(
-        self,
-        server_name: &str,
-    ) -> io::Result<ClientTransport> {
+    async fn upgrade_tls(self, server_name: &str) -> io::Result<ClientTransport> {
         match self {
-            ClientTransport::Tls(_) => {
-                Err(io::Error::other("already using TLS"))
-            }
+            ClientTransport::Tls(_) => Err(io::Error::other("already using TLS")),
             ClientTransport::Plain(stream) => {
                 let tls = AsyncTlsStream::client(stream, server_name, &[], None)
                     .await
@@ -171,7 +168,10 @@ impl SmtpClient {
                 client.starttls().await?;
                 // Re-EHLO after TLS upgrade (capabilities may change)
                 client.ehlo(&server_name).await?;
-                edgerun_log::info!("edgerun-smtp-client: auto-negotiated STARTTLS with {}", addr);
+                edgerun_log::info!(
+                    "edgerun-smtp-client: auto-negotiated STARTTLS with {}",
+                    addr
+                );
             }
         }
 
@@ -244,15 +244,19 @@ impl SmtpClient {
         let result = edgerun_rt::spawn_blocking(move || {
             use std::net::ToSocketAddrs;
             format!("{}:{}", host_str, port).to_socket_addrs()
-        }).await
-            .map_err(io::Error::other)?;
+        })
+        .await
+        .map_err(io::Error::other)?;
 
         match result {
             Ok(mut addrs) => {
                 if let Some(addr) = addrs.next() {
                     Ok(addr)
                 } else {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, "DNS returned no addresses"))
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "DNS returned no addresses",
+                    ))
                 }
             }
             Err(e) => Err(e),
@@ -266,15 +270,24 @@ impl SmtpClient {
         let line = read_line(&mut self.transport).await?;
         let line = match line {
             Some(l) => l,
-            None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "server disconnected",
+                ))
+            }
         };
 
         if line.len() < 4 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "malformed response"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "malformed response",
+            ));
         }
 
         let code_str = &line[..3];
-        let code = code_str.parse::<u16>()
+        let code = code_str
+            .parse::<u16>()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         let is_multiline = line.as_bytes().get(3) == Some(&b'-');
@@ -292,7 +305,12 @@ impl SmtpClient {
                 let next_line = read_line(&mut self.transport).await?;
                 let next_line = match next_line {
                     Some(l) => l,
-                    None => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "server disconnected")),
+                    None => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "server disconnected",
+                        ))
+                    }
                 };
                 let is_final = next_line.as_bytes().get(3) != Some(&b'-');
                 all_lines.push(next_line[4..].to_string());
@@ -334,7 +352,11 @@ impl SmtpClient {
             self.capabilities.push(line.to_string());
             let parts: Vec<&str> = line.splitn(2, |c: char| c.is_whitespace()).collect();
             let name = parts[0].to_uppercase();
-            let param = if parts.len() > 1 { Some(parts[1].to_string()) } else { None };
+            let param = if parts.len() > 1 {
+                Some(parts[1].to_string())
+            } else {
+                None
+            };
             self.capabilities_map.insert(name, param);
         }
         Ok(())
@@ -344,16 +366,24 @@ impl SmtpClient {
     pub async fn helo(&mut self, domain: &str) -> io::Result<()> {
         let response = self.send_command(&format!("HELO {}", domain)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, format!("HELO rejected: {}", response.message)));
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("HELO rejected: {}", response.message),
+            ));
         }
         Ok(())
     }
 
     /// Send MAIL FROM.
     pub async fn mail_from(&mut self, address: &str) -> io::Result<()> {
-        let response = self.send_command(&format!("MAIL FROM:<{}>", address)).await?;
+        let response = self
+            .send_command(&format!("MAIL FROM:<{}>", address))
+            .await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("MAIL FROM rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "MAIL FROM rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -362,7 +392,10 @@ impl SmtpClient {
     pub async fn rcpt_to(&mut self, address: &str) -> io::Result<()> {
         let response = self.send_command(&format!("RCPT TO:<{}>", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("RCPT TO rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "RCPT TO rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -371,7 +404,10 @@ impl SmtpClient {
     pub async fn data(&mut self, message: &[u8]) -> io::Result<()> {
         let response = self.send_command("DATA").await?;
         if !response.code.is_continuation() {
-            return Err(io::Error::other(format!("DATA rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "DATA rejected: {}",
+                response.message
+            )));
         }
 
         self.transport.write_all(message).await?;
@@ -379,7 +415,10 @@ impl SmtpClient {
 
         let response = self.read_response().await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("Message rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "Message rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -399,9 +438,10 @@ impl SmtpClient {
         let cmd = format!("BDAT {}{}", data.len(), last_str);
         let response = self.send_command(&cmd).await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(
-                format!("BDAT rejected: {}", response.message),
-            ));
+            return Err(io::Error::other(format!(
+                "BDAT rejected: {}",
+                response.message
+            )));
         }
 
         self.transport.write_all(data).await?;
@@ -411,9 +451,10 @@ impl SmtpClient {
         if last {
             let response = self.read_response().await?;
             if !response.code.is_success() {
-                return Err(io::Error::other(
-                    format!("Message rejected: {}", response.message),
-                ));
+                return Err(io::Error::other(format!(
+                    "Message rejected: {}",
+                    response.message
+                )));
             }
         }
 
@@ -429,7 +470,10 @@ impl SmtpClient {
     pub async fn rset(&mut self) -> io::Result<()> {
         let response = self.send_command("RSET").await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("RSET rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "RSET rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -438,7 +482,10 @@ impl SmtpClient {
     pub async fn noop(&mut self) -> io::Result<()> {
         let response = self.send_command("NOOP").await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("NOOP rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "NOOP rejected: {}",
+                response.message
+            )));
         }
         Ok(())
     }
@@ -447,7 +494,10 @@ impl SmtpClient {
     pub async fn vrfy(&mut self, address: &str) -> io::Result<String> {
         let response = self.send_command(&format!("VRFY {}", address)).await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("VRFY rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "VRFY rejected: {}",
+                response.message
+            )));
         }
         Ok(response.message.clone())
     }
@@ -471,7 +521,10 @@ impl SmtpClient {
 
         let response = self.send_command("STARTTLS").await?;
         if !response.code.is_success() {
-            return Err(io::Error::other(format!("STARTTLS rejected: {}", response.message)));
+            return Err(io::Error::other(format!(
+                "STARTTLS rejected: {}",
+                response.message
+            )));
         }
 
         // Extract the transport and upgrade.
@@ -503,7 +556,9 @@ impl SmtpClient {
     pub async fn auth_plain(&mut self, credentials: &str) -> io::Result<()> {
         // Encode credentials as base64.
         let encoded = edgerun_encoding::base64::standard_encode(credentials.as_bytes());
-        let response = self.send_command(&format!("AUTH PLAIN {}", encoded)).await?;
+        let response = self
+            .send_command(&format!("AUTH PLAIN {}", encoded))
+            .await?;
         if !response.code.is_success() {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -516,12 +571,14 @@ impl SmtpClient {
 
     /// Check if the server supports a specific ESMTP extension.
     pub fn supports(&self, extension: &str) -> bool {
-        self.capabilities_map.contains_key(&extension.to_uppercase())
+        self.capabilities_map
+            .contains_key(&extension.to_uppercase())
     }
 
     /// Get the maximum message size from server capabilities (if advertised).
     pub fn max_message_size(&self) -> Option<usize> {
-        self.capabilities_map.get("SIZE")
+        self.capabilities_map
+            .get("SIZE")
             .and_then(|s| s.as_ref())
             .and_then(|s| s.parse().ok())
     }

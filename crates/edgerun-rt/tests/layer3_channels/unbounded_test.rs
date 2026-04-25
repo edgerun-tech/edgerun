@@ -1,6 +1,6 @@
 // Test unbounded channel with the actual runtime.
 use edgerun_rt::unbounded::{self, TryRecvError};
-use edgerun_rt::{Runtime, spawn};
+use edgerun_rt::{spawn, Runtime};
 use std::time::Duration;
 
 fn main() {
@@ -27,7 +27,7 @@ fn test_send_recv_basic() {
     let (tx, rx) = unbounded::channel::<i32>();
     tx.send(42).unwrap();
     tx.send(100).unwrap();
-    drop(tx);  // Close the channel so receiver gets None
+    drop(tx); // Close the channel so receiver gets None
     let mut rx = rx;
     assert_eq!(rx.blocking_recv(), Some(42));
     assert_eq!(rx.blocking_recv(), Some(100));

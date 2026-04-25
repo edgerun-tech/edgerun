@@ -14,16 +14,16 @@ use std::sync::Arc;
 
 use edgerun_rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 
-use crate::server::ConnectionInterceptor;
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
 use crate::server::read_line;
+use crate::server::ConnectionInterceptor;
+use crate::smtp::server::{MailHandler, MemoryMailStore};
 use crate::smtp::types::{
     DsnNotify, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
     SmtpResponseCode, SmtpState,
 };
-use crate::smtp::server::{MailHandler, MemoryMailStore};
 use edgerun_email_auth::EmailAuthEvaluator;
 
 // ===========================================================================
@@ -118,7 +118,8 @@ impl LmtpServer {
                             Err(e) => {
                                 edgerun_log::info!(
                                     "edgerun-lmtp: connection from {} rejected: {}",
-                                    peer, e
+                                    peer,
+                                    e
                                 );
                                 continue;
                             }
@@ -132,8 +133,15 @@ impl LmtpServer {
 
                     edgerun_log::info!("edgerun-lmtp: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        if let Err(e) = handle_connection(stream, peer, handler, config, shutdown, command_middleware)
-                            .await
+                        if let Err(e) = handle_connection(
+                            stream,
+                            peer,
+                            handler,
+                            config,
+                            shutdown,
+                            command_middleware,
+                        )
+                        .await
                         {
                             edgerun_log::error!("edgerun-lmtp: connection error: {}", e);
                         }
@@ -175,8 +183,8 @@ async fn evaluate_and_notify_auth(
     };
 
     // Parse From: header
-    let header_from = crate::smtp::types::headers::get_from_address(headers_str)
-        .unwrap_or_default();
+    let header_from =
+        crate::smtp::types::headers::get_from_address(headers_str).unwrap_or_default();
 
     // Get a DNS client for evaluation
     let mut dns_client = match edgerun_dns::client::DnsClient::new("8.8.8.8:53") {
@@ -189,7 +197,13 @@ async fn evaluate_and_notify_auth(
 
     let mut evaluator = EmailAuthEvaluator::new(&mut dns_client);
     match evaluator
-        .evaluate(peer_ip, &envelope.from, &header_from, headers_str, &envelope.data)
+        .evaluate(
+            peer_ip,
+            &envelope.from,
+            &header_from,
+            headers_str,
+            &envelope.data,
+        )
         .await
     {
         Ok(auth_results) => {
@@ -236,10 +250,7 @@ async fn handle_connection(
         // Idle timeout
         let elapsed = last_activity.elapsed().as_secs();
         if elapsed > config.limits.idle_timeout_secs {
-            edgerun_log::info!(
-                "edgerun-lmtp: {} idle timeout ({}s)",
-                peer, elapsed
-            );
+            edgerun_log::info!("edgerun-lmtp: {} idle timeout ({}s)", peer, elapsed);
             send_response(
                 &mut stream,
                 &SmtpResponse::new(SmtpResponseCode::CLOSING, "Idle timeout"),
@@ -249,7 +260,11 @@ async fn handle_connection(
         }
 
         if command_count >= config.limits.max_commands {
-            send_response(&mut stream, &SmtpResponse::bad_sequence("Too many commands")).await?;
+            send_response(
+                &mut stream,
+                &SmtpResponse::bad_sequence("Too many commands"),
+            )
+            .await?;
             break;
         }
 
@@ -286,10 +301,7 @@ async fn handle_connection(
                                             .with_enhanced(EnhancedStatusCode::QUEUED),
                                     )
                                     .await?;
-                                    edgerun_log::info!(
-                                        "edgerun-lmtp: delivered to {}",
-                                        recipient,
-                                    );
+                                    edgerun_log::info!("edgerun-lmtp: delivered to {}", recipient,);
                                     // Evaluate SPF/DKIM/DMARC in background (first recipient only)
                                     if recipient == &envelope.recipients[0] {
                                         let handler_clone = Arc::clone(&handler);
@@ -297,7 +309,13 @@ async fn handle_connection(
                                         let domain_clone = domain.clone();
                                         let peer_ip_clone = peer_ip_str.clone();
                                         edgerun_rt::spawn(async move {
-                                            evaluate_and_notify_auth(&handler_clone, &envelope_clone, &domain_clone, &peer_ip_clone).await;
+                                            evaluate_and_notify_auth(
+                                                &handler_clone,
+                                                &envelope_clone,
+                                                &domain_clone,
+                                                &peer_ip_clone,
+                                            )
+                                            .await;
                                         });
                                     }
                                 }
@@ -312,17 +330,15 @@ async fn handle_connection(
                                     .await?;
                                     edgerun_log::error!(
                                         "edgerun-lmtp: delivery failed to {}: {}",
-                                        recipient, e,
+                                        recipient,
+                                        e,
                                     );
                                 }
                             }
                         }
                         Err(_) => {
-                            send_response(
-                                &mut stream,
-                                &SmtpResponse::mailbox_not_found(recipient),
-                            )
-                            .await?;
+                            send_response(&mut stream, &SmtpResponse::mailbox_not_found(recipient))
+                                .await?;
                         }
                     }
                 }
@@ -395,7 +411,8 @@ async fn handle_connection(
                     }
                     Ok(MwControlFlow::Continue) => {}
                     Err(e) => {
-                        send_response(&mut stream, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                        send_response(&mut stream, &SmtpResponse::syntax_error(&e.to_string()))
+                            .await?;
                         blocked = true;
                         break;
                     }
@@ -462,9 +479,16 @@ async fn handle_command(
             send_multiline_response(stream, SmtpResponseCode::OK, lines).await?;
         }
 
-        SmtpCommand::MailFrom { address, parameters } => {
+        SmtpCommand::MailFrom {
+            address,
+            parameters,
+        } => {
             if *state != SmtpState::Ready && *state != SmtpState::MailSet {
-                send_response(stream, &SmtpResponse::bad_sequence("MAIL FROM not allowed in current state")).await?;
+                send_response(
+                    stream,
+                    &SmtpResponse::bad_sequence("MAIL FROM not allowed in current state"),
+                )
+                .await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -475,7 +499,8 @@ async fn handle_command(
                         if let Some(s) = value {
                             if let Ok(size) = s.parse::<usize>() {
                                 if size > config.limits.max_message_size {
-                                    send_response(stream, &SmtpResponse::message_too_large()).await?;
+                                    send_response(stream, &SmtpResponse::message_too_large())
+                                        .await?;
                                     return Ok(ControlFlow::Continue);
                                 }
                             }
@@ -494,9 +519,16 @@ async fn handle_command(
             .await?;
         }
 
-        SmtpCommand::RcptTo { address, parameters } => {
+        SmtpCommand::RcptTo {
+            address,
+            parameters,
+        } => {
             if *state != SmtpState::MailSet && *state != SmtpState::RcptSet {
-                send_response(stream, &SmtpResponse::bad_sequence("RCPT TO not allowed in current state")).await?;
+                send_response(
+                    stream,
+                    &SmtpResponse::bad_sequence("RCPT TO not allowed in current state"),
+                )
+                .await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -553,11 +585,7 @@ async fn handle_command(
         | SmtpCommand::Turn
         | SmtpCommand::Etrn(_)
         | SmtpCommand::Bdat { .. } => {
-            send_response(
-                stream,
-                &SmtpResponse::command_not_implemented("LMTP"),
-            )
-            .await?;
+            send_response(stream, &SmtpResponse::command_not_implemented("LMTP")).await?;
         }
     }
 

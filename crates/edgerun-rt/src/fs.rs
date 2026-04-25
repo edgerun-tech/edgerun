@@ -7,7 +7,7 @@ use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::blocking_pool::{JoinHandle, JoinError};
+use crate::blocking_pool::{JoinError, JoinHandle};
 use crate::runtime::spawn_blocking;
 
 // ===========================================================================
@@ -140,9 +140,7 @@ pub async fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<
 /// Check if a path exists.
 pub async fn exists<P: AsRef<Path>>(path: P) -> bool {
     let path = path.as_ref().to_path_buf();
-    spawn_blocking(move || path.exists())
-        .await
-        .unwrap_or(false)
+    spawn_blocking(move || path.exists()).await.unwrap_or(false)
 }
 
 // ===========================================================================

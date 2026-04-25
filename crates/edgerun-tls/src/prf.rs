@@ -37,7 +37,13 @@ impl Hasher {
     }
 
     /// HKDF-Expand-Label(secret, label, context, length) per RFC 8446 §7.1
-    pub fn expand_label(&self, secret: &[u8], label: &str, context: &[u8], length: usize) -> Vec<u8> {
+    pub fn expand_label(
+        &self,
+        secret: &[u8],
+        label: &str,
+        context: &[u8],
+        length: usize,
+    ) -> Vec<u8> {
         let hkdf_label = build_hkdf_label(label, context, length);
         self.expand(secret, &hkdf_label, length)
     }
@@ -113,17 +119,20 @@ impl Tls13KeySchedule {
     /// is still the early secret. Derives using label "c e traffic"
     /// with the ClientHello hash as context.
     pub fn client_early_traffic_secret(&self, ch_hash: &[u8]) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "c e traffic", ch_hash, self.hash.len())
+        self.hash
+            .expand_label(&self.secret, "c e traffic", ch_hash, self.hash.len())
     }
 
     /// Derive client handshake traffic secret
     pub fn client_handshake_traffic_secret(&self, ch_hash: &[u8]) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "c hs traffic", ch_hash, self.hash.len())
+        self.hash
+            .expand_label(&self.secret, "c hs traffic", ch_hash, self.hash.len())
     }
 
     /// Derive server handshake traffic secret
     pub fn server_handshake_traffic_secret(&self, ch_hash: &[u8]) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "s hs traffic", ch_hash, self.hash.len())
+        self.hash
+            .expand_label(&self.secret, "s hs traffic", ch_hash, self.hash.len())
     }
 
     /// Advance to master secret
@@ -136,18 +145,29 @@ impl Tls13KeySchedule {
     /// Derive client application traffic secret
     /// Per RFC 8446 §7.1: HKDF-Expand-Label(master_secret, "c ap traffic", Hash(CH1..SH-Finished), 32)
     pub fn client_app_traffic_secret(&self, transcript_hash: &[u8]) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "c ap traffic", transcript_hash, self.hash.len())
+        self.hash.expand_label(
+            &self.secret,
+            "c ap traffic",
+            transcript_hash,
+            self.hash.len(),
+        )
     }
 
     /// Derive server application traffic secret
     /// Per RFC 8446 §7.1: HKDF-Expand-Label(master_secret, "s ap traffic", Hash(CH1..SH-Finished), 32)
     pub fn server_app_traffic_secret(&self, transcript_hash: &[u8]) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "s ap traffic", transcript_hash, self.hash.len())
+        self.hash.expand_label(
+            &self.secret,
+            "s ap traffic",
+            transcript_hash,
+            self.hash.len(),
+        )
     }
 
     /// Derive resumption master secret
     pub fn resumption_master_secret(&self) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "res master", &[], self.hash.len())
+        self.hash
+            .expand_label(&self.secret, "res master", &[], self.hash.len())
     }
 }
 
@@ -161,7 +181,12 @@ pub struct TrafficKeys {
 
 /// Derive AEAD keys for client → server (handshake)
 /// Labels per RFC 8446 §7.3: "key", "iv"
-pub fn client_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+pub fn client_write_keys(
+    secret: &[u8],
+    cipher_key_len: usize,
+    iv_len: usize,
+    hash: &Hasher,
+) -> TrafficKeys {
     TrafficKeys {
         write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
         write_iv: hash.expand_label(secret, "iv", &[], iv_len),
@@ -170,7 +195,12 @@ pub fn client_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, ha
 
 /// Derive AEAD keys for server → client (handshake)
 /// Labels per RFC 8446 §7.3: "key", "iv"
-pub fn server_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+pub fn server_write_keys(
+    secret: &[u8],
+    cipher_key_len: usize,
+    iv_len: usize,
+    hash: &Hasher,
+) -> TrafficKeys {
     TrafficKeys {
         write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
         write_iv: hash.expand_label(secret, "iv", &[], iv_len),
@@ -179,7 +209,12 @@ pub fn server_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, ha
 
 /// Derive AEAD keys for client → server (application data)
 /// Labels per RFC 8446 §7.3: "key", "iv"
-pub fn client_app_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+pub fn client_app_write_keys(
+    secret: &[u8],
+    cipher_key_len: usize,
+    iv_len: usize,
+    hash: &Hasher,
+) -> TrafficKeys {
     TrafficKeys {
         write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
         write_iv: hash.expand_label(secret, "iv", &[], iv_len),
@@ -188,7 +223,12 @@ pub fn client_app_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize
 
 /// Derive AEAD keys for server → client (application data)
 /// Labels per RFC 8446 §7.3: "key", "iv"
-pub fn server_app_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+pub fn server_app_write_keys(
+    secret: &[u8],
+    cipher_key_len: usize,
+    iv_len: usize,
+    hash: &Hasher,
+) -> TrafficKeys {
     TrafficKeys {
         write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
         write_iv: hash.expand_label(secret, "iv", &[], iv_len),
@@ -232,7 +272,13 @@ impl Hasher {
     ///
     /// Used for deriving AEAD keys, IVs, and header protection keys from
     /// QUIC traffic secrets (RFC 9001 §5.1).
-    pub fn quic_expand_label(&self, secret: &[u8], label: &str, context: &[u8], length: usize) -> Vec<u8> {
+    pub fn quic_expand_label(
+        &self,
+        secret: &[u8],
+        label: &str,
+        context: &[u8],
+        length: usize,
+    ) -> Vec<u8> {
         let hkdf_label = build_quic_hkdf_label(label, context, length);
         self.expand(secret, &hkdf_label, length)
     }
@@ -240,8 +286,7 @@ impl Hasher {
 
 /// Well-known initial salts for QUIC version 1 (RFC 9001 §5.2).
 pub const INITIAL_SALT_V1: &[u8] = &[
-    0x38, 0x76, 0xcf, 0x71, 0xba, 0x52, 0x1f, 0x3d,
-    0x62, 0xd5, 0x1f, 0xa5, 0x78, 0x3d, 0x78, 0x39,
+    0x38, 0x76, 0xcf, 0x71, 0xba, 0x52, 0x1f, 0x3d, 0x62, 0xd5, 0x1f, 0xa5, 0x78, 0x3d, 0x78, 0x39,
     0x87, 0x6d, 0xc0, 0x78,
 ];
 
@@ -253,7 +298,12 @@ pub const INITIAL_SALT_V1: &[u8] = &[
 /// Returns `(write_keys, read_keys)` where:
 /// - `write_keys` — keys for encrypting client → server Initial packets
 /// - `read_keys` — keys for decrypting server → client Initial packets
-pub fn quic_initial_client_keys(dcid: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> (TrafficKeys, TrafficKeys) {
+pub fn quic_initial_client_keys(
+    dcid: &[u8],
+    cipher_key_len: usize,
+    iv_len: usize,
+    hash: &Hasher,
+) -> (TrafficKeys, TrafficKeys) {
     let initial_secret = hash.extract(INITIAL_SALT_V1, dcid);
 
     let client_in_secret = hash.quic_expand_label(&initial_secret, "client in", &[], hash.len());
@@ -270,7 +320,12 @@ pub fn quic_initial_client_keys(dcid: &[u8], cipher_key_len: usize, iv_len: usiz
 /// Returns `(write_keys, read_keys)` where:
 /// - `write_keys` — keys for encrypting server → client Initial packets
 /// - `read_keys` — keys for decrypting client → server Initial packets
-pub fn quic_initial_server_keys(dcid: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> (TrafficKeys, TrafficKeys) {
+pub fn quic_initial_server_keys(
+    dcid: &[u8],
+    cipher_key_len: usize,
+    iv_len: usize,
+    hash: &Hasher,
+) -> (TrafficKeys, TrafficKeys) {
     let initial_secret = hash.extract(INITIAL_SALT_V1, dcid);
 
     let client_in_secret = hash.quic_expand_label(&initial_secret, "client in", &[], hash.len());
@@ -285,7 +340,12 @@ pub fn quic_initial_server_keys(dcid: &[u8], cipher_key_len: usize, iv_len: usiz
 /// Derive AEAD traffic keys (key + IV) from a QUIC traffic secret.
 ///
 /// Uses QUIC-specific labels `"quic key"` and `"quic iv"` (RFC 9001 §5.1).
-pub fn quic_traffic_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+pub fn quic_traffic_keys(
+    secret: &[u8],
+    cipher_key_len: usize,
+    iv_len: usize,
+    hash: &Hasher,
+) -> TrafficKeys {
     TrafficKeys {
         write_key: hash.quic_expand_label(secret, "key", &[], cipher_key_len),
         write_iv: hash.quic_expand_label(secret, "iv", &[], iv_len),
@@ -345,12 +405,18 @@ mod tests {
     fn test_server_handshake_keys_against_vectors() {
         let hash = Hasher::Sha256;
         let secret: [u8; 32] = [
-            0x30, 0x31, 0xe9, 0xc2, 0xc2, 0x6e, 0xcc, 0x15, 0x4b, 0xc3, 0x68, 0x26, 0xe8, 0x7f, 0xee, 0xff,
-            0x8f, 0x45, 0x47, 0xdf, 0x52, 0x59, 0x67, 0x47, 0xb2, 0xdc, 0xab, 0xf9, 0x2b, 0x18, 0xfb, 0x59
+            0x30, 0x31, 0xe9, 0xc2, 0xc2, 0x6e, 0xcc, 0x15, 0x4b, 0xc3, 0x68, 0x26, 0xe8, 0x7f,
+            0xee, 0xff, 0x8f, 0x45, 0x47, 0xdf, 0x52, 0x59, 0x67, 0x47, 0xb2, 0xdc, 0xab, 0xf9,
+            0x2b, 0x18, 0xfb, 0x59,
         ];
         let keys = server_write_keys(&secret, 16, 12, &hash);
-        let expected_key: [u8; 16] = [0x4d, 0x15, 0xc0, 0x0e, 0x47, 0x31, 0x7f, 0xe9, 0x9c, 0x71, 0x4f, 0x8e, 0xbd, 0x92, 0xc4, 0xd1];
-        let expected_iv: [u8; 12] = [0x18, 0x22, 0x30, 0x84, 0x73, 0x5f, 0x2f, 0x2d, 0x85, 0x88, 0xca, 0xaa];
+        let expected_key: [u8; 16] = [
+            0x4d, 0x15, 0xc0, 0x0e, 0x47, 0x31, 0x7f, 0xe9, 0x9c, 0x71, 0x4f, 0x8e, 0xbd, 0x92,
+            0xc4, 0xd1,
+        ];
+        let expected_iv: [u8; 12] = [
+            0x18, 0x22, 0x30, 0x84, 0x73, 0x5f, 0x2f, 0x2d, 0x85, 0x88, 0xca, 0xaa,
+        ];
         assert_eq!(keys.write_key, expected_key, "Key mismatch");
         assert_eq!(keys.write_iv, expected_iv, "IV mismatch");
     }
@@ -384,10 +450,10 @@ mod tests {
         // Client and server should use inverses - client's write = server's read
         let hash = Hasher::Sha256;
         let dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
-        
+
         let (client_write, client_read) = quic_initial_client_keys(&dcid, 16, 12, &hash);
         let (server_write, server_read) = quic_initial_server_keys(&dcid, 16, 12, &hash);
-        
+
         // Verify the inverse relationship
         assert_eq!(client_write.write_key, server_read.write_key);
         assert_eq!(client_write.write_iv, server_read.write_iv);
@@ -400,10 +466,10 @@ mod tests {
         // Same DCID should always produce same keys
         let hash = Hasher::Sha256;
         let dcid = vec![0x5b, 0x6c, 0x2f, 0xd6, 0xcc, 0xe0, 0x29, 0x1c];
-        
+
         let (a, _) = quic_initial_client_keys(&dcid, 16, 12, &hash);
         let (b, _) = quic_initial_client_keys(&dcid, 16, 12, &hash);
-        
+
         assert_eq!(a.write_key, b.write_key);
         assert_eq!(a.write_iv, b.write_iv);
     }
@@ -411,13 +477,13 @@ mod tests {
     #[test]
     fn test_different_dcid_produces_different_keys() {
         let hash = Hasher::Sha256;
-        
+
         let dcid1 = vec![0x5b, 0x6c, 0x2f, 0xd6, 0xcc, 0xe0, 0x29, 0x1c];
         let dcid2 = vec![0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11];
-        
+
         let (a, _) = quic_initial_client_keys(&dcid1, 16, 12, &hash);
         let (b, _) = quic_initial_client_keys(&dcid2, 16, 12, &hash);
-        
+
         assert_ne!(a.write_key, b.write_key);
     }
 

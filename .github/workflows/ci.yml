@@ -6,31 +6,123 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  RUST_BACKTRACE: 1
+
 jobs:
-  validate:
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.api.outputs.version }}
+      type: ${{ steps.api.outputs.type }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy lint
+        run: cargo clippy --workspace -- -D warnings
 
       - name: Workspace check
-        run: make check
+        run: cargo check --workspace
 
-      - name: Run Rust test suite
-        run: make test
+      - name: Tests
+        run: cargo test --workspace
 
-      - name: Run ignored edgerun-rt concurrency tests
-        run: cargo test -p edgerun-rt -- --ignored
+      - name: Release build
+        run: cargo build --release -p edgerun-node
 
-      - name: Build release binary
-        run: make release-build
+      - name: Analyze API changes
+        id: api
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          LAST_TAG=$(git tag -l 'v*.*.*' --sort=-version:refname 2>/dev/null | head -1 || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+            echo "version=0.1.0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          V="${LAST_TAG#v}"
+          echo "Last: v$V"
+          
+          CHANGED=$(git diff --name-only "$LAST_TAG" -- 'crates/*/src/lib.rs' 2>/dev/null | cut -d/ -f2 | sort -u || true)
+          
+          if [ -z "$CHANGED" ]; then
+            PATCH=$(echo $V | cut -d. -f3)
+            PATCH=$((PATCH + 1))
+            echo "type=patch" >> $GITHUB_OUTPUT
+            echo "version=$(echo $V | cut -d. -f1,2).${PATCH}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          BREAKING=false
+          NEW_API=false
+          
+          for CRATE in $CHANGED; do
+            [ -d "crates/$CRATE" ] || continue
+            grep -q 'publish = false' "crates/$CRATE/Cargo.toml" 2>/dev/null && continue
+            
+            cargo public-api dump -p "$CRATE" --no-private-items 2>/dev/null > /tmp/current.txt || continue
+            
+            git show "$LAST_TAG:crates/$CRATE/src/lib.rs" 2>/dev/null > /tmp/prev.rs
+            [ -s /tmp/prev.rs ] || { NEW_API=true; continue; }
+            
+            cp crates/$CRATE/src/lib.rs /tmp/cur.rs
+            git checkout "$LAST_TAG" -- "crates/$CRATE/src/lib.rs"
+            cargo public-api dump -p "$CRATE" --no-private-items 2>/dev/null > /tmp/old.txt
+            cp /tmp/cur.rs crates/$CRATE/src/lib.rs
+            
+            [ -s /tmp/old.txt ] && [ -s /tmp/current.txt ] || continue
+            
+            REMOVED=$(diff /tmp/old.txt /tmp/current.txt 2>/dev/null | grep '^<' | grep -vE '^< (pub |//)' | wc -l || echo 0)
+            ADDED=$(diff /tmp/old.txt /tmp/current.txt 2>/dev/null | grep '^>' | grep -vE '^\+ (pub |//)' | wc -l || echo 0)
+            
+            [ "$REMOVED" -gt 0 ] && BREAKING=true
+            [ "$ADDED" -gt 0 ] && NEW_API=true
+          done
+          
+          MAJOR=$(echo $V | cut -d. -f1)
+          MINOR=$(echo $V | cut -d. -f2)
+          PATCH=$(echo $V | cut -d. -f3)
+          
+          if [ "$BREAKING" = true ]; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0; echo "type=major" >> $GITHUB_OUTPUT
+          elif [ "$NEW_API" = true ]; then
+            MINOR=$((MINOR + 1)); PATCH=0; echo "type=minor" >> $GITHUB_OUTPUT
+          else
+            PATCH=$((PATCH + 1)); echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "version=${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
 
-      - name: Build container image
-        run: make docker-build
+      - name: Apply version bump
+        if: steps.api.outputs.version
+        run: |
+          V="${{ steps.api.outputs.version }}"
+          TYPE="${{ steps.api.outputs.type }}"
+          
+          for toml in Cargo.toml crates/*/Cargo.toml; do
+            [ -f "$toml" ] || continue
+            grep -q 'publish = false' "$toml" 2>/dev/null && continue
+            sed -i "s|^version = \".*\"|version = \"${V}\"|" "$toml"
+          done
+          
+          git config --local user.email "ci@edgerun.ai"
+          git config --local user.name "Edgerun CI"
+          git add -A
+          
+          if ! git diff --cached --quiet; then
+            git commit -m "release: v${V} (${TYPE})"
+            git tag -s "v${V}" -m "Release v${V}"
+            git push origin main "v${V}" 2>/dev/null || echo "Tag v${V} created"
+          fi

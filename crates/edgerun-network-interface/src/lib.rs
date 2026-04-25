@@ -1,6 +1,6 @@
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
+    CapabilityModality, CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 use edgerun_quectel_ec200a::DtaNetwork;
 
@@ -78,11 +78,17 @@ pub struct NetworkInterfaceInfo {
 /// Network interface controller trait
 pub trait NetworkInterfaceController: CapabilityProvider {
     fn interface_info(&self) -> Result<NetworkInterfaceInfo, CapabilityError>;
-    fn set_admin_state(&self, state: NetworkAdminState) -> Result<NetworkAdminState, CapabilityError>;
+    fn set_admin_state(
+        &self,
+        state: NetworkAdminState,
+    ) -> Result<NetworkAdminState, CapabilityError>;
 }
 
 /// Create a default network interface descriptor
-pub fn default_network_interface_descriptor(provider: &str, interface_name: &str) -> CapabilityDescriptor {
+pub fn default_network_interface_descriptor(
+    provider: &str,
+    interface_name: &str,
+) -> CapabilityDescriptor {
     capability_descriptor(
         provider,
         interface_name,

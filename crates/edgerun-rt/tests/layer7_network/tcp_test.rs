@@ -1,8 +1,5 @@
 // Test TCP (AsyncTcpStream, AsyncTcpListener) with the actual runtime.
-use edgerun_rt::{
-    AsyncTcpListener, AsyncTcpStream, AsyncReadExt, AsyncWriteExt,
-    Runtime, spawn,
-};
+use edgerun_rt::{spawn, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, Runtime};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -117,8 +114,12 @@ fn test_multiple_connections() {
         let h = spawn(async move {
             let mut stream = std::net::TcpStream::connect(&addr).expect("client connect");
             stream.set_nonblocking(true).unwrap();
-            let mut stream: Arc<AsyncTcpStream> = Arc::new(AsyncTcpStream::from_std(stream).unwrap());
-            stream.write_all(msg.as_bytes()).await.expect("write failed");
+            let mut stream: Arc<AsyncTcpStream> =
+                Arc::new(AsyncTcpStream::from_std(stream).unwrap());
+            stream
+                .write_all(msg.as_bytes())
+                .await
+                .expect("write failed");
             let mut buf = [0u8; 32];
             let n = stream.read(&mut buf).await.expect("read failed");
             assert_eq!(&buf[..n], msg.as_bytes());
@@ -182,7 +183,10 @@ fn test_shutdown_write() {
     let server = spawn(async move {
         let (stream, _addr) = srv.accept().await.expect("accept failed");
         let mut stream: Arc<AsyncTcpStream> = stream;
-        stream.write_all(b"final message").await.expect("write failed");
+        stream
+            .write_all(b"final message")
+            .await
+            .expect("write failed");
         stream.shutdown_write().expect("shutdown_write failed");
     });
 
@@ -293,9 +297,13 @@ fn test_large_data_transfer() {
         let mut buf = [0u8; 1024];
         loop {
             let n = stream.read(&mut buf).await.expect("read failed");
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             received.extend_from_slice(&buf[..n]);
-            if received.len() >= data_len { break; }
+            if received.len() >= data_len {
+                break;
+            }
         }
         assert_eq!(received.len(), data_len);
         assert_eq!(received[0], 0xAB);

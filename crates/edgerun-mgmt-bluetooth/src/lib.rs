@@ -1,7 +1,7 @@
 use edgerun_bluetooth::{
-    BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
-    BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,
-    BluetoothScanner, BluetoothTransportKind, default_bluetooth_descriptor,
+    default_bluetooth_descriptor, BluetoothAddressKind, BluetoothBeaconObservation,
+    BluetoothConnectionInfo, BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile,
+    BluetoothScanResult, BluetoothScanner, BluetoothTransportKind,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use std::io;
@@ -434,7 +434,8 @@ fn parse_controller_info(
     let class_of_device =
         u32::from(payload[17]) | (u32::from(payload[18]) << 8) | (u32::from(payload[19]) << 16);
     let name = edgerun_encoding::cstring::decode_c_string(&payload[20..269]).unwrap_or_default();
-    let short_name = edgerun_encoding::cstring::decode_c_string(&payload[269..280]).unwrap_or_default();
+    let short_name =
+        edgerun_encoding::cstring::decode_c_string(&payload[269..280]).unwrap_or_default();
     Ok(MgmtControllerInfo {
         index,
         address,
@@ -757,14 +758,12 @@ fn parse_eir_or_ad_data(data: &[u8]) -> ParsedDiscoveryData {
         let ty = data[offset + 1];
         let value = &data[offset + 2..offset + 1 + len];
         match ty {
-            0x08
-                if out.local_name.is_none() => {
-                    out.local_name = Some(String::from_utf8_lossy(value).to_string());
-                }
-            0x09
-                if !value.is_empty() => {
-                    out.local_name = Some(String::from_utf8_lossy(value).to_string());
-                }
+            0x08 if out.local_name.is_none() => {
+                out.local_name = Some(String::from_utf8_lossy(value).to_string());
+            }
+            0x09 if !value.is_empty() => {
+                out.local_name = Some(String::from_utf8_lossy(value).to_string());
+            }
             0x02 | 0x03 => {
                 for chunk in value.chunks_exact(2) {
                     parse_uuid16_in_discovery_payload(
@@ -800,31 +799,24 @@ fn parse_eir_or_ad_data(data: &[u8]) -> ParsedDiscoveryData {
                     );
                 }
             }
-            0x16
-                if value.len() >= 2 => {
-                    let uuid = u16::from_le_bytes([value[0], value[1]]);
-                    parse_uuid16_in_discovery_payload(
-                        &mut out.service_uuids,
-                        &mut out.profiles,
-                        uuid,
-                    );
+            0x16 if value.len() >= 2 => {
+                let uuid = u16::from_le_bytes([value[0], value[1]]);
+                parse_uuid16_in_discovery_payload(&mut out.service_uuids, &mut out.profiles, uuid);
+            }
+            0x20 if value.len() >= 4 => {
+                let uuid = u32::from_le_bytes([value[0], value[1], value[2], value[3]]);
+                out.service_uuids.push(format_32bit_service_uuid(uuid));
+                if let Some(profile_uuid) = map_profile_from_32bit_uuid(uuid) {
+                    out.profiles.extend(profile_uuid);
                 }
-            0x20
-                if value.len() >= 4 => {
-                    let uuid = u32::from_le_bytes([value[0], value[1], value[2], value[3]]);
-                    out.service_uuids.push(format_32bit_service_uuid(uuid));
-                    if let Some(profile_uuid) = map_profile_from_32bit_uuid(uuid) {
-                        out.profiles.extend(profile_uuid);
-                    }
-                }
-            0x21
-                if value.len() >= 16 => {
-                    let mut b = [0u8; 16];
-                    b.copy_from_slice(&value[..16]);
-                    b.reverse();
-                    let value = format_128bit_service_uuid(&b);
-                    out.service_uuids.push(value);
-                }
+            }
+            0x21 if value.len() >= 16 => {
+                let mut b = [0u8; 16];
+                b.copy_from_slice(&value[..16]);
+                b.reverse();
+                let value = format_128bit_service_uuid(&b);
+                out.service_uuids.push(value);
+            }
             0x15 => {
                 for chunk in value.chunks_exact(16) {
                     let mut b = [0u8; 16];
@@ -910,8 +902,10 @@ fn parse_mgmt_controller_event(event: &MgmtEvent) -> Option<MgmtControllerEvent>
             })
         }
         MGMT_EV_LOCAL_NAME_CHANGED if event.payload.len() >= 260 => {
-            let name = edgerun_encoding::cstring::decode_c_string(&event.payload[0..249]).unwrap_or_default();
-            let short_name = edgerun_encoding::cstring::decode_c_string(&event.payload[249..260]).unwrap_or_default();
+            let name = edgerun_encoding::cstring::decode_c_string(&event.payload[0..249])
+                .unwrap_or_default();
+            let short_name = edgerun_encoding::cstring::decode_c_string(&event.payload[249..260])
+                .unwrap_or_default();
             Some(MgmtControllerEvent::LocalNameChanged {
                 index: event.index,
                 name,
@@ -1136,7 +1130,8 @@ pub fn set_controller_local_name(
     }
     let mut info = read_controller_info(index)?;
     info.name = edgerun_encoding::cstring::decode_c_string(&payload[0..249]).unwrap_or_default();
-    info.short_name = edgerun_encoding::cstring::decode_c_string(&payload[249..260]).unwrap_or_default();
+    info.short_name =
+        edgerun_encoding::cstring::decode_c_string(&payload[249..260]).unwrap_or_default();
     Ok(info)
 }
 
@@ -1343,7 +1338,11 @@ impl MgmtBluetoothBackend {
     /// Use 0x00 to auto-detect.
     pub fn connect_device(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
         let addr_bytes = parse_bdaddr(bdaddr)?;
-        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+        let auto_type = if addr_type != 0 {
+            addr_type
+        } else {
+            MGMT_ADDR_ALL
+        };
 
         // Payload: 6-byte BD_ADDR + 1-byte address type
         let mut payload = Vec::with_capacity(7);
@@ -1358,7 +1357,11 @@ impl MgmtBluetoothBackend {
     /// Disconnect from a remote Bluetooth device.
     pub fn disconnect_device(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
         let addr_bytes = parse_bdaddr(bdaddr)?;
-        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+        let auto_type = if addr_type != 0 {
+            addr_type
+        } else {
+            MGMT_ADDR_ALL
+        };
 
         let mut payload = Vec::with_capacity(7);
         payload.extend_from_slice(&addr_bytes);
@@ -1374,7 +1377,11 @@ impl MgmtBluetoothBackend {
     /// or `MGMT_EV_CONNECT_FAILED` events.
     pub fn pair_device(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
         let addr_bytes = parse_bdaddr(bdaddr)?;
-        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+        let auto_type = if addr_type != 0 {
+            addr_type
+        } else {
+            MGMT_ADDR_ALL
+        };
 
         let mut payload = Vec::with_capacity(7);
         payload.extend_from_slice(&addr_bytes);
@@ -1388,7 +1395,11 @@ impl MgmtBluetoothBackend {
     /// Cancel an ongoing pairing attempt.
     pub fn cancel_pairing(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
         let addr_bytes = parse_bdaddr(bdaddr)?;
-        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+        let auto_type = if addr_type != 0 {
+            addr_type
+        } else {
+            MGMT_ADDR_ALL
+        };
 
         let mut payload = Vec::with_capacity(7);
         payload.extend_from_slice(&addr_bytes);
@@ -1471,11 +1482,9 @@ mod tests {
     fn parses_eir_name_and_uuid() {
         let parsed = parse_eir_or_ad_data(&[3, 0x03, 0x0f, 0x18, 5, 0x09, b'T', b'e', b's', b't']);
         assert_eq!(parsed.local_name.as_deref(), Some("Test"));
-        assert!(
-            parsed
-                .service_uuids
-                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
-        );
+        assert!(parsed
+            .service_uuids
+            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -1492,11 +1501,9 @@ mod tests {
         let parsed = parse_eir_or_ad_data(&[
             5, 0x05, 0x6f, 0x00, 0x00, 0x00, 3, 0x09, b'T', b'e', b's', b't',
         ]);
-        assert!(
-            parsed
-                .service_uuids
-                .contains(&"0000006f-0000-1000-8000-00805f9b34fb".to_string())
-        );
+        assert!(parsed
+            .service_uuids
+            .contains(&"0000006f-0000-1000-8000-00805f9b34fb".to_string()));
     }
 
     #[test]
@@ -1523,22 +1530,18 @@ mod tests {
     #[test]
     fn parses_service_data_16bit_profile() {
         let parsed = parse_eir_or_ad_data(&[4, 0x16, 0x0f, 0x18, 0x01, 0x02]);
-        assert!(
-            parsed
-                .service_uuids
-                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
-        );
+        assert!(parsed
+            .service_uuids
+            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
     #[test]
     fn parses_16bit_service_uuid_solicitation() {
         let parsed = parse_eir_or_ad_data(&[3, 0x14, 0x0f, 0x18]);
-        assert!(
-            parsed
-                .service_uuids
-                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
-        );
+        assert!(parsed
+            .service_uuids
+            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -1548,22 +1551,18 @@ mod tests {
             17, 0x21, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33,
             0x22, 0x11, 0x00,
         ]);
-        assert!(
-            parsed
-                .service_uuids
-                .contains(&"00112233-4455-6677-8899-aabbccddeeff".to_string())
-        );
+        assert!(parsed
+            .service_uuids
+            .contains(&"00112233-4455-6677-8899-aabbccddeeff".to_string()));
     }
 
     #[test]
     fn parses_service_uuids_from_info_record_variants() {
         let text = "[General]\nServices=180f;{180D};0000180f\n";
         let record = parse_bluez_device_record("AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66", text);
-        assert!(
-            record
-                .service_uuids
-                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
-        );
+        assert!(record
+            .service_uuids
+            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
         assert!(record.profiles.contains(&BluetoothProfile::HeartRate));
         assert!(record.profiles.contains(&BluetoothProfile::BatteryService));
     }
@@ -1587,16 +1586,12 @@ mod tests {
     fn normalizes_0x_prefixed_service_uuids() {
         let text = "[General]\nServices=0x180f;0X180A\n";
         let record = parse_bluez_device_record("AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66", text);
-        assert!(
-            record
-                .service_uuids
-                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
-        );
-        assert!(
-            record
-                .service_uuids
-                .contains(&"0000180a-0000-1000-8000-00805f9b34fb".to_string())
-        );
+        assert!(record
+            .service_uuids
+            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(record
+            .service_uuids
+            .contains(&"0000180a-0000-1000-8000-00805f9b34fb".to_string()));
         assert!(record.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -1728,9 +1723,18 @@ mod tests {
 
     #[test]
     fn discovery_transport_address_masks() {
-        assert_eq!(MgmtDiscoveryTransport::Classic.address_mask(), MGMT_ADDR_BREDR);
-        assert_eq!(MgmtDiscoveryTransport::LowEnergy.address_mask(), MGMT_ADDR_LE_ANY);
-        assert_eq!(MgmtDiscoveryTransport::Interleaved.address_mask(), MGMT_ADDR_ALL);
+        assert_eq!(
+            MgmtDiscoveryTransport::Classic.address_mask(),
+            MGMT_ADDR_BREDR
+        );
+        assert_eq!(
+            MgmtDiscoveryTransport::LowEnergy.address_mask(),
+            MGMT_ADDR_LE_ANY
+        );
+        assert_eq!(
+            MgmtDiscoveryTransport::Interleaved.address_mask(),
+            MGMT_ADDR_ALL
+        );
     }
 
     #[test]
@@ -1743,14 +1747,20 @@ mod tests {
 
     #[test]
     fn version_info_fields() {
-        let v = MgmtVersionInfo { version: 1, revision: 42 };
+        let v = MgmtVersionInfo {
+            version: 1,
+            revision: 42,
+        };
         assert_eq!(v.version, 1);
         assert_eq!(v.revision, 42);
     }
 
     #[test]
     fn version_info_clone_and_eq() {
-        let v = MgmtVersionInfo { version: 2, revision: 100 };
+        let v = MgmtVersionInfo {
+            version: 2,
+            revision: 100,
+        };
         assert_eq!(v.clone(), v);
     }
 
@@ -1759,9 +1769,15 @@ mod tests {
     #[test]
     fn settings_all_false() {
         let s = MgmtControllerSettings {
-            powered: false, connectable: false, fast_connectable: false,
-            discoverable: false, pairable: false, link_security: false,
-            secure_simple_pairing: false, bredr: false, high_speed: false,
+            powered: false,
+            connectable: false,
+            fast_connectable: false,
+            discoverable: false,
+            pairable: false,
+            link_security: false,
+            secure_simple_pairing: false,
+            bredr: false,
+            high_speed: false,
             low_energy: false,
         };
         assert!(!s.powered);
@@ -1771,9 +1787,15 @@ mod tests {
     #[test]
     fn settings_all_true() {
         let s = MgmtControllerSettings {
-            powered: true, connectable: true, fast_connectable: true,
-            discoverable: true, pairable: true, link_security: true,
-            secure_simple_pairing: true, bredr: true, high_speed: true,
+            powered: true,
+            connectable: true,
+            fast_connectable: true,
+            discoverable: true,
+            pairable: true,
+            link_security: true,
+            secure_simple_pairing: true,
+            bredr: true,
+            high_speed: true,
             low_energy: true,
         };
         assert!(s.powered);
@@ -1784,9 +1806,15 @@ mod tests {
     #[test]
     fn settings_clone_and_eq() {
         let s = MgmtControllerSettings {
-            powered: true, connectable: false, fast_connectable: false,
-            discoverable: false, pairable: false, link_security: false,
-            secure_simple_pairing: false, bredr: false, high_speed: false,
+            powered: true,
+            connectable: false,
+            fast_connectable: false,
+            discoverable: false,
+            pairable: false,
+            link_security: false,
+            secure_simple_pairing: false,
+            bredr: false,
+            high_speed: false,
             low_energy: false,
         };
         assert_eq!(s.clone(), s);
@@ -1797,9 +1825,15 @@ mod tests {
     #[test]
     fn controller_info_construction() {
         let settings = MgmtControllerSettings {
-            powered: true, connectable: true, fast_connectable: false,
-            discoverable: false, pairable: false, link_security: true,
-            secure_simple_pairing: true, bredr: true, high_speed: false,
+            powered: true,
+            connectable: true,
+            fast_connectable: false,
+            discoverable: false,
+            pairable: false,
+            link_security: true,
+            secure_simple_pairing: true,
+            bredr: true,
+            high_speed: false,
             low_energy: true,
         };
         let info = MgmtControllerInfo {
@@ -1823,17 +1857,29 @@ mod tests {
     #[test]
     fn controller_info_clone() {
         let s = MgmtControllerSettings {
-            powered: false, connectable: false, fast_connectable: false,
-            discoverable: false, pairable: false, link_security: false,
-            secure_simple_pairing: false, bredr: false, high_speed: false,
+            powered: false,
+            connectable: false,
+            fast_connectable: false,
+            discoverable: false,
+            pairable: false,
+            link_security: false,
+            secure_simple_pairing: false,
+            bredr: false,
+            high_speed: false,
             low_energy: false,
         };
         let info = MgmtControllerInfo {
-            index: 1, address: "00:00:00:00:00:01".to_string(),
-            bluetooth_version: 4, manufacturer: 0,
-            supported_settings_raw: 0, current_settings_raw: 0,
-            supported_settings: s.clone(), current_settings: s,
-            class_of_device: 0, name: "".to_string(), short_name: "".to_string(),
+            index: 1,
+            address: "00:00:00:00:00:01".to_string(),
+            bluetooth_version: 4,
+            manufacturer: 0,
+            supported_settings_raw: 0,
+            current_settings_raw: 0,
+            supported_settings: s.clone(),
+            current_settings: s,
+            class_of_device: 0,
+            name: "".to_string(),
+            short_name: "".to_string(),
         };
         assert_eq!(info.clone(), info);
     }
@@ -1843,17 +1889,29 @@ mod tests {
     #[test]
     fn mgmt_bluetooth_backend_construction() {
         let s = MgmtControllerSettings {
-            powered: false, connectable: false, fast_connectable: false,
-            discoverable: false, pairable: false, link_security: false,
-            secure_simple_pairing: false, bredr: false, high_speed: false,
+            powered: false,
+            connectable: false,
+            fast_connectable: false,
+            discoverable: false,
+            pairable: false,
+            link_security: false,
+            secure_simple_pairing: false,
+            bredr: false,
+            high_speed: false,
             low_energy: false,
         };
         let controller = MgmtControllerInfo {
-            index: 0, address: "00:00:00:00:00:00".to_string(),
-            bluetooth_version: 5, manufacturer: 0,
-            supported_settings_raw: 0, current_settings_raw: 0,
-            supported_settings: s.clone(), current_settings: s,
-            class_of_device: 0, name: "".to_string(), short_name: "".to_string(),
+            index: 0,
+            address: "00:00:00:00:00:00".to_string(),
+            bluetooth_version: 5,
+            manufacturer: 0,
+            supported_settings_raw: 0,
+            current_settings_raw: 0,
+            supported_settings: s.clone(),
+            current_settings: s,
+            class_of_device: 0,
+            name: "".to_string(),
+            short_name: "".to_string(),
         };
         let backend = MgmtBluetoothBackend { controller };
         assert_eq!(backend.controller.index, 0);
@@ -1939,7 +1997,11 @@ mod tests {
             discovering: true,
         };
         match event {
-            MgmtControllerEvent::DiscoveringChanged { discovering, address_mask, .. } => {
+            MgmtControllerEvent::DiscoveringChanged {
+                discovering,
+                address_mask,
+                ..
+            } => {
                 assert!(discovering);
                 assert_eq!(address_mask, MGMT_ADDR_LE_ANY);
             }
@@ -1953,9 +2015,15 @@ mod tests {
             index: 0,
             settings_raw: 0,
             settings: MgmtControllerSettings {
-                powered: false, connectable: false, fast_connectable: false,
-                discoverable: false, pairable: false, link_security: false,
-                secure_simple_pairing: false, bredr: false, high_speed: false,
+                powered: false,
+                connectable: false,
+                fast_connectable: false,
+                discoverable: false,
+                pairable: false,
+                link_security: false,
+                secure_simple_pairing: false,
+                bredr: false,
+                high_speed: false,
                 low_energy: false,
             },
         };
@@ -2064,12 +2132,15 @@ mod tests {
         // address (6 bytes)
         payload[0..6].copy_from_slice(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
         payload[6] = 5; // bluetooth_version
-        payload[7] = 0x3f; payload[8] = 0x00; // manufacturer
+        payload[7] = 0x3f;
+        payload[8] = 0x00; // manufacturer
         payload[9..13].copy_from_slice(&0x3ffu32.to_le_bytes()); // supported_settings
-        // current_settings: bits 0,1,9 = powered, connectable, low_energy (0x203)
+                                                                 // current_settings: bits 0,1,9 = powered, connectable, low_energy (0x203)
         payload[13..17].copy_from_slice(&0x203u32.to_le_bytes());
         // class_of_device is 3 bytes at offset 17-19
-        payload[17] = 0x04; payload[18] = 0x01; payload[19] = 0x7c;
+        payload[17] = 0x04;
+        payload[18] = 0x01;
+        payload[19] = 0x7c;
         payload[20..24].copy_from_slice(b"name");
         payload[269..272].copy_from_slice(b"sn\0");
         let info = parse_controller_info(0, &payload).unwrap();
@@ -2115,12 +2186,18 @@ mod tests {
 
     #[test]
     fn address_kind_from_public() {
-        assert_eq!(address_kind_from_str("public"), BluetoothAddressKind::Public);
+        assert_eq!(
+            address_kind_from_str("public"),
+            BluetoothAddressKind::Public
+        );
     }
 
     #[test]
     fn address_kind_from_random() {
-        assert_eq!(address_kind_from_str("random"), BluetoothAddressKind::Random);
+        assert_eq!(
+            address_kind_from_str("random"),
+            BluetoothAddressKind::Random
+        );
     }
 
     #[test]
@@ -2181,7 +2258,9 @@ mod tests {
 
     #[test]
     fn parse_service_uuids_semicolon_separated() {
-        let result = parse_service_uuids("0000180f-0000-1000-8000-00805f9b34fb;0000180d-0000-1000-8000-00805f9b34fb;");
+        let result = parse_service_uuids(
+            "0000180f-0000-1000-8000-00805f9b34fb;0000180d-0000-1000-8000-00805f9b34fb;",
+        );
         assert_eq!(result.len(), 2);
     }
 
@@ -2298,7 +2377,10 @@ mod tests {
             "0000110c-0000-1000-8000-00805f9b34fb".to_string(),
         ];
         let profiles = profiles_from_services(&uuids);
-        let count = profiles.iter().filter(|&&p| p == BluetoothProfile::AudioSink).count();
+        let count = profiles
+            .iter()
+            .filter(|&&p| p == BluetoothProfile::AudioSink)
+            .count();
         assert_eq!(count, 1);
     }
 
@@ -2308,8 +2390,14 @@ mod tests {
     fn parse_ini_map_basic() {
         let text = "[Section1]\nkey1=value1\n\n[Section2]\nkey2=value2\n";
         let map = parse_ini_map(text);
-        assert_eq!(map.get("Section1").and_then(|m| m.get("key1")), Some(&"value1".to_string()));
-        assert_eq!(map.get("Section2").and_then(|m| m.get("key2")), Some(&"value2".to_string()));
+        assert_eq!(
+            map.get("Section1").and_then(|m| m.get("key1")),
+            Some(&"value1".to_string())
+        );
+        assert_eq!(
+            map.get("Section2").and_then(|m| m.get("key2")),
+            Some(&"value2".to_string())
+        );
     }
 
     #[test]
@@ -2351,7 +2439,10 @@ mod tests {
     #[test]
     fn bluez_controller_dir_path() {
         let path = bluez_controller_dir("AA:BB:CC:DD:EE:FF");
-        assert_eq!(path, Path::new("/var/lib/bluetooth").join("AA:BB:CC:DD:EE:FF"));
+        assert_eq!(
+            path,
+            Path::new("/var/lib/bluetooth").join("AA:BB:CC:DD:EE:FF")
+        );
     }
 
     // --- build_mgmt_packet ---
@@ -2432,7 +2523,7 @@ mod tests {
     #[test]
     fn parse_eir_complete_name_overrides_short() {
         let data = [
-            0x03, 0x08, b'A', b'B',  // short name
+            0x03, 0x08, b'A', b'B', // short name
             0x05, 0x09, b'T', b'e', b's', b't', // complete name
         ];
         let parsed = parse_eir_or_ad_data(&data);
@@ -2467,7 +2558,10 @@ mod tests {
 
     #[test]
     fn infer_profiles_headset() {
-        assert_eq!(infer_profiles_from_uuid16(0x1108), vec![BluetoothProfile::Headset]);
+        assert_eq!(
+            infer_profiles_from_uuid16(0x1108),
+            vec![BluetoothProfile::Headset]
+        );
     }
 
     #[test]
@@ -2478,12 +2572,18 @@ mod tests {
 
     #[test]
     fn infer_profiles_audio_source() {
-        assert_eq!(infer_profiles_from_uuid16(0x110a), vec![BluetoothProfile::AudioSource]);
+        assert_eq!(
+            infer_profiles_from_uuid16(0x110a),
+            vec![BluetoothProfile::AudioSource]
+        );
     }
 
     #[test]
     fn infer_profiles_hid() {
-        assert_eq!(infer_profiles_from_uuid16(0x1124), vec![BluetoothProfile::Hid]);
+        assert_eq!(
+            infer_profiles_from_uuid16(0x1124),
+            vec![BluetoothProfile::Hid]
+        );
     }
 
     #[test]

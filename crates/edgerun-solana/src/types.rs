@@ -1,9 +1,8 @@
-use edgerun_json::from_slice;
 use crate::solana_types::Pubkey;
+use edgerun_json::from_slice;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ProviderStatus {
     #[default]
     Active = 0,
@@ -11,9 +10,7 @@ pub enum ProviderStatus {
     Slashed = 2,
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DeploymentStatus {
     #[default]
     Created = 0,
@@ -22,7 +19,6 @@ pub enum DeploymentStatus {
     Stopped = 3,
     Disputed = 4,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Provider {
@@ -97,7 +93,12 @@ pub mod collateral {
     pub const PER_GIB_STORAGE: u64 = 10_000_000;
     pub const PER_MBIT: u64 = 5_000_000;
 
-    pub fn calculate_minimum(cpu_cores: u32, memory_bytes: u64, storage_bytes: u64, network_mbits: u32) -> u64 {
+    pub fn calculate_minimum(
+        cpu_cores: u32,
+        memory_bytes: u64,
+        storage_bytes: u64,
+        network_mbits: u32,
+    ) -> u64 {
         let ram_gib = memory_bytes.div_ceil(1024 * 1024 * 1024);
         let storage_gib = storage_bytes.div_ceil(1024 * 1024 * 1024);
         PER_CORE * cpu_cores as u64

@@ -18,7 +18,9 @@ use crate::uri::Uri;
 fn method_standard_methods_exist() {
     // RFC 9110 Section 9.1: GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE
     // Plus PATCH from RFC 5789
-    let methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE"];
+    let methods = [
+        "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE",
+    ];
     for m in methods {
         let parsed: Method = m.parse().unwrap();
         assert_eq!(parsed.as_str(), m, "Method {m} should round-trip");
@@ -39,7 +41,10 @@ fn method_case_insensitive() {
     ];
     for (input, expected) in cases {
         let parsed: Method = input.parse().unwrap();
-        assert_eq!(parsed, expected, "Method parsing of '{input}' should be case-insensitive");
+        assert_eq!(
+            parsed, expected,
+            "Method parsing of '{input}' should be case-insensitive"
+        );
     }
 }
 
@@ -47,14 +52,17 @@ fn method_case_insensitive() {
 fn method_rejects_invalid() {
     // Invalid methods: empty, contains non-token characters
     let invalid = [
-        "",              // empty
-        "GET ",          // trailing space (not a tchar)
-        " POST",         // leading space
-        "G E T",         // spaces between chars
-        "foo bar",       // space in middle
+        "",        // empty
+        "GET ",    // trailing space (not a tchar)
+        " POST",   // leading space
+        "G E T",   // spaces between chars
+        "foo bar", // space in middle
     ];
     for m in &invalid {
-        assert!(m.parse::<Method>().is_err(), "Method '{m}' should be rejected");
+        assert!(
+            m.parse::<Method>().is_err(),
+            "Method '{m}' should be rejected"
+        );
     }
 }
 
@@ -62,14 +70,17 @@ fn method_rejects_invalid() {
 fn method_accepts_valid_token_as_extension() {
     // Any valid token (tchar+) that isn't a standard method becomes Extension
     let extension_tokens = [
-        "get-post",       // hyphen is a tchar
-        "123",            // digits are tchars
-        "FOO-BAR_BAZ",    // mixed token chars
-        "x-request-id",   // common custom pattern
+        "get-post",     // hyphen is a tchar
+        "123",          // digits are tchars
+        "FOO-BAR_BAZ",  // mixed token chars
+        "x-request-id", // common custom pattern
     ];
     for m in extension_tokens {
         let parsed = m.parse::<Method>().unwrap();
-        assert!(parsed.is_extension(), "'{m}' should be parsed as extension method");
+        assert!(
+            parsed.is_extension(),
+            "'{m}' should be parsed as extension method"
+        );
     }
 }
 
@@ -77,19 +88,22 @@ fn method_accepts_valid_token_as_extension() {
 fn method_extension_methods() {
     // RFC 9110 Section 9.1: any valid token is a method
     let extensions = [
-        ("PROPFIND", Method::Extension("PROPFIND".to_string())),  // WebDAV
-        ("MKCOL", Method::Extension("MKCOL".to_string())),        // WebDAV
-        ("COPY", Method::Extension("COPY".to_string())),          // WebDAV
-        ("MOVE", Method::Extension("MOVE".to_string())),          // WebDAV
-        ("LOCK", Method::Extension("LOCK".to_string())),          // WebDAV
-        ("UNLOCK", Method::Extension("UNLOCK".to_string())),      // WebDAV
-        ("SEARCH", Method::Extension("SEARCH".to_string())),      // RFC 5323
-        ("CUSTOM", Method::Extension("CUSTOM".to_string())),      // Custom
+        ("PROPFIND", Method::Extension("PROPFIND".to_string())), // WebDAV
+        ("MKCOL", Method::Extension("MKCOL".to_string())),       // WebDAV
+        ("COPY", Method::Extension("COPY".to_string())),         // WebDAV
+        ("MOVE", Method::Extension("MOVE".to_string())),         // WebDAV
+        ("LOCK", Method::Extension("LOCK".to_string())),         // WebDAV
+        ("UNLOCK", Method::Extension("UNLOCK".to_string())),     // WebDAV
+        ("SEARCH", Method::Extension("SEARCH".to_string())),     // RFC 5323
+        ("CUSTOM", Method::Extension("CUSTOM".to_string())),     // Custom
         ("X-REQUEST", Method::Extension("X-REQUEST".to_string())), // Custom with hyphen
     ];
     for (input, expected) in extensions {
         let parsed: Method = input.parse().unwrap();
-        assert_eq!(parsed, expected, "Method {input} should be parsed as extension");
+        assert_eq!(
+            parsed, expected,
+            "Method {input} should be parsed as extension"
+        );
         assert!(parsed.is_extension());
         assert!(!parsed.is_standard());
     }
@@ -185,9 +199,15 @@ fn status_code_reason_phrases() {
     assert_eq!(StatusCode::new(401).unwrap().reason(), "Unauthorized");
     assert_eq!(StatusCode::new(403).unwrap().reason(), "Forbidden");
     assert_eq!(StatusCode::new(404).unwrap().reason(), "Not Found");
-    assert_eq!(StatusCode::new(500).unwrap().reason(), "Internal Server Error");
+    assert_eq!(
+        StatusCode::new(500).unwrap().reason(),
+        "Internal Server Error"
+    );
     assert_eq!(StatusCode::new(502).unwrap().reason(), "Bad Gateway");
-    assert_eq!(StatusCode::new(503).unwrap().reason(), "Service Unavailable");
+    assert_eq!(
+        StatusCode::new(503).unwrap().reason(),
+        "Service Unavailable"
+    );
 }
 
 #[test]
@@ -231,19 +251,19 @@ fn header_name_rejects_invalid() {
     // token = 1*tchar where tchar = ALPHA / DIGIT / "!" / "#" / "$" / "%" / "&" / "'" / "*" /
     //   "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
     let invalid = [
-        "",             // empty
-        "content type", // space
+        "",              // empty
+        "content type",  // space
         "content\ttype", // tab (control char)
-        "content:type", // colon
-        "content;type", // semicolon
-        "content/type", // slash
-        "content,type", // comma
-        "[bad]",        // brackets
-        "<bad>",        // angle brackets
-        "foo=bar",      // equals sign (not tchar)
-        "foo?bar",      // question mark
-        "foo@bar",      // at sign
-        "foo[bar",      // square bracket
+        "content:type",  // colon
+        "content;type",  // semicolon
+        "content/type",  // slash
+        "content,type",  // comma
+        "[bad]",         // brackets
+        "<bad>",         // angle brackets
+        "foo=bar",       // equals sign (not tchar)
+        "foo?bar",       // question mark
+        "foo@bar",       // at sign
+        "foo[bar",       // square bracket
     ];
     for name in invalid {
         assert!(
@@ -282,8 +302,8 @@ fn header_value_rejects_control_chars() {
     // RFC 9110 Section 5.5: field values allow visible ASCII (0x21-0x7E), SP (0x20), HTAB (0x09)
     // Control characters (except \t and space) are not allowed
     let invalid = [
-        "hello\nworld",  // newline
-        "hello\rworld",  // carriage return
+        "hello\nworld",   // newline
+        "hello\rworld",   // carriage return
         "hello\x00world", // null
         "hello\x1Bworld", // escape
         "hello\x7Fworld", // DEL (0x7F)
@@ -298,9 +318,9 @@ fn header_value_rejects_control_chars() {
     // Non-ASCII UTF-8 characters must also be rejected (RFC 9110 limits
     // header values to ASCII). These are valid UTF-8 strings with bytes >= 0x80.
     let non_ascii = [
-        "hello🌍world",   // emoji (multi-byte UTF-8)
-        "café",           // non-ASCII Latin
-        "日本語",          // CJK characters
+        "hello🌍world", // emoji (multi-byte UTF-8)
+        "café",         // non-ASCII Latin
+        "日本語",       // CJK characters
     ];
     for val in non_ascii {
         assert!(
@@ -322,7 +342,10 @@ fn header_map_insert_and_get() {
 
     assert!(map.contains_key("content-type"));
     assert!(map.contains_key("Content-Type")); // case-insensitive
-    assert_eq!(map.get("content-type").unwrap().as_str(), "application/json");
+    assert_eq!(
+        map.get("content-type").unwrap().as_str(),
+        "application/json"
+    );
 }
 
 #[test]
@@ -481,9 +504,9 @@ fn response_parse_with_body() {
 #[test]
 fn response_rejects_invalid_status_line() {
     let invalid = [
-        "",                          // empty
-        "Not HTTP",                  // no status code
-        "HTTP/1.1 abc OK\r\n\r\n",   // non-numeric status
+        "",                        // empty
+        "Not HTTP",                // no status code
+        "HTTP/1.1 abc OK\r\n\r\n", // non-numeric status
     ];
     for raw in invalid {
         assert!(
@@ -505,7 +528,8 @@ fn response_parse_chunked_body() {
 
 #[test]
 fn response_parse_chunked_body_single() {
-    let raw = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nd\r\nHello, world!\r\n0\r\n\r\n";
+    let raw =
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nd\r\nHello, world!\r\n0\r\n\r\n";
     let resp = Response::from_http(raw).unwrap();
     assert_eq!(resp.body_as_string().unwrap(), "Hello, world!");
 }
@@ -520,7 +544,8 @@ fn response_parse_chunked_body_multiple() {
 #[test]
 fn response_parse_chunked_with_extensions() {
     // Chunk extensions after the hex size (RFC 9112 §7.1.1)
-    let raw = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;foo=bar\r\nHello\r\n0\r\n\r\n";
+    let raw =
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;foo=bar\r\nHello\r\n0\r\n\r\n";
     let resp = Response::from_http(raw).unwrap();
     assert_eq!(resp.body_as_string().unwrap(), "Hello");
 }
@@ -561,7 +586,10 @@ fn response_parse_trailer_headers() {
     let resp = Response::from_http(raw).unwrap();
     assert_eq!(resp.body_as_string().unwrap(), "Hello");
     assert!(resp.trailers().contains_key("x-checksum"));
-    assert_eq!(resp.trailers().get("x-checksum").unwrap().as_str(), "abc123");
+    assert_eq!(
+        resp.trailers().get("x-checksum").unwrap().as_str(),
+        "abc123"
+    );
 }
 
 #[test]
@@ -605,7 +633,9 @@ fn request_parse_post_with_body() {
 
 #[test]
 fn request_parse_all_methods() {
-    let methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE"];
+    let methods = [
+        "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE",
+    ];
     for m in methods {
         let raw = format!("{m} / HTTP/1.1\r\nHost: x\r\n\r\n");
         let req = Request::from_http(&raw).unwrap();
@@ -623,7 +653,8 @@ fn request_parse_extension_method() {
 
 #[test]
 fn request_parse_multiple_headers() {
-    let raw = "GET / HTTP/1.1\r\nHost: example.com\r\nAccept: text/html\r\nUser-Agent: Test\r\n\r\n";
+    let raw =
+        "GET / HTTP/1.1\r\nHost: example.com\r\nAccept: text/html\r\nUser-Agent: Test\r\n\r\n";
     let req = Request::from_http(raw).unwrap();
     assert!(req.headers().contains_key("host"));
     assert!(req.headers().contains_key("accept"));
@@ -675,10 +706,10 @@ fn request_parse_no_body_without_content_length() {
 #[test]
 fn request_rejects_invalid() {
     let invalid = [
-        "",                              // empty
-        "GET / HTTP/1.1\n",              // LF instead of CRLF (no \r\n found)
-        "GET /\r\n",                     // missing HTTP version
-        "GET@ / HTTP/1.1\r\n\r\n",       // @ is not a tchar in method
+        "",                        // empty
+        "GET / HTTP/1.1\n",        // LF instead of CRLF (no \r\n found)
+        "GET /\r\n",               // missing HTTP version
+        "GET@ / HTTP/1.1\r\n\r\n", // @ is not a tchar in method
     ];
     for raw in invalid {
         assert!(

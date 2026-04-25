@@ -53,7 +53,9 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
 
     for line in yaml.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
 
         if trimmed.starts_with("signer:") {
             in_signer = true;
@@ -104,7 +106,11 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
 
     if !signer_type.is_empty() || !public_key_hex.is_empty() {
         config.signer = Some(SignerConfig {
-            signer_type: if signer_type.is_empty() { "unknown".into() } else { signer_type },
+            signer_type: if signer_type.is_empty() {
+                "unknown".into()
+            } else {
+                signer_type
+            },
             public_key_hex,
             private_key_hex,
             handle,
@@ -142,18 +148,23 @@ pub struct BootstrapPeer {
 }
 
 pub fn parse_bootstrap_peers(entries: &[String]) -> Vec<BootstrapPeer> {
-    entries.iter().filter_map(|entry| {
-        let parts: Vec<&str> = entry.splitn(2, '@').collect();
-        if parts.len() == 2 {
-            Some(BootstrapPeer {
-                addr: parts[0].to_string(),
-                node_id_hex: parts[1].to_string(),
-            })
-        } else {
-            edgerun_log::warn!("invalid bootstrap peer format (expected host:port@node_id_hex)");
-            None
-        }
-    }).collect()
+    entries
+        .iter()
+        .filter_map(|entry| {
+            let parts: Vec<&str> = entry.splitn(2, '@').collect();
+            if parts.len() == 2 {
+                Some(BootstrapPeer {
+                    addr: parts[0].to_string(),
+                    node_id_hex: parts[1].to_string(),
+                })
+            } else {
+                edgerun_log::warn!(
+                    "invalid bootstrap peer format (expected host:port@node_id_hex)"
+                );
+                None
+            }
+        })
+        .collect()
 }
 
 pub fn extract_private_key_bytes(config: &NodeConfig) -> Vec<u8> {

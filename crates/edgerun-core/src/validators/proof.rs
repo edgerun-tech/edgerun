@@ -12,8 +12,7 @@
 //! - TrustPolicyProof MUST carry at least one of policy_object or assignments_object
 
 use edgerun_proto::edgerun::v0::access::{
-    AggregateSummaryProof, EventSetProof, ObjectAssertionProof,
-    SnapshotSetProof, TrustPolicyProof,
+    AggregateSummaryProof, EventSetProof, ObjectAssertionProof, SnapshotSetProof, TrustPolicyProof,
 };
 
 /// Structural validation result for a proof object.
@@ -130,7 +129,10 @@ mod tests {
                 object_id: None,
             }],
         };
-        assert_eq!(validate_snapshot_set_proof(&proof), ProofStructuralResult::Valid);
+        assert_eq!(
+            validate_snapshot_set_proof(&proof),
+            ProofStructuralResult::Valid
+        );
     }
 
     #[test]
@@ -159,7 +161,10 @@ mod tests {
             }],
             related_objects: vec![],
         };
-        assert_eq!(validate_event_set_proof(&proof), ProofStructuralResult::Valid);
+        assert_eq!(
+            validate_event_set_proof(&proof),
+            ProofStructuralResult::Valid
+        );
     }
 
     #[test]

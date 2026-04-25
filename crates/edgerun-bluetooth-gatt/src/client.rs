@@ -1,8 +1,8 @@
 use crate::error::{GattError, GattResult};
 use crate::{
     format_gatt_uuid, parse_gatt_uuid, AttProtocol, GattAddressKind, GattCharacteristic,
-    GattClient, GattConnectionState, GattDescriptor, GattEventCallback,
-    GattEventKind, GattProperty, GattService, GattUuid, L2capSocket, UUID_CLIENT_CHARACTERISTIC_CONFIGURATION,
+    GattClient, GattConnectionState, GattDescriptor, GattEventCallback, GattEventKind,
+    GattProperty, GattService, GattUuid, L2capSocket, UUID_CLIENT_CHARACTERISTIC_CONFIGURATION,
 };
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
 use std::collections::HashMap;
@@ -48,9 +48,12 @@ impl LinuxGattClient {
         F: FnOnce(&mut AttProtocol) -> Result<T, GattError>,
     {
         let socket_guard = self.socket.read().unwrap();
-        let socket = socket_guard
-            .as_ref()
-            .ok_or_else(|| -> edgerun_capabilities::CapabilityError { GattError::NotConnected.into() })?;
+        let socket =
+            socket_guard
+                .as_ref()
+                .ok_or_else(|| -> edgerun_capabilities::CapabilityError {
+                    GattError::NotConnected.into()
+                })?;
         let mut proto = AttProtocol::new(socket.clone());
         let mtu = *self.mtu.read().unwrap();
         proto.set_mtu(mtu);
@@ -76,7 +79,10 @@ impl LinuxGattClient {
         let handlers = self.notification_handlers.read().unwrap();
         if let Some(callbacks) = handlers.get(&handle) {
             for callback in callbacks {
-                callback(GattEventKind::Notification { handle, value: value.clone() });
+                callback(GattEventKind::Notification {
+                    handle,
+                    value: value.clone(),
+                });
             }
         }
     }
@@ -108,7 +114,7 @@ impl LinuxGattClient {
 
     pub fn on_event<F>(&self, callback: F)
     where
-        F: Fn(GattEventKind) + Send + Sync + 'static
+        F: Fn(GattEventKind) + Send + Sync + 'static,
     {
         self.connection_callbacks
             .write()
@@ -116,7 +122,11 @@ impl LinuxGattClient {
             .push(Box::new(callback));
     }
 
-    pub fn on_notification(&self, handle: u16, callback: impl Fn(GattEventKind) + Send + Sync + 'static) {
+    pub fn on_notification(
+        &self,
+        handle: u16,
+        callback: impl Fn(GattEventKind) + Send + Sync + 'static,
+    ) {
         self.notification_handlers
             .write()
             .unwrap()
@@ -150,7 +160,11 @@ impl CapabilityProvider for LinuxGattClient {
 }
 
 impl GattClient for LinuxGattClient {
-    fn connect(&self, device_addr: &str, addr_type: GattAddressKind) -> Result<(), CapabilityError> {
+    fn connect(
+        &self,
+        device_addr: &str,
+        addr_type: GattAddressKind,
+    ) -> Result<(), CapabilityError> {
         if device_addr.is_empty() {
             return Err(GattError::InvalidParameter("device address required".to_string()).into());
         }
@@ -242,13 +256,18 @@ impl GattClient for LinuxGattClient {
                     .insert(handle, characteristics.last().unwrap().clone());
             }
 
-            self.emit_event(GattEventKind::CharacteristicDiscovered(characteristics.clone()));
+            self.emit_event(GattEventKind::CharacteristicDiscovered(
+                characteristics.clone(),
+            ));
 
             Ok(characteristics)
         })
     }
 
-    fn discover_descriptors(&self, char_handle: u16) -> Result<Vec<GattDescriptor>, CapabilityError> {
+    fn discover_descriptors(
+        &self,
+        char_handle: u16,
+    ) -> Result<Vec<GattDescriptor>, CapabilityError> {
         self.with_protocol(|proto| {
             let data = proto.find_information(char_handle + 1, 0xFFFF)?;
 
@@ -275,7 +294,10 @@ impl GattClient for LinuxGattClient {
     fn read_value(&self, handle: u16) -> Result<Vec<u8>, CapabilityError> {
         self.with_protocol(|proto| {
             let result = proto.read_value(handle)?;
-            self.emit_event(GattEventKind::ReadResponse { handle, value: result.clone() });
+            self.emit_event(GattEventKind::ReadResponse {
+                handle,
+                value: result.clone(),
+            });
             Ok(result)
         })
     }
@@ -296,25 +318,33 @@ impl GattClient for LinuxGattClient {
     }
 
     fn enable_notifications(&self, handle: u16, enable: bool) -> Result<(), CapabilityError> {
-        let desc_handle = self.find_descriptor_by_uuid(handle, UUID_CLIENT_CHARACTERISTIC_CONFIGURATION)?;
+        let desc_handle =
+            self.find_descriptor_by_uuid(handle, UUID_CLIENT_CHARACTERISTIC_CONFIGURATION)?;
         let config: [u8; 2] = if enable { [0x01, 0x00] } else { [0x00, 0x00] };
         self.write_value(desc_handle, &config, true)
     }
 
-    fn read_by_type(&self, start: u16, end: u16, uuid: &GattUuid) -> Result<Vec<u8>, CapabilityError> {
+    fn read_by_type(
+        &self,
+        start: u16,
+        end: u16,
+        uuid: &GattUuid,
+    ) -> Result<Vec<u8>, CapabilityError> {
         let uuid_bytes = Self::uuid_bytes(uuid)?;
-        self.with_protocol(|proto| {
-            proto.read_by_type(start, end, &uuid_bytes)})
+        self.with_protocol(|proto| proto.read_by_type(start, end, &uuid_bytes))
     }
 
     fn write_cmd(&self, handle: u16, data: &[u8]) -> Result<(), CapabilityError> {
-        self.with_protocol(|proto| {
-            proto.write_cmd(handle, data)})
+        self.with_protocol(|proto| proto.write_cmd(handle, data))
     }
 }
 
 impl LinuxGattClient {
-    pub fn find_descriptor_by_uuid(&self, char_handle: u16, target_uuid: u16) -> Result<u16, CapabilityError> {
+    pub fn find_descriptor_by_uuid(
+        &self,
+        char_handle: u16,
+        target_uuid: u16,
+    ) -> Result<u16, CapabilityError> {
         let descriptors = self.discover_descriptors(char_handle)?;
         let target_bytes = target_uuid.to_le_bytes();
         let target_str = format!("{:02x}{:02x}", target_bytes[0], target_bytes[1]);
@@ -349,8 +379,7 @@ impl LinuxGattClient {
     }
 
     pub fn read_characteristic_by_uuid(&self, uuid: &str) -> Result<Vec<u8>, CapabilityError> {
-        let uuid = parse_gatt_uuid(uuid)
-            .ok_or_else(|| GattError::InvalidUuid(uuid.to_string()))?;
+        let uuid = parse_gatt_uuid(uuid).ok_or_else(|| GattError::InvalidUuid(uuid.to_string()))?;
 
         for svc in self.services.read().unwrap().iter() {
             let chars = self.discover_characteristics_by_range(svc.handle, svc.end_handle)?;
@@ -364,9 +393,13 @@ impl LinuxGattClient {
         Err(GattError::CharacteristicNotFound(uuid.0).into())
     }
 
-    pub fn write_characteristic_by_uuid(&self, uuid: &str, data: &[u8], with_response: bool) -> Result<(), CapabilityError> {
-        let uuid = parse_gatt_uuid(uuid)
-            .ok_or_else(|| GattError::InvalidUuid(uuid.to_string()))?;
+    pub fn write_characteristic_by_uuid(
+        &self,
+        uuid: &str,
+        data: &[u8],
+        with_response: bool,
+    ) -> Result<(), CapabilityError> {
+        let uuid = parse_gatt_uuid(uuid).ok_or_else(|| GattError::InvalidUuid(uuid.to_string()))?;
 
         for svc in self.services.read().unwrap().iter() {
             let chars = self.discover_characteristics_by_range(svc.handle, svc.end_handle)?;
@@ -397,7 +430,12 @@ impl LinuxGattClient {
     }
 
     pub fn get_characteristics(&self) -> Vec<GattCharacteristic> {
-        self.characteristics.read().unwrap().values().cloned().collect()
+        self.characteristics
+            .read()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn get_characteristic_by_handle(&self, handle: u16) -> Option<GattCharacteristic> {
@@ -406,7 +444,9 @@ impl LinuxGattClient {
 
     pub fn get_characteristic_by_uuid(&self, uuid: &str) -> Option<GattCharacteristic> {
         let cleaned = uuid.replace("-", "").to_lowercase();
-        self.characteristics.read().unwrap()
+        self.characteristics
+            .read()
+            .unwrap()
             .values()
             .find(|c| c.uuid.0.replace("-", "").to_lowercase() == cleaned)
             .cloned()
@@ -468,7 +508,7 @@ impl GattClientBuilder {
 
     pub fn on_event<F>(mut self, callback: F) -> Self
     where
-        F: Fn(GattEventKind) + Send + Sync + 'static
+        F: Fn(GattEventKind) + Send + Sync + 'static,
     {
         self.connection_callback = Some(Box::new(callback));
         self

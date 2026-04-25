@@ -2,15 +2,15 @@
 //!
 //! Minimal JSON-RPC client using edgerun-http and edgerun-json.
 
-use std::sync::{Arc, mpsc};
-use crate::solana_types::{Pubkey, AccountMeta, Instruction};
 use crate::signers::Signer;
+use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::HttpClient;
 use edgerun_json::{json, JsonValue};
+use std::sync::{mpsc, Arc};
 
 use crate::error::SolanaError;
-use crate::types::{Provider, ProviderStatus, collateral};
 use crate::provider_registry_program_id;
+use crate::types::{collateral, Provider, ProviderStatus};
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[allow(dead_code)]
@@ -25,7 +25,9 @@ enum ProviderRegistryInstruction {
     UpdateCollateral(u64),
     Pause,
     Resume,
-    Attest { uptime_seconds: u32 },
+    Attest {
+        uptime_seconds: u32,
+    },
 }
 
 pub struct ProviderClient {
@@ -47,7 +49,8 @@ impl ProviderClient {
     }
 
     fn rpc_call(&self, payload: JsonValue) -> Result<JsonValue, SolanaError> {
-        let json_str = payload.to_json_string()
+        let json_str = payload
+            .to_json_string()
             .map_err(|e| SolanaError::Rpc(e.to_string()))?;
         let rpc_url = self.rpc_url.clone();
         let http = self.http.clone();
@@ -58,12 +61,14 @@ impl ProviderClient {
             let _ = tx.send(body);
         });
 
-        let resp = rx.recv().map_err(|e| SolanaError::Rpc(e.to_string()))?
+        let resp = rx
+            .recv()
+            .map_err(|e| SolanaError::Rpc(e.to_string()))?
             .map_err(|e| SolanaError::Rpc(e.to_string()))?;
-        let body = String::from_utf8(resp.body().to_vec())
-            .map_err(|e| SolanaError::Rpc(e.to_string()))?;
-        let parsed = edgerun_json::parse_json(&body)
-            .map_err(|e| SolanaError::Rpc(e.to_string()))?;
+        let body =
+            String::from_utf8(resp.body().to_vec()).map_err(|e| SolanaError::Rpc(e.to_string()))?;
+        let parsed =
+            edgerun_json::parse_json(&body).map_err(|e| SolanaError::Rpc(e.to_string()))?;
         if parsed.get("error").is_some() {
             return Err(SolanaError::Rpc(
                 parsed["error"].to_json_string().unwrap_or_default(),
@@ -84,8 +89,7 @@ impl ProviderClient {
             .as_str()
             .ok_or_else(|| SolanaError::Rpc("no data in response".to_string()))?;
         let bytes = base64_decode(data)?;
-        Provider::try_from_slice(&bytes)
-            .map_err(|e| SolanaError::Serialization(e.to_string()))
+        Provider::try_from_slice(&bytes).map_err(|e| SolanaError::Serialization(e.to_string()))
     }
 
     pub fn find_active_providers(&self) -> Result<Vec<Pubkey>, SolanaError> {
@@ -248,9 +252,13 @@ impl ProviderClient {
         signer_pubkey: &Pubkey,
         signer: &S,
     ) -> Result<String, SolanaError> {
-        let msg = crate::deployment::serialize_transaction_message(signer_pubkey, &[instruction.clone()]);
-        let signature = signer.sign(&msg).map_err(|e| SolanaError::Signing(e.to_string()))?;
-        let tx_bytes = crate::deployment::serialize_transaction(signer_pubkey, &[instruction], &signature);
+        let msg =
+            crate::deployment::serialize_transaction_message(signer_pubkey, &[instruction.clone()]);
+        let signature = signer
+            .sign(&msg)
+            .map_err(|e| SolanaError::Signing(e.to_string()))?;
+        let tx_bytes =
+            crate::deployment::serialize_transaction(signer_pubkey, &[instruction], &signature);
         let payload = json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -298,13 +306,18 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, SolanaError> {
             b'0'..=b'9' => Ok(b - b'0' + 52),
             b'+' => Ok(62),
             b'/' => Ok(63),
-            _ => Err(SolanaError::Rpc(format!("invalid base64 char: {}", b as char))),
+            _ => Err(SolanaError::Rpc(format!(
+                "invalid base64 char: {}",
+                b as char
+            ))),
         }
     }
     let input = input.trim_end_matches('=');
     let mut result = Vec::with_capacity(input.len() * 3 / 4);
     for chunk in input.as_bytes().chunks(4) {
-        if chunk.len() < 4 { break; }
+        if chunk.len() < 4 {
+            break;
+        }
         let c0 = decode_char(chunk[0])?;
         let c1 = decode_char(chunk[1])?;
         result.push(c0 << 2 | c1 >> 4);
@@ -312,7 +325,9 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, SolanaError> {
             let c = decode_char(chunk[2])?;
             result.push(c1 << 4 | c >> 2);
             Some(c)
-        } else { None };
+        } else {
+            None
+        };
         if chunk.len() >= 4 && chunk[3] != b'=' {
             let c3 = decode_char(chunk[3])?;
             result.push((c2.unwrap_or(0)) << 6 | c3);

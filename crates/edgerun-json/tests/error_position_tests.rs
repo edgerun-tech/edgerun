@@ -145,11 +145,7 @@ fn test_multiline_error_positions() {
 
             eprintln!(
                 "Multiline error {}:\n  Input:\n{}\n  edgerun: {}\n  serde_json line: {}, col: {}",
-                description,
-                input,
-                lg_msg,
-                sj_line,
-                sj_col
+                description, input, lg_msg, sj_line, sj_col
             );
 
             // Verify serde_json line number is reasonable

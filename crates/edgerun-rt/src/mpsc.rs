@@ -6,21 +6,21 @@
 //! - Direct handoff: when receiver frees capacity, it transfers to a blocked sender
 //! - This prevents races where sender steals slot before receiver can process
 
+use std::cell::UnsafeCell;
 use std::hint::spin_loop;
 use std::mem::MaybeUninit;
-use std::cell::UnsafeCell;
 use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicUsize, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
     let cap = cap.max(1);
-    
+
     let stub = Box::into_raw(Box::new(Node {
         slot_idx: usize::MAX,
         next: AtomicPtr::new(ptr::null_mut()),
     }));
-    
+
     let inner = Arc::new(Inner {
         head: AtomicPtr::new(stub),
         tail: AtomicPtr::new(stub),
@@ -33,7 +33,9 @@ pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
         waiter_count: AtomicUsize::new(0),
     });
     (
-        Sender { inner: inner.clone() },
+        Sender {
+            inner: inner.clone(),
+        },
         Receiver { inner },
     )
 }
@@ -73,14 +75,18 @@ impl<T> Inner<T> {
             unsafe {
                 let tail = self.waiters_tail.load(Ordering::Acquire);
                 let next = (*head).next.load(Ordering::Acquire);
-                
+
                 if head == tail && next.is_null() {
                     return false;
                 }
 
                 let new_head = if next.is_null() { tail } else { next };
-                
-                if self.waiters_head.compare_exchange(head, new_head, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+
+                if self
+                    .waiters_head
+                    .compare_exchange(head, new_head, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
                     self.waiter_count.fetch_sub(1, Ordering::AcqRel);
                     if next.is_null() {
                         self.waiters_tail.store(head, Ordering::Release);
@@ -103,15 +109,34 @@ impl<T> Inner<T> {
         loop {
             let tail = self.waiters_tail.load(Ordering::Acquire);
             if tail.is_null() {
-                if self.waiters_head.compare_exchange(ptr::null_mut(), waiter, Ordering::AcqRel, Ordering::Acquire).is_ok() {
-                    let _ = self.waiters_tail.compare_exchange(ptr::null_mut(), waiter, Ordering::Release, Ordering::Relaxed);
+                if self
+                    .waiters_head
+                    .compare_exchange(ptr::null_mut(), waiter, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
+                    let _ = self.waiters_tail.compare_exchange(
+                        ptr::null_mut(),
+                        waiter,
+                        Ordering::Release,
+                        Ordering::Relaxed,
+                    );
                     self.waiter_count.fetch_add(1, Ordering::Relaxed);
                     return;
                 }
             } else {
                 let next = unsafe { (*tail).next.load(Ordering::Acquire) };
                 if next.is_null() {
-                    if unsafe { (*tail).next.compare_exchange(ptr::null_mut(), waiter, Ordering::AcqRel, Ordering::Acquire).is_ok() } {
+                    if unsafe {
+                        (*tail)
+                            .next
+                            .compare_exchange(
+                                ptr::null_mut(),
+                                waiter,
+                                Ordering::AcqRel,
+                                Ordering::Acquire,
+                            )
+                            .is_ok()
+                    } {
                         self.waiters_tail.store(waiter, Ordering::Release);
                         self.waiter_count.fetch_add(1, Ordering::Relaxed);
                         return;
@@ -157,7 +182,9 @@ struct FreeList {
 impl FreeList {
     fn new(cap: usize) -> Self {
         let head = if cap > 0 { 0 } else { usize::MAX };
-        Self { head: AtomicUsize::new(head) }
+        Self {
+            head: AtomicUsize::new(head),
+        }
     }
 
     fn pack(ptr: usize, tag: usize) -> usize {
@@ -186,7 +213,11 @@ impl FreeList {
             let next = slots[ptr].next.load(Ordering::Acquire);
             let new = Self::pack(next, tag.wrapping_add(1));
 
-            if self.head.compare_exchange(head, new, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            if self
+                .head
+                .compare_exchange(head, new, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
                 return Some(ptr);
             }
         }
@@ -201,7 +232,11 @@ impl FreeList {
 
             let new = Self::pack(idx, tag.wrapping_add(1));
 
-            if self.head.compare_exchange(head, new, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            if self
+                .head
+                .compare_exchange(head, new, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
                 return;
             }
         }
@@ -218,7 +253,7 @@ impl<T> SlotPool<T> {
                 next: AtomicUsize::new(0),
             });
         }
-        
+
         let freelist = FreeList::new(cap);
         for (i, slot) in slots.iter_mut().enumerate() {
             let next = if i + 1 < cap { i + 1 } else { usize::MAX };
@@ -261,7 +296,9 @@ unsafe impl<T: Send> Send for Sender<T> {}
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
         self.inner.sender_count.fetch_add(1, Ordering::Relaxed);
-        Sender { inner: self.inner.clone() }
+        Sender {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -282,7 +319,7 @@ impl<T> Sender<T> {
         let Some(slot_idx) = self.inner.pool.acquire() else {
             return Err(SendError(value));
         };
-        
+
         unsafe {
             self.inner.pool.write(slot_idx, value);
         }
@@ -354,9 +391,12 @@ unsafe impl<T> Send for SendFut<T> {}
 impl<T: Unpin> std::future::Future for SendFut<T> {
     type Output = Result<(), SendError<T>>;
 
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         let this = self.as_mut().get_mut();
-        
+
         if this.value.is_none() {
             return std::task::Poll::Ready(Ok(()));
         }
@@ -369,7 +409,9 @@ impl<T: Unpin> std::future::Future for SendFut<T> {
             unsafe {
                 let assigned = (*this.waiter_ptr).slot_idx.load(Ordering::Acquire);
                 if assigned != usize::MAX {
-                    (*this.waiter_ptr).slot_idx.store(usize::MAX, Ordering::Release);
+                    (*this.waiter_ptr)
+                        .slot_idx
+                        .store(usize::MAX, Ordering::Release);
                     let slot_idx = assigned;
                     let value = (*this.waiter_ptr).value.take().unwrap();
                     this.inner.pool.write(slot_idx, value);
@@ -381,7 +423,7 @@ impl<T: Unpin> std::future::Future for SendFut<T> {
 
                     let prev = this.inner.tail.swap(node, Ordering::AcqRel);
                     (*prev).next.store(node, Ordering::Release);
-                    
+
                     this.inner.wake_receiver();
                     let waiter = Box::from_raw(this.waiter_ptr);
                     drop(waiter);
@@ -407,7 +449,7 @@ impl<T: Unpin> std::future::Future for SendFut<T> {
                 unsafe {
                     (*prev).next.store(node, Ordering::Release);
                 }
-                
+
                 this.inner.wake_receiver();
                 return std::task::Poll::Ready(Ok(()));
             }
@@ -469,7 +511,10 @@ impl<T> Receiver<T> {
             if let Ok(val) = self.try_recv() {
                 return Some(val);
             }
-            if self.inner.closed.load(Ordering::Acquire) && self.inner.head.load(Ordering::Acquire) == self.inner.tail.load(Ordering::Acquire) {
+            if self.inner.closed.load(Ordering::Acquire)
+                && self.inner.head.load(Ordering::Acquire)
+                    == self.inner.tail.load(Ordering::Acquire)
+            {
                 return None;
             }
             spin_loop();
@@ -482,14 +527,14 @@ impl<T> Receiver<T> {
 
     fn pop_node(&self) -> Option<usize> {
         let head = self.inner.head.load(Ordering::Acquire);
-        
+
         unsafe {
             let next = (*head).next.load(Ordering::Acquire);
-            
+
             if next.is_null() {
                 return None;
             }
-            
+
             let slot_idx = (*next).slot_idx;
             if slot_idx == usize::MAX {
                 self.inner.head.store(next, Ordering::Release);
@@ -502,7 +547,7 @@ impl<T> Receiver<T> {
                 drop(Box::from_raw(next));
                 return Some(slot_idx);
             }
-            
+
             self.inner.head.store(next, Ordering::Release);
             drop(Box::from_raw(head));
             Some(slot_idx)
@@ -534,9 +579,12 @@ unsafe impl<T: Send> Send for RecvFut<'_, T> {}
 impl<T> std::future::Future for RecvFut<'_, T> {
     type Output = Option<T>;
 
-    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         let this = self.get_mut();
-        
+
         let try_pop = || -> Option<usize> {
             let head = this.inner.head.load(Ordering::Acquire);
             unsafe {
@@ -561,7 +609,7 @@ impl<T> std::future::Future for RecvFut<'_, T> {
                 Some(slot_idx)
             }
         };
-        
+
         if this.inner.closed.load(Ordering::Acquire) {
             if let Some(slot_idx) = try_pop() {
                 let val = unsafe {
@@ -589,12 +637,22 @@ impl<T> std::future::Future for RecvFut<'_, T> {
             return std::task::Poll::Ready(Some(val));
         }
 
-        let old_waker = this.inner.recv_waker.swap(Box::into_raw(Box::new(cx.waker().clone())), Ordering::AcqRel);
-        if !old_waker.is_null() { drop(unsafe { Box::from_raw(old_waker) }); }
-        
+        let old_waker = this.inner.recv_waker.swap(
+            Box::into_raw(Box::new(cx.waker().clone())),
+            Ordering::AcqRel,
+        );
+        if !old_waker.is_null() {
+            drop(unsafe { Box::from_raw(old_waker) });
+        }
+
         if this.inner.closed.load(Ordering::Acquire) || try_pop().is_some() {
-            let waker = this.inner.recv_waker.swap(ptr::null_mut(), Ordering::AcqRel);
-            if !waker.is_null() { drop(unsafe { Box::from_raw(waker) }); }
+            let waker = this
+                .inner
+                .recv_waker
+                .swap(ptr::null_mut(), Ordering::AcqRel);
+            if !waker.is_null() {
+                drop(unsafe { Box::from_raw(waker) });
+            }
             if let Some(slot_idx) = try_pop() {
                 let val = unsafe {
                     let slots = &*this.inner.pool.slots.get();

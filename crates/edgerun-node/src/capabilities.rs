@@ -12,39 +12,37 @@
 
 use edgerun_proto::edgerun::v0::common::ObjectKind;
 
-use edgerun_capabilities::{
-    CapabilityDescriptor, CapabilityProvider,
-};
-use edgerun_capability_policy::{PolicyContext, PolicyEngine, RevocationReason, SimplePolicyEngine};
-use edgerun_proto::edgerun::v0::stream::EventType;
-use prost::Message;
-use edgerun_remote_capability::{
-    FramedRemoteTransport, PolicyWrappedProvider, RemoteCapabilityProvider,
-    serve_one,
+use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
+use edgerun_capability_policy::{
+    PolicyContext, PolicyEngine, RevocationReason, SimplePolicyEngine,
 };
 use edgerun_hardware_signing::MeshSigner;
+use edgerun_proto::edgerun::v0::stream::EventType;
+use edgerun_remote_capability::{
+    serve_one, FramedRemoteTransport, PolicyWrappedProvider, RemoteCapabilityProvider,
+};
 use edgerun_storage::NodeStore;
+use prost::Message;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
 const KIND_PAYLOAD: i32 = ObjectKind::Payload as i32; // 1
 
+#[cfg(feature = "all-hardware")]
+use edgerun_camera_biometrics::CameraBiometricPurpose;
 #[cfg(feature = "hardware")]
 use edgerun_evdev_input::EvdevInputBackend;
 #[cfg(feature = "all-hardware")]
+use edgerun_microphone::{AudioCaptureRequest, MicrophoneSampleFormat};
+#[cfg(feature = "all-hardware")]
 use edgerun_remote_capability::adapters::{
-    BluetoothRemoteAdapter, BluetoothConnectionRemoteAdapter,
-    CameraRemoteAdapter, InputRemoteAdapter,
-    MicrophoneRemoteAdapter, SpeakerRemoteAdapter,
-    WifiRemoteAdapter, WifiControlRemoteAdapter,
+    BluetoothConnectionRemoteAdapter, BluetoothRemoteAdapter, CameraRemoteAdapter,
+    InputRemoteAdapter, MicrophoneRemoteAdapter, SpeakerRemoteAdapter, WifiControlRemoteAdapter,
+    WifiRemoteAdapter,
 };
 #[cfg(feature = "all-hardware")]
-use edgerun_v4l2_camera::{V4l2CameraBiometricReader, discover_camera_devices};
-#[cfg(feature = "all-hardware")]
-use edgerun_camera_biometrics::CameraBiometricPurpose;
-#[cfg(feature = "all-hardware")]
-use edgerun_microphone::{AudioCaptureRequest, MicrophoneSampleFormat};
+use edgerun_v4l2_camera::{discover_camera_devices, V4l2CameraBiometricReader};
 
 // ===========================================================================
 // Grant projection from event stream
@@ -78,9 +76,17 @@ pub fn project_capability_grants(
                 // Resolve the grant object from the store
                 if let Some(object_ref) = &event.payload_object {
                     if let Ok(Some(obj)) = store.get_object(object_ref) {
-                        if let Ok(grant) = edgerun_proto::edgerun::v0::capability::CapabilityGrant::decode(&obj.content[..]) {
+                        if let Ok(grant) =
+                            edgerun_proto::edgerun::v0::capability::CapabilityGrant::decode(
+                                &obj.content[..],
+                            )
+                        {
                             if let Err(e) = engine.import_grant(grant) {
-                                edgerun_log::warn!("failed to import capability grant for event seq {}: {}", event.seq, e);
+                                edgerun_log::warn!(
+                                    "failed to import capability grant for event seq {}: {}",
+                                    event.seq,
+                                    e
+                                );
                             }
                         }
                     }
@@ -90,9 +96,19 @@ pub fn project_capability_grants(
                 // Resolve the revocation object from the store
                 if let Some(object_ref) = &event.payload_object {
                     if let Ok(Some(obj)) = store.get_object(object_ref) {
-                        if let Ok(revocation) = edgerun_proto::edgerun::v0::capability::CapabilityRevocation::decode(&obj.content[..]) {
-                            if let Err(e) = engine.revoke(&revocation.grant_id, RevocationReason::Superseded) {
-                                edgerun_log::warn!("failed to revoke capability for event seq {}: {}", event.seq, e);
+                        if let Ok(revocation) =
+                            edgerun_proto::edgerun::v0::capability::CapabilityRevocation::decode(
+                                &obj.content[..],
+                            )
+                        {
+                            if let Err(e) =
+                                engine.revoke(&revocation.grant_id, RevocationReason::Superseded)
+                            {
+                                edgerun_log::warn!(
+                                    "failed to revoke capability for event seq {}: {}",
+                                    event.seq,
+                                    e
+                                );
                             }
                         }
                     }
@@ -130,7 +146,8 @@ pub fn record_capability_grant_event(
         vec![],
         vec![],
         vec![],
-    ).ok_or("failed to append capability grant event")?;
+    )
+    .ok_or("failed to append capability grant event")?;
 
     Ok(seq)
 }
@@ -156,7 +173,8 @@ pub fn record_capability_revocation_event(
         vec![],
         vec![],
         vec![],
-    ).ok_or("failed to append capability revocation event")?;
+    )
+    .ok_or("failed to append capability revocation event")?;
 
     Ok(seq)
 }
@@ -183,7 +201,11 @@ impl MultiCapabilityProvider {
     }
 
     /// Registers a capability provider.
-    pub fn register(&mut self, descriptor: &CapabilityDescriptor, provider: Box<dyn RemoteCapabilityProvider + Send>) {
+    pub fn register(
+        &mut self,
+        descriptor: &CapabilityDescriptor,
+        provider: Box<dyn RemoteCapabilityProvider + Send>,
+    ) {
         let key = format!(
             "{}:{}:{}",
             descriptor.provider_name,
@@ -226,7 +248,10 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
     fn open_session(
         &mut self,
         open: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionOpen,
-    ) -> Result<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept, edgerun_capabilities::CapabilityError> {
+    ) -> Result<
+        edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept,
+        edgerun_capabilities::CapabilityError,
+    > {
         let mut last_err = None;
         for (key, provider) in self.providers.iter_mut() {
             match provider.open_session(open) {
@@ -244,7 +269,10 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
         session_id: &[u8],
         invocation: &edgerun_capabilities::CapabilityInvocation,
         inline_parameters: Option<&[u8]>,
-    ) -> Result<edgerun_remote_capability::RemoteInvocationResult, edgerun_capabilities::CapabilityError> {
+    ) -> Result<
+        edgerun_remote_capability::RemoteInvocationResult,
+        edgerun_capabilities::CapabilityError,
+    > {
         for provider in self.providers.values_mut() {
             match provider.invoke(session_id, invocation, inline_parameters) {
                 Ok(result) => return Ok(result),
@@ -260,7 +288,10 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
     fn next_event(
         &mut self,
         session_id: &[u8],
-    ) -> Result<Option<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent>, edgerun_capabilities::CapabilityError> {
+    ) -> Result<
+        Option<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent>,
+        edgerun_capabilities::CapabilityError,
+    > {
         for provider in self.providers.values_mut() {
             match provider.next_event(session_id) {
                 Ok(Some(event)) => return Ok(Some(event)),
@@ -287,7 +318,8 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
     fn handle_request(
         &mut self,
         request: &edgerun_capabilities::CapabilityRequest,
-    ) -> Result<Option<edgerun_capabilities::CapabilityGrant>, edgerun_capabilities::CapabilityError> {
+    ) -> Result<Option<edgerun_capabilities::CapabilityGrant>, edgerun_capabilities::CapabilityError>
+    {
         // Try to find a provider that can handle this request
         for provider in self.providers.values_mut() {
             match provider.handle_request(request) {
@@ -354,11 +386,14 @@ pub fn discover_and_register_capabilities(
                         Ok(backend) => {
                             let descriptor = backend.descriptor();
                             let adapter = InputRemoteAdapter::new(backend, 64);
-                            let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
-                                .with_context(context.clone());
+                            let wrapped =
+                                PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                                    .with_context(context.clone());
                             multi.register(&descriptor, Box::new(wrapped));
                         }
-                        Err(e) => eprintln!("edgerund: warning: failed to open evdev device: {}", e),
+                        Err(e) => {
+                            eprintln!("edgerund: warning: failed to open evdev device: {}", e)
+                        }
                     }
                 }
             }
@@ -387,14 +422,18 @@ pub fn discover_and_register_capabilities(
                     match edgerun_alsa_microphone::AlsaMicrophoneBackend::open(pcm.clone()) {
                         Ok(backend) => {
                             let descriptor = backend.descriptor();
-                            let adapter = MicrophoneRemoteAdapter::new(backend, AudioCaptureRequest {
-                                sample_rate_hz: 48_000,
-                                channels: 2,
-                                duration_ms: 1000,
-                                format: MicrophoneSampleFormat::PcmS16Le,
-                            });
-                            let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
-                                .with_context(context.clone());
+                            let adapter = MicrophoneRemoteAdapter::new(
+                                backend,
+                                AudioCaptureRequest {
+                                    sample_rate_hz: 48_000,
+                                    channels: 2,
+                                    duration_ms: 1000,
+                                    format: MicrophoneSampleFormat::PcmS16Le,
+                                },
+                            );
+                            let wrapped =
+                                PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                                    .with_context(context.clone());
                             multi.register(&descriptor, Box::new(wrapped));
                         }
                         Err(e) => eprintln!("edgerund: warning: failed to open ALSA mic: {}", e),
@@ -436,7 +475,8 @@ pub fn discover_and_register_capabilities(
                         interface: iface.clone(),
                     };
                     let instance_id = format!("wifi-{}", i);
-                    let descriptor = edgerun_wifi::default_wifi_descriptor("edgerun-linux-wifi", &instance_id);
+                    let descriptor =
+                        edgerun_wifi::default_wifi_descriptor("edgerun-linux-wifi", &instance_id);
                     let adapter = WifiRemoteAdapter::new(backend, descriptor.clone());
                     let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
                         .with_context(context.clone());
@@ -448,7 +488,8 @@ pub fn discover_and_register_capabilities(
                         interface: iface.clone(),
                     };
                     let instance_id = format!("wifi-ctrl-{}", i);
-                    let descriptor = edgerun_wifi::default_wifi_descriptor("edgerun-linux-wifi", &instance_id);
+                    let descriptor =
+                        edgerun_wifi::default_wifi_descriptor("edgerun-linux-wifi", &instance_id);
                     let adapter = WifiControlRemoteAdapter::new(backend, descriptor.clone());
                     let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
                         .with_context(context.clone());
@@ -467,7 +508,10 @@ pub fn discover_and_register_capabilities(
                         controller: ctrl.clone(),
                     };
                     let instance_id = format!("bt-{}", ctrl.index);
-                    let descriptor = edgerun_bluetooth::default_bluetooth_descriptor("edgerun-mgmt-bluetooth", &instance_id);
+                    let descriptor = edgerun_bluetooth::default_bluetooth_descriptor(
+                        "edgerun-mgmt-bluetooth",
+                        &instance_id,
+                    );
                     let adapter = BluetoothRemoteAdapter::new(backend, descriptor.clone());
                     let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
                         .with_context(context.clone());
@@ -479,14 +523,21 @@ pub fn discover_and_register_capabilities(
                         controller: ctrl.clone(),
                     };
                     let instance_id = format!("bt-conn-{}", ctrl.index);
-                    let descriptor = edgerun_bluetooth::default_bluetooth_descriptor("edgerun-mgmt-bluetooth", &instance_id);
-                    let adapter = BluetoothConnectionRemoteAdapter::new(backend, descriptor.clone());
+                    let descriptor = edgerun_bluetooth::default_bluetooth_descriptor(
+                        "edgerun-mgmt-bluetooth",
+                        &instance_id,
+                    );
+                    let adapter =
+                        BluetoothConnectionRemoteAdapter::new(backend, descriptor.clone());
                     let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
                         .with_context(context.clone());
                     multi.register(&descriptor, Box::new(wrapped));
                 }
             }
-            Err(e) => eprintln!("edgerund: warning: Bluetooth controller discovery failed: {}", e),
+            Err(e) => eprintln!(
+                "edgerund: warning: Bluetooth controller discovery failed: {}",
+                e
+            ),
         }
     }
 
@@ -511,15 +562,20 @@ pub fn serve_capabilities_unix(
     }
 
     let listener = std::os::unix::net::UnixListener::bind(socket_path)?;
-    eprintln!("edgerund: capability server listening on {}", socket_path.display());
+    eprintln!(
+        "edgerund: capability server listening on {}",
+        socket_path.display()
+    );
 
     loop {
         match listener.accept() {
             Ok((stream, _addr)) => {
                 let mut transport = FramedRemoteTransport::new(stream);
-                let mut locked = multi.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut locked = multi
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 match serve_one(&mut *locked, &mut transport) {
-                    Ok(true) => {} // connection served
+                    Ok(true) => {}  // connection served
                     Ok(false) => {} // connection closed gracefully
                     Err(e) => eprintln!("edgerund: capability serve error: {}", e),
                 }
@@ -582,9 +638,7 @@ pub fn mesh_capability_server_tick<P: RemoteCapabilityProvider>(
 
 /// Builds a multi-provider with all discovered capabilities.
 /// The `policy` engine should have grants replayed from the event stream first.
-pub fn build_multi_provider(
-    policy: SimplePolicyEngine,
-) -> MultiCapabilityProvider {
+pub fn build_multi_provider(policy: SimplePolicyEngine) -> MultiCapabilityProvider {
     let mut multi = MultiCapabilityProvider::new();
     discover_and_register_capabilities(&mut multi, policy);
     multi
@@ -598,10 +652,10 @@ pub fn build_multi_provider(
 mod tests {
     use super::*;
     use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
-    use edgerun_remote_capability::RemoteCapabilityProvider;
     use edgerun_proto::edgerun::v0::capability_runtime::{
-        CapabilitySessionOpen, CapabilitySessionClose,
+        CapabilitySessionClose, CapabilitySessionOpen,
     };
+    use edgerun_remote_capability::RemoteCapabilityProvider;
 
     // -----------------------------------------------------------------------
     // MultiCapabilityProvider tests
@@ -644,7 +698,9 @@ mod tests {
         assert_eq!(multi.len(), 1);
 
         let multi_desc = multi.descriptor();
-        assert!(multi_desc.capability_id.ends_with(b"1-providers".as_slice()));
+        assert!(multi_desc
+            .capability_id
+            .ends_with(b"1-providers".as_slice()));
     }
 
     #[test]
@@ -985,17 +1041,22 @@ mod tests {
         fn open_session(
             &mut self,
             _open: &CapabilitySessionOpen,
-        ) -> Result<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept, CapabilityError> {
+        ) -> Result<
+            edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept,
+            CapabilityError,
+        > {
             if self.accept_sessions {
-                Ok(edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept {
-                    version: 1,
-                    session_id: vec![1, 2, 3],
-                    accepted: true,
-                    granted_operations: vec![],
-                    granted_access_class: 0,
-                    error_reason: String::new(),
-                    grant_id: vec![],
-                })
+                Ok(
+                    edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept {
+                        version: 1,
+                        session_id: vec![1, 2, 3],
+                        accepted: true,
+                        granted_operations: vec![],
+                        granted_access_class: 0,
+                        error_reason: String::new(),
+                        grant_id: vec![],
+                    },
+                )
             } else {
                 Err(CapabilityError::Unsupported("not accepting"))
             }

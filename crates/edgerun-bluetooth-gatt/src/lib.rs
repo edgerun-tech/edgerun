@@ -1,14 +1,14 @@
-pub mod linux;
+pub mod async_ext;
 pub mod client;
 pub mod error;
-pub mod async_ext;
 pub mod hci;
+pub mod linux;
 
-pub use linux::{L2capSocket, AttProtocol};
+pub use async_ext::{AsyncAttProtocol, AsyncL2capSocket};
 pub use client::LinuxGattClient;
 pub use error::{GattError, GattResult};
-pub use async_ext::{AsyncL2capSocket, AsyncAttProtocol};
 pub use hci::{HciConnection, HciConnectionPool, LeConnParams};
+pub use linux::{AttProtocol, L2capSocket};
 
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
@@ -63,7 +63,9 @@ impl GattUuid {
 
     pub fn from_hex(hex: &str) -> Option<Self> {
         let cleaned = hex.replace('-', "").to_lowercase();
-        if (cleaned.len() == 4 || cleaned.len() == 32) && cleaned.chars().all(|c| c.is_ascii_hexdigit()) {
+        if (cleaned.len() == 4 || cleaned.len() == 32)
+            && cleaned.chars().all(|c| c.is_ascii_hexdigit())
+        {
             Some(Self(cleaned))
         } else {
             None
@@ -137,14 +139,30 @@ pub enum GattProperty {
 impl GattProperty {
     pub fn from_bits(bits: u8) -> Vec<Self> {
         let mut props = Vec::new();
-        if bits & 0x01 != 0 { props.push(Self::Broadcast); }
-        if bits & 0x02 != 0 { props.push(Self::Read); }
-        if bits & 0x04 != 0 { props.push(Self::WriteNoResponse); }
-        if bits & 0x08 != 0 { props.push(Self::Write); }
-        if bits & 0x10 != 0 { props.push(Self::Notify); }
-        if bits & 0x20 != 0 { props.push(Self::Indicate); }
-        if bits & 0x40 != 0 { props.push(Self::SignedWrite); }
-        if bits & 0x80 != 0 { props.push(Self::Extended); }
+        if bits & 0x01 != 0 {
+            props.push(Self::Broadcast);
+        }
+        if bits & 0x02 != 0 {
+            props.push(Self::Read);
+        }
+        if bits & 0x04 != 0 {
+            props.push(Self::WriteNoResponse);
+        }
+        if bits & 0x08 != 0 {
+            props.push(Self::Write);
+        }
+        if bits & 0x10 != 0 {
+            props.push(Self::Notify);
+        }
+        if bits & 0x20 != 0 {
+            props.push(Self::Indicate);
+        }
+        if bits & 0x40 != 0 {
+            props.push(Self::SignedWrite);
+        }
+        if bits & 0x80 != 0 {
+            props.push(Self::Extended);
+        }
         props
     }
 
@@ -273,16 +291,45 @@ impl GattConnectionState {
 pub type GattEventCallback = Box<dyn Fn(GattEventKind) + Send + Sync>;
 
 pub trait GattClient: CapabilityProvider {
-    fn connect(&self, device_addr: &str, addr_type: GattAddressKind) -> Result<(), edgerun_capabilities::CapabilityError>;
+    fn connect(
+        &self,
+        device_addr: &str,
+        addr_type: GattAddressKind,
+    ) -> Result<(), edgerun_capabilities::CapabilityError>;
     fn disconnect(&self) -> Result<(), edgerun_capabilities::CapabilityError>;
     fn discover_services(&self) -> Result<Vec<GattService>, edgerun_capabilities::CapabilityError>;
-    fn discover_characteristics_by_range(&self, start: u16, end: u16) -> Result<Vec<GattCharacteristic>, edgerun_capabilities::CapabilityError>;
-    fn discover_descriptors(&self, char_handle: u16) -> Result<Vec<GattDescriptor>, edgerun_capabilities::CapabilityError>;
+    fn discover_characteristics_by_range(
+        &self,
+        start: u16,
+        end: u16,
+    ) -> Result<Vec<GattCharacteristic>, edgerun_capabilities::CapabilityError>;
+    fn discover_descriptors(
+        &self,
+        char_handle: u16,
+    ) -> Result<Vec<GattDescriptor>, edgerun_capabilities::CapabilityError>;
     fn read_value(&self, handle: u16) -> Result<Vec<u8>, edgerun_capabilities::CapabilityError>;
-    fn write_value(&self, handle: u16, data: &[u8], with_response: bool) -> Result<(), edgerun_capabilities::CapabilityError>;
-    fn enable_notifications(&self, handle: u16, enable: bool) -> Result<(), edgerun_capabilities::CapabilityError>;
-    fn read_by_type(&self, start: u16, end: u16, uuid: &GattUuid) -> Result<Vec<u8>, edgerun_capabilities::CapabilityError>;
-    fn write_cmd(&self, handle: u16, data: &[u8]) -> Result<(), edgerun_capabilities::CapabilityError>;
+    fn write_value(
+        &self,
+        handle: u16,
+        data: &[u8],
+        with_response: bool,
+    ) -> Result<(), edgerun_capabilities::CapabilityError>;
+    fn enable_notifications(
+        &self,
+        handle: u16,
+        enable: bool,
+    ) -> Result<(), edgerun_capabilities::CapabilityError>;
+    fn read_by_type(
+        &self,
+        start: u16,
+        end: u16,
+        uuid: &GattUuid,
+    ) -> Result<Vec<u8>, edgerun_capabilities::CapabilityError>;
+    fn write_cmd(
+        &self,
+        handle: u16,
+        data: &[u8],
+    ) -> Result<(), edgerun_capabilities::CapabilityError>;
 }
 
 pub fn default_gatt_descriptor(provider: &str, instance_id: &str) -> CapabilityDescriptor {
@@ -292,10 +339,7 @@ pub fn default_gatt_descriptor(provider: &str, instance_id: &str) -> CapabilityD
         CapabilityRole::Communication,
         &[CapabilityModality::Radio],
         &[CapabilityEventKind::Radio],
-        &[
-            CapabilityOperation::Observe,
-            CapabilityOperation::Query,
-        ],
+        &[CapabilityOperation::Observe, CapabilityOperation::Query],
         Vec::new(),
     )
 }
@@ -313,10 +357,17 @@ pub fn format_gatt_uuid(bytes: &[u8]) -> String {
             let hex = b.iter().map(|b| format!("{:02x}", b)).collect::<String>();
             format!(
                 "{}-{}-{}-{}-{}",
-                &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32]
+                &hex[0..8],
+                &hex[8..12],
+                &hex[12..16],
+                &hex[16..20],
+                &hex[20..32]
             )
         }
-        _ => bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>(),
+        _ => bytes
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>(),
     }
 }
 
@@ -357,8 +408,8 @@ mod tests {
     #[test]
     fn format_128bit_uuid() {
         let bytes = [
-            0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x02, 0xff, 0x00,
-            0x00,
+            0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x02, 0xff,
+            0x00, 0x00,
         ];
         let formatted = format_gatt_uuid(&bytes);
         assert_eq!(formatted, "0000ff02-0000-1000-8000-00805f9b34fb");
@@ -384,7 +435,7 @@ mod tests {
         assert!(uuid2.matches_16(0x180A));
     }
 
-#[test]
+    #[test]
     fn gatt_property_bits() {
         let props = GattProperty::from_bits(0x1F);
         assert!(props.contains(&GattProperty::Broadcast));

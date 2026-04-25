@@ -30,7 +30,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use edgerun_crypto::{KeyInit, Aead, AeadInPlace};
+use edgerun_crypto::{Aead, AeadInPlace, KeyInit};
 
 use crate::error::StorageError;
 
@@ -53,8 +53,12 @@ pub enum BlobKeySource {
     /// On first use, a random key is generated and sealed.
     /// The `unseal_fn` is called to recover the key from the sealed blob.
     HardwareSealed {
-        unseal_fn: std::sync::Arc<dyn Fn(&[u8]) -> Result<[u8; 32], crate::error::StorageError> + Send + Sync>,
-        seal_fn: std::sync::Arc<dyn Fn(&[u8; 32]) -> Result<Vec<u8>, crate::error::StorageError> + Send + Sync>,
+        unseal_fn: std::sync::Arc<
+            dyn Fn(&[u8]) -> Result<[u8; 32], crate::error::StorageError> + Send + Sync,
+        >,
+        seal_fn: std::sync::Arc<
+            dyn Fn(&[u8; 32]) -> Result<Vec<u8>, crate::error::StorageError> + Send + Sync,
+        >,
     },
     /// Password-derived: derive the key from a passphrase via PBKDF2.
     /// Used for provisioned nodes where the key is derived from the user's password.
@@ -66,7 +70,10 @@ impl std::fmt::Debug for BlobKeySource {
         match self {
             Self::Software { private_key_bytes } => f
                 .debug_struct("Software")
-                .field("private_key_bytes", &format!("[{} bytes]", private_key_bytes.len()))
+                .field(
+                    "private_key_bytes",
+                    &format!("[{} bytes]", private_key_bytes.len()),
+                )
                 .finish(),
             Self::HardwareSealed { .. } => f.debug_struct("HardwareSealed").finish(),
             Self::Password { .. } => f.debug_struct("Password").finish(),
@@ -91,10 +98,7 @@ impl BlobStore {
     /// For `DeriveFromPrivateKey`, the key is deterministic — same private key
     /// always produces the same blob key. For `HardwareSealed`, the key is
     /// generated once and persists in sealed form on disk.
-    pub fn open(
-        config: &BlobStoreConfig,
-        key_source: BlobKeySource,
-    ) -> Result<Self, StorageError> {
+    pub fn open(config: &BlobStoreConfig, key_source: BlobKeySource) -> Result<Self, StorageError> {
         fs::create_dir_all(&config.blob_dir)?;
 
         let key = match key_source {
@@ -104,9 +108,7 @@ impl BlobStore {
             BlobKeySource::HardwareSealed { unseal_fn, seal_fn } => {
                 load_or_create_sealed_key(&config.blob_dir, &*unseal_fn, &*seal_fn)?
             }
-            BlobKeySource::Password { passphrase } => {
-                derive_blob_key_from_passphrase(&passphrase)
-            }
+            BlobKeySource::Password { passphrase } => derive_blob_key_from_passphrase(&passphrase),
         };
 
         let node_identity = key.to_vec();
@@ -124,11 +126,7 @@ impl BlobStore {
     /// (content-addressed). The ciphertext is stored on the filesystem.
     ///
     /// Returns the blob ID.
-    pub fn store(
-        &self,
-        plaintext: &[u8],
-        recipients: &[Vec<u8>],
-    ) -> Result<String, StorageError> {
+    pub fn store(&self, plaintext: &[u8], recipients: &[Vec<u8>]) -> Result<String, StorageError> {
         let recipients = if recipients.is_empty() {
             vec![self.node_identity.clone()]
         } else {
@@ -144,7 +142,8 @@ impl BlobStore {
         let nonce = &nonce_bytes;
 
         // Encrypt
-        let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
+        let cipher =
+            edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
         let ciphertext = cipher
             .encrypt(nonce.into(), plaintext)
             .map_err(|e| StorageError::Encryption(format!("AES-GCM encryption failed: {}", e)))?;
@@ -222,12 +221,11 @@ impl BlobStore {
     /// before calling this method.
     pub fn decrypt(&self, nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, StorageError> {
         if nonce.len() != 12 {
-            return Err(StorageError::Decryption(
-                "nonce must be 12 bytes".into(),
-            ));
+            return Err(StorageError::Decryption("nonce must be 12 bytes".into()));
         }
         let nonce: [u8; 12] = nonce.try_into().expect("nonce length checked above");
-let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
+        let cipher =
+            edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
         cipher
             .decrypt((&nonce).into(), ciphertext.as_ref())
             .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))
@@ -281,7 +279,8 @@ fn derive_blob_key_from_passphrase(passphrase: &str) -> [u8; 32] {
     use edgerun_crypto::sha2::Sha256;
 
     let salt = b"edgerun:v0:blob-key-password";
-    let derived: [u8; 32] = pbkdf2_hmac_array::<Sha256, 32>(passphrase.as_bytes(), salt, BLOB_KEY_PBKDF2_ITERATIONS);
+    let derived: [u8; 32] =
+        pbkdf2_hmac_array::<Sha256, 32>(passphrase.as_bytes(), salt, BLOB_KEY_PBKDF2_ITERATIONS);
     derived
 }
 

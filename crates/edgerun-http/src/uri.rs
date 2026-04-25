@@ -87,16 +87,21 @@ impl Uri {
                     return Err("Invalid IPv6 address in URI".to_string());
                 }
             } else if let Some(pos) = auth_without_userinfo.rfind(':') {
-                (&auth_without_userinfo[..pos], Some(&auth_without_userinfo[pos + 1..]))
+                (
+                    &auth_without_userinfo[..pos],
+                    Some(&auth_without_userinfo[pos + 1..]),
+                )
             } else {
                 (auth_without_userinfo, None)
             };
 
             host = Some(host_str.to_string());
             if let Some(port_str) = port_str {
-                port = Some(port_str.parse::<u16>().map_err(|_| {
-                    format!("Invalid port number: {}", port_str)
-                })?);
+                port = Some(
+                    port_str
+                        .parse::<u16>()
+                        .map_err(|_| format!("Invalid port number: {}", port_str))?,
+                );
             }
         }
 

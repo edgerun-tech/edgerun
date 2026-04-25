@@ -1,5 +1,5 @@
 // Test DuplexStream with the actual runtime.
-use edgerun_rt::{DuplexStream, Runtime, AsyncReadExt, AsyncWriteExt, spawn, copy};
+use edgerun_rt::{copy, spawn, AsyncReadExt, AsyncWriteExt, DuplexStream, Runtime};
 use std::time::Duration;
 
 fn main() {
@@ -94,7 +94,10 @@ fn test_copy_between_duplex() {
         let (mut src_a, mut dst_b) = DuplexStream::channel();
 
         // Write some data to src_a
-        src_a.write_all(b"copy test data").await.expect("write failed");
+        src_a
+            .write_all(b"copy test data")
+            .await
+            .expect("write failed");
         src_a.shutdown().await.expect("shutdown failed");
 
         // Copy from src to dst

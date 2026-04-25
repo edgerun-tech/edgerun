@@ -68,7 +68,13 @@ impl Lease {
     }
 
     /// Create a new lease with client-id.
-    pub fn with_client_id(mac: [u8; 6], client_id: Vec<u8>, ip: Ipv4Addr, lease_time: u32, xid: u32) -> Self {
+    pub fn with_client_id(
+        mac: [u8; 6],
+        client_id: Vec<u8>,
+        ip: Ipv4Addr,
+        lease_time: u32,
+        xid: u32,
+    ) -> Self {
         Self {
             mac,
             client_id: Some(client_id),
@@ -170,7 +176,13 @@ impl LeasePool {
     /// Creates a lease in OFFERED state (not yet bound).
     /// If client_id is provided, it takes precedence over MAC for identification (RFC 2131 §9).
     /// Returns None if the pool is exhausted.
-    pub fn allocate(&mut self, mac: [u8; 6], client_id: Option<Vec<u8>>, lease_time: u32, xid: u32) -> Option<Ipv4Addr> {
+    pub fn allocate(
+        &mut self,
+        mac: [u8; 6],
+        client_id: Option<Vec<u8>>,
+        lease_time: u32,
+        xid: u32,
+    ) -> Option<Ipv4Addr> {
         // Check by client-id first (RFC 2131 §9: client-id takes precedence)
         if let Some(ref cid) = client_id {
             if let Some(ip_u32) = self.client_id_to_ip.get(cid) {
@@ -293,7 +305,8 @@ impl LeasePool {
 
     /// Number of available addresses.
     pub fn available_count(&self) -> u32 {
-        let used = self.leases.len() as u32 + self.reserved.len() as u32 + self.conflicts.len() as u32;
+        let used =
+            self.leases.len() as u32 + self.reserved.len() as u32 + self.conflicts.len() as u32;
         self.pool_size().saturating_sub(used)
     }
 
@@ -324,7 +337,8 @@ impl LeasePool {
     /// Number of active conflicts.
     pub fn active_conflict_count(&self) -> usize {
         let now = Instant::now();
-        self.conflicts.iter()
+        self.conflicts
+            .iter()
             .filter(|(_, t)| now.duration_since(**t) < Duration::from_secs(600))
             .count()
     }
@@ -333,7 +347,9 @@ impl LeasePool {
     /// Returns the number of entries removed.
     pub fn compact(&mut self) -> usize {
         let before = self.leases.len();
-        let released: Vec<u32> = self.leases.iter()
+        let released: Vec<u32> = self
+            .leases
+            .iter()
             .filter(|(_, l)| l.state == LeaseState::Released)
             .map(|(ip, _)| *ip)
             .collect();
@@ -371,10 +387,16 @@ impl LeasePool {
         use std::io::Write;
         let mut f = std::fs::File::create(path)?;
         writeln!(f, "# edgerun-dhcp lease database")?;
-        writeln!(f, "# pool_start={} pool_end={}", self.pool_start, self.pool_end)?;
+        writeln!(
+            f,
+            "# pool_start={} pool_end={}",
+            self.pool_start, self.pool_end
+        )?;
         for (ip_u32, lease) in &self.leases {
             let mac_hex = edgerun_encoding::hex::bytes_to_hex_sep(&lease.mac, ':');
-            let cid_hex = lease.client_id.as_ref()
+            let cid_hex = lease
+                .client_id
+                .as_ref()
                 .map(|c| edgerun_encoding::hex::bytes_to_hex_sep(c, ':'))
                 .unwrap_or_else(|| "-".to_string());
             let epoch = std::time::SystemTime::now()
@@ -382,7 +404,11 @@ impl LeasePool {
                 .map(|d| d.as_secs())
                 .unwrap_or(0)
                 .saturating_sub(lease.granted_at.elapsed().as_secs());
-            writeln!(f, "{},{},{},{},{},{}", ip_u32, mac_hex, cid_hex, lease.lease_time, epoch, lease.xid)?;
+            writeln!(
+                f,
+                "{},{},{},{},{},{}",
+                ip_u32, mac_hex, cid_hex, lease.lease_time, epoch, lease.xid
+            )?;
         }
         Ok(())
     }
@@ -393,25 +419,44 @@ impl LeasePool {
         let content = std::fs::read_to_string(path)?;
         let mut restored = 0;
         let now_epoch = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
 
         for line in content.lines() {
             let line = line.trim();
-            if line.is_empty() || line.starts_with('#') { continue; }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() != 6 { continue; }
+            if parts.len() != 6 {
+                continue;
+            }
             let ip_u32: u32 = parts[0].parse().unwrap_or(0);
             let ip = u32_to_ip(ip_u32);
-            let Some(mac) = edgerun_encoding::hex::parse_mac(parts[1]) else { continue; };
+            let Some(mac) = edgerun_encoding::hex::parse_mac(parts[1]) else {
+                continue;
+            };
             let client_id = if parts[2] != "-" {
-                Some(parts[2].split(':').filter_map(|s| u8::from_str_radix(s, 16).ok()).collect::<Vec<_>>())
-            } else { None };
+                Some(
+                    parts[2]
+                        .split(':')
+                        .filter_map(|s| u8::from_str_radix(s, 16).ok())
+                        .collect::<Vec<_>>(),
+                )
+            } else {
+                None
+            };
             let lease_time: u32 = parts[3].parse().unwrap_or(0);
             let granted_at_epoch: u64 = parts[4].parse().unwrap_or(0);
             let xid: u32 = parts[5].parse().unwrap_or(0);
-            if now_epoch >= granted_at_epoch + lease_time as u64 { continue; }
+            if now_epoch >= granted_at_epoch + lease_time as u64 {
+                continue;
+            }
             let remaining = lease_time.saturating_sub((now_epoch - granted_at_epoch) as u32);
-            if remaining == 0 { continue; }
+            if remaining == 0 {
+                continue;
+            }
             let lease = if let Some(ref cid) = client_id {
                 Lease::with_client_id(mac, cid.clone(), ip, remaining, xid)
             } else {
@@ -472,10 +517,7 @@ mod tests {
 
     #[test]
     fn test_pool_reserve() {
-        let mut pool = LeasePool::new(
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(10, 0, 0, 10),
-        );
+        let mut pool = LeasePool::new(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 10));
 
         pool.reserve(Ipv4Addr::new(10, 0, 0, 1)); // Gateway
 
@@ -486,10 +528,7 @@ mod tests {
 
     #[test]
     fn test_pool_exhaustion() {
-        let mut pool = LeasePool::new(
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(10, 0, 0, 2),
-        );
+        let mut pool = LeasePool::new(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 2));
 
         let mac1 = [1, 1, 1, 1, 1, 1];
         let mac2 = [2, 2, 2, 2, 2, 2];
@@ -502,10 +541,7 @@ mod tests {
 
     #[test]
     fn test_sweep_expired() {
-        let mut pool = LeasePool::new(
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(10, 0, 0, 10),
-        );
+        let mut pool = LeasePool::new(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 10));
 
         let mac = [0xff; 6];
         pool.allocate(mac, None, 3600, 0x1234);

@@ -4,12 +4,12 @@
 //! Use for control paths where dropping or backing up messages is
 //! unacceptable (e.g., mesh commands, shutdown signals).
 
+use crate::sync::{Condvar, Mutex};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
 /// Creates an unbounded mpsc channel.
@@ -22,7 +22,9 @@ pub fn channel<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
         sender_count: Mutex::new(1),
     });
     (
-        UnboundedSender { inner: inner.clone() },
+        UnboundedSender {
+            inner: inner.clone(),
+        },
         UnboundedReceiver { inner },
     )
 }
@@ -53,7 +55,9 @@ pub struct UnboundedSender<T> {
 impl<T> Clone for UnboundedSender<T> {
     fn clone(&self) -> Self {
         *self.inner.sender_count.lock() += 1;
-        Self { inner: self.inner.clone() }
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
 

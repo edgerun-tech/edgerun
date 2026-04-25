@@ -41,14 +41,22 @@ fn logout_all() -> std::io::Result<()> {
     client.unlock()?;
 
     let known_registries = [
-        "docker.io", "ghcr.io", "gcr.io", "registry.gitlab.com",
-        "quay.io", "mcr.microsoft.com", "public.ecr.aws",
+        "docker.io",
+        "ghcr.io",
+        "gcr.io",
+        "registry.gitlab.com",
+        "quay.io",
+        "mcr.microsoft.com",
+        "public.ecr.aws",
     ];
 
     let mut count = 0;
     for registry in &known_registries {
         match client.delete_registry_credential(registry) {
-            Ok(true) => { println!("  Removed: {}", registry); count += 1; }
+            Ok(true) => {
+                println!("  Removed: {}", registry);
+                count += 1;
+            }
             Ok(false) => {}
             Err(_) => {}
         }

@@ -7,11 +7,11 @@
 //!
 //! No NDK C API exists for biometrics — all access is through JNI.
 
+use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
-    CapabilityOperation, CapabilityRole, CapabilityProvider,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
-use edgerun_biometrics::{BiometricState, BiometricAssuranceStrength};
 
 #[cfg(feature = "android-real")]
 mod real {
@@ -103,7 +103,9 @@ mod real {
                     "()Landroid/content/Context;",
                     &[],
                 )
-                .map_err(|e| CapabilityError::Provider(format!("getApplicationContext failed: {e}")))?
+                .map_err(|e| {
+                    CapabilityError::Provider(format!("getApplicationContext failed: {e}"))
+                })?
                 .l()
                 .map_err(|e| CapabilityError::Provider(format!("l() failed: {e}")))?;
             env.new_global_ref(&context)
@@ -133,17 +135,17 @@ mod real {
         /// Create a new BiometricManager via JNI.
         pub fn new() -> Result<Self, CapabilityError> {
             let jvm = get_jvm()?;
-            let mut env = jvm.attach_current_thread().map_err(|e| {
-                CapabilityError::Provider(format!("JNI attach failed: {e}"))
-            })?;
+            let mut env = jvm
+                .attach_current_thread()
+                .map_err(|e| CapabilityError::Provider(format!("JNI attach failed: {e}")))?;
 
             // Get BiometricManager instance
             let context = get_application_context(&mut env)?;
             let biometric_manager_class = env
                 .find_class("android/hardware/biometrics/BiometricManager")
-                .map_err(|e| CapabilityError::Provider(format!(
-                    "BiometricManager class not found: {e}"
-                )))?;
+                .map_err(|e| {
+                    CapabilityError::Provider(format!("BiometricManager class not found: {e}"))
+                })?;
 
             let manager = env
                 .call_static_method(
@@ -152,13 +154,15 @@ mod real {
                     "(Landroid/content/Context;)Landroid/hardware/biometrics/BiometricManager;",
                     &[JValue::Object(&context)],
                 )
-                .map_err(|e| CapabilityError::Provider(format!("BiometricManager.from failed: {e}")))?
+                .map_err(|e| {
+                    CapabilityError::Provider(format!("BiometricManager.from failed: {e}"))
+                })?
                 .l()
                 .map_err(|e| CapabilityError::Provider(format!("l() failed: {e}")))?;
 
-            let manager_global = env.new_global_ref(&manager).map_err(|e| {
-                CapabilityError::Provider(format!("new_global_ref failed: {e}"))
-            })?;
+            let manager_global = env
+                .new_global_ref(&manager)
+                .map_err(|e| CapabilityError::Provider(format!("new_global_ref failed: {e}")))?;
 
             // Check what biometric types are available
             let available_types = Self::check_available_types(&mut env, &manager)?;
@@ -178,19 +182,18 @@ mod real {
 
             // Try to call canAuthenticate(BIOMETRIC_STRONG) for API 29+
             // We check each biometric type individually
-            let biometric_type_class = env
-                .find_class("android/hardware/biometrics/BiometricManager$Authenticators");
-            
+            let biometric_type_class =
+                env.find_class("android/hardware/biometrics/BiometricManager$Authenticators");
+
             if let Ok(auth_class) = biometric_type_class {
                 // On API 29+, check each type
                 // FINGERPRINT = 0x01
-                let result = env
-                    .call_method(
-                        manager,
-                        "canAuthenticate",
-                        "(I)I",
-                        &[JValue::Int(BIOMETRIC_TYPE_FINGERPRINT)],
-                    );
+                let result = env.call_method(
+                    manager,
+                    "canAuthenticate",
+                    "(I)I",
+                    &[JValue::Int(BIOMETRIC_TYPE_FINGERPRINT)],
+                );
                 if let Ok(r) = result {
                     if let Ok(code) = r.i() {
                         if code == BIOMETRIC_SUCCESS {
@@ -200,13 +203,12 @@ mod real {
                 }
 
                 // FACE = 0x02
-                let result = env
-                    .call_method(
-                        manager,
-                        "canAuthenticate",
-                        "(I)I",
-                        &[JValue::Int(BIOMETRIC_TYPE_FACE)],
-                    );
+                let result = env.call_method(
+                    manager,
+                    "canAuthenticate",
+                    "(I)I",
+                    &[JValue::Int(BIOMETRIC_TYPE_FACE)],
+                );
                 if let Ok(r) = result {
                     if let Ok(code) = r.i() {
                         if code == BIOMETRIC_SUCCESS {
@@ -216,13 +218,12 @@ mod real {
                 }
 
                 // IRIS = 0x04
-                let result = env
-                    .call_method(
-                        manager,
-                        "canAuthenticate",
-                        "(I)I",
-                        &[JValue::Int(BIOMETRIC_TYPE_IRIS)],
-                    );
+                let result = env.call_method(
+                    manager,
+                    "canAuthenticate",
+                    "(I)I",
+                    &[JValue::Int(BIOMETRIC_TYPE_IRIS)],
+                );
                 if let Ok(r) = result {
                     if let Ok(code) = r.i() {
                         if code == BIOMETRIC_SUCCESS {
@@ -235,13 +236,12 @@ mod real {
             // Fallback: check if any biometric is available via the general check
             // This works on older APIs too
             if types == 0 {
-                let result = env
-                    .call_method(
-                        manager,
-                        "canAuthenticate",
-                        "(I)I",
-                        &[JValue::Int(0xFF)], // All types
-                    );
+                let result = env.call_method(
+                    manager,
+                    "canAuthenticate",
+                    "(I)I",
+                    &[JValue::Int(0xFF)], // All types
+                );
                 if let Ok(r) = result {
                     if let Ok(code) = r.i() {
                         if code == BIOMETRIC_SUCCESS {
@@ -280,7 +280,7 @@ mod real {
             let modalities = self.get_available_modalities();
             BiometricState {
                 modality: modalities.first().cloned(),
-                verified: false, // Not verified until user authenticates
+                verified: false,          // Not verified until user authenticates
                 hardware_protected: true, // Android BiometricManager runs in hardware
                 user_present: false,
             }
@@ -306,9 +306,9 @@ mod real {
             // In a full Android app, you'd create a BiometricPrompt with
             // CryptoObject and call authenticate(). Here we check enrollment.
             let jvm = get_jvm()?;
-            let mut env = jvm.attach_current_thread().map_err(|e| {
-                CapabilityError::Provider(format!("JNI attach failed: {e}"))
-            })?;
+            let mut env = jvm
+                .attach_current_thread()
+                .map_err(|e| CapabilityError::Provider(format!("JNI attach failed: {e}")))?;
 
             let _ = prompt_title;
             let _ = prompt_subtitle;
@@ -324,7 +324,9 @@ mod real {
                 .map_err(|e| CapabilityError::Provider(format!("canAuthenticate failed: {e}")))?;
 
             let code = result
-                .map_err(|e| CapabilityError::Provider(format!("canAuthenticate result failed: {e}")))?
+                .map_err(|e| {
+                    CapabilityError::Provider(format!("canAuthenticate result failed: {e}"))
+                })?
                 .i()
                 .map_err(|e| CapabilityError::Provider(format!("i() failed: {e}")))?;
 
@@ -344,46 +346,30 @@ mod real {
                     }
                     Ok(())
                 }
-                BIOMETRIC_ERROR_NONE_ENROLLED => {
-                    Err(CapabilityError::Provider(
-                        "No biometrics enrolled. Please enroll a fingerprint/face in Settings.".into(),
-                    ))
-                }
-                BIOMETRIC_ERROR_NO_HARDWARE => {
-                    Err(CapabilityError::Provider(
-                        "No biometric hardware on this device.".into(),
-                    ))
-                }
-                BIOMETRIC_ERROR_HW_UNAVAILABLE => {
-                    Err(CapabilityError::Provider(
-                        "Biometric hardware is temporarily unavailable.".into(),
-                    ))
-                }
-                BIOMETRIC_ERROR_LOCKOUT => {
-                    Err(CapabilityError::Provider(
-                        "Too many failed attempts. Please try again later.".into(),
-                    ))
-                }
-                BIOMETRIC_ERROR_LOCKOUT_PERMANENT => {
-                    Err(CapabilityError::Provider(
-                        "Biometric authentication is permanently locked. Use device PIN.".into(),
-                    ))
-                }
-                BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED => {
-                    Err(CapabilityError::Provider(
-                        "A security update is required to use biometrics.".into(),
-                    ))
-                }
-                BIOMETRIC_ERROR_UNSUPPORTED => {
-                    Err(CapabilityError::Provider(
-                        "Biometric authentication is not supported on this device.".into(),
-                    ))
-                }
-                other => {
-                    Err(CapabilityError::Provider(format!(
-                        "Unknown biometric error code: {other}",
-                    )))
-                }
+                BIOMETRIC_ERROR_NONE_ENROLLED => Err(CapabilityError::Provider(
+                    "No biometrics enrolled. Please enroll a fingerprint/face in Settings.".into(),
+                )),
+                BIOMETRIC_ERROR_NO_HARDWARE => Err(CapabilityError::Provider(
+                    "No biometric hardware on this device.".into(),
+                )),
+                BIOMETRIC_ERROR_HW_UNAVAILABLE => Err(CapabilityError::Provider(
+                    "Biometric hardware is temporarily unavailable.".into(),
+                )),
+                BIOMETRIC_ERROR_LOCKOUT => Err(CapabilityError::Provider(
+                    "Too many failed attempts. Please try again later.".into(),
+                )),
+                BIOMETRIC_ERROR_LOCKOUT_PERMANENT => Err(CapabilityError::Provider(
+                    "Biometric authentication is permanently locked. Use device PIN.".into(),
+                )),
+                BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED => Err(CapabilityError::Provider(
+                    "A security update is required to use biometrics.".into(),
+                )),
+                BIOMETRIC_ERROR_UNSUPPORTED => Err(CapabilityError::Provider(
+                    "Biometric authentication is not supported on this device.".into(),
+                )),
+                other => Err(CapabilityError::Provider(format!(
+                    "Unknown biometric error code: {other}",
+                ))),
             }
         }
     }
@@ -408,7 +394,10 @@ mod real {
 
         /// Check if biometric hardware is available.
         pub fn is_available(&self) -> bool {
-            self.manager.as_ref().map(|m| m.is_available()).unwrap_or(false)
+            self.manager
+                .as_ref()
+                .map(|m| m.is_available())
+                .unwrap_or(false)
         }
 
         /// Get available biometric modalities.
@@ -516,10 +505,15 @@ mod real {
 
     impl CapabilityProvider for AndroidBiometricProvider {
         fn descriptor(&self) -> CapabilityDescriptor {
-            capability_descriptor("android-biometric-stub", "stub", CapabilityRole::SecureElement,
+            capability_descriptor(
+                "android-biometric-stub",
+                "stub",
+                CapabilityRole::SecureElement,
                 &[CapabilityModality::Biometric],
                 &[edgerun_capabilities::CapabilityEventKind::Text],
-                &[CapabilityOperation::Query], Vec::new())
+                &[CapabilityOperation::Query],
+                Vec::new(),
+            )
         }
     }
 }

@@ -16,9 +16,7 @@ use std::time::Instant;
 
 use edgerun_rt::Mutex;
 
-use crate::command_middleware::{
-    CommandMiddleware, ControlFlow, NextCommand, SessionExtensions,
-};
+use crate::command_middleware::{CommandMiddleware, ControlFlow, NextCommand, SessionExtensions};
 
 /// Peer address stored in SessionExtensions.
 #[derive(Clone)]
@@ -37,19 +35,17 @@ struct RateLimitEntry {
 /// returns `530 Authentication required`.
 pub struct SmtpRequireAuth;
 
-impl CommandMiddleware<
-    crate::smtp::SmtpCommand,
-    crate::smtp::SmtpResponse,
-> for SmtpRequireAuth {
+impl CommandMiddleware<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse> for SmtpRequireAuth {
     fn handle(
         &self,
         cmd: crate::smtp::SmtpCommand,
         session: SessionExtensions,
         next: NextCommand<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse>,
-    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::smtp::SmtpResponse>>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::smtp::SmtpResponse>>> + Send + '_>>
+    {
+        use crate::smtp::server::session::SmtpAuth;
         use crate::smtp::SmtpCommand;
         use crate::smtp::SmtpResponse;
-        use crate::smtp::server::session::SmtpAuth;
 
         Box::pin(async move {
             let needs_auth = matches!(&cmd, SmtpCommand::MailFrom { .. });
@@ -75,20 +71,20 @@ pub struct SmtpCommandLogger {
 
 impl SmtpCommandLogger {
     pub fn new(prefix: impl Into<String>) -> Self {
-        Self { prefix: prefix.into() }
+        Self {
+            prefix: prefix.into(),
+        }
     }
 }
 
-impl CommandMiddleware<
-    crate::smtp::SmtpCommand,
-    crate::smtp::SmtpResponse,
-> for SmtpCommandLogger {
+impl CommandMiddleware<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse> for SmtpCommandLogger {
     fn handle(
         &self,
         cmd: crate::smtp::SmtpCommand,
         session: SessionExtensions,
         next: NextCommand<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse>,
-    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::smtp::SmtpResponse>>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::smtp::SmtpResponse>>> + Send + '_>>
+    {
         let prefix = self.prefix.clone();
         Box::pin(async move {
             edgerun_log::debug!("{}: CMD {:?}", prefix, cmd);
@@ -121,16 +117,14 @@ impl SmtpRateLimit {
     }
 }
 
-impl CommandMiddleware<
-    crate::smtp::SmtpCommand,
-    crate::smtp::SmtpResponse,
-> for SmtpRateLimit {
+impl CommandMiddleware<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse> for SmtpRateLimit {
     fn handle(
         &self,
         cmd: crate::smtp::SmtpCommand,
         session: SessionExtensions,
         next: NextCommand<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse>,
-    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::smtp::SmtpResponse>>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::smtp::SmtpResponse>>> + Send + '_>>
+    {
         use crate::smtp::SmtpResponse;
 
         let state = Arc::clone(&self.state);
@@ -158,9 +152,9 @@ impl CommandMiddleware<
 
             entry.count += 1;
             if entry.count > max {
-                return Ok(ControlFlow::Respond(
-                    SmtpResponse::transient_failure("Rate limit exceeded"),
-                ));
+                return Ok(ControlFlow::Respond(SmtpResponse::transient_failure(
+                    "Rate limit exceeded",
+                )));
             }
 
             drop(map);
@@ -178,20 +172,20 @@ pub struct ImapCommandLogger {
 
 impl ImapCommandLogger {
     pub fn new(prefix: impl Into<String>) -> Self {
-        Self { prefix: prefix.into() }
+        Self {
+            prefix: prefix.into(),
+        }
     }
 }
 
-impl CommandMiddleware<
-    crate::imap::ImapCommand,
-    crate::imap::ImapResponse,
-> for ImapCommandLogger {
+impl CommandMiddleware<crate::imap::ImapCommand, crate::imap::ImapResponse> for ImapCommandLogger {
     fn handle(
         &self,
         cmd: crate::imap::ImapCommand,
         session: SessionExtensions,
         next: NextCommand<crate::imap::ImapCommand, crate::imap::ImapResponse>,
-    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::imap::ImapResponse>>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::imap::ImapResponse>>> + Send + '_>>
+    {
         let prefix = self.prefix.clone();
         Box::pin(async move {
             edgerun_log::debug!("{}: CMD {:?}", prefix, cmd);

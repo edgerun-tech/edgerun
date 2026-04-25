@@ -10,9 +10,9 @@ use std::path::Path;
 // YubiKey USB vendor/product IDs
 const YUBIKEY_VENDOR_ID: u16 = 0x1050;
 const YUBIKEY_PRODUCT_IDS: &[u16] = &[
-    0x0403, 0x0404, 0x0405, 0x0406, 0x0407, 0x0408, 0x0409, 0x040a, 0x040b,
-    0x040c, 0x040d, 0x040e, 0x040f, 0x0410, 0x0411, 0x0412, 0x0413, 0x0414,
-    0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041a, 0x041b, 0x041c, 0x041d,
+    0x0403, 0x0404, 0x0405, 0x0406, 0x0407, 0x0408, 0x0409, 0x040a, 0x040b, 0x040c, 0x040d, 0x040e,
+    0x040f, 0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041a,
+    0x041b, 0x041c, 0x041d,
 ];
 
 // CCID protocol constants (from USB CCID spec 1.1)
@@ -276,7 +276,8 @@ impl LinuxUsbYubiKey {
         for bus_entry in std::fs::read_dir(usb_root)
             .map_err(|e| YubiKeyError::Provider(format!("read /dev/bus/usb: {e}")))?
         {
-            let bus_entry = bus_entry.map_err(|e| YubiKeyError::Provider(format!("read bus dir: {e}")))?;
+            let bus_entry =
+                bus_entry.map_err(|e| YubiKeyError::Provider(format!("read bus dir: {e}")))?;
             let _bus_name = bus_entry.file_name();
             let bus_path = bus_entry.path();
             if !bus_path.is_dir() {
@@ -285,7 +286,8 @@ impl LinuxUsbYubiKey {
             for dev_entry in std::fs::read_dir(&bus_path)
                 .map_err(|e| YubiKeyError::Provider(format!("read {bus_path:?}: {e}")))?
             {
-                let dev_entry = dev_entry.map_err(|e| YubiKeyError::Provider(format!("read dev dir: {e}")))?;
+                let dev_entry =
+                    dev_entry.map_err(|e| YubiKeyError::Provider(format!("read dev dir: {e}")))?;
                 let dev_path = dev_entry.path();
                 if !dev_path.is_file() {
                     continue;
@@ -368,10 +370,12 @@ impl LinuxUsbYubiKey {
         // Extract bus/device numbers from path
         let path_str = path.to_string_lossy();
         let parts: Vec<&str> = path_str.split('/').collect();
-        let bus: u8 = parts.get(parts.len() - 2)
+        let bus: u8 = parts
+            .get(parts.len() - 2)
             .and_then(|s| s.parse().ok())
             .ok_or_else(|| YubiKeyError::Provider("parse bus".into()))?;
-        let device: u8 = parts.last()
+        let device: u8 = parts
+            .last()
             .and_then(|s| s.parse().ok())
             .ok_or_else(|| YubiKeyError::Provider("parse device".into()))?;
 
@@ -423,7 +427,11 @@ impl LinuxUsbYubiKey {
     /// Release the claimed USB interface.
     fn release_interface(&self) -> Result<(), YubiKeyError> {
         let rc = unsafe {
-            libc::ioctl(self.fd.as_raw_fd(), USBDEVFS_RELEASEINTERFACE as _, &self.interface)
+            libc::ioctl(
+                self.fd.as_raw_fd(),
+                USBDEVFS_RELEASEINTERFACE as _,
+                &self.interface,
+            )
         };
         if rc < 0 {
             return Err(YubiKeyError::Provider(format!(
@@ -457,17 +465,16 @@ impl LinuxUsbYubiKey {
     /// Perform a CCID bulk transfer: write command, read response.
     fn ccid_transfer(fd: &mut File, cmd: &[u8], buf: &mut [u8]) -> Result<Vec<u8>, YubiKeyError> {
         // Write CCID command
-        fd.write_all(cmd).map_err(|e| {
-            YubiKeyError::Provider(format!("CCID write failed: {e}"))
-        })?;
+        fd.write_all(cmd)
+            .map_err(|e| YubiKeyError::Provider(format!("CCID write failed: {e}")))?;
 
         // Read CCID response header (10 bytes)
         let mut header = [0u8; CCID_MSG_HEADER_SIZE];
         let mut pos = 0;
         while pos < CCID_MSG_HEADER_SIZE {
-            let n = fd.read(&mut header[pos..]).map_err(|e| {
-                YubiKeyError::Provider(format!("CCID read header failed: {e}"))
-            })?;
+            let n = fd
+                .read(&mut header[pos..])
+                .map_err(|e| YubiKeyError::Provider(format!("CCID read header failed: {e}")))?;
             if n == 0 {
                 return Err(YubiKeyError::Provider("CCID read returned 0 bytes".into()));
             }
@@ -492,11 +499,13 @@ impl LinuxUsbYubiKey {
         // Read data payload
         let mut total_read = 0;
         while total_read < data_len {
-            let n = fd.read(&mut buf[total_read..data_len]).map_err(|e| {
-                YubiKeyError::Provider(format!("CCID read data failed: {e}"))
-            })?;
+            let n = fd
+                .read(&mut buf[total_read..data_len])
+                .map_err(|e| YubiKeyError::Provider(format!("CCID read data failed: {e}")))?;
             if n == 0 {
-                return Err(YubiKeyError::Provider("CCID data read returned 0 bytes".into()));
+                return Err(YubiKeyError::Provider(
+                    "CCID data read returned 0 bytes".into(),
+                ));
             }
             total_read += n;
         }
@@ -830,7 +839,9 @@ fn digest_for_yubikey_algorithm(
     match algorithm {
         YubiKeySignatureAlgorithm::EcdsaP256Sha256
         | YubiKeySignatureAlgorithm::RsaPkcs1v15Sha256
-        | YubiKeySignatureAlgorithm::RsaPssSha256 => Ok(edgerun_core::crypto::sha256(message).to_vec()),
+        | YubiKeySignatureAlgorithm::RsaPssSha256 => {
+            Ok(edgerun_core::crypto::sha256(message).to_vec())
+        }
         YubiKeySignatureAlgorithm::EcdsaP384Sha384 => Ok(edgerun_core::crypto::sha384(message)),
         other => Err(YubiKeyError::UnsupportedAlgorithm(other.clone())),
     }
@@ -1606,31 +1617,23 @@ mod tests {
 
     #[test]
     fn digest_for_rsa_pkcs1_sha256() {
-        let d = digest_for_yubikey_algorithm(
-            &YubiKeySignatureAlgorithm::RsaPkcs1v15Sha256,
-            b"test",
-        )
-        .unwrap();
+        let d =
+            digest_for_yubikey_algorithm(&YubiKeySignatureAlgorithm::RsaPkcs1v15Sha256, b"test")
+                .unwrap();
         assert_eq!(d.len(), 32);
     }
 
     #[test]
     fn digest_for_rsa_pss_sha256() {
-        let d = digest_for_yubikey_algorithm(
-            &YubiKeySignatureAlgorithm::RsaPssSha256,
-            b"test",
-        )
-        .unwrap();
+        let d = digest_for_yubikey_algorithm(&YubiKeySignatureAlgorithm::RsaPssSha256, b"test")
+            .unwrap();
         assert_eq!(d.len(), 32);
     }
 
     #[test]
     fn digest_for_eddsa_is_unsupported() {
-        let err = digest_for_yubikey_algorithm(
-            &YubiKeySignatureAlgorithm::Eddsa,
-            b"test",
-        )
-        .unwrap_err();
+        let err =
+            digest_for_yubikey_algorithm(&YubiKeySignatureAlgorithm::Eddsa, b"test").unwrap_err();
         assert!(matches!(err, YubiKeyError::UnsupportedAlgorithm(_)));
     }
 
@@ -1704,11 +1707,8 @@ mod tests {
 
     #[test]
     fn parse_piv_metadata_without_53_wrapper() {
-        let metadata = parse_piv_metadata(
-            YubiKeyPivSlot::Authentication,
-            &[0x01, 0x01, 0x11],
-        )
-        .unwrap();
+        let metadata =
+            parse_piv_metadata(YubiKeyPivSlot::Authentication, &[0x01, 0x01, 0x11]).unwrap();
         assert_eq!(
             metadata.algorithm,
             Some(YubiKeySignatureAlgorithm::EcdsaP256Sha256)
@@ -1719,11 +1719,8 @@ mod tests {
     #[test]
     fn parse_piv_metadata_minimal() {
         // 0x53 tag with 1 byte of content: a zero-length inner TLV (0x01, 0x00)
-        let metadata = parse_piv_metadata(
-            YubiKeyPivSlot::Attestation,
-            &[0x53, 0x02, 0x01, 0x00],
-        )
-        .unwrap();
+        let metadata =
+            parse_piv_metadata(YubiKeyPivSlot::Attestation, &[0x53, 0x02, 0x01, 0x00]).unwrap();
         assert_eq!(metadata.algorithm, None);
         assert_eq!(metadata.pin_policy, None);
         assert_eq!(metadata.touch_policy, None);
@@ -1735,7 +1732,8 @@ mod tests {
 
     #[test]
     fn parse_general_authenticate_signature_no_7c_wrapper() {
-        let err = parse_general_authenticate_signature(&[0x82, 0x03, 0x11, 0x22, 0x33]).unwrap_err();
+        let err =
+            parse_general_authenticate_signature(&[0x82, 0x03, 0x11, 0x22, 0x33]).unwrap_err();
         assert!(matches!(err, YubiKeyError::Provider(_)));
     }
 
@@ -1834,10 +1832,7 @@ mod tests {
         let key = FakeYubiKey::new(YubiKeySignatureAlgorithm::EcdsaP256Sha256);
         let info = key.key_info().unwrap();
         assert_eq!(info.slot, "9c");
-        assert_eq!(
-            info.algorithm,
-            YubiKeySignatureAlgorithm::EcdsaP256Sha256
-        );
+        assert_eq!(info.algorithm, YubiKeySignatureAlgorithm::EcdsaP256Sha256);
         assert_eq!(info.public_key, vec![8, 6, 7, 5, 3, 0, 9]);
         assert_eq!(info.attestation_chain, vec![vec![1, 2, 3]]);
         assert_eq!(info.serial_number, Some("yk-serial-123".into()));
@@ -1963,7 +1958,10 @@ mod tests {
         };
         let cloned = info.clone();
         assert_eq!(info, cloned);
-        assert_eq!(format!("{:?}", info), "YubiKeyReaderInfo { name: \"Test Reader\" }");
+        assert_eq!(
+            format!("{:?}", info),
+            "YubiKeyReaderInfo { name: \"Test Reader\" }"
+        );
     }
 
     // --- Looks-like-yubikey additional cases ---

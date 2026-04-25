@@ -11,16 +11,17 @@ use edgerun_rt::{
 };
 
 use crate::command_middleware::{
-    CommandMiddleware, ControlFlow as MwControlFlow,
-    NextCommand, SessionExtensions,
+    CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
 use crate::server::{read_line, ConnectionInterceptor};
+use crate::smtp::relay::bounce::BounceConfig;
+use crate::smtp::relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::smtp::server::rate_limit::RateLimiter;
-use crate::smtp::relay::{MailIndex, OutboundRelay, DeliveryWorker, DeliveryWorkerConfig};
-use crate::smtp::relay::bounce::BounceConfig;
-use crate::smtp::types::command::{extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret};
+use crate::smtp::types::command::{
+    extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret,
+};
 use crate::smtp::types::response::EnhancedStatusCode;
 use crate::smtp::types::{
     MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
@@ -109,16 +110,9 @@ impl SmtpTransport {
     /// Consumes `self` and returns a new `SmtpTransport::Tls` after the
     /// handshake completes.
     #[cfg(feature = "tls")]
-    pub async fn upgrade_tls(
-        self,
-        cert_and_key: &CertificateAndKey,
-    ) -> io::Result<SmtpTransport> {
+    pub async fn upgrade_tls(self, cert_and_key: &CertificateAndKey) -> io::Result<SmtpTransport> {
         match self {
-            SmtpTransport::Tls(_) => {
-                Err(io::Error::other(
-                    "already using TLS",
-                ))
-            }
+            SmtpTransport::Tls(_) => Err(io::Error::other("already using TLS")),
             SmtpTransport::Plain(stream) => {
                 let fd = stream.into_fd();
                 let tcp = AsyncTcpStream::from_raw(fd);
@@ -243,10 +237,7 @@ impl SmtpServer {
     ///
     /// Requires the `tls` feature and a configured `tls_cert`.
     #[cfg(feature = "tls")]
-    pub fn new_smtps(
-        config: SmtpServerConfig,
-        handler: Arc<dyn MailHandler>,
-    ) -> io::Result<Self> {
+    pub fn new_smtps(config: SmtpServerConfig, handler: Arc<dyn MailHandler>) -> io::Result<Self> {
         if config.tls_cert.is_none() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -263,9 +254,13 @@ impl SmtpServer {
 
     pub async fn run(&self, shutdown: CancellationToken) -> io::Result<()> {
         // Initialize outbound queue if configured
-        let queue: Option<Arc<MailIndex>> = if let Some(ref data_root) = self.config.queue_data_root {
+        let queue: Option<Arc<MailIndex>> = if let Some(ref data_root) = self.config.queue_data_root
+        {
             let idx = Arc::new(MailIndex::open(data_root).await?);
-            edgerun_log::info!("edgerun-smtp: outbound mail queue initialized at {:?}", data_root);
+            edgerun_log::info!(
+                "edgerun-smtp: outbound mail queue initialized at {:?}",
+                data_root
+            );
             Some(idx)
         } else {
             None
@@ -309,7 +304,8 @@ impl SmtpServer {
                             Err(e) => {
                                 edgerun_log::info!(
                                     "edgerun-smtp: connection from {} rejected: {}",
-                                    peer, e
+                                    peer,
+                                    e
                                 );
                                 continue;
                             }
@@ -319,9 +315,7 @@ impl SmtpServer {
                     // Rate limit check
                     if let Some(ref limiter) = self.config.rate_limiter {
                         if !limiter.is_allowed(peer.ip()).await {
-                            edgerun_log::warn!(
-                                "edgerun-smtp: rate limit exceeded for {}", peer
-                            );
+                            edgerun_log::warn!("edgerun-smtp: rate limit exceeded for {}", peer);
                             // Reject with 421
                             let config = self.config.clone();
                             edgerun_rt::spawn(async move {
@@ -345,7 +339,16 @@ impl SmtpServer {
 
                     edgerun_log::info!("edgerun-smtp: connection from {}", peer);
                     edgerun_rt::spawn(async move {
-                        let result = handle_connection(stream, peer, handler, config, shutdown, queue, command_middleware).await;
+                        let result = handle_connection(
+                            stream,
+                            peer,
+                            handler,
+                            config,
+                            shutdown,
+                            queue,
+                            command_middleware,
+                        )
+                        .await;
                         // Release rate limit slot on disconnect
                         if let Some(ref limiter) = rate_limiter {
                             limiter.release(peer_ip).await;
@@ -376,7 +379,9 @@ enum ControlFlow {
     StartTls,
     /// A BDAT chunk was read. The caller should read `remaining` more bytes
     /// then continue the command loop.
-    BdatContinue { remaining: usize },
+    BdatContinue {
+        remaining: usize,
+    },
     /// The final BDAT chunk was read. Deliver the mail.
     BdatDone,
 }
@@ -454,7 +459,9 @@ async fn handle_connection(
         if elapsed > config.limits.idle_timeout_secs {
             edgerun_log::info!(
                 "edgerun-smtp: {} idle timeout ({}s > {}s)",
-                peer, elapsed, config.limits.idle_timeout_secs
+                peer,
+                elapsed,
+                config.limits.idle_timeout_secs
             );
             send_response(
                 &mut transport,
@@ -491,7 +498,8 @@ async fn handle_connection(
                     Ok(()) => {
                         edgerun_log::info!(
                             "edgerun-smtp: mail accepted from {} to {:?}",
-                            envelope.from, envelope.recipients,
+                            envelope.from,
+                            envelope.recipients,
                         );
                         send_response(
                             &mut transport,
@@ -518,7 +526,13 @@ async fn handle_connection(
                     let envelope_clone = envelope.clone();
                     let config_clone = config.clone();
                     edgerun_rt::spawn(async move {
-                        evaluate_and_notify_auth(&handler_clone, &envelope_clone, &config_clone, &peer_ip_str).await;
+                        evaluate_and_notify_auth(
+                            &handler_clone,
+                            &envelope_clone,
+                            &config_clone,
+                            &peer_ip_str,
+                        )
+                        .await;
                     });
                 }
                 envelope.reset();
@@ -531,7 +545,11 @@ async fn handle_connection(
         // Command count limit
         if command_count >= config.limits.max_commands {
             edgerun_log::info!("edgerun-smtp: {} exceeded max commands", peer);
-            send_response(&mut transport, &SmtpResponse::bad_sequence("Too many commands")).await?;
+            send_response(
+                &mut transport,
+                &SmtpResponse::bad_sequence("Too many commands"),
+            )
+            .await?;
             break;
         }
 
@@ -577,10 +595,8 @@ async fn handle_connection(
                 let peer_ip_str = peer.ip().to_string();
 
                 // Route: local recipients → handler, remote → queue
-                let (local_recipients, remote_recipients) = route_recipients(
-                    &envelope.recipients,
-                    &config.local_domains,
-                );
+                let (local_recipients, remote_recipients) =
+                    route_recipients(&envelope.recipients, &config.local_domains);
 
                 let delivery_ok = if !local_recipients.is_empty() {
                     // Deliver local recipients
@@ -628,13 +644,16 @@ async fn handle_connection(
                     if let Some(ref q) = queue {
                         // Queue for outbound relay
                         let message_id = generate_message_id();
-                        match q.enqueue_message(
-                            &message_id,
-                            &envelope.from,
-                            remote_recipients,
-                            envelope.data.clone(),
-                            8, // max retries
-                        ).await {
+                        match q
+                            .enqueue_message(
+                                &message_id,
+                                &envelope.from,
+                                remote_recipients,
+                                envelope.data.clone(),
+                                8, // max retries
+                            )
+                            .await
+                        {
                             Ok(()) => {
                                 edgerun_log::info!(
                                     "edgerun-smtp: mail queued for remote delivery (id={})",
@@ -648,7 +667,9 @@ async fn handle_connection(
                             }
                         }
                     } else {
-                        edgerun_log::warn!("edgerun-smtp: remote recipients but no queue configured");
+                        edgerun_log::warn!(
+                            "edgerun-smtp: remote recipients but no queue configured"
+                        );
                         false
                     }
                 } else {
@@ -658,15 +679,20 @@ async fn handle_connection(
                 if delivery_ok && queued_ok {
                     send_response(
                         &mut transport,
-                        &SmtpResponse::ok("OK: queued")
-                            .with_enhanced(EnhancedStatusCode::QUEUED),
+                        &SmtpResponse::ok("OK: queued").with_enhanced(EnhancedStatusCode::QUEUED),
                     )
                     .await?;
                     let handler_clone = Arc::clone(&handler);
                     let envelope_clone = envelope.clone();
                     let config_clone = config.clone();
                     edgerun_rt::spawn(async move {
-                        evaluate_and_notify_auth(&handler_clone, &envelope_clone, &config_clone, &peer_ip_str).await;
+                        evaluate_and_notify_auth(
+                            &handler_clone,
+                            &envelope_clone,
+                            &config_clone,
+                            &peer_ip_str,
+                        )
+                        .await;
                     });
                 } else {
                     if !delivery_ok || !queued_ok {
@@ -715,10 +741,12 @@ async fn handle_connection(
         if !command_middleware.is_empty() {
             let session = SessionExtensions::new();
             // Store session state for middleware to inspect/modify
-            session.insert(SmtpAuth {
-                authenticated,
-                identity: auth_identity.clone(),
-            }).await;
+            session
+                .insert(SmtpAuth {
+                    authenticated,
+                    identity: auth_identity.clone(),
+                })
+                .await;
             if let Some(ref domain) = ehlo_domain {
                 session.insert(EhloDomain(Some(domain.clone()))).await;
             }
@@ -750,7 +778,8 @@ async fn handle_connection(
                         }
                     }
                     Err(e) => {
-                        send_response(&mut transport, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                        send_response(&mut transport, &SmtpResponse::syntax_error(&e.to_string()))
+                            .await?;
                         blocked = true;
                         break;
                     }
@@ -795,7 +824,10 @@ async fn handle_connection(
                                 edgerun_log::info!("edgerun-smtp: STARTTLS handshake complete");
                             }
                             Err(e) => {
-                                edgerun_log::error!("edgerun-smtp: STARTTLS handshake failed: {}", e);
+                                edgerun_log::error!(
+                                    "edgerun-smtp: STARTTLS handshake failed: {}",
+                                    e
+                                );
                                 break;
                             }
                         }
@@ -824,54 +856,46 @@ async fn handle_auth_response(
     state: AuthExchangeState,
 ) -> io::Result<AuthExchangeState> {
     match state {
-        AuthExchangeState::Plain => {
-            match base64_decode(line) {
-                Ok(credentials) => {
-                    match handler.authenticate("PLAIN", &credentials) {
-                        AuthResult::Authenticated(identity) => {
-                            *authenticated = true;
-                            *auth_identity = Some(identity.clone());
-                            edgerun_log::info!("edgerun-smtp: authenticated as {}", identity);
-                            send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
-                            Ok(AuthExchangeState::Idle)
-                        }
-                        AuthResult::Failed => {
-                            send_response(
-                                transport,
-                                &SmtpResponse::new(
-                                    SmtpResponseCode::AUTHENTICATION_FAILED,
-                                    "Authentication failed",
-                                ),
-                            )
-                            .await?;
-                            Ok(AuthExchangeState::Idle)
-                        }
-                        AuthResult::Unsupported => {
-                            send_response(transport, &SmtpResponse::auth_required()).await?;
-                            Ok(AuthExchangeState::Idle)
-                        }
-                    }
+        AuthExchangeState::Plain => match base64_decode(line) {
+            Ok(credentials) => match handler.authenticate("PLAIN", &credentials) {
+                AuthResult::Authenticated(identity) => {
+                    *authenticated = true;
+                    *auth_identity = Some(identity.clone());
+                    edgerun_log::info!("edgerun-smtp: authenticated as {}", identity);
+                    send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
+                    Ok(AuthExchangeState::Idle)
                 }
-                Err(e) => {
+                AuthResult::Failed => {
                     send_response(
                         transport,
-                        &SmtpResponse::syntax_error(&format!("Invalid AUTH response: {}", e)),
+                        &SmtpResponse::new(
+                            SmtpResponseCode::AUTHENTICATION_FAILED,
+                            "Authentication failed",
+                        ),
                     )
                     .await?;
                     Ok(AuthExchangeState::Idle)
                 }
+                AuthResult::Unsupported => {
+                    send_response(transport, &SmtpResponse::auth_required()).await?;
+                    Ok(AuthExchangeState::Idle)
+                }
+            },
+            Err(e) => {
+                send_response(
+                    transport,
+                    &SmtpResponse::syntax_error(&format!("Invalid AUTH response: {}", e)),
+                )
+                .await?;
+                Ok(AuthExchangeState::Idle)
             }
-        }
+        },
         AuthExchangeState::LoginUsername => {
             let username = base64_decode_raw(line)
                 .ok()
                 .and_then(|b| String::from_utf8(b).ok())
                 .unwrap_or_default();
-            send_response(
-                transport,
-                &SmtpResponse::auth_continue("UGFzc3dvcmQ6"),
-            )
-            .await?;
+            send_response(transport, &SmtpResponse::auth_continue("UGFzc3dvcmQ6")).await?;
             Ok(AuthExchangeState::LoginPassword { username })
         }
         AuthExchangeState::LoginPassword { username } => {
@@ -879,8 +903,13 @@ async fn handle_auth_response(
                 .ok()
                 .map(|b| String::from_utf8_lossy(&b).to_string())
                 .unwrap_or_default();
-            let cred_bytes: Vec<u8> = [b"\0".as_slice(), username.as_bytes(), b"\0", password.as_bytes()]
-                .concat();
+            let cred_bytes: Vec<u8> = [
+                b"\0".as_slice(),
+                username.as_bytes(),
+                b"\0",
+                password.as_bytes(),
+            ]
+            .concat();
             let creds = AuthCredentials::from_plain(&cred_bytes)?;
             match handler.authenticate("PLAIN", &creds) {
                 AuthResult::Authenticated(identity) => {
@@ -970,9 +999,16 @@ async fn handle_command(
             send_response(transport, &SmtpResponse::ok(&format!("Hello {}", domain))).await?;
         }
 
-        SmtpCommand::MailFrom { address, parameters } => {
+        SmtpCommand::MailFrom {
+            address,
+            parameters,
+        } => {
             if *state != SmtpState::Ready && *state != SmtpState::MailSet {
-                send_response(transport, &SmtpResponse::bad_sequence("MAIL FROM not allowed in current state")).await?;
+                send_response(
+                    transport,
+                    &SmtpResponse::bad_sequence("MAIL FROM not allowed in current state"),
+                )
+                .await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -992,7 +1028,8 @@ async fn handle_command(
                         if let Some(s) = value {
                             if let Ok(size) = s.parse::<usize>() {
                                 if size > config.limits.max_message_size {
-                                    send_response(transport, &SmtpResponse::message_too_large()).await?;
+                                    send_response(transport, &SmtpResponse::message_too_large())
+                                        .await?;
                                     return Ok(ControlFlow::Continue);
                                 }
                             }
@@ -1025,7 +1062,8 @@ async fn handle_command(
                             send_response(
                                 transport,
                                 &SmtpResponse::syntax_error(&format!(
-                                    "Unknown BODY type: {}", body_type
+                                    "Unknown BODY type: {}",
+                                    body_type
                                 )),
                             )
                             .await?;
@@ -1048,9 +1086,16 @@ async fn handle_command(
             .await?;
         }
 
-        SmtpCommand::RcptTo { address, parameters } => {
+        SmtpCommand::RcptTo {
+            address,
+            parameters,
+        } => {
             if *state != SmtpState::MailSet && *state != SmtpState::RcptSet {
-                send_response(transport, &SmtpResponse::bad_sequence("RCPT TO not allowed in current state")).await?;
+                send_response(
+                    transport,
+                    &SmtpResponse::bad_sequence("RCPT TO not allowed in current state"),
+                )
+                .await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -1082,7 +1127,11 @@ async fn handle_command(
 
         SmtpCommand::Data => {
             if *state != SmtpState::RcptSet {
-                send_response(transport, &SmtpResponse::bad_sequence("No valid recipients")).await?;
+                send_response(
+                    transport,
+                    &SmtpResponse::bad_sequence("No valid recipients"),
+                )
+                .await?;
                 return Ok(ControlFlow::Continue);
             }
             *state = SmtpState::Data;
@@ -1091,7 +1140,11 @@ async fn handle_command(
 
         SmtpCommand::Bdat { size, last } => {
             if *state != SmtpState::RcptSet && *state != SmtpState::Data {
-                send_response(transport, &SmtpResponse::bad_sequence("BDAT requires RCPT TO first")).await?;
+                send_response(
+                    transport,
+                    &SmtpResponse::bad_sequence("BDAT requires RCPT TO first"),
+                )
+                .await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -1128,18 +1181,17 @@ async fn handle_command(
             // In practice, most servers don't implement actual role reversal
             // because it's rarely used and complex to handle.
             // We respond with 502 (command not implemented) as a safe default.
-            send_response(
-                transport,
-                &SmtpResponse::command_not_implemented("TURN"),
-            )
-            .await?;
+            send_response(transport, &SmtpResponse::command_not_implemented("TURN")).await?;
         }
 
         SmtpCommand::Etrn(domain) => {
             // RFC 2476 — Remote mail queue processing.
             // We don't have a mail queue in this implementation, so we
             // acknowledge the request but note there's nothing to process.
-            edgerun_log::info!("edgerun-smtp: ETRN {} received (no queue to process)", domain);
+            edgerun_log::info!(
+                "edgerun-smtp: ETRN {} received (no queue to process)",
+                domain
+            );
             send_response(
                 transport,
                 &SmtpResponse::ok(&format!("No mail for {}", domain)),
@@ -1157,11 +1209,16 @@ async fn handle_command(
             #[cfg(feature = "tls")]
             {
                 if transport.is_tls() {
-                    send_response(transport, &SmtpResponse::bad_sequence("TLS already active")).await?;
+                    send_response(transport, &SmtpResponse::bad_sequence("TLS already active"))
+                        .await?;
                     return Ok(ControlFlow::Continue);
                 }
                 if config.tls_cert.is_none() {
-                    send_response(transport, &SmtpResponse::command_not_implemented("STARTTLS")).await?;
+                    send_response(
+                        transport,
+                        &SmtpResponse::command_not_implemented("STARTTLS"),
+                    )
+                    .await?;
                     return Ok(ControlFlow::Continue);
                 }
                 send_response(transport, &SmtpResponse::ok("Ready to start TLS")).await?;
@@ -1170,7 +1227,11 @@ async fn handle_command(
             }
             #[cfg(not(feature = "tls"))]
             {
-                send_response(transport, &SmtpResponse::command_not_implemented("STARTTLS")).await?;
+                send_response(
+                    transport,
+                    &SmtpResponse::command_not_implemented("STARTTLS"),
+                )
+                .await?;
             }
         }
 
@@ -1186,9 +1247,16 @@ async fn handle_command(
             send_response(transport, &SmtpResponse::help_text(&config.domain)).await?;
         }
 
-        SmtpCommand::Auth { mechanism, initial_response } => {
+        SmtpCommand::Auth {
+            mechanism,
+            initial_response,
+        } => {
             if *authenticated {
-                send_response(transport, &SmtpResponse::bad_sequence("Already authenticated")).await?;
+                send_response(
+                    transport,
+                    &SmtpResponse::bad_sequence("Already authenticated"),
+                )
+                .await?;
                 return Ok(ControlFlow::Continue);
             }
 
@@ -1205,29 +1273,35 @@ async fn handle_command(
                 "PLAIN" => {
                     if let Some(response_b64) = initial_response {
                         match base64_decode(&response_b64) {
-                            Ok(credentials) => {
-                                match handler.authenticate("PLAIN", &credentials) {
-                                    AuthResult::Authenticated(identity) => {
-                                        *authenticated = true;
-                                        *auth_identity = Some(identity.clone());
-                                        edgerun_log::info!("edgerun-smtp: authenticated as {}", identity);
-                                        send_response(transport, &SmtpResponse::auth_success(&identity)).await?;
-                                    }
-                                    AuthResult::Failed => {
-                                        send_response(
-                                            transport,
-                                            &SmtpResponse::new(
-                                                SmtpResponseCode::AUTHENTICATION_FAILED,
-                                                "Authentication failed",
-                                            ),
-                                        )
-                                        .await?;
-                                    }
-                                    AuthResult::Unsupported => {
-                                        send_response(transport, &SmtpResponse::auth_required()).await?;
-                                    }
+                            Ok(credentials) => match handler.authenticate("PLAIN", &credentials) {
+                                AuthResult::Authenticated(identity) => {
+                                    *authenticated = true;
+                                    *auth_identity = Some(identity.clone());
+                                    edgerun_log::info!(
+                                        "edgerun-smtp: authenticated as {}",
+                                        identity
+                                    );
+                                    send_response(
+                                        transport,
+                                        &SmtpResponse::auth_success(&identity),
+                                    )
+                                    .await?;
                                 }
-                            }
+                                AuthResult::Failed => {
+                                    send_response(
+                                        transport,
+                                        &SmtpResponse::new(
+                                            SmtpResponseCode::AUTHENTICATION_FAILED,
+                                            "Authentication failed",
+                                        ),
+                                    )
+                                    .await?;
+                                }
+                                AuthResult::Unsupported => {
+                                    send_response(transport, &SmtpResponse::auth_required())
+                                        .await?;
+                                }
+                            },
                             Err(e) => {
                                 send_response(
                                     transport,
@@ -1248,7 +1322,8 @@ async fn handle_command(
                     *auth_exchange = AuthExchangeState::LoginUsername;
                 }
                 _ => {
-                    send_response(transport, &SmtpResponse::auth_mechanism_unknown(&mechanism)).await?;
+                    send_response(transport, &SmtpResponse::auth_mechanism_unknown(&mechanism))
+                        .await?;
                 }
             }
         }
@@ -1365,8 +1440,8 @@ async fn evaluate_and_notify_auth(
     };
 
     // Parse From: header
-    let header_from = crate::smtp::types::headers::get_from_address(headers_str)
-        .unwrap_or_default();
+    let header_from =
+        crate::smtp::types::headers::get_from_address(headers_str).unwrap_or_default();
 
     // Get a DNS client for evaluation
     let mut dns_client = match edgerun_dns::client::DnsClient::new("8.8.8.8:53") {
@@ -1379,7 +1454,13 @@ async fn evaluate_and_notify_auth(
 
     let mut evaluator = EmailAuthEvaluator::new(&mut dns_client);
     match evaluator
-        .evaluate(peer_ip, &envelope.from, &header_from, headers_str, &envelope.data)
+        .evaluate(
+            peer_ip,
+            &envelope.from,
+            &header_from,
+            headers_str,
+            &envelope.data,
+        )
         .await
     {
         Ok(auth_results) => {
@@ -1399,19 +1480,15 @@ async fn evaluate_and_notify_auth(
 // ===========================================================================
 
 /// Split recipients into local and remote based on configured local domains.
-fn route_recipients(
-    recipients: &[String],
-    local_domains: &[String],
-) -> (Vec<String>, Vec<String>) {
+fn route_recipients(recipients: &[String], local_domains: &[String]) -> (Vec<String>, Vec<String>) {
     let mut local = Vec::new();
     let mut remote = Vec::new();
 
     for addr in recipients {
         let domain = extract_domain_from_address(addr);
-        let is_local = local_domains.iter().any(|d| {
-            d.eq_ignore_ascii_case(&domain)
-                || addr.contains(&format!("@{}", d))
-        });
+        let is_local = local_domains
+            .iter()
+            .any(|d| d.eq_ignore_ascii_case(&domain) || addr.contains(&format!("@{}", d)));
 
         if is_local {
             local.push(addr.clone());

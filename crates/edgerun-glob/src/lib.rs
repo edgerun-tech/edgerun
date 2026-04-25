@@ -27,11 +27,11 @@ pub fn glob_match(pattern: &str, path: &str) -> bool {
 pub fn glob_match_with_separator(pattern: &str, path: &str, sep: char) -> bool {
     let mut pi = 0; // pattern index
     let mut ti = 0; // path index
-    
+
     while pi < pattern.len() || ti < path.len() {
         let pc = pattern[pi..].chars().next();
         let tc = path[ti..].chars().next();
-        
+
         match (pc, tc) {
             (Some('*'), Some(tc_char)) if tc_char == sep => {
                 // * doesn't match across separator
@@ -99,11 +99,11 @@ pub fn glob_match_with_separator(pattern: &str, path: &str, sep: char) -> bool {
 fn glob_match_fast(pattern: &str, path: &str, sep: char) -> bool {
     let mut pi = 0;
     let mut ti = 0;
-    
+
     while pi < pattern.len() && ti < path.len() {
         let pc = pattern[pi..].chars().next();
         let tc = path[ti..].chars().next();
-        
+
         match (pc, tc) {
             (Some('*'), _) => return false,
             (Some('?'), Some(_)) => {
@@ -134,13 +134,13 @@ fn glob_match_fast(pattern: &str, path: &str, sep: char) -> bool {
 fn match_char_class(pattern: &str, ch: char) -> bool {
     let start = if pattern.starts_with('[') { 1 } else { 0 };
     let end = pattern.find(']').unwrap_or(pattern.len());
-    
+
     if start >= end {
         return false;
     }
-    
+
     let class = &pattern[start..end];
-    
+
     if let Some(minus) = class.find('-') {
         let start_char = class[..minus].chars().next();
         let end_char = class[minus + 1..].chars().next();
@@ -148,7 +148,7 @@ fn match_char_class(pattern: &str, ch: char) -> bool {
             return ch >= s && ch <= e;
         }
     }
-    
+
     class.chars().any(|c| c == ch)
 }
 

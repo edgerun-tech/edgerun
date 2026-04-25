@@ -30,12 +30,14 @@ pub fn read_trimmed(path: &Path) -> Option<String> {
 
 #[must_use]
 pub fn parse_hex_u16(text: Option<String>) -> Option<u16> {
-    text.as_deref().and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
+    text.as_deref()
+        .and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
 }
 
 #[must_use]
 pub fn parse_hex_u32(text: Option<String>) -> Option<u32> {
-    text.as_deref().and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
+    text.as_deref()
+        .and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
 }
 
 /// Parse a hex u32 from a `&str` directly (useful when chaining with `and_then`
@@ -48,7 +50,8 @@ pub fn parse_hex_u32_from_str(s: &str) -> Option<u32> {
 
 #[must_use]
 pub fn parse_hex_u8(text: Option<String>) -> Option<u8> {
-    text.as_deref().and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
+    text.as_deref()
+        .and_then(|v| edgerun_encoding::hex::parse_hex_int(v.trim_start_matches("0x")))
 }
 
 #[must_use]
@@ -175,15 +178,16 @@ pub fn build_parent_child_relationships<T>(
     clear_parent: impl Fn(&mut T),
     set_children: impl Fn(&mut T, Vec<String>),
 ) {
-    let known: std::collections::HashSet<String> = devices.iter().map(|d| get_key(d).to_string()).collect();
-    
+    let known: std::collections::HashSet<String> =
+        devices.iter().map(|d| get_key(d).to_string()).collect();
+
     // Clear orphaned parent references
     for device in &mut *devices {
         if !get_parent(device).is_some_and(|p| known.contains(p)) {
             clear_parent(device);
         }
     }
-    
+
     // Build children map
     let mut children: HashMap<String, Vec<String>> = HashMap::new();
     for device in &*devices {
@@ -194,7 +198,7 @@ pub fn build_parent_child_relationships<T>(
                 .push(get_key(device).to_string());
         }
     }
-    
+
     // Assign sorted children to each device
     for device in &mut *devices {
         if let Some(ids) = children.get(get_key(device)) {
@@ -203,7 +207,7 @@ pub fn build_parent_child_relationships<T>(
             set_children(device, ids);
         }
     }
-    
+
     // Sort devices by key
     devices.sort_by(|a, b| get_key(a).cmp(get_key(b)));
 }
@@ -290,7 +294,10 @@ mod tests {
 
     #[test]
     fn parse_hex_u32_with_0x_prefix() {
-        assert_eq!(parse_hex_u32(Some("0xdeadbeef".to_string())), Some(0xdeadbeef));
+        assert_eq!(
+            parse_hex_u32(Some("0xdeadbeef".to_string())),
+            Some(0xdeadbeef)
+        );
     }
 
     #[test]
@@ -417,7 +424,10 @@ mod tests {
 
     #[test]
     fn parse_u64_valid() {
-        assert_eq!(parse_u64(Some("18446744073709551615".to_string())), Some(u64::MAX));
+        assert_eq!(
+            parse_u64(Some("18446744073709551615".to_string())),
+            Some(u64::MAX)
+        );
     }
 
     #[test]
@@ -566,7 +576,14 @@ mod tests {
         let mut buf = [0i8; 16];
         let name = "abcdefghijklmno"; // 15 chars + null
         fill_ifr_name(&mut buf, name);
-        assert_eq!(&buf[0..15], name.as_bytes().iter().map(|&b| b as i8).collect::<Vec<i8>>().as_slice());
+        assert_eq!(
+            &buf[0..15],
+            name.as_bytes()
+                .iter()
+                .map(|&b| b as i8)
+                .collect::<Vec<i8>>()
+                .as_slice()
+        );
         assert_eq!(buf[15], 0);
     }
 

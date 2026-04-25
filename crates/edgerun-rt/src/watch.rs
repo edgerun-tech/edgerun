@@ -2,12 +2,12 @@
 //!
 //! Uses `crate::sync::Mutex` consistently.
 
+use crate::sync::Mutex;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 struct WatchData<T> {
@@ -155,7 +155,9 @@ impl<T> Future for Changed<'_, T> {
         let current_version = this.receiver.version.load(Ordering::Acquire);
 
         if current_version > this.receiver.last_seen.load(Ordering::Acquire) {
-            this.receiver.last_seen.store(current_version, Ordering::Release);
+            this.receiver
+                .last_seen
+                .store(current_version, Ordering::Release);
             return Poll::Ready(Ok(()));
         }
 
@@ -167,7 +169,9 @@ impl<T> Future for Changed<'_, T> {
 
         let current_version = this.receiver.version.load(Ordering::Acquire);
         if current_version > this.receiver.last_seen.load(Ordering::Acquire) {
-            this.receiver.last_seen.store(current_version, Ordering::Release);
+            this.receiver
+                .last_seen
+                .store(current_version, Ordering::Release);
             return Poll::Ready(Ok(()));
         }
 
@@ -184,22 +188,16 @@ impl<T> Future for Changed<'_, T> {
 mod tests {
     use super::*;
 
-    static NOOP_WAKER: std::sync::LazyLock<Waker> =
-        std::sync::LazyLock::new(|| {
-            static VTABLE: std::task::RawWakerVTable =
-                std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-            const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-                std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-            }
-            const fn wake_noop(_: *const ()) {}
-            const fn drop_noop(_: *const ()) {}
-            unsafe {
-                Waker::from_raw(std::task::RawWaker::new(
-                    std::ptr::null(),
-                    &VTABLE,
-                ))
-            }
-        });
+    static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
+        static VTABLE: std::task::RawWakerVTable =
+            std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
+        const fn clone_noop(_: *const ()) -> std::task::RawWaker {
+            std::task::RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        const fn wake_noop(_: *const ()) {}
+        const fn drop_noop(_: *const ()) {}
+        unsafe { Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+    });
 
     fn cx() -> Context<'static> {
         Context::from_waker(&NOOP_WAKER)

@@ -57,7 +57,11 @@ impl fmt::Display for GattError {
             Self::Timeout(ms) => write!(f, "timeout after {}ms", ms),
             Self::AttError(code) => write!(f, "ATT protocol error: {}", code),
             Self::AttErrorResponse { handle, error } => {
-                write!(f, "ATT error response: handle=0x{:04x}, error={}", handle, error)
+                write!(
+                    f,
+                    "ATT error response: handle=0x{:04x}, error={}",
+                    handle, error
+                )
             }
             Self::NotPermitted(s) => write!(f, "GATT operation not permitted: {}", s),
             Self::ReadNotAllowed => write!(f, "read not allowed"),
@@ -129,12 +133,18 @@ impl GattError {
     pub fn is_connection_error(&self) -> bool {
         matches!(
             self,
-            Self::ConnectionFailed(_) | Self::ConnectionRefused(_) | Self::HostUnreachable | Self::Timeout(_)
+            Self::ConnectionFailed(_)
+                | Self::ConnectionRefused(_)
+                | Self::HostUnreachable
+                | Self::Timeout(_)
         )
     }
 
     pub fn is_authentication_error(&self) -> bool {
-        matches!(self, Self::AuthenticationFailed(_) | Self::ReadNotAllowed | Self::WriteNotAllowed)
+        matches!(
+            self,
+            Self::AuthenticationFailed(_) | Self::ReadNotAllowed | Self::WriteNotAllowed
+        )
     }
 }
 

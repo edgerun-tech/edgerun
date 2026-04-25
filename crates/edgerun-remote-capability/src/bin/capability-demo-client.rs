@@ -1,10 +1,10 @@
 use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation};
-use edgerun_remote_capability::{
-    capability_remote_envelope, FramedRemoteTransport, RemoteCapabilityTransport,
-};
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilityRemoteEnvelope, CapabilitySessionMode, CapabilitySessionOpen,
+};
+use edgerun_remote_capability::{
+    capability_remote_envelope, FramedRemoteTransport, RemoteCapabilityTransport,
 };
 use std::env;
 
@@ -26,7 +26,9 @@ fn run_client<T: RemoteCapabilityTransport>(
         )),
     })?;
 
-    let accept = transport.recv()?.ok_or("server closed before session accept")?;
+    let accept = transport
+        .recv()?
+        .ok_or("server closed before session accept")?;
     eprintln!("accept={accept:?}");
 
     transport.send(CapabilityRemoteEnvelope {
@@ -53,8 +55,12 @@ fn run_client<T: RemoteCapabilityTransport>(
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
-    let mode = args.next().ok_or("usage: capability-demo-client <unix|tcp> <path|addr>")?;
-    let target = args.next().ok_or("usage: capability-demo-client <unix|tcp> <path|addr>")?;
+    let mode = args
+        .next()
+        .ok_or("usage: capability-demo-client <unix|tcp> <path|addr>")?;
+    let target = args
+        .next()
+        .ok_or("usage: capability-demo-client <unix|tcp> <path|addr>")?;
 
     match mode.as_str() {
         "unix" => {

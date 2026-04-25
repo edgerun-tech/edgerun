@@ -86,7 +86,10 @@ mod tests {
         env.add_recipient(
             "a@b.com".to_string(),
             vec![("NOTIFY".to_string(), Some("FAILURE".to_string()))],
-            DsnNotify { failure: true, ..Default::default() },
+            DsnNotify {
+                failure: true,
+                ..Default::default()
+            },
             None,
         );
         assert_eq!(env.recipient_count(), 1);
@@ -100,6 +103,9 @@ mod tests {
         env.add_recipient("a@b.com".to_string(), vec![], DsnNotify::default(), None);
         env.reset();
         assert_eq!(env.recipient_count(), 0);
-        assert_eq!(env.authenticated_identity, Some("user@example.com".to_string()));
+        assert_eq!(
+            env.authenticated_identity,
+            Some("user@example.com".to_string())
+        );
     }
 }

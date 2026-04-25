@@ -11,7 +11,10 @@ fn main() {
     let default_key = "e0d652d4843a48a6be9eeb4fe6dd5b9c";
 
     if args.len() < 3 {
-        eprintln!("Usage: {} [device-ip] [local-key] [on|off|temp <N>|mode <M>|fan <F>]", args[0]);
+        eprintln!(
+            "Usage: {} [device-ip] [local-key] [on|off|temp <N>|mode <M>|fan <F>]",
+            args[0]
+        );
         eprintln!("Using defaults: {} {} [command]", default_ip, default_key);
         eprintln!("Examples:");
         eprintln!("  {} {} on", args[0], default_ip);
@@ -21,9 +24,21 @@ fn main() {
         return;
     }
 
-    let ip = if args[1] == "default" { default_ip.to_string() } else { args[1].clone() };
-    let key = if args[2] == "default" { default_key.to_string() } else { args[2].clone() };
-    let cmd = if args.len() > 3 { args[3].clone() } else { "on".to_string() };
+    let ip = if args[1] == "default" {
+        default_ip.to_string()
+    } else {
+        args[1].clone()
+    };
+    let key = if args[2] == "default" {
+        default_key.to_string()
+    } else {
+        args[2].clone()
+    };
+    let cmd = if args.len() > 3 {
+        args[3].clone()
+    } else {
+        "on".to_string()
+    };
 
     let device = TuyaDevice {
         id: "".to_string(),
@@ -43,9 +58,7 @@ fn main() {
             "on" => controller.set_power(true).await,
             "off" => controller.set_power(false).await,
             "temp" => {
-                let temp: i32 = args.get(4)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(24);
+                let temp: i32 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(24);
                 controller.set_temperature(temp).await
             }
             "mode" => {

@@ -222,13 +222,14 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 std::process::exit(1);
             });
 
-            let signing_key = edgerun_crypto::decrypt_signing_key(&encrypted_data, &passphrase).unwrap_or_else(|e| {
-                eprintln!(
+            let signing_key = edgerun_crypto::decrypt_signing_key(&encrypted_data, &passphrase)
+                .unwrap_or_else(|e| {
+                    eprintln!(
                     "error: failed to decrypt key with passphrase from '{}' (wrong passphrase?)",
                     passphrase_env
                 );
-                std::process::exit(1);
-            });
+                    std::process::exit(1);
+                });
 
             Arc::new(SyncSoftwareSigner::new(signing_key))
         }
@@ -252,11 +253,12 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 std::process::exit(1);
             }
 
-            let signing_key = derive_signing_key_from_passphrase(&passphrase, &signer_config.public_key_hex)
-                .unwrap_or_else(|e| {
-                    eprintln!("error: failed to derive signing key: {}", e);
-                    std::process::exit(1);
-                });
+            let signing_key =
+                derive_signing_key_from_passphrase(&passphrase, &signer_config.public_key_hex)
+                    .unwrap_or_else(|e| {
+                        eprintln!("error: failed to derive signing key: {}", e);
+                        std::process::exit(1);
+                    });
 
             Arc::new(SyncSoftwareSigner::new(signing_key))
         }
@@ -269,12 +271,16 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
 
 const PBKDF2_ITERATIONS: u32 = 100_000;
 
-fn derive_signing_key_from_passphrase(passphrase: &str, public_key_hex: &str) -> Result<SigningKey, String> {
+fn derive_signing_key_from_passphrase(
+    passphrase: &str,
+    public_key_hex: &str,
+) -> Result<SigningKey, String> {
     use edgerun_crypto::pbkdf2::pbkdf2_hmac_array;
     use edgerun_crypto::sha2::Sha256;
 
     let salt = format!("edgerun:provisioned:{}", public_key_hex);
-    let derived: [u8; 32] = pbkdf2_hmac_array::<Sha256, 32>(passphrase.as_bytes(), salt.as_bytes(), PBKDF2_ITERATIONS);
+    let derived: [u8; 32] =
+        pbkdf2_hmac_array::<Sha256, 32>(passphrase.as_bytes(), salt.as_bytes(), PBKDF2_ITERATIONS);
     SigningKey::from_bytes(&derived.into()).map_err(|e| e.to_string())
 }
 

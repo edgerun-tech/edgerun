@@ -138,7 +138,8 @@ impl Http3Frame {
     /// Parse frame from bytes
     pub fn from_bytes(data: &[u8]) -> Result<(Self, usize), String> {
         let (frame_type, ft_len) = Self::decode_varint(data).map_err(|e| e.to_string())?;
-        let (payload_len, pl_len) = Self::decode_varint(&data[ft_len..]).map_err(|e| e.to_string())?;
+        let (payload_len, pl_len) =
+            Self::decode_varint(&data[ft_len..]).map_err(|e| e.to_string())?;
         let header_len = ft_len + pl_len;
 
         if header_len + payload_len as usize > data.len() {
@@ -156,43 +157,42 @@ impl Http3Frame {
                 header_block: payload.to_vec(),
             },
             Some(Http3FrameType::CancelPush) => {
-                let (push_id, _) = Self::decode_varint(payload)
-                    .map_err(|e| e.to_string())?;
+                let (push_id, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::CancelPush { push_id }
             }
             Some(Http3FrameType::Settings) => {
                 let mut entries = Vec::new();
                 let mut pos = 0;
                 while pos < payload.len() {
-                    let (id, n) = Self::decode_varint(&payload[pos..])
-                        .map_err(|e| e.to_string())?;
+                    let (id, n) =
+                        Self::decode_varint(&payload[pos..]).map_err(|e| e.to_string())?;
                     pos += n;
-                    let (value, n) = Self::decode_varint(&payload[pos..])
-                        .map_err(|e| e.to_string())?;
+                    let (value, n) =
+                        Self::decode_varint(&payload[pos..]).map_err(|e| e.to_string())?;
                     pos += n;
                     entries.push((id, value));
                 }
                 Http3Frame::Settings { entries }
             }
             Some(Http3FrameType::Goaway) => {
-                let (stream_id, _) = Self::decode_varint(payload)
-                    .map_err(|e| e.to_string())?;
+                let (stream_id, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::Goaway { stream_id }
             }
             Some(Http3FrameType::MaxPushId) => {
-                let (push_id, _) = Self::decode_varint(payload)
-                    .map_err(|e| e.to_string())?;
+                let (push_id, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::MaxPushId { push_id }
             }
             Some(Http3FrameType::PushPromise) => {
-                let (push_id, varint_len) = Self::decode_varint(payload)
-                    .map_err(|e| e.to_string())?;
+                let (push_id, varint_len) =
+                    Self::decode_varint(payload).map_err(|e| e.to_string())?;
                 let header_block = payload[varint_len..].to_vec();
-                Http3Frame::PushPromise { push_id, header_block }
+                Http3Frame::PushPromise {
+                    push_id,
+                    header_block,
+                }
             }
             Some(Http3FrameType::StreamsBlocked) => {
-                let (limit, _) = Self::decode_varint(payload)
-                    .map_err(|e| e.to_string())?;
+                let (limit, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::StreamsBlocked { limit }
             }
             Some(_) | None => {
@@ -235,7 +235,7 @@ mod tests {
     fn test_settings_frame_roundtrip() {
         let frame = Http3Frame::Settings {
             entries: vec![
-                (0x06, 4096),  // MAX_TABLE_CAPACITY
+                (0x06, 4096), // MAX_TABLE_CAPACITY
             ],
         };
         let bytes = frame.to_bytes();

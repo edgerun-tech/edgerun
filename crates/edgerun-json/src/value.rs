@@ -178,7 +178,11 @@ impl JsonValue {
 
     /// Non-panicking version of [`push_field`].
     /// Returns `Err` if called on a non-object value.
-    pub fn try_push_field(&mut self, key: impl Into<String>, value: impl Into<JsonValue>) -> Result<(), JsonValueError> {
+    pub fn try_push_field(
+        &mut self,
+        key: impl Into<String>,
+        value: impl Into<JsonValue>,
+    ) -> Result<(), JsonValueError> {
         match self {
             Self::Object(entries) => {
                 entries.push((key.into(), value.into()));

@@ -64,20 +64,35 @@ impl OciPlatform {
     pub fn matches_host(&self) -> bool {
         // OS check
         if let Some(ref os) = self.os {
-            let host_os = if cfg!(target_os = "linux") { "linux" }
-                          else if cfg!(target_os = "windows") { "windows" }
-                          else if cfg!(target_os = "solaris") { "solaris" }
-                          else { "unknown" };
-            if os != host_os { return false; }
+            let host_os = if cfg!(target_os = "linux") {
+                "linux"
+            } else if cfg!(target_os = "windows") {
+                "windows"
+            } else if cfg!(target_os = "solaris") {
+                "solaris"
+            } else {
+                "unknown"
+            };
+            if os != host_os {
+                return false;
+            }
         }
         // Arch check
         if let Some(ref arch) = self.arch {
-            let host_arch = if cfg!(target_arch = "x86_64") { "amd64" }
-                            else if cfg!(target_arch = "aarch64") { "arm64" }
-                            else if cfg!(target_arch = "riscv64") { "riscv64" }
-                            else if cfg!(target_arch = "arm") { "arm" }
-                            else { "unknown" };
-            if arch != host_arch { return false; }
+            let host_arch = if cfg!(target_arch = "x86_64") {
+                "amd64"
+            } else if cfg!(target_arch = "aarch64") {
+                "arm64"
+            } else if cfg!(target_arch = "riscv64") {
+                "riscv64"
+            } else if cfg!(target_arch = "arm") {
+                "arm"
+            } else {
+                "unknown"
+            };
+            if arch != host_arch {
+                return false;
+            }
         }
         true
     }
@@ -375,13 +390,25 @@ pub struct OciLinuxBlockIO {
     pub weight_device: Option<Vec<OciLinuxWeightDevice>>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "leafWeightDevice")]
     pub leaf_weight_device: Option<Vec<OciLinuxWeightDevice>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "throttleReadBpsDevice")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "throttleReadBpsDevice"
+    )]
     pub throttle_read_bps_device: Option<Vec<OciLinuxThrottleDevice>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "throttleWriteBpsDevice")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "throttleWriteBpsDevice"
+    )]
     pub throttle_write_bps_device: Option<Vec<OciLinuxThrottleDevice>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "throttleReadIOPSDevice")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "throttleReadIOPSDevice"
+    )]
     pub throttle_read_iops_device: Option<Vec<OciLinuxThrottleDevice>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "throttleWriteIOPSDevice")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "throttleWriteIOPSDevice"
+    )]
     pub throttle_write_iops_device: Option<Vec<OciLinuxThrottleDevice>>,
 }
 
@@ -481,7 +508,11 @@ pub struct OciLinuxSeccomp {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE", try_from = "String", into = "String")]
+#[serde(
+    rename_all = "SCREAMING_SNAKE_CASE",
+    try_from = "String",
+    into = "String"
+)]
 pub enum OciSeccompAction {
     Kill,
     KillProcess,
@@ -648,7 +679,8 @@ mod tests {
 
     #[test]
     fn parse_minimal_oci_spec() {
-        let json = r#"{"ociVersion":"1.0.2","root":{"path":"rootfs"},"process":{"args":["/bin/sh"]}}"#;
+        let json =
+            r#"{"ociVersion":"1.0.2","root":{"path":"rootfs"},"process":{"args":["/bin/sh"]}}"#;
         let spec = parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(spec.version, "1.0.2");
         assert_eq!(spec.root.unwrap().path, "rootfs");
@@ -675,7 +707,8 @@ mod tests {
                 no_new_privileges: Some(true),
                 oom_score_adj: Some(100),
                 user: Some(OciUser {
-                    uid: Some(1000), gid: Some(1000),
+                    uid: Some(1000),
+                    gid: Some(1000),
                     additional_gids: Some(vec![1001, 1002]),
                     umask: Some(0o022),
                 }),
@@ -690,17 +723,16 @@ mod tests {
                 rootfs_propagation: Some("shared".into()),
                 ..Default::default()
             }),
-            mounts: Some(vec![
-                OciMount {
-                    destination: "/proc".into(),
-                    mount_type: Some("proc".into()),
-                    source: Some("proc".into()),
-                    ..Default::default()
-                },
-            ]),
-            annotations: Some(std::collections::HashMap::from([
-                ("org.edgerun.container.id".into(), "my-id".into()),
-            ])),
+            mounts: Some(vec![OciMount {
+                destination: "/proc".into(),
+                mount_type: Some("proc".into()),
+                source: Some("proc".into()),
+                ..Default::default()
+            }]),
+            annotations: Some(std::collections::HashMap::from([(
+                "org.edgerun.container.id".into(),
+                "my-id".into(),
+            )])),
             platform: None,
         };
 
@@ -741,7 +773,11 @@ mod tests {
     fn oci_platform_matches_host_linux_amd64() {
         let platform = OciPlatform {
             os: Some("linux".into()),
-            arch: Some(if cfg!(target_arch = "x86_64") { "amd64".into() } else { "arm64".into() }),
+            arch: Some(if cfg!(target_arch = "x86_64") {
+                "amd64".into()
+            } else {
+                "arm64".into()
+            }),
             ..Default::default()
         };
         #[cfg(target_arch = "x86_64")]
@@ -752,7 +788,10 @@ mod tests {
 
     #[test]
     fn oci_platform_rejects_windows() {
-        let platform = OciPlatform { os: Some("windows".into()), ..Default::default() };
+        let platform = OciPlatform {
+            os: Some("windows".into()),
+            ..Default::default()
+        };
         assert!(!platform.matches_host());
     }
 
@@ -844,7 +883,10 @@ mod tests {
         };
         let json = edgerun_json::to_string(&resources).unwrap();
         let parsed: OciLinuxResources = from_slice(json.as_bytes()).unwrap();
-        assert_eq!(parsed.memory.as_ref().unwrap().limit, Some(512 * 1024 * 1024));
+        assert_eq!(
+            parsed.memory.as_ref().unwrap().limit,
+            Some(512 * 1024 * 1024)
+        );
         assert_eq!(parsed.cpu.as_ref().unwrap().shares, Some(512));
         assert_eq!(parsed.cpu.as_ref().unwrap().idle, Some(1));
         assert_eq!(parsed.cpu.as_ref().unwrap().burst, Some(500000));
@@ -872,7 +914,8 @@ mod tests {
 
     #[test]
     fn oci_hook_with_timeout_and_env() {
-        let json = r#"{"path":"/bin/hook","args":["hook","--flag"],"env":["FOO=bar"],"timeout":30}"#;
+        let json =
+            r#"{"path":"/bin/hook","args":["hook","--flag"],"env":["FOO=bar"],"timeout":30}"#;
         let hook: OciHook = from_slice(json.as_bytes()).unwrap();
         assert_eq!(hook.path, "/bin/hook");
         assert_eq!(hook.args, Some(vec!["hook".into(), "--flag".into()]));
@@ -883,10 +926,19 @@ mod tests {
     #[test]
     fn oci_seccomp_action_serde() {
         // All action variants
-        for action_str in &["SCMP_ACT_KILL", "SCMP_ACT_KILL_PROCESS", "SCMP_ACT_KILL_THREAD",
-            "SCMP_ACT_TRAP", "SCMP_ACT_ERRNO", "SCMP_ACT_TRACE", "SCMP_ACT_ALLOW",
-            "SCMP_ACT_NOTIFY", "SCMP_ACT_LOG"] {
-            let action: OciSeccompAction = from_slice(format!("\"{}\"", action_str).as_bytes()).unwrap();
+        for action_str in &[
+            "SCMP_ACT_KILL",
+            "SCMP_ACT_KILL_PROCESS",
+            "SCMP_ACT_KILL_THREAD",
+            "SCMP_ACT_TRAP",
+            "SCMP_ACT_ERRNO",
+            "SCMP_ACT_TRACE",
+            "SCMP_ACT_ALLOW",
+            "SCMP_ACT_NOTIFY",
+            "SCMP_ACT_LOG",
+        ] {
+            let action: OciSeccompAction =
+                from_slice(format!("\"{}\"", action_str).as_bytes()).unwrap();
             let serialized: String = action.clone().into();
             assert_eq!(&serialized, action_str);
         }
@@ -930,7 +982,10 @@ mod tests {
         let seccomp: OciLinuxSeccomp = from_slice(json.as_bytes()).unwrap();
         assert_eq!(seccomp.default_action, Some(OciSeccompAction::Errno));
         assert_eq!(seccomp.default_errno_ret, Some(1));
-        assert_eq!(seccomp.architectures, Some(vec!["SCMP_ARCH_X86_64".into(), "SCMP_ARCH_X32".into()]));
+        assert_eq!(
+            seccomp.architectures,
+            Some(vec!["SCMP_ARCH_X86_64".into(), "SCMP_ARCH_X32".into()])
+        );
         assert_eq!(seccomp.listener_path, Some("/run/seccomp-listener".into()));
         assert_eq!(seccomp.listener_metadata, Some("container-id=test".into()));
         let syscalls = seccomp.syscalls.as_ref().unwrap();
@@ -950,8 +1005,16 @@ mod tests {
             destination: "/data".into(),
             mount_type: Some("ext4".into()),
             source: Some("/dev/sda1".into()),
-            uid_mappings: Some(vec![OciIdMapping { container_id: 0, host_id: 1000, size: 1 }]),
-            gid_mappings: Some(vec![OciIdMapping { container_id: 0, host_id: 1000, size: 1 }]),
+            uid_mappings: Some(vec![OciIdMapping {
+                container_id: 0,
+                host_id: 1000,
+                size: 1,
+            }]),
+            gid_mappings: Some(vec![OciIdMapping {
+                container_id: 0,
+                host_id: 1000,
+                size: 1,
+            }]),
             recursive: Some(true),
             ..Default::default()
         };
@@ -966,13 +1029,15 @@ mod tests {
 
     #[test]
     fn oci_linux_devices_serialization() {
-        let devices = vec![
-            OciLinuxDevice {
-                ns_type: "c".into(), path: "/dev/null".into(),
-                file_mode: Some(0o666), uid: Some(0), gid: Some(0),
-                major: Some(1), minor: Some(3),
-            },
-        ];
+        let devices = vec![OciLinuxDevice {
+            ns_type: "c".into(),
+            path: "/dev/null".into(),
+            file_mode: Some(0o666),
+            uid: Some(0),
+            gid: Some(0),
+            major: Some(1),
+            minor: Some(3),
+        }];
         let json = edgerun_json::to_string(&devices).unwrap();
         let parsed: Vec<OciLinuxDevice> = from_slice(json.as_bytes()).unwrap();
         assert_eq!(parsed[0].ns_type, "c");
@@ -999,7 +1064,10 @@ mod tests {
 
     #[test]
     fn oci_io_priority_serialization() {
-        let io_prio = OciIoPriority { class: 2, priority: Some(4) };
+        let io_prio = OciIoPriority {
+            class: 2,
+            priority: Some(4),
+        };
         let json = edgerun_json::to_string(&io_prio).unwrap();
         assert!(json.contains("\"class\":2"));
         let parsed: OciIoPriority = from_slice(json.as_bytes()).unwrap();
@@ -1011,22 +1079,32 @@ mod tests {
     fn oci_block_io_full_serialization() {
         let blkio = OciLinuxBlockIO {
             weight: Some(500),
-            weight_device: Some(vec![
-                OciLinuxWeightDevice { major: 8, minor: 0, weight: Some(300), leaf_weight: None },
-            ]),
-            throttle_read_bps_device: Some(vec![
-                OciLinuxThrottleDevice { major: 8, minor: 0, rate: 102400 },
-            ]),
-            throttle_write_iops_device: Some(vec![
-                OciLinuxThrottleDevice { major: 8, minor: 0, rate: 1000 },
-            ]),
+            weight_device: Some(vec![OciLinuxWeightDevice {
+                major: 8,
+                minor: 0,
+                weight: Some(300),
+                leaf_weight: None,
+            }]),
+            throttle_read_bps_device: Some(vec![OciLinuxThrottleDevice {
+                major: 8,
+                minor: 0,
+                rate: 102400,
+            }]),
+            throttle_write_iops_device: Some(vec![OciLinuxThrottleDevice {
+                major: 8,
+                minor: 0,
+                rate: 1000,
+            }]),
             ..Default::default()
         };
         let json = edgerun_json::to_string(&blkio).unwrap();
         let parsed: OciLinuxBlockIO = from_slice(json.as_bytes()).unwrap();
         assert_eq!(parsed.weight, Some(500));
         assert_eq!(parsed.weight_device.as_ref().unwrap()[0].major, 8);
-        assert_eq!(parsed.throttle_read_bps_device.as_ref().unwrap()[0].rate, 102400);
+        assert_eq!(
+            parsed.throttle_read_bps_device.as_ref().unwrap()[0].rate,
+            102400
+        );
     }
 
     #[test]
@@ -1062,9 +1140,10 @@ mod tests {
     fn oci_network_serialization() {
         let net = OciLinuxNetwork {
             class_id: Some(0x1234),
-            priorities: Some(vec![
-                OciLinuxNetworkPriority { name: "eth0".into(), priority: 3 },
-            ]),
+            priorities: Some(vec![OciLinuxNetworkPriority {
+                name: "eth0".into(),
+                priority: 3,
+            }]),
         };
         let json = edgerun_json::to_string(&net).unwrap();
         let parsed: OciLinuxNetwork = from_slice(json.as_bytes()).unwrap();
@@ -1089,7 +1168,10 @@ mod tests {
 
     #[test]
     fn oci_box_console_size() {
-        let box_ = OciBox { width: 80, height: 24 };
+        let box_ = OciBox {
+            width: 80,
+            height: 24,
+        };
         let json = edgerun_json::to_string(&box_).unwrap();
         let parsed: OciBox = from_slice(json.as_bytes()).unwrap();
         assert_eq!(parsed.width, 80);

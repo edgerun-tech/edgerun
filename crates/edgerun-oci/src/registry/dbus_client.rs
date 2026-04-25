@@ -8,9 +8,9 @@ use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
-use edgerun_secret_service::dbus_types::*;
-use edgerun_secret_service::dbus_wire::{encode_msg, decode_msg};
 use edgerun_secret_service::backend::Backend;
+use edgerun_secret_service::dbus_types::*;
+use edgerun_secret_service::dbus_wire::{decode_msg, encode_msg};
 
 const DEFAULT_SOCKET: &str = "/run/edgerun/secret.sock";
 const SERVICE_PATH: &str = "/org/freedesktop/secrets";
@@ -54,15 +54,19 @@ impl SecretClient {
 
         let mut msg = Msg::call(SERVICE_PATH, SERVICE_IFACE, "OpenSession", "");
         msg.ser = ser;
-        msg = msg.body(vec![
-            Val::S("plain".into()),
-            Val::Var(Box::new(Val::Arr(vec![]))),
-        ], "sv");
+        msg = msg.body(
+            vec![Val::S("plain".into()), Val::Var(Box::new(Val::Arr(vec![])))],
+            "sv",
+        );
 
         let reply = self.send_and_recv(&msg)?;
 
         if reply.mt == MType::Err {
-            let err_msg = reply.body.first().and_then(Val::s).unwrap_or("unknown error");
+            let err_msg = reply
+                .body
+                .first()
+                .and_then(Val::s)
+                .unwrap_or("unknown error");
             return Err(io::Error::new(io::ErrorKind::PermissionDenied, err_msg));
         }
 
@@ -85,14 +89,16 @@ impl SecretClient {
 
         let mut msg = Msg::call(SERVICE_PATH, SERVICE_IFACE, "Unlock", "");
         msg.ser = ser;
-        msg = msg.body(vec![
-            Val::Arr(vec![Val::O(SERVICE_PATH.into())]),
-        ], "ao");
+        msg = msg.body(vec![Val::Arr(vec![Val::O(SERVICE_PATH.into())])], "ao");
 
         let reply = self.send_and_recv(&msg)?;
 
         if reply.mt == MType::Err {
-            let err_msg = reply.body.first().and_then(Val::s).unwrap_or("unlock failed");
+            let err_msg = reply
+                .body
+                .first()
+                .and_then(Val::s)
+                .unwrap_or("unlock failed");
             return Err(io::Error::new(io::ErrorKind::PermissionDenied, err_msg));
         }
 
@@ -139,16 +145,23 @@ impl SecretClient {
 
         let mut msg = Msg::call(REGISTRY_COLL, COLLECTION_IFACE, "CreateItem", "");
         msg.ser = ser;
-        msg = msg.body(vec![
-            Val::Dict(props),
-            secret_val,
-            Val::B(true), // replace = true
-        ], "a{sv}(oa{sv}ays)b");
+        msg = msg.body(
+            vec![
+                Val::Dict(props),
+                secret_val,
+                Val::B(true), // replace = true
+            ],
+            "a{sv}(oa{sv}ays)b",
+        );
 
         let reply = self.send_and_recv(&msg)?;
 
         if reply.mt == MType::Err {
-            let err_msg = reply.body.first().and_then(Val::s).unwrap_or("store failed");
+            let err_msg = reply
+                .body
+                .first()
+                .and_then(Val::s)
+                .unwrap_or("store failed");
             return Err(io::Error::other(err_msg));
         }
 
@@ -163,13 +176,8 @@ impl SecretClient {
     ///
     /// Searches for a credential matching the given `registry_host`.
     /// If the session is locked, triggers biometric verification automatically.
-    pub fn get_registry_credential(
-        &mut self,
-        registry_host: &str,
-    ) -> io::Result<Vec<u8>> {
-        let attrs = vec![
-            (Val::S("host".into()), Val::S(registry_host.to_string())),
-        ];
+    pub fn get_registry_credential(&mut self, registry_host: &str) -> io::Result<Vec<u8>> {
+        let attrs = vec![(Val::S("host".into()), Val::S(registry_host.to_string()))];
 
         // Search for the item
         self.serial += 1;
@@ -182,7 +190,11 @@ impl SecretClient {
         let reply = self.send_and_recv(&search_msg)?;
 
         if reply.mt == MType::Err {
-            let err_msg = reply.body.first().and_then(Val::s).unwrap_or("search failed");
+            let err_msg = reply
+                .body
+                .first()
+                .and_then(Val::s)
+                .unwrap_or("search failed");
             return Err(io::Error::other(err_msg));
         }
 
@@ -200,13 +212,8 @@ impl SecretClient {
     }
 
     /// Delete a registry credential for the given registry host.
-    pub fn delete_registry_credential(
-        &mut self,
-        registry_host: &str,
-    ) -> io::Result<bool> {
-        let attrs = vec![
-            (Val::S("host".into()), Val::S(registry_host.to_string())),
-        ];
+    pub fn delete_registry_credential(&mut self, registry_host: &str) -> io::Result<bool> {
+        let attrs = vec![(Val::S("host".into()), Val::S(registry_host.to_string()))];
 
         self.serial += 1;
         let ser = self.serial;
@@ -252,10 +259,7 @@ impl SecretClient {
 
         let mut get_msg = Msg::call(SERVICE_PATH, SERVICE_IFACE, "GetSecrets", "");
         get_msg.ser = ser;
-        get_msg = get_msg.body(vec![
-            Val::Arr(paths.clone()),
-            Val::O(session.clone()),
-        ], "ao");
+        get_msg = get_msg.body(vec![Val::Arr(paths.clone()), Val::O(session.clone())], "ao");
 
         let reply = self.send_and_recv(&get_msg)?;
 
@@ -269,20 +273,25 @@ impl SecretClient {
                 let ser = self.serial;
                 let mut retry_msg = Msg::call(SERVICE_PATH, SERVICE_IFACE, "GetSecrets", "");
                 retry_msg.ser = ser;
-                retry_msg = retry_msg.body(vec![
-                    Val::Arr(paths),
-                    Val::O(session),
-                ], "ao");
+                retry_msg = retry_msg.body(vec![Val::Arr(paths), Val::O(session)], "ao");
 
                 let reply2 = self.send_and_recv(&retry_msg)?;
                 if reply2.mt == MType::Err {
-                    let err_msg = reply2.body.first().and_then(Val::s).unwrap_or("get secrets failed");
+                    let err_msg = reply2
+                        .body
+                        .first()
+                        .and_then(Val::s)
+                        .unwrap_or("get secrets failed");
                     return Err(io::Error::new(io::ErrorKind::PermissionDenied, err_msg));
                 }
                 return extract_first_secret(&reply2);
             }
 
-            let err_msg = reply.body.first().and_then(Val::s).unwrap_or("get secrets failed");
+            let err_msg = reply
+                .body
+                .first()
+                .and_then(Val::s)
+                .unwrap_or("get secrets failed");
             return Err(io::Error::other(err_msg));
         }
 
@@ -324,7 +333,8 @@ fn extract_first_secret(reply: &Msg) -> io::Result<Vec<u8>> {
                 if let Val::Str(fields) = inner.as_ref() {
                     if fields.len() >= 3 {
                         if let Val::Arr(bytes) = &fields[2] {
-                            let secret: Vec<u8> = bytes.iter()
+                            let secret: Vec<u8> = bytes
+                                .iter()
                                 .filter_map(|b| if let Val::Y(v) = b { Some(*v) } else { None })
                                 .collect();
                             return Ok(secret);
@@ -334,7 +344,10 @@ fn extract_first_secret(reply: &Msg) -> io::Result<Vec<u8>> {
             }
         }
     }
-    Err(io::Error::new(io::ErrorKind::NotFound, "no secret in response"))
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "no secret in response",
+    ))
 }
 
 #[cfg(test)]
@@ -351,12 +364,13 @@ mod tests {
             Val::S("text/plain".into()),
         ]);
 
-        let reply = Msg::ret(1, "test").body(vec![
-            Val::Dict(vec![(
+        let reply = Msg::ret(1, "test").body(
+            vec![Val::Dict(vec![(
                 Val::O("/org/freedesktop/secrets/collections/registry/abc".into()),
                 Val::Var(Box::new(secret_val)),
-            )]),
-        ], "a{o(v)}");
+            )])],
+            "a{o(v)}",
+        );
 
         let secret = extract_first_secret(&reply).unwrap();
         assert_eq!(secret, b"user:pass");

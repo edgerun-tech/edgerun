@@ -61,7 +61,9 @@ pub fn discover_nfc_adapters_in(root: &Path) -> Result<Vec<LinuxNfcAdapter>, Cap
 }
 
 fn parse_supported_technologies(protocols: &Option<String>) -> Vec<NfcTechnology> {
-    let Some(protocols) = protocols else { return Vec::new() };
+    let Some(protocols) = protocols else {
+        return Vec::new();
+    };
     protocols
         .split_whitespace()
         .map(NfcTechnology::parse)

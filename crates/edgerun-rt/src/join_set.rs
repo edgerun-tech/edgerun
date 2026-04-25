@@ -3,12 +3,12 @@
 //! Tasks are spawned on the set and awaited via [`JoinSet::join_next()`],
 //! which returns the result of whichever task completes next.
 
+use crate::sync::Mutex;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
-use crate::sync::Mutex;
 
 use crate::oneshot;
 use crate::runtime::spawn;

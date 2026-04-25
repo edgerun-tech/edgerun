@@ -206,4 +206,3 @@ pub fn validate_object_case(
     }
     reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map())
 }
-

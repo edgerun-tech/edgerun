@@ -31,8 +31,8 @@ impl HeaderName {
 /// Check if a byte is a valid HTTP token character (RFC 9110 Section 5.6.2).
 pub fn is_tchar(b: u8) -> bool {
     match b {
-        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+'
-        | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~' => true,
+        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_'
+        | b'`' | b'|' | b'~' => true,
         b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' => true,
         _ => false,
     }
@@ -72,7 +72,7 @@ impl HeaderValue {
         if !value.bytes().all(|b| {
             b == 0x09            // HTAB
                 || b == 0x20     // SP
-                || (0x21..=0x7E).contains(&b)  // visible ASCII
+                || (0x21..=0x7E).contains(&b) // visible ASCII
         }) {
             return Err(format!("Invalid header value: {value}"));
         }

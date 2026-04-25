@@ -175,8 +175,10 @@ fn enrich_from_ioctl(file: &File, info: &mut LinuxCecAdapterInfo) {
     // SAFETY: ioctl is called with valid pointers to C-compatible structs for read/write requests.
     let caps_ok = unsafe { ioctl(fd, CEC_ADAP_G_CAPS, &mut caps) } == 0;
     if caps_ok {
-        let driver_name = edgerun_encoding::cstring::decode_c_string_trimmed(&caps.driver).unwrap_or_default();
-        let adapter_name = edgerun_encoding::cstring::decode_c_string_trimmed(&caps.name).unwrap_or_default();
+        let driver_name =
+            edgerun_encoding::cstring::decode_c_string_trimmed(&caps.driver).unwrap_or_default();
+        let adapter_name =
+            edgerun_encoding::cstring::decode_c_string_trimmed(&caps.name).unwrap_or_default();
         if !driver_name.is_empty() {
             info.driver_name = Some(driver_name);
         }

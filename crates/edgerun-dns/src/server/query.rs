@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use edgerun_rt::AsyncUdpSocket;
 
-use crate::message::{DnsMessage, DnsOpcode, DnsResponseCode, DnsRecord};
+use crate::message::{DnsMessage, DnsOpcode, DnsRecord, DnsResponseCode};
 use crate::name::validate_name;
 use crate::record::{DnsRecordData, DnsRecordType};
 use crate::zone::DnsZone;
@@ -30,10 +30,7 @@ pub struct ParseError;
 /// Process a DNS query and return `(response_wire, needs_tcp)`.
 ///
 /// If the response exceeds `MAX_UDP_RESPONSE` bytes, `needs_tcp` is true.
-pub async fn handle_query(
-    wire: &[u8],
-    state: &ServerState,
-) -> Result<(Vec<u8>, bool), ParseError> {
+pub async fn handle_query(wire: &[u8], state: &ServerState) -> Result<(Vec<u8>, bool), ParseError> {
     let query = DnsMessage::from_wire(wire).map_err(|_| ParseError)?;
 
     if query.header.is_response {
@@ -66,7 +63,8 @@ async fn handle_standard_query(
         Some(q) => q,
         None => {
             return Ok((
-                DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new()).to_wire(),
+                DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new())
+                    .to_wire(),
                 false,
             ));
         }
@@ -95,7 +93,8 @@ async fn handle_standard_query(
             }
         } else {
             return Ok((
-                DnsMessage::response(query.header.id, DnsResponseCode::NotAuth, Vec::new()).to_wire(),
+                DnsMessage::response(query.header.id, DnsResponseCode::NotAuth, Vec::new())
+                    .to_wire(),
                 false,
             ));
         }
@@ -112,7 +111,11 @@ async fn handle_standard_query(
         ));
     }
 
-    edgerun_log::debug!("edgerun-dns: query {} {} (concurrent)", qtype.as_str(), qname);
+    edgerun_log::debug!(
+        "edgerun-dns: query {} {} (concurrent)",
+        qtype.as_str(),
+        qname
+    );
 
     // Resolve while holding the zones lock, then drop it before any
     // other `.await` points. The borrow checker can't prove that
@@ -164,10 +167,7 @@ async fn handle_standard_query(
 }
 
 /// Find the SOA record for the zone that would match this query name.
-fn find_matching_zone_soa(
-    qname: &str,
-    zones: &HashMap<String, DnsZone>,
-) -> Vec<DnsRecord> {
+fn find_matching_zone_soa(qname: &str, zones: &HashMap<String, DnsZone>) -> Vec<DnsRecord> {
     for zone in zones.values() {
         let origin = zone.origin.to_lowercase();
         if qname == origin || qname.ends_with(&format!(".{}", origin)) {
@@ -267,10 +267,13 @@ async fn handle_update_query(
 ) -> Result<(Vec<u8>, bool), ParseError> {
     let zone_question = match query.questions.first() {
         Some(q) => q,
-        None => return Ok((
-            DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new()).to_wire(),
-            false,
-        )),
+        None => {
+            return Ok((
+                DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new())
+                    .to_wire(),
+                false,
+            ))
+        }
     };
 
     let zone_name = zone_question.name.to_lowercase();
@@ -282,15 +285,13 @@ async fn handle_update_query(
     let zone = zones_guard.get_mut(&zone_name);
 
     match zone {
-        Some(zone) => {
-            match crate::axfr::handle_update(query, zone, None) {
-                Ok(response) => Ok((response.to_wire(), false)),
-                Err(rcode) => Ok((
-                    DnsMessage::response(query.header.id, rcode, Vec::new()).to_wire(),
-                    false,
-                )),
-            }
-        }
+        Some(zone) => match crate::axfr::handle_update(query, zone, None) {
+            Ok(response) => Ok((response.to_wire(), false)),
+            Err(rcode) => Ok((
+                DnsMessage::response(query.header.id, rcode, Vec::new()).to_wire(),
+                false,
+            )),
+        },
         None => Ok((
             DnsMessage::response(query.header.id, DnsResponseCode::NotAuth, Vec::new()).to_wire(),
             false,

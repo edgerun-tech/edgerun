@@ -7,21 +7,21 @@
 //! Enable `feature = "android-real"` to get real implementations.
 //! Otherwise, stub implementations are available for cross-compilation.
 
-mod input;
 mod audio;
-mod camera;
-mod sensors;
-mod display;
 mod biometric;
+mod camera;
+mod display;
+mod input;
 mod location;
 mod power;
+mod sensors;
 
 // Re-export all providers
-pub use input::{AndroidInputProvider, AInputDevice};
-pub use audio::{AndroidAudioInputProvider, AndroidAudioOutputProvider, AAudioStream};
-pub use camera::{AndroidCameraProvider, Camera2Session};
-pub use sensors::{AndroidSensorProvider, ASensorManagerWrapper as ASensor};
-pub use display::{AndroidDisplayProvider, ANativeWindowSurface};
+pub use audio::{AAudioStream, AndroidAudioInputProvider, AndroidAudioOutputProvider};
 pub use biometric::AndroidBiometricProvider;
+pub use camera::{AndroidCameraProvider, Camera2Session};
+pub use display::{ANativeWindowSurface, AndroidDisplayProvider};
+pub use input::{AInputDevice, AndroidInputProvider};
 pub use location::AndroidLocationProvider;
 pub use power::{AndroidPowerProvider, BatteryInfo};
+pub use sensors::{ASensorManagerWrapper as ASensor, AndroidSensorProvider};

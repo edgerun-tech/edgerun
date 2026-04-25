@@ -1,12 +1,15 @@
-use std::env;
-use edgerun_http::{HttpServer, Handler, Request, Response, StatusCode};
+use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
 use edgerun_rt::Runtime;
 use edgerun_tls::generate_self_signed as gen_cert;
+use std::env;
 
 struct EchoHandler;
 
 impl Handler for EchoHandler {
-    fn handle(&self, req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    fn handle(
+        &self,
+        req: Request,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
         Box::pin(async move {
             let body = req.body().map(|b| b.to_vec()).unwrap_or_default();
             Response::new(StatusCode::OK).with_body(body)

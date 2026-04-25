@@ -1,5 +1,5 @@
+use super::varint::encode_varint;
 use super::QuicFrame;
-use super::varint::{encode_varint};
 
 pub fn to_bytes(frame: &QuicFrame) -> Vec<u8> {
     match frame {
@@ -20,7 +20,9 @@ pub fn to_bytes(frame: &QuicFrame) -> Vec<u8> {
             data,
         } => {
             let mut type_byte = 0x08u8;
-            if *fin { type_byte |= 0x01; }
+            if *fin {
+                type_byte |= 0x01;
+            }
             type_byte |= 0x02; // Offset present
             type_byte |= 0x04; // Length present
 

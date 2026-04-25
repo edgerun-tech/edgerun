@@ -11,7 +11,9 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 
 use super::lease::LeasePool;
-use super::message::{DhcpMessage, DhcpMessageType, DhcpOp, DHCP_SERVER_PORT, DHCP_CLIENT_PORT, NetworkConfig};
+use super::message::{
+    DhcpMessage, DhcpMessageType, DhcpOp, NetworkConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
+};
 
 /// A DHCP scope (subnet-specific pool + config).
 #[derive(Debug)]
@@ -125,7 +127,11 @@ pub struct DhcpMultiServer {
 impl DhcpMultiServer {
     /// Create a new multi-scope DHCP server on the given port.
     /// Use a port > 1024 to avoid requiring root (e.g. 1067 for testing).
-    pub fn with_port(server_ip: Ipv4Addr, port: u16, scopes: Vec<DhcpScope>) -> Result<Self, io::Error> {
+    pub fn with_port(
+        server_ip: Ipv4Addr,
+        port: u16,
+        scopes: Vec<DhcpScope>,
+    ) -> Result<Self, io::Error> {
         use std::net::UdpSocket;
         use std::time::Duration;
 
@@ -138,9 +144,13 @@ impl DhcpMultiServer {
             let fd = socket.as_raw_fd();
             let opt: libc::c_int = 1;
             unsafe {
-                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR,
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_REUSEADDR,
                     &opt as *const _ as *const libc::c_void,
-                    std::mem::size_of::<libc::c_int>() as libc::socklen_t);
+                    std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+                );
             }
         }
 
@@ -245,10 +255,12 @@ impl DhcpMultiServer {
         Ok(())
     }
 
-
     /// Get statistics for all scopes.
     pub fn stats(&self) -> HashMap<&str, String> {
-        self.scopes.iter().map(|(k, v)| (k.as_str(), v.stats())).collect()
+        self.scopes
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.stats()))
+            .collect()
     }
 
     /// Get the number of scopes.
@@ -280,15 +292,28 @@ fn handle_scope_message(
     }
 }
 
-fn handle_discover(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr, socket: &std::net::UdpSocket) -> Result<(), io::Error> {
+fn handle_discover(
+    scope: &mut DhcpScope,
+    msg: &DhcpMessage,
+    server_ip: Ipv4Addr,
+    socket: &std::net::UdpSocket,
+) -> Result<(), io::Error> {
     let mac = msg.client_mac();
-    let ip = match scope.pool.allocate(mac, msg.options.client_id.clone(), scope.lease_time, msg.xid) {
+    let ip = match scope.pool.allocate(
+        mac,
+        msg.options.client_id.clone(),
+        scope.lease_time,
+        msg.xid,
+    ) {
         Some(ip) => ip,
         None => return send_nak(server_ip, msg.xid, mac, msg, socket),
     };
 
     let offer = DhcpMessage::offer(
-        msg.xid, mac, ip, NetworkConfig {
+        msg.xid,
+        mac,
+        ip,
+        NetworkConfig {
             server_id: server_ip,
             subnet_mask: scope.subnet_mask,
             router: scope.router,
@@ -302,12 +327,20 @@ fn handle_discover(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr
     send_reply(&offer, msg, server_ip, socket)
 }
 
-fn handle_request(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr, socket: &std::net::UdpSocket) -> Result<(), io::Error> {
+fn handle_request(
+    scope: &mut DhcpScope,
+    msg: &DhcpMessage,
+    server_ip: Ipv4Addr,
+    socket: &std::net::UdpSocket,
+) -> Result<(), io::Error> {
     let mac = msg.client_mac();
     let ip = msg.options.requested_ip.unwrap_or(msg.ciaddr);
 
     let ack = DhcpMessage::ack(
-        msg.xid, mac, ip, NetworkConfig {
+        msg.xid,
+        mac,
+        ip,
+        NetworkConfig {
             server_id: server_ip,
             subnet_mask: scope.subnet_mask,
             router: scope.router,
@@ -334,10 +367,18 @@ fn handle_decline(scope: &mut DhcpScope, msg: &DhcpMessage) -> Result<(), io::Er
     Ok(())
 }
 
-fn handle_inform(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr, socket: &std::net::UdpSocket) -> Result<(), io::Error> {
+fn handle_inform(
+    scope: &mut DhcpScope,
+    msg: &DhcpMessage,
+    server_ip: Ipv4Addr,
+    socket: &std::net::UdpSocket,
+) -> Result<(), io::Error> {
     let mac = msg.client_mac();
     let mut ack = DhcpMessage::ack(
-        msg.xid, mac, msg.ciaddr, NetworkConfig {
+        msg.xid,
+        mac,
+        msg.ciaddr,
+        NetworkConfig {
             server_id: server_ip,
             subnet_mask: scope.subnet_mask,
             router: scope.router,
@@ -353,7 +394,12 @@ fn handle_inform(scope: &mut DhcpScope, msg: &DhcpMessage, server_ip: Ipv4Addr, 
     send_reply(&ack, msg, server_ip, socket)
 }
 
-fn send_reply(msg: &DhcpMessage, req: &DhcpMessage, server_ip: Ipv4Addr, socket: &std::net::UdpSocket) -> Result<(), io::Error> {
+fn send_reply(
+    msg: &DhcpMessage,
+    req: &DhcpMessage,
+    server_ip: Ipv4Addr,
+    socket: &std::net::UdpSocket,
+) -> Result<(), io::Error> {
     let wire = msg.to_wire();
     let dest = if !req.giaddr.is_unspecified() {
         SocketAddr::new(std::net::IpAddr::V4(req.giaddr), DHCP_SERVER_PORT)
@@ -366,7 +412,13 @@ fn send_reply(msg: &DhcpMessage, req: &DhcpMessage, server_ip: Ipv4Addr, socket:
     Ok(())
 }
 
-fn send_nak(server_ip: Ipv4Addr, xid: u32, mac: [u8; 6], req: &DhcpMessage, socket: &std::net::UdpSocket) -> Result<(), io::Error> {
+fn send_nak(
+    server_ip: Ipv4Addr,
+    xid: u32,
+    mac: [u8; 6],
+    req: &DhcpMessage,
+    socket: &std::net::UdpSocket,
+) -> Result<(), io::Error> {
     let nak = DhcpMessage::nak(xid, server_ip, mac);
     let wire = nak.to_wire();
     let dest = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
@@ -434,10 +486,9 @@ mod tests {
             3600,
         );
 
-        let server = DhcpMultiServer::with_port(
-            Ipv4Addr::new(10, 0, 0, 1), 1067,
-            vec![scope1, scope2],
-        ).unwrap();
+        let server =
+            DhcpMultiServer::with_port(Ipv4Addr::new(10, 0, 0, 1), 1067, vec![scope1, scope2])
+                .unwrap();
 
         assert_eq!(server.scope_count(), 2);
 

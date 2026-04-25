@@ -42,16 +42,12 @@ const SNDRV_PCM_FORMAT_FLOAT_LE: u32 = 10;
 
 const SNDRV_PCM_IOCTL_HW_PARAMS: c_int = c_iowr(b'A', 0x11, SNDRV_PCM_HW_PARAMS_SIZE);
 const SNDRV_PCM_IOCTL_PREPARE: c_int = c_io(b'A', 0x40);
-const SNDRV_PCM_IOCTL_READI_FRAMES: c_int =
-    c_iowr(b'A', 0x51, std::mem::size_of::<SndXferi>());
+const SNDRV_PCM_IOCTL_READI_FRAMES: c_int = c_iowr(b'A', 0x51, std::mem::size_of::<SndXferi>());
 
 const fn c_iowr(ty: u8, nr: u8, size: usize) -> c_int {
     // _IOC(_IOC_READ | _IOC_WRITE, ty, nr, size)
     // direction: READ=2, WRITE=1 => READ|WRITE = 3
-    ((3u32 << 30)
-        | ((ty as u32) << 8)
-        | (nr as u32)
-        | ((size as u32) << 16)) as c_int
+    ((3u32 << 30) | ((ty as u32) << 8) | (nr as u32) | ((size as u32) << 16)) as c_int
 }
 const fn c_io(ty: u8, nr: u8) -> c_int {
     (((ty as u32) << 8) | (nr as u32)) as c_int
@@ -104,7 +100,6 @@ const SNDRV_PCM_HW_PARAMS_SIZE: usize = std::mem::size_of::<SndPcmHwParams>();
 
 impl SndPcmHwParams {
     fn any() -> Self {
-        
         Self {
             flags: 0,
             masks: [SndMask {
@@ -259,12 +254,11 @@ fn discover_from_card_dirs() -> Result<Vec<AlsaPcmInfo>, CapabilityError> {
     if !asound.exists() {
         return Ok(devices);
     }
-    for entry in fs::read_dir(asound).map_err(|e| {
-        CapabilityError::Provider(format!("failed to read /proc/asound: {}", e))
-    })? {
-        let entry = entry.map_err(|e| {
-            CapabilityError::Provider(format!("failed to read dir entry: {}", e))
-        })?;
+    for entry in fs::read_dir(asound)
+        .map_err(|e| CapabilityError::Provider(format!("failed to read /proc/asound: {}", e)))?
+    {
+        let entry = entry
+            .map_err(|e| CapabilityError::Provider(format!("failed to read dir entry: {}", e)))?;
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
         if !name_str.starts_with("card") {
@@ -311,10 +305,7 @@ pub struct AlsaMicrophoneBackend {
 impl AlsaMicrophoneBackend {
     /// Opens a microphone backend for the given PCM device.
     pub fn open(pcm: AlsaPcmInfo) -> Result<Self, CapabilityError> {
-        let device_path = format!(
-            "/dev/snd/pcmC{}D{}c",
-            pcm.card_index, pcm.device_index
-        );
+        let device_path = format!("/dev/snd/pcmC{}D{}c", pcm.card_index, pcm.device_index);
         if !Path::new(&device_path).exists() {
             return Err(CapabilityError::Provider(format!(
                 "ALSA capture device {} does not exist",
@@ -324,7 +315,10 @@ impl AlsaMicrophoneBackend {
         Ok(Self { pcm, device_path })
     }
 
-    fn capture_from_device(&mut self, request: &AudioCaptureRequest) -> Result<AudioCapture, CapabilityError> {
+    fn capture_from_device(
+        &mut self,
+        request: &AudioCaptureRequest,
+    ) -> Result<AudioCapture, CapabilityError> {
         let bytes_per_sample = match request.format {
             MicrophoneSampleFormat::PcmS16Le => 2,
             MicrophoneSampleFormat::PcmS24Le => 3,
@@ -382,12 +376,13 @@ impl AlsaMicrophoneBackend {
 
         // Read audio frames
         let mut buf = vec![0u8; total_bytes];
-        let read_frames = ioctl_pcm_readi_frames(fd, buf.as_mut_ptr().cast(), frames)
-            .map_err(|e| {
+        let read_frames =
+            ioctl_pcm_readi_frames(fd, buf.as_mut_ptr().cast(), frames).map_err(|e| {
                 CapabilityError::Provider(format!("readi_frames {}: {}", self.device_path, e))
             })?;
 
-        let read_bytes = (read_frames as usize) * (usize::from(request.channels)) * bytes_per_sample;
+        let read_bytes =
+            (read_frames as usize) * (usize::from(request.channels)) * bytes_per_sample;
 
         let started_at_unix_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -476,7 +471,12 @@ mod tests {
             let lower = rest.to_lowercase();
             let capture = lower.contains("capture");
             let playback = lower.contains("playback");
-            let name = id_part.splitn(2, ':').last().unwrap_or(id_part).trim().to_string();
+            let name = id_part
+                .splitn(2, ':')
+                .last()
+                .unwrap_or(id_part)
+                .trim()
+                .to_string();
             devices.push(AlsaPcmInfo {
                 card_index,
                 device_index,

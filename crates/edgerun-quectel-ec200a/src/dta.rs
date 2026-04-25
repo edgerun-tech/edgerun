@@ -139,7 +139,7 @@ pub fn set_radio_function(mode: u8) -> Result<String, String> {
 fn send_at_command(cmd: &str) -> Result<String, String> {
     let port = "/dev/ttyUSB1"; // Primary AT command port
     let baud = 115200;
-    
+
     let python_script = format!(
         r#"import serial, time
 try:
@@ -169,11 +169,10 @@ except Exception as e:
         .map_err(|e| format!("Failed to execute Python script: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    
+
     if !output.status.success() || stdout.starts_with("ERROR:") {
         return Err(stdout);
     }
 
     Ok(stdout)
 }
-

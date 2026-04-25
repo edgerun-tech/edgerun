@@ -1,5 +1,5 @@
 // Test UnixDatagram with the actual runtime.
-use edgerun_rt::{UnixDatagram, Runtime, AsyncReadExt, AsyncWriteExt};
+use edgerun_rt::{AsyncReadExt, AsyncWriteExt, Runtime, UnixDatagram};
 use std::os::unix::io::AsRawFd;
 use std::time::Duration;
 
@@ -16,7 +16,9 @@ fn cleanup(path: &std::path::Path) {
 
 struct Cleanup<'a>(&'a std::path::Path);
 impl Drop for Cleanup<'_> {
-    fn drop(&mut self) { cleanup(self.0); }
+    fn drop(&mut self) {
+        cleanup(self.0);
+    }
 }
 
 fn main() {
@@ -77,10 +79,7 @@ fn test_send_to_and_recv_from() {
 
         // Receive on A
         let mut buf = [0u8; 64];
-        let n = sock_a.poll_recv(
-            &mut std::task::Context::from_waker(&noop_waker()),
-            &mut buf,
-        );
+        let n = sock_a.poll_recv(&mut std::task::Context::from_waker(&noop_waker()), &mut buf);
         if let std::task::Poll::Ready(Ok(n)) = n {
             assert_eq!(&buf[..n], data);
         } else {
@@ -108,20 +107,14 @@ fn test_connect_send_recv() {
 
         // Send from B (connected, so no address needed)
         let data = b"connected dgram";
-        let n = sock_b.poll_send(
-            &mut std::task::Context::from_waker(&noop_waker()),
-            data,
-        );
+        let n = sock_b.poll_send(&mut std::task::Context::from_waker(&noop_waker()), data);
         assert!(n.is_ready());
 
         std::thread::sleep(Duration::from_millis(50));
 
         // Receive on A
         let mut buf = [0u8; 64];
-        let n = sock_a.poll_recv(
-            &mut std::task::Context::from_waker(&noop_waker()),
-            &mut buf,
-        );
+        let n = sock_a.poll_recv(&mut std::task::Context::from_waker(&noop_waker()), &mut buf);
         if let std::task::Poll::Ready(Ok(n)) = n {
             assert_eq!(&buf[..n], data);
         } else {
@@ -147,7 +140,10 @@ fn test_async_read_write() {
         sock_b.connect(&path_a).expect("connect failed");
 
         // Use AsyncWrite
-        sock_b.write_all(b"async dgram").await.expect("write failed");
+        sock_b
+            .write_all(b"async dgram")
+            .await
+            .expect("write failed");
 
         std::thread::sleep(Duration::from_millis(50));
 

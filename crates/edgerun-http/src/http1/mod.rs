@@ -3,35 +3,34 @@
 //! This module provides HTTP/1.1 server built on top of
 //! [`edgerun_rt`] async primitives. The client is in the unified `HttpClient`.
 
-pub mod handler;
 pub mod body;
+pub mod chunked;
+pub mod compression;
+pub mod connection;
+pub mod handler;
+pub mod multipart;
+pub mod pool;
+pub mod range;
 pub mod request;
 pub mod response;
-pub mod version;
-pub mod connection;
 pub mod upgrade;
-pub mod compression;
-pub mod multipart;
-pub mod range;
-pub mod chunked;
-pub mod pool;
+pub mod version;
 
-pub use handler::{Handler, into_handler, into_handler_async};
-pub use body::{Body, BodyReader, BodySender, AsyncBodyReader};
+pub use body::{AsyncBodyReader, Body, BodyReader, BodySender};
+pub use compression::{accept_encoding_value, decompress_body, ContentEncoding};
+pub use connection::{determine_connection, ConnectionState};
 pub use edgerun_rt::BufReader;
+pub use handler::{into_handler, into_handler_async, Handler};
+pub use multipart::{extract_boundary, is_multipart, parse_multipart, MultipartField};
+pub use pool::ConnectionPool;
+pub use range::{
+    build_partial_response, get_range, has_range_header, is_range_satisfiable, parse_range_header,
+    range_not_satisfiable_response, resolve_byte_range, ByteRange, ContentRange, RangeSpecifier,
+};
 pub use request::{Request, RequestBuilder};
 pub use response::Response;
-pub use version::HttpVersion;
-pub use connection::{ConnectionState, determine_connection};
 pub use upgrade::{
-    UpgradeProtocol, UpgradeHandler, parse_upgrade_request, is_websocket_upgrade,
-    build_upgrade_response, build_websocket_accept_headers,
+    build_upgrade_response, build_websocket_accept_headers, is_websocket_upgrade,
+    parse_upgrade_request, UpgradeHandler, UpgradeProtocol,
 };
-pub use compression::{ContentEncoding, decompress_body, accept_encoding_value};
-pub use multipart::{MultipartField, parse_multipart, extract_boundary, is_multipart};
-pub use range::{
-    RangeSpecifier, ByteRange, ContentRange, parse_range_header, resolve_byte_range,
-    is_range_satisfiable, has_range_header, get_range, build_partial_response,
-    range_not_satisfiable_response,
-};
-pub use pool::ConnectionPool;
+pub use version::HttpVersion;

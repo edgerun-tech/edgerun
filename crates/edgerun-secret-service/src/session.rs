@@ -4,8 +4,8 @@
 //! when the session has an active biometric verification. After an idle
 //! timeout, the session auto-locks and requires re-verification.
 
+use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
 use std::collections::HashMap;
-use edgerun_biometrics::{BiometricState, BiometricAssuranceStrength};
 
 // ===========================================================================
 // Session state
@@ -163,7 +163,9 @@ impl SessionManager {
 
     /// Lock all sessions for a client.
     pub fn lock_client(&mut self, client: &str) {
-        let keys: Vec<String> = self.sessions.iter()
+        let keys: Vec<String> = self
+            .sessions
+            .iter()
             .filter(|(_, s)| s.client == client)
             .map(|(k, _)| k.clone())
             .collect();
@@ -176,7 +178,9 @@ impl SessionManager {
 
     /// Verify all sessions for a client using biometric state.
     pub fn verify_client(&mut self, client: &str, state: BiometricState, now_us: u64) {
-        let keys: Vec<String> = self.sessions.iter()
+        let keys: Vec<String> = self
+            .sessions
+            .iter()
             .filter(|(_, s)| s.client == client)
             .map(|(k, _)| k.clone())
             .collect();
@@ -305,20 +309,29 @@ mod tests {
         let mut state = BiometricState::default();
         state.user_present = true;
         s.mark_verified(state, now_us());
-        assert_eq!(s.assurance_strength(), BiometricAssuranceStrength::UserPresence);
+        assert_eq!(
+            s.assurance_strength(),
+            BiometricAssuranceStrength::UserPresence
+        );
 
         // Biometric match
         let mut state = BiometricState::default();
         state.verified = true;
         s.mark_verified(state, now_us());
-        assert_eq!(s.assurance_strength(), BiometricAssuranceStrength::BiometricMatch);
+        assert_eq!(
+            s.assurance_strength(),
+            BiometricAssuranceStrength::BiometricMatch
+        );
 
         // Hardware protected
         let mut state = BiometricState::default();
         state.verified = true;
         state.hardware_protected = true;
         s.mark_verified(state, now_us());
-        assert_eq!(s.assurance_strength(), BiometricAssuranceStrength::HardwareProtectedBiometric);
+        assert_eq!(
+            s.assurance_strength(),
+            BiometricAssuranceStrength::HardwareProtectedBiometric
+        );
     }
 
     #[test]
@@ -376,7 +389,10 @@ mod tests {
         mgr.verify_client(":1.42", state, now_us());
         assert!(mgr.get(&p1).unwrap().is_verified(now_us()));
         assert!(mgr.get(&p2).unwrap().is_verified(now_us()));
-        assert_eq!(mgr.get(&p1).unwrap().assurance_strength(), BiometricAssuranceStrength::HardwareProtectedBiometric);
+        assert_eq!(
+            mgr.get(&p1).unwrap().assurance_strength(),
+            BiometricAssuranceStrength::HardwareProtectedBiometric
+        );
     }
 
     #[test]
@@ -405,7 +421,9 @@ mod tests {
             state.verified = true;
             mgr.verify_client(":1.1", state, now_us());
         }
-        if let Some(s) = mgr.get_mut(&p2) { s.lock(); }
+        if let Some(s) = mgr.get_mut(&p2) {
+            s.lock();
+        }
         std::thread::sleep(std::time::Duration::from_millis(60));
         let count = mgr.auto_lock_idle();
         assert_eq!(count, 1);

@@ -68,11 +68,7 @@ impl ConnectionNext {
         Self { inner }
     }
 
-    pub async fn run(
-        self,
-        peer: SocketAddr,
-        stream: Arc<AsyncTcpStream>,
-    ) -> io::Result<()> {
+    pub async fn run(self, peer: SocketAddr, stream: Arc<AsyncTcpStream>) -> io::Result<()> {
         self.inner.handle(peer, stream).await
     }
 }
@@ -181,7 +177,10 @@ impl ConnectionChain {
     pub fn build(self) -> Arc<dyn ConnectionHandler> {
         let mut h: Arc<dyn ConnectionHandler> = Arc::new(self.inner);
         for mw in self.middlewares.into_iter().rev() {
-            h = Arc::new(MiddlewareLayer { middleware: mw, inner: h });
+            h = Arc::new(MiddlewareLayer {
+                middleware: mw,
+                inner: h,
+            });
         }
         h
     }

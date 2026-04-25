@@ -2,10 +2,13 @@ use std::io;
 use std::os::raw::c_void;
 
 use crate::json::{OciLinuxSeccomp, OciSeccompAction};
-use crate::syscalls::{do_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, SECCOMP_FILTER_FLAG_NEW_LISTENER};
+use crate::syscalls::{
+    do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
+    SECCOMP_SET_MODE_FILTER,
+};
 
-use super::*;
 use super::actions::{action_to_bpf, arch_to_bpf};
+use super::*;
 
 /// 5. Falls through to default_action if no rule matches
 pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> (Vec<u8>, Vec<u8>) {
@@ -26,7 +29,12 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> (Vec<u8>, Vec<u8>) {
         if skip_past_arch_check > 255 {
             bpf_long_skip(&mut insns, skip_past_arch_check);
         } else {
-            insns.push(bpf_insn_j(0x15, skip_past_arch_check as u8, 0, CURRENT_ARCH));
+            insns.push(bpf_insn_j(
+                0x15,
+                skip_past_arch_check as u8,
+                0,
+                CURRENT_ARCH,
+            ));
         }
     } else {
         for arch in archs {
@@ -45,12 +53,16 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> (Vec<u8>, Vec<u8>) {
 
     // 4. Build syscall rules with argument filters
     let entries = spec.syscalls.as_deref().unwrap_or(&[]);
-    let default_action = spec.default_action.as_ref()
+    let default_action = spec
+        .default_action
+        .as_ref()
         .unwrap_or(&OciSeccompAction::Kill);
     let default_ret = action_to_bpf(default_action, spec.default_errno_ret);
 
     for (i, entry) in entries.iter().enumerate() {
-        let Some(names) = entry.names.as_ref() else { continue };
+        let Some(names) = entry.names.as_ref() else {
+            continue;
+        };
         let action = entry.action.as_ref().unwrap_or(default_action);
         let ret_val = action_to_bpf(action, entry.errno_ret);
         let args = entry.args.as_deref().unwrap_or(&[]);
@@ -69,8 +81,8 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> (Vec<u8>, Vec<u8>) {
                 // For this syscall: arg checks + RET
                 count += arg_check_insns + 1;
                 // For remaining syscalls in this entry
-                let remaining_in_entry = names.len() - names.iter()
-                    .position(|n| n == name).unwrap_or(0) - 1;
+                let remaining_in_entry =
+                    names.len() - names.iter().position(|n| n == name).unwrap_or(0) - 1;
                 count += remaining_in_entry * per_syscall_insns;
                 // For remaining entries
                 for entry in entries.iter().skip(i + 1) {
@@ -239,8 +251,8 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> (Vec<u8>, Vec<u8>) {
                     "SCMP_CMP_MASKED_EQ" => {
                         let mask_hi = (arg.value >> 32) as u32;
                         let expected_hi = (arg.value_two >> 32) as u32;
-                        insns.push(bpf_insn(0x50, 0, 0, mask_hi));  // A = A & mask_hi
-                        // Skip past RET on mismatch
+                        insns.push(bpf_insn(0x50, 0, 0, mask_hi)); // A = A & mask_hi
+                                                                   // Skip past RET on mismatch
                         insns.push(bpf_insn(0x15, 0, 1, expected_hi));
                     }
                     _ => {
@@ -282,7 +294,12 @@ pub fn seccomp_bpf_prog() -> (Vec<u8>, Vec<u8>) {
     insns.push(bpf_insn(0x20, 0, 0, 4));
     // 1: JEQ expected_arch ? continue : kill
     let skip_to_deny = ALLOWED.len() + 2;
-    insns.push(bpf_insn_j(0x15, skip_to_deny.min(255) as u8, 0, CURRENT_ARCH));
+    insns.push(bpf_insn_j(
+        0x15,
+        skip_to_deny.min(255) as u8,
+        0,
+        CURRENT_ARCH,
+    ));
     // 2: LOAD syscall_nr
     insns.push(bpf_insn(0x20, 0, 0, 0));
 
@@ -666,168 +683,339 @@ mod nr {
 #[cfg(target_arch = "x86_64")]
 const ALLOWED: &[u32] = &[
     // I/O fundamentals
-    nr::READ, nr::WRITE, nr::CLOSE,
-    nr::PREAD64, nr::PWRITE64, nr::READV, nr::WRITEV,
-    nr::GETDENTS64, nr::FCNTL, nr::FLOCK,
-
+    nr::READ,
+    nr::WRITE,
+    nr::CLOSE,
+    nr::PREAD64,
+    nr::PWRITE64,
+    nr::READV,
+    nr::WRITEV,
+    nr::GETDENTS64,
+    nr::FCNTL,
+    nr::FLOCK,
     // File operations
-    nr::OPENAT, nr::MKDIRAT, nr::MKNODAT, nr::FCHOWNAT, nr::NEWFSTATAT,
-    nr::UNLINKAT, nr::RENAMEAT, nr::LINKAT, nr::SYMLINKAT,
-    nr::READLINKAT, nr::FCHMODAT, nr::FACCESSAT, nr::FACCESSAT2,
+    nr::OPENAT,
+    nr::MKDIRAT,
+    nr::MKNODAT,
+    nr::FCHOWNAT,
+    nr::NEWFSTATAT,
+    nr::UNLINKAT,
+    nr::RENAMEAT,
+    nr::LINKAT,
+    nr::SYMLINKAT,
+    nr::READLINKAT,
+    nr::FCHMODAT,
+    nr::FACCESSAT,
+    nr::FACCESSAT2,
     nr::FSYNC,
-    nr::RENAME, nr::MKDIR, nr::RMDIR, nr::UNLINK, nr::SYMLINK, nr::READLINK,
-    nr::CHMOD, nr::FCHMOD, nr::CHOWN, nr::FCHOWN, nr::MKNOD,
-
+    nr::RENAME,
+    nr::MKDIR,
+    nr::RMDIR,
+    nr::UNLINK,
+    nr::SYMLINK,
+    nr::READLINK,
+    nr::CHMOD,
+    nr::FCHMOD,
+    nr::CHOWN,
+    nr::FCHOWN,
+    nr::MKNOD,
     // Memory management
-    nr::MMAP, nr::MPROTECT, nr::MUNMAP, nr::BRK,
-    nr::MREMAP, nr::MINCORE, nr::MADVISE, nr::FALLOCATE,
-
+    nr::MMAP,
+    nr::MPROTECT,
+    nr::MUNMAP,
+    nr::BRK,
+    nr::MREMAP,
+    nr::MINCORE,
+    nr::MADVISE,
+    nr::FALLOCATE,
     // Signal handling
-    nr::RT_SIGACTION, nr::RT_SIGPROCMASK, nr::RT_SIGRETURN,
-    nr::KILL, nr::RT_SIGPENDING, nr::RT_SIGTIMEDWAIT,
-    nr::RT_SIGQUEUEINFO, nr::RT_SIGSUSPEND,
-    nr::SIGALTSTACK, nr::TGKILL, nr::TKILL,
-
+    nr::RT_SIGACTION,
+    nr::RT_SIGPROCMASK,
+    nr::RT_SIGRETURN,
+    nr::KILL,
+    nr::RT_SIGPENDING,
+    nr::RT_SIGTIMEDWAIT,
+    nr::RT_SIGQUEUEINFO,
+    nr::RT_SIGSUSPEND,
+    nr::SIGALTSTACK,
+    nr::TGKILL,
+    nr::TKILL,
     // Process management
-    nr::GETPID, nr::CLONE, nr::CLONE3, nr::FORK, nr::VFORK,
-    nr::EXECVE, nr::EXIT, nr::EXIT_GROUP, nr::WAIT4,
-    nr::SETPGID, nr::GETPPID, nr::GETPGRP, nr::SETSID,
-    nr::GETPGID, nr::GETSID,
-
+    nr::GETPID,
+    nr::CLONE,
+    nr::CLONE3,
+    nr::FORK,
+    nr::VFORK,
+    nr::EXECVE,
+    nr::EXIT,
+    nr::EXIT_GROUP,
+    nr::WAIT4,
+    nr::SETPGID,
+    nr::GETPPID,
+    nr::GETPGRP,
+    nr::SETSID,
+    nr::GETPGID,
+    nr::GETSID,
     // Thread / TLS setup (glibc)
-    nr::SET_TID_ADDRESS, nr::SET_ROBUST_LIST, nr::GET_ROBUST_LIST,
-    nr::GETTIMEOFDAY, nr::CLOCK_GETTIME, nr::CLOCK_GETRES,
-    nr::CLOCK_NANOSLEEP, nr::NANOSLEEP,
-    nr::FUTEX, nr::ARCH_PRCTL, nr::RSEQ,
-    nr::SYSINFO, nr::TIMES,
-
+    nr::SET_TID_ADDRESS,
+    nr::SET_ROBUST_LIST,
+    nr::GET_ROBUST_LIST,
+    nr::GETTIMEOFDAY,
+    nr::CLOCK_GETTIME,
+    nr::CLOCK_GETRES,
+    nr::CLOCK_NANOSLEEP,
+    nr::NANOSLEEP,
+    nr::FUTEX,
+    nr::ARCH_PRCTL,
+    nr::RSEQ,
+    nr::SYSINFO,
+    nr::TIMES,
     // Random / entropy
     nr::GETRANDOM,
-
     // User/identity
-    nr::GETUID, nr::GETGID, nr::SETUID, nr::SETGID,
-    nr::GETEUID, nr::GETEGID,
-    nr::GETGROUPS, nr::SETGROUPS,
-    nr::SETRESUID, nr::GETRESUID, nr::SETRESGID, nr::GETRESGID,
-    nr::SETFSUID, nr::SETFSGID,
-
+    nr::GETUID,
+    nr::GETGID,
+    nr::SETUID,
+    nr::SETGID,
+    nr::GETEUID,
+    nr::GETEGID,
+    nr::GETGROUPS,
+    nr::SETGROUPS,
+    nr::SETRESUID,
+    nr::GETRESUID,
+    nr::SETRESGID,
+    nr::GETRESGID,
+    nr::SETFSUID,
+    nr::SETFSGID,
     // Capabilities / security
-    nr::CAPGET, nr::CAPSET, nr::PRCTL, nr::SECCOMP,
-
+    nr::CAPGET,
+    nr::CAPSET,
+    nr::PRCTL,
+    nr::SECCOMP,
     // Resource limits
-    nr::GETRLIMIT, nr::SETRLIMIT, nr::PRLIMIT64, nr::GETRUSAGE, nr::SYSLOG,
-
+    nr::GETRLIMIT,
+    nr::SETRLIMIT,
+    nr::PRLIMIT64,
+    nr::GETRUSAGE,
+    nr::SYSLOG,
     // Network
-    nr::SOCKET, nr::CONNECT, nr::ACCEPT, nr::ACCEPT4,
-    nr::SENDTO, nr::RECVFROM, nr::SENDMSG, nr::RECVMSG, nr::RECVMMSG,
-    nr::SHUTDOWN, nr::BIND, nr::LISTEN,
-    nr::GETSOCKNAME, nr::GETPEERNAME, nr::SOCKETPAIR,
-    nr::SETSOCKOPT, nr::GETSOCKOPT,
-
+    nr::SOCKET,
+    nr::CONNECT,
+    nr::ACCEPT,
+    nr::ACCEPT4,
+    nr::SENDTO,
+    nr::RECVFROM,
+    nr::SENDMSG,
+    nr::RECVMSG,
+    nr::RECVMMSG,
+    nr::SHUTDOWN,
+    nr::BIND,
+    nr::LISTEN,
+    nr::GETSOCKNAME,
+    nr::GETPEERNAME,
+    nr::SOCKETPAIR,
+    nr::SETSOCKOPT,
+    nr::GETSOCKOPT,
     // Event / epoll / io multiplexing
-    nr::POLL, nr::SELECT, nr::PSELECT6, nr::PPOLL,
-    nr::EPOLL_WAIT, nr::EPOLL_CTL, nr::EPOLL_PWAIT, nr::EPOLL_CREATE1,
-    nr::SIGNALFD, nr::SIGNALFD4,
-    nr::TIMERFD_CREATE, nr::TIMERFD_SETTIME, nr::TIMERFD_GETTIME,
+    nr::POLL,
+    nr::SELECT,
+    nr::PSELECT6,
+    nr::PPOLL,
+    nr::EPOLL_WAIT,
+    nr::EPOLL_CTL,
+    nr::EPOLL_PWAIT,
+    nr::EPOLL_CREATE1,
+    nr::SIGNALFD,
+    nr::SIGNALFD4,
+    nr::TIMERFD_CREATE,
+    nr::TIMERFD_SETTIME,
+    nr::TIMERFD_GETTIME,
     nr::EVENTFD,
-
     // Scheduling
     nr::SCHED_YIELD,
-    nr::SCHED_SETPARAM, nr::SCHED_GETPARAM,
-    nr::SCHED_SETSCHEDULER, nr::SCHED_GETSCHEDULER,
-    nr::SCHED_GET_PRIORITY_MAX, nr::SCHED_GET_PRIORITY_MIN,
+    nr::SCHED_SETPARAM,
+    nr::SCHED_GETPARAM,
+    nr::SCHED_SETSCHEDULER,
+    nr::SCHED_GETSCHEDULER,
+    nr::SCHED_GET_PRIORITY_MAX,
+    nr::SCHED_GET_PRIORITY_MIN,
     nr::SCHED_RR_GET_INTERVAL,
-    nr::SCHED_SETAFFINITY, nr::SCHED_GETAFFINITY,
-
+    nr::SCHED_SETAFFINITY,
+    nr::SCHED_GETAFFINITY,
     // Misc
-    nr::UNAME, nr::IOCTL, nr::ACCESS,
-    nr::DUP, nr::DUP2, nr::DUP3,
-    nr::CHDIR, nr::FCHDIR, nr::GETCWD,
+    nr::UNAME,
+    nr::IOCTL,
+    nr::ACCESS,
+    nr::DUP,
+    nr::DUP2,
+    nr::DUP3,
+    nr::CHDIR,
+    nr::FCHDIR,
+    nr::GETCWD,
     nr::GETCPU,
-    nr::PIDFD_SEND_SIGNAL, nr::PIDFD_OPEN, nr::CLOSE_RANGE,
+    nr::PIDFD_SEND_SIGNAL,
+    nr::PIDFD_OPEN,
+    nr::CLOSE_RANGE,
 ];
 
 #[cfg(target_arch = "aarch64")]
 const ALLOWED: &[u32] = &[
     // I/O fundamentals
-    nr::READ, nr::WRITE, nr::CLOSE,
-    nr::PREAD64, nr::PWRITE64, nr::READV, nr::WRITEV,
-    nr::GETDENTS64, nr::FCNTL, nr::FLOCK,
-
+    nr::READ,
+    nr::WRITE,
+    nr::CLOSE,
+    nr::PREAD64,
+    nr::PWRITE64,
+    nr::READV,
+    nr::WRITEV,
+    nr::GETDENTS64,
+    nr::FCNTL,
+    nr::FLOCK,
     // File operations
-    nr::OPENAT, nr::MKDIRAT, nr::MKNODAT, nr::FCHOWNAT, nr::NEWFSTATAT,
-    nr::UNLINKAT, nr::RENAMEAT, nr::LINKAT, nr::SYMLINKAT,
-    nr::READLINKAT, nr::FCHMODAT, nr::FACCESSAT, nr::FACCESSAT2,
+    nr::OPENAT,
+    nr::MKDIRAT,
+    nr::MKNODAT,
+    nr::FCHOWNAT,
+    nr::NEWFSTATAT,
+    nr::UNLINKAT,
+    nr::RENAMEAT,
+    nr::LINKAT,
+    nr::SYMLINKAT,
+    nr::READLINKAT,
+    nr::FCHMODAT,
+    nr::FACCESSAT,
+    nr::FACCESSAT2,
     nr::FSYNC,
-    nr::FCHMOD, nr::FCHOWN, nr::GETCWD,
-
+    nr::FCHMOD,
+    nr::FCHOWN,
+    nr::GETCWD,
     // Memory management
-    nr::MMAP, nr::MPROTECT, nr::MUNMAP, nr::BRK,
-    nr::MREMAP, nr::MINCORE, nr::MADVISE, nr::FALLOCATE,
-
+    nr::MMAP,
+    nr::MPROTECT,
+    nr::MUNMAP,
+    nr::BRK,
+    nr::MREMAP,
+    nr::MINCORE,
+    nr::MADVISE,
+    nr::FALLOCATE,
     // Signal handling
-    nr::RT_SIGACTION, nr::RT_SIGPROCMASK, nr::RT_SIGRETURN,
-    nr::KILL, nr::RT_SIGPENDING, nr::RT_SIGTIMEDWAIT,
-    nr::RT_SIGQUEUEINFO, nr::RT_SIGSUSPEND,
-    nr::SIGALTSTACK, nr::TGKILL, nr::TKILL,
-
+    nr::RT_SIGACTION,
+    nr::RT_SIGPROCMASK,
+    nr::RT_SIGRETURN,
+    nr::KILL,
+    nr::RT_SIGPENDING,
+    nr::RT_SIGTIMEDWAIT,
+    nr::RT_SIGQUEUEINFO,
+    nr::RT_SIGSUSPEND,
+    nr::SIGALTSTACK,
+    nr::TGKILL,
+    nr::TKILL,
     // Process management
-    nr::GETPID, nr::CLONE, nr::CLONE3,
-    nr::EXECVE, nr::EXIT, nr::EXIT_GROUP, nr::WAIT4,
-    nr::SETPGID, nr::GETPPID, nr::SETSID,
-    nr::GETPGID, nr::GETSID,
-
+    nr::GETPID,
+    nr::CLONE,
+    nr::CLONE3,
+    nr::EXECVE,
+    nr::EXIT,
+    nr::EXIT_GROUP,
+    nr::WAIT4,
+    nr::SETPGID,
+    nr::GETPPID,
+    nr::SETSID,
+    nr::GETPGID,
+    nr::GETSID,
     // Thread / TLS setup (glibc)
-    nr::SET_TID_ADDRESS, nr::SET_ROBUST_LIST, nr::GET_ROBUST_LIST,
-    nr::GETTIMEOFDAY, nr::CLOCK_GETTIME, nr::CLOCK_GETRES,
-    nr::CLOCK_NANOSLEEP, nr::NANOSLEEP,
-    nr::FUTEX, nr::RSEQ,
-    nr::SYSINFO, nr::TIMES,
-
+    nr::SET_TID_ADDRESS,
+    nr::SET_ROBUST_LIST,
+    nr::GET_ROBUST_LIST,
+    nr::GETTIMEOFDAY,
+    nr::CLOCK_GETTIME,
+    nr::CLOCK_GETRES,
+    nr::CLOCK_NANOSLEEP,
+    nr::NANOSLEEP,
+    nr::FUTEX,
+    nr::RSEQ,
+    nr::SYSINFO,
+    nr::TIMES,
     // Random / entropy
     nr::GETRANDOM,
-
     // User/identity
-    nr::GETUID, nr::GETGID, nr::SETUID, nr::SETGID,
-    nr::GETEUID, nr::GETEGID,
-    nr::GETGROUPS, nr::SETGROUPS,
-    nr::SETRESUID, nr::GETRESUID, nr::SETRESGID, nr::GETRESGID,
-    nr::SETFSUID, nr::SETFSGID,
-
+    nr::GETUID,
+    nr::GETGID,
+    nr::SETUID,
+    nr::SETGID,
+    nr::GETEUID,
+    nr::GETEGID,
+    nr::GETGROUPS,
+    nr::SETGROUPS,
+    nr::SETRESUID,
+    nr::GETRESUID,
+    nr::SETRESGID,
+    nr::GETRESGID,
+    nr::SETFSUID,
+    nr::SETFSGID,
     // Capabilities / security
-    nr::CAPGET, nr::CAPSET, nr::PRCTL, nr::SECCOMP,
-
+    nr::CAPGET,
+    nr::CAPSET,
+    nr::PRCTL,
+    nr::SECCOMP,
     // Resource limits
-    nr::GETRLIMIT, nr::SETRLIMIT, nr::PRLIMIT64, nr::GETRUSAGE, nr::SYSLOG,
-
+    nr::GETRLIMIT,
+    nr::SETRLIMIT,
+    nr::PRLIMIT64,
+    nr::GETRUSAGE,
+    nr::SYSLOG,
     // Network
-    nr::SOCKET, nr::CONNECT, nr::ACCEPT, nr::ACCEPT4,
-    nr::SENDTO, nr::RECVFROM, nr::SENDMSG, nr::RECVMSG, nr::RECVMMSG,
-    nr::SHUTDOWN, nr::BIND, nr::LISTEN,
-    nr::GETSOCKNAME, nr::GETPEERNAME, nr::SOCKETPAIR,
-    nr::SETSOCKOPT, nr::GETSOCKOPT,
-
+    nr::SOCKET,
+    nr::CONNECT,
+    nr::ACCEPT,
+    nr::ACCEPT4,
+    nr::SENDTO,
+    nr::RECVFROM,
+    nr::SENDMSG,
+    nr::RECVMSG,
+    nr::RECVMMSG,
+    nr::SHUTDOWN,
+    nr::BIND,
+    nr::LISTEN,
+    nr::GETSOCKNAME,
+    nr::GETPEERNAME,
+    nr::SOCKETPAIR,
+    nr::SETSOCKOPT,
+    nr::GETSOCKOPT,
     // Event / epoll / io multiplexing
-    nr::PSELECT6, nr::PPOLL,
-    nr::EPOLL_CTL, nr::EPOLL_PWAIT, nr::EPOLL_CREATE1,
+    nr::PSELECT6,
+    nr::PPOLL,
+    nr::EPOLL_CTL,
+    nr::EPOLL_PWAIT,
+    nr::EPOLL_CREATE1,
     nr::SIGNALFD4,
-    nr::TIMERFD_CREATE, nr::TIMERFD_SETTIME, nr::TIMERFD_GETTIME,
+    nr::TIMERFD_CREATE,
+    nr::TIMERFD_SETTIME,
+    nr::TIMERFD_GETTIME,
     nr::EVENTFD,
-
     // Scheduling
     nr::SCHED_YIELD,
-    nr::SCHED_SETPARAM, nr::SCHED_GETPARAM,
-    nr::SCHED_SETSCHEDULER, nr::SCHED_GETSCHEDULER,
-    nr::SCHED_GET_PRIORITY_MAX, nr::SCHED_GET_PRIORITY_MIN,
+    nr::SCHED_SETPARAM,
+    nr::SCHED_GETPARAM,
+    nr::SCHED_SETSCHEDULER,
+    nr::SCHED_GETSCHEDULER,
+    nr::SCHED_GET_PRIORITY_MAX,
+    nr::SCHED_GET_PRIORITY_MIN,
     nr::SCHED_RR_GET_INTERVAL,
-    nr::SCHED_SETAFFINITY, nr::SCHED_GETAFFINITY,
-
+    nr::SCHED_SETAFFINITY,
+    nr::SCHED_GETAFFINITY,
     // Misc
-    nr::UNAME, nr::IOCTL, nr::ACCESS,
-    nr::DUP, nr::DUP3,
-    nr::CHDIR, nr::FCHDIR,
+    nr::UNAME,
+    nr::IOCTL,
+    nr::ACCESS,
+    nr::DUP,
+    nr::DUP3,
+    nr::CHDIR,
+    nr::FCHDIR,
     nr::GETCPU,
-    nr::PIDFD_SEND_SIGNAL, nr::PIDFD_OPEN, nr::CLOSE_RANGE,
+    nr::PIDFD_SEND_SIGNAL,
+    nr::PIDFD_OPEN,
+    nr::CLOSE_RANGE,
 ];
 
 pub(crate) fn bpf_insn_j(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {

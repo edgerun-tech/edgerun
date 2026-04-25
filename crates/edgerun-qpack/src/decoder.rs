@@ -336,7 +336,7 @@ impl From<TryFromIntError> for DecoderError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::helpers::{TABLE_SIZE, build_table_with_size};
+    use crate::tests::helpers::{build_table_with_size, TABLE_SIZE};
 
     // #[test]
     // fn test_header_too_long() {

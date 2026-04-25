@@ -19,22 +19,21 @@
 //! ```
 
 use edgerun_crypto::getrandom;
-use edgerun_crypto::{AesGcmCipher, CipherSuite};
-use edgerun_crypto::p256::ecdsa::{VerifyingKey, Signature};
+use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
 use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
 use edgerun_crypto::p256::EncodedPoint;
+use edgerun_crypto::{AesGcmCipher, CipherSuite};
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use edgerun_tls::prf::{
-    Hasher, Tls13KeySchedule, TrafficKeys,
-    quic_initial_client_keys, quic_traffic_keys, quic_hp_key,
-    INITIAL_SALT_V1,
+    quic_hp_key, quic_initial_client_keys, quic_traffic_keys, Hasher, Tls13KeySchedule,
+    TrafficKeys, INITIAL_SALT_V1,
 };
 
+use super::crypto::{CryptoPhase, PacketProtection, ProtectionKeys};
 use super::frame::QuicFrame;
 use super::packet::QuicPacket;
-use super::crypto::{CryptoPhase, ProtectionKeys, PacketProtection};
 use super::{ConnectionId, TransportParameters, QUIC_VERSION_V1};
 
 /// Certificate validation result.
@@ -224,10 +223,11 @@ impl CertificateValidator {
             Ok(arr) => arr,
             Err(_) => return false,
         };
-        let verifying_key = match edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes_arr) {
-            Ok(vk) => vk,
-            Err(_) => return false,
-        };
+        let verifying_key =
+            match edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes_arr) {
+                Ok(vk) => vk,
+                Err(_) => return false,
+            };
 
         if signature.len() != 64 {
             return false;
@@ -242,14 +242,21 @@ impl CertificateValidator {
     }
 
     /// Verify an RSA-PSS-SHA256 signature over the transcript hash.
-    fn verify_rsa_pss_sha256(&self, cert_der: &[u8], signature: &[u8], transcript_hash: &[u8]) -> bool {
-        use edgerun_crypto::rsa::RsaPublicKey;
+    fn verify_rsa_pss_sha256(
+        &self,
+        cert_der: &[u8],
+        signature: &[u8],
+        transcript_hash: &[u8],
+    ) -> bool {
         use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
         use edgerun_crypto::rsa::traits::PublicKeyParts;
+        use edgerun_crypto::rsa::RsaPublicKey;
 
         // RSA SPKI OID: 1.2.840.113549.1.1.1
         // In DER: 0x06 0x09 0x2A 0x86 0x48 0x86 0xF7 0x0D 0x01 0x01 0x01
-        let rsa_oid = [0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01];
+        let rsa_oid = [
+            0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01,
+        ];
         let oid_pos = match Self::find_subsequence(cert_der, &rsa_oid) {
             Some(p) => p,
             None => return false,
@@ -288,7 +295,7 @@ impl CertificateValidator {
 
     /// MGF1 with SHA-256 (RFC 8017 Appendix B.2.1).
     fn mgf1_sha256(seed: &[u8], mask_len: usize) -> Vec<u8> {
-        use edgerun_crypto::sha2::{Sha256, Digest};
+        use edgerun_crypto::sha2::{Digest, Sha256};
         let mut t = Vec::with_capacity(mask_len);
         let mut counter = 0u32;
         while t.len() < mask_len {
@@ -425,8 +432,8 @@ impl QuicTlsHandshaker {
         let mut client_random = [0u8; 32];
         getrandom::fill(&mut client_random).expect("CSPRNG failure");
 
-        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519)
-            .expect("X25519 key generation failed");
+        let key_pair =
+            EcdhKeyPair::generate(KeyExchangeGroup::X25519).expect("X25519 key generation failed");
 
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
         let hasher = hasher_for_suite(cipher_suite);
@@ -527,12 +534,14 @@ impl QuicTlsHandshaker {
         // ServerHello bytes for the transcript. ServerHello::parse doesn't return
         // consumed bytes, so we re-serialize the length.
         let sh_msg_len = if crypto_data.len() >= 4 {
-            let msg_len = u32::from_be_bytes([0, crypto_data[1], crypto_data[2], crypto_data[3]]) as usize;
+            let msg_len =
+                u32::from_be_bytes([0, crypto_data[1], crypto_data[2], crypto_data[3]]) as usize;
             4 + msg_len
         } else {
             crypto_data.len()
         };
-        self.transcript.extend_from_slice(&crypto_data[..sh_msg_len.min(crypto_data.len())]);
+        self.transcript
+            .extend_from_slice(&crypto_data[..sh_msg_len.min(crypto_data.len())]);
         self.received_server_hello = true;
 
         // Derive 0-RTT early traffic keys BEFORE advancing key schedule.
@@ -545,11 +554,16 @@ impl QuicTlsHandshaker {
         let shared_secret = self.key_pair.exchange(&self.server_key_share)?;
         let transcript_hash = self.hasher.hash(&self.transcript);
 
-        self.key_schedule.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
+        self.key_schedule
+            .advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
 
         // Cache the handshake traffic secrets for later use (Finished verification)
-        self.client_hs_secret = self.key_schedule.client_handshake_traffic_secret(&transcript_hash);
-        self.server_hs_secret = self.key_schedule.server_handshake_traffic_secret(&transcript_hash);
+        self.client_hs_secret = self
+            .key_schedule
+            .client_handshake_traffic_secret(&transcript_hash);
+        self.server_hs_secret = self
+            .key_schedule
+            .server_handshake_traffic_secret(&transcript_hash);
 
         Ok(())
     }
@@ -581,14 +595,28 @@ impl QuicTlsHandshaker {
     pub fn handshake_keys(&self) -> Result<ProtectionKeys, String> {
         let transcript_hash = self.hasher.hash(&self.transcript);
 
-        let client_hs_secret = self.key_schedule.client_handshake_traffic_secret(&transcript_hash);
-        let server_hs_secret = self.key_schedule.server_handshake_traffic_secret(&transcript_hash);
+        let client_hs_secret = self
+            .key_schedule
+            .client_handshake_traffic_secret(&transcript_hash);
+        let server_hs_secret = self
+            .key_schedule
+            .server_handshake_traffic_secret(&transcript_hash);
 
         // From client perspective:
         // - write: use client_hs_secret (client encrypts with its own secret)
         // - read: use server_hs_secret (client decrypts server's encrypted data)
-        let write = quic_traffic_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
-        let read = quic_traffic_keys(&server_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let write = quic_traffic_keys(
+            &client_hs_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
+        let read = quic_traffic_keys(
+            &server_hs_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
         let hp = quic_hp_key(&client_hs_secret, self.cipher_suite.key_len(), &self.hasher);
 
         Ok(ProtectionKeys::new(
@@ -607,10 +635,7 @@ impl QuicTlsHandshaker {
     /// Finished message is ready to be sent.
     ///
     /// Returns the Client Finished CRYPTO data to send back to the server.
-    pub fn process_handshake_crypto(
-        &mut self,
-        crypto_data: &[u8],
-    ) -> Result<Vec<u8>, String> {
+    pub fn process_handshake_crypto(&mut self, crypto_data: &[u8]) -> Result<Vec<u8>, String> {
         // The handshake CRYPTO payload contains multiple TLS handshake messages:
         // EncryptedExtensions(8), Certificate(11), CertificateVerify(15), Finished(20)
         let mut pos = 0;
@@ -647,12 +672,22 @@ impl QuicTlsHandshaker {
                         let context_len = msg[4] as usize;
                         let cert_list_start = 5 + context_len;
                         if cert_list_start + 3 <= msg.len() {
-                            let cert_list_len = u32::from_be_bytes([0, msg[cert_list_start], msg[cert_list_start + 1], msg[cert_list_start + 2]]) as usize;
+                            let cert_list_len = u32::from_be_bytes([
+                                0,
+                                msg[cert_list_start],
+                                msg[cert_list_start + 1],
+                                msg[cert_list_start + 2],
+                            ]) as usize;
                             let mut cert_pos = cert_list_start + 3;
                             let cert_end = cert_pos + cert_list_len.min(msg.len() - cert_pos);
 
                             while cert_pos + 3 <= cert_end {
-                                let cert_len = u32::from_be_bytes([0, msg[cert_pos], msg[cert_pos + 1], msg[cert_pos + 2]]) as usize;
+                                let cert_len = u32::from_be_bytes([
+                                    0,
+                                    msg[cert_pos],
+                                    msg[cert_pos + 1],
+                                    msg[cert_pos + 2],
+                                ]) as usize;
                                 cert_pos += 3;
                                 if cert_pos + cert_len <= cert_end && cert_len > 0 {
                                     let cert_der = msg[cert_pos..cert_pos + cert_len].to_vec();
@@ -661,14 +696,17 @@ impl QuicTlsHandshaker {
                                 cert_pos += cert_len;
                                 // Skip extensions (2-byte length + data)
                                 if cert_pos + 2 <= cert_end {
-                                    let ext_len = u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]]) as usize;
+                                    let ext_len =
+                                        u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]])
+                                            as usize;
                                     cert_pos += 2 + ext_len;
                                 }
                             }
 
                             // Validate certificate chain
                             let validator = CertificateValidator::new(Some(self.server_name()));
-                            self.cert_validation = Some(validator.validate_chain(&self.server_cert_chain));
+                            self.cert_validation =
+                                Some(validator.validate_chain(&self.server_cert_chain));
                         }
                     }
                     self.transcript.extend_from_slice(msg);
@@ -692,11 +730,20 @@ impl QuicTlsHandshaker {
                     let pre_finished_hash = self.hasher.hash(&self.transcript);
 
                     // Use cached server handshake secret (derived from CH||SH transcript)
-                    let finished_key = self.hasher.expand_label(&self.server_hs_secret, "finished", &[], self.hasher.len());
+                    let finished_key = self.hasher.expand_label(
+                        &self.server_hs_secret,
+                        "finished",
+                        &[],
+                        self.hasher.len(),
+                    );
 
                     let verify_data = match self.hasher {
-                        Hasher::Sha256 => edgerun_crypto::hmac_sha256(&finished_key, &pre_finished_hash),
-                        Hasher::Sha384 => edgerun_crypto::hmac_sha384(&finished_key, &pre_finished_hash),
+                        Hasher::Sha256 => {
+                            edgerun_crypto::hmac_sha256(&finished_key, &pre_finished_hash)
+                        }
+                        Hasher::Sha384 => {
+                            edgerun_crypto::hmac_sha384(&finished_key, &pre_finished_hash)
+                        }
                     };
 
                     // verify_data is at offset 4 in the Finished message
@@ -739,7 +786,9 @@ impl QuicTlsHandshaker {
         let full_transcript_hash = self.hasher.hash(&self.transcript);
 
         // Use cached client handshake secret (derived from CH||SH transcript)
-        let finished_key = self.hasher.expand_label(&self.client_hs_secret, "finished", &[], self.hasher.len());
+        let finished_key =
+            self.hasher
+                .expand_label(&self.client_hs_secret, "finished", &[], self.hasher.len());
 
         let verify_data = match self.hasher {
             Hasher::Sha256 => edgerun_crypto::hmac_sha256(&finished_key, &full_transcript_hash),
@@ -768,14 +817,19 @@ impl QuicTlsHandshaker {
         if self.early_traffic_secret.is_empty() {
             return None;
         }
-        let keys = quic_traffic_keys(&self.early_traffic_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let keys = quic_traffic_keys(
+            &self.early_traffic_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
         // For 0-RTT, client sends so we use client's write keys.
         // The server would use read keys from the same secret.
         Some(ProtectionKeys::new(
             CipherSuite::TLS_AES_128_GCM_SHA256,
             keys.write_key.clone(),
             keys.write_iv.clone(),
-            keys.write_key,  // Same keys for simplicity — client sends, server reads
+            keys.write_key, // Same keys for simplicity — client sends, server reads
             keys.write_iv,
         ))
     }
@@ -784,11 +838,25 @@ impl QuicTlsHandshaker {
     pub fn app_keys(&self, transcript_after_client_finished: &[u8]) -> ProtectionKeys {
         let app_transcript_hash = self.hasher.hash(transcript_after_client_finished);
 
-        let client_app_secret = self.key_schedule.client_app_traffic_secret(&app_transcript_hash);
-        let server_app_secret = self.key_schedule.server_app_traffic_secret(&app_transcript_hash);
+        let client_app_secret = self
+            .key_schedule
+            .client_app_traffic_secret(&app_transcript_hash);
+        let server_app_secret = self
+            .key_schedule
+            .server_app_traffic_secret(&app_transcript_hash);
 
-        let write = quic_traffic_keys(&client_app_secret, self.cipher_suite.key_len(), 12, &self.hasher);
-        let read = quic_traffic_keys(&server_app_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let write = quic_traffic_keys(
+            &client_app_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
+        let read = quic_traffic_keys(
+            &server_app_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
 
         ProtectionKeys::new(
             CipherSuite::TLS_AES_128_GCM_SHA256,
@@ -832,7 +900,11 @@ impl QuicTlsHandshaker {
     }
 
     /// Build full handshake result with all protection keys.
-    pub fn build_result(&self, dcid: &[u8], transcript_after_finished: &[u8]) -> Result<HandshakeResult, String> {
+    pub fn build_result(
+        &self,
+        dcid: &[u8],
+        transcript_after_finished: &[u8],
+    ) -> Result<HandshakeResult, String> {
         let (init_write, init_read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
 
         let hs_keys = self.handshake_keys()?;
@@ -840,8 +912,18 @@ impl QuicTlsHandshaker {
 
         // Derive 0-RTT early data protection keys (if early traffic secret was derived)
         let early_data_keys = if !self.early_traffic_secret.is_empty() {
-            let early_keys = quic_traffic_keys(&self.early_traffic_secret, self.cipher_suite.key_len(), 12, &self.hasher);
-            let early_read = quic_traffic_keys(&self.early_traffic_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+            let early_keys = quic_traffic_keys(
+                &self.early_traffic_secret,
+                self.cipher_suite.key_len(),
+                12,
+                &self.hasher,
+            );
+            let early_read = quic_traffic_keys(
+                &self.early_traffic_secret,
+                self.cipher_suite.key_len(),
+                12,
+                &self.hasher,
+            );
             Some(ProtectionKeys::new(
                 CipherSuite::TLS_AES_128_GCM_SHA256,
                 early_keys.write_key,
@@ -953,7 +1035,13 @@ mod tests {
     #[test]
     fn test_hasher_for_suite() {
         use edgerun_tls::cipher::CipherSuite;
-        assert!(matches!(hasher_for_suite(CipherSuite::TLS_AES_128_GCM_SHA256), Hasher::Sha256));
-        assert!(matches!(hasher_for_suite(CipherSuite::TLS_AES_256_GCM_SHA384), Hasher::Sha384));
+        assert!(matches!(
+            hasher_for_suite(CipherSuite::TLS_AES_128_GCM_SHA256),
+            Hasher::Sha256
+        ));
+        assert!(matches!(
+            hasher_for_suite(CipherSuite::TLS_AES_256_GCM_SHA384),
+            Hasher::Sha384
+        ));
     }
 }

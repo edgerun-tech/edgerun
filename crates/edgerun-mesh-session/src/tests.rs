@@ -1,13 +1,12 @@
-use edgerun_hardware_signing::NodeID;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
-use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+use edgerun_crypto::p256::PublicKey;
+use edgerun_hardware_signing::NodeID;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use super::*;
 use manager::derive_session_key;
-
 
 use edgerun_hardware_signing::{HardwareKeyInfo, HardwareSigningKey};
 
@@ -36,7 +35,9 @@ fn full_handshake_and_encrypt_decrypt() {
     assert_eq!(accept.responder, bob_id);
 
     // Step 3: Alice completes
-    alice_mgr.complete_handshake_initiator(&accept, &alice_secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &alice_secret)
+        .unwrap();
 
     assert_eq!(alice_mgr.session_count(), 1);
     assert_eq!(bob_mgr.session_count(), 1);
@@ -69,7 +70,9 @@ fn nonce_advances_on_each_encrypt() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let c1 = alice_mgr.encrypt_for(bob_id, b"msg1").unwrap();
     let c2 = alice_mgr.encrypt_for(bob_id, b"msg1").unwrap();
@@ -91,7 +94,9 @@ fn replay_detection_rejects_old_nonce() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let c1 = alice_mgr.encrypt_for(bob_id, b"msg1").unwrap();
     // First decrypt succeeds
@@ -115,7 +120,9 @@ fn replay_detection_accepts_out_of_order() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let c1 = alice_mgr.encrypt_for(bob_id, b"msg1").unwrap();
     let c2 = alice_mgr.encrypt_for(bob_id, b"msg2").unwrap();
@@ -141,7 +148,9 @@ fn session_expires_after_max_frames() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     for _ in 0..MAX_FRAMES_BEFORE_REKEY {
         let _ = alice_mgr.encrypt_for(bob_id, b"data").unwrap();
@@ -163,7 +172,9 @@ fn remove_peer_clears_session() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     assert_eq!(alice_mgr.session_count(), 1);
     alice_mgr.remove_peer(&bob_id);
@@ -186,7 +197,10 @@ fn derive_session_key_is_deterministic() {
     let shared_ab = secret_a.diffie_hellman(&pub_b);
     let shared_ba = secret_b.diffie_hellman(&pub_a);
 
-    assert_eq!(shared_ab.raw_secret_bytes().as_slice(), shared_ba.raw_secret_bytes().as_slice());
+    assert_eq!(
+        shared_ab.raw_secret_bytes().as_slice(),
+        shared_ba.raw_secret_bytes().as_slice()
+    );
 
     let key_ab = derive_session_key(shared_ab.raw_secret_bytes().as_slice());
     let key_ba = derive_session_key(shared_ba.raw_secret_bytes().as_slice());
@@ -255,15 +269,23 @@ fn bidirectional_encrypt_decrypt() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     // Alice → Bob
     let ct1 = alice_mgr.encrypt_for(bob_id, b"alice-to-bob").unwrap();
-    assert_eq!(bob_mgr.decrypt_from(alice_id, &ct1).unwrap(), b"alice-to-bob");
+    assert_eq!(
+        bob_mgr.decrypt_from(alice_id, &ct1).unwrap(),
+        b"alice-to-bob"
+    );
 
     // Bob → Alice (Bob has the session too since respond_to_handshake creates it)
     let ct2 = bob_mgr.encrypt_for(alice_id, b"bob-to-alice").unwrap();
-    assert_eq!(alice_mgr.decrypt_from(bob_id, &ct2).unwrap(), b"bob-to-alice");
+    assert_eq!(
+        alice_mgr.decrypt_from(bob_id, &ct2).unwrap(),
+        b"bob-to-alice"
+    );
 }
 
 // ── HardwareMeshSigner integration ──
@@ -274,7 +296,9 @@ fn hardware_mesh_signer_extracts_node_id_and_signs_digest() {
 
     struct FakeMeshKey;
     impl HardwareSigningKey for FakeMeshKey {
-        fn key_info(&self) -> Result<HardwareKeyInfo, edgerun_hardware_signing::HardwareSigningError> {
+        fn key_info(
+            &self,
+        ) -> Result<HardwareKeyInfo, edgerun_hardware_signing::HardwareSigningError> {
             let mut pk = [0u8; 64];
             pk[0] = 0x04;
             pk[1] = 0xAB;
@@ -288,7 +312,10 @@ fn hardware_mesh_signer_extracts_node_id_and_signs_digest() {
                 biometric_state: Default::default(),
             })
         }
-        fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, edgerun_hardware_signing::HardwareSigningError> {
+        fn sign_message(
+            &self,
+            message: &[u8],
+        ) -> Result<Vec<u8>, edgerun_hardware_signing::HardwareSigningError> {
             let mut sig = [0u8; 64];
             sig[..32].copy_from_slice(message);
             sig[32..].copy_from_slice(&message.iter().map(|b| !b).collect::<Vec<_>>()[..32]);
@@ -451,8 +478,7 @@ fn derive_session_key_produces_32_byte_key() {
     // Verify that derive_session_key always returns exactly 32 bytes.
     // Use a fixed input to avoid RNG dependency.
     let shared = [0x42u8; 32];
-    let key = edgerun_core::crypto::HkdfSha256::new(None, &shared)
-        .expand(HKDF_INFO, 32);
+    let key = edgerun_core::crypto::HkdfSha256::new(None, &shared).expand(HKDF_INFO, 32);
     assert_eq!(key.len(), 32);
 }
 
@@ -460,10 +486,8 @@ fn derive_session_key_produces_32_byte_key() {
 fn derive_session_key_same_input_same_output() {
     // HKDF is deterministic: same input always produces the same key.
     let shared = [0x77u8; 32];
-    let key1 = edgerun_core::crypto::HkdfSha256::new(None, &shared)
-        .expand(HKDF_INFO, 32);
-    let key2 = edgerun_core::crypto::HkdfSha256::new(None, &shared)
-        .expand(HKDF_INFO, 32);
+    let key1 = edgerun_core::crypto::HkdfSha256::new(None, &shared).expand(HKDF_INFO, 32);
+    let key2 = edgerun_core::crypto::HkdfSha256::new(None, &shared).expand(HKDF_INFO, 32);
     assert_eq!(key1, key2);
 }
 
@@ -488,7 +512,9 @@ fn encrypt_empty_plaintext() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let ct = alice_mgr.encrypt_for(bob_id, b"").unwrap();
     // Ciphertext = 12-byte nonce + 16-byte GCM tag (no plaintext)
@@ -507,7 +533,9 @@ fn encrypt_large_plaintext() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let plaintext = vec![0x42u8; 65536];
     let ct = alice_mgr.encrypt_for(bob_id, &plaintext).unwrap();
@@ -526,7 +554,9 @@ fn encrypt_binary_data_all_byte_values() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let plaintext: Vec<u8> = (0..=255).cycle().take(1024).collect();
     let ct = alice_mgr.encrypt_for(bob_id, &plaintext).unwrap();
@@ -544,11 +574,16 @@ fn encrypt_produces_ciphertext_longer_than_plaintext() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let plaintext = b"short";
     let ct = alice_mgr.encrypt_for(bob_id, plaintext).unwrap();
-    assert!(ct.len() > plaintext.len(), "ciphertext should include nonce + tag");
+    assert!(
+        ct.len() > plaintext.len(),
+        "ciphertext should include nonce + tag"
+    );
 }
 
 // ── Decrypt edge cases ──
@@ -563,7 +598,9 @@ fn decrypt_empty_ciphertext_returns_error() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     assert!(matches!(
         bob_mgr.decrypt_from(alice_id, &[]),
@@ -581,7 +618,9 @@ fn decrypt_ciphertext_shorter_than_nonce() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     for len in 1..NONCE_SIZE {
         assert!(matches!(
@@ -601,7 +640,9 @@ fn decrypt_tampered_ciphertext_fails() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let mut ct = alice_mgr.encrypt_for(bob_id, b"secret").unwrap();
     // Flip a byte in the ciphertext portion (after the nonce)
@@ -622,7 +663,9 @@ fn decrypt_tampered_nonce_fails() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let mut ct = alice_mgr.encrypt_for(bob_id, b"secret").unwrap();
     // Flip a byte in the nonce prefix
@@ -643,7 +686,9 @@ fn decrypt_nonce_only_ciphertext() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     // Exactly 12 bytes = nonce only, no ciphertext/tag
     let ct = vec![0u8; NONCE_SIZE];
@@ -665,7 +710,9 @@ fn nonce_counter_advances_per_encrypt() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let c1 = alice_mgr.encrypt_for(bob_id, b"x").unwrap();
     let c2 = alice_mgr.encrypt_for(bob_id, b"x").unwrap();
@@ -693,7 +740,9 @@ fn nonce_prefix_is_random_per_session() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let c1 = alice_mgr.encrypt_for(bob_id, b"x").unwrap();
     let prefix1 = &c1[..4];
@@ -706,7 +755,9 @@ fn nonce_prefix_is_random_per_session() {
 
     let (init2, secret2) = alice_mgr2.initiate_handshake(bob_id2);
     let (accept2, _) = bob_mgr2.respond_to_handshake(&init2).unwrap();
-    alice_mgr2.complete_handshake_initiator(&accept2, &secret2).unwrap();
+    alice_mgr2
+        .complete_handshake_initiator(&accept2, &secret2)
+        .unwrap();
 
     let c2 = alice_mgr2.encrypt_for(bob_id2, b"x").unwrap();
     let prefix2 = &c2[..4];
@@ -725,7 +776,9 @@ fn different_plaintext_same_nonce_produces_same_prefix() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     // Two separate encryptions produce different nonces (different counter)
     let c1 = alice_mgr.encrypt_for(bob_id, b"hello").unwrap();
@@ -749,7 +802,9 @@ fn replay_detection_rejects_same_nonce_twice() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let ct = alice_mgr.encrypt_for(bob_id, b"once").unwrap();
     bob_mgr.decrypt_from(alice_id, &ct).unwrap();
@@ -770,7 +825,9 @@ fn replay_detection_accepts_strictly_increasing_counter() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let c1 = alice_mgr.encrypt_for(bob_id, b"1").unwrap();
     let c2 = alice_mgr.encrypt_for(bob_id, b"2").unwrap();
@@ -792,7 +849,9 @@ fn replay_detection_rejects_lower_counter_after_higher() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let c1 = alice_mgr.encrypt_for(bob_id, b"1").unwrap();
     let c2 = alice_mgr.encrypt_for(bob_id, b"2").unwrap();
@@ -818,7 +877,9 @@ fn needs_rekey_returns_true_at_max_frames() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     // Encrypt exactly MAX_FRAMES_BEFORE_REKEY times
     for _ in 0..MAX_FRAMES_BEFORE_REKEY {
@@ -842,7 +903,9 @@ fn needs_rekey_returns_false_one_below_max_frames() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     // One less than max
     for _ in 0..(MAX_FRAMES_BEFORE_REKEY - 1) {
@@ -867,12 +930,16 @@ fn session_expiry_does_not_affect_other_peers() {
     // Alice ↔ Bob
     let (init_ab, secret_ab) = alice_mgr.initiate_handshake(bob_id);
     let (accept_ab, _) = bob_mgr.respond_to_handshake(&init_ab).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept_ab, &secret_ab).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept_ab, &secret_ab)
+        .unwrap();
 
     // Alice ↔ Charlie
     let (init_ac, secret_ac) = alice_mgr.initiate_handshake(charlie_id);
     let (accept_ac, _) = charlie_mgr.respond_to_handshake(&init_ac).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept_ac, &secret_ac).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept_ac, &secret_ac)
+        .unwrap();
 
     // Exhaust Alice→Bob session
     for _ in 0..MAX_FRAMES_BEFORE_REKEY {
@@ -904,11 +971,15 @@ fn session_manager_tracks_multiple_peers() {
 
     let (init_ab, secret_ab) = alice_mgr.initiate_handshake(bob_id);
     let (accept_ab, _) = bob_mgr.respond_to_handshake(&init_ab).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept_ab, &secret_ab).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept_ab, &secret_ab)
+        .unwrap();
 
     let (init_ac, secret_ac) = alice_mgr.initiate_handshake(charlie_id);
     let (accept_ac, _) = charlie_mgr.respond_to_handshake(&init_ac).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept_ac, &secret_ac).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept_ac, &secret_ac)
+        .unwrap();
 
     assert_eq!(alice_mgr.session_count(), 2);
     assert_eq!(bob_mgr.session_count(), 1);
@@ -947,11 +1018,15 @@ fn remove_peer_removes_only_target() {
 
     let (init_ab, secret_ab) = alice_mgr.initiate_handshake(bob_id);
     let (accept_ab, _) = bob_mgr.respond_to_handshake(&init_ab).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept_ab, &secret_ab).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept_ab, &secret_ab)
+        .unwrap();
 
     let (init_ac, secret_ac) = alice_mgr.initiate_handshake(charlie_id);
     let (accept_ac, _) = charlie_mgr.respond_to_handshake(&init_ac).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept_ac, &secret_ac).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept_ac, &secret_ac)
+        .unwrap();
 
     alice_mgr.remove_peer(&bob_id);
     assert_eq!(alice_mgr.session_count(), 1);
@@ -977,7 +1052,9 @@ fn mesh_session_peer_returns_correct_node_id() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     // Bob's session with Alice should report Alice as peer
     // We can't directly access the session, but we can verify via decrypt
@@ -1020,7 +1097,9 @@ fn multi_message_round_trip() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let messages = vec![
         b"hello".to_vec(),
@@ -1062,7 +1141,9 @@ fn respond_to_handshake_creates_responder_session() {
     ));
 
     // After Alice completes, she can decrypt
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
     let ct2 = bob_mgr.encrypt_for(alice_id, b"after").unwrap();
     assert_eq!(alice_mgr.decrypt_from(bob_id, &ct2).unwrap(), b"after");
 }
@@ -1105,7 +1186,9 @@ fn decrypt_random_garbage_fails() {
 
     let (init, secret) = alice_mgr.initiate_handshake(bob_id);
     let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     // Random garbage that has the right structure (12-byte nonce + some payload)
     // but is not a valid ciphertext
@@ -1141,9 +1224,10 @@ fn handshake_with_zero_node_id() {
 
     let (init, secret) = alice_mgr.initiate_handshake(zero_id);
     let (accept, _) = zero_mgr.respond_to_handshake(&init).unwrap();
-    alice_mgr.complete_handshake_initiator(&accept, &secret).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
 
     let ct = alice_mgr.encrypt_for(zero_id, b"test").unwrap();
     assert_eq!(zero_mgr.decrypt_from(alice_id, &ct).unwrap(), b"test");
 }
-

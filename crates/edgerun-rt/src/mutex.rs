@@ -3,12 +3,12 @@
 //! A sync Mutex guards only the wait queue and an "acquired" flag.
 //! Data is behind an UnsafeCell, protected by the async protocol.
 
+use crate::sync::Mutex as SyncMutex;
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use crate::sync::Mutex as SyncMutex;
 use std::task::{Context, Poll, Waker};
 
 struct State {
@@ -129,22 +129,16 @@ impl<'a, T> Future for MutexLockFuture<'a, T> {
 mod tests {
     use super::*;
 
-    static NOOP_WAKER: std::sync::LazyLock<Waker> =
-        std::sync::LazyLock::new(|| {
-            static VTABLE: std::task::RawWakerVTable =
-                std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-            const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-                std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-            }
-            const fn wake_noop(_: *const ()) {}
-            const fn drop_noop(_: *const ()) {}
-            unsafe {
-                Waker::from_raw(std::task::RawWaker::new(
-                    std::ptr::null(),
-                    &VTABLE,
-                ))
-            }
-        });
+    static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
+        static VTABLE: std::task::RawWakerVTable =
+            std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
+        const fn clone_noop(_: *const ()) -> std::task::RawWaker {
+            std::task::RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        const fn wake_noop(_: *const ()) {}
+        const fn drop_noop(_: *const ()) {}
+        unsafe { Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+    });
 
     fn cx() -> Context<'static> {
         Context::from_waker(&NOOP_WAKER)

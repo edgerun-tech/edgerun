@@ -6,7 +6,7 @@
 //! This provides LOCAL-ONLY control - no cloud account, no internet required.
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_rt::{AsyncUdpSocket, timeout, Elapsed};
+use edgerun_rt::{timeout, AsyncUdpSocket, Elapsed};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -44,7 +44,10 @@ pub enum TuyaCommand {
     #[serde(rename = "discovery")]
     Discovery { protocol_version: String },
     #[serde(rename = "control")]
-    Control { devId: String, dps: edgerun_json::Value },
+    Control {
+        devId: String,
+        dps: edgerun_json::Value,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -59,7 +62,10 @@ pub enum TuyaResponse {
         ability: Option<edgerun_json::Value>,
     },
     #[serde(rename = "control")]
-    Control { devId: String, dps: edgerun_json::Value },
+    Control {
+        devId: String,
+        dps: edgerun_json::Value,
+    },
 }
 
 pub struct TuyaDiscovery;
@@ -75,7 +81,10 @@ impl TuyaDiscovery {
         Self
     }
 
-    pub async fn broadcast_discovery(&self, bind_addr: SocketAddr) -> Result<Vec<TuyaDevice>, std::io::Error> {
+    pub async fn broadcast_discovery(
+        &self,
+        bind_addr: SocketAddr,
+    ) -> Result<Vec<TuyaDevice>, std::io::Error> {
         let broadcast_addr: SocketAddr = format!("{}:{}", TUYA_BROADCAST_ADDR, TUYA_DISCOVERY_PORT)
             .parse()
             .unwrap();
@@ -147,14 +156,20 @@ impl TuyaController {
         let mut key = [0u8; 16];
         key[..key_bytes.len().min(16)].copy_from_slice(&key_bytes[..key_bytes.len().min(16)]);
 
-        Self { device, local_key: key }
+        Self {
+            device,
+            local_key: key,
+        }
     }
 
     pub fn device(&self) -> &TuyaDevice {
         &self.device
     }
 
-    pub async fn send_command(&mut self, dps: edgerun_json::Value) -> Result<edgerun_json::Value, std::io::Error> {
+    pub async fn send_command(
+        &mut self,
+        dps: edgerun_json::Value,
+    ) -> Result<edgerun_json::Value, std::io::Error> {
         let ip = format!("{}:{}", self.device.ip, TUYA_CONTROL_PORT);
         let addr: SocketAddr = ip.parse().unwrap();
 

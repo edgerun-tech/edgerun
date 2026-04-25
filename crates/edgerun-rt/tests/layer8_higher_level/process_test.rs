@@ -25,7 +25,9 @@ fn test_output_echo() {
             let mut c = Command::new("echo");
             c.arg("-n").arg("hello");
             c
-        }).await.expect("output failed");
+        })
+        .await
+        .expect("output failed");
         assert_eq!(out.stdout, b"hello");
         assert!(out.status.success());
     });
@@ -38,7 +40,8 @@ fn test_output_true() {
     println!("  test_output_true...");
     let h = edgerun_rt::spawn(async {
         let out = process::output(|| Command::new("true"))
-            .await.expect("output failed");
+            .await
+            .expect("output failed");
         assert!(out.status.success());
         assert_eq!(out.stdout, b"");
     });
@@ -51,7 +54,8 @@ fn test_status_success() {
     println!("  test_status_success...");
     let h = edgerun_rt::spawn(async {
         let status = process::status(|| Command::new("true"))
-            .await.expect("status failed");
+            .await
+            .expect("status failed");
         assert!(status.success());
     });
     std::thread::sleep(Duration::from_millis(200));
@@ -63,7 +67,8 @@ fn test_status_failure() {
     println!("  test_status_failure...");
     let h = edgerun_rt::spawn(async {
         let status = process::status(|| Command::new("false"))
-            .await.expect("status failed");
+            .await
+            .expect("status failed");
         assert!(!status.success());
     });
     std::thread::sleep(Duration::from_millis(200));
@@ -78,7 +83,9 @@ fn test_output_string() {
             let mut c = Command::new("printf");
             c.arg("hello world");
             c
-        }).await.expect("output_string failed");
+        })
+        .await
+        .expect("output_string failed");
         assert_eq!(text, "hello world");
     });
     std::thread::sleep(Duration::from_millis(200));
@@ -93,7 +100,8 @@ fn test_child_spawn_and_wait() {
             let mut c = Command::new("sleep");
             c.arg("0.1");
             c
-        }).expect("spawn failed");
+        })
+        .expect("spawn failed");
         let status = child.wait().await.expect("wait failed");
         assert!(status.success());
     });
@@ -109,7 +117,8 @@ fn test_child_id() {
             let mut c = Command::new("sleep");
             c.arg("0.1");
             c
-        }).expect("spawn failed");
+        })
+        .expect("spawn failed");
         let pid = child.id();
         assert!(pid > 0, "child PID should be > 0, got {}", pid);
         let status = child.wait().await.expect("wait failed");
@@ -125,13 +134,19 @@ fn test_concurrent_commands() {
     println!("  test_concurrent_commands...");
     let h = edgerun_rt::spawn(async {
         let a = process::output(|| {
-            let mut c = Command::new("echo"); c.arg("-n").arg("a"); c
+            let mut c = Command::new("echo");
+            c.arg("-n").arg("a");
+            c
         });
         let b = process::output(|| {
-            let mut c = Command::new("echo"); c.arg("-n").arg("b"); c
+            let mut c = Command::new("echo");
+            c.arg("-n").arg("b");
+            c
         });
         let c = process::output(|| {
-            let mut c = Command::new("echo"); c.arg("-n").arg("c"); c
+            let mut c = Command::new("echo");
+            c.arg("-n").arg("c");
+            c
         });
         let (a, b, c) = edgerun_rt::join!(a, b, c);
 

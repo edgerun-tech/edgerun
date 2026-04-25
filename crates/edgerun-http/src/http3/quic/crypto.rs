@@ -9,8 +9,8 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use edgerun_crypto::{AeadCipher, KeyInit, AeadInPlace, CipherSuite};
 use edgerun_crypto::aes_gcm;
+use edgerun_crypto::{AeadCipher, AeadInPlace, CipherSuite, KeyInit};
 
 use std::collections::HashMap;
 
@@ -95,10 +95,8 @@ pub struct PacketProtection {
 impl PacketProtection {
     /// Create from protection keys
     pub fn new(keys: &ProtectionKeys) -> Self {
-        let write_aead = AeadCipher::new_from_key(&keys.write_key)
-            .expect("valid write key");
-        let read_aead = AeadCipher::new_from_key(&keys.read_key)
-            .expect("valid read key");
+        let write_aead = AeadCipher::new_from_key(&keys.write_key).expect("valid write key");
+        let read_aead = AeadCipher::new_from_key(&keys.read_key).expect("valid read key");
 
         PacketProtection {
             write_aead,
@@ -121,7 +119,9 @@ impl PacketProtection {
 
         let mut buffer = plaintext.to_vec();
 
-        let tag = self.write_aead.encrypt_in_place_detached(&nonce, header, &mut buffer)
+        let tag = self
+            .write_aead
+            .encrypt_in_place_detached(&nonce, header, &mut buffer)
             .map_err(|e| format!("AEAD encrypt failed: {:?}", e))?;
 
         buffer.extend_from_slice(tag.as_slice());
@@ -133,7 +133,12 @@ impl PacketProtection {
     ///
     /// AAD = unprotected packet header (authenticated but not encrypted)
     /// Nonce = read_iv XOR (packet_number << 8)
-    pub fn unprotect(&mut self, header: &[u8], packet_number: u64, ciphertext_and_tag: &[u8]) -> Result<Vec<u8>, String> {
+    pub fn unprotect(
+        &mut self,
+        header: &[u8],
+        packet_number: u64,
+        ciphertext_and_tag: &[u8],
+    ) -> Result<Vec<u8>, String> {
         let nonce = self.make_nonce(&self.read_iv, packet_number);
 
         if ciphertext_and_tag.len() < 16 {
@@ -143,7 +148,8 @@ impl PacketProtection {
         let tag = aes_gcm::Tag::from_slice(&ciphertext_and_tag[tag_start..]);
         let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
 
-        self.read_aead.decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
+        self.read_aead
+            .decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
             .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
 
         Ok(buffer)
@@ -300,12 +306,16 @@ mod tests {
     fn test_client_server_nonce_inverse() {
         // Client uses server_in secret for encryption, server uses client_in for decryption
         // But both should XOR with same packet number
-        let client_iv = [0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0xad, 0xbe, 0xcf];
-        let server_iv = [0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0xad, 0xbe, 0xcf];
-        
+        let client_iv = [
+            0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0xad, 0xbe, 0xcf,
+        ];
+        let server_iv = [
+            0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0xad, 0xbe, 0xcf,
+        ];
+
         let client_nonce = PacketProtection::test_make_nonce(&client_iv, 0);
         let server_nonce = PacketProtection::test_make_nonce(&server_iv, 0);
-        
+
         // Both start with same IV, XOR with pn=0 means no change
         assert_eq!(client_nonce, client_iv);
         assert_eq!(server_nonce, server_iv);
@@ -317,13 +327,13 @@ mod tests {
         let keys = ProtectionKeys::test_keys();
         let mut encryptor = PacketProtection::new(&keys);
         let mut decryptor = PacketProtection::new(&keys);
-        
+
         let header = b"test header";
         let plaintext = b"Hello QUIC!";
-        
+
         let ciphertext = encryptor.protect(header, plaintext).unwrap();
         let decrypted = decryptor.unprotect(header, 0, &ciphertext).unwrap();
-        
+
         assert_eq!(&decrypted, plaintext);
     }
 
@@ -334,13 +344,17 @@ mod tests {
 
         let header = b"header";
         let plaintext = b"hello quic";
-        let ciphertext = protection.protect(header, plaintext).expect("encrypt failed");
+        let ciphertext = protection
+            .protect(header, plaintext)
+            .expect("encrypt failed");
 
         assert_ne!(ciphertext, plaintext.to_vec());
         assert!(ciphertext.len() > plaintext.len()); // includes tag
 
         // Decrypt
-        let decrypted = protection.unprotect(header, 0, &ciphertext).expect("decrypt failed");
+        let decrypted = protection
+            .unprotect(header, 0, &ciphertext)
+            .expect("decrypt failed");
         assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 

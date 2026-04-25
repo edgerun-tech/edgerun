@@ -47,10 +47,7 @@ impl WorkloadPolicy {
         if !self.allowed_registries.is_empty() {
             let registry = extract_registry(image_ref);
             if !self.allowed_registries.contains(&registry) {
-                return Err(format!(
-                    "registry '{}' not in allowlist",
-                    registry
-                ));
+                return Err(format!("registry '{}' not in allowlist", registry));
             }
         }
 
@@ -82,9 +79,8 @@ fn extract_registry(image: &str) -> String {
     //
     // If the first segment only contains a ':' but no '/' after it,
     // it's actually a tag separator (e.g., "alpine:latest"), not a registry.
-    let is_registry = first.contains('.')
-        || first == "localhost"
-        || (first.contains(':') && image.contains('/'));
+    let is_registry =
+        first.contains('.') || first == "localhost" || (first.contains(':') && image.contains('/'));
 
     if is_registry {
         first.to_string()
@@ -118,9 +114,15 @@ pub fn load_policy_file(path: &std::path::Path) -> std::io::Result<WorkloadPolic
         if let Some((directive, value)) = line.split_once(':') {
             let value = value.trim().to_string();
             match directive.trim() {
-                "allow-registry" => { policy.allowed_registries.insert(value); }
-                "block-image" => { policy.blocked_images.insert(value); }
-                "pin-digest" => { policy.pinned_digests.insert(value); }
+                "allow-registry" => {
+                    policy.allowed_registries.insert(value);
+                }
+                "block-image" => {
+                    policy.blocked_images.insert(value);
+                }
+                "pin-digest" => {
+                    policy.pinned_digests.insert(value);
+                }
                 _ => {}
             }
         }
@@ -215,21 +217,29 @@ mod tests {
         policy.blocked_images.insert("/malicious/".into());
 
         assert!(policy.validate("nginx:latest").is_ok());
-        let err = policy.validate("docker.io/hacker/cryptominer:v2").unwrap_err();
+        let err = policy
+            .validate("docker.io/hacker/cryptominer:v2")
+            .unwrap_err();
         assert!(err.contains("blocked pattern"));
-        let err = policy.validate("evil.com/malicious/tool:latest").unwrap_err();
+        let err = policy
+            .validate("evil.com/malicious/tool:latest")
+            .unwrap_err();
         assert!(err.contains("blocked pattern"));
     }
 
     #[test]
     fn pinned_digests_only() {
         let mut policy = WorkloadPolicy::default();
-        policy.pinned_digests.insert(
-            "docker.io/library/alpine@sha256:abc123".into()
-        );
+        policy
+            .pinned_digests
+            .insert("docker.io/library/alpine@sha256:abc123".into());
 
-        assert!(policy.validate("docker.io/library/alpine@sha256:abc123").is_ok());
-        let err = policy.validate("docker.io/library/alpine:latest").unwrap_err();
+        assert!(policy
+            .validate("docker.io/library/alpine@sha256:abc123")
+            .is_ok());
+        let err = policy
+            .validate("docker.io/library/alpine:latest")
+            .unwrap_err();
         assert!(err.contains("not in pinned digests"));
     }
 
@@ -239,7 +249,10 @@ mod tests {
         assert_eq!(extract_registry("library/nginx:1.25"), "docker.io");
         assert_eq!(extract_registry("ghcr.io/myorg/app:v1"), "ghcr.io");
         assert_eq!(extract_registry("localhost:5000/myimg"), "localhost:5000");
-        assert_eq!(extract_registry("my.registry.com/org/img"), "my.registry.com");
+        assert_eq!(
+            extract_registry("my.registry.com/org/img"),
+            "my.registry.com"
+        );
     }
 
     #[test]

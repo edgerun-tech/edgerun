@@ -19,14 +19,21 @@ impl Parser for Cli {
     fn command() -> Command {
         Command::new("edgerun-edit")
             .about("AST-level Rust code editor HTTP server")
-            .arg(Arg::new("port").long("port").short('p').default_value("3456"))
+            .arg(
+                Arg::new("port")
+                    .long("port")
+                    .short('p')
+                    .default_value("3456"),
+            )
             .arg(Arg::new("host").long("host").default_value("127.0.0.1"))
     }
 
     fn from(matches: &edgerun_clap::ArgMatches) -> Self {
         Self {
             port: matches.get_one::<u16>("port").unwrap_or(3456),
-            host: matches.get_one::<String>("host").unwrap_or_else(|| "127.0.0.1".to_string()),
+            host: matches
+                .get_one::<String>("host")
+                .unwrap_or_else(|| "127.0.0.1".to_string()),
         }
     }
 }
@@ -34,7 +41,10 @@ impl Parser for Cli {
 fn main() {
     let cli = Cli::parse();
     let addr = format!("{}:{}", cli.host, cli.port);
-    let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap();
+    let rt = edgerun_rt::Runtime::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
     rt.block_on(async move {
         match start_server(&addr).await {
             Ok(server) => {

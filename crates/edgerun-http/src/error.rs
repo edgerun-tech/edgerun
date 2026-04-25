@@ -103,10 +103,18 @@ impl fmt::Display for HttpError {
         match self {
             HttpError::Http1(err) => write!(f, "HTTP/1.1 error: {}", err),
             HttpError::Http2(inner) => {
-                write!(f, "HTTP/2 error (0x{:02x}): {}", inner.error_code, inner.reason)
+                write!(
+                    f,
+                    "HTTP/2 error (0x{:02x}): {}",
+                    inner.error_code, inner.reason
+                )
             }
             HttpError::Http3(inner) => {
-                write!(f, "HTTP/3 error (0x{:02x}): {}", inner.error_code, inner.reason)
+                write!(
+                    f,
+                    "HTTP/3 error (0x{:02x}): {}",
+                    inner.error_code, inner.reason
+                )
             }
             HttpError::Io(err) => write!(f, "I/O error: {}", err),
         }

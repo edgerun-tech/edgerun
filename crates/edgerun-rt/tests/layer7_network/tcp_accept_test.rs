@@ -1,5 +1,5 @@
 // Minimal test: verify the runtime can accept a TCP connection and read/write.
-use edgerun_rt::{AsyncTcpListener, AsyncTcpStream, AsyncReadExt, AsyncWriteExt, Runtime, spawn};
+use edgerun_rt::{spawn, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, Runtime};
 use std::sync::Arc;
 
 fn main() {

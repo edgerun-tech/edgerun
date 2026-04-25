@@ -24,27 +24,25 @@ use std::task::{Context, Poll};
 use crate::alert::{Alert, AlertLevel};
 use crate::certificate::Certificate;
 use crate::certificate_gen::CertificateAndKey;
-use edgerun_crypto::CipherSuite;
 use crate::cipher::NamedGroup;
 use crate::handshake::{ClientHelloBuilder, ServerHello};
 use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::prf::{
-    Hasher, Tls13KeySchedule,
-    client_write_keys, server_write_keys,
-    client_app_write_keys, server_app_write_keys,
-    hmac_sha256, hmac_sha384,
+    client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384, server_app_write_keys,
+    server_write_keys, Hasher, Tls13KeySchedule,
 };
 use crate::record::RecordCipher;
 use crate::server::client_hello::ClientHello;
 use crate::server::message_builder::{
-    build_server_hello, build_encrypted_extensions, build_certificate_message,
-    build_certificate_verify, build_finished_message,
-    compute_server_finished_verify_data, compute_client_finished_verify_data,
+    build_certificate_message, build_certificate_verify, build_encrypted_extensions,
+    build_finished_message, build_server_hello, compute_client_finished_verify_data,
+    compute_server_finished_verify_data,
 };
-use crate::{Result, TlsError};
 use crate::session_cache::SessionCache;
+use crate::{Result, TlsError};
+use edgerun_crypto::CipherSuite;
 
-use edgerun_rt::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
+use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 // ---------------------------------------------------------------------------
 // AsyncTlsStream — client-side async TLS stream
@@ -97,8 +95,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         session_cache: Option<&SessionCache>,
     ) -> Result<Self> {
         let client_random = generate_random();
-        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519)
-            .map_err(TlsError::HandshakeFailure)?;
+        let key_pair =
+            EcdhKeyPair::generate(KeyExchangeGroup::X25519).map_err(TlsError::HandshakeFailure)?;
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
 
         // 1. Send ClientHello
@@ -162,35 +160,53 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         // 3. Derive handshake keys — offload ECDH to blocking pool
         let key_pair = std::sync::Arc::new(key_pair);
         let server_key_share = sh.server_key_share.clone();
-        let shared_secret = edgerun_rt::spawn_blocking(move || {
-            key_pair.exchange(&server_key_share)
-        }).await
-            .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
-            .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
+        let shared_secret =
+            edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
+                .await
+                .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
+                .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
         let hash = Hasher::Sha256;
         let transcript_hash = hash.hash(&transcript);
 
-let mut ks = Tls13KeySchedule::new(hash.clone());
+        let mut ks = Tls13KeySchedule::new(hash.clone());
         ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
         let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
         let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
 
-        let client_hs_keys = client_write_keys(&client_hs_secret, cipher_suite.key_len(), 12, &hash);
-        let server_hs_keys = server_write_keys(&server_hs_secret, cipher_suite.key_len(), 12, &hash);
+        let client_hs_keys =
+            client_write_keys(&client_hs_secret, cipher_suite.key_len(), 12, &hash);
+        let server_hs_keys =
+            server_write_keys(&server_hs_secret, cipher_suite.key_len(), 12, &hash);
 
-        let mut _write_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
-        let mut _read_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
+        let mut _write_cipher =
+            RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
+        let mut _read_cipher =
+            RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
 
         // 4. Read encrypted handshake messages
         async_read_encrypted_handshake_messages(
-            &mut stream, &mut _read_cipher, &mut ks, &mut transcript, &hash, &transcript_hash,
+            &mut stream,
+            &mut _read_cipher,
+            &mut ks,
+            &mut transcript,
+            &hash,
+            &transcript_hash,
             server_name,
-        ).await?;
+        )
+        .await?;
 
         let app_transcript_hash = hash.hash(&transcript);
 
         // 5. Send client Finished
-        async_send_client_finished(&mut stream, &mut _write_cipher, &ks, &transcript, &hash, &transcript_hash).await?;
+        async_send_client_finished(
+            &mut stream,
+            &mut _write_cipher,
+            &ks,
+            &transcript,
+            &hash,
+            &transcript_hash,
+        )
+        .await?;
 
         // 6. Derive application keys
         ks.advance_to_master();
@@ -200,7 +216,8 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
         let client_app_keys = client_app_write_keys(&client_app, cipher_suite.key_len(), 12, &hash);
         let server_app_keys = server_app_write_keys(&server_app, cipher_suite.key_len(), 12, &hash);
 
-        let write_cipher = RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
+        let write_cipher =
+            RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
         let read_cipher = RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv)?;
 
         Ok(AsyncTlsStream {
@@ -216,7 +233,11 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
     }
 
     /// Async read — returns decrypted application data.
-    pub fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
+    pub fn poll_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
         if !self.handshake_done {
             return Poll::Ready(Err(std::io::Error::new(
                 std::io::ErrorKind::NotConnected,
@@ -228,7 +249,8 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
         if self.pending_offset < self.pending_data.len() {
             let available = self.pending_data.len() - self.pending_offset;
             let n = available.min(buf.len());
-            buf[..n].copy_from_slice(&self.pending_data[self.pending_offset..self.pending_offset + n]);
+            buf[..n]
+                .copy_from_slice(&self.pending_data[self.pending_offset..self.pending_offset + n]);
             self.pending_offset += n;
             return Poll::Ready(Ok(n));
         }
@@ -248,9 +270,10 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
                 Poll::Ready(Ok(n))
             }
             Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
-            Poll::Ready(Err(TlsError::Alert(_, _))) => {
-                Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
-            }
+            Poll::Ready(Err(TlsError::Alert(_, _))) => Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "TLS alert",
+            ))),
             Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
             Poll::Pending => Poll::Pending,
         }
@@ -328,7 +351,9 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
                             ))));
                         }
                         pos += n;
-                        if pos == 5 { break; }
+                        if pos == 5 {
+                            break;
+                        }
                     }
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
                     Poll::Pending => return Poll::Pending,
@@ -351,7 +376,9 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
                             ))));
                         }
                         pos += n;
-                        if pos == length { break; }
+                        if pos == length {
+                            break;
+                        }
                     }
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
                     Poll::Pending => return Poll::Pending,
@@ -372,10 +399,8 @@ let mut ks = Tls13KeySchedule::new(hash.clone());
             } else if content_type == 21 {
                 // alert
                 if fragment.len() >= 2 {
-                    let level = AlertLevel::from_wire(fragment[0])
-                        .map_err(TlsError::Protocol)?;
-                    let alert = Alert::from_wire(fragment[1])
-                        .map_err(TlsError::Protocol)?;
+                    let level = AlertLevel::from_wire(fragment[0]).map_err(TlsError::Protocol)?;
+                    let alert = Alert::from_wire(fragment[1]).map_err(TlsError::Protocol)?;
                     if level == AlertLevel::Fatal {
                         return Poll::Ready(Err(TlsError::Alert(level, alert)));
                     }
@@ -493,7 +518,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     }
 
     /// Read decrypted application data.
-    pub fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
+    pub fn poll_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
         if !self.handshake_done {
             return Poll::Ready(Err(std::io::Error::new(
                 std::io::ErrorKind::NotConnected,
@@ -504,7 +533,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         if self.pending_offset < self.pending_data.len() {
             let available = self.pending_data.len() - self.pending_offset;
             let n = available.min(buf.len());
-            buf[..n].copy_from_slice(&self.pending_data[self.pending_offset..self.pending_offset + n]);
+            buf[..n]
+                .copy_from_slice(&self.pending_data[self.pending_offset..self.pending_offset + n]);
             self.pending_offset += n;
             return Poll::Ready(Ok(n));
         }
@@ -520,9 +550,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 Poll::Ready(Ok(n))
             }
             Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
-            Poll::Ready(Err(TlsError::Alert(_, _))) => {
-                Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
-            }
+            Poll::Ready(Err(TlsError::Alert(_, _))) => Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "TLS alert",
+            ))),
             Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
             Poll::Pending => Poll::Pending,
         }
@@ -598,7 +629,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                             ))));
                         }
                         pos += n;
-                        if pos == 5 { break; }
+                        if pos == 5 {
+                            break;
+                        }
                     }
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
                     Poll::Pending => return Poll::Pending,
@@ -621,7 +654,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                             ))));
                         }
                         pos += n;
-                        if pos == length { break; }
+                        if pos == length {
+                            break;
+                        }
                     }
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
                     Poll::Pending => return Poll::Pending,
@@ -642,10 +677,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             } else if content_type == 21 {
                 // alert
                 if fragment.len() >= 2 {
-                    let level = AlertLevel::from_wire(fragment[0])
-                        .map_err(TlsError::Protocol)?;
-                    let alert = Alert::from_wire(fragment[1])
-                        .map_err(TlsError::Protocol)?;
+                    let level = AlertLevel::from_wire(fragment[0]).map_err(TlsError::Protocol)?;
+                    let alert = Alert::from_wire(fragment[1]).map_err(TlsError::Protocol)?;
                     if level == AlertLevel::Fatal {
                         return Poll::Ready(Err(TlsError::Alert(level, alert)));
                     }
@@ -676,7 +709,11 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
         let mut fragment = vec![0u8; len];
         stream.read_exact(&mut fragment).await?;
         let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
-        let hs_type = if !plaintext.is_empty() { plaintext[0] } else { inner_type };
+        let hs_type = if !plaintext.is_empty() {
+            plaintext[0]
+        } else {
+            inner_type
+        };
 
         match hs_type {
             8 => {
@@ -687,7 +724,8 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                 // Certificate
                 transcript.extend_from_slice(&plaintext);
                 if plaintext.len() >= 8 {
-                    let cert_list_len = u32::from_be_bytes([0, plaintext[5], plaintext[6], plaintext[7]]) as usize;
+                    let cert_list_len =
+                        u32::from_be_bytes([0, plaintext[5], plaintext[6], plaintext[7]]) as usize;
                     let cert_list_start = 8;
                     if cert_list_start + cert_list_len <= plaintext.len() {
                         let mut cert_pos = cert_list_start;
@@ -695,37 +733,52 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                         let mut certs = Vec::new();
                         while cert_pos + 5 < cert_list_end {
                             let cert_data_len = u32::from_be_bytes([
-                                0, plaintext[cert_pos], plaintext[cert_pos + 1], plaintext[cert_pos + 2],
+                                0,
+                                plaintext[cert_pos],
+                                plaintext[cert_pos + 1],
+                                plaintext[cert_pos + 2],
                             ]) as usize;
                             cert_pos += 3;
-                            if cert_pos + cert_data_len + 2 > cert_list_end { break; }
+                            if cert_pos + cert_data_len + 2 > cert_list_end {
+                                break;
+                            }
                             let cert_der = &plaintext[cert_pos..cert_pos + cert_data_len];
                             cert_pos += cert_data_len;
-                            let ext_len = u16::from_be_bytes([plaintext[cert_pos], plaintext[cert_pos + 1]]) as usize;
+                            let ext_len =
+                                u16::from_be_bytes([plaintext[cert_pos], plaintext[cert_pos + 1]])
+                                    as usize;
                             cert_pos += 2 + ext_len;
                             let cert = Certificate::from_der(cert_der)?;
                             certs.push(cert);
                         }
                         if certs.is_empty() {
-                            return Err(TlsError::Certificate("No certificates from server".into()));
+                            return Err(TlsError::Certificate(
+                                "No certificates from server".into(),
+                            ));
                         }
                         let leaf = &certs[0];
                         if !leaf.is_valid_now() {
-                            return Err(TlsError::Certificate("Server certificate is expired".into()));
+                            return Err(TlsError::Certificate(
+                                "Server certificate is expired".into(),
+                            ));
                         }
                         if !leaf.matches_hostname(server_name) {
                             if certs.len() == 1 {
                                 // Self-signed — accept for testing
                             } else {
                                 return Err(TlsError::Certificate(format!(
-                                    "Certificate does not match hostname {}", server_name,
+                                    "Certificate does not match hostname {}",
+                                    server_name,
                                 )));
                             }
                         }
                         if certs.len() >= 2 {
                             let issuer = &certs[1];
                             if let Err(e) = leaf.verify_signature(issuer) {
-                                return Err(TlsError::Certificate(format!("Certificate signature verification failed: {}", e)));
+                                return Err(TlsError::Certificate(format!(
+                                    "Certificate signature verification failed: {}",
+                                    e
+                                )));
                             }
                         }
                     }
@@ -738,8 +791,10 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
             20 => {
                 // Finished — verify
                 let full_transcript_hash = hash.hash(transcript);
-                let server_hs_secret = ks.server_handshake_traffic_secret(handshake_transcript_hash);
-                let finished_key = hash.expand_label(&server_hs_secret, "finished", &[], hash.len());
+                let server_hs_secret =
+                    ks.server_handshake_traffic_secret(handshake_transcript_hash);
+                let finished_key =
+                    hash.expand_label(&server_hs_secret, "finished", &[], hash.len());
                 if plaintext.len() < 4 + hash.len() {
                     return Err(TlsError::Protocol("Finished message too short".into()));
                 }
@@ -749,9 +804,14 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                     Hasher::Sha384 => hmac_sha384(&finished_key, &full_transcript_hash),
                 };
                 if verify_data.len() < expected_verify_data.len()
-                    || !constant_time_eq(&verify_data[..expected_verify_data.len()], &expected_verify_data)
+                    || !constant_time_eq(
+                        &verify_data[..expected_verify_data.len()],
+                        &expected_verify_data,
+                    )
                 {
-                    return Err(TlsError::Protocol("Finished message verification failed".into()));
+                    return Err(TlsError::Protocol(
+                        "Finished message verification failed".into(),
+                    ));
                 }
                 transcript.extend_from_slice(&plaintext);
                 return Ok(());
@@ -771,7 +831,7 @@ async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
 ) -> Result<()> {
     let full_transcript_hash = hash.hash(transcript);
     let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
-    
+
     let finished_key = hash.expand_label(&client_hs_secret, "finished", &[], hash.len());
     // RFC 8446 §4.4.3: verify_data uses hash of all handshake messages including Finished
     let verify_data = match hash {
@@ -809,28 +869,68 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
     let ee_msg = build_encrypted_extensions(alpn_protocol);
     transcript.extend_from_slice(&ee_msg);
     let ee_ct = write_cipher.encrypt(22, &ee_msg);
-    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: ee_ct }.to_bytes()).await?;
+    stream
+        .write_all(
+            &crate::record::TlsRecord {
+                content_type: 23,
+                version: 0x0303,
+                fragment: ee_ct,
+            }
+            .to_bytes(),
+        )
+        .await?;
 
     // Certificate
     let cert_msg = build_certificate_message(cert_der);
     transcript.extend_from_slice(&cert_msg);
     let cert_ct = write_cipher.encrypt(22, &cert_msg);
-    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: cert_ct }.to_bytes()).await?;
+    stream
+        .write_all(
+            &crate::record::TlsRecord {
+                content_type: 23,
+                version: 0x0303,
+                fragment: cert_ct,
+            }
+            .to_bytes(),
+        )
+        .await?;
 
     // CertificateVerify
     let cv_msg = build_certificate_verify(transcript, signing_key, hash)?;
     transcript.extend_from_slice(&cv_msg);
     let cv_ct = write_cipher.encrypt(22, &cv_msg);
-    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: cv_ct }.to_bytes()).await?;
+    stream
+        .write_all(
+            &crate::record::TlsRecord {
+                content_type: 23,
+                version: 0x0303,
+                fragment: cv_ct,
+            }
+            .to_bytes(),
+        )
+        .await?;
 
     // Finished
     let transcript_hash_before_finished = hash.hash(transcript);
     let server_hs_secret = ks.server_handshake_traffic_secret(handshake_transcript_hash);
-    let verify_data = compute_server_finished_verify_data(&server_hs_secret, &transcript_hash_before_finished, hash);
+    let verify_data = compute_server_finished_verify_data(
+        &server_hs_secret,
+        &transcript_hash_before_finished,
+        hash,
+    );
     let finished_msg = build_finished_message(&verify_data);
     transcript.extend_from_slice(&finished_msg);
     let finished_ct = write_cipher.encrypt(22, &finished_msg);
-    stream.write_all(&crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: finished_ct }.to_bytes()).await?;
+    stream
+        .write_all(
+            &crate::record::TlsRecord {
+                content_type: 23,
+                version: 0x0303,
+                fragment: finished_ct,
+            }
+            .to_bytes(),
+        )
+        .await?;
     stream.flush().await?;
 
     Ok(())
@@ -866,21 +966,33 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
         let mut fragment = vec![0u8; len];
         stream.read_exact(&mut fragment).await?;
         let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
-        let hs_type = if !plaintext.is_empty() { plaintext[0] } else { inner_type };
+        let hs_type = if !plaintext.is_empty() {
+            plaintext[0]
+        } else {
+            inner_type
+        };
         if hs_type != 20 {
-            return Err(TlsError::HandshakeFailure(format!("Expected Finished (type 20), got {}", hs_type)));
+            return Err(TlsError::HandshakeFailure(format!(
+                "Expected Finished (type 20), got {}",
+                hs_type
+            )));
         }
         let transcript_hash = hash.hash(transcript);
         // RFC 8446 §4.4.3: verify_data is computed from hash of all handshake messages
         // including the Finished being verified.
         let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
-        let expected_verify = compute_client_finished_verify_data(&client_hs_secret, &transcript_hash, hash);
+        let expected_verify =
+            compute_client_finished_verify_data(&client_hs_secret, &transcript_hash, hash);
         if plaintext.len() < 4 + expected_verify.len() {
-            return Err(TlsError::Protocol("Client Finished verification data too short".into()));
+            return Err(TlsError::Protocol(
+                "Client Finished verification data too short".into(),
+            ));
         }
         let client_verify_data = &plaintext[4..4 + expected_verify.len()];
         if !constant_time_eq(client_verify_data, &expected_verify) {
-            return Err(TlsError::Protocol("Client Finished verification failed".into()));
+            return Err(TlsError::Protocol(
+                "Client Finished verification failed".into(),
+            ));
         }
         transcript.extend_from_slice(&plaintext);
         break;
@@ -911,13 +1023,20 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     let ch = ClientHello::parse(&fragment)?;
 
     if !ch.supported_versions.contains(&0x0304) {
-        return Err(TlsError::HandshakeFailure("Client does not support TLS 1.3".into()));
+        return Err(TlsError::HandshakeFailure(
+            "Client does not support TLS 1.3".into(),
+        ));
     }
 
-    let negotiated_suite = ch.cipher_suites.iter()
+    let negotiated_suite = ch
+        .cipher_suites
+        .iter()
         .find(|cs| matches!(cs, CipherSuite::TLS_AES_128_GCM_SHA256))
-        .or_else(|| ch.cipher_suites.iter()
-            .find(|cs| matches!(cs, CipherSuite::TLS_AES_256_GCM_SHA384)))
+        .or_else(|| {
+            ch.cipher_suites
+                .iter()
+                .find(|cs| matches!(cs, CipherSuite::TLS_AES_256_GCM_SHA384))
+        })
         .cloned()
         .ok_or_else(|| TlsError::HandshakeFailure("No common cipher suite".into()))?;
 
@@ -949,15 +1068,16 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
         };
         (keg, ks)
     } else {
-        return Err(TlsError::HandshakeFailure("No key_share in ClientHello".into()));
+        return Err(TlsError::HandshakeFailure(
+            "No key_share in ClientHello".into(),
+        ));
     };
 
     let client_session_id = ch.session_id;
     let mut transcript = fragment;
 
     // 2. Send ServerHello
-    let key_pair = EcdhKeyPair::generate(selected_group)
-        .map_err(TlsError::HandshakeFailure)?;
+    let key_pair = EcdhKeyPair::generate(selected_group).map_err(TlsError::HandshakeFailure)?;
     let public_key = key_pair.public_key_bytes();
     let named_group = match selected_group {
         KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
@@ -983,9 +1103,8 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     // 3. Derive handshake keys — offload ECDH to blocking pool
     let key_pair = std::sync::Arc::new(key_pair);
     let client_key_share = client_key_share.clone();
-    let shared_secret = edgerun_rt::spawn_blocking(move || {
-        key_pair.exchange(&client_key_share)
-    }).await
+    let shared_secret = edgerun_rt::spawn_blocking(move || key_pair.exchange(&client_key_share))
+        .await
         .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
         .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
     let hash = Hasher::Sha256;
@@ -997,8 +1116,10 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
     let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
 
-    let server_hs_keys = server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
-    let client_hs_keys = client_write_keys(&client_hs_secret, negotiated_suite.key_len(), 12, &hash);
+    let server_hs_keys =
+        server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
+    let client_hs_keys =
+        client_write_keys(&client_hs_secret, negotiated_suite.key_len(), 12, &hash);
 
     let mut write_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
     let mut read_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
@@ -1007,17 +1128,30 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
 
     // 4. Send encrypted handshake messages
     async_server_send_encrypted_handshake(
-        stream, &mut write_cipher, &mut ks, &mut transcript, &hash,
-        &handshake_transcript_hash, &cert_and_key.cert_der, &cert_and_key.signing_key,
+        stream,
+        &mut write_cipher,
+        &mut ks,
+        &mut transcript,
+        &hash,
+        &handshake_transcript_hash,
+        &cert_and_key.cert_der,
+        &cert_and_key.signing_key,
         alpn_protocol.as_deref(),
-    ).await?;
+    )
+    .await?;
 
     let app_transcript_hash = hash.hash(&transcript);
 
     // 5. Read client Finished
     async_server_read_client_finished(
-        stream, &mut read_cipher, &ks, &mut transcript, &hash, &handshake_transcript_hash,
-    ).await?;
+        stream,
+        &mut read_cipher,
+        &ks,
+        &mut transcript,
+        &hash,
+        &handshake_transcript_hash,
+    )
+    .await?;
 
     // 6. Derive application keys
     ks.advance_to_master();
@@ -1044,9 +1178,13 @@ pub(crate) fn generate_random() -> [u8; 32] {
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
+    if a.len() != b.len() {
+        return false;
+    }
     let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) { diff |= x ^ y; }
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
     diff == 0
 }
 
@@ -1055,13 +1193,21 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 // ---------------------------------------------------------------------------
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for AsyncTlsStream<S> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
         self.get_mut().poll_read(cx, buf)
     }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsStream<S> {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
         self.get_mut().poll_write(cx, buf)
     }
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
@@ -1073,13 +1219,21 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsStream<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for AsyncTlsServerStream<S> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
         self.get_mut().poll_read(cx, buf)
     }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsServerStream<S> {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
         self.get_mut().poll_write(cx, buf)
     }
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {

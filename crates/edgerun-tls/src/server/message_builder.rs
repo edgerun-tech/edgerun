@@ -1,11 +1,11 @@
 //! TLS 1.3 server handshake message builders.
 
-use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, signature::SignerMut};
+use edgerun_crypto::p256::ecdsa::{signature::SignerMut, Signature, SigningKey};
 
-use edgerun_crypto::CipherSuite;
 use crate::cipher::NamedGroup;
-use crate::prf::{Hasher, hmac_sha256, hmac_sha384};
+use crate::prf::{hmac_sha256, hmac_sha384, Hasher};
 use crate::Result;
+use edgerun_crypto::CipherSuite;
 
 /// Build a ServerHello handshake message (RFC 8446 §4.1.3).
 pub fn build_server_hello(
@@ -215,7 +215,7 @@ mod tests {
     use crate::certificate_gen::generate_self_signed;
     use crate::handshake::ClientHelloBuilder;
     use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
-    use crate::prf::{Tls13KeySchedule, server_write_keys};
+    use crate::prf::{server_write_keys, Tls13KeySchedule};
     use crate::record::RecordCipher;
 
     #[test]
@@ -260,7 +260,8 @@ mod tests {
         let cert = generate_self_signed(&["localhost"]).unwrap();
         let transcript = vec![0x01u8; 64];
 
-        let cv_bytes = build_certificate_verify(&transcript, &*cert.signing_key, &Hasher::Sha256).unwrap();
+        let cv_bytes =
+            build_certificate_verify(&transcript, &*cert.signing_key, &Hasher::Sha256).unwrap();
         assert_eq!(cv_bytes[0], 15);
         assert!(cv_bytes.len() > 4);
         assert_eq!(&cv_bytes[4..6], &[0x04, 0x03]);
@@ -280,14 +281,17 @@ mod tests {
         let transcript_hash = vec![0x55u8; 32];
         let hasher = Hasher::Sha256;
 
-        let verify_data = compute_server_finished_verify_data(&server_hs_secret, &transcript_hash, &hasher);
+        let verify_data =
+            compute_server_finished_verify_data(&server_hs_secret, &transcript_hash, &hasher);
         assert_eq!(verify_data.len(), 32);
 
-        let verify_data2 = compute_server_finished_verify_data(&server_hs_secret, &transcript_hash, &hasher);
+        let verify_data2 =
+            compute_server_finished_verify_data(&server_hs_secret, &transcript_hash, &hasher);
         assert_eq!(verify_data, verify_data2);
 
         let different_secret = vec![0xFFu8; 32];
-        let verify_data3 = compute_server_finished_verify_data(&different_secret, &transcript_hash, &hasher);
+        let verify_data3 =
+            compute_server_finished_verify_data(&different_secret, &transcript_hash, &hasher);
         assert_ne!(verify_data, verify_data3);
     }
 
@@ -325,12 +329,14 @@ mod tests {
         let server_hs_secret = ks.server_handshake_traffic_secret(&ch_hash);
         let server_write = server_write_keys(&server_hs_secret, cipher_suite.key_len(), 12, &hash);
 
-        let mut write_cipher = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
+        let mut write_cipher =
+            RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
 
         let ee_bytes = build_encrypted_extensions(None);
         let ee_encrypted = write_cipher.encrypt(22, &ee_bytes);
 
-        let mut read_cipher_ee = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
+        let mut read_cipher_ee =
+            RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
         let (ct, plaintext) = read_cipher_ee.decrypt(&ee_encrypted).unwrap();
         assert_eq!(ct, 22);
         assert_eq!(plaintext, ee_bytes);
@@ -338,7 +344,8 @@ mod tests {
         let cert_msg = build_certificate_message(&cert.cert_der);
         let cert_encrypted = write_cipher.encrypt(22, &cert_msg);
 
-        let mut read_cipher_cert = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
+        let mut read_cipher_cert =
+            RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
         let _ = read_cipher_cert.decrypt(&ee_encrypted).unwrap();
         let (_ct2, cert_decrypted) = read_cipher_cert.decrypt(&cert_encrypted).unwrap();
         assert_eq!(cert_decrypted, cert_msg);
@@ -347,18 +354,21 @@ mod tests {
         let cv_bytes = build_certificate_verify(&transcript, &*cert.signing_key, &hash).unwrap();
         let cv_encrypted = write_cipher.encrypt(22, &cv_bytes);
 
-        let mut read_cipher_cv = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
+        let mut read_cipher_cv =
+            RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
         let _ = read_cipher_cv.decrypt(&ee_encrypted).unwrap();
         let _ = read_cipher_cv.decrypt(&cert_encrypted).unwrap();
         let (_ct3, cv_decrypted) = read_cipher_cv.decrypt(&cv_encrypted).unwrap();
         assert_eq!(cv_decrypted, cv_bytes);
 
         let transcript_hash = hash.hash(&transcript);
-        let verify_data = compute_server_finished_verify_data(&server_hs_secret, &transcript_hash, &hash);
+        let verify_data =
+            compute_server_finished_verify_data(&server_hs_secret, &transcript_hash, &hash);
         let finished_msg = build_finished_message(&verify_data);
         let finished_encrypted = write_cipher.encrypt(22, &finished_msg);
 
-        let mut read_cipher_fin = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
+        let mut read_cipher_fin =
+            RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
         let _ = read_cipher_fin.decrypt(&ee_encrypted).unwrap();
         let _ = read_cipher_fin.decrypt(&cert_encrypted).unwrap();
         let _ = read_cipher_fin.decrypt(&cv_encrypted).unwrap();

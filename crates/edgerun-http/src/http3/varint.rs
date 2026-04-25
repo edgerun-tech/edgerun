@@ -96,7 +96,11 @@ pub fn qpack_encode_varint(value: u64, prefix_bits: u8, output: &mut Vec<u8>) {
 /// Decode an integer using the QPACK/HPACK generic varint scheme.
 ///
 /// Returns `(value, bytes_consumed)`.
-pub fn qpack_decode_varint(data: &[u8], start: usize, prefix_bits: u8) -> Result<(u64, usize), String> {
+pub fn qpack_decode_varint(
+    data: &[u8],
+    start: usize,
+    prefix_bits: u8,
+) -> Result<(u64, usize), String> {
     if start >= data.len() {
         return Err("Not enough data".to_string());
     }

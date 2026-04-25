@@ -7,19 +7,21 @@
 //! - **PXE boot support** — option 66/67/93/94/97 for network boot
 //! - **Multiple scopes/subnets** — serve multiple subnets from one server
 
-pub mod message;
 pub mod client;
-pub mod server;
-pub mod options;
 pub mod lease;
+pub mod message;
+pub mod options;
 pub mod scope;
+pub mod server;
 
-pub use message::{DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, NetworkConfig, PxeClientArch};
-pub use message::{
-    OPT_TFTP_SERVER_NAME, OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_NDI,
-    OPT_CLIENT_MACHINE_ID, OPT_VENDOR_ENCAP, OPT_HOST_NAME,
-};
 pub use client::DhcpClient;
-pub use server::DhcpServer;
 pub use lease::Lease;
-pub use scope::{DhcpScope, DhcpMultiServer};
+pub use message::{
+    DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, NetworkConfig, PxeClientArch,
+};
+pub use message::{
+    OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_MACHINE_ID, OPT_CLIENT_NDI, OPT_HOST_NAME,
+    OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP,
+};
+pub use scope::{DhcpMultiServer, DhcpScope};
+pub use server::DhcpServer;

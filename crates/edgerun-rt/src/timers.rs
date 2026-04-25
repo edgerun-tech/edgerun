@@ -148,7 +148,10 @@ impl Interval {
         self._mb = b;
     }
     pub fn tick(&mut self) -> IntervalTick<'_> {
-        IntervalTick { interval: self, registered: false }
+        IntervalTick {
+            interval: self,
+            registered: false,
+        }
     }
 }
 
@@ -191,10 +194,8 @@ pub fn ctrl_c() -> CtrlC {
         GOT_SIGINT.store(true, Ordering::Release);
     }
     static INIT: std::sync::Once = std::sync::Once::new();
-    INIT.call_once(|| {
-        unsafe {
-            libc::signal(libc::SIGINT, handler as *const () as libc::sighandler_t);
-        }
+    INIT.call_once(|| unsafe {
+        libc::signal(libc::SIGINT, handler as *const () as libc::sighandler_t);
     });
     CtrlC { deadline: None }
 }
@@ -219,7 +220,9 @@ impl Future for CtrlC {
         match this.deadline {
             Some(d) if now >= d => {
                 let new_deadline = now + Duration::from_millis(100);
-                current_rt().reactor.register_timer(new_deadline, cx.waker().clone());
+                current_rt()
+                    .reactor
+                    .register_timer(new_deadline, cx.waker().clone());
                 this.deadline = Some(new_deadline);
             }
             None => {

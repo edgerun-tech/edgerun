@@ -74,9 +74,8 @@ impl<T: AsRef<[u8]>> Cursor<T> {
             }
             SeekFrom::Current(n) => {
                 let new = self.pos as i64 + n;
-                new.try_into().map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "seek before start")
-                })?
+                new.try_into()
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "seek before start"))?
             }
         };
         self.pos = new_pos.min(len);

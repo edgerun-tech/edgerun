@@ -445,8 +445,8 @@ impl VirtualFileSystem {
     /// Search for pattern in text files (parallel, in-memory).
     /// Binary files are automatically skipped.
     pub fn grep(&self, pattern: &str) -> Vec<GrepMatch> {
-        use rayon::prelude::*;
         use edgerun_regex::Regex;
+        use rayon::prelude::*;
 
         let regex = match Regex::new(pattern) {
             Some(r) => r,

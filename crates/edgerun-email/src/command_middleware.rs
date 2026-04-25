@@ -52,11 +52,11 @@
 //!     .build();
 //! ```
 
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
 use std::sync::Arc;
-use std::any::{Any, TypeId};
 
 use edgerun_rt::Mutex;
 
@@ -181,7 +181,14 @@ pub enum ControlFlow<Resp> {
 /// Calling `.run()` passes the command downstream exactly once.
 /// The handle is consumed by `run()`, preventing double-handling.
 pub struct NextCommand<Cmd, Resp> {
-    inner: Box<dyn FnOnce(Cmd, SessionExtensions) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>> + Send>,
+    inner: Box<
+        dyn FnOnce(
+                Cmd,
+                SessionExtensions,
+            )
+                -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>>
+            + Send,
+    >,
 }
 
 use std::pin::Pin;
@@ -189,9 +196,17 @@ use std::pin::Pin;
 impl<Cmd, Resp> NextCommand<Cmd, Resp> {
     pub fn new<F>(inner: F) -> Self
     where
-        F: FnOnce(Cmd, SessionExtensions) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>> + Send + 'static,
+        F: FnOnce(
+                Cmd,
+                SessionExtensions,
+            )
+                -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>>
+            + Send
+            + 'static,
     {
-        Self { inner: Box::new(inner) }
+        Self {
+            inner: Box::new(inner),
+        }
     }
 
     /// Pass the command to the next middleware or handler.
@@ -249,15 +264,11 @@ where
 
         let next = NextCommand::new(move |cmd, sess| {
             let inner = Arc::clone(&inner);
-            Box::pin(async move {
-                inner.handle(cmd, sess).await
-            })
+            Box::pin(async move { inner.handle(cmd, sess).await })
         });
 
         // Clone the future to extend its lifetime past this function
-        Box::pin(async move {
-            mw.handle(cmd, session_clone, next).await
-        })
+        Box::pin(async move { mw.handle(cmd, session_clone, next).await })
     }
 }
 
@@ -333,8 +344,14 @@ pub struct FnCommandMiddleware<Cmd, Resp, F> {
 /// Create command middleware from a closure.
 pub fn command_fn<Cmd, Resp, F>(f: F) -> FnCommandMiddleware<Cmd, Resp, F>
 where
-    F: Fn(Cmd, SessionExtensions, NextCommand<Cmd, Resp>) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>>
-        + Send + Sync + 'static,
+    F: Fn(
+            Cmd,
+            SessionExtensions,
+            NextCommand<Cmd, Resp>,
+        ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>>
+        + Send
+        + Sync
+        + 'static,
 {
     FnCommandMiddleware {
         f,
@@ -347,8 +364,14 @@ impl<Cmd, Resp, F> CommandMiddleware<Cmd, Resp> for FnCommandMiddleware<Cmd, Res
 where
     Cmd: Send + Sync + 'static,
     Resp: Send + Sync + 'static,
-    F: Fn(Cmd, SessionExtensions, NextCommand<Cmd, Resp>) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>>
-        + Send + Sync + 'static,
+    F: Fn(
+            Cmd,
+            SessionExtensions,
+            NextCommand<Cmd, Resp>,
+        ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<Resp>>> + Send>>
+        + Send
+        + Sync
+        + 'static,
 {
     fn handle(
         &self,

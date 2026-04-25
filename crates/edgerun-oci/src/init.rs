@@ -40,9 +40,18 @@ fn pid1_init_loop(workload_pid: libc::pid_t) -> ! {
     WORKLOAD_PID.store(workload_pid, std::sync::atomic::Ordering::SeqCst);
 
     unsafe {
-        libc::signal(libc::SIGTERM, forward_signal as *const () as libc::sighandler_t);
-        libc::signal(libc::SIGINT, forward_signal as *const () as libc::sighandler_t);
-        libc::signal(libc::SIGQUIT, forward_signal as *const () as libc::sighandler_t);
+        libc::signal(
+            libc::SIGTERM,
+            forward_signal as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGINT,
+            forward_signal as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGQUIT,
+            forward_signal as *const () as libc::sighandler_t,
+        );
         libc::signal(libc::SIGCHLD, libc::SIG_DFL);
     }
 
@@ -52,7 +61,9 @@ fn pid1_init_loop(workload_pid: libc::pid_t) -> ! {
     loop {
         let mut status: i32 = 0;
         let pid = unsafe { libc::waitpid(-1, &mut status, 0) };
-        if pid < 0 { continue; } // EINTR
+        if pid < 0 {
+            continue;
+        } // EINTR
 
         if pid == workload_pid {
             workload_exited = true;

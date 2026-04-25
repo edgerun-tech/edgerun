@@ -89,7 +89,8 @@ impl EmailBuilder {
 
     /// Set the Subject header.
     pub fn subject(mut self, subject: &str) -> Self {
-        self.headers.push(("Subject".to_string(), subject.to_string()));
+        self.headers
+            .push(("Subject".to_string(), subject.to_string()));
         self
     }
 
@@ -101,13 +102,15 @@ impl EmailBuilder {
 
     /// Set the Message-ID header (auto-generated if not set).
     pub fn message_id(mut self, id: &str) -> Self {
-        self.headers.push(("Message-ID".to_string(), id.to_string()));
+        self.headers
+            .push(("Message-ID".to_string(), id.to_string()));
         self
     }
 
     /// Set Content-Type header manually (overridden by `build()` if multipart).
     pub fn content_type(mut self, mime_type: &str) -> Self {
-        self.headers.push(("Content-Type".to_string(), mime_type.to_string()));
+        self.headers
+            .push(("Content-Type".to_string(), mime_type.to_string()));
         self
     }
 
@@ -158,7 +161,10 @@ impl EmailBuilder {
 
         // Auto-generate Message-ID if absent
         if !self.headers.iter().any(|(n, _)| n == "Message-ID") {
-            message.push_str(&format!("Message-ID: <{}@edgerun.mail>\r\n", generate_message_id()));
+            message.push_str(&format!(
+                "Message-ID: <{}@edgerun.mail>\r\n",
+                generate_message_id()
+            ));
         }
 
         // Blank line separates headers from body
@@ -166,7 +172,8 @@ impl EmailBuilder {
 
         if !self.parts.is_empty() {
             // ── Multipart message ─────────────────────────────────────────
-            let boundary = self.headers
+            let boundary = self
+                .headers
                 .iter()
                 .find(|(n, _)| n == "X-Boundary")
                 .map(|(_, v)| v.clone())
@@ -177,16 +184,25 @@ impl EmailBuilder {
                 && self.parts[1].content_type.starts_with("text/html")
             {
                 // multipart/alternative (plain + HTML alternatives)
-                message.push_str(&format!("Content-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n", boundary));
+                message.push_str(&format!(
+                    "Content-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n",
+                    boundary
+                ));
             } else {
                 // multipart/mixed (body + attachments)
-                message.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\n", boundary));
+                message.push_str(&format!(
+                    "Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\n",
+                    boundary
+                ));
             }
 
             for part in &self.parts {
                 message.push_str(&format!("--{}\r\n", boundary));
                 message.push_str(&format!("Content-Type: {}\r\n", part.content_type));
-                message.push_str(&format!("Content-Transfer-Encoding: {}\r\n", part.transfer_encoding));
+                message.push_str(&format!(
+                    "Content-Transfer-Encoding: {}\r\n",
+                    part.transfer_encoding
+                ));
                 if let Some(ref disp) = part.disposition {
                     message.push_str(&format!("Content-Disposition: {}\r\n", disp));
                 }
@@ -239,7 +255,11 @@ fn generate_boundary() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    format!("----=_NextPart_{:x}_{:x}", ts, ts.wrapping_mul(0x5DEECE66D) & 0xFFFF_FFFF)
+    format!(
+        "----=_NextPart_{:x}_{:x}",
+        ts,
+        ts.wrapping_mul(0x5DEECE66D) & 0xFFFF_FFFF
+    )
 }
 
 fn generate_message_id() -> String {
@@ -255,7 +275,9 @@ fn generate_message_id() -> String {
 fn generate_rfc2822_date() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let dur = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    let dur = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
     let secs = dur.as_secs();
 
     let days = secs / 86400;
@@ -280,12 +302,15 @@ fn generate_rfc2822_date() -> String {
     let secs = time_of_day % 60;
     let dow = ((days + 3) % 7) as usize;
 
-    const MONTHS: &[&str] = &["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const MONTHS: &[&str] = &[
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
     const DAYS: &[&str] = &["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-    format!("{}, {:02} {} {:04} {:02}:{:02}:{:02} +0000",
-        DAYS[dow], day, MONTHS[month], year, hours, mins, secs)
+    format!(
+        "{}, {:02} {} {:04} {:02}:{:02}:{:02} +0000",
+        DAYS[dow], day, MONTHS[month], year, hours, mins, secs
+    )
 }
 
 // ===========================================================================
@@ -333,7 +358,11 @@ mod tests {
             .to("recipient@example.com")
             .subject("With attachment")
             .part(MimePart::text("See attached."))
-            .part(MimePart::attachment("report.pdf", "application/pdf", b"%PDF-1.4"))
+            .part(MimePart::attachment(
+                "report.pdf",
+                "application/pdf",
+                b"%PDF-1.4",
+            ))
             .build();
         let text = String::from_utf8_lossy(&msg);
         assert!(text.contains("multipart/mixed"));

@@ -8,17 +8,15 @@
 use std::ffi::CString;
 use std::fs;
 use std::io;
+use std::os::raw::c_int;
 use std::os::raw::c_ulong;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
-use std::os::raw::c_int;
 use std::path::Path;
 
 use crate::json::{OciLinuxDevice, OciMount, OciRoot};
 use crate::syscalls::{
-    chown, do_mount, do_pivot_root, do_umount2, makedev, mknod,
-    ms, MNT_DETACH, S_IFCHR,
-    mount_attr, MountAttr, do_mount_setattr,
-    open_tree, move_mount, do_open_tree, do_move_mount,
+    chown, do_mount, do_mount_setattr, do_move_mount, do_open_tree, do_pivot_root, do_umount2,
+    makedev, mknod, mount_attr, move_mount, ms, open_tree, MountAttr, MNT_DETACH, S_IFCHR,
 };
 
 // ===========================================================================
@@ -30,18 +28,18 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
     if let Some(opts) = opts {
         for opt in opts {
             match opt.as_str() {
-                "ro"           => flags |= ms::RDONLY,
-                "nosuid"       => flags |= ms::NOSUID,
-                "nodev"        => flags |= ms::NODEV,
-                "noexec"       => flags |= ms::NOEXEC,
-                "strictatime"  => flags |= ms::STRICTATIME,
-                "shared"       => flags |= ms::SHARED,
-                "slave"        => flags |= ms::SLAVE,
-                "private"      => flags |= ms::PRIVATE,
-                "unbindable"   => flags |= ms::UNBINDABLE,
+                "ro" => flags |= ms::RDONLY,
+                "nosuid" => flags |= ms::NOSUID,
+                "nodev" => flags |= ms::NODEV,
+                "noexec" => flags |= ms::NOEXEC,
+                "strictatime" => flags |= ms::STRICTATIME,
+                "shared" => flags |= ms::SHARED,
+                "slave" => flags |= ms::SLAVE,
+                "private" => flags |= ms::PRIVATE,
+                "unbindable" => flags |= ms::UNBINDABLE,
                 // OCI 1.2.0: idmap/ridmap mount options (handled via setup_idmapped_mount below)
-                "idmap"        => {}  // Handled by uidMappings — no flag, uses new mount API
-                "ridmap"       => {}  // Recursive idmap — same handling
+                "idmap" => {}  // Handled by uidMappings — no flag, uses new mount API
+                "ridmap" => {} // Recursive idmap — same handling
                 _ => {}
             }
         }
@@ -71,7 +69,9 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
                         ));
                     }
                 }
-                _ => { depth += 1; }
+                _ => {
+                    depth += 1;
+                }
             }
         }
         // Relative paths are resolved against rootfs root: "./foo" -> "/foo"
@@ -128,7 +128,11 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
     let flags = mount_flags_from_opts(mount.options.as_deref());
 
     // Build data string: options + optional SELinux label
-    let mut data = mount.options.as_ref().map(|o| o.join(",")).unwrap_or_default();
+    let mut data = mount
+        .options
+        .as_ref()
+        .map(|o| o.join(","))
+        .unwrap_or_default();
     if let Some(label) = mount_label {
         if !data.is_empty() {
             data.push(',');
@@ -146,7 +150,13 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
             let _ = fs::File::create(dest);
         }
         do_mount(source, &mount.destination, "", flags | ms::BIND, &data)?;
-        do_mount(source, &mount.destination, "", flags | ms::BIND | ms::REMOUNT, &data)?;
+        do_mount(
+            source,
+            &mount.destination,
+            "",
+            flags | ms::BIND | ms::REMOUNT,
+            &data,
+        )?;
     } else {
         fs::create_dir_all(dest)?;
         do_mount(source, &mount.destination, fstype, flags, &data)?;
@@ -162,8 +172,12 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
     // OCI 1.1 mount.recursive — apply mount flags recursively to sub-mounts
     // via mount_setattr(2) with MOUNT_ATTR_REC.
     if mount.recursive == Some(true) {
-        let attr_set = mount_attr::REC | (flags & (mount_attr::RDONLY
-            | mount_attr::NOSUID | mount_attr::NODEV | mount_attr::NOEXEC));
+        let attr_set = mount_attr::REC
+            | (flags
+                & (mount_attr::RDONLY
+                    | mount_attr::NOSUID
+                    | mount_attr::NODEV
+                    | mount_attr::NOEXEC));
         let attr = MountAttr {
             attr_set,
             attr_clr: 0,
@@ -225,16 +239,20 @@ fn setup_idmapped_mount(
     gid_mappings: Option<&[crate::json::OciIdMapping]>,
 ) -> io::Result<()> {
     // Build uid_map string: "container_id host_id size\n" per entry
-    let uid_map_str: String = uid_mappings.iter()
+    let uid_map_str: String = uid_mappings
+        .iter()
         .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
         .collect();
 
     // Build gid_map string (same format)
-    let gid_map_str: String = gid_mappings.map(|mappings| {
-        mappings.iter()
-            .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
-            .collect()
-    }).unwrap_or_default();
+    let gid_map_str: String = gid_mappings
+        .map(|mappings| {
+            mappings
+                .iter()
+                .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
+                .collect()
+        })
+        .unwrap_or_default();
 
     // Two pipes for bidirectional synchronization:
     // child_ready: child writes "R" → parent reads
@@ -244,10 +262,18 @@ fn setup_idmapped_mount(
     if unsafe { libc::pipe(child_ready.as_mut_ptr()) } != 0
         || unsafe { libc::pipe(parent_done.as_mut_ptr()) } != 0
     {
-        if child_ready[0] >= 0 { unsafe { libc::close(child_ready[0]) }; }
-        if child_ready[1] >= 0 { unsafe { libc::close(child_ready[1]) }; }
-        if parent_done[0] >= 0 { unsafe { libc::close(parent_done[0]) }; }
-        if parent_done[1] >= 0 { unsafe { libc::close(parent_done[1]) }; }
+        if child_ready[0] >= 0 {
+            unsafe { libc::close(child_ready[0]) };
+        }
+        if child_ready[1] >= 0 {
+            unsafe { libc::close(child_ready[1]) };
+        }
+        if parent_done[0] >= 0 {
+            unsafe { libc::close(parent_done[0]) };
+        }
+        if parent_done[1] >= 0 {
+            unsafe { libc::close(parent_done[1]) };
+        }
         return Err(io::Error::last_os_error());
     }
 
@@ -268,13 +294,15 @@ fn setup_idmapped_mount(
 
         // Create new user namespace
         if unsafe { libc::unshare(libc::CLONE_NEWUSER) } != 0 {
-            let _ = unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
+            let _ =
+                unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
             unsafe { libc::_exit(1) };
         }
 
         // Write uid_map
         if std::fs::write("/proc/self/uid_map", &uid_map_str).is_err() {
-            let _ = unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
+            let _ =
+                unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
             unsafe { libc::_exit(1) };
         }
 
@@ -283,7 +311,8 @@ fn setup_idmapped_mount(
 
         // Write gid_map (only if non-empty)
         if !gid_map_str.is_empty() && std::fs::write("/proc/self/gid_map", &gid_map_str).is_err() {
-            let _ = unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
+            let _ =
+                unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
             unsafe { libc::_exit(1) };
         }
 
@@ -325,7 +354,10 @@ fn setup_idmapped_mount(
         Ok(c) => c,
         Err(_) => {
             unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid userns path"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid userns path",
+            ));
         }
     };
     let userns_fd = unsafe { libc::open(userns_cstr.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
@@ -424,7 +456,7 @@ fn create_spec_device(device: &OciLinuxDevice) -> io::Result<()> {
         "c" | "char" => S_IFCHR,
         "b" | "block" => 0o060000, // S_IFBLK
         "p" | "fifo" => 0o010000,  // S_IFIFO
-        _ => return Ok(()), // Skip unknown types
+        _ => return Ok(()),        // Skip unknown types
     };
 
     let mode = device.file_mode.unwrap_or(0o660);
@@ -617,15 +649,12 @@ pub fn setup_rootfs(
 
     // Bind mount rootfs to make it a mount point
     let rootfs_cstr = rootfs.to_str().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "rootfs path is not valid UTF-8")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rootfs path is not valid UTF-8",
+        )
     })?;
-    do_mount(
-        rootfs_cstr,
-        rootfs_cstr,
-        "bind",
-        ms::BIND | ms::REC,
-        "",
-    )?;
+    do_mount(rootfs_cstr, rootfs_cstr, "bind", ms::BIND | ms::REC, "")?;
 
     // Make / private BEFORE pivot_root so mounts don't propagate to host
     // This can fail on some systems (EBUSY), so we make it best-effort
@@ -654,15 +683,33 @@ pub fn setup_rootfs(
 
     // Mount proc
     fs::create_dir_all("/proc")?;
-    do_mount("proc", "/proc", "proc", ms::NOSUID | ms::NODEV | ms::NOEXEC | ms::REC, "")?;
+    do_mount(
+        "proc",
+        "/proc",
+        "proc",
+        ms::NOSUID | ms::NODEV | ms::NOEXEC | ms::REC,
+        "",
+    )?;
 
     // Mount sys
     fs::create_dir_all("/sys")?;
-    do_mount("sysfs", "/sys", "sysfs", ms::NOSUID | ms::NODEV | ms::NOEXEC | ms::REC, "")?;
+    do_mount(
+        "sysfs",
+        "/sys",
+        "sysfs",
+        ms::NOSUID | ms::NODEV | ms::NOEXEC | ms::REC,
+        "",
+    )?;
 
     // Mount dev (tmpfs)
     fs::create_dir_all("/dev")?;
-    do_mount("tmpfs", "/dev", "tmpfs", ms::NOSUID | ms::STRICTATIME, "mode=755,size=65536k")?;
+    do_mount(
+        "tmpfs",
+        "/dev",
+        "tmpfs",
+        ms::NOSUID | ms::STRICTATIME,
+        "mode=755,size=65536k",
+    )?;
 
     // Essential device nodes
     create_essential_devices();
@@ -676,14 +723,18 @@ pub fn setup_rootfs(
 
     // Mount devpts
     do_mount(
-        "devpts", "/dev/pts", "devpts",
+        "devpts",
+        "/dev/pts",
+        "devpts",
         ms::NOSUID | ms::NOEXEC,
         "newinstance,ptmxmode=0666,mode=0620",
     )?;
 
     // Mount tmpfs on /dev/shm
     do_mount(
-        "tmpfs", "/dev/shm", "tmpfs",
+        "tmpfs",
+        "/dev/shm",
+        "tmpfs",
         ms::NOSUID | ms::NODEV,
         "mode=1777,size=65536k",
     )?;
@@ -705,15 +756,11 @@ pub fn setup_rootfs(
         }
     }
 
-
     // Masked paths — security-sensitive paths masked with /dev/null
     if let Some(paths) = masked {
         for p in paths {
-            do_mount("/dev/null", p, "", ms::BIND, "").map_err(|e| {
-                io::Error::other(
-                    format!("failed to mask path {}: {}", p, e),
-                )
-            })?;
+            do_mount("/dev/null", p, "", ms::BIND, "")
+                .map_err(|e| io::Error::other(format!("failed to mask path {}: {}", p, e)))?;
         }
     }
 
@@ -721,18 +768,17 @@ pub fn setup_rootfs(
     if let Some(paths) = readonly {
         for p in paths {
             do_mount(p, p, "", ms::BIND | ms::REC, "").map_err(|e| {
-                io::Error::other(
-                    format!("failed to bind readonly path {}: {}", p, e),
-                )
+                io::Error::other(format!("failed to bind readonly path {}: {}", p, e))
             })?;
             do_mount(
-                p, p, "",
+                p,
+                p,
+                "",
                 ms::BIND | ms::REMOUNT | ms::RDONLY | ms::NOSUID | ms::NODEV | ms::NOEXEC,
                 "",
-            ).map_err(|e| {
-                io::Error::other(
-                    format!("failed to remount readonly path {}: {}", p, e),
-                )
+            )
+            .map_err(|e| {
+                io::Error::other(format!("failed to remount readonly path {}: {}", p, e))
             })?;
         }
     }
@@ -756,7 +802,10 @@ pub fn apply_sysctl(sysctl: Option<&std::collections::HashMap<String, String>>) 
         let proc_path = format!("/proc/sys/{}", key.replace('.', "/"));
         if let Err(e) = fs::write(&proc_path, value) {
             // Log but don't fail — some sysctls may not be available in all environments
-            let _ = std::fs::write("/dev/kmsg", format!("edgerun: sysctl {:?} failed: {}", key, e));
+            let _ = std::fs::write(
+                "/dev/kmsg",
+                format!("edgerun: sysctl {:?} failed: {}", key, e),
+            );
         }
     }
 
@@ -775,11 +824,11 @@ pub fn set_rootfs_propagation(mode: Option<&str>) -> io::Result<()> {
     let Some(mode) = mode else { return Ok(()) };
 
     let flags = match mode {
-        "shared"     => ms::REC | 0x100,   // MS_SHARED = 0x100
-        "slave"      => ms::REC | 0x200,   // MS_SLAVE = 0x200
-        "unbindable" => ms::REC | 0x400,   // MS_UNBINDABLE = 0x400
-        "private"    => ms::REC | ms::PRIVATE, // MS_PRIVATE = 1<<18
-        _ => return Ok(()), // Unknown mode — use default
+        "shared" => ms::REC | 0x100,        // MS_SHARED = 0x100
+        "slave" => ms::REC | 0x200,         // MS_SLAVE = 0x200
+        "unbindable" => ms::REC | 0x400,    // MS_UNBINDABLE = 0x400
+        "private" => ms::REC | ms::PRIVATE, // MS_PRIVATE = 1<<18
+        _ => return Ok(()),                 // Unknown mode — use default
     };
 
     do_mount("", "/", "", flags, "")

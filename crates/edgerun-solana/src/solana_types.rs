@@ -30,7 +30,9 @@ impl Default for Pubkey {
 impl std::str::FromStr for Pubkey {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let decoded = bs58::decode(s).into_vec().map_err(|_| "bs58 decode failed")?;
+        let decoded = bs58::decode(s)
+            .into_vec()
+            .map_err(|_| "bs58 decode failed")?;
         if decoded.len() != 32 {
             eprintln!("DEBUG: decoded {} bytes from '{}'", decoded.len(), s);
             return Err("decoded key must be 32 bytes");
@@ -76,8 +78,6 @@ impl AccountMeta {
         matches!(self, Self::Signer { .. })
     }
 }
-
-
 
 #[derive(Debug, Clone)]
 pub struct Instruction {

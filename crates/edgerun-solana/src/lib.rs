@@ -1,22 +1,22 @@
 //! Edgerun Solana Client
-//! 
+//!
 //! Client library for interacting with Edgerun's on-chain programs:
 //! - ProviderRegistry: provider registration, collateral, reputation
 //! - DeploymentContract: deployment lifecycle, per-second billing
 //!
 //! Uses pure Solana SDK (no Anchor).
 
-pub mod provider_registry;
 pub mod deployment;
 pub mod error;
-pub mod types;
-pub mod solana_types;
+pub mod provider_registry;
 pub mod signers;
+pub mod solana_types;
+pub mod types;
 
+pub use deployment::DeploymentClient;
 pub use error::SolanaError;
 pub use provider_registry::ProviderClient;
-pub use deployment::DeploymentClient;
-pub use types::{Provider, Deployment, ProviderStatus, DeploymentStatus};
+pub use types::{Deployment, DeploymentStatus, Provider, ProviderStatus};
 
 use crate::solana_types::Pubkey;
 

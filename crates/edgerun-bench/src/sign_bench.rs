@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 // ===========================================================================
 
 fn benchmark_software_sign(ops_target: u64) -> (u64, Duration) {
-    use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, signature::hazmat::PrehashSigner};
+    use edgerun_crypto::p256::ecdsa::{signature::hazmat::PrehashSigner, Signature, SigningKey};
 
     // Generate a fresh key
     let mut key_bytes = [0u8; 32];
@@ -39,10 +39,8 @@ fn benchmark_software_sign(ops_target: u64) -> (u64, Duration) {
 // ===========================================================================
 
 fn benchmark_tpm_sign(ops_target: u64) -> Option<(u64, Duration)> {
-    use edgerun_tpm::{
-        LinuxTpmSigningKey, TpmHandle,
-    };
-    use edgerun_hardware_signing::{TpmHardwareKeyAdapter, HardwareSigningKey};
+    use edgerun_hardware_signing::{HardwareSigningKey, TpmHardwareKeyAdapter};
+    use edgerun_tpm::{LinuxTpmSigningKey, TpmHandle};
 
     // First, try to find an existing persistent key handle
     let handle = find_existing_tpm_key().or_else(provision_tpm_key);
@@ -69,17 +67,15 @@ fn benchmark_tpm_sign(ops_target: u64) -> Option<(u64, Duration)> {
 }
 
 fn find_existing_tpm_key() -> Option<u32> {
-    let mut device = edgerun_tpm::TpmDevice::new(
-        edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"),
-    );
+    let mut device = edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
     // Scan persistent handles 0x8100_0001..0x8100_00FF
-    (0x8100_0001..=0x8100_00FF).step_by(1).find(|&h| device.read_public(edgerun_tpm::TpmHandle(h)).is_ok())
+    (0x8100_0001..=0x8100_00FF)
+        .step_by(1)
+        .find(|&h| device.read_public(edgerun_tpm::TpmHandle(h)).is_ok())
 }
 
 fn provision_tpm_key() -> Option<u32> {
-    let mut device = edgerun_tpm::TpmDevice::new(
-        edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"),
-    );
+    let mut device = edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
     // Find a free handle
     let mut free_handle = None;
     for h in (0x8100_0001..=0x8100_00FF).step_by(1) {
@@ -92,7 +88,10 @@ fn provision_tpm_key() -> Option<u32> {
 
     // Create the key
     let provisioned = device.create_ecdsa_p256_signing_key(handle).ok()?;
-    eprintln!("  [TPM] Provisioned ECDSA P-256 key at handle 0x{:08X}", provisioned.persistent_handle);
+    eprintln!(
+        "  [TPM] Provisioned ECDSA P-256 key at handle 0x{:08X}",
+        provisioned.persistent_handle
+    );
     Some(provisioned.persistent_handle)
 }
 
@@ -143,7 +142,11 @@ pub fn run_sign_comparison() {
     } else {
         0.0
     };
-    println!("    → {} ops/s ({:.2} µs per sign)", sw_ops, sw_per_op / 1000.0);
+    println!(
+        "    → {} ops/s ({:.2} µs per sign)",
+        sw_ops,
+        sw_per_op / 1000.0
+    );
 
     // SHA-256 only
     println!("  SHA-256 only (CPU) ...");
@@ -174,18 +177,34 @@ pub fn run_sign_comparison() {
             } else {
                 0.0
             };
-            println!("    → {} ops/s ({:.2} µs per sign)", tpm_ops, tpm_per_op / 1000.0);
+            println!(
+                "    → {} ops/s ({:.2} µs per sign)",
+                tpm_ops,
+                tpm_per_op / 1000.0
+            );
 
             // Comparison table
             println!();
             println!("  ┌──────────────────┬───────────┬─────────────┬─────────────┐");
             println!("  │ Backend          │ ops/s     │ µs/sign     │ vs Software │");
             println!("  ├──────────────────┼───────────┼─────────────┼─────────────┤");
-            println!("  │ Software P-256   │ {:>9} │ {:>9.2} │      1.00x  │", sw_ops, sw_per_op / 1000.0);
-            println!("  │ SHA-256 (CPU)    │ {:>9} │ {:>5.2} ns  │    {:.3}x  │",
-                hash_ops, hash_per_op, hash_per_op / (sw_per_op));
-            println!("  │ TPM 2.0          │ {:>9} │ {:>9.2} │   {:>6.2}x  │",
-                tpm_ops, tpm_per_op / 1000.0, tpm_per_op / sw_per_op);
+            println!(
+                "  │ Software P-256   │ {:>9} │ {:>9.2} │      1.00x  │",
+                sw_ops,
+                sw_per_op / 1000.0
+            );
+            println!(
+                "  │ SHA-256 (CPU)    │ {:>9} │ {:>5.2} ns  │    {:.3}x  │",
+                hash_ops,
+                hash_per_op,
+                hash_per_op / (sw_per_op)
+            );
+            println!(
+                "  │ TPM 2.0          │ {:>9} │ {:>9.2} │   {:>6.2}x  │",
+                tpm_ops,
+                tpm_per_op / 1000.0,
+                tpm_per_op / sw_per_op
+            );
             println!("  └──────────────────┴───────────┴─────────────┴─────────────┘");
         }
         None => {

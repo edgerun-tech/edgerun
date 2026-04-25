@@ -8,11 +8,11 @@
 //! - Tasks are re-enqueued on abort so the worker sees the flag
 //! - Single `JoinInner` pattern shared by spawn and spawn_blocking
 
+use crate::sync::{Condvar, Mutex};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll};
 use std::thread::JoinHandle as StdJoinHandle;
 
@@ -152,7 +152,9 @@ impl<T> Future for JoinHandle<T> {
 
 impl<T> Clone for JoinHandle<T> {
     fn clone(&self) -> Self {
-        Self { inner: Arc::clone(&self.inner) }
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
     }
 }
 

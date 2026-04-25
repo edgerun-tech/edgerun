@@ -1,8 +1,8 @@
 // Debug mpsc with #[test] harness (standard).
-use edgerun_rt::{Runtime, mpsc};
+use edgerun_rt::{mpsc, Runtime};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
 fn mpsc_debug_single_worker() {
@@ -41,10 +41,14 @@ fn mpsc_debug_single_worker() {
                 _ = async { edgerun_rt::sleep(Duration::from_secs(5)).await; None } => None,
             };
             match got {
-                Some(_) => { received += 1; }
+                Some(_) => {
+                    received += 1;
+                }
                 None => break,
             }
-            if received >= expected { break; }
+            if received >= expected {
+                break;
+            }
         }
 
         eprintln!("received={} sent={}", received, sent.load(Ordering::SeqCst));

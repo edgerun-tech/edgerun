@@ -57,7 +57,10 @@ impl edgerun_remote_capability::RemoteCapabilityTransport for MeshCapabilityTran
         // The daemon will drain this queue, encrypt through the session manager,
         // sign with hardware, and transmit.
         let payload = envelope.encode_to_vec();
-        self.outbound.lock().expect("outbound queue poisoned").push_back((self.remote_id, payload));
+        self.outbound
+            .lock()
+            .expect("outbound queue poisoned")
+            .push_back((self.remote_id, payload));
         Ok(())
     }
 

@@ -86,7 +86,10 @@ pub struct TftpServer {
 
 impl TftpServer {
     /// Create a new TFTP server.
-    pub fn new(config: TftpServerConfig, provider: impl FileProvider + 'static) -> Result<Self, io::Error> {
+    pub fn new(
+        config: TftpServerConfig,
+        provider: impl FileProvider + 'static,
+    ) -> Result<Self, io::Error> {
         let socket = UdpSocket::bind(&config.bind_addr)?;
         socket.set_read_timeout(Some(Duration::from_millis(100)))?;
 
@@ -135,7 +138,12 @@ impl TftpServer {
         };
 
         match msg {
-            TftpMessage::RRQ { filename, mode, options, .. } => {
+            TftpMessage::RRQ {
+                filename,
+                mode,
+                options,
+                ..
+            } => {
                 if mode.to_lowercase() != "octet" {
                     let err = TftpMessage::error(
                         TftpError::IllegalOperation,
@@ -162,10 +170,7 @@ impl TftpServer {
 
             TftpMessage::DATA { .. } | TftpMessage::OACK { .. } => {
                 // Client shouldn't send these unsolicited
-                let err = TftpMessage::error(
-                    TftpError::IllegalOperation,
-                    "Unexpected message",
-                );
+                let err = TftpMessage::error(TftpError::IllegalOperation, "Unexpected message");
                 let _ = self.socket.send_to(&err.to_wire(), src);
             }
 
@@ -189,9 +194,7 @@ impl TftpServer {
     ) -> Result<(), io::Error> {
         eprintln!(
             "edgerun-tftp: RRQ '{}' from {} (blksize={})",
-            filename,
-            client_addr,
-            client_options.blksize
+            filename, client_addr, client_options.blksize
         );
 
         // Check if file exists
@@ -241,8 +244,10 @@ impl TftpServer {
             };
             let wire = oack.to_wire();
             let _ = self.socket.send_to(&wire, client_addr);
-            eprintln!("edgerun-tftp: OACK sent to {} (blksize={}, tsize={})",
-                client_addr, negotiated.blksize, total_size);
+            eprintln!(
+                "edgerun-tftp: OACK sent to {} (blksize={}, tsize={})",
+                client_addr, negotiated.blksize, total_size
+            );
         } else {
             // No options to negotiate, start sending data
             self.send_next_block(&client_addr)?;
@@ -253,7 +258,8 @@ impl TftpServer {
 
     fn handle_ack(&mut self, client_addr: SocketAddr, block: u16) -> Result<(), io::Error> {
         // Find the transfer for this client
-        let key = self.transfers
+        let key = self
+            .transfers
             .keys()
             .find(|(addr, _)| *addr == client_addr)
             .cloned();
@@ -268,9 +274,7 @@ impl TftpServer {
                     // Transfer complete
                     eprintln!(
                         "edgerun-tftp: transfer complete '{}' to {} ({} bytes)",
-                        transfer.filename,
-                        client_addr,
-                        transfer.offset
+                        transfer.filename, client_addr, transfer.offset
                     );
                     self.transfers.remove(&key);
                 } else {
@@ -283,7 +287,8 @@ impl TftpServer {
     }
 
     fn send_next_block(&mut self, client_addr: &SocketAddr) -> Result<(), io::Error> {
-        let key = self.transfers
+        let key = self
+            .transfers
             .keys()
             .find(|(addr, _)| addr == client_addr)
             .cloned();
@@ -293,7 +298,10 @@ impl TftpServer {
             let blksize = transfer.blksize as usize;
 
             // Read the next block
-            match self.provider.read_block(&transfer.filename, transfer.offset, blksize) {
+            match self
+                .provider
+                .read_block(&transfer.filename, transfer.offset, blksize)
+            {
                 Some(data) => {
                     let is_last = data.len() < blksize;
                     transfer.current_block = transfer.current_block.wrapping_add(1);
@@ -307,17 +315,13 @@ impl TftpServer {
                     if is_last {
                         eprintln!(
                             "edgerun-tftp: final block {} for '{}' to {}",
-                            transfer.current_block,
-                            transfer.filename,
-                            client_addr
+                            transfer.current_block, transfer.filename, client_addr
                         );
                     }
                 }
                 None => {
-                    let err = TftpMessage::error(
-                        TftpError::NotDefined,
-                        "Failed to read file block",
-                    );
+                    let err =
+                        TftpMessage::error(TftpError::NotDefined, "Failed to read file block");
                     let _ = self.socket.send_to(&err.to_wire(), *client_addr);
                     self.transfers.remove(&key);
                 }

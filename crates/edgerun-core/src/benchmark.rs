@@ -89,8 +89,6 @@ pub fn benchmark_memory_bandwidth() -> u64 {
     let elapsed = start.elapsed();
     std::hint::black_box(checksum);
 
-    
-
     (SIZE as u64)
         .saturating_mul(1_000_000)
         .checked_div(elapsed.as_micros() as u64)
@@ -229,12 +227,17 @@ pub fn benchmark_storage_sequential() -> u64 {
     let r_start = Instant::now();
     let rd = match std::fs::read(&path) {
         Ok(d) => d,
-        Err(_) => { let _ = std::fs::remove_dir_all(&tmp_dir); return 0; }
+        Err(_) => {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return 0;
+        }
     };
     let r_us = r_start.elapsed().as_micros() as u64;
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
-    if rd.len() != SIZE { return 0; }
+    if rd.len() != SIZE {
+        return 0;
+    }
     std::hint::black_box(&rd);
 
     let total_us = w_us.saturating_add(r_us);
@@ -273,7 +276,8 @@ pub fn benchmark_storage_event_append() -> u64 {
     ));
     let events_dir = tmp_dir.join("events");
     let _ = std::fs::create_dir_all(&events_dir);
-    let log_path = events_dir.join("0000000000000000000000000000000000000000000000000000000000000001.log");
+    let log_path =
+        events_dir.join("0000000000000000000000000000000000000000000000000000000000000001.log");
 
     // Create a realistic event envelope
     let event = edgerun_proto::edgerun::v0::stream::EventEnvelope {
@@ -283,7 +287,10 @@ pub fn benchmark_storage_event_append() -> u64 {
         prev_event_hash: None,
         event_type: 1, // data event
         event_version: 1,
-        recorded_at: Some(prost_types::Timestamp { seconds: 0, nanos: 0 }),
+        recorded_at: Some(prost_types::Timestamp {
+            seconds: 0,
+            nanos: 0,
+        }),
         effective_at: None,
         payload_object: None,
         related_events: vec![],
@@ -433,7 +440,10 @@ pub fn benchmark_storage_object_ops() -> u64 {
         canonicalization_id: String::new(),
         canonical_digest: None,
         canonical_size: 1024,
-        created_at: Some(prost_types::Timestamp { seconds: 0, nanos: 0 }),
+        created_at: Some(prost_types::Timestamp {
+            seconds: 0,
+            nanos: 0,
+        }),
         producer: None,
         describes_object: None,
         object_metadata: None,
@@ -603,13 +613,27 @@ pub fn print_benchmark_results(cert: &PerformanceCertificate) {
     println!("  Storage Blob:        {} ops/s", cert.storage_blob_ops);
     println!("  Storage Object:      {} ops/s", cert.storage_object_ops);
     if cert.net_frame_encode_decode_ops > 0 {
-        println!("  Net Frame Enc/Dec:   {} ops/s", cert.net_frame_encode_decode_ops);
-        println!("  Net Frame Sign/Vrfy: {} ops/s", cert.net_frame_sign_verify_ops);
-        println!("  Net UDP Throughput:  {} ops/s", cert.net_udp_throughput_ops);
-        println!("  Net Router Lookup:   {} ops/s", cert.net_router_lookup_ops);
+        println!(
+            "  Net Frame Enc/Dec:   {} ops/s",
+            cert.net_frame_encode_decode_ops
+        );
+        println!(
+            "  Net Frame Sign/Vrfy: {} ops/s",
+            cert.net_frame_sign_verify_ops
+        );
+        println!(
+            "  Net UDP Throughput:  {} ops/s",
+            cert.net_udp_throughput_ops
+        );
+        println!(
+            "  Net Router Lookup:   {} ops/s",
+            cert.net_router_lookup_ops
+        );
     }
-    println!("  Duration:            {} ms",
-        (cert.benchmark_completed_us - cert.benchmark_started_us) / 1000);
+    println!(
+        "  Duration:            {} ms",
+        (cert.benchmark_completed_us - cert.benchmark_started_us) / 1000
+    );
     println!("  Digest:              {}", hex32(&cert.digest));
 }
 
@@ -632,27 +656,43 @@ mod tests {
     fn cpu_int_fast() {
         let s = benchmark_cpu_int();
         assert!(s > 0, "cpu_int score was 0");
-        assert!(s < 100_000_000_000u64, "cpu_int score {} impossibly high", s);
+        assert!(
+            s < 100_000_000_000u64,
+            "cpu_int score {} impossibly high",
+            s
+        );
     }
 
     #[test]
     fn cpu_crypto_fast() {
         let s = benchmark_cpu_crypto();
         assert!(s > 0, "cpu_crypto score was 0");
-        assert!(s < 100_000_000_000u64, "cpu_crypto score {} impossibly high", s);
+        assert!(
+            s < 100_000_000_000u64,
+            "cpu_crypto score {} impossibly high",
+            s
+        );
     }
 
     #[test]
     fn mem_bw_fast() {
         let mbps = benchmark_memory_bandwidth();
         assert!(mbps > 100, "memory bandwidth {} MB/s impossibly low", mbps);
-        assert!(mbps < 1_000_000, "memory bandwidth {} MB/s impossibly high", mbps);
+        assert!(
+            mbps < 1_000_000,
+            "memory bandwidth {} MB/s impossibly high",
+            mbps
+        );
     }
 
     #[test]
     fn mem_lat_fast() {
         let ns = benchmark_memory_latency();
-        assert!(ns > 0 && ns < 100_000, "memory latency {} ns out of range", ns);
+        assert!(
+            ns > 0 && ns < 100_000,
+            "memory latency {} ns out of range",
+            ns
+        );
     }
 
     #[test]
@@ -719,14 +759,17 @@ mod tests {
         let bytes = cert.to_bytes();
         assert_eq!(bytes.len(), 296);
 
-        let restored = PerformanceCertificate::from_bytes(&bytes)
-            .expect("Failed to deserialize certificate");
+        let restored =
+            PerformanceCertificate::from_bytes(&bytes).expect("Failed to deserialize certificate");
 
         assert_eq!(restored.node_id, cert.node_id);
         assert_eq!(restored.cpu_int_score, cert.cpu_int_score);
         assert_eq!(restored.storage_event_iops, cert.storage_event_iops);
         assert_eq!(restored.storage_blob_ops, cert.storage_blob_ops);
-        assert_eq!(restored.net_frame_encode_decode_ops, cert.net_frame_encode_decode_ops);
+        assert_eq!(
+            restored.net_frame_encode_decode_ops,
+            cert.net_frame_encode_decode_ops
+        );
         assert_eq!(restored.net_router_lookup_ops, cert.net_router_lookup_ops);
         assert_eq!(restored.digest, cert.digest);
     }

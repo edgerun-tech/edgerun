@@ -23,13 +23,13 @@
 //! # });
 //! ```
 
-use edgerun_encoding::base64::base64url_nopad_encode;
 use crate::client::DeviceFlowCallback;
 use crate::errors::OAuthError;
 use crate::pkce::PkcePair;
 use crate::token_store::TokenStore;
 use crate::types::{ClientConfig, Credentials};
 use edgerun_crypto::sha256;
+use edgerun_encoding::base64::base64url_nopad_encode;
 use edgerun_http::client_middleware::{
     Chain, Client, ClientExtensions, ClientMiddleware, ClientNext, ClientRequest,
 };
@@ -66,7 +66,8 @@ impl ClientMiddleware for BearerTokenMiddleware {
         // Try to get a valid token (with 30s grace)
         if let Some(creds) = self.store.get_valid(30) {
             if let Some(token) = creds.bearer_token() {
-                req.headers_mut().insert("Authorization", &format!("Bearer {token}"));
+                req.headers_mut()
+                    .insert("Authorization", &format!("Bearer {token}"));
             }
         }
 
@@ -97,14 +98,12 @@ impl AutoRefreshMiddleware {
         }
     }
 
-    async fn refresh_and_retry(
-        &self,
-        original_req: ClientRequest,
-    ) -> Result<Response> {
+    async fn refresh_and_retry(&self, original_req: ClientRequest) -> Result<Response> {
         // Load credentials to get the refresh token
         let Some(creds) = self.store.load().map_err(|e| {
             edgerun_http::Error::ProtocolError(format!("failed to load tokens: {e}"))
-        })? else {
+        })?
+        else {
             // No tokens — return original request (will get 401)
             return self.execute_without_auth(original_req).await;
         };
@@ -123,7 +122,9 @@ impl AutoRefreshMiddleware {
                 // Clone original request and retry with new token
                 let mut retry_req = original_req.clone();
                 if let Some(token) = new_creds.bearer_token() {
-                    retry_req.headers_mut().insert("Authorization", &format!("Bearer {token}"));
+                    retry_req
+                        .headers_mut()
+                        .insert("Authorization", &format!("Bearer {token}"));
                 }
                 self.execute_without_auth(retry_req).await
             }
@@ -134,28 +135,42 @@ impl AutoRefreshMiddleware {
         }
     }
 
-    async fn do_refresh(&self, refresh_token: &str) -> std::result::Result<Credentials, OAuthError> {
+    async fn do_refresh(
+        &self,
+        refresh_token: &str,
+    ) -> std::result::Result<Credentials, OAuthError> {
         let body = format!(
             "grant_type=refresh_token&client_id={}&refresh_token={}",
             percent_encode(&self.config.client_id),
             percent_encode(refresh_token),
         );
 
-        let resp = self.http.post(&self.config.token_url(), body.as_bytes()).await
+        let resp = self
+            .http
+            .post(&self.config.token_url(), body.as_bytes())
+            .await
             .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
         let resp_body = String::from_utf8_lossy(resp.body()).to_string();
 
         if resp.status().as_u16() != 200 {
-            return Err(OAuthError::HttpError(format!("refresh failed: HTTP {}", resp.status().as_u16())));
+            return Err(OAuthError::HttpError(format!(
+                "refresh failed: HTTP {}",
+                resp.status().as_u16()
+            )));
         }
 
-        let token_resp = crate::types::TokenResponse::from_json(&resp_body)
-            .map_err(OAuthError::JsonError)?;
+        let token_resp =
+            crate::types::TokenResponse::from_json(&resp_body).map_err(OAuthError::JsonError)?;
 
         if let Some(error) = token_resp.error {
-            let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-            return Err(OAuthError::ServerError { error, error_description: desc });
+            let desc = token_resp
+                .error_description
+                .unwrap_or_else(|| "Unknown error".into());
+            return Err(OAuthError::ServerError {
+                error,
+                error_description: desc,
+            });
         }
 
         Ok(token_resp.into_credentials())
@@ -266,7 +281,10 @@ impl OAuthClient {
         let store = Arc::new(store);
         let client = Chain::new(HttpClient::new())
             .with(BearerTokenMiddleware::new(Arc::clone(&store)))
-            .with(AutoRefreshMiddleware::new(config.clone(), Arc::clone(&store)))
+            .with(AutoRefreshMiddleware::new(
+                config.clone(),
+                Arc::clone(&store),
+            ))
             .build();
 
         Self {
@@ -277,7 +295,10 @@ impl OAuthClient {
     }
 
     /// Execute the device flow and save credentials to the token store.
-    pub async fn device_flow(&self, callback: &dyn DeviceFlowCallback) -> std::result::Result<Credentials, OAuthError> {
+    pub async fn device_flow(
+        &self,
+        callback: &dyn DeviceFlowCallback,
+    ) -> std::result::Result<Credentials, OAuthError> {
         let pkce = PkcePair::generate().map_err(|e| OAuthError::PkceError(e.to_string()))?;
 
         // Request device code
@@ -290,12 +311,17 @@ impl OAuthClient {
         let body = req.to_form_body();
 
         let http = HttpClient::new();
-        let resp = http.post(&self.config.device_code_url(), body.as_bytes()).await
+        let resp = http
+            .post(&self.config.device_code_url(), body.as_bytes())
+            .await
             .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
         let body = String::from_utf8_lossy(resp.body()).to_string();
         if resp.status().as_u16() != 200 {
-            return Err(OAuthError::HttpError(format!("device code request failed: HTTP {}", resp.status().as_u16())));
+            return Err(OAuthError::HttpError(format!(
+                "device code request failed: HTTP {}",
+                resp.status().as_u16()
+            )));
         }
 
         let device_resp = crate::types::DeviceAuthorizationResponse::from_json(&body)
@@ -307,20 +333,28 @@ impl OAuthClient {
         );
 
         // Poll for token
-        let creds = self.poll_for_token(
-            &device_resp.device_code,
-            &pkce.code_verifier,
-            self.config.device_flow_timeout_secs,
-            device_resp.interval,
-        ).await?;
+        let creds = self
+            .poll_for_token(
+                &device_resp.device_code,
+                &pkce.code_verifier,
+                self.config.device_flow_timeout_secs,
+                device_resp.interval,
+            )
+            .await?;
 
-        self.store.save(&creds).map_err(|e| OAuthError::IoError(e.to_string()))?;
+        self.store
+            .save(&creds)
+            .map_err(|e| OAuthError::IoError(e.to_string()))?;
         Ok(creds)
     }
 
     /// Refresh the access token using the stored refresh token.
     pub async fn refresh(&self) -> std::result::Result<Option<Credentials>, OAuthError> {
-        let Some(creds) = self.store.load().map_err(|e| OAuthError::IoError(e.to_string()))? else {
+        let Some(creds) = self
+            .store
+            .load()
+            .map_err(|e| OAuthError::IoError(e.to_string()))?
+        else {
             return Ok(None);
         };
         let Some(ref refresh_token) = creds.refresh_token else {
@@ -328,11 +362,16 @@ impl OAuthClient {
         };
 
         let new_creds = self.do_refresh(refresh_token).await?;
-        self.store.save(&new_creds).map_err(|e| OAuthError::IoError(e.to_string()))?;
+        self.store
+            .save(&new_creds)
+            .map_err(|e| OAuthError::IoError(e.to_string()))?;
         Ok(Some(new_creds))
     }
 
-    async fn do_refresh(&self, refresh_token: &str) -> std::result::Result<Credentials, OAuthError> {
+    async fn do_refresh(
+        &self,
+        refresh_token: &str,
+    ) -> std::result::Result<Credentials, OAuthError> {
         let body = format!(
             "grant_type=refresh_token&client_id={}&refresh_token={}",
             percent_encode(&self.config.client_id),
@@ -340,20 +379,30 @@ impl OAuthClient {
         );
 
         let http = HttpClient::new();
-        let resp = http.post(&self.config.token_url(), body.as_bytes()).await
+        let resp = http
+            .post(&self.config.token_url(), body.as_bytes())
+            .await
             .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
         let resp_body = String::from_utf8_lossy(resp.body()).to_string();
         if resp.status().as_u16() != 200 {
-            return Err(OAuthError::HttpError(format!("refresh failed: HTTP {}", resp.status().as_u16())));
+            return Err(OAuthError::HttpError(format!(
+                "refresh failed: HTTP {}",
+                resp.status().as_u16()
+            )));
         }
 
-        let token_resp = crate::types::TokenResponse::from_json(&resp_body)
-            .map_err(OAuthError::JsonError)?;
+        let token_resp =
+            crate::types::TokenResponse::from_json(&resp_body).map_err(OAuthError::JsonError)?;
 
         if let Some(error) = token_resp.error {
-            let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-            return Err(OAuthError::ServerError { error, error_description: desc });
+            let desc = token_resp
+                .error_description
+                .unwrap_or_else(|| "Unknown error".into());
+            return Err(OAuthError::ServerError {
+                error,
+                error_description: desc,
+            });
         }
 
         Ok(token_resp.into_credentials())
@@ -394,7 +443,9 @@ impl OAuthClient {
             let body = req.to_form_body();
 
             let http = HttpClient::new();
-            let resp = http.post(&self.config.token_url(), body.as_bytes()).await
+            let resp = http
+                .post(&self.config.token_url(), body.as_bytes())
+                .await
                 .map_err(|e| OAuthError::HttpError(e.to_string()))?;
 
             let resp_body = String::from_utf8_lossy(resp.body()).to_string();
@@ -408,11 +459,20 @@ impl OAuthClient {
                         interval = interval.saturating_add(Duration::from_secs(2));
                         continue;
                     }
-                    "expired_token" => return Err(OAuthError::DeviceError(crate::errors::DeviceError::Expired)),
-                    "access_denied" => return Err(OAuthError::DeviceError(crate::errors::DeviceError::Denied)),
+                    "expired_token" => {
+                        return Err(OAuthError::DeviceError(crate::errors::DeviceError::Expired))
+                    }
+                    "access_denied" => {
+                        return Err(OAuthError::DeviceError(crate::errors::DeviceError::Denied))
+                    }
                     _ => {
-                        let desc = token_resp.error_description.unwrap_or_else(|| "Unknown error".into());
-                        return Err(OAuthError::ServerError { error, error_description: desc });
+                        let desc = token_resp
+                            .error_description
+                            .unwrap_or_else(|| "Unknown error".into());
+                        return Err(OAuthError::ServerError {
+                            error,
+                            error_description: desc,
+                        });
                     }
                 }
             }

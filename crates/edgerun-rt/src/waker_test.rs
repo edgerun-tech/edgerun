@@ -1,10 +1,10 @@
 //! Unit tests for waker.rs — tests the RawWakerVTable implementation
 //! directly without the runtime.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::ready_queue::ReadyQueue;
 use crate::waker::make_waker;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 #[test]
 fn waker_wake_consumes() {

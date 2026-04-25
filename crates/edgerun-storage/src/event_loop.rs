@@ -13,10 +13,10 @@
 use edgerun_core::protocol::EventEnvelope;
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
-use std::path::Path;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::Arc;
@@ -253,9 +253,7 @@ impl DispatchContext {
                         let namespace = edgerun_core::util::bytes_to_hex(&payload.object_id);
                         let name = edgerun_core::util::bytes_to_hex(&event.stream_id);
                         let blob_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
-                        let _ = self
-                            .index
-                            .put_credential(&namespace, &name, &blob_id, None);
+                        let _ = self.index.put_credential(&namespace, &name, &blob_id, None);
                     }
                 }
                 OpEventType::PeerDiscovered | OpEventType::PeerStatusChanged => {
@@ -302,10 +300,7 @@ fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> File {
 }
 
 /// Write a single event to disk (used by both the main loop and produce_event).
-fn write_event_to_disk(
-    file: &mut File,
-    event: &EventEnvelope,
-) -> Result<u64, StorageError> {
+fn write_event_to_disk(file: &mut File, event: &EventEnvelope) -> Result<u64, StorageError> {
     let proto: proto_stream::EventEnvelope = event.clone();
     let mut event_bytes = Vec::new();
     proto_stream::EventEnvelope::encode(&proto, &mut event_bytes)
@@ -351,8 +346,7 @@ impl EventLoopBuilder {
         let (tx, rx) = mpsc::sync_channel(EVENT_CHANNEL_CAPACITY);
         let next_seq: Arc<std::sync::Mutex<HashMap<Vec<u8>, u64>>> =
             Arc::new(std::sync::Mutex::new(HashMap::new()));
-        let stream_files: StreamFilesRef =
-            Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let stream_files: StreamFilesRef = Arc::new(std::sync::Mutex::new(HashMap::new()));
 
         let events_dir = self.events_dir.clone();
         let blobs = Arc::clone(&self.blobs);
@@ -394,7 +388,9 @@ fn run_event_loop(
     next_seq: Arc<std::sync::Mutex<HashMap<Vec<u8>, u64>>>,
     stream_files: StreamFilesRef,
 ) {
-    let materializer = Materializer { index: Arc::clone(&index) };
+    let materializer = Materializer {
+        index: Arc::clone(&index),
+    };
 
     loop {
         let request = match rx.recv() {
@@ -492,20 +488,15 @@ impl Materializer {
             match op {
                 OpEventType::CredentialStored => {
                     if let Some(payload) = &event.payload_object {
-                        let namespace =
-                            edgerun_core::util::bytes_to_hex(&payload.object_id);
+                        let namespace = edgerun_core::util::bytes_to_hex(&payload.object_id);
                         let name = edgerun_core::util::bytes_to_hex(&event.stream_id);
-                        let blob_id =
-                            edgerun_core::util::bytes_to_hex(&payload.object_id);
-                        let _ = self
-                            .index
-                            .put_credential(&namespace, &name, &blob_id, None);
+                        let blob_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                        let _ = self.index.put_credential(&namespace, &name, &blob_id, None);
                     }
                 }
                 OpEventType::PeerDiscovered | OpEventType::PeerStatusChanged => {
                     if let Some(payload) = &event.payload_object {
-                        let node_id =
-                            edgerun_core::util::bytes_to_hex(&payload.object_id);
+                        let node_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
                         let status = match op {
                             OpEventType::PeerDiscovered => "discovered",
                             _ => "status_changed",
@@ -527,11 +518,7 @@ impl Materializer {
 
 pub struct FetchHandler;
 impl EventHandler for FetchHandler {
-    fn handle(
-        &self,
-        event: &EventEnvelope,
-        ctx: &DispatchContext,
-    ) -> Result<(), StorageError> {
+    fn handle(&self, event: &EventEnvelope, ctx: &DispatchContext) -> Result<(), StorageError> {
         if event.event_type == OpEventType::FetchRequested.as_i32() {
             if let Some(payload) = &event.payload_object {
                 let target_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
@@ -544,11 +531,7 @@ impl EventHandler for FetchHandler {
 
 pub struct PeerDiscoveryHandler;
 impl EventHandler for PeerDiscoveryHandler {
-    fn handle(
-        &self,
-        event: &EventEnvelope,
-        ctx: &DispatchContext,
-    ) -> Result<(), StorageError> {
+    fn handle(&self, event: &EventEnvelope, ctx: &DispatchContext) -> Result<(), StorageError> {
         if event.event_type == OpEventType::PeerDiscovered.as_i32() {
             let attempt_event = EventEnvelope {
                 envelope_version: 1,
@@ -576,33 +559,21 @@ impl EventHandler for PeerDiscoveryHandler {
 
 pub struct PeerStatusHandler;
 impl EventHandler for PeerStatusHandler {
-    fn handle(
-        &self,
-        _event: &EventEnvelope,
-        _ctx: &DispatchContext,
-    ) -> Result<(), StorageError> {
+    fn handle(&self, _event: &EventEnvelope, _ctx: &DispatchContext) -> Result<(), StorageError> {
         Ok(())
     }
 }
 
 pub struct CredentialHandler;
 impl EventHandler for CredentialHandler {
-    fn handle(
-        &self,
-        _event: &EventEnvelope,
-        _ctx: &DispatchContext,
-    ) -> Result<(), StorageError> {
+    fn handle(&self, _event: &EventEnvelope, _ctx: &DispatchContext) -> Result<(), StorageError> {
         Ok(())
     }
 }
 
 pub struct CredentialDeleteHandler;
 impl EventHandler for CredentialDeleteHandler {
-    fn handle(
-        &self,
-        _event: &EventEnvelope,
-        _ctx: &DispatchContext,
-    ) -> Result<(), StorageError> {
+    fn handle(&self, _event: &EventEnvelope, _ctx: &DispatchContext) -> Result<(), StorageError> {
         Ok(())
     }
 }

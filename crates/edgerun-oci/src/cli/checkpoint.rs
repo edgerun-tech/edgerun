@@ -11,7 +11,10 @@ use crate::state::{load_state, save_state};
 pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         let root_str = root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?;
         crate::state::set_state_dir(root_str);
     }
@@ -69,9 +72,11 @@ pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Res
         }
     }
 
-    let id = id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
+    let id =
+        id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
 
-    let image_path = image_path.unwrap_or_else(|| PathBuf::from(format!("/var/lib/edgerun/checkpoint/{}", id)));
+    let image_path =
+        image_path.unwrap_or_else(|| PathBuf::from(format!("/var/lib/edgerun/checkpoint/{}", id)));
     let work_path = work_path.unwrap_or_else(|| image_path.join("work"));
 
     let state = load_state(&id)?;
@@ -83,9 +88,9 @@ pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Res
         ));
     }
 
-    let pid = state.pid.ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidData, "container has no PID")
-    })?;
+    let pid = state
+        .pid
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "container has no PID"))?;
 
     fs::create_dir_all(&image_path)?;
     fs::create_dir_all(&work_path)?;

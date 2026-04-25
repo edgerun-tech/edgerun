@@ -1,19 +1,19 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use edgerun_crypto::sha2::Digest;
+use super::engine::SimplePolicyEngine;
+use super::helpers::*;
+use super::trait_def::PolicyEngine;
+use super::types::*;
 use edgerun_capabilities::{
     validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
     CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_crypto::sha2::Digest;
 use edgerun_proto::edgerun::v0::common::{IdentityRef, NodeRef};
 use prost_types::{Duration as ProstDuration, Timestamp};
-use super::types::*;
-use super::helpers::*;
-use super::trait_def::PolicyEngine;
-use super::engine::SimplePolicyEngine;
 
 impl PolicyEngine for SimplePolicyEngine {
     fn evaluate_request(
@@ -249,4 +249,3 @@ impl PolicyEngine for SimplePolicyEngine {
         self.grants.get(grant_id)
     }
 }
-

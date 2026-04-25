@@ -42,14 +42,14 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use super::connection::Http3Connection;
-use super::quic::QuicTlsServerHandshaker;
-use super::quic::crypto::PacketProtection;
-use super::quic::packet::{QuicPacket, PacketType};
-use super::quic::frame::QuicFrame;
-use super::quic::QuicConnection;
-use super::quic::ConnectionId;
-use super::qpack::{QpackDecoder, QpackEncoder};
 use super::http3::settings::Http3Settings;
+use super::qpack::{QpackDecoder, QpackEncoder};
+use super::quic::crypto::PacketProtection;
+use super::quic::frame::QuicFrame;
+use super::quic::packet::{PacketType, QuicPacket};
+use super::quic::ConnectionId;
+use super::quic::QuicConnection;
+use super::quic::QuicTlsServerHandshaker;
 use super::Http3Error;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -168,7 +168,9 @@ impl Http3Server {
                 // Remove from pending before processing
                 {
                     let mut pending = self.pending.lock().unwrap();
-                    if !pending.is_empty() { pending.remove(0); }
+                    if !pending.is_empty() {
+                        pending.remove(0);
+                    }
                 }
                 if let Ok(conn) = self.handle_initial_packet(&data, client_addr).await {
                     return Ok(conn);
@@ -178,7 +180,9 @@ impl Http3Server {
 
             // Receive next packet
             let mut buf = [0u8; 65536]; // Max UDP datagram
-            let (n, client_addr) = self.socket.recv_from(&mut buf)
+            let (n, client_addr) = self
+                .socket
+                .recv_from(&mut buf)
                 .await
                 .map_err(|e| format!("recv_from failed: {}", e))?;
 
@@ -187,7 +191,10 @@ impl Http3Server {
                 Ok(conn) => return Ok(conn),
                 Err(e) => {
                     // Log and try next packet
-                    eprintln!("[HTTP/3 server] handshake error from {}: {}", client_addr, e);
+                    eprintln!(
+                        "[HTTP/3 server] handshake error from {}: {}",
+                        client_addr, e
+                    );
                 }
             }
         }
@@ -204,21 +211,29 @@ impl Http3Server {
         }
 
         let first_byte = data[0];
-        eprintln!("DEBUG: first={:02x} data[:20]={:02x?}", first_byte, &data[..20]);
+        eprintln!(
+            "DEBUG: first={:02x} data[:20]={:02x?}",
+            first_byte,
+            &data[..20]
+        );
 
         // Parse packet to get header_to_bytes_aad()
-        let (pkt, _) = QuicPacket::from_bytes(data)
-            .map_err(|e| format!("Parse packet failed: {}", e))?;
-        
+        let (pkt, _) =
+            QuicPacket::from_bytes(data).map_err(|e| format!("Parse packet failed: {}", e))?;
+
         // Use header_to_bytes_aad() - same method as client
         let aad = pkt.header_to_bytes_aad();
         let encrypted_payload = data[aad.len()..].to_vec();
 
-        eprintln!("DEBUG: aad_len={}, encrypted_len={}", aad.len(), encrypted_payload.len());
+        eprintln!(
+            "DEBUG: aad_len={}, encrypted_len={}",
+            aad.len(),
+            encrypted_payload.len()
+        );
 
         // Extract CIDs from AAD
         let dst_cid_len = aad[5] as usize;
-        let dst_cid = aad[6..6+dst_cid_len].to_vec();
+        let dst_cid = aad[6..6 + dst_cid_len].to_vec();
         let src_cid = if 6 + dst_cid_len + 1 < aad.len() {
             let src_offset = 6 + dst_cid_len + 1;
             let src_cid_len = aad[src_offset - 1] as usize;
@@ -237,15 +252,21 @@ impl Http3Server {
         let initial_keys = handshaker.initial_keys(&dst_cid);
         let mut initial_protection = PacketProtection::new(&initial_keys);
 
-        let plaintext = initial_protection.unprotect(&aad, 0, &encrypted_payload)
+        let plaintext = initial_protection
+            .unprotect(&aad, 0, &encrypted_payload)
             .map_err(|e| format!("Decrypt failed: {}", e))?;
 
-        eprintln!("DEBUG: plaintext[:30]={:02x?}", &plaintext[..plaintext.len().min(30)]);
-        eprintln!("DEBUG: frame_type=0x{:02x}", plaintext.first().copied().unwrap_or(0));
+        eprintln!(
+            "DEBUG: plaintext[:30]={:02x?}",
+            &plaintext[..plaintext.len().min(30)]
+        );
+        eprintln!(
+            "DEBUG: frame_type=0x{:02x}",
+            plaintext.first().copied().unwrap_or(0)
+        );
 
         // Try parsing as QUIC CRYPTO frame first (0x06)
-        let mut crypto_data = Self::parse_crypto_frame(&plaintext)
-            .map(|(d, _)| d);
+        let mut crypto_data = Self::parse_crypto_frame(&plaintext).map(|(d, _)| d);
 
         // If no QUIC CRYPTO frame, try treating raw TLS handshake data
         if crypto_data.is_none() && !plaintext.is_empty() {
@@ -257,13 +278,16 @@ impl Http3Server {
             }
         }
 
-        let crypto_data = crypto_data.ok_or_else(|| "No CRYPTO frame in decrypted payload".to_string())?;
+        let crypto_data =
+            crypto_data.ok_or_else(|| "No CRYPTO frame in decrypted payload".to_string())?;
 
         // Update address validation state
         {
             let mut state_map = self.validation_state.lock().unwrap();
             state_map.retain(|_, state| !state.is_stale());
-            let state = state_map.entry(client_addr).or_insert_with(AddressValidationState::new);
+            let state = state_map
+                .entry(client_addr)
+                .or_insert_with(AddressValidationState::new);
             state.record_received(data.len() as u64);
         }
 
@@ -304,7 +328,9 @@ impl Http3Server {
         )?;
 
         // Send Initial packet
-        self.socket.send_to(&initial_response, client_addr).await
+        self.socket
+            .send_to(&initial_response, client_addr)
+            .await
             .map_err(|e| format!("Failed to send Initial packet: {}", e))?;
 
         // Update validation state
@@ -316,7 +342,8 @@ impl Http3Server {
         }
 
         // Build and send Handshake packet
-        let (handshake_crypto, expected_client_verify) = handshaker.build_encrypted_handshake()
+        let (handshake_crypto, expected_client_verify) = handshaker
+            .build_encrypted_handshake()
             .map_err(|e| format!("Failed to build encrypted handshake: {}", e))?;
 
         let handshake_frame = QuicFrame::Crypto {
@@ -344,7 +371,9 @@ impl Http3Server {
         }
 
         // Send Handshake packet
-        self.socket.send_to(&handshake_response, client_addr).await
+        self.socket
+            .send_to(&handshake_response, client_addr)
+            .await
             .map_err(|e| format!("Failed to send Handshake packet: {}", e))?;
 
         // Update validation state
@@ -356,12 +385,14 @@ impl Http3Server {
         }
 
         // Wait for client's Finished in a Handshake packet
-        let client_finished_data = self.wait_for_client_finished(
-            client_addr,
-            &client_dcid,
-            &handshaker,
-            &expected_client_verify,
-        ).await?;
+        let client_finished_data = self
+            .wait_for_client_finished(
+                client_addr,
+                &client_dcid,
+                &handshaker,
+                &expected_client_verify,
+            )
+            .await?;
 
         // Client's address is now validated (they received our Handshake and replied)
         {
@@ -376,7 +407,8 @@ impl Http3Server {
 
         // Derive application keys and build the handshake result
         // The server uses the client's DCID (our SCID) as the dcid for key derivation
-        let handshake_result = handshaker.build_result(&client_dcid, &transcript_after)
+        let handshake_result = handshaker
+            .build_result(&client_dcid, &transcript_after)
             .map_err(|e| format!("Failed to build handshake result: {}", e))?;
         handshaker.mark_complete();
 
@@ -443,7 +475,8 @@ impl Http3Server {
         let header_len = header.len();
         header.extend_from_slice(&payload);
 
-        let encrypted = protection.protect(&header, &header[header_len..])
+        let encrypted = protection
+            .protect(&header, &header[header_len..])
             .map_err(|e| format!("Initial encrypt failed: {}", e))?;
 
         // Fill in payload length
@@ -467,7 +500,8 @@ impl Http3Server {
         handshaker: &QuicTlsServerHandshaker,
     ) -> Result<Vec<u8>, String> {
         let payload = crypto_frame.to_bytes();
-        let hs_keys = handshaker.handshake_keys()
+        let hs_keys = handshaker
+            .handshake_keys()
             .map_err(|e| format!("Failed to derive handshake keys: {}", e))?;
         let mut protection = PacketProtection::new(&hs_keys);
 
@@ -490,7 +524,8 @@ impl Http3Server {
         let header_len = header.len();
         header.extend_from_slice(&payload);
 
-        let encrypted = protection.protect(&header, &header[header_len..])
+        let encrypted = protection
+            .protect(&header, &header[header_len..])
             .map_err(|e| format!("Handshake encrypt failed: {}", e))?;
 
         let total_payload = encrypted.len();
@@ -515,14 +550,17 @@ impl Http3Server {
         expected_client_verify: &[u8],
     ) -> Result<Vec<u8>, String> {
         // Derive handshake-level protection keys for decryption
-        let hs_keys = handshaker.handshake_keys()
+        let hs_keys = handshaker
+            .handshake_keys()
             .map_err(|e| format!("Failed to derive handshake keys: {}", e))?;
         let mut hs_protection = PacketProtection::new(&hs_keys);
 
         // Try to receive packets until we find the client's Finished
         for _ in 0..20 {
             let mut buf = [0u8; 65536];
-            let (n, _src) = self.socket.recv_from(&mut buf)
+            let (n, _src) = self
+                .socket
+                .recv_from(&mut buf)
                 .await
                 .map_err(|e| format!("recv_from failed: {}", e))?;
 
@@ -535,7 +573,8 @@ impl Http3Server {
             }
 
             // Decrypt
-            let plaintext = hs_protection.unprotect(&[], pkt.header.packet_number, &pkt.payload)
+            let plaintext = hs_protection
+                .unprotect(&[], pkt.header.packet_number, &pkt.payload)
                 .map_err(|e| format!("Handshake decrypt failed: {}", e))?;
 
             // Parse CRYPTO frame
@@ -546,10 +585,10 @@ impl Http3Server {
                     // Check if this is actually a Finished message (type 20)
                     if crypto_data[0] == 20 {
                         let verify_data = &crypto_data[4..4 + expected_client_verify.len()];
-                        
+
                         // Verify the client's Finished
                         handshaker.verify_client_finished(verify_data, expected_client_verify)?;
-                        
+
                         return Ok(crypto_data);
                     }
                 }
@@ -638,8 +677,14 @@ impl Http3Server {
                 Ok((mut conn, client_addr)) => {
                     let handler = Arc::clone(&handler);
                     edgerun_rt::spawn(async move {
-                        if let Err(e) = Self::handle_connection(&mut conn, handler, client_addr).await {
-                            edgerun_log::warn!("HTTP/3 connection error from {}: {}", client_addr, e);
+                        if let Err(e) =
+                            Self::handle_connection(&mut conn, handler, client_addr).await
+                        {
+                            edgerun_log::warn!(
+                                "HTTP/3 connection error from {}: {}",
+                                client_addr,
+                                e
+                            );
                         }
                     });
                 }
@@ -664,8 +709,11 @@ impl Http3Server {
                 Err(e) => return Err(format!("accept_request: {:?}", e)),
             };
 
-            let body = conn.recv_request_body(stream_id).await
-                .unwrap_or(None).unwrap_or_default();
+            let body = conn
+                .recv_request_body(stream_id)
+                .await
+                .unwrap_or(None)
+                .unwrap_or_default();
 
             let request = Request::new(method, uri, headers, Some(body));
             let response = handler.handle(request).await;
@@ -674,7 +722,10 @@ impl Http3Server {
             let resp_headers = response.headers().clone();
             let body = response.body().to_vec();
 
-            if let Err(e) = conn.send_response(stream_id, status, &resp_headers, Some(body)).await {
+            if let Err(e) = conn
+                .send_response(stream_id, status, &resp_headers, Some(body))
+                .await
+            {
                 return Err(format!("send_response: {:?}", e));
             }
         }

@@ -3,14 +3,14 @@
 //! Implements the signed SessionHello/SessionAccept handshake per §9 of the spec.
 //! After session establishment, peers exchange RouteAdvertisements.
 
+use edgerun_core::crypto::sha256;
+use edgerun_core::protocol::ProtocolRecord;
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_proto::edgerun::v0::{
     common::{IdentityKind, IdentityRef, NodeRef},
     network::{SessionAccept, SessionHello},
 };
-use edgerun_core::crypto::sha256;
-use edgerun_core::protocol::ProtocolRecord;
 use prost::Message;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -141,7 +141,7 @@ fn sign_session_accept(
 
 /// Verify a SessionHello's signature and extract the peer's node ID.
 pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str> {
-    use edgerun_core::crypto::{SIG_DOMAIN_SESSION_HELLO, verify_canonical_record};
+    use edgerun_core::crypto::{verify_canonical_record, SIG_DOMAIN_SESSION_HELLO};
     let Some(ref sig) = hello.signature else {
         return Err("missing_signature");
     };
@@ -284,9 +284,9 @@ pub fn now_timestamp() -> prost_types::Timestamp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::p256::ecdsa::SigningKey;
+    use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
 
     struct TestSigner {
@@ -305,12 +305,11 @@ use edgerun_crypto::p256::ecdsa::SigningKey;
             seed[16..24].copy_from_slice(&count.to_be_bytes());
             seed[24..].copy_from_slice(&count.to_be_bytes());
 
-            let signing_key = SigningKey::from_bytes(&seed.into())
-                .unwrap_or_else(|_| {
-                    // If seed is invalid, use a fallback (deterministic for tests)
-                    SigningKey::from_bytes(&[1u8; 32].into())
-                        .expect("fallback signing key should always be valid")
-                });
+            let signing_key = SigningKey::from_bytes(&seed.into()).unwrap_or_else(|_| {
+                // If seed is invalid, use a fallback (deterministic for tests)
+                SigningKey::from_bytes(&[1u8; 32].into())
+                    .expect("fallback signing key should always be valid")
+            });
             let verifying_key = signing_key.verifying_key();
             let encoded = verifying_key.to_encoded_point(false);
             let mut node_id_bytes = [0u8; 64];
@@ -327,9 +326,19 @@ use edgerun_crypto::p256::ecdsa::SigningKey;
             self.node_id
         }
 
-        fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: edgerun_crypto::p256::ecdsa::Signature = self.signing_key.sign_prehash(digest)
-                .map_err(|_| edgerun_hardware_signing::HardwareSigningError::Provider("signing failed".into()))?;
+        fn sign_digest(
+            &self,
+            digest: &[u8; 32],
+        ) -> Result<
+            [u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH],
+            edgerun_hardware_signing::HardwareSigningError,
+        > {
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
+                self.signing_key.sign_prehash(digest).map_err(|_| {
+                    edgerun_hardware_signing::HardwareSigningError::Provider(
+                        "signing failed".into(),
+                    )
+                })?;
             let (r, s) = sig.split_bytes();
             let mut out = [0u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH];
             out[..32].copy_from_slice(&r);
@@ -367,8 +376,14 @@ use edgerun_crypto::p256::ecdsa::SigningKey;
     fn test_session_accept_roundtrip() {
         let signer = TestSigner::new();
         let nonce = generate_nonce();
-        let accept = build_session_accept(&signer.node_id(), &nonce, PROTOCOL_VERSION,
-            TRANSPORT_FEATURES.iter().map(|s| s.to_string()).collect(), &signer).unwrap();
+        let accept = build_session_accept(
+            &signer.node_id(),
+            &nonce,
+            PROTOCOL_VERSION,
+            TRANSPORT_FEATURES.iter().map(|s| s.to_string()).collect(),
+            &signer,
+        )
+        .unwrap();
 
         let bytes = encode_accept(&accept);
         let decoded = decode_accept(&bytes).unwrap();
@@ -383,8 +398,14 @@ use edgerun_crypto::p256::ecdsa::SigningKey;
     fn test_session_accept_verification() {
         let signer = TestSigner::new();
         let nonce = generate_nonce();
-        let accept = build_session_accept(&signer.node_id(), &nonce, PROTOCOL_VERSION,
-            TRANSPORT_FEATURES.iter().map(|s| s.to_string()).collect(), &signer).unwrap();
+        let accept = build_session_accept(
+            &signer.node_id(),
+            &nonce,
+            PROTOCOL_VERSION,
+            TRANSPORT_FEATURES.iter().map(|s| s.to_string()).collect(),
+            &signer,
+        )
+        .unwrap();
 
         let result = verify_session_accept(&accept, &nonce);
         assert!(result.is_ok());
@@ -396,8 +417,14 @@ use edgerun_crypto::p256::ecdsa::SigningKey;
         let signer = TestSigner::new();
         let nonce = generate_nonce();
         let wrong_nonce = generate_nonce();
-        let accept = build_session_accept(&signer.node_id(), &nonce, PROTOCOL_VERSION,
-            TRANSPORT_FEATURES.iter().map(|s| s.to_string()).collect(), &signer).unwrap();
+        let accept = build_session_accept(
+            &signer.node_id(),
+            &nonce,
+            PROTOCOL_VERSION,
+            TRANSPORT_FEATURES.iter().map(|s| s.to_string()).collect(),
+            &signer,
+        )
+        .unwrap();
 
         let result = verify_session_accept(&accept, &wrong_nonce);
         assert!(result.is_err());

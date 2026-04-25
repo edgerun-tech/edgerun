@@ -4,13 +4,13 @@
 //! an `AssuranceClaim` that proves the command was executed at the requested
 //! assurance level (software, hardware-backed, or attested runtime).
 
-use edgerun_proto::edgerun::v0::common::ObjectKind;
 use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
-use edgerun_hardware_signing::MeshSigner;
-use edgerun_storage::NodeStore;
 use edgerun_core::util::system_time_to_prost;
-use std::time::SystemTime;
+use edgerun_hardware_signing::MeshSigner;
+use edgerun_proto::edgerun::v0::common::ObjectKind;
 use edgerun_proto::edgerun::v0::trust::AssuranceClaim;
+use edgerun_storage::NodeStore;
+use std::time::SystemTime;
 
 const KIND_PROOF: i32 = ObjectKind::Proof as i32; // 7
 
@@ -34,11 +34,13 @@ pub fn generate_and_record_assurance_claim(
 
     let claim = AssuranceClaim {
         claim_version: 1,
-        subject: Some(edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(
-            edgerun_proto::edgerun::v0::common::NodeRef {
-                node_id: node_id.0.to_vec(),
-            },
-        )),
+        subject: Some(
+            edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(
+                edgerun_proto::edgerun::v0::common::NodeRef {
+                    node_id: node_id.0.to_vec(),
+                },
+            ),
+        ),
         assurance_class,
         attester: Some(IdentityRef {
             identity_id: node_id.0.to_vec(),
@@ -59,13 +61,14 @@ pub fn generate_and_record_assurance_claim(
     // Sign using domain-separated canonical path (spec §17)
     let record = ProtocolRecord::AssuranceClaim(claim.clone());
     let canonical = canonical_bytes(&record, true);
-    let sig_bytes = match signer.sign_record(edgerun_core::crypto::SIG_DOMAIN_ASSURANCE_CLAIM, &canonical) {
-        Ok(sig) => sig,
-        Err(e) => {
-            edgerun_log::warn!("failed to sign assurance claim: {:?}", e);
-            return None;
-        }
-    };
+    let sig_bytes =
+        match signer.sign_record(edgerun_core::crypto::SIG_DOMAIN_ASSURANCE_CLAIM, &canonical) {
+            Ok(sig) => sig,
+            Err(e) => {
+                edgerun_log::warn!("failed to sign assurance claim: {:?}", e);
+                return None;
+            }
+        };
 
     let mut signed_claim = claim;
     signed_claim.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
@@ -74,20 +77,22 @@ pub fn generate_and_record_assurance_claim(
     });
 
     let claim_bytes = prost::Message::encode_to_vec(&signed_claim);
-    let obj_ref = store.put_object(&claim_bytes, KIND_PROOF, &[stream_id.to_vec()]).ok()?;
+    let obj_ref = store
+        .put_object(&claim_bytes, KIND_PROOF, &[stream_id.to_vec()])
+        .ok()?;
 
-    edgerun_log::info!("assurance claim recorded: class={}, object_id={}",
+    edgerun_log::info!(
+        "assurance claim recorded: class={}, object_id={}",
         assurance_class,
-        edgerun_core::util::bytes_to_hex(&obj_ref.object_id));
+        edgerun_core::util::bytes_to_hex(&obj_ref.object_id)
+    );
 
     Some(obj_ref)
 }
 
 /// Verifies an AssuranceClaim's signature using domain-separated canonical
 /// verification (spec §17).
-pub fn verify_assurance_claim(
-    claim: &AssuranceClaim,
-) -> Result<(), &'static str> {
+pub fn verify_assurance_claim(claim: &AssuranceClaim) -> Result<(), &'static str> {
     let Some(ref sig) = claim.signature else {
         return Err("missing_signature");
     };

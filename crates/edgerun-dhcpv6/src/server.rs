@@ -4,12 +4,16 @@ use std::io;
 use std::net::{Ipv6Addr, SocketAddr, UdpSocket};
 use std::time::Duration;
 
-use super::duid::{Duid, default_server_duid};
-use super::message::{Dhcpv6Message, Dhcpv6MsgType, TransactionId, DHCPV6_CLIENT_PORT, DHCPV6_SERVER_PORT};
-use super::options::{Dhcpv6Option, StatusCode,
-    OPT_IA_NA, OPT_IA_PD, OPT_IAADDR, OPT_IAPREFIX,
-    OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_RAPID_COMMIT, OPT_SERVERID, OPT_CLIENTID, OPT_ORO, OPT_ELAPSED_TIME, OPT_STATUS_CODE};
+use super::duid::{default_server_duid, Duid};
 use super::lease::{LeasePool, LeaseState};
+use super::message::{
+    Dhcpv6Message, Dhcpv6MsgType, TransactionId, DHCPV6_CLIENT_PORT, DHCPV6_SERVER_PORT,
+};
+use super::options::{
+    Dhcpv6Option, StatusCode, OPT_CLIENTID, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_ELAPSED_TIME,
+    OPT_IAADDR, OPT_IAPREFIX, OPT_IA_NA, OPT_IA_PD, OPT_ORO, OPT_RAPID_COMMIT, OPT_SERVERID,
+    OPT_STATUS_CODE,
+};
 
 /// DHCPv6 server configuration.
 pub struct Dhcpv6ServerConfig {
@@ -76,7 +80,10 @@ impl Dhcpv6Server {
 
     /// Run the server event loop.
     pub fn run(&mut self) -> Result<(), io::Error> {
-        edgerun_log::info!("edgerun-dhcpv6: server listening on UDP {}", DHCPV6_SERVER_PORT);
+        edgerun_log::info!(
+            "edgerun-dhcpv6: server listening on UDP {}",
+            DHCPV6_SERVER_PORT
+        );
 
         loop {
             match self.tick() {
@@ -104,8 +111,12 @@ impl Dhcpv6Server {
             }
         };
 
-        edgerun_log::debug!("edgerun-dhcpv6: {} from {} (xid={})",
-            msg.msg_type, src, msg.transaction_id);
+        edgerun_log::debug!(
+            "edgerun-dhcpv6: {} from {} (xid={})",
+            msg.msg_type,
+            src,
+            msg.transaction_id
+        );
 
         let response = self.handle_message(&msg, src)?;
 
@@ -121,7 +132,11 @@ impl Dhcpv6Server {
     }
 
     /// Handle a DHCPv6 message and produce a response.
-    fn handle_message(&mut self, msg: &Dhcpv6Message, src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_message(
+        &mut self,
+        msg: &Dhcpv6Message,
+        src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         match msg.msg_type {
             Dhcpv6MsgType::Solicit => self.handle_solicit(msg, src),
             Dhcpv6MsgType::Request => self.handle_request(msg, src),
@@ -131,8 +146,11 @@ impl Dhcpv6Server {
             Dhcpv6MsgType::Decline => self.handle_decline(msg, src),
             Dhcpv6MsgType::InformationRequest => self.handle_information_request(msg, src),
             Dhcpv6MsgType::Confirm => self.handle_confirm(msg, src),
-            Dhcpv6MsgType::Advertise | Dhcpv6MsgType::Reply | Dhcpv6MsgType::Reconfigure
-            | Dhcpv6MsgType::RelayForw | Dhcpv6MsgType::RelayRepl => {
+            Dhcpv6MsgType::Advertise
+            | Dhcpv6MsgType::Reply
+            | Dhcpv6MsgType::Reconfigure
+            | Dhcpv6MsgType::RelayForw
+            | Dhcpv6MsgType::RelayRepl => {
                 Ok(None) // Server doesn't process these
             }
         }
@@ -140,7 +158,11 @@ impl Dhcpv6Server {
 
     // --- Message handlers ---
 
-    fn handle_solicit(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_solicit(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         let client_duid = match msg.client_duid() {
             Some(d) => d,
             None => return Ok(None),
@@ -156,40 +178,74 @@ impl Dhcpv6Server {
 
         // Allocate an address
         let addr = match self.pool.allocate_address(
-            client_duid.clone(), iaid,
+            client_duid.clone(),
+            iaid,
             self.config.preferred_lifetime,
             self.config.valid_lifetime,
         ) {
             Some(a) => a,
             None => {
                 // Pool exhausted — send Reply with NoAddrsAvail
-                return Ok(Some(self.make_error_reply(msg, StatusCode::NoAddrsAvail, "No addresses available")));
+                return Ok(Some(self.make_error_reply(
+                    msg,
+                    StatusCode::NoAddrsAvail,
+                    "No addresses available",
+                )));
             }
         };
 
         // Build IA_NA response with IAADDR
-        let t1 = if self.config.t1 > 0 { self.config.t1 } else { self.config.preferred_lifetime / 2 };
-        let t2 = if self.config.t2 > 0 { self.config.t2 } else { (self.config.valid_lifetime * 7) / 8 };
+        let t1 = if self.config.t1 > 0 {
+            self.config.t1
+        } else {
+            self.config.preferred_lifetime / 2
+        };
+        let t2 = if self.config.t2 > 0 {
+            self.config.t2
+        } else {
+            (self.config.valid_lifetime * 7) / 8
+        };
 
         let iaaddr = Dhcpv6Option::iaaddr(
-            addr, self.config.preferred_lifetime, self.config.valid_lifetime, vec![]);
+            addr,
+            self.config.preferred_lifetime,
+            self.config.valid_lifetime,
+            vec![],
+        );
         let ia_na = Dhcpv6Option::ia_na(iaid, t1, t2, vec![iaaddr]);
 
         let mut resp_options = vec![
             Dhcpv6Option::from_raw(OPT_SERVERID, self.config.server_duid.clone()),
             ia_na,
             Dhcpv6Option::dns_servers(&self.config.dns_servers),
-            Dhcpv6Option::domain_list(&self.config.domain_list.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            Dhcpv6Option::domain_list(
+                &self
+                    .config
+                    .domain_list
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>(),
+            ),
         ];
 
         if rapid_commit {
             resp_options.push(Dhcpv6Option::from_raw(OPT_RAPID_COMMIT, vec![]));
         }
 
-        let resp_type = if rapid_commit { Dhcpv6MsgType::Reply } else { Dhcpv6MsgType::Advertise };
+        let resp_type = if rapid_commit {
+            Dhcpv6MsgType::Reply
+        } else {
+            Dhcpv6MsgType::Advertise
+        };
 
-        edgerun_log::info!("edgerun-dhcpv6: {} {} to duid={}",
-            resp_type, addr, Duid::from_wire(&client_duid).map(|d| format!("{}", d)).unwrap_or_default());
+        edgerun_log::info!(
+            "edgerun-dhcpv6: {} {} to duid={}",
+            resp_type,
+            addr,
+            Duid::from_wire(&client_duid)
+                .map(|d| format!("{}", d))
+                .unwrap_or_default()
+        );
 
         Ok(Some(Dhcpv6Message {
             msg_type: resp_type,
@@ -198,7 +254,11 @@ impl Dhcpv6Server {
         }))
     }
 
-    fn handle_request(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_request(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         let client_duid = match msg.client_duid() {
             Some(d) => d,
             None => return Ok(None),
@@ -214,24 +274,47 @@ impl Dhcpv6Server {
         // Find existing lease or allocate new
         let iaid = match msg.ia_id() {
             Some(id) => id,
-            None => return Ok(Some(self.make_error_reply(msg, StatusCode::MalformedQuery, "Missing IAID"))),
+            None => {
+                return Ok(Some(self.make_error_reply(
+                    msg,
+                    StatusCode::MalformedQuery,
+                    "Missing IAID",
+                )))
+            }
         };
 
         // Check if already leased
-        let existing = self.pool.address_leases.iter().find(|l| {
-            l.client_duid == client_duid && l.iaid == iaid
-        });
+        let existing = self
+            .pool
+            .address_leases
+            .iter()
+            .find(|l| l.client_duid == client_duid && l.iaid == iaid);
 
         let (addr, preferred, valid) = if let Some(lease) = existing {
-            (lease.address, lease.preferred_lifetime, lease.valid_lifetime)
+            (
+                lease.address,
+                lease.preferred_lifetime,
+                lease.valid_lifetime,
+            )
         } else {
             match self.pool.allocate_address(
-                client_duid.clone(), iaid,
+                client_duid.clone(),
+                iaid,
                 self.config.preferred_lifetime,
                 self.config.valid_lifetime,
             ) {
-                Some(a) => (a, self.config.preferred_lifetime, self.config.valid_lifetime),
-                None => return Ok(Some(self.make_error_reply(msg, StatusCode::NoAddrsAvail, "No addresses available"))),
+                Some(a) => (
+                    a,
+                    self.config.preferred_lifetime,
+                    self.config.valid_lifetime,
+                ),
+                None => {
+                    return Ok(Some(self.make_error_reply(
+                        msg,
+                        StatusCode::NoAddrsAvail,
+                        "No addresses available",
+                    )))
+                }
             }
         };
 
@@ -246,8 +329,13 @@ impl Dhcpv6Server {
             Dhcpv6Option::dns_servers(&self.config.dns_servers),
         ];
 
-        edgerun_log::info!("edgerun-dhcpv6: REPLY {} to duid={}",
-            addr, Duid::from_wire(&client_duid).map(|d| format!("{}", d)).unwrap_or_default());
+        edgerun_log::info!(
+            "edgerun-dhcpv6: REPLY {} to duid={}",
+            addr,
+            Duid::from_wire(&client_duid)
+                .map(|d| format!("{}", d))
+                .unwrap_or_default()
+        );
 
         Ok(Some(Dhcpv6Message {
             msg_type: Dhcpv6MsgType::Reply,
@@ -256,15 +344,27 @@ impl Dhcpv6Server {
         }))
     }
 
-    fn handle_renew(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_renew(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         self.handle_lease_update(msg, Dhcpv6MsgType::Renew)
     }
 
-    fn handle_rebind(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_rebind(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         self.handle_lease_update(msg, Dhcpv6MsgType::Rebind)
     }
 
-    fn handle_lease_update(&mut self, msg: &Dhcpv6Message, msg_type: Dhcpv6MsgType) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_lease_update(
+        &mut self,
+        msg: &Dhcpv6Message,
+        msg_type: Dhcpv6MsgType,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         let client_duid = match msg.client_duid() {
             Some(d) => d,
             None => return Ok(None),
@@ -276,16 +376,27 @@ impl Dhcpv6Server {
         };
 
         // Find existing lease
-        let lease = self.pool.address_leases.iter_mut().find(|l| {
-            l.client_duid == client_duid && l.iaid == iaid && !l.is_expired()
-        });
+        let lease = self
+            .pool
+            .address_leases
+            .iter_mut()
+            .find(|l| l.client_duid == client_duid && l.iaid == iaid && !l.is_expired());
 
         if let Some(lease) = lease {
             let t1 = self.config.t1;
             let t2 = self.config.t2;
-            let iaaddr = Dhcpv6Option::iaaddr(lease.address, lease.preferred_lifetime, lease.valid_lifetime, vec![]);
+            let iaaddr = Dhcpv6Option::iaaddr(
+                lease.address,
+                lease.preferred_lifetime,
+                lease.valid_lifetime,
+                vec![],
+            );
             let ia_na = Dhcpv6Option::ia_na(iaid, t1, t2, vec![iaaddr]);
-            lease.state = if msg_type == Dhcpv6MsgType::Renew { LeaseState::Renewing } else { LeaseState::Rebinding };
+            lease.state = if msg_type == Dhcpv6MsgType::Renew {
+                LeaseState::Renewing
+            } else {
+                LeaseState::Rebinding
+            };
 
             let resp_options = vec![
                 Dhcpv6Option::from_raw(OPT_SERVERID, self.config.server_duid.clone()),
@@ -298,11 +409,19 @@ impl Dhcpv6Server {
                 options: resp_options,
             }))
         } else {
-            Ok(Some(self.make_error_reply(msg, StatusCode::NoBinding, "No binding for IAID")))
+            Ok(Some(self.make_error_reply(
+                msg,
+                StatusCode::NoBinding,
+                "No binding for IAID",
+            )))
         }
     }
 
-    fn handle_release(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_release(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         let client_duid = match msg.client_duid() {
             Some(d) => d,
             None => return Ok(None),
@@ -314,20 +433,32 @@ impl Dhcpv6Server {
         };
 
         // Find and release lease
-        if let Some(lease) = self.pool.address_leases.iter().find(|l| {
-            l.client_duid == client_duid && l.iaid == iaid
-        }) {
+        if let Some(lease) = self
+            .pool
+            .address_leases
+            .iter()
+            .find(|l| l.client_duid == client_duid && l.iaid == iaid)
+        {
             let addr = lease.address;
             self.pool.release_address(&client_duid, iaid, addr);
-            edgerun_log::info!("edgerun-dhcpv6: RELEASE {} from duid={}",
-                addr, Duid::from_wire(&client_duid).map(|d| format!("{}", d)).unwrap_or_default());
+            edgerun_log::info!(
+                "edgerun-dhcpv6: RELEASE {} from duid={}",
+                addr,
+                Duid::from_wire(&client_duid)
+                    .map(|d| format!("{}", d))
+                    .unwrap_or_default()
+            );
         }
 
         // Release is typically not acknowledged per RFC 8415
         Ok(None)
     }
 
-    fn handle_decline(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_decline(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         let client_duid = match msg.client_duid() {
             Some(d) => d,
             None => return Ok(None),
@@ -339,18 +470,30 @@ impl Dhcpv6Server {
         };
 
         // Find and mark as declined
-        if let Some(lease) = self.pool.address_leases.iter_mut().find(|l| {
-            l.client_duid == client_duid && l.iaid == iaid
-        }) {
+        if let Some(lease) = self
+            .pool
+            .address_leases
+            .iter_mut()
+            .find(|l| l.client_duid == client_duid && l.iaid == iaid)
+        {
             lease.state = LeaseState::Declined;
-            edgerun_log::warn!("edgerun-dhcpv6: DECLINE {} from duid={}",
-                lease.address, Duid::from_wire(&client_duid).map(|d| format!("{}", d)).unwrap_or_default());
+            edgerun_log::warn!(
+                "edgerun-dhcpv6: DECLINE {} from duid={}",
+                lease.address,
+                Duid::from_wire(&client_duid)
+                    .map(|d| format!("{}", d))
+                    .unwrap_or_default()
+            );
         }
 
         Ok(None)
     }
 
-    fn handle_information_request(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_information_request(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         // Stateless: return options only, no addresses
         let mut options = vec![
             Dhcpv6Option::from_raw(OPT_SERVERID, self.config.server_duid.clone()),
@@ -360,7 +503,14 @@ impl Dhcpv6Server {
         // Add domain list if requested
         let oro = msg.option_request_list();
         if oro.contains(&OPT_DOMAIN_LIST) {
-            options.push(Dhcpv6Option::domain_list(&self.config.domain_list.iter().map(|s| s.as_str()).collect::<Vec<_>>()));
+            options.push(Dhcpv6Option::domain_list(
+                &self
+                    .config
+                    .domain_list
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>(),
+            ));
         }
 
         Ok(Some(Dhcpv6Message {
@@ -370,7 +520,11 @@ impl Dhcpv6Server {
         }))
     }
 
-    fn handle_confirm(&mut self, msg: &Dhcpv6Message, _src: SocketAddr) -> Result<Option<Dhcpv6Message>, io::Error> {
+    fn handle_confirm(
+        &mut self,
+        msg: &Dhcpv6Message,
+        _src: SocketAddr,
+    ) -> Result<Option<Dhcpv6Message>, io::Error> {
         // Confirm that addresses are still appropriate for the new link
         // For now, just acknowledge
         let options = vec![
@@ -387,7 +541,12 @@ impl Dhcpv6Server {
 
     // --- Helpers ---
 
-    fn make_error_reply(&self, msg: &Dhcpv6Message, status: StatusCode, message: &str) -> Dhcpv6Message {
+    fn make_error_reply(
+        &self,
+        msg: &Dhcpv6Message,
+        status: StatusCode,
+        message: &str,
+    ) -> Dhcpv6Message {
         Dhcpv6Message {
             msg_type: Dhcpv6MsgType::Reply,
             transaction_id: msg.transaction_id,

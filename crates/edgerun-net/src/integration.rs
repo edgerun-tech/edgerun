@@ -96,8 +96,14 @@ mod tests {
         let a = integration.get_a_records();
         let ptr = integration.get_ptr_records();
 
-        assert_eq!(a.get("laptop.local"), Some(&Ipv4Addr::new(192, 168, 1, 100)));
-        assert_eq!(ptr.get(&Ipv4Addr::new(192, 168, 1, 100)), Some(&"laptop.local".to_string()));
+        assert_eq!(
+            a.get("laptop.local"),
+            Some(&Ipv4Addr::new(192, 168, 1, 100))
+        );
+        assert_eq!(
+            ptr.get(&Ipv4Addr::new(192, 168, 1, 100)),
+            Some(&"laptop.local".to_string())
+        );
     }
 
     #[test]
@@ -120,7 +126,10 @@ mod tests {
         let ptr = integration.get_ptr_records();
 
         assert_eq!(a.get("pc.local"), Some(&Ipv4Addr::new(10, 0, 0, 2)));
-        assert_eq!(ptr.get(&Ipv4Addr::new(10, 0, 0, 2)), Some(&"pc.local".to_string()));
+        assert_eq!(
+            ptr.get(&Ipv4Addr::new(10, 0, 0, 2)),
+            Some(&"pc.local".to_string())
+        );
         assert!(!ptr.contains_key(&Ipv4Addr::new(10, 0, 0, 1)));
     }
 

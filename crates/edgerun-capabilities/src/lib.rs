@@ -145,10 +145,7 @@ mod tests {
     #[test]
     fn error_display_invalid_request() {
         let err = CapabilityError::InvalidRequest("missing field");
-        assert_eq!(
-            err.to_string(),
-            "invalid capability request: missing field"
-        );
+        assert_eq!(err.to_string(), "invalid capability request: missing field");
     }
 
     #[test]
@@ -177,8 +174,7 @@ mod tests {
 
     #[test]
     fn error_is_std_error() {
-        let err: Box<dyn std::error::Error> =
-            Box::new(CapabilityError::InvalidRequest("test"));
+        let err: Box<dyn std::error::Error> = Box::new(CapabilityError::InvalidRequest("test"));
         assert!(err.source().is_none());
     }
 
@@ -189,10 +185,7 @@ mod tests {
         let c = CapabilityError::InvalidRequest("other");
         assert_eq!(a, b);
         assert_ne!(a, c);
-        assert_ne!(
-            a,
-            CapabilityError::PermissionDenied("msg")
-        );
+        assert_ne!(a, CapabilityError::PermissionDenied("msg"));
     }
 
     #[test]
@@ -417,15 +410,7 @@ mod tests {
 
     #[test]
     fn descriptor_empty_slices_produce_empty_vectors() {
-        let d = capability_descriptor(
-            "p",
-            "i",
-            CapabilityRole::Input,
-            &[],
-            &[],
-            &[],
-            vec![],
-        );
+        let d = capability_descriptor("p", "i", CapabilityRole::Input, &[], &[], &[], vec![]);
         assert!(d.modalities.is_empty());
         assert!(d.event_kinds.is_empty());
         assert!(d.operations.is_empty());
@@ -938,15 +923,7 @@ mod tests {
 
     #[test]
     fn builder_empty_slices_fails_validation() {
-        let d = capability_descriptor(
-            "p",
-            "i",
-            CapabilityRole::Input,
-            &[],
-            &[],
-            &[],
-            vec![],
-        );
+        let d = capability_descriptor("p", "i", CapabilityRole::Input, &[], &[], &[], vec![]);
         assert!(validate_descriptor(&d).is_err());
     }
 
@@ -973,7 +950,9 @@ mod tests {
             &[CapabilityOperation::Invoke],
             vec![],
         );
-        let provider = MockProvider { descriptor: desc.clone() };
+        let provider = MockProvider {
+            descriptor: desc.clone(),
+        };
         assert_eq!(provider.descriptor(), desc);
     }
 

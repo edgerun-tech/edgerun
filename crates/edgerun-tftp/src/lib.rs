@@ -29,10 +29,10 @@
 //!   |  (BIOS/UEFI loads and executes)|
 //! ```
 
+pub mod blob_provider;
 pub mod message;
 pub mod server;
-pub mod blob_provider;
 
-pub use message::{TftpOpcode, TftpMessage, TftpError, TftpOptions};
-pub use server::TftpServer;
 pub use blob_provider::BlobTftpProvider;
+pub use message::{TftpError, TftpMessage, TftpOpcode, TftpOptions};
+pub use server::TftpServer;

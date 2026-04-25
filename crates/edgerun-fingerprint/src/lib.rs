@@ -249,8 +249,7 @@ mod tests {
 
     #[test]
     fn fingerprint_error_is_std_error() {
-        let err: Box<dyn std::error::Error> =
-            Box::new(FingerprintError::InvalidRequest("test"));
+        let err: Box<dyn std::error::Error> = Box::new(FingerprintError::InvalidRequest("test"));
         assert!(err.to_string().contains("invalid fingerprint request"));
     }
 

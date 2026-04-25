@@ -117,9 +117,15 @@ pub(crate) async fn handle_provisioning_connection(
         }
 
         let response = r#"{"status":"provisioning_accepted"}"#;
-        stream.write_all(response.as_bytes()).await.map_err(|e| e.to_string())?;
+        stream
+            .write_all(response.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
 
-        edgerun_log::info!("Node {} provisioning accepted, genesis will be encrypted with password", &public_key_hex[..16]);
+        edgerun_log::info!(
+            "Node {} provisioning accepted, genesis will be encrypted with password",
+            &public_key_hex[..16]
+        );
 
         Ok(())
     } else if msg_type == "complete" {
@@ -130,9 +136,15 @@ pub(crate) async fn handle_provisioning_connection(
         }
 
         let response = r#"{"status":"genesis_completed"}"#;
-        stream.write_all(response.as_bytes()).await.map_err(|e| e.to_string())?;
+        stream
+            .write_all(response.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
 
-        edgerun_log::info!("Node {} genesis completed and encrypted with password", &public_key_hex[..16]);
+        edgerun_log::info!(
+            "Node {} genesis completed and encrypted with password",
+            &public_key_hex[..16]
+        );
 
         Ok(())
     } else if msg_type == "unlock" {
@@ -143,9 +155,15 @@ pub(crate) async fn handle_provisioning_connection(
         }
 
         let response = r#"{"status":"unlock_accepted"}"#;
-        stream.write_all(response.as_bytes()).await.map_err(|e| e.to_string())?;
+        stream
+            .write_all(response.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
 
-        edgerun_log::info!("Unlock accepted for node {}, will decrypt private key with password", &public_key_hex[..16]);
+        edgerun_log::info!(
+            "Unlock accepted for node {}, will decrypt private key with password",
+            &public_key_hex[..16]
+        );
 
         Ok(())
     } else {

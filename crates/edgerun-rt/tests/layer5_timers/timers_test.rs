@@ -1,8 +1,7 @@
 // Test timers (sleep, timeout, interval, ctrl_c) with the actual runtime.
 use edgerun_rt::{
-    sleep, timeout, interval, interval_at, ctrl_c, Sleep, Timeout, Interval,
-    MissedTickBehavior, Elapsed,
-    Runtime, spawn,
+    ctrl_c, interval, interval_at, sleep, spawn, timeout, Elapsed, Interval, MissedTickBehavior,
+    Runtime, Sleep, Timeout,
 };
 use std::time::Duration;
 use std::time::Instant as StdInstant;
@@ -33,8 +32,16 @@ fn test_sleep_basic() {
         let start = StdInstant::now();
         sleep(Duration::from_millis(50)).await;
         let elapsed = start.elapsed();
-        assert!(elapsed >= Duration::from_millis(45), "sleep should wait at least 50ms, got {:?}", elapsed);
-        assert!(elapsed < Duration::from_millis(200), "sleep should not wait much longer, got {:?}", elapsed);
+        assert!(
+            elapsed >= Duration::from_millis(45),
+            "sleep should wait at least 50ms, got {:?}",
+            elapsed
+        );
+        assert!(
+            elapsed < Duration::from_millis(200),
+            "sleep should not wait much longer, got {:?}",
+            elapsed
+        );
         println!("  test_sleep_basic OK (waited {:?})", elapsed);
     });
     std::thread::sleep(Duration::from_millis(100));
@@ -47,7 +54,11 @@ fn test_sleep_accuracy() {
         let start = StdInstant::now();
         sleep(Duration::from_millis(10)).await;
         let elapsed = start.elapsed();
-        assert!(elapsed >= Duration::from_millis(5), "10ms sleep should take at least 5ms, got {:?}", elapsed);
+        assert!(
+            elapsed >= Duration::from_millis(5),
+            "10ms sleep should take at least 5ms, got {:?}",
+            elapsed
+        );
         println!("  test_sleep_accuracy OK (waited {:?})", elapsed);
     });
     std::thread::sleep(Duration::from_millis(50));
@@ -80,10 +91,7 @@ fn test_concurrent_sleeps() {
 fn test_timeout_success() {
     println!("  test_timeout_success...");
     let h = spawn(async {
-        let result = timeout(
-            Duration::from_millis(100),
-            async { "done" },
-        ).await;
+        let result = timeout(Duration::from_millis(100), async { "done" }).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "done");
         println!("  test_timeout_success OK");
@@ -95,13 +103,11 @@ fn test_timeout_success() {
 fn test_timeout_expires() {
     println!("  test_timeout_expires...");
     let h = spawn(async {
-        let result = timeout(
-            Duration::from_millis(50),
-            async {
-                sleep(Duration::from_secs(100)).await;
-                "should not reach here"
-            },
-        ).await;
+        let result = timeout(Duration::from_millis(50), async {
+            sleep(Duration::from_secs(100)).await;
+            "should not reach here"
+        })
+        .await;
         assert!(result.is_err(), "timeout should expire");
         let err = result.unwrap_err();
         assert_eq!(format!("{}", err), "deadline elapsed");
@@ -114,13 +120,11 @@ fn test_timeout_expires() {
 fn test_timeout_wrapped_sleep() {
     println!("  test_timeout_wrapped_sleep...");
     let h = spawn(async {
-        let result = timeout(
-            Duration::from_millis(200),
-            async {
-                sleep(Duration::from_millis(50)).await;
-                42
-            },
-        ).await;
+        let result = timeout(Duration::from_millis(200), async {
+            sleep(Duration::from_millis(50)).await;
+            42
+        })
+        .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
         println!("  test_timeout_wrapped_sleep OK");
@@ -144,7 +148,11 @@ fn test_interval_ticks() {
 
         let elapsed = start.elapsed();
         assert_eq!(count, 3);
-        assert!(elapsed >= Duration::from_millis(70), "3 ticks at 30ms should take ~90ms, got {:?}", elapsed);
+        assert!(
+            elapsed >= Duration::from_millis(70),
+            "3 ticks at 30ms should take ~90ms, got {:?}",
+            elapsed
+        );
         println!("  test_interval_ticks OK (elapsed {:?})", elapsed);
     });
     std::thread::sleep(Duration::from_millis(200));
@@ -177,8 +185,15 @@ fn test_interval_at_start_time() {
         iv.tick().await;
         let elapsed = tick_start.elapsed();
         // First tick should be at ~50ms from now (the start time)
-        assert!(elapsed >= Duration::from_millis(40), "interval_at first tick took {:?}", elapsed);
-        println!("  test_interval_at_start_time OK (first tick in {:?})", elapsed);
+        assert!(
+            elapsed >= Duration::from_millis(40),
+            "interval_at first tick took {:?}",
+            elapsed
+        );
+        println!(
+            "  test_interval_at_start_time OK (first tick in {:?})",
+            elapsed
+        );
     });
     std::thread::sleep(Duration::from_millis(500));
     drop(h);

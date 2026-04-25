@@ -1,7 +1,7 @@
 //! OAuth 2.0 / OIDC type definitions.
 
-use edgerun_json::{JsonValue, from_str, to_string};
 use crate::oauth_client::percent_encode;
+use edgerun_json::{from_str, to_string, JsonValue};
 
 // ---------------------------------------------------------------------------
 // Scope
@@ -12,10 +12,18 @@ use crate::oauth_client::percent_encode;
 pub struct Scope(pub String);
 
 impl Scope {
-    pub fn openid() -> Self { Scope("openid".into()) }
-    pub fn email() -> Self { Scope("email".into()) }
-    pub fn profile() -> Self { Scope("profile".into()) }
-    pub fn offline_access() -> Self { Scope("offline_access".into()) }
+    pub fn openid() -> Self {
+        Scope("openid".into())
+    }
+    pub fn email() -> Self {
+        Scope("email".into())
+    }
+    pub fn profile() -> Self {
+        Scope("profile".into())
+    }
+    pub fn offline_access() -> Self {
+        Scope("offline_access".into())
+    }
 
     /// Parse a space-separated scope string into a list of scopes.
     pub fn parse_list(s: &str) -> Vec<Self> {
@@ -24,7 +32,11 @@ impl Scope {
 
     /// Format scopes as a space-separated string (for use in URL params).
     pub fn format_list(scopes: &[Self]) -> String {
-        scopes.iter().map(|s| s.0.as_str()).collect::<Vec<_>>().join(" ")
+        scopes
+            .iter()
+            .map(|s| s.0.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
@@ -234,14 +246,35 @@ impl TokenResponse {
     pub fn from_json(json_str: &str) -> Result<Self, String> {
         let value: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
         Ok(Self {
-            access_token: value.get("access_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            token_type: value.get("token_type").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            access_token: value
+                .get("access_token")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            token_type: value
+                .get("token_type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             expires_in: value.get("expires_in").and_then(|v| v.as_u64()),
-            refresh_token: value.get("refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            id_token: value.get("id_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            scope: value.get("scope").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            error: value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            error_description: value.get("error_description").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            refresh_token: value
+                .get("refresh_token")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            id_token: value
+                .get("id_token")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            scope: value
+                .get("scope")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            error: value
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            error_description: value
+                .get("error_description")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         })
     }
 
@@ -308,12 +341,14 @@ pub struct DeviceAuthorizationRequest {
 impl DeviceAuthorizationRequest {
     /// Encode as `application/x-www-form-urlencoded` body.
     pub fn to_form_body(&self) -> String {
-        let parts = vec![
-            url_encode("client_id", &self.client_id),
-            url_encode("scope", &self.scope),
-            url_encode("code_challenge", &self.code_challenge),
-            url_encode("code_challenge_method", &self.code_challenge_method),
-        ];
+        let mut parts = Vec::new();
+        parts.push(url_encode("client_id", &self.client_id));
+        parts.push(url_encode("scope", &self.scope));
+        parts.push(url_encode("code_challenge", &self.code_challenge));
+        parts.push(url_encode(
+            "code_challenge_method",
+            &self.code_challenge_method,
+        ));
         parts.join("&")
     }
 }
@@ -332,11 +367,30 @@ impl DeviceAuthorizationResponse {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
         let value: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
-        let device_code = value.get("device_code").and_then(|v| v.as_str()).ok_or("Missing 'device_code'")?.to_string();
-        let user_code = value.get("user_code").and_then(|v| v.as_str()).ok_or("Missing 'user_code'")?.to_string();
-        let verification_uri = value.get("verification_uri").and_then(|v| v.as_str()).ok_or("Missing 'verification_uri'")?.to_string();
-        let verification_uri_complete = value.get("verification_uri_complete").and_then(|v| v.as_str()).ok_or("Missing 'verification_uri_complete'")?.to_string();
-        let expires_in = value.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(600);
+        let device_code = value
+            .get("device_code")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'device_code'")?
+            .to_string();
+        let user_code = value
+            .get("user_code")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'user_code'")?
+            .to_string();
+        let verification_uri = value
+            .get("verification_uri")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'verification_uri'")?
+            .to_string();
+        let verification_uri_complete = value
+            .get("verification_uri_complete")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'verification_uri_complete'")?
+            .to_string();
+        let expires_in = value
+            .get("expires_in")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(600);
         let interval = value.get("interval").and_then(|v| v.as_u64()).unwrap_or(5);
         Ok(Self {
             device_code,

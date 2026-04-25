@@ -238,35 +238,27 @@ pub enum TftpMessage {
         raw_options: HashMap<String, String>,
     },
     /// Write request from client (not supported for PXE, returns error).
-    WRQ {
-        filename: String,
-        mode: String,
-    },
+    WRQ { filename: String, mode: String },
     /// Data block from server.
-    DATA {
-        block: u16,
-        data: Vec<u8>,
-    },
+    DATA { block: u16, data: Vec<u8> },
     /// Acknowledgment from client.
-    ACK {
-        block: u16,
-    },
+    ACK { block: u16 },
     /// Error message.
-    ERROR {
-        code: TftpError,
-        message: String,
-    },
+    ERROR { code: TftpError, message: String },
     /// Option acknowledgment from server (RFC 2347).
-    OACK {
-        options: TftpOptions,
-    },
+    OACK { options: TftpOptions },
 }
 
 impl TftpMessage {
     /// Serialize this message to wire format.
     pub fn to_wire(&self) -> Vec<u8> {
         match self {
-            Self::RRQ { filename, mode, options, raw_options } => {
+            Self::RRQ {
+                filename,
+                mode,
+                options,
+                raw_options,
+            } => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&1u16.to_be_bytes()); // RRQ opcode
                 buf.extend_from_slice(filename.as_bytes());
@@ -385,10 +377,7 @@ impl TftpMessage {
 
             Some(TftpOpcode::DATA) => {
                 if data.len() < 4 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "DATA too short",
-                    ));
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "DATA too short"));
                 }
                 let block = u16::from_be_bytes([data[2], data[3]]);
                 let d = data[4..].to_vec();
@@ -397,10 +386,7 @@ impl TftpMessage {
 
             Some(TftpOpcode::ACK) => {
                 if data.len() < 4 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "ACK too short",
-                    ));
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "ACK too short"));
                 }
                 let block = u16::from_be_bytes([data[2], data[3]]);
                 Ok(Self::ACK { block })
@@ -415,7 +401,10 @@ impl TftpMessage {
                 }
                 let code_val = u16::from_be_bytes([data[2], data[3]]);
                 let code = TftpError::from_u16(code_val).unwrap_or(TftpError::NotDefined);
-                let msg_end = data[4..].iter().position(|&b| b == 0).unwrap_or(data.len() - 4);
+                let msg_end = data[4..]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(data.len() - 4);
                 let message = String::from_utf8_lossy(&data[4..4 + msg_end]).to_string();
                 Ok(Self::ERROR { code, message })
             }

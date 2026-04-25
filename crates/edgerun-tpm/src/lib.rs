@@ -15,70 +15,44 @@
 // TSS2 ESAPI module removed — we now use raw TPM commands via /dev/tpmrm0
 
 mod constants;
-mod types;
-mod traits;
-mod wire;
 mod device;
 mod signing;
+mod traits;
+mod types;
+mod wire;
 
 // Explicit public API — no glob re-exports
 pub use constants::{
-    TPM_RC_SUCCESS, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
-    TPM_RH_NULL, TPM_ALG_ECC, TPM_ALG_SHA256, TPM_ALG_NULL, TPM_ECC_NIST_P256,
-    TPM_CC_SIGN, TPM_RS_PW,
+    TPM_ALG_ECC, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_SIGN, TPM_ECC_NIST_P256, TPM_RC_SUCCESS,
+    TPM_RH_NULL, TPM_RS_PW, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
 };
-pub use types::{
-    TpmHandle, TpmSignCommandParams, TpmSignatureScheme, TpmNameAlgorithm,
-    TpmSignatureAlgorithm, TpmPublicAreaInfo, TpmPublicObjectType, TpmEccCurve,
-    TpmHashParams, TpmReadPublicInfo, TpmAuthCommand, TpmPasswordAuthSession,
-    TpmPolicySession, TpmParsedSignature, TpmKeyInfo, TpmError, TpmAssuranceLevel,
+pub use device::{LinuxTpmDevice, TpmDevice};
+pub use signing::{
+    default_sign_scheme_for_algorithm, hash_message_for_algorithm, sign_params_for_message,
+    sign_prehashed_with_device, sign_record_with_tpm, sign_record_with_tpm_checked,
+    signature_input_for_record, LinuxTpmSigningKey,
 };
 pub use traits::{TpmSigningKey, TpmTransport};
-pub use device::{TpmDevice, LinuxTpmDevice};
-pub use signing::{
-    LinuxTpmSigningKey,
-    signature_input_for_record,
-    sign_record_with_tpm,
-    sign_record_with_tpm_checked,
-    sign_params_for_message,
-    sign_prehashed_with_device,
-    hash_message_for_algorithm,
-    default_sign_scheme_for_algorithm,
+pub use types::{
+    TpmAssuranceLevel, TpmAuthCommand, TpmEccCurve, TpmError, TpmHandle, TpmHashParams, TpmKeyInfo,
+    TpmNameAlgorithm, TpmParsedSignature, TpmPasswordAuthSession, TpmPolicySession,
+    TpmPublicAreaInfo, TpmPublicObjectType, TpmReadPublicInfo, TpmSignCommandParams,
+    TpmSignatureAlgorithm, TpmSignatureScheme,
 };
 pub use wire::commands::{
-    build_sign_command,
-    build_sign_command_with_password_auth,
-    build_sign_command_with_policy_session,
-    build_hash_command,
-    build_verify_signature_command,
-    build_read_public_command,
-    build_start_auth_session_command,
-    build_policy_pcr_command,
-    build_policy_authorize_command,
-    build_policy_command_code_command,
-    build_startup_command,
+    build_hash_command, build_policy_authorize_command, build_policy_command_code_command,
+    build_policy_pcr_command, build_read_public_command, build_sign_command,
+    build_sign_command_with_password_auth, build_sign_command_with_policy_session,
+    build_start_auth_session_command, build_startup_command, build_verify_signature_command,
 };
 pub use wire::parse::{
-    parse_response_header,
-    ensure_success_response,
-    parse_sign_response,
-    parse_read_public_response,
-    parse_hash_response,
-    parse_start_auth_session_response,
-    infer_signature_algorithm,
-    parse_public_area,
-    key_info_from_read_public,
+    ensure_success_response, infer_signature_algorithm, key_info_from_read_public,
+    parse_hash_response, parse_public_area, parse_read_public_response, parse_response_header,
+    parse_sign_response, parse_start_auth_session_response,
 };
 pub use wire::{
-    encode_command_header,
-    encode_name_algorithm,
-    encode_symmetric_definition,
-    encode_parsed_signature,
-    read_u16,
-    read_u32,
-    read_tpm2b,
-    build_auth_command,
-    build_password_auth_area,
+    build_auth_command, build_password_auth_area, encode_command_header, encode_name_algorithm,
+    encode_parsed_signature, encode_symmetric_definition, read_tpm2b, read_u16, read_u32,
 };
 
 // ---------------------------------------------------------------------------
@@ -154,14 +128,19 @@ mod tests {
         let mut body = Vec::new();
         body.extend_from_slice(&0x0018u16.to_be_bytes()); // scheme = ECDSA
         body.extend_from_slice(&0x000Bu16.to_be_bytes()); // hash = SHA256
-        body.extend_from_slice(&32u16.to_be_bytes());     // r len
-        body.extend_from_slice(&[0xAB; 32]);               // r
-        body.extend_from_slice(&32u16.to_be_bytes());     // s len
-        body.extend_from_slice(&[0xCD; 32]);               // s
+        body.extend_from_slice(&32u16.to_be_bytes()); // r len
+        body.extend_from_slice(&[0xAB; 32]); // r
+        body.extend_from_slice(&32u16.to_be_bytes()); // s len
+        body.extend_from_slice(&[0xCD; 32]); // s
         let response = fake_success_response(TPM_ST_NO_SESSIONS, &body);
         let parsed = parse_sign_response(&response).unwrap();
         match parsed {
-            TpmParsedSignature::Ecc { scheme, hash_algorithm, r, s } => {
+            TpmParsedSignature::Ecc {
+                scheme,
+                hash_algorithm,
+                r,
+                s,
+            } => {
                 assert_eq!(scheme, 0x0018);
                 assert_eq!(hash_algorithm, TpmNameAlgorithm::Sha256);
                 assert_eq!(r.len(), 32);
@@ -175,21 +154,26 @@ mod tests {
     fn parse_read_public_response_ecc() {
         // Minimal ECC TPMT_PUBLIC
         let mut pub_area = Vec::new();
-        pub_area.extend_from_slice(&TPM_ALG_ECC.to_be_bytes());       // type
-        pub_area.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());    // nameAlg
-        pub_area.extend_from_slice(&0x0004_0000u32.to_be_bytes());    // objectAttributes
-        pub_area.extend_from_slice(&0u16.to_be_bytes());              // authPolicy size=0
-        pub_area.extend_from_slice(&TPM_ALG_NULL.to_be_bytes());      // symmetric
-        pub_area.extend_from_slice(&0x0010u16.to_be_bytes());         // scheme (NULL)
+        pub_area.extend_from_slice(&TPM_ALG_ECC.to_be_bytes()); // type
+        pub_area.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes()); // nameAlg
+        pub_area.extend_from_slice(&0x0004_0000u32.to_be_bytes()); // objectAttributes
+        pub_area.extend_from_slice(&0u16.to_be_bytes()); // authPolicy size=0
+        pub_area.extend_from_slice(&TPM_ALG_NULL.to_be_bytes()); // symmetric
+        pub_area.extend_from_slice(&0x0010u16.to_be_bytes()); // scheme (NULL)
         pub_area.extend_from_slice(&TPM_ECC_NIST_P256.to_be_bytes()); // curveID
-        pub_area.extend_from_slice(&TPM_ALG_NULL.to_be_bytes());      // KDF
-        pub_area.extend_from_slice(&32u16.to_be_bytes());             // x len
-        pub_area.extend_from_slice(&[0x01u8; 32]);                     // x
-        pub_area.extend_from_slice(&32u16.to_be_bytes());             // y len
-        pub_area.extend_from_slice(&[0x02u8; 32]);                     // y
+        pub_area.extend_from_slice(&TPM_ALG_NULL.to_be_bytes()); // KDF
+        pub_area.extend_from_slice(&32u16.to_be_bytes()); // x len
+        pub_area.extend_from_slice(&[0x01u8; 32]); // x
+        pub_area.extend_from_slice(&32u16.to_be_bytes()); // y len
+        pub_area.extend_from_slice(&[0x02u8; 32]); // y
 
         // name (SHA256 = 2 + 32) and qualified_name (same)
-        let name = { let mut v = Vec::new(); v.extend_from_slice(&0x000Bu16.to_be_bytes()); v.extend_from_slice(&[0u8; 32]); v };
+        let name = {
+            let mut v = Vec::new();
+            v.extend_from_slice(&0x000Bu16.to_be_bytes());
+            v.extend_from_slice(&[0u8; 32]);
+            v
+        };
         let qname = name.clone();
 
         // Response body: outPublic(TPM2B = size + publicArea) + name(TPM2B) + qualifiedName(TPM2B)
@@ -219,10 +203,10 @@ mod tests {
     fn parse_hash_response_success() {
         let mut body = Vec::new();
         body.extend_from_slice(&32u16.to_be_bytes()); // digest len
-        body.extend_from_slice(&[0xAA; 32]);           // digest
+        body.extend_from_slice(&[0xAA; 32]); // digest
         body.extend_from_slice(&TPM_ST_HASHCHECK.to_be_bytes()); // ticket tag
-        body.extend_from_slice(&TPM_RH_NULL.to_be_bytes());      // ticket hierarchy
-        body.extend_from_slice(&0u16.to_be_bytes());   // ticket digest len (empty)
+        body.extend_from_slice(&TPM_RH_NULL.to_be_bytes()); // ticket hierarchy
+        body.extend_from_slice(&0u16.to_be_bytes()); // ticket digest len (empty)
         let response = fake_success_response(TPM_ST_NO_SESSIONS, &body);
         let resp = parse_hash_response(&response).unwrap();
         assert_eq!(resp.digest.len(), 32);
@@ -237,8 +221,8 @@ mod tests {
     fn parse_start_auth_session_response_success() {
         let mut body = Vec::new();
         body.extend_from_slice(&0x03000001u32.to_be_bytes()); // session handle
-        body.extend_from_slice(&16u16.to_be_bytes());          // nonce_tpm len
-        body.extend_from_slice(&[0u8; 16]);                     // nonce_tpm
+        body.extend_from_slice(&16u16.to_be_bytes()); // nonce_tpm len
+        body.extend_from_slice(&[0u8; 16]); // nonce_tpm
         let response = fake_success_response(TPM_ST_NO_SESSIONS, &body);
         let resp = parse_start_auth_session_response(&response).unwrap();
         assert_eq!(resp.session_handle, 0x03000001);

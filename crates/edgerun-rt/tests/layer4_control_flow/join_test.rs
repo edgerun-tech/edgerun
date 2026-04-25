@@ -1,5 +1,5 @@
 // Test join! macro with the actual runtime.
-use edgerun_rt::{Runtime, join};
+use edgerun_rt::{join, Runtime};
 use std::time::Duration;
 
 fn main() {
@@ -24,10 +24,7 @@ async fn test_join_one() {
 
 async fn test_join_two() {
     println!("  test_join_two...");
-    let (a, b) = join!(
-        async { 1 },
-        async { 2 },
-    );
+    let (a, b) = join!(async { 1 }, async { 2 },);
     assert_eq!(a, 1);
     assert_eq!(b, 2);
     println!("  test_join_two OK");
@@ -35,11 +32,7 @@ async fn test_join_two() {
 
 async fn test_join_three() {
     println!("  test_join_three...");
-    let (a, b, c) = join!(
-        async { "hello" },
-        async { 42 },
-        async { vec![1, 2, 3] },
-    );
+    let (a, b, c) = join!(async { "hello" }, async { 42 }, async { vec![1, 2, 3] },);
     assert_eq!(a, "hello");
     assert_eq!(b, 42);
     assert_eq!(c, vec![1, 2, 3]);
@@ -48,12 +41,7 @@ async fn test_join_three() {
 
 async fn test_join_four() {
     println!("  test_join_four...");
-    let (a, b, c, d) = join!(
-        async { 10 },
-        async { 20 },
-        async { 30 },
-        async { 40 },
-    );
+    let (a, b, c, d) = join!(async { 10 }, async { 20 }, async { 30 }, async { 40 },);
     assert_eq!(a, 10);
     assert_eq!(b, 20);
     assert_eq!(c, 30);

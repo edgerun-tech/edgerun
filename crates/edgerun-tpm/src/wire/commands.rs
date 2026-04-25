@@ -1,6 +1,9 @@
 use crate::constants::*;
 use crate::types::*;
-use crate::wire::{build_auth_command, build_password_auth_area, encode_command_header, encode_name_algorithm, encode_symmetric_definition};
+use crate::wire::{
+    build_auth_command, build_password_auth_area, encode_command_header, encode_name_algorithm,
+    encode_symmetric_definition,
+};
 
 // ---------------------------------------------------------------------------
 // Command builders

@@ -1,3 +1,4 @@
+use crate::crypto::sha256;
 /// Accounting types for the edgerun compute marketplace.
 ///
 /// Defines the core data structures for tracking billable compute work.
@@ -15,7 +16,6 @@
 /// | Storage I/O | ops + bytes           | u64    |
 /// | Network     | bytes                 | u64    |
 use crate::fixed_point::FixedPoint16;
-use crate::crypto::sha256;
 
 // ===========================================================================
 // Workload classification
@@ -255,7 +255,9 @@ impl PerformanceCertificate {
     }
 
     fn verify_ecdsa_signature(&self) -> Result<(), &'static str> {
-        use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier};
+        use edgerun_crypto::p256::ecdsa::{
+            signature::hazmat::PrehashVerifier, Signature, VerifyingKey,
+        };
         use edgerun_crypto::p256::EncodedPoint;
 
         // Reconstruct the public key from node_id (64 bytes: x || y, uncompressed without 0x04)
@@ -265,7 +267,8 @@ impl PerformanceCertificate {
         pk_bytes[33..].copy_from_slice(&self.node_id[32..]);
 
         let encoded_point = EncodedPoint::from_bytes(pk_bytes).map_err(|_| "Invalid public key")?;
-        let verifying_key = VerifyingKey::from_encoded_point(&encoded_point).map_err(|_| "Invalid verifying key")?;
+        let verifying_key = VerifyingKey::from_encoded_point(&encoded_point)
+            .map_err(|_| "Invalid verifying key")?;
 
         // Parse signature (r || s format, 64 bytes total)
         let r_bytes: [u8; 32] = self.signature[..32].try_into().map_err(|_| "Invalid r")?;
@@ -274,7 +277,9 @@ impl PerformanceCertificate {
         let sig = Signature::from_scalars(r_bytes, s_bytes).map_err(|_| "Invalid signature")?;
 
         // Verify signature over the digest
-        verifying_key.verify_prehash(&self.digest, &sig).map_err(|_| "Signature verification failed")
+        verifying_key
+            .verify_prehash(&self.digest, &sig)
+            .map_err(|_| "Signature verification failed")
     }
 
     /// Compute and return a new certificate with the digest field populated.
@@ -288,7 +293,8 @@ impl PerformanceCertificate {
     /// The digest must already be set (via `with_digest()`).
     pub fn with_signature(mut self, signing_key: &edgerun_crypto::p256::ecdsa::SigningKey) -> Self {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-        let sig: edgerun_crypto::p256::ecdsa::Signature = signing_key.sign_prehash(&self.digest)
+        let sig: edgerun_crypto::p256::ecdsa::Signature = signing_key
+            .sign_prehash(&self.digest)
             .expect("ECDSA P-256 signing failed");
         self.signature.copy_from_slice(&sig.to_bytes());
         self
@@ -376,13 +382,26 @@ impl PerformanceCertificate {
         let npu_score = if npu_raw > 0 { Some(npu_raw) } else { None };
 
         Some(Self {
-            node_id, cpu_int_score, cpu_crypto_score, mem_bandwidth_mbps,
-            mem_latency_ns, storage_random_iops, storage_seq_mbps,
-            storage_event_iops, storage_blob_ops, storage_object_ops,
-            net_frame_encode_decode_ops, net_frame_sign_verify_ops,
-            net_udp_throughput_ops, net_router_lookup_ops,
-            gpu_score, npu_score, benchmark_started_us, benchmark_completed_us,
-            digest, signature,
+            node_id,
+            cpu_int_score,
+            cpu_crypto_score,
+            mem_bandwidth_mbps,
+            mem_latency_ns,
+            storage_random_iops,
+            storage_seq_mbps,
+            storage_event_iops,
+            storage_blob_ops,
+            storage_object_ops,
+            net_frame_encode_decode_ops,
+            net_frame_sign_verify_ops,
+            net_udp_throughput_ops,
+            net_router_lookup_ops,
+            gpu_score,
+            npu_score,
+            benchmark_started_us,
+            benchmark_completed_us,
+            digest,
+            signature,
         })
     }
 }
@@ -483,17 +502,23 @@ impl WorkAccounting {
         buf.extend_from_slice(&self.network_sent_bytes.to_le_bytes());
         buf.extend_from_slice(&self.network_received_bytes.to_le_bytes());
         buf.extend_from_slice(&self.workload_class.to_u32().to_le_bytes());
-        buf.extend_from_slice(&(match self.priority {
-            WorkPriority::Batch => 0u32,
-            WorkPriority::Standard => 1,
-            WorkPriority::Expedited => 2,
-        }).to_le_bytes());
-        buf.extend_from_slice(&(match self.status {
-            WorkStatus::Completed => 0u32,
-            WorkStatus::Failed => 1,
-            WorkStatus::Terminated => 2,
-            WorkStatus::Preempted => 3,
-        }).to_le_bytes());
+        buf.extend_from_slice(
+            &(match self.priority {
+                WorkPriority::Batch => 0u32,
+                WorkPriority::Standard => 1,
+                WorkPriority::Expedited => 2,
+            })
+            .to_le_bytes(),
+        );
+        buf.extend_from_slice(
+            &(match self.status {
+                WorkStatus::Completed => 0u32,
+                WorkStatus::Failed => 1,
+                WorkStatus::Terminated => 2,
+                WorkStatus::Preempted => 3,
+            })
+            .to_le_bytes(),
+        );
         if let Some(code) = self.exit_code {
             buf.extend_from_slice(&1u32.to_le_bytes());
             buf.extend_from_slice(&code.to_le_bytes());
@@ -511,7 +536,32 @@ impl WorkAccounting {
 
     /// Deserialize from bytes.
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
-        const MIN_SIZE: usize = 32+64+64+32 + 8+8 + 8+4+4+8+8 + 8+8+4+4 + 8+8 + 4+4+4+8 + 32+4+4+4 + 8;
+        const MIN_SIZE: usize = 32
+            + 64
+            + 64
+            + 32
+            + 8
+            + 8
+            + 8
+            + 4
+            + 4
+            + 8
+            + 8
+            + 8
+            + 8
+            + 4
+            + 4
+            + 8
+            + 8
+            + 4
+            + 4
+            + 4
+            + 8
+            + 32
+            + 4
+            + 4
+            + 4
+            + 8;
         if data.len() < MIN_SIZE {
             return None;
         }
@@ -522,33 +572,46 @@ impl WorkAccounting {
         }
         impl<'a> Reader<'a> {
             fn read32(&mut self) -> Option<[u8; 32]> {
-                if self.offset + 32 > self.data.len() { return None; }
-                let v: [u8; 32] = self.data[self.offset..self.offset+32].try_into().ok()?;
+                if self.offset + 32 > self.data.len() {
+                    return None;
+                }
+                let v: [u8; 32] = self.data[self.offset..self.offset + 32].try_into().ok()?;
                 self.offset += 32;
                 Some(v)
             }
             fn read64(&mut self) -> Option<u64> {
-                if self.offset + 8 > self.data.len() { return None; }
-                let v = u64::from_le_bytes(self.data[self.offset..self.offset+8].try_into().ok()?);
+                if self.offset + 8 > self.data.len() {
+                    return None;
+                }
+                let v =
+                    u64::from_le_bytes(self.data[self.offset..self.offset + 8].try_into().ok()?);
                 self.offset += 8;
                 Some(v)
             }
             fn read32u(&mut self) -> Option<u32> {
-                if self.offset + 4 > self.data.len() { return None; }
-                let v = u32::from_le_bytes(self.data[self.offset..self.offset+4].try_into().ok()?);
+                if self.offset + 4 > self.data.len() {
+                    return None;
+                }
+                let v =
+                    u32::from_le_bytes(self.data[self.offset..self.offset + 4].try_into().ok()?);
                 self.offset += 4;
                 Some(v)
             }
             fn read_i32(&mut self) -> Option<i32> {
-                if self.offset + 4 > self.data.len() { return None; }
-                let v = i32::from_le_bytes(self.data[self.offset..self.offset+4].try_into().ok()?);
+                if self.offset + 4 > self.data.len() {
+                    return None;
+                }
+                let v =
+                    i32::from_le_bytes(self.data[self.offset..self.offset + 4].try_into().ok()?);
                 self.offset += 4;
                 Some(v)
             }
             fn read64arr(&mut self) -> Option<[u8; 64]> {
-                if self.offset + 64 > self.data.len() { return None; }
+                if self.offset + 64 > self.data.len() {
+                    return None;
+                }
                 let mut out = [0u8; 64];
-                out.copy_from_slice(&self.data[self.offset..self.offset+64]);
+                out.copy_from_slice(&self.data[self.offset..self.offset + 64]);
                 self.offset += 64;
                 Some(out)
             }
@@ -573,17 +636,15 @@ impl WorkAccounting {
         let storage_write_ops = r.read32u()?;
         let network_sent_bytes = r.read64()?;
         let network_received_bytes = r.read64()?;
-        let workload_class = WorkloadClass::parse(
-            match r.read32u()? {
-                1 => "container",
-                2 => "inference",
-                3 => "compilation",
-                4 => "data_processing",
-                5 => "transcoding",
-                6 => "general",
-                _ => "other",
-            }
-        );
+        let workload_class = WorkloadClass::parse(match r.read32u()? {
+            1 => "container",
+            2 => "inference",
+            3 => "compilation",
+            4 => "data_processing",
+            5 => "transcoding",
+            6 => "general",
+            _ => "other",
+        });
         let priority = match r.read32u()? {
             0 => WorkPriority::Batch,
             1 => WorkPriority::Standard,
@@ -598,7 +659,12 @@ impl WorkAccounting {
             _ => WorkStatus::Failed,
         };
         let has_exit = r.read32u()?;
-        let exit_code = if has_exit == 1 { Some(r.read_i32()?) } else { r.read_i32(); None };
+        let exit_code = if has_exit == 1 {
+            Some(r.read_i32()?)
+        } else {
+            r.read_i32();
+            None
+        };
         let provider_cert_digest = r.read32()?;
         let cpu_multiplier = FixedPoint16::from_raw(r.read32u()?);
         let memory_multiplier = FixedPoint16::from_raw(r.read32u()?);
@@ -606,15 +672,31 @@ impl WorkAccounting {
         let billable_compute_rc_us = r.read64()?;
 
         Some(Self {
-            work_id, requester_id, provider_id, delegation_hash,
-            started_at_us, completed_at_us,
-            physical_core_us, physical_memory_gb, memory_duration_seconds,
-            gpu_core_us, npu_core_us,
-            storage_read_bytes, storage_written_bytes,
-            storage_read_ops, storage_write_ops,
-            network_sent_bytes, network_received_bytes,
-            workload_class, priority, status, exit_code,
-            provider_cert_digest, cpu_multiplier, memory_multiplier, storage_multiplier,
+            work_id,
+            requester_id,
+            provider_id,
+            delegation_hash,
+            started_at_us,
+            completed_at_us,
+            physical_core_us,
+            physical_memory_gb,
+            memory_duration_seconds,
+            gpu_core_us,
+            npu_core_us,
+            storage_read_bytes,
+            storage_written_bytes,
+            storage_read_ops,
+            storage_write_ops,
+            network_sent_bytes,
+            network_received_bytes,
+            workload_class,
+            priority,
+            status,
+            exit_code,
+            provider_cert_digest,
+            cpu_multiplier,
+            memory_multiplier,
+            storage_multiplier,
             billable_compute_rc_us,
         })
     }
@@ -626,7 +708,8 @@ impl WorkAccounting {
 
     /// Total network bytes (sent + received).
     pub fn total_network_bytes(&self) -> u64 {
-        self.network_sent_bytes.saturating_add(self.network_received_bytes)
+        self.network_sent_bytes
+            .saturating_add(self.network_received_bytes)
     }
 }
 
@@ -717,9 +800,17 @@ impl ComputeAdvertisement {
         signature.copy_from_slice(&data[148..212]);
 
         Some(Self {
-            node_id, available_cores, available_memory_bytes, available_storage_bytes,
-            gpu_count, npu_count, cert_digest, price_per_million_rc_us,
-            min_contract_duration_us, timestamp_us, signature,
+            node_id,
+            available_cores,
+            available_memory_bytes,
+            available_storage_bytes,
+            gpu_count,
+            npu_count,
+            cert_digest,
+            price_per_million_rc_us,
+            min_contract_duration_us,
+            timestamp_us,
+            signature,
         })
     }
 }
@@ -794,7 +885,7 @@ mod tests {
 
     #[test]
     fn workload_class_roundtrip() {
-assert_eq!(WorkloadClass::parse("inference"), WorkloadClass::Inference);
+        assert_eq!(WorkloadClass::parse("inference"), WorkloadClass::Inference);
         assert_eq!(WorkPriority::parse("batch"), WorkPriority::Batch);
         assert_eq!(WorkStatus::parse("preempted"), WorkStatus::Preempted);
     }
@@ -927,10 +1018,16 @@ assert_eq!(WorkloadClass::parse("inference"), WorkloadClass::Inference);
 
         assert_eq!(restored.work_id, accounting.work_id);
         assert_eq!(restored.physical_core_us, accounting.physical_core_us);
-        assert_eq!(restored.billable_compute_rc_us, accounting.billable_compute_rc_us);
+        assert_eq!(
+            restored.billable_compute_rc_us,
+            accounting.billable_compute_rc_us
+        );
         assert_eq!(restored.workload_class, WorkloadClass::Inference);
         assert_eq!(restored.status, WorkStatus::Completed);
-        assert_eq!(restored.cpu_multiplier.to_raw(), accounting.cpu_multiplier.to_raw());
+        assert_eq!(
+            restored.cpu_multiplier.to_raw(),
+            accounting.cpu_multiplier.to_raw()
+        );
     }
 
     #[test]
@@ -994,8 +1091,8 @@ assert_eq!(WorkloadClass::parse("inference"), WorkloadClass::Inference);
             node_id: [1u8; 64],
             cpu_int_score: 0,
             cpu_crypto_score: 0,
-            mem_bandwidth_mbps: 20_000,  // 4x reference
-            mem_latency_ns: 50,           // 2x reference (half the latency)
+            mem_bandwidth_mbps: 20_000, // 4x reference
+            mem_latency_ns: 50,         // 2x reference (half the latency)
             storage_random_iops: 0,
             storage_seq_mbps: 0,
             storage_event_iops: 0,
@@ -1026,8 +1123,8 @@ assert_eq!(WorkloadClass::parse("inference"), WorkloadClass::Inference);
 
     #[test]
     fn certificate_verify_rejects_tampered_digest() {
-        use edgerun_crypto::p256::ecdsa::SigningKey;
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+        use edgerun_crypto::p256::ecdsa::SigningKey;
 
         let key = SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let vk = key.verifying_key();

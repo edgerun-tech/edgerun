@@ -69,7 +69,10 @@ pub fn decode_frame_len_le(header: &[u8; 8]) -> usize {
 /// Panics if `payload.len()` exceeds `u16::MAX` (65535 bytes).
 pub fn encode_frame_u16_be(payload: &[u8]) -> Vec<u8> {
     let len = payload.len();
-    assert!(len <= u16::MAX as usize, "payload too large for u16 length prefix: {len}");
+    assert!(
+        len <= u16::MAX as usize,
+        "payload too large for u16 length prefix: {len}"
+    );
     let mut frame = Vec::with_capacity(2 + len);
     frame.extend_from_slice(&(len as u16).to_be_bytes());
     frame.extend_from_slice(payload);
@@ -135,6 +138,9 @@ mod tests {
         let payload = vec![0u8; u16::MAX as usize];
         let frame = encode_frame_u16_be(&payload);
         assert_eq!(frame.len(), 2 + u16::MAX as usize);
-        assert_eq!(decode_frame_len_u16_be(&frame[..2].try_into().unwrap()), u16::MAX as usize);
+        assert_eq!(
+            decode_frame_len_u16_be(&frame[..2].try_into().unwrap()),
+            u16::MAX as usize
+        );
     }
 }

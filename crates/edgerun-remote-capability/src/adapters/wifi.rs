@@ -1,6 +1,8 @@
 //! WiFi scanner and controller remote adapters.
 
-use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation};
+use edgerun_capabilities::{
+    CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
+};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
@@ -10,7 +12,9 @@ use edgerun_wifi::{
     WifiScanResult, WifiScanner,
 };
 
-use crate::protocol::{accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult};
+use crate::protocol::{
+    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
+};
 
 // --- Enum converters ---
 
@@ -29,7 +33,11 @@ fn wifi_power_state_from_u8(v: u8) -> Result<WifiPowerState, CapabilityError> {
         1 => WifiPowerState::Enabled,
         2 => WifiPowerState::Disabled,
         3 => WifiPowerState::Blocked,
-        _ => return Err(CapabilityError::InvalidRequest("remote wifi power state is invalid")),
+        _ => {
+            return Err(CapabilityError::InvalidRequest(
+                "remote wifi power state is invalid",
+            ))
+        }
     })
 }
 
@@ -50,7 +58,11 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
         2 => WifiInterfaceMode::AccessPoint,
         3 => WifiInterfaceMode::AdHoc,
         4 => WifiInterfaceMode::Monitor,
-        _ => return Err(CapabilityError::InvalidRequest("remote wifi interface mode is invalid")),
+        _ => {
+            return Err(CapabilityError::InvalidRequest(
+                "remote wifi interface mode is invalid",
+            ))
+        }
     })
 }
 
@@ -71,7 +83,10 @@ fn encode_optional_string_field(value: &Option<String>, out: &mut Vec<u8>) {
         .expect("optional string field encode failed");
 }
 
-fn decode_optional_string_field(bytes: &[u8], cursor: &mut usize) -> Result<Option<String>, CapabilityError> {
+fn decode_optional_string_field(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<Option<String>, CapabilityError> {
     edgerun_encoding::string_field::decode_optional_string_field_u32(bytes, cursor)
         .map_err(|_| CapabilityError::InvalidRequest("remote optional string field decode failed"))
 }
@@ -94,7 +109,9 @@ pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
             out.extend_from_slice(&v.to_le_bytes());
         }
         out.push(match observation.secure {
-            None => 0, Some(true) => 1, Some(false) => 2,
+            None => 0,
+            Some(true) => 1,
+            Some(false) => 2,
         });
         out.extend_from_slice(&observation.observed_at_unix_ms.to_le_bytes());
     }
@@ -103,7 +120,9 @@ pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
 
 pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, CapabilityError> {
     if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest("remote wifi scan payload too short"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote wifi scan payload too short",
+        ));
     }
     let mut cursor = 0usize;
     let count = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
@@ -114,12 +133,16 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
         let ssid = decode_optional_string_field(bytes, &mut cursor)?;
         let bssid = decode_optional_string_field(bytes, &mut cursor)?;
         if bytes.len() < cursor + 1 {
-            return Err(CapabilityError::InvalidRequest("remote wifi signal presence byte missing"));
+            return Err(CapabilityError::InvalidRequest(
+                "remote wifi signal presence byte missing",
+            ));
         }
         let signal_dbm = if bytes[cursor] != 0 {
             cursor += 1;
             if bytes.len() < cursor + 2 {
-                return Err(CapabilityError::InvalidRequest("remote wifi signal payload too short"));
+                return Err(CapabilityError::InvalidRequest(
+                    "remote wifi signal payload too short",
+                ));
             }
             let v = i16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
             cursor += 2;
@@ -129,12 +152,16 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
             None
         };
         if bytes.len() < cursor + 1 {
-            return Err(CapabilityError::InvalidRequest("remote wifi frequency presence byte missing"));
+            return Err(CapabilityError::InvalidRequest(
+                "remote wifi frequency presence byte missing",
+            ));
         }
         let frequency_mhz = if bytes[cursor] != 0 {
             cursor += 1;
             if bytes.len() < cursor + 4 {
-                return Err(CapabilityError::InvalidRequest("remote wifi frequency payload too short"));
+                return Err(CapabilityError::InvalidRequest(
+                    "remote wifi frequency payload too short",
+                ));
             }
             let v = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
             cursor += 4;
@@ -144,21 +171,37 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
             None
         };
         if bytes.len() < cursor + 1 + 8 {
-            return Err(CapabilityError::InvalidRequest("remote wifi observation trailer too short"));
+            return Err(CapabilityError::InvalidRequest(
+                "remote wifi observation trailer too short",
+            ));
         }
         let secure = match bytes[cursor] {
-            0 => None, 1 => Some(true), 2 => Some(false),
-            _ => return Err(CapabilityError::InvalidRequest("remote wifi secure flag is invalid")),
+            0 => None,
+            1 => Some(true),
+            2 => Some(false),
+            _ => {
+                return Err(CapabilityError::InvalidRequest(
+                    "remote wifi secure flag is invalid",
+                ))
+            }
         };
         cursor += 1;
         let observed_at_unix_ms = i64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
         cursor += 8;
         observations.push(WifiNetworkObservation {
-            interface_name, ssid, bssid, signal_dbm, frequency_mhz, secure, observed_at_unix_ms,
+            interface_name,
+            ssid,
+            bssid,
+            signal_dbm,
+            frequency_mhz,
+            secure,
+            observed_at_unix_ms,
         });
     }
     if cursor != bytes.len() {
-        return Err(CapabilityError::InvalidRequest("remote wifi scan payload trailing bytes are invalid"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote wifi scan payload trailing bytes are invalid",
+        ));
     }
     Ok(WifiScanResult { observations })
 }
@@ -183,12 +226,20 @@ pub fn decode_wifi_interface_info(bytes: &[u8]) -> Result<WifiInterfaceInfo, Cap
     let phy_name = decode_optional_string_field(bytes, &mut cursor)?;
     let operstate = decode_optional_string_field(bytes, &mut cursor)?;
     if bytes.len() != cursor + 2 {
-        return Err(CapabilityError::InvalidRequest("remote wifi interface info payload length is invalid"));
+        return Err(CapabilityError::InvalidRequest(
+            "remote wifi interface info payload length is invalid",
+        ));
     }
     let power_state = wifi_power_state_from_u8(bytes[cursor])?;
     let mode = wifi_interface_mode_from_u8(bytes[cursor + 1])?;
     Ok(WifiInterfaceInfo {
-        provider, interface_name, mac_address, phy_name, operstate, power_state, mode,
+        provider,
+        interface_name,
+        mac_address,
+        phy_name,
+        operstate,
+        power_state,
+        mode,
     })
 }
 
@@ -222,7 +273,11 @@ pub struct WifiRemoteAdapter<D> {
 
 impl<D> WifiRemoteAdapter<D> {
     pub fn new(device: D, descriptor: CapabilityDescriptor) -> Self {
-        Self { device, descriptor, next_sequence_no: 1 }
+        Self {
+            device,
+            descriptor,
+            next_sequence_no: 1,
+        }
     }
 }
 
@@ -234,15 +289,26 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(&mut self, open: &CapabilitySessionOpen) -> Result<CapabilitySessionAccept, CapabilityError> {
+    fn open_session(
+        &mut self,
+        open: &CapabilitySessionOpen,
+    ) -> Result<CapabilitySessionAccept, CapabilityError> {
         Ok(accept_session_open_unchecked(open))
     }
 
-    fn invoke(&mut self, _session_id: &[u8], invocation: &CapabilityInvocation, _inline_parameters: Option<&[u8]>) -> Result<RemoteInvocationResult, CapabilityError> {
+    fn invoke(
+        &mut self,
+        _session_id: &[u8],
+        invocation: &CapabilityInvocation,
+        _inline_parameters: Option<&[u8]>,
+    ) -> Result<RemoteInvocationResult, CapabilityError> {
         Ok(stream_error(invocation))
     }
 
-    fn next_event(&mut self, session_id: &[u8]) -> Result<Option<CapabilitySessionEvent>, CapabilityError> {
+    fn next_event(
+        &mut self,
+        session_id: &[u8],
+    ) -> Result<Option<CapabilitySessionEvent>, CapabilityError> {
         let scan = self.device.scan_nearby()?;
         let sequence_no = self.next_sequence_no;
         self.next_sequence_no += 1;
@@ -279,11 +345,19 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(&mut self, open: &CapabilitySessionOpen) -> Result<CapabilitySessionAccept, CapabilityError> {
+    fn open_session(
+        &mut self,
+        open: &CapabilitySessionOpen,
+    ) -> Result<CapabilitySessionAccept, CapabilityError> {
         Ok(accept_session_open_unchecked(open))
     }
 
-    fn invoke(&mut self, _session_id: &[u8], invocation: &CapabilityInvocation, inline_parameters: Option<&[u8]>) -> Result<RemoteInvocationResult, CapabilityError> {
+    fn invoke(
+        &mut self,
+        _session_id: &[u8],
+        invocation: &CapabilityInvocation,
+        inline_parameters: Option<&[u8]>,
+    ) -> Result<RemoteInvocationResult, CapabilityError> {
         let info = if invocation.operation == CapabilityOperation::Control as i32 {
             let parameters = inline_parameters.ok_or(CapabilityError::InvalidRequest(
                 "wifi control invocation requires inline power state parameter",

@@ -1,17 +1,17 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use edgerun_crypto::sha2::Digest;
+use super::helpers::*;
+use super::types::*;
 use edgerun_capabilities::{
     validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
     CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_crypto::sha2::Digest;
 use edgerun_proto::edgerun::v0::common::{IdentityRef, NodeRef};
 use prost_types::{Duration as ProstDuration, Timestamp};
-use super::types::*;
-use super::helpers::*;
 
 #[derive(Debug, Clone)]
 pub struct SimplePolicyEngine {
@@ -90,7 +90,10 @@ impl SimplePolicyEngine {
         dedupe_i32(requested)
     }
 
-    pub(crate) fn effective_access_class(&self, request: &CapabilityRequest) -> CapabilityAccessClass {
+    pub(crate) fn effective_access_class(
+        &self,
+        request: &CapabilityRequest,
+    ) -> CapabilityAccessClass {
         request
             .selector
             .as_ref()
@@ -205,7 +208,11 @@ impl SimplePolicyEngine {
         Ok(())
     }
 
-    pub(crate) fn requested_expiry(&self, request: &CapabilityRequest, now: SystemTime) -> Option<SystemTime> {
+    pub(crate) fn requested_expiry(
+        &self,
+        request: &CapabilityRequest,
+        now: SystemTime,
+    ) -> Option<SystemTime> {
         let duration = request
             .requested_duration
             .as_ref()
@@ -215,7 +222,9 @@ impl SimplePolicyEngine {
         Some(now + duration)
     }
 
-    pub(crate) fn constraint_rate_limit(constraint: &CapabilityConstraint) -> Option<(u64, Duration)> {
+    pub(crate) fn constraint_rate_limit(
+        constraint: &CapabilityConstraint,
+    ) -> Option<(u64, Duration)> {
         let rate_limit = constraint.rate_limit.as_ref()?;
         let per = duration_from_prost(rate_limit.per.as_ref()?)?;
         Some((rate_limit.max_operations, per))
@@ -269,4 +278,3 @@ impl SimplePolicyEngine {
         Ok(())
     }
 }
-

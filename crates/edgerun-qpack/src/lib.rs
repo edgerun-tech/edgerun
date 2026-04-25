@@ -2,8 +2,8 @@
 // QPACK header compression for HTTP/3 (RFC 9204).
 
 pub use self::{
-    decoder::{Decoded, DecoderError, decode_stateless},
-    encoder::{EncoderError, encode_stateless},
+    decoder::{decode_stateless, Decoded, DecoderError},
+    encoder::{encode_stateless, EncoderError},
     field::HeaderField,
 };
 

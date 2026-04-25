@@ -249,15 +249,15 @@ mod tests {
 
     #[test]
     fn test_parse_tlv_map() {
-        let data = vec![
-            0x01, 0x03, b'f', b'o', b'o',
-            0x02, 0x03, b'b', b'a', b'r',
-        ];
+        let data = vec![0x01, 0x03, b'f', b'o', b'o', 0x02, 0x03, b'b', b'a', b'r'];
         let parsed = parse_tlv_map(&data).unwrap();
-        assert_eq!(parsed, vec![
-            (0x01, vec![b'f', b'o', b'o']),
-            (0x02, vec![b'b', b'a', b'r']),
-        ]);
+        assert_eq!(
+            parsed,
+            vec![
+                (0x01, vec![b'f', b'o', b'o']),
+                (0x02, vec![b'b', b'a', b'r']),
+            ]
+        );
     }
 
     #[test]
@@ -276,10 +276,13 @@ mod tests {
         assert_eq!(parsed[0].0, 0x80);
         // Parse inner
         let inner_parsed = parse_tlv_map(&parsed[0].1).unwrap();
-        assert_eq!(inner_parsed, vec![
-            (0x01, vec![b'f', b'o', b'o']),
-            (0x02, vec![b'b', b'a', b'r']),
-        ]);
+        assert_eq!(
+            inner_parsed,
+            vec![
+                (0x01, vec![b'f', b'o', b'o']),
+                (0x02, vec![b'b', b'a', b'r']),
+            ]
+        );
     }
 
     #[test]
@@ -293,8 +296,14 @@ mod tests {
 
     #[test]
     fn test_parse_single_tlv_truncated() {
-        assert!(matches!(parse_single_tlv(&[0x42]), Err(TlvError::TruncatedInput)));
-        assert!(matches!(parse_single_tlv(&[0x42, 0x05, b'h']), Err(TlvError::LengthExceedsInput)));
+        assert!(matches!(
+            parse_single_tlv(&[0x42]),
+            Err(TlvError::TruncatedInput)
+        ));
+        assert!(matches!(
+            parse_single_tlv(&[0x42, 0x05, b'h']),
+            Err(TlvError::LengthExceedsInput)
+        ));
     }
 
     #[test]
@@ -315,10 +324,7 @@ mod tests {
 
     #[test]
     fn test_encode_nested_tlv() {
-        let children = vec![
-            (0x01u8, vec![b'a', b'b']),
-            (0x02u8, vec![b'c', b'd']),
-        ];
+        let children = vec![(0x01u8, vec![b'a', b'b']), (0x02u8, vec![b'c', b'd'])];
         let nested = encode_nested_tlv(0x80, &children).unwrap();
 
         // Parse outer

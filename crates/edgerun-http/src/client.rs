@@ -14,8 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// HTTP protocol preference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HttpVersion {
     Http1,
     Http2,
@@ -24,7 +23,6 @@ pub enum HttpVersion {
     Best,
     Http2OrHttp1,
 }
-
 
 /// Shared state for the HTTP client — the connection pool.
 /// Wrapped in Arc so HttpClient is cheaply cloneable.
@@ -61,7 +59,9 @@ impl HttpClient {
         }
     }
 
-    fn inner(&self) -> &ClientInner { &self.inner }
+    fn inner(&self) -> &ClientInner {
+        &self.inner
+    }
 
     pub fn version(self, v: HttpVersion) -> Self {
         Self {
@@ -186,7 +186,12 @@ impl HttpClient {
     }
 
     /// Generic request with any method.
-    pub async fn request(&self, method: Method, uri: &str, body: Option<Vec<u8>>) -> Result<Response> {
+    pub async fn request(
+        &self,
+        method: Method,
+        uri: &str,
+        body: Option<Vec<u8>>,
+    ) -> Result<Response> {
         let request = Request::builder()
             .method(method)
             .uri(uri)
@@ -248,13 +253,17 @@ impl HttpClient {
             let _ = headers.insert(k.as_str(), v.as_str());
         }
 
-        Ok(Response::from_parts(h1_resp.status(), headers, h1_resp.body().to_vec()))
+        Ok(Response::from_parts(
+            h1_resp.status(),
+            headers,
+            h1_resp.body().to_vec(),
+        ))
     }
 
-/// Execute an HTTP/3 request via QUIC.
+    /// Execute an HTTP/3 request via QUIC.
     async fn execute_http3(&self, request: &Request) -> Result<Response> {
-        use crate::http3::connection::Http3Connection;
         use crate::http1::compression;
+        use crate::http3::connection::Http3Connection;
 
         eprintln!("CLIENT HTTP3: execute_http3 start");
         let uri = request.uri();
@@ -262,13 +271,14 @@ impl HttpClient {
         if !uri.is_https() {
             edgerun_log::debug!("HTTP/3: only supports HTTPS, falling back");
             return Err(Error::ProtocolError(
-                "HTTP/3 only supports HTTPS scheme".to_string()
+                "HTTP/3 only supports HTTPS scheme".to_string(),
             ));
         }
 
-        let host = uri.host().ok_or_else(|| {
-            Error::ProtocolError("HTTP/3 requires host in URI".to_string())
-        })?.to_string();
+        let host = uri
+            .host()
+            .ok_or_else(|| Error::ProtocolError("HTTP/3 requires host in URI".to_string()))?
+            .to_string();
         let port = uri.port().unwrap_or(443);
 
         eprintln!("CLIENT HTTP3: host={}, port={}", host, port);
@@ -279,11 +289,15 @@ impl HttpClient {
 
         loop {
             let cur_uri = current_request.uri();
-            let cur_host = cur_uri.host()
+            let cur_host = cur_uri
+                .host()
                 .ok_or_else(|| Error::ProtocolError("No host".to_string()))?;
             let cur_port = cur_uri.port().unwrap_or(443);
             let cur_path = cur_uri.path().to_string();
-            let cur_query = cur_uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
+            let cur_query = cur_uri
+                .query()
+                .map(|q| format!("?{}", q))
+                .unwrap_or_default();
             let path_and_query = format!("{}{}", cur_path, cur_query);
 
             let server_addr = if cur_port == 443 {
@@ -292,10 +306,12 @@ impl HttpClient {
                 format!("{}:{}", cur_host, cur_port)
             };
 
-            let mut conn = Http3Connection::connect(&server_addr).await
-                .map_err(|e| Error::Network(std::io::Error::new(
-                    std::io::ErrorKind::ConnectionRefused, e
-                )))?;
+            let mut conn = Http3Connection::connect(&server_addr).await.map_err(|e| {
+                Error::Network(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionRefused,
+                    e,
+                ))
+            })?;
 
             let mut headers = HeaderMap::new();
             for (k, v) in current_request.headers().iter() {
@@ -308,25 +324,35 @@ impl HttpClient {
 
             let body = current_request.body().map(|b| b.to_vec());
 
-            let stream_id = conn.send_request(&method, &req_uri, &headers, body).await
-                .map_err(|e| Error::Network(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe, format!("{:?}", e)
-                )))?;
+            let stream_id = conn
+                .send_request(&method, &req_uri, &headers, body)
+                .await
+                .map_err(|e| {
+                    Error::Network(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        format!("{:?}", e),
+                    ))
+                })?;
 
-            let response = conn.recv_response(stream_id).await
-                .map_err(|e| Error::Network(std::io::Error::new(
-                    std::io::ErrorKind::ConnectionReset, format!("{:?}", e)
-                )))?;
-
-            let (status, resp_headers, body) = response.ok_or_else(|| {
-                Error::ProtocolError("No response received".to_string())
+            let response = conn.recv_response(stream_id).await.map_err(|e| {
+                Error::Network(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionReset,
+                    format!("{:?}", e),
+                ))
             })?;
 
-            if self.inner.follow_redirects && status.is_redirection() && resp_redirect_count < self.inner.max_redirects as usize {
+            let (status, resp_headers, body) =
+                response.ok_or_else(|| Error::ProtocolError("No response received".to_string()))?;
+
+            if self.inner.follow_redirects
+                && status.is_redirection()
+                && resp_redirect_count < self.inner.max_redirects as usize
+            {
                 if let Some(location) = resp_headers.get("location") {
                     let loc = location.as_str();
-                    let _new_uri = Uri::parse(loc)
-                        .map_err(|e| Error::ProtocolError(format!("Invalid redirect URI: {}", e)))?;
+                    let _new_uri = Uri::parse(loc).map_err(|e| {
+                        Error::ProtocolError(format!("Invalid redirect URI: {}", e))
+                    })?;
 
                     current_request = Request::builder()
                         .method(if status.as_u16() == 303 {
@@ -342,8 +368,7 @@ impl HttpClient {
             }
 
             let body = if self.inner.auto_decompress {
-                compression::decompress_body(&body, &resp_headers)
-                    .unwrap_or(body)
+                compression::decompress_body(&body, &resp_headers).unwrap_or(body)
             } else {
                 body
             };
@@ -355,15 +380,22 @@ impl HttpClient {
     async fn execute_http2(&self, request: &Request) -> Result<Response> {
         let uri = request.uri();
         edgerun_log::debug!("HTTP/2: connecting to {}", uri);
-        let h2_resp = Http2Pool::execute_async(&self.inner.h2_pool, request).await
+        let h2_resp = Http2Pool::execute_async(&self.inner.h2_pool, request)
+            .await
             .map_err(|e| {
                 edgerun_log::debug!("HTTP/2 failed: {}", e);
                 e
             })?;
-        Ok(Response::from_parts(h2_resp.status, h2_resp.headers, h2_resp.body))
+        Ok(Response::from_parts(
+            h2_resp.status,
+            h2_resp.headers,
+            h2_resp.body,
+        ))
     }
 }
 
 impl Default for HttpClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

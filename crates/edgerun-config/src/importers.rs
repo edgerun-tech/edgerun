@@ -2,8 +2,8 @@
 //! Kubernetes-compatible YAML config resources.
 
 use crate::types::*;
-use std::collections::HashMap;
 use edgerun_json::JsonValue;
+use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // dnsmasq.conf → ConfigResource
@@ -26,8 +26,12 @@ pub fn import_dnsmasq(conf: &str) -> Result<Vec<ConfigResource>, ImportError> {
 
     for line in conf.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') { continue; }
-        let Some((key, value)) = line.split_once('=') else { continue; };
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
 
         match key {
             "interface" => interface = Some(value.to_string()),
@@ -42,8 +46,13 @@ pub fn import_dnsmasq(conf: &str) -> Result<Vec<ConfigResource>, ImportError> {
             }
             "dhcp-leaseTime" => {} // handled via spec default
             "server" => upstreams.push(value.to_string()),
-            "domain" if domain_name.is_none() => { domain_name = Some(value.to_string()); }
-            "tftp-root" => { tftp_root = Some(value.to_string()); tftp_enabled = true; }
+            "domain" if domain_name.is_none() => {
+                domain_name = Some(value.to_string());
+            }
+            "tftp-root" => {
+                tftp_root = Some(value.to_string());
+                tftp_enabled = true;
+            }
             "enable-tftp" => tftp_enabled = true,
             _ => {}
         }
@@ -60,35 +69,67 @@ pub fn import_dnsmasq(conf: &str) -> Result<Vec<ConfigResource>, ImportError> {
     }
 
     if !dhcp_ranges.is_empty() || !dhcp_hosts.is_empty() {
-        let pools: Vec<String> = dhcp_ranges.iter().enumerate()
-            .map(|(i, _)| format!("pool-{}", i)).collect();
-        let reservations: Vec<DhcpReservation> = dhcp_hosts.iter()
+        let pools: Vec<String> = dhcp_ranges
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("pool-{}", i))
+            .collect();
+        let reservations: Vec<DhcpReservation> = dhcp_hosts
+            .iter()
             .filter_map(|h| {
                 if let (Some(mac), Some(ip)) = (&h.mac, &h.ip) {
-                    Some(DhcpReservation { mac: mac.clone(), ip: ip.clone(), hostname: h.hostname.clone() })
-                } else { None }
-            }).collect();
+                    Some(DhcpReservation {
+                        mac: mac.clone(),
+                        ip: ip.clone(),
+                        hostname: h.hostname.clone(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         resources.push(ConfigResource::DhcpServer(DhcpServerSpec {
             interface: interface.clone().unwrap_or_else(|| "eth0".to_string()),
             pools,
             default_lease_time: 86400,
             max_lease_time: None,
-            dns_servers: if dns_servers.is_empty() { None } else { Some(dns_servers) },
+            dns_servers: if dns_servers.is_empty() {
+                None
+            } else {
+                Some(dns_servers)
+            },
             router,
-            ntp_servers: if ntp_servers.is_empty() { None } else { Some(ntp_servers) },
+            ntp_servers: if ntp_servers.is_empty() {
+                None
+            } else {
+                Some(ntp_servers)
+            },
             domain_name,
             bootfile: None,
             tftp_server: None,
-            reservations: if reservations.is_empty() { None } else { Some(reservations) },
+            reservations: if reservations.is_empty() {
+                None
+            } else {
+                Some(reservations)
+            },
         }));
 
         for (i, range) in dhcp_ranges.iter().enumerate() {
             resources.push(ConfigResource::DhcpPool(DhcpPoolSpec {
                 name: format!("pool-{}", i),
-                range_start: range.start.clone().unwrap_or_else(|| "192.168.1.100".to_string()),
-                range_end: range.end.clone().unwrap_or_else(|| "192.168.1.200".to_string()),
-                subnet_mask: range.mask.clone().unwrap_or_else(|| "255.255.255.0".to_string()),
+                range_start: range
+                    .start
+                    .clone()
+                    .unwrap_or_else(|| "192.168.1.100".to_string()),
+                range_end: range
+                    .end
+                    .clone()
+                    .unwrap_or_else(|| "192.168.1.200".to_string()),
+                subnet_mask: range
+                    .mask
+                    .clone()
+                    .unwrap_or_else(|| "255.255.255.0".to_string()),
                 exclude: range.exclude.clone(),
             }));
         }
@@ -115,7 +156,11 @@ pub fn import_dnsmasq(conf: &str) -> Result<Vec<ConfigResource>, ImportError> {
         }));
     }
 
-    if resources.is_empty() { Err(ImportError::EmptyConfig) } else { Ok(resources) }
+    if resources.is_empty() {
+        Err(ImportError::EmptyConfig)
+    } else {
+        Ok(resources)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -141,9 +186,20 @@ pub fn import_corefile(corefile: &str) -> Result<Vec<ConfigResource>, ImportErro
             match plugin.name.as_str() {
                 "forward" => {
                     for arg in &plugin.args {
-                        if arg.starts_with('/') || matches!(arg.as_str(),
-                            "sequential"|"random"|"round_robin"|"force_tcp"|"prefer_udp"
-                            |"expire"|"max_concurrent") { continue; }
+                        if arg.starts_with('/')
+                            || matches!(
+                                arg.as_str(),
+                                "sequential"
+                                    | "random"
+                                    | "round_robin"
+                                    | "force_tcp"
+                                    | "prefer_udp"
+                                    | "expire"
+                                    | "max_concurrent"
+                            )
+                        {
+                            continue;
+                        }
                         forward_upstreams.push(arg.clone());
                     }
                 }
@@ -161,15 +217,20 @@ pub fn import_corefile(corefile: &str) -> Result<Vec<ConfigResource>, ImportErro
                         if ip.contains('.') && !name.starts_with('/') {
                             host_entries.push((name.clone(), ip.clone()));
                             i += 2;
-                        } else { i += 1; }
+                        } else {
+                            i += 1;
+                        }
                     }
                 }
-                "tls"
-                    if plugin.args.len() >= 2 => {
-                        tls_cert = Some(plugin.args[0].clone());
-                        tls_key = Some(plugin.args[1].clone());
+                "tls" if plugin.args.len() >= 2 => {
+                    tls_cert = Some(plugin.args[0].clone());
+                    tls_key = Some(plugin.args[1].clone());
+                }
+                "bind" => {
+                    if let Some(a) = plugin.args.first() {
+                        bind_addr = Some(a.clone());
                     }
-                "bind" => { if let Some(a) = plugin.args.first() { bind_addr = Some(a.clone()); } }
+                }
                 _ => {}
             }
         }
@@ -184,20 +245,31 @@ pub fn import_corefile(corefile: &str) -> Result<Vec<ConfigResource>, ImportErro
         }
 
         if !host_entries.is_empty() {
-            let mut records: Vec<ZoneRecord> = host_entries.iter()
+            let mut records: Vec<ZoneRecord> = host_entries
+                .iter()
                 .map(|(name, ip)| ZoneRecord {
-                    name: name.clone(), record_type: "A".to_string(), ttl: None,
+                    name: name.clone(),
+                    record_type: "A".to_string(),
+                    ttl: None,
                     value: edgerun_json::JsonValue::String(ip.clone()),
-                }).collect();
+                })
+                .collect();
             records.push(ZoneRecord {
-                name: "@".to_string(), record_type: "NS".to_string(), ttl: None,
+                name: "@".to_string(),
+                record_type: "NS".to_string(),
+                ttl: None,
                 value: edgerun_json::JsonValue::String(format!("ns1.{}", zone)),
             });
             resources.push(ConfigResource::DnsZone(DnsZoneSpec {
                 origin: zone.to_string(),
                 soa: SoaRecord {
-                    mname: format!("ns1.{}", zone), rname: format!("admin.{}", zone),
-                    serial: 1, refresh: 3600, retry: 900, expire: 604800, minimum: 86400,
+                    mname: format!("ns1.{}", zone),
+                    rname: format!("admin.{}", zone),
+                    serial: 1,
+                    refresh: 3600,
+                    retry: 900,
+                    expire: 604800,
+                    minimum: 86400,
                 },
                 records,
                 dnssec: None,
@@ -228,7 +300,11 @@ pub fn import_corefile(corefile: &str) -> Result<Vec<ConfigResource>, ImportErro
         }
     }
 
-    if resources.is_empty() { Err(ImportError::EmptyConfig) } else { Ok(resources) }
+    if resources.is_empty() {
+        Err(ImportError::EmptyConfig)
+    } else {
+        Ok(resources)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -236,40 +312,71 @@ pub fn import_corefile(corefile: &str) -> Result<Vec<ConfigResource>, ImportErro
 // ---------------------------------------------------------------------------
 
 #[derive(Debug)]
-struct DhcpRange { start: Option<String>, end: Option<String>, mask: Option<String>, exclude: Option<Vec<String>> }
+struct DhcpRange {
+    start: Option<String>,
+    end: Option<String>,
+    mask: Option<String>,
+    exclude: Option<Vec<String>>,
+}
 #[derive(Debug)]
-struct DhcpHost { mac: Option<String>, ip: Option<String>, hostname: Option<String> }
+struct DhcpHost {
+    mac: Option<String>,
+    ip: Option<String>,
+    hostname: Option<String>,
+}
 
 #[derive(Debug)]
-struct CoreBlock { zone: String, plugins: Vec<CorePlugin> }
+struct CoreBlock {
+    zone: String,
+    plugins: Vec<CorePlugin>,
+}
 #[derive(Debug)]
-struct CorePlugin { name: String, args: Vec<String> }
+struct CorePlugin {
+    name: String,
+    args: Vec<String>,
+}
 
 fn parse_dhcp_range(value: &str) -> DhcpRange {
-    let mut r = DhcpRange { start: None, end: None, mask: None, exclude: None };
+    let mut r = DhcpRange {
+        start: None,
+        end: None,
+        mask: None,
+        exclude: None,
+    };
     for part in value.split(',') {
         if let Some((k, v)) = part.split_once('=') {
             match k {
                 "start" => r.start = Some(v.to_string()),
                 "end" => r.end = Some(v.to_string()),
-                "mask"|"netmask" => r.mask = Some(v.to_string()),
+                "mask" | "netmask" => r.mask = Some(v.to_string()),
                 _ => {}
             }
         } else if part.contains('-') {
             let p: Vec<&str> = part.split('-').collect();
-            if p.len() == 2 { r.start = Some(p[0].trim().to_string()); r.end = Some(p[1].trim().to_string()); }
+            if p.len() == 2 {
+                r.start = Some(p[0].trim().to_string());
+                r.end = Some(p[1].trim().to_string());
+            }
         }
     }
     r
 }
 
 fn parse_dhcp_host(value: &str) -> DhcpHost {
-    let mut h = DhcpHost { mac: None, ip: None, hostname: None };
+    let mut h = DhcpHost {
+        mac: None,
+        ip: None,
+        hostname: None,
+    };
     for part in value.split(',') {
         let part = part.trim();
-        if part.contains(':') && part.len() == 17 { h.mac = Some(part.to_string()); }
-        else if part.parse::<std::net::Ipv4Addr>().is_ok() { h.ip = Some(part.to_string()); }
-        else if !part.is_empty() { h.hostname = Some(part.to_string()); }
+        if part.contains(':') && part.len() == 17 {
+            h.mac = Some(part.to_string());
+        } else if part.parse::<std::net::Ipv4Addr>().is_ok() {
+            h.ip = Some(part.to_string());
+        } else if !part.is_empty() {
+            h.hostname = Some(part.to_string());
+        }
     }
     h
 }
@@ -282,14 +389,19 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
 
     for line in corefile.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') { continue; }
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
 
         if depth == 0 {
             if let Some(stripped) = line.strip_suffix('{') {
                 let zone = stripped.trim().trim_matches('"').trim_matches('/');
                 if !zone.is_empty() {
                     if let Some(z) = current_zone.take() {
-                        blocks.push(CoreBlock { zone: z, plugins: std::mem::take(&mut current_plugins) });
+                        blocks.push(CoreBlock {
+                            zone: z,
+                            plugins: std::mem::take(&mut current_plugins),
+                        });
                     }
                     current_zone = Some(zone.to_string());
                     depth = 1;
@@ -298,16 +410,25 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
                 // Single-line block
                 let zone = line.trim_matches('"').trim_matches('/');
                 if let Some(z) = current_zone.take() {
-                    blocks.push(CoreBlock { zone: z, plugins: std::mem::take(&mut current_plugins) });
+                    blocks.push(CoreBlock {
+                        zone: z,
+                        plugins: std::mem::take(&mut current_plugins),
+                    });
                 }
-                blocks.push(CoreBlock { zone: zone.to_string(), plugins: vec![] });
+                blocks.push(CoreBlock {
+                    zone: zone.to_string(),
+                    plugins: vec![],
+                });
             }
         } else {
             if line == "}" {
                 depth -= 1;
                 if depth == 0 {
                     if let Some(z) = current_zone.take() {
-                        blocks.push(CoreBlock { zone: z, plugins: std::mem::take(&mut current_plugins) });
+                        blocks.push(CoreBlock {
+                            zone: z,
+                            plugins: std::mem::take(&mut current_plugins),
+                        });
                     }
                 }
             } else if let Some(stripped) = line.strip_suffix('{') {
@@ -341,7 +462,10 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
         }
     }
     if let Some(z) = current_zone.take() {
-        blocks.push(CoreBlock { zone: z, plugins: std::mem::take(&mut current_plugins) });
+        blocks.push(CoreBlock {
+            zone: z,
+            plugins: std::mem::take(&mut current_plugins),
+        });
     }
     blocks
 }
@@ -370,9 +494,15 @@ server=8.8.8.8
 server=1.1.1.1
 "#;
         let resources = import_dnsmasq(conf).unwrap();
-        assert!(resources.iter().any(|r| matches!(r, ConfigResource::DhcpServer(_))));
-        assert!(resources.iter().any(|r| matches!(r, ConfigResource::DhcpPool(_))));
-        assert!(resources.iter().any(|r| matches!(r, ConfigResource::DnsForwarder(_))));
+        assert!(resources
+            .iter()
+            .any(|r| matches!(r, ConfigResource::DhcpServer(_))));
+        assert!(resources
+            .iter()
+            .any(|r| matches!(r, ConfigResource::DhcpPool(_))));
+        assert!(resources
+            .iter()
+            .any(|r| matches!(r, ConfigResource::DnsForwarder(_))));
     }
 
     #[test]
@@ -389,7 +519,9 @@ cluster.local {
 }
 "#;
         let resources = import_corefile(corefile).unwrap();
-        assert!(resources.iter().any(|r| matches!(r, ConfigResource::ForwardingRule(_))));
+        assert!(resources
+            .iter()
+            .any(|r| matches!(r, ConfigResource::ForwardingRule(_))));
     }
 
     #[test]
@@ -405,6 +537,8 @@ cluster.local {
 }
 "#;
         let resources = import_corefile(corefile).unwrap();
-        assert!(resources.iter().any(|r| matches!(r, ConfigResource::DnsZone(_))));
+        assert!(resources
+            .iter()
+            .any(|r| matches!(r, ConfigResource::DnsZone(_))));
     }
 }

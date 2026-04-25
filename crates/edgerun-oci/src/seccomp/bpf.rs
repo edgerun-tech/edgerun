@@ -2,7 +2,10 @@ use std::io;
 use std::os::raw::c_void;
 
 use crate::json::{OciLinuxSeccomp, OciSeccompAction};
-use crate::syscalls::{do_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, SECCOMP_FILTER_FLAG_NEW_LISTENER};
+use crate::syscalls::{
+    do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
+    SECCOMP_SET_MODE_FILTER,
+};
 
 use super::*;
 
@@ -38,4 +41,3 @@ pub(crate) fn bpf_long_skip(insns: &mut Vec<[u8; 8]>, mut count: usize) {
         insns.push(bpf_insn(0x15, 0, count as u8, 0xFFFFFFFF));
     }
 }
-

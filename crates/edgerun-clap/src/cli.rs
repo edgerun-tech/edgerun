@@ -62,7 +62,10 @@ impl Command {
             let arg = &args[i];
             if arg.starts_with('-') {
                 let key = arg.trim_start_matches('-');
-                if let Some(a) = self.args.iter().find(|a| a.long.as_deref() == Some(key) || a.short.map(|s| s.to_string() == key).unwrap_or(false)) {
+                if let Some(a) = self.args.iter().find(|a| {
+                    a.long.as_deref() == Some(key)
+                        || a.short.map(|s| s.to_string() == key).unwrap_or(false)
+                }) {
                     i += 1;
                     if let Some(num) = a.num_args {
                         let mut values = Vec::new();
@@ -78,21 +81,34 @@ impl Command {
                         }
                         if !values.is_empty() {
                             if values.len() == 1 {
-                                matches.map.insert(a.name.clone(), Value::String(values[0].clone()));
+                                matches
+                                    .map
+                                    .insert(a.name.clone(), Value::String(values[0].clone()));
                             } else {
-                                matches.map.insert(a.name.clone(), Value::Array(values.into_iter().map(Value::String).collect()));
+                                matches.map.insert(
+                                    a.name.clone(),
+                                    Value::Array(values.into_iter().map(Value::String).collect()),
+                                );
                             }
                         }
                     } else if i < args.len() && !args[i].starts_with('-') {
                         if let Some(delimiter) = a.value_delimiter {
-                            let values: Vec<_> = args[i].split(delimiter).map(String::from).collect();
+                            let values: Vec<_> =
+                                args[i].split(delimiter).map(String::from).collect();
                             if values.len() == 1 {
-                                matches.map.insert(a.name.clone(), Value::String(values[0].clone()));
+                                matches
+                                    .map
+                                    .insert(a.name.clone(), Value::String(values[0].clone()));
                             } else {
-                                matches.map.insert(a.name.clone(), Value::Array(values.into_iter().map(Value::String).collect()));
+                                matches.map.insert(
+                                    a.name.clone(),
+                                    Value::Array(values.into_iter().map(Value::String).collect()),
+                                );
                             }
                         } else {
-                            matches.map.insert(a.name.clone(), Value::String(args[i].clone()));
+                            matches
+                                .map
+                                .insert(a.name.clone(), Value::String(args[i].clone()));
                         }
                         i += 1;
                     } else {
@@ -196,7 +212,13 @@ impl ArgMatches {
         self.map.get(name).and_then(|v| match v {
             Value::String(s) => s.parse().ok(),
             Value::Number(n) => n.to_string().parse().ok(),
-            Value::Bool(b) => if *b { Some(T::from_str("true").ok()?) } else { None },
+            Value::Bool(b) => {
+                if *b {
+                    Some(T::from_str("true").ok()?)
+                } else {
+                    None
+                }
+            }
             _ => None,
         })
     }
@@ -215,11 +237,13 @@ impl ArgMatches {
                         }
                     }
                 }
-                if result.is_empty() { None } else { Some(result) }
+                if result.is_empty() {
+                    None
+                } else {
+                    Some(result)
+                }
             }
-            Value::String(s) => {
-                s.parse::<T>().ok().map(|v| alloc::vec![v])
-            }
+            Value::String(s) => s.parse::<T>().ok().map(|v| alloc::vec![v]),
             _ => None,
         })
     }

@@ -10,7 +10,8 @@ use syn::punctuated::Punctuated;
 // ── File I/O ─────────────────────────────────────────────────────────────────
 
 pub fn parse_file(path: &Path) -> Result<syn::File, String> {
-    let src = std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+    let src =
+        std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
     syn::parse_file(&src).map_err(|e| format!("parsing {}: {e}", path.display()))
 }
 
@@ -371,8 +372,8 @@ fn rename_type_in_expr(expr: &mut syn::Expr, old: &str, new: &str) {
 // ── Individual operations ────────────────────────────────────────────────────
 
 pub fn replace_fn_body(file: &mut syn::File, name: &str, new_body: &str) -> Result<bool, String> {
-    let body: syn::Block = syn::parse_str(&format!("{{ {new_body} }}"))
-        .map_err(|e| format!("invalid body: {e}"))?;
+    let body: syn::Block =
+        syn::parse_str(&format!("{{ {new_body} }}")).map_err(|e| format!("invalid body: {e}"))?;
     for item in &mut file.items {
         if let syn::Item::Fn(func) = item {
             if func.sig.ident == name {
@@ -384,7 +385,13 @@ pub fn replace_fn_body(file: &mut syn::File, name: &str, new_body: &str) -> Resu
     Ok(false)
 }
 
-pub fn add_fn(file: &mut syn::File, name: &str, args: &str, ret: &str, body: &str) -> Result<(), String> {
+pub fn add_fn(
+    file: &mut syn::File,
+    name: &str,
+    args: &str,
+    ret: &str,
+    body: &str,
+) -> Result<(), String> {
     let mut inputs = Punctuated::new();
     if !args.trim().is_empty() {
         for part in args.split(',') {
@@ -392,20 +399,18 @@ pub fn add_fn(file: &mut syn::File, name: &str, args: &str, ret: &str, body: &st
             if part.is_empty() {
                 continue;
             }
-            let arg: syn::FnArg = syn::parse_str(part)
-                .map_err(|e| format!("invalid arg '{part}': {e}"))?;
+            let arg: syn::FnArg =
+                syn::parse_str(part).map_err(|e| format!("invalid arg '{part}': {e}"))?;
             inputs.push(arg);
         }
     }
     let ret_type = if ret.is_empty() {
         syn::ReturnType::Default
     } else {
-        let ty: syn::Type = syn::parse_str(ret)
-            .map_err(|e| format!("invalid ret: {e}"))?;
+        let ty: syn::Type = syn::parse_str(ret).map_err(|e| format!("invalid ret: {e}"))?;
         syn::ReturnType::Type(Default::default(), Box::new(ty))
     };
-    let body_block: syn::Block = syn::parse_str(body)
-        .map_err(|e| format!("invalid body: {e}"))?;
+    let body_block: syn::Block = syn::parse_str(body).map_err(|e| format!("invalid body: {e}"))?;
     let ident = syn::Ident::new(name, proc_macro2::Span::call_site());
     let new_fn = syn::ItemFn {
         attrs: vec![],
@@ -442,8 +447,8 @@ pub fn remove_fn(file: &mut syn::File, name: &str) -> bool {
 }
 
 pub fn add_use(file: &mut syn::File, use_path: &str) -> Result<(), String> {
-    let use_item: syn::ItemUse = syn::parse_str(&format!("pub use {use_path};"))
-        .map_err(|e| format!("invalid use: {e}"))?;
+    let use_item: syn::ItemUse =
+        syn::parse_str(&format!("pub use {use_path};")).map_err(|e| format!("invalid use: {e}"))?;
     file.items.insert(0, syn::Item::Use(use_item));
     Ok(())
 }
@@ -520,16 +525,13 @@ pub fn new_file(path: &Path, content: &str) -> Result<(), String> {
             .map_err(|e| format!("creating dir {}: {e}", parent.display()))?;
     }
     if !content.is_empty() {
-        syn::parse_file(content)
-            .map_err(|e| format!("invalid rust content: {e}"))?;
+        syn::parse_file(content).map_err(|e| format!("invalid rust content: {e}"))?;
     }
-    std::fs::write(path, content)
-        .map_err(|e| format!("writing {}: {e}", path.display()))
+    std::fs::write(path, content).map_err(|e| format!("writing {}: {e}", path.display()))
 }
 
 pub fn remove_file(path: &Path) -> Result<(), String> {
-    std::fs::remove_file(path)
-        .map_err(|e| format!("removing {}: {e}", path.display()))
+    std::fs::remove_file(path).map_err(|e| format!("removing {}: {e}", path.display()))
 }
 
 pub fn list_file(path: &Path) -> Result<Vec<String>, String> {
@@ -538,13 +540,22 @@ pub fn list_file(path: &Path) -> Result<Vec<String>, String> {
     for item in &f.items {
         match item {
             syn::Item::Fn(func) => {
-                let args: Vec<String> =
-                    func.sig.inputs.iter().map(|a| quote::quote!(#a).to_string()).collect();
+                let args: Vec<String> = func
+                    .sig
+                    .inputs
+                    .iter()
+                    .map(|a| quote::quote!(#a).to_string())
+                    .collect();
                 let ret = match &func.sig.output {
                     syn::ReturnType::Default => "()".to_string(),
                     syn::ReturnType::Type(_, ty) => quote::quote!(#ty).to_string(),
                 };
-                items.push(format!("fn {}({}) -> {}", func.sig.ident, args.join(", "), ret));
+                items.push(format!(
+                    "fn {}({}) -> {}",
+                    func.sig.ident,
+                    args.join(", "),
+                    ret
+                ));
             }
             syn::Item::Struct(s) => items.push(format!("struct {}", s.ident)),
             syn::Item::Enum(e) => items.push(format!("enum {}", e.ident)),
@@ -581,8 +592,12 @@ pub fn find_fn(file: &syn::File, name: &str) -> Option<String> {
 
 /// Count incoming refs to identifiers defined in `file` from all other project files.
 pub fn incoming_refs(project_files: &[PathBuf], file: &Path) -> usize {
-    let Ok(content) = std::fs::read_to_string(file) else { return 0 };
-    let Ok(parsed) = syn::parse_file(&content) else { return 0 };
+    let Ok(content) = std::fs::read_to_string(file) else {
+        return 0;
+    };
+    let Ok(parsed) = syn::parse_file(&content) else {
+        return 0;
+    };
 
     let defined: HashSet<String> = parsed
         .items
@@ -607,7 +622,9 @@ pub fn incoming_refs(project_files: &[PathBuf], file: &Path) -> usize {
         if other == file {
             continue;
         }
-        let Ok(c) = std::fs::read_to_string(other) else { continue };
+        let Ok(c) = std::fs::read_to_string(other) else {
+            continue;
+        };
         let Ok(p) = syn::parse_file(&c) else { continue };
         for item in &p.items {
             total += count_refs_to_set(item, &defined);
@@ -651,13 +668,17 @@ fn count_use_refs(tree: &syn::UseTree, defined: &HashSet<String>) -> usize {
     let mut count = 0;
     match tree {
         syn::UseTree::Path(up) => {
-            if defined.contains(&up.ident.to_string()) { count += 1; }
+            if defined.contains(&up.ident.to_string()) {
+                count += 1;
+            }
             count += count_use_refs(&up.tree, defined);
         }
-        syn::UseTree::Name(un)
-            if defined.contains(&un.ident.to_string()) => { count += 1; }
-        syn::UseTree::Rename(urn)
-            if defined.contains(&urn.rename.to_string()) => { count += 1; }
+        syn::UseTree::Name(un) if defined.contains(&un.ident.to_string()) => {
+            count += 1;
+        }
+        syn::UseTree::Rename(urn) if defined.contains(&urn.rename.to_string()) => {
+            count += 1;
+        }
         syn::UseTree::Group(ug) => {
             for child in &ug.items {
                 count += count_use_refs(child, defined);
@@ -673,7 +694,9 @@ fn count_type_refs(ty: &syn::Type, defined: &HashSet<String>) -> usize {
     match ty {
         syn::Type::Path(tp) => {
             for seg in &tp.path.segments {
-                if defined.contains(&seg.ident.to_string()) { count += 1; }
+                if defined.contains(&seg.ident.to_string()) {
+                    count += 1;
+                }
                 if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
                     for arg in &args.args {
                         if let syn::GenericArgument::Type(inner) = arg {

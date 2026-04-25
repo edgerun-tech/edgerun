@@ -37,7 +37,9 @@ pub mod dbus_wire;
 pub mod event_log;
 pub mod session;
 
-pub use backend::{Backend, CredentialMeta, SecretEventRecorder, no_op_event_recorder};
+pub use backend::{no_op_event_recorder, Backend, CredentialMeta, SecretEventRecorder};
 pub use dbus_bus::BusConnection;
 pub use event_log::{EventLog, SecretEvent, SecretEventType, SECRET_STREAM_ID};
-pub use session::{Session, SessionManager, BiometricVerifier, NoBiometricVerifier, DEFAULT_IDLE_TIMEOUT_US};
+pub use session::{
+    BiometricVerifier, NoBiometricVerifier, Session, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
+};

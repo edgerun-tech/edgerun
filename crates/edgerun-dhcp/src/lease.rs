@@ -217,10 +217,7 @@ mod tests {
 
     #[test]
     fn test_pool_reserve() {
-        let mut pool = LeasePool::new(
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(10, 0, 0, 10),
-        );
+        let mut pool = LeasePool::new(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 10));
 
         pool.reserve(Ipv4Addr::new(10, 0, 0, 1)); // Gateway
 
@@ -231,10 +228,7 @@ mod tests {
 
     #[test]
     fn test_pool_exhaustion() {
-        let mut pool = LeasePool::new(
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(10, 0, 0, 2),
-        );
+        let mut pool = LeasePool::new(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 2));
 
         let mac1 = [1, 1, 1, 1, 1, 1];
         let mac2 = [2, 2, 2, 2, 2, 2];
@@ -247,10 +241,7 @@ mod tests {
 
     #[test]
     fn test_sweep_expired() {
-        let mut pool = LeasePool::new(
-            Ipv4Addr::new(10, 0, 0, 1),
-            Ipv4Addr::new(10, 0, 0, 10),
-        );
+        let mut pool = LeasePool::new(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 10));
 
         let mac = [0xff; 6];
         pool.allocate(mac, 3600, 0x1234);

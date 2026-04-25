@@ -56,12 +56,12 @@
 //! ```
 
 use crate::{Handler, Request, Response};
+use edgerun_rt::sync::Mutex;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use edgerun_rt::sync::Mutex;
 
 // ===========================================================================
 // Extensions
@@ -96,7 +96,9 @@ pub struct Extensions {
 
 impl Extensions {
     pub fn new() -> Self {
-        Self { inner: Arc::new(Mutex::new(HashMap::new())) }
+        Self {
+            inner: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     /// Insert a value, replacing any existing value of the same type.
@@ -143,7 +145,9 @@ impl Extensions {
 }
 
 impl Default for Extensions {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl std::fmt::Debug for Extensions {
@@ -184,11 +188,8 @@ impl Next {
 /// Implement this trait to intercept requests before they reach the handler.
 /// Applied via [`Chain`].
 pub trait Middleware: Send + Sync + 'static {
-    fn call(
-        &self,
-        req: Request,
-        next: Next,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
+    fn call(&self, req: Request, next: Next)
+        -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
 }
 
 /// Function-based middleware. Created via [`middleware_fn`].
@@ -209,20 +210,14 @@ pub struct FnMiddleware<F> {
 /// ```
 pub fn middleware_fn<F>(f: F) -> FnMiddleware<F>
 where
-    F: Fn(Request, Next) -> Pin<Box<dyn Future<Output = Response> + Send>>
-        + Send
-        + Sync
-        + 'static,
+    F: Fn(Request, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Send + Sync + 'static,
 {
     FnMiddleware { f }
 }
 
 impl<F> Middleware for FnMiddleware<F>
 where
-    F: Fn(Request, Next) -> Pin<Box<dyn Future<Output = Response> + Send>>
-        + Send
-        + Sync
-        + 'static,
+    F: Fn(Request, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Send + Sync + 'static,
 {
     fn call(
         &self,
@@ -276,7 +271,10 @@ impl Chain {
         let mut h = self.handler;
         // Reverse so first `.with()` is outermost
         for mw in self.middlewares.into_iter().rev() {
-            h = Arc::new(MiddlewareLayer { middleware: mw, inner: h });
+            h = Arc::new(MiddlewareLayer {
+                middleware: mw,
+                inner: h,
+            });
         }
         h
     }
@@ -289,10 +287,7 @@ struct MiddlewareLayer {
 }
 
 impl Handler for MiddlewareLayer {
-    fn handle(
-        &self,
-        req: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+    fn handle(&self, req: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         let mw = Arc::clone(&self.middleware);
         let inner = Arc::clone(&self.inner);
         Box::pin(async move {

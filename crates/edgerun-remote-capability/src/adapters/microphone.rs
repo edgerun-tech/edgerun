@@ -9,7 +9,9 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 
-use crate::protocol::{accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult};
+use crate::protocol::{
+    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
+};
 
 /// Binary-encode microphone capture for remote transport.
 pub fn encode_microphone_capture(capture: &AudioCapture) -> Vec<u8> {
@@ -74,8 +76,7 @@ fn stream_error(invocation: &CapabilityInvocation) -> RemoteInvocationResult {
             result_access_class: invocation.requested_access_class,
             produced_event_kinds: Vec::new(),
             payload_object: None,
-            error_reason: "microphone remote adapter is stream-oriented; use session events"
-                .into(),
+            error_reason: "microphone remote adapter is stream-oriented; use session events".into(),
             produced_at: None,
             signature: None,
         },

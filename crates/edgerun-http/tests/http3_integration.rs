@@ -6,8 +6,8 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use edgerun_http::{HttpServer, HttpClient, HttpVersion, Handler, Request, Response, StatusCode};
-use edgerun_rt::{Runtime, spawn, sleep};
+use edgerun_http::{Handler, HttpClient, HttpServer, HttpVersion, Request, Response, StatusCode};
+use edgerun_rt::{sleep, spawn, Runtime};
 use edgerun_tls::generate_self_signed as gen_cert;
 
 static PORT: AtomicU32 = AtomicU32::new(15000);
@@ -19,7 +19,10 @@ fn next_port() -> u16 {
 struct EchoHandler;
 
 impl Handler for EchoHandler {
-    fn handle(&self, req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    fn handle(
+        &self,
+        req: Request,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
         Box::pin(async move {
             let body = req.body().map(|b| b.to_vec()).unwrap_or_default();
             Response::new(StatusCode::OK).with_body(body)
@@ -30,7 +33,9 @@ impl Handler for EchoHandler {
 fn with_server<F, Fut>(name: &'static str, f: F)
 where
     F: FnOnce(u16) -> Fut + Send + 'static,
-    Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
+    Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
+        + Send
+        + 'static,
 {
     let port = next_port();
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
@@ -78,7 +83,9 @@ fn test_http3_basic_get() {
 fn test_http3_echo_post_body() {
     with_server("http3_echo_post", |port| async move {
         let client = HttpClient::new().version(HttpVersion::Http3);
-        let resp = client.post(&format!("https://127.0.0.1:{}/", port), b"hello http3").await?;
+        let resp = client
+            .post(&format!("https://127.0.0.1:{}/", port), b"hello http3")
+            .await?;
         assert_eq!(resp.status().as_u16(), 200);
         let body = resp.body_as_string().ok_or_else(|| "no body")?;
         assert_eq!(body, "hello http3");
@@ -92,13 +99,19 @@ fn test_http3_multiple_requests() {
     with_server("http3_multi", |port| async move {
         let client = HttpClient::new().version(HttpVersion::Http3);
 
-        let resp1 = client.get(&format!("https://127.0.0.1:{}/path1", port)).await?;
+        let resp1 = client
+            .get(&format!("https://127.0.0.1:{}/path1", port))
+            .await?;
         assert_eq!(resp1.status().as_u16(), 200);
 
-        let resp2 = client.get(&format!("https://127.0.0.1:{}/path2", port)).await?;
+        let resp2 = client
+            .get(&format!("https://127.0.0.1:{}/path2", port))
+            .await?;
         assert_eq!(resp2.status().as_u16(), 200);
 
-        let resp3 = client.post(&format!("https://127.0.0.1:{}/path3", port), b"data").await?;
+        let resp3 = client
+            .post(&format!("https://127.0.0.1:{}/path3", port), b"data")
+            .await?;
         assert_eq!(resp3.status().as_u16(), 200);
 
         Ok(())
@@ -110,7 +123,9 @@ fn test_http3_large_body() {
     with_server("http3_large", |port| async move {
         let body = vec![0xAB; 64 * 1024];
         let client = HttpClient::new().version(HttpVersion::Http3);
-        let resp = client.post(&format!("https://127.0.0.1:{}/", port), body.clone()).await?;
+        let resp = client
+            .post(&format!("https://127.0.0.1:{}/", port), body.clone())
+            .await?;
         assert_eq!(resp.status().as_u16(), 200);
         assert_eq!(resp.body().len(), body.len());
         Ok(())

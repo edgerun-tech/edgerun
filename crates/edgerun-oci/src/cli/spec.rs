@@ -14,10 +14,18 @@ fn default_spec() -> String {
     let spec = OciSpec {
         version: "1.0.2".into(),
         platform: Some(OciPlatform {
-            os: Some(if cfg!(target_os = "linux") { "linux".into() } else { "unknown".into() }),
-            arch: Some(if cfg!(target_arch = "x86_64") { "amd64".into() }
-                     else if cfg!(target_arch = "aarch64") { "arm64".into() }
-                     else { "unknown".into() }),
+            os: Some(if cfg!(target_os = "linux") {
+                "linux".into()
+            } else {
+                "unknown".into()
+            }),
+            arch: Some(if cfg!(target_arch = "x86_64") {
+                "amd64".into()
+            } else if cfg!(target_arch = "aarch64") {
+                "arm64".into()
+            } else {
+                "unknown".into()
+            }),
             os_version: None,
             os_features: None,
         }),
@@ -100,7 +108,12 @@ fn default_spec() -> String {
                 destination: "/dev".into(),
                 mount_type: Some("tmpfs".into()),
                 source: Some("tmpfs".into()),
-                options: Some(vec!["nosuid".into(), "strictatime".into(), "mode=755".into(), "size=65536k".into()]),
+                options: Some(vec![
+                    "nosuid".into(),
+                    "strictatime".into(),
+                    "mode=755".into(),
+                    "size=65536k".into(),
+                ]),
                 label: None,
                 recursive: None,
                 uid_mappings: None,
@@ -110,7 +123,13 @@ fn default_spec() -> String {
                 destination: "/dev/pts".into(),
                 mount_type: Some("devpts".into()),
                 source: Some("devpts".into()),
-                options: Some(vec!["nosuid".into(), "noexec".into(), "newinstance".into(), "ptmxmode=0666".into(), "mode=0620".into()]),
+                options: Some(vec![
+                    "nosuid".into(),
+                    "noexec".into(),
+                    "newinstance".into(),
+                    "ptmxmode=0666".into(),
+                    "mode=0620".into(),
+                ]),
                 label: None,
                 recursive: None,
                 uid_mappings: None,
@@ -120,7 +139,13 @@ fn default_spec() -> String {
                 destination: "/dev/shm".into(),
                 mount_type: Some("tmpfs".into()),
                 source: Some("shm".into()),
-                options: Some(vec!["nosuid".into(), "noexec".into(), "nodev".into(), "mode=1777".into(), "size=65536k".into()]),
+                options: Some(vec![
+                    "nosuid".into(),
+                    "noexec".into(),
+                    "nodev".into(),
+                    "mode=1777".into(),
+                    "size=65536k".into(),
+                ]),
                 label: None,
                 recursive: None,
                 uid_mappings: None,
@@ -140,7 +165,12 @@ fn default_spec() -> String {
                 destination: "/sys".into(),
                 mount_type: Some("sysfs".into()),
                 source: Some("sysfs".into()),
-                options: Some(vec!["nosuid".into(), "noexec".into(), "nodev".into(), "ro".into()]),
+                options: Some(vec![
+                    "nosuid".into(),
+                    "noexec".into(),
+                    "nodev".into(),
+                    "ro".into(),
+                ]),
                 label: None,
                 recursive: None,
                 uid_mappings: None,
@@ -150,7 +180,13 @@ fn default_spec() -> String {
                 destination: "/sys/fs/cgroup".into(),
                 mount_type: Some("cgroup".into()),
                 source: Some("cgroup".into()),
-                options: Some(vec!["nosuid".into(), "noexec".into(), "nodev".into(), "relatime".into(), "ro".into()]),
+                options: Some(vec![
+                    "nosuid".into(),
+                    "noexec".into(),
+                    "nodev".into(),
+                    "relatime".into(),
+                    "ro".into(),
+                ]),
                 label: None,
                 recursive: None,
                 uid_mappings: None,

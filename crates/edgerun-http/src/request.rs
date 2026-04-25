@@ -27,27 +27,36 @@ impl Request {
 
     /// Create a request with explicit fields (used internally by servers).
     pub(crate) fn new(method: Method, uri: Uri, headers: HeaderMap, body: Option<Vec<u8>>) -> Self {
-        Self { method, uri, headers, body, extensions: Extensions::new() }
+        Self {
+            method,
+            uri,
+            headers,
+            body,
+            extensions: Extensions::new(),
+        }
     }
 
     /// Parse a request from raw HTTP/1.x bytes.
     pub fn from_http(raw: &str) -> Result<Self> {
-        let line_end = raw.find("\r\n").ok_or_else(|| {
-            crate::Error::InvalidRequest("No request line".to_string())
-        })?;
+        let line_end = raw
+            .find("\r\n")
+            .ok_or_else(|| crate::Error::InvalidRequest("No request line".to_string()))?;
 
         let request_line = &raw[..line_end];
         let mut parts = request_line.splitn(3, ' ');
-        let method_str = parts.next().ok_or_else(|| {
-            crate::Error::InvalidRequest("Empty request line".to_string())
-        })?;
-        let target = parts.next().ok_or_else(|| {
-            crate::Error::InvalidRequest("No request target".to_string())
-        })?;
+        let method_str = parts
+            .next()
+            .ok_or_else(|| crate::Error::InvalidRequest("Empty request line".to_string()))?;
+        let target = parts
+            .next()
+            .ok_or_else(|| crate::Error::InvalidRequest("No request target".to_string()))?;
 
-        let method = method_str.parse().map_err(|e: String| crate::Error::InvalidRequest(e))?;
+        let method = method_str
+            .parse()
+            .map_err(|e: String| crate::Error::InvalidRequest(e))?;
 
-        let header_end = raw[line_end..].find("\r\n\r\n")
+        let header_end = raw[line_end..]
+            .find("\r\n\r\n")
             .map(|i| line_end + i)
             .unwrap_or(raw.len());
 
@@ -66,7 +75,10 @@ impl Request {
         let uri = if target.starts_with("http://") || target.starts_with("https://") {
             Uri::parse(target).map_err(crate::Error::InvalidUri)?
         } else {
-            let host = headers.get("Host").map(|v| v.as_str()).unwrap_or("localhost");
+            let host = headers
+                .get("Host")
+                .map(|v| v.as_str())
+                .unwrap_or("localhost");
             let uri_str = if target.starts_with('/') {
                 format!("http://{}{}", host, target)
             } else {
@@ -90,21 +102,43 @@ impl Request {
             None
         };
 
-        Ok(Self { method, uri, headers, body, extensions: Extensions::new() })
+        Ok(Self {
+            method,
+            uri,
+            headers,
+            body,
+            extensions: Extensions::new(),
+        })
     }
 
-    pub fn method(&self) -> &Method { &self.method }
-    pub fn uri(&self) -> &Uri { &self.uri }
-    pub fn headers(&self) -> &HeaderMap { &self.headers }
-    pub fn headers_mut(&mut self) -> &mut HeaderMap { &mut self.headers }
-    pub fn body(&self) -> Option<&[u8]> { self.body.as_deref() }
-    pub fn into_body(self) -> Option<Vec<u8>> { self.body }
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+    pub fn uri(&self) -> &Uri {
+        &self.uri
+    }
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
+    }
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+    pub fn body(&self) -> Option<&[u8]> {
+        self.body.as_deref()
+    }
+    pub fn into_body(self) -> Option<Vec<u8>> {
+        self.body
+    }
 
     /// Access the extensions map — used by middleware to pass data between layers.
-    pub fn extensions(&self) -> &Extensions { &self.extensions }
+    pub fn extensions(&self) -> &Extensions {
+        &self.extensions
+    }
 
     /// Mutate the extensions map — insert data for downstream middleware/handler.
-    pub fn extensions_mut(&mut self) -> &mut Extensions { &mut self.extensions }
+    pub fn extensions_mut(&mut self) -> &mut Extensions {
+        &mut self.extensions
+    }
 
     /// Serialize the request as raw HTTP/1.1 bytes.
     pub fn to_http_bytes(&self) -> Vec<u8> {
@@ -168,11 +202,23 @@ pub struct RequestBuilder {
 
 impl RequestBuilder {
     pub fn new() -> Self {
-        Self { method: Method::GET, uri: None, headers: HeaderMap::new(), body: None, extensions: Extensions::new() }
+        Self {
+            method: Method::GET,
+            uri: None,
+            headers: HeaderMap::new(),
+            body: None,
+            extensions: Extensions::new(),
+        }
     }
 
-    pub fn method(mut self, method: Method) -> Self { self.method = method; self }
-    pub fn uri(mut self, uri: impl AsRef<str>) -> Self { self.uri = Some(uri.as_ref().to_string()); self }
+    pub fn method(mut self, method: Method) -> Self {
+        self.method = method;
+        self
+    }
+    pub fn uri(mut self, uri: impl AsRef<str>) -> Self {
+        self.uri = Some(uri.as_ref().to_string());
+        self
+    }
 
     pub fn header(mut self, name: &str, value: &str) -> Self {
         let _ = self.headers.insert(name, value);
@@ -197,9 +243,9 @@ impl RequestBuilder {
     }
 
     pub fn build(self) -> Result<Request> {
-        let uri_str = self.uri.ok_or_else(|| {
-            crate::Error::InvalidRequest("No URI specified".to_string())
-        })?;
+        let uri_str = self
+            .uri
+            .ok_or_else(|| crate::Error::InvalidRequest("No URI specified".to_string()))?;
         let uri = Uri::parse(&uri_str).map_err(crate::Error::InvalidUri)?;
 
         let mut headers = self.headers;
@@ -218,5 +264,7 @@ impl RequestBuilder {
 }
 
 impl Default for RequestBuilder {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

@@ -20,7 +20,10 @@ impl MailWebHandler {
     pub fn new(static_root: std::path::PathBuf, imap_host: String, imap_port: u16) -> Self {
         Self {
             static_handler: edgerun_http::StaticHandler::new(static_root),
-            api_handler: Arc::new(MailApiHandler { _imap_host: imap_host, _imap_port: imap_port }),
+            api_handler: Arc::new(MailApiHandler {
+                _imap_host: imap_host,
+                _imap_port: imap_port,
+            }),
         }
     }
 }
@@ -34,9 +37,7 @@ impl Handler for MailWebHandler {
 
         if uri.starts_with("/api/") {
             let handler = Arc::clone(&self.api_handler);
-            Box::pin(async move {
-                handle_api(&handler, &uri[5..]).await
-            })
+            Box::pin(async move { handle_api(&handler, &uri[5..]).await })
         } else {
             self.static_handler.handle(request)
         }
@@ -45,21 +46,15 @@ impl Handler for MailWebHandler {
 
 async fn handle_api(_handler: &MailApiHandler, path: &str) -> Response {
     match path {
-        "login" => {
-            Response::new(StatusCode::OK)
-                .with_header("Content-Type", "application/json")
-                .with_body(r#"{"status": "ok", "message": "Use IMAP authentication"}"#)
-        }
-        "folders" => {
-            Response::new(StatusCode::OK)
-                .with_header("Content-Type", "application/json")
-                .with_body(r#"{"folders": ["INBOX", "Sent", "Drafts", "Trash"]}"#)
-        }
-        _ => {
-            Response::new(StatusCode::NOT_FOUND)
-                .with_header("Content-Type", "application/json")
-                .with_body(r#"{"error": "not found"}"#)
-        }
+        "login" => Response::new(StatusCode::OK)
+            .with_header("Content-Type", "application/json")
+            .with_body(r#"{"status": "ok", "message": "Use IMAP authentication"}"#),
+        "folders" => Response::new(StatusCode::OK)
+            .with_header("Content-Type", "application/json")
+            .with_body(r#"{"folders": ["INBOX", "Sent", "Drafts", "Trash"]}"#),
+        _ => Response::new(StatusCode::NOT_FOUND)
+            .with_header("Content-Type", "application/json")
+            .with_body(r#"{"error": "not found"}"#),
     }
 }
 

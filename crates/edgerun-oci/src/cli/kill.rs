@@ -8,28 +8,34 @@
 use std::io;
 use std::os::raw::c_int;
 
+use crate::cli::{is_process_alive, parse_kill_args};
 use crate::state::load_state;
-use crate::cli::{parse_kill_args, is_process_alive};
 
 pub fn cmd_kill(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?);
     }
 
     let (sig_str, id) = parse_kill_args(args);
     let id = if id.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "container ID required"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID required",
+        ));
     } else {
         id
     };
     let sig_str = sig_str.unwrap_or("TERM");
 
     let state = load_state(id)?;
-    let pid = state.pid.ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container has no PID")
-    })?;
+    let pid = state
+        .pid
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;
 
     // No-op for stopped/created containers — OCI spec: kill should be safe on non-running
     if !is_process_alive(pid) {
@@ -63,6 +69,9 @@ fn parse_signal(s: &str) -> io::Result<c_int> {
         "TERM" | "SIGTERM" => Ok(15),
         "CONT" | "SIGCONT" => Ok(18),
         "STOP" | "SIGSTOP" => Ok(19),
-        _ => Err(io::Error::new(io::ErrorKind::InvalidInput, format!("unknown signal: {}", s))),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown signal: {}", s),
+        )),
     }
 }

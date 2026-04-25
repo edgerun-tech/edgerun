@@ -28,8 +28,12 @@ pub fn create_fifo(path: &Path) -> io::Result<PathBuf> {
     // Remove existing file if present (from a previous failed container)
     let _ = fs::remove_file(path);
 
-    let path_c = CString::new(path.to_string_lossy().as_bytes())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("invalid FIFO path: {}", e)))?;
+    let path_c = CString::new(path.to_string_lossy().as_bytes()).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid FIFO path: {}", e),
+        )
+    })?;
 
     let ret = unsafe { libc::mkfifo(path_c.as_ptr(), 0o600) };
     if ret != 0 {
@@ -43,8 +47,12 @@ pub fn create_fifo(path: &Path) -> io::Result<PathBuf> {
 ///
 /// Returns a raw file descriptor. The caller is responsible for closing it.
 pub fn open_fifo_read(path: &Path) -> io::Result<i32> {
-    let path_c = CString::new(path.to_string_lossy().as_bytes())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("invalid FIFO path: {}", e)))?;
+    let path_c = CString::new(path.to_string_lossy().as_bytes()).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid FIFO path: {}", e),
+        )
+    })?;
 
     let fd = unsafe { libc::open(path_c.as_ptr(), libc::O_RDONLY) };
     if fd < 0 {
@@ -82,11 +90,17 @@ pub fn read_start_signal(fd: i32) -> io::Result<()> {
     let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
 
     if n <= 0 {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "FIFO closed before start signal"));
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "FIFO closed before start signal",
+        ));
     }
 
     if &buf[..n as usize] != START_SIGNAL {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid start signal received"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid start signal received",
+        ));
     }
 
     Ok(())
@@ -119,7 +133,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "oci-fifo-test-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         fs::create_dir_all(&dir).expect("failed to create temp dir");
         dir
@@ -144,7 +161,10 @@ mod tests {
         use std::os::unix::fs::MetadataExt;
         let dir = temp_fifo_dir();
         let path = dir.join("test.fifo");
-        if create_fifo(&path).is_err() { let _ = fs::remove_dir_all(&dir); return; }
+        if create_fifo(&path).is_err() {
+            let _ = fs::remove_dir_all(&dir);
+            return;
+        }
         let _ = path.metadata().unwrap().ino();
         create_fifo(&path).expect("replace should succeed");
         let _ = fs::remove_dir_all(&dir);
@@ -160,7 +180,10 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let dir = temp_fifo_dir();
         let path = dir.join("perms.fifo");
-        if create_fifo(&path).is_err() { let _ = fs::remove_dir_all(&dir); return; }
+        if create_fifo(&path).is_err() {
+            let _ = fs::remove_dir_all(&dir);
+            return;
+        }
         let mode = path.metadata().unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
         let _ = fs::remove_dir_all(&dir);
@@ -170,7 +193,10 @@ mod tests {
     fn fifo_signal_roundtrip() {
         let dir = temp_fifo_dir();
         let fifo_path = dir.join("roundtrip.fifo");
-        if create_fifo(&fifo_path).is_err() { let _ = fs::remove_dir_all(&dir); return; }
+        if create_fifo(&fifo_path).is_err() {
+            let _ = fs::remove_dir_all(&dir);
+            return;
+        }
         let p1 = fifo_path.clone();
         let reader = thread::spawn(move || {
             thread::sleep(Duration::from_millis(50));
@@ -192,7 +218,10 @@ mod tests {
     fn fifo_read_signal_validates_payload() {
         let dir = temp_fifo_dir();
         let fifo_path = dir.join("payload.fifo");
-        if create_fifo(&fifo_path).is_err() { let _ = fs::remove_dir_all(&dir); return; }
+        if create_fifo(&fifo_path).is_err() {
+            let _ = fs::remove_dir_all(&dir);
+            return;
+        }
         let p1 = fifo_path.clone();
         let reader = thread::spawn(move || {
             thread::sleep(Duration::from_millis(50));
@@ -227,7 +256,10 @@ mod tests {
     fn cleanup_fifo_removes_file_and_empty_dir() {
         let dir = temp_fifo_dir();
         let fifo_path = dir.join("cleanup.fifo");
-        if create_fifo(&fifo_path).is_err() { let _ = fs::remove_dir_all(&dir); return; }
+        if create_fifo(&fifo_path).is_err() {
+            let _ = fs::remove_dir_all(&dir);
+            return;
+        }
         assert!(fifo_path.exists());
         cleanup_fifo(&fifo_path);
         assert!(!fifo_path.exists());

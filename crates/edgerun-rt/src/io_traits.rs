@@ -45,7 +45,11 @@ pub trait AsyncReadExt: AsyncRead + Unpin {
     where
         Self: Sized,
     {
-        ReadExactFut { s: self, buf, pos: 0 }
+        ReadExactFut {
+            s: self,
+            buf,
+            pos: 0,
+        }
     }
     /// Read all bytes until EOF, appending to `buf`.
     fn read_to_end<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadToEndFut<'a, Self>
@@ -59,14 +63,21 @@ pub trait AsyncReadExt: AsyncRead + Unpin {
     where
         Self: Sized,
     {
-        ReadToStringFut { s: self, buf: String::new() }
+        ReadToStringFut {
+            s: self,
+            buf: String::new(),
+        }
     }
     /// Create an adaptor that reads at most `limit` bytes.
     fn take(self, limit: u64) -> Take<Self>
     where
         Self: Sized,
     {
-        Take { inner: self, limit, remaining: limit }
+        Take {
+            inner: self,
+            limit,
+            remaining: limit,
+        }
     }
     /// Chain this reader with another, reading from `self` then `other`.
     fn chain<R2>(self, other: R2) -> Chain<Self, R2>
@@ -74,7 +85,11 @@ pub trait AsyncReadExt: AsyncRead + Unpin {
         Self: Sized,
         R2: AsyncRead + Unpin,
     {
-        Chain { first: self, second: other, done_first: false }
+        Chain {
+            first: self,
+            second: other,
+            done_first: false,
+        }
     }
 
     /// Read all bytes until a newline (`\n`) is reached, appending to `buf`.
@@ -97,7 +112,10 @@ pub trait AsyncReadExt: AsyncRead + Unpin {
     where
         Self: Sized,
     {
-        Lines { reader: self, buf: String::new() }
+        Lines {
+            reader: self,
+            buf: String::new(),
+        }
     }
 }
 impl<R: AsyncRead + Unpin> AsyncReadExt for R {}
@@ -107,7 +125,11 @@ pub trait AsyncWriteExt: AsyncWrite + Unpin {
     where
         Self: Sized,
     {
-        WriteAllFut { s: self, buf, pos: 0 }
+        WriteAllFut {
+            s: self,
+            buf,
+            pos: 0,
+        }
     }
     fn flush(&mut self) -> FlushFut<'_, Self>
     where

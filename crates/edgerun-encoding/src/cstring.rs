@@ -140,7 +140,10 @@ mod tests {
 
     #[test]
     fn test_encode_c_string() {
-        assert_eq!(encode_c_string("hello"), vec![b'h', b'e', b'l', b'l', b'o', 0]);
+        assert_eq!(
+            encode_c_string("hello"),
+            vec![b'h', b'e', b'l', b'l', b'o', 0]
+        );
         assert_eq!(encode_c_string(""), vec![0]);
         assert_eq!(encode_c_string("a"), vec![b'a', 0]);
     }
@@ -183,7 +186,10 @@ mod tests {
     #[test]
     fn test_decode_c_string_trimmed() {
         assert_eq!(decode_c_string_trimmed(b"hello  \0world").unwrap(), "hello");
-        assert_eq!(decode_c_string_trimmed(b"  trimmed  \0").unwrap(), "trimmed");
+        assert_eq!(
+            decode_c_string_trimmed(b"  trimmed  \0").unwrap(),
+            "trimmed"
+        );
         assert_eq!(decode_c_string_trimmed(b"no-trim\0").unwrap(), "no-trim");
         assert_eq!(decode_c_string_trimmed(b"\0").unwrap(), "");
     }

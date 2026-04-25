@@ -40,7 +40,10 @@ impl FixedPoint16 {
     /// Panics if `denominator` is 0 or if the result overflows u32.
     #[inline]
     pub const fn from_ratio(numerator: u64, denominator: u64) -> Self {
-        assert!(denominator != 0, "division by zero in FixedPoint16::from_ratio");
+        assert!(
+            denominator != 0,
+            "division by zero in FixedPoint16::from_ratio"
+        );
         // Shift numerator left by 16 bits before dividing
         Self(((numerator << 16) / denominator) as u32)
     }

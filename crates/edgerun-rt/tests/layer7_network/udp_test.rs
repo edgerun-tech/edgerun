@@ -1,5 +1,5 @@
 // Test AsyncUdpSocket with the actual runtime.
-use edgerun_rt::{AsyncUdpSocket, Runtime, spawn};
+use edgerun_rt::{spawn, AsyncUdpSocket, Runtime};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -47,7 +47,10 @@ fn test_send_to_recv_from() {
 
     let send_a = socket_a.clone();
     let sender = spawn(async move {
-        let n = send_a.send_to(b"hello udp", target_b).await.expect("send_to failed");
+        let n = send_a
+            .send_to(b"hello udp", target_b)
+            .await
+            .expect("send_to failed");
         assert_eq!(n, 9);
         println!("    A sent {} bytes to B", n);
     });
@@ -84,7 +87,10 @@ fn test_multiple_senders_single_receiver() {
 
         let h = spawn(async move {
             let socket = AsyncUdpSocket::bind(&addr_tx).expect("bind failed");
-            let n = socket.send_to(msg.as_bytes(), target_rx).await.expect("send_to failed");
+            let n = socket
+                .send_to(msg.as_bytes(), target_rx)
+                .await
+                .expect("send_to failed");
             println!("    sender {} sent {} bytes", i, n);
         });
         sender_handles.push(h);
@@ -125,7 +131,10 @@ fn test_clone_shares_fd() {
     let peer = Arc::new(AsyncUdpSocket::bind(&addr_peer).expect("peer bind failed"));
     let peer2 = peer.clone();
     let sender = spawn(async move {
-        peer2.send_to(b"clone test", target).await.expect("peer send failed");
+        peer2
+            .send_to(b"clone test", target)
+            .await
+            .expect("peer send failed");
     });
 
     let recv = socket2.clone();
@@ -159,7 +168,10 @@ fn test_large_datagram() {
     let data = vec![0xCDu8; 4000];
     let send_a = socket_a.clone();
     let sender = spawn(async move {
-        let n = send_a.send_to(&data, target_b).await.expect("send_to failed");
+        let n = send_a
+            .send_to(&data, target_b)
+            .await
+            .expect("send_to failed");
         assert_eq!(n, 4000);
         println!("    sent {} bytes", n);
     });
@@ -197,7 +209,10 @@ fn test_connected_send_recv() {
     // A sends using send_to (still works even when connected)
     let send_a = socket_a.clone();
     let sender = spawn(async move {
-        let n = send_a.send_to(b"connected udp", target_b).await.expect("send_to failed");
+        let n = send_a
+            .send_to(b"connected udp", target_b)
+            .await
+            .expect("send_to failed");
         println!("    A sent {} bytes (connected)", n);
     });
 

@@ -1,9 +1,11 @@
 // Stress and race condition tests for channels and sync primitives.
 // These tests verify correctness under concurrent access with realistic
 // contention patterns.
-use edgerun_rt::{Runtime, mpsc, unbounded, Notify, Semaphore, Mutex, Barrier, CancellationToken, WatchSender};
-use std::sync::Arc;
+use edgerun_rt::{
+    mpsc, unbounded, Barrier, CancellationToken, Mutex, Notify, Runtime, Semaphore, WatchSender,
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 // ===========================================================================
@@ -209,7 +211,12 @@ fn semaphore_stress_concurrent_acquire() {
         }
 
         let peak = max_active.load(Ordering::SeqCst);
-        assert!(peak <= PERMITS, "peak active {} exceeded permits {}", peak, PERMITS);
+        assert!(
+            peak <= PERMITS,
+            "peak active {} exceeded permits {}",
+            peak,
+            PERMITS
+        );
     });
 }
 

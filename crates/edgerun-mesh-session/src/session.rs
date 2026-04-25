@@ -1,8 +1,8 @@
-use edgerun_hardware_signing::NodeID;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
-use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::{Aead, KeyInit};
+use edgerun_hardware_signing::NodeID;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -99,7 +99,10 @@ impl MeshSession {
 
         use edgerun_crypto::Nonce;
         let nonce = Nonce::from(nonce_bytes);
-        let ciphertext = self.cipher.encrypt(&nonce, plaintext).expect("AES-GCM encrypt failed");
+        let ciphertext = self
+            .cipher
+            .encrypt(&nonce, plaintext)
+            .expect("AES-GCM encrypt failed");
 
         let mut out = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
         out.extend_from_slice(&nonce_bytes);
@@ -141,8 +144,7 @@ impl MeshSession {
 
     /// Returns `true` if this session should be rekeyed.
     pub fn needs_rekey(&self) -> bool {
-        self.frame_count >= MAX_FRAMES_BEFORE_REKEY
-            || self.created_at.elapsed() >= MAX_SESSION_AGE
+        self.frame_count >= MAX_FRAMES_BEFORE_REKEY || self.created_at.elapsed() >= MAX_SESSION_AGE
     }
 }
 
@@ -151,7 +153,9 @@ impl Drop for MeshSession {
         // Zero all sensitive fields on drop
         volatile_zero_u64(&mut self.nonce_counter);
         volatile_zero_bytes(&mut self.nonce_prefix);
-        if let Some(ref mut c) = self.highest_seen_counter { volatile_zero_u64(c); }
+        if let Some(ref mut c) = self.highest_seen_counter {
+            volatile_zero_u64(c);
+        }
         // The cipher holds the AES-256 key — we can't zero it directly,
         // but the key material in the cipher struct is stored in memory
         // that will be freed. For defense-in-depth, we could use a custom
@@ -163,4 +167,3 @@ impl Drop for MeshSession {
 // ---------------------------------------------------------------------------
 // Handshake messages
 // ---------------------------------------------------------------------------
-

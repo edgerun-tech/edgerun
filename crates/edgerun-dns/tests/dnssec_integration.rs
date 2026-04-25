@@ -18,7 +18,8 @@ fn now() -> u32 {
 }
 
 fn make_a_rr(name: &str, ip: &str, ttl: u32) -> DnsRecord {
-    let octets: [u8; 4] = ip.split('.')
+    let octets: [u8; 4] = ip
+        .split('.')
         .map(|p| p.parse::<u8>().unwrap())
         .collect::<Vec<_>>()
         .try_into()
@@ -32,12 +33,7 @@ fn make_a_rr(name: &str, ip: &str, ttl: u32) -> DnsRecord {
 
 #[test]
 fn test_key_tag_ecdsap256() {
-    let dnskey = DnsRecord::dnskey(
-        "example.com".to_string(),
-        257, 3, 13,
-        vec![0x04; 65],
-        3600,
-    );
+    let dnskey = DnsRecord::dnskey("example.com".to_string(), 257, 3, 13, vec![0x04; 65], 3600);
     let tag = compute_key_tag(&dnskey);
     assert_ne!(tag, 0);
 }
@@ -46,7 +42,9 @@ fn test_key_tag_ecdsap256() {
 fn test_key_tag_consistency() {
     let dnskey = DnsRecord::dnskey(
         "test.example.com".to_string(),
-        256, 3, 13,
+        256,
+        3,
+        13,
         vec![0xAB; 65],
         7200,
     );
@@ -79,7 +77,9 @@ fn test_ed25519_wrong_signature_rejected() {
 
     let dnskey = DnsRecord::dnskey(
         "example.com".to_string(),
-        257, 3, 15,
+        257,
+        3,
+        15,
         public_key_bytes,
         3600,
     );
@@ -88,7 +88,12 @@ fn test_ed25519_wrong_signature_rejected() {
     let current = now();
     let rrsig = DnsRecord::rrsig(
         "example.com".to_string(),
-        1, 15, 2, 3600, current + 86400, current - 3600,
+        1,
+        15,
+        2,
+        3600,
+        current + 86400,
+        current - 3600,
         compute_key_tag(&dnskey),
         "example.com".to_string(),
         vec![0u8; 64], // wrong signature
@@ -109,7 +114,9 @@ fn test_ed25519_expired_signature() {
 
     let dnskey = DnsRecord::dnskey(
         "example.com".to_string(),
-        257, 3, 15,
+        257,
+        3,
+        15,
         public_key_bytes,
         3600,
     );
@@ -120,7 +127,12 @@ fn test_ed25519_expired_signature() {
 
     let rrsig = DnsRecord::rrsig(
         "example.com".to_string(),
-        1, 15, 2, 3600, expiration, inception,
+        1,
+        15,
+        2,
+        3600,
+        expiration,
+        inception,
         compute_key_tag(&dnskey),
         "example.com".to_string(),
         vec![0xAB; 64],
@@ -142,18 +154,25 @@ fn test_ed25519_not_yet_valid() {
 
     let dnskey = DnsRecord::dnskey(
         "example.com".to_string(),
-        257, 3, 15,
+        257,
+        3,
+        15,
         public_key_bytes,
         3600,
     );
 
     let current = now();
-    let inception = current + 86400;  // starts tomorrow
+    let inception = current + 86400; // starts tomorrow
     let expiration = current + 86400 * 2;
 
     let rrsig = DnsRecord::rrsig(
         "example.com".to_string(),
-        1, 15, 2, 3600, expiration, inception,
+        1,
+        15,
+        2,
+        3600,
+        expiration,
+        inception,
         compute_key_tag(&dnskey),
         "example.com".to_string(),
         vec![0xAB; 64],
@@ -193,7 +212,9 @@ fn test_ecdsap256_wrong_signature_rejected() {
 
     let dnskey = DnsRecord::dnskey(
         "example.com".to_string(),
-        257, 3, 13,
+        257,
+        3,
+        13,
         public_key_bytes,
         3600,
     );
@@ -202,7 +223,12 @@ fn test_ecdsap256_wrong_signature_rejected() {
     let current = now();
     let rrsig = DnsRecord::rrsig(
         "example.com".to_string(),
-        1, 13, 2, 3600, current + 86400, current - 3600,
+        1,
+        13,
+        2,
+        3600,
+        current + 86400,
+        current - 3600,
         compute_key_tag(&dnskey),
         "example.com".to_string(),
         vec![0u8; 64], // wrong signature
@@ -219,9 +245,9 @@ fn test_ecdsap256_wrong_signature_rejected() {
 
 #[test]
 fn test_chain_of_trust_valid_sha256() {
-    use edgerun_crypto::sha2::{Digest, Sha256};
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+    use edgerun_crypto::sha2::{Digest, Sha256};
 
     let signing_key = SigningKey::random(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
@@ -230,7 +256,9 @@ fn test_chain_of_trust_valid_sha256() {
 
     let dnskey = DnsRecord::dnskey(
         "example.com".to_string(),
-        257, 3, 13,
+        257,
+        3,
+        13,
         public_key_bytes,
         3600,
     );
@@ -241,12 +269,7 @@ fn test_chain_of_trust_valid_sha256() {
     let digest = hasher.finalize().to_vec();
 
     let key_tag = compute_key_tag(&dnskey);
-    let ds = DnsRecord::ds(
-        "example.com".to_string(),
-        key_tag, 13, 2,
-        digest,
-        3600,
-    );
+    let ds = DnsRecord::ds("example.com".to_string(), key_tag, 13, 2, digest, 3600);
 
     let result = verify_chain_of_trust(&[ds], &[dnskey]);
     assert_eq!(result, DnssecResult::Valid);
@@ -254,16 +277,13 @@ fn test_chain_of_trust_valid_sha256() {
 
 #[test]
 fn test_chain_of_trust_broken_wrong_digest() {
-    let dnskey = DnsRecord::dnskey(
-        "example.com".to_string(),
-        257, 3, 13,
-        vec![0x04; 65],
-        3600,
-    );
+    let dnskey = DnsRecord::dnskey("example.com".to_string(), 257, 3, 13, vec![0x04; 65], 3600);
 
     let ds = DnsRecord::ds(
         "example.com".to_string(),
-        compute_key_tag(&dnskey), 13, 2,
+        compute_key_tag(&dnskey),
+        13,
+        2,
         vec![0xDE, 0xAD, 0xBE, 0xEF],
         3600,
     );
@@ -274,17 +294,13 @@ fn test_chain_of_trust_broken_wrong_digest() {
 
 #[test]
 fn test_chain_of_trust_broken_wrong_key_tag() {
-    let dnskey = DnsRecord::dnskey(
-        "example.com".to_string(),
-        257, 3, 13,
-        vec![0x04; 65],
-        3600,
-    );
+    let dnskey = DnsRecord::dnskey("example.com".to_string(), 257, 3, 13, vec![0x04; 65], 3600);
 
     let ds = DnsRecord::ds(
         "example.com".to_string(),
         54321, // wrong key tag
-        13, 2,
+        13,
+        2,
         vec![0xAB; 32],
         3600,
     );
@@ -295,12 +311,14 @@ fn test_chain_of_trust_broken_wrong_key_tag() {
 
 #[test]
 fn test_chain_of_trust_sha1_digest() {
-    use edgerun_crypto::sha1::Sha1;
     use edgerun_crypto::sha1::Digest;
+    use edgerun_crypto::sha1::Sha1;
 
     let dnskey = DnsRecord::dnskey(
         "example.com".to_string(),
-        257, 3, 8,
+        257,
+        3,
+        8,
         vec![0x01, 0x00, 0x01, 0xFF, 0xFE],
         3600,
     );
@@ -312,7 +330,9 @@ fn test_chain_of_trust_sha1_digest() {
 
     let ds = DnsRecord::ds(
         "example.com".to_string(),
-        compute_key_tag(&dnskey), 8, 1,
+        compute_key_tag(&dnskey),
+        8,
+        1,
         digest,
         3600,
     );
@@ -325,12 +345,7 @@ fn test_chain_of_trust_sha1_digest() {
 fn test_chain_of_trust_sha384_digest() {
     use edgerun_crypto::sha2::{Digest, Sha384};
 
-    let dnskey = DnsRecord::dnskey(
-        "example.com".to_string(),
-        257, 3, 14,
-        vec![0x04; 97],
-        3600,
-    );
+    let dnskey = DnsRecord::dnskey("example.com".to_string(), 257, 3, 14, vec![0x04; 97], 3600);
 
     let dnskey_rdata = dnskey.data.to_wire(dnskey.rtype);
     let mut hasher = Sha384::new();
@@ -339,7 +354,9 @@ fn test_chain_of_trust_sha384_digest() {
 
     let ds = DnsRecord::ds(
         "example.com".to_string(),
-        compute_key_tag(&dnskey), 14, 4,
+        compute_key_tag(&dnskey),
+        14,
+        4,
         digest,
         3600,
     );
@@ -367,7 +384,11 @@ fn test_validate_response_no_signature_for_rrset() {
     let rrsig = DnsRecord::rrsig(
         "example.com".to_string(),
         1, // type_covered = A
-        15, 2, 3600, current + 86400, current - 3600,
+        15,
+        2,
+        3600,
+        current + 86400,
+        current - 3600,
         12345,
         "example.com".to_string(),
         vec![0u8; 64],
@@ -376,7 +397,10 @@ fn test_validate_response_no_signature_for_rrset() {
     // The RRSIG exists but has a bad signature, so it should return BadSignature
     // (NoSignature is only when there's no RRSIG for the covered type at all)
     let result = validate_response(&answers, &[rrsig], &[], None);
-    assert!(matches!(result, DnssecResult::BadSignature | DnssecResult::NoKey));
+    assert!(matches!(
+        result,
+        DnssecResult::BadSignature | DnssecResult::NoKey
+    ));
 }
 
 // -----------------------------------------------------------------------
@@ -427,9 +451,17 @@ fn test_rrsig_wire_roundtrip() {
     let parsed = DnsRecordData::from_wire(DnsRecordType::RRSIG, &wire, &offset_map).unwrap();
 
     if let DnsRecordData::RRSIG {
-        type_covered, algorithm, labels, original_ttl,
-        expiration, inception, key_tag, signer_name, signature,
-    } = parsed {
+        type_covered,
+        algorithm,
+        labels,
+        original_ttl,
+        expiration,
+        inception,
+        key_tag,
+        signer_name,
+        signature,
+    } = parsed
+    {
         assert_eq!(type_covered, 1);
         assert_eq!(algorithm, 13);
         assert_eq!(labels, 2);
@@ -455,7 +487,11 @@ fn test_nsec_wire_roundtrip() {
     let offset_map: Vec<(usize, usize)> = (0..wire.len()).map(|i| (i, i)).collect();
     let parsed = DnsRecordData::from_wire(DnsRecordType::NSEC, &wire, &offset_map).unwrap();
 
-    if let DnsRecordData::NSEC { next_owner, type_bits } = parsed {
+    if let DnsRecordData::NSEC {
+        next_owner,
+        type_bits,
+    } = parsed
+    {
         assert_eq!(next_owner, "next.example.com");
         assert_eq!(type_bits, vec![0x40, 0x01, 0x00, 0x01]);
     } else {
@@ -476,7 +512,13 @@ fn test_ds_wire_roundtrip() {
     let offset_map: Vec<(usize, usize)> = (0..wire.len()).map(|i| (i, i)).collect();
     let parsed = DnsRecordData::from_wire(DnsRecordType::DS, &wire, &offset_map).unwrap();
 
-    if let DnsRecordData::DS { key_tag, algorithm, digest_type, digest } = parsed {
+    if let DnsRecordData::DS {
+        key_tag,
+        algorithm,
+        digest_type,
+        digest,
+    } = parsed
+    {
         assert_eq!(key_tag, 54321);
         assert_eq!(algorithm, 8);
         assert_eq!(digest_type, 2);
@@ -499,7 +541,13 @@ fn test_dnskey_wire_roundtrip() {
     let offset_map: Vec<(usize, usize)> = (0..wire.len()).map(|i| (i, i)).collect();
     let parsed = DnsRecordData::from_wire(DnsRecordType::DNSKEY, &wire, &offset_map).unwrap();
 
-    if let DnsRecordData::DNSKEY { protocol, flags, algorithm, public_key } = parsed {
+    if let DnsRecordData::DNSKEY {
+        protocol,
+        flags,
+        algorithm,
+        public_key,
+    } = parsed
+    {
         assert_eq!(protocol, 3);
         assert_eq!(flags, 257);
         assert_eq!(algorithm, 13);
@@ -543,7 +591,9 @@ fn test_nsec3_base32hex_encoding() {
     // 20 bytes → 32 base32hex characters
     assert_eq!(b32.len(), 32);
     // All lowercase base32hex characters
-    assert!(b32.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+    assert!(b32
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
 }
 
 #[test]
@@ -556,14 +606,9 @@ fn test_nsec3_type_bitmap() {
 
 #[test]
 fn test_nsec3_synthesize_chain() {
-    let names = vec![
-        "@".to_string(),
-        "www".to_string(),
-        "mail".to_string(),
-    ];
-    let chain = edgerun_dns::synthesize_nsec3_chain(
-        "example.com", &names, &[0xDE, 0xAD], 1, 0, 3600,
-    );
+    let names = vec!["@".to_string(), "www".to_string(), "mail".to_string()];
+    let chain =
+        edgerun_dns::synthesize_nsec3_chain("example.com", &names, &[0xDE, 0xAD], 1, 0, 3600);
     assert_eq!(chain.len(), 3);
     // All should be NSEC3 records
     for rr in &chain {
@@ -573,13 +618,8 @@ fn test_nsec3_synthesize_chain() {
 
 #[test]
 fn test_nsec3_find_covering() {
-    let names = vec![
-        "example.com".to_string(),
-        "www.example.com".to_string(),
-    ];
-    let chain = edgerun_dns::synthesize_nsec3_chain(
-        "example.com", &names, &[0xAB], 1, 0, 3600,
-    );
+    let names = vec!["example.com".to_string(), "www.example.com".to_string()];
+    let chain = edgerun_dns::synthesize_nsec3_chain("example.com", &names, &[0xAB], 1, 0, 3600);
     // Query a name not in the zone
     let covering = edgerun_dns::find_nsec3_covering(&chain, "nonexistent.example.com", &[0xAB], 1);
     assert!(covering.is_some());
@@ -601,9 +641,14 @@ fn test_nsec3_wire_roundtrip() {
     let parsed = DnsRecordData::from_wire(DnsRecordType::NSEC3, &wire, &offset_map).unwrap();
 
     if let DnsRecordData::NSEC3 {
-        hash_algorithm, flags, iterations, salt,
-        next_hashed_owner, type_bits,
-    } = parsed {
+        hash_algorithm,
+        flags,
+        iterations,
+        salt,
+        next_hashed_owner,
+        type_bits,
+    } = parsed
+    {
         assert_eq!(hash_algorithm, 1);
         assert_eq!(flags, 1);
         assert_eq!(iterations, 10);

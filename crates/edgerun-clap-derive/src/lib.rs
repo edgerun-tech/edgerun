@@ -1,7 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use quote::ToTokens;
-use syn::{parse_macro_input, DeriveInput, Data, Fields, Variant, Field, Attribute, Meta, MetaList, Lit};
+use syn::{
+    parse_macro_input, Attribute, Data, DeriveInput, Field, Fields, Lit, Meta, MetaList, Variant,
+};
 
 fn to_kebab_case(s: &str) -> String {
     let mut result = String::new();
@@ -19,7 +21,17 @@ fn to_kebab_case(s: &str) -> String {
 }
 
 #[allow(clippy::type_complexity)]
-fn parse_arg_attrs(field: &Field) -> (Option<char>, Option<String>, Option<String>, Option<String>, bool, Option<usize>, Option<char>) {
+fn parse_arg_attrs(
+    field: &Field,
+) -> (
+    Option<char>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+    Option<usize>,
+    Option<char>,
+) {
     let mut short = None;
     let mut long = None;
     let mut help = None;
@@ -37,7 +49,13 @@ fn parse_arg_attrs(field: &Field) -> (Option<char>, Option<String>, Option<Strin
                         let ident_str = ident.to_string();
                         if ident_str == "subcommand" {
                             is_subcommand = true;
-                        } else if ident_str == "short" || ident_str == "long" || ident_str == "help" || ident_str == "default_value" || ident_str == "num_args" || ident_str == "value_delimiter" {
+                        } else if ident_str == "short"
+                            || ident_str == "long"
+                            || ident_str == "help"
+                            || ident_str == "default_value"
+                            || ident_str == "num_args"
+                            || ident_str == "value_delimiter"
+                        {
                             let mut value_tokens = proc_macro2::TokenStream::new();
                             while let Some(t) = tokens.peek() {
                                 if let proc_macro2::TokenTree::Punct(p) = t {
@@ -79,7 +97,15 @@ fn parse_arg_attrs(field: &Field) -> (Option<char>, Option<String>, Option<Strin
             }
         }
     }
-(short, long, help, default, is_subcommand, num_args, value_delimiter)
+    (
+        short,
+        long,
+        help,
+        default,
+        is_subcommand,
+        num_args,
+        value_delimiter,
+    )
 }
 
 fn parse_global_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<String>) {
@@ -176,14 +202,14 @@ pub fn arg(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn derive_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-    
+
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let cmd_name = to_kebab_case(&name.to_string());
 
     let gen = match &input.data {
         Data::Enum(e) => {
             let variants: Vec<_> = e.variants.iter().collect();
-            
+
             let variant_cmds: Vec<_> = variants.iter()
                 .map(|v| {
                     let var_ident = &v.ident;
@@ -245,11 +271,21 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                 })
                 .collect();
 
-            let subcommand_names: Vec<_> = variant_cmds.iter().map(|(n, _, _, _, _)| n.as_str()).collect();
-            let subcommand_bodies: Vec<_> = variant_cmds.iter().map(|(_, _, _, body, _)| quote! { #body }).collect();
-            let subcommand_idents: Vec<_> = variant_cmds.iter().map(|(_, _, _, _, i)| quote! { Self::#i }).collect();
+            let subcommand_names: Vec<_> = variant_cmds
+                .iter()
+                .map(|(n, _, _, _, _)| n.as_str())
+                .collect();
+            let subcommand_bodies: Vec<_> = variant_cmds
+                .iter()
+                .map(|(_, _, _, body, _)| quote! { #body })
+                .collect();
+            let subcommand_idents: Vec<_> = variant_cmds
+                .iter()
+                .map(|(_, _, _, _, i)| quote! { Self::#i })
+                .collect();
 
-            let subcommands_build: Vec<_> = variant_cmds.iter()
+            let subcommands_build: Vec<_> = variant_cmds
+                .iter()
                 .map(|(name, about, args, _, _)| {
                     let mut cmd = quote! { edgerun_clap::cli::Command::new(#name) };
                     if let Some(ab) = about {
@@ -289,7 +325,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-        },
+        }
         Data::Struct(s) => {
             let fields: Vec<_> = if let Fields::Named(named) = &s.fields {
                 named.named.iter().collect()
@@ -306,12 +342,15 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                 cmd = quote! { #cmd.author(#a) };
             }
 
-            let arg_builds: Vec<_> = fields.iter()
+            let arg_builds: Vec<_> = fields
+                .iter()
                 .map(|f| {
                     let field_name = f.ident.as_ref().unwrap().to_string();
-                    let (short, long, help, default, is_subcommand, num_args, value_delimiter) = parse_arg_attrs(f);
+                    let (short, long, help, default, is_subcommand, num_args, value_delimiter) =
+                        parse_arg_attrs(f);
                     let arg_long = long.unwrap_or_else(|| to_kebab_case(&field_name));
-                    let mut arg = quote! { edgerun_clap::cli::Arg::new(#field_name).long(#arg_long) };
+                    let mut arg =
+                        quote! { edgerun_clap::cli::Arg::new(#field_name).long(#arg_long) };
                     if is_subcommand {
                         arg = quote! { #arg.subcommand() };
                     }
@@ -334,7 +373,8 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                 })
                 .collect();
 
-            let field_loads: Vec<_> = fields.iter()
+            let field_loads: Vec<_> = fields
+                .iter()
                 .map(|f| {
                     let ident = f.ident.as_ref().unwrap();
                     let field_name = ident.to_string();
@@ -363,7 +403,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-        },
+        }
         _ => {
             quote! {
                 impl #impl_generics edgerun_clap::Parser for #name #ty_generics #where_clause {
@@ -386,7 +426,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
 pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-    
+
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let cmd_name = to_kebab_case(&name.to_string());
 

@@ -39,9 +39,12 @@ impl Duid {
     pub fn llt(hw_type: u16, time: u32, link_addr: &[u8]) -> Self {
         let mut data = Vec::with_capacity(6 + link_addr.len());
         data.extend_from_slice(&hw_type.to_be_bytes()); // hardware type (1 = Ethernet)
-        data.extend_from_slice(&time.to_be_bytes());    // time
-        data.extend_from_slice(link_addr);              // MAC address
-        Self { duid_type: DuidType::Llt, data }
+        data.extend_from_slice(&time.to_be_bytes()); // time
+        data.extend_from_slice(link_addr); // MAC address
+        Self {
+            duid_type: DuidType::Llt,
+            data,
+        }
     }
 
     /// Create a DUID-LL (type 3) — hardware type + link-layer address only.
@@ -49,7 +52,10 @@ impl Duid {
         let mut data = Vec::with_capacity(2 + link_addr.len());
         data.extend_from_slice(&hw_type.to_be_bytes());
         data.extend_from_slice(link_addr);
-        Self { duid_type: DuidType::Ll, data }
+        Self {
+            duid_type: DuidType::Ll,
+            data,
+        }
     }
 
     /// Create a DUID-EN (type 2) — enterprise number + identifier.
@@ -57,12 +63,18 @@ impl Duid {
         let mut data = Vec::with_capacity(4 + identifier.len());
         data.extend_from_slice(&enterprise_number.to_be_bytes());
         data.extend_from_slice(identifier);
-        Self { duid_type: DuidType::En, data }
+        Self {
+            duid_type: DuidType::En,
+            data,
+        }
     }
 
     /// Create a DUID-UUID (type 4) — 16-byte UUID.
     pub fn uuid(uuid: [u8; 16]) -> Self {
-        Self { duid_type: DuidType::Uuid, data: uuid.to_vec() }
+        Self {
+            duid_type: DuidType::Uuid,
+            data: uuid.to_vec(),
+        }
     }
 
     /// Generate a DUID-LLT from the current time and a MAC address.
@@ -84,7 +96,9 @@ impl Duid {
 
     /// Parse a DUID from wire format (includes 2-byte type prefix).
     pub fn from_wire(data: &[u8]) -> Option<Self> {
-        if data.len() < 4 { return None; } // min: 2 type + 2 data
+        if data.len() < 4 {
+            return None;
+        } // min: 2 type + 2 data
         let duid_type = u16::from_be_bytes([data[0], data[1]]);
         let duid_type = match duid_type {
             1 => DuidType::Llt,
@@ -130,7 +144,9 @@ impl Duid {
 impl fmt::Display for Duid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, b) in self.data.iter().enumerate() {
-            if i > 0 { write!(f, ":")?; }
+            if i > 0 {
+                write!(f, ":")?;
+            }
             write!(f, "{:02x}", b)?;
         }
         Ok(())
@@ -191,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_duid_uuid_roundtrip() {
-        let uuid = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+        let uuid = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
         let duid = Duid::uuid(uuid);
         assert_eq!(duid.duid_type, DuidType::Uuid);
         let wire = duid.to_wire();

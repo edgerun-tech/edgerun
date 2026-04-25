@@ -1,7 +1,7 @@
-use edgerun_hardware_signing::{MESH_SIGNATURE_LENGTH, NodeID};
 use crate::{
     FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
 };
+use edgerun_hardware_signing::{NodeID, MESH_SIGNATURE_LENGTH};
 
 // ---------------------------------------------------------------------------
 // Discovery packet (serialized payload)
@@ -115,15 +115,12 @@ impl MeshRouter {
         now_unix: i64,
     ) -> bool {
         // Update or create the peer entry
-        let peer = self
-            .peers
-            .entry(from)
-            .or_insert_with(|| MeshPeer {
-                node_id: from,
-                advertised_routes: Vec::new(),
-                last_seen_unix: now_unix,
-                missed_heartbeats: 0,
-            });
+        let peer = self.peers.entry(from).or_insert_with(|| MeshPeer {
+            node_id: from,
+            advertised_routes: Vec::new(),
+            last_seen_unix: now_unix,
+            missed_heartbeats: 0,
+        });
         peer.last_seen_unix = now_unix;
         peer.missed_heartbeats = 0;
         peer.advertised_routes.clone_from(&packet.routes);
@@ -243,16 +240,14 @@ impl MeshRouter {
         if *destination == self.local.node_id {
             return None;
         }
-        self.routing_table
-            .lookup(destination)
-            .and_then(|route| {
-                if route.next_hop.is_none() {
-                    // Direct route — the destination is a peer
-                    Some(*destination)
-                } else {
-                    route.next_hop
-                }
-            })
+        self.routing_table.lookup(destination).and_then(|route| {
+            if route.next_hop.is_none() {
+                // Direct route — the destination is a peer
+                Some(*destination)
+            } else {
+                route.next_hop
+            }
+        })
     }
 
     /// Returns `true` if we have a route to the given destination.

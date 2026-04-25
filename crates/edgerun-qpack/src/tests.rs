@@ -1,10 +1,10 @@
 use crate::decoder::Decoder;
 use crate::encoder::Encoder;
-use crate::{Decoded, DecoderError, HeaderField, dynamic::DynamicTable};
+use crate::{dynamic::DynamicTable, Decoded, DecoderError, HeaderField};
 use std::io::Cursor;
 
 pub mod helpers {
-    use crate::{HeaderField, dynamic::DynamicTable};
+    use crate::{dynamic::DynamicTable, HeaderField};
 
     pub const TABLE_SIZE: usize = 4096;
 

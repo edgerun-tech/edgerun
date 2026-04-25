@@ -35,7 +35,10 @@ pub enum OAuthError {
 impl fmt::Display for OAuthError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OAuthError::ServerError { error, error_description } => {
+            OAuthError::ServerError {
+                error,
+                error_description,
+            } => {
                 write!(f, "OAuth server error: {error} — {error_description}")
             }
             OAuthError::HttpError(msg) => write!(f, "HTTP error: {msg}"),

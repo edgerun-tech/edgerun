@@ -11,7 +11,7 @@ pub mod transport;
 pub use crypto::{PacketProtection, ProtectionKeys, QuicCrypto};
 pub use frame::QuicFrame;
 pub use handshake::{HandshakeResult, QuicTlsHandshaker};
-pub use packet::{PacketType, QuicPacket, get_long_header_payload_offset};
+pub use packet::{get_long_header_payload_offset, PacketType, QuicPacket};
 pub use server_handshake::{QuicTlsServerHandshaker, ServerHandshakeResult};
 pub use transport::QuicTransport;
 
@@ -101,8 +101,10 @@ impl QuicConnection {
         };
 
         // Bind UDP socket
-        let socket = Arc::new(AsyncUdpSocket::bind("0.0.0.0:0")
-            .map_err(|e| format!("Failed to bind UDP socket: {}", e))?);
+        let socket = Arc::new(
+            AsyncUdpSocket::bind("0.0.0.0:0")
+                .map_err(|e| format!("Failed to bind UDP socket: {}", e))?,
+        );
 
         eprintln!("CLIENT QUIC: Bound UDP socket");
 
@@ -163,7 +165,11 @@ impl QuicConnection {
 
     /// Perform the QUIC + TLS 1.3 handshake.
     async fn do_handshake(&mut self) -> Result<(), String> {
-        let server_name = self.server_addr.split(':').next().unwrap_or(&self.server_addr);
+        let server_name = self
+            .server_addr
+            .split(':')
+            .next()
+            .unwrap_or(&self.server_addr);
         let mut handshaker = handshake::QuicTlsHandshaker::new(server_name);
 
         // ── Step 1: Derive Initial keys ──────────────────────────────
@@ -249,8 +255,10 @@ impl QuicConnection {
         self.protection = Some(app_protection);
 
         // Store app traffic secrets for future key updates (RFC 9001 §6)
-        self.client_app_traffic_secret = handshaker.client_app_traffic_secret(&transcript_after_finished);
-        self.server_app_traffic_secret = handshaker.server_app_traffic_secret(&transcript_after_finished);
+        self.client_app_traffic_secret =
+            handshaker.client_app_traffic_secret(&transcript_after_finished);
+        self.server_app_traffic_secret =
+            handshaker.server_app_traffic_secret(&transcript_after_finished);
         self.cipher_suite_hash = handshaker.hasher().clone();
 
         handshaker.mark_complete();
@@ -270,10 +278,18 @@ impl QuicConnection {
     /// Send a CRYPTO frame in an Initial packet (unprotected header + encrypted payload).
     async fn send_initial_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
-        eprintln!("DEBUG CLIENT: CRYPTO frame payload[:20]={:02x?}", &payload[..payload.len().min(20)]);
-        eprintln!("DEBUG CLIENT: frame_type=0x{:02x}", payload.first().copied().unwrap_or(0));
-        
-        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
+        eprintln!(
+            "DEBUG CLIENT: CRYPTO frame payload[:20]={:02x?}",
+            &payload[..payload.len().min(20)]
+        );
+        eprintln!(
+            "DEBUG CLIENT: frame_type=0x{:02x}",
+            payload.first().copied().unwrap_or(0)
+        );
+
+        let pn = self
+            .transport
+            .next_packet_number(PacketNumberSpace::ApplicationData);
 
         let pkt = QuicPacket::initial(
             QUIC_VERSION_V1,
@@ -296,17 +312,30 @@ impl QuicConnection {
         };
 
         eprintln!("DEBUG CLIENT: aad[:20]={:02x?}", &aad[..aad.len().min(20)]);
-        eprintln!("DEBUG CLIENT: encrypted[:20]={:02x?}", &encrypted[..encrypted.len().min(20)]);
-        eprintln!("DEBUG CLIENT: send_bytes[:20]={:02x?}", &send_bytes[..send_bytes.len().min(20)]);
+        eprintln!(
+            "DEBUG CLIENT: encrypted[:20]={:02x?}",
+            &encrypted[..encrypted.len().min(20)]
+        );
+        eprintln!(
+            "DEBUG CLIENT: send_bytes[:20]={:02x?}",
+            &send_bytes[..send_bytes.len().min(20)]
+        );
 
         let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
-        
-        eprintln!("DEBUG CLIENT: full[:30]={:02x?}", &full_packet[..full_packet.len().min(30)]);
 
-        let addr: SocketAddr = self.server_addr.parse()
+        eprintln!(
+            "DEBUG CLIENT: full[:30]={:02x?}",
+            &full_packet[..full_packet.len().min(30)]
+        );
+
+        let addr: SocketAddr = self
+            .server_addr
+            .parse()
             .map_err(|e| format!("Invalid server address: {}", e))?;
-        self.socket.send_to(&full_packet, addr).await
+        self.socket
+            .send_to(&full_packet, addr)
+            .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
         self.sent_packets_buffer.push(full_packet);
@@ -317,7 +346,9 @@ impl QuicConnection {
     /// Send a CRYPTO frame in a Handshake-level packet.
     async fn send_handshake_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
-        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
+        let pn = self
+            .transport
+            .next_packet_number(PacketNumberSpace::ApplicationData);
 
         let mut output = Vec::new();
         output.push(0x2C);
@@ -349,9 +380,13 @@ impl QuicConnection {
         let mut full_packet = output[..header_len].to_vec();
         full_packet.extend_from_slice(&send_bytes);
 
-        let addr: SocketAddr = self.server_addr.parse()
+        let addr: SocketAddr = self
+            .server_addr
+            .parse()
             .map_err(|e| format!("Invalid server address: {}", e))?;
-        self.socket.send_to(&full_packet, addr).await
+        self.socket
+            .send_to(&full_packet, addr)
+            .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
         self.sent_packets_buffer.push(full_packet);
@@ -362,7 +397,10 @@ impl QuicConnection {
     /// Receive a raw QUIC packet from the UDP socket.
     async fn recv_packet(&mut self) -> Result<QuicPacket, String> {
         let mut buf = [0u8; 4096];
-        let (n, _) = self.socket.recv_from(&mut buf).await
+        let (n, _) = self
+            .socket
+            .recv_from(&mut buf)
+            .await
             .map_err(|e| format!("UDP recv failed: {}", e))?;
         self.recv_buffer = buf[..n].to_vec();
         self.recv_offset = 0;
@@ -525,8 +563,9 @@ impl QuicConnection {
         client_scid: ConnectionId,
         handshake_result: crate::http3::quic::server_handshake::ServerHandshakeResult,
     ) -> Result<Self, String> {
-        let socket = Arc::new(AsyncUdpSocket::from_std(socket)
-            .map_err(|e| format!("Cannot wrap socket: {}", e))?);
+        let socket = Arc::new(
+            AsyncUdpSocket::from_std(socket).map_err(|e| format!("Cannot wrap socket: {}", e))?,
+        );
         let transport = QuicTransport::new(client_dcid.clone(), client_scid.clone());
 
         let mut conn = QuicConnection {
@@ -573,13 +612,22 @@ impl QuicConnection {
     /// the `fin` bit. Each chunk is sent in a separate QUIC packet.
     ///
     /// The stream offset is tracked per stream across calls.
-    pub async fn send_stream_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
+    pub async fn send_stream_data(
+        &mut self,
+        stream_id: u64,
+        data: &[u8],
+        fin: bool,
+    ) -> Result<(), String> {
         if data.is_empty() && !fin {
             return Ok(());
         }
 
         const MAX_STREAM_PAYLOAD: usize = 1170;
-        let mut offset = self.stream_send_offset.get(&stream_id).copied().unwrap_or(0);
+        let mut offset = self
+            .stream_send_offset
+            .get(&stream_id)
+            .copied()
+            .unwrap_or(0);
         let total_len = data.len();
         let mut chunks_sent = 0;
         while chunks_sent * MAX_STREAM_PAYLOAD < total_len {
@@ -605,7 +653,11 @@ impl QuicConnection {
     }
 
     /// Send RESET_STREAM to abort a stream (RFC 9000 §4.5).
-    pub async fn send_reset_stream(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
+    pub async fn send_reset_stream(
+        &mut self,
+        stream_id: u64,
+        error_code: u64,
+    ) -> Result<(), String> {
         let frame = QuicFrame::ResetStream {
             stream_id,
             error_code,
@@ -615,7 +667,11 @@ impl QuicConnection {
     }
 
     /// Send STOP_SENDING to tell peer to stop sending (RFC 9000 §4.6).
-    pub async fn send_stop_sending(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
+    pub async fn send_stop_sending(
+        &mut self,
+        stream_id: u64,
+        error_code: u64,
+    ) -> Result<(), String> {
         let frame = QuicFrame::StopSending {
             stream_id,
             error_code,
@@ -629,16 +685,14 @@ impl QuicConnection {
     /// - Before handshake: long header (Initial) — used during handshake
     /// - After handshake: short header (1-RTT) — used for application data
     pub async fn send_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
-        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
+        let pn = self
+            .transport
+            .next_packet_number(PacketNumberSpace::ApplicationData);
         let payload = frame.to_bytes();
 
         let packet_bytes = if self.established {
-            QuicPacket::one_rtt(
-                self.transport.remote_cid.as_bytes().to_vec(),
-                pn,
-                payload,
-            )
-            .to_bytes()
+            QuicPacket::one_rtt(self.transport.remote_cid.as_bytes().to_vec(), pn, payload)
+                .to_bytes()
         } else {
             QuicPacket::initial(
                 QUIC_VERSION_V1,
@@ -653,20 +707,25 @@ impl QuicConnection {
 
         let send_bytes = if let Some(ref mut prot) = self.protection {
             let header_len = if self.established { 10 } else { 9 };
-            prot.protect(&packet_bytes[..header_len.min(packet_bytes.len())], &packet_bytes[header_len.min(packet_bytes.len())..])
-                .map_err(|e| format!("Packet protection failed: {}", e))?
+            prot.protect(
+                &packet_bytes[..header_len.min(packet_bytes.len())],
+                &packet_bytes[header_len.min(packet_bytes.len())..],
+            )
+            .map_err(|e| format!("Packet protection failed: {}", e))?
         } else {
             packet_bytes
         };
 
         self.sent_packets_buffer.push(send_bytes.clone());
 
-        let addr: SocketAddr = self.server_addr.parse()
-            .unwrap_or_else(|_| {
-                format!("{}:443", self.server_addr).parse()
-                    .expect("server_addr must be parseable as SocketAddr")
-            });
-        self.socket.send_to(&send_bytes, addr).await
+        let addr: SocketAddr = self.server_addr.parse().unwrap_or_else(|_| {
+            format!("{}:443", self.server_addr)
+                .parse()
+                .expect("server_addr must be parseable as SocketAddr")
+        });
+        self.socket
+            .send_to(&send_bytes, addr)
+            .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
         self.transport.update_activity();
@@ -680,7 +739,10 @@ impl QuicConnection {
     pub async fn recv_stream_data(&mut self) -> Result<Option<(u64, Vec<u8>, bool)>, String> {
         if self.recv_buffer.is_empty() || self.recv_offset >= self.recv_buffer.len() {
             let mut buf = [0u8; 65536];
-            let (n, _) = self.socket.recv_from(&mut buf).await
+            let (n, _) = self
+                .socket
+                .recv_from(&mut buf)
+                .await
                 .map_err(|e| format!("UDP recv failed: {}", e))?;
             self.recv_buffer = buf[..n].to_vec();
             self.recv_offset = 0;
@@ -772,7 +834,13 @@ impl QuicConnection {
             match QuicFrame::from_bytes(&data[pos..]) {
                 Ok((frame, consumed)) => {
                     pos += consumed;
-                    if let QuicFrame::Stream { stream_id, offset: _, fin, data: frame_data } = frame {
+                    if let QuicFrame::Stream {
+                        stream_id,
+                        offset: _,
+                        fin,
+                        data: frame_data,
+                    } = frame
+                    {
                         return Some((stream_id, frame_data, fin));
                     }
                     // Skip non-STREAM frames (ACK, PADDING, etc.)
@@ -823,13 +891,22 @@ impl QuicConnection {
     ///
     /// This sends data encrypted with 0-RTT keys, allowing the client to
     /// send HTTP/3 requests in the first flight.
-    pub async fn send_early_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
+    pub async fn send_early_data(
+        &mut self,
+        stream_id: u64,
+        data: &[u8],
+        fin: bool,
+    ) -> Result<(), String> {
         if self.early_data_protection.is_none() {
             return Err("Early data not enabled".to_string());
         }
 
-        let frame = self.transport.create_stream_frame(stream_id, data.to_vec(), fin);
-        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
+        let frame = self
+            .transport
+            .create_stream_frame(stream_id, data.to_vec(), fin);
+        let pn = self
+            .transport
+            .next_packet_number(PacketNumberSpace::ApplicationData);
 
         let mut output = Vec::new();
         output.push(0xD0);
@@ -848,7 +925,8 @@ impl QuicConnection {
         output.extend_from_slice(&frame.to_bytes());
 
         if let Some(ref mut prot) = self.early_data_protection {
-            let encrypted = prot.protect(&output[..header_len], &output[header_len..])
+            let encrypted = prot
+                .protect(&output[..header_len], &output[header_len..])
                 .map_err(|e| format!("0-RTT encrypt failed: {}", e))?;
 
             let total_payload = encrypted.len();
@@ -858,9 +936,12 @@ impl QuicConnection {
             let mut packet = output[..header_len].to_vec();
             packet.extend_from_slice(&encrypted);
 
-            let addr: SocketAddr = format!("{}:443", self.server_addr).parse()
+            let addr: SocketAddr = format!("{}:443", self.server_addr)
+                .parse()
                 .map_err(|e| format!("Invalid server address: {}", e))?;
-            self.socket.send_to(&packet, addr).await
+            self.socket
+                .send_to(&packet, addr)
+                .await
                 .map_err(|e| format!("UDP send failed: {}", e))?;
         }
 
@@ -911,7 +992,10 @@ impl QuicConnection {
     /// Used to validate a new path when the client's address changes.
     pub async fn send_path_challenge(&mut self, data: [u8; 8]) -> Result<(), String> {
         let frame = QuicFrame::PathChallenge { data };
-        self.pending_path_challenges.insert(data, std::time::Instant::now() + std::time::Duration::from_secs(3));
+        self.pending_path_challenges.insert(
+            data,
+            std::time::Instant::now() + std::time::Duration::from_secs(3),
+        );
         self.send_frame(frame).await
     }
 
@@ -929,7 +1013,9 @@ impl QuicConnection {
     /// Returns the list of expired challenge data.
     pub fn check_expired_path_challenges(&mut self) -> Vec<[u8; 8]> {
         let now = std::time::Instant::now();
-        let expired: Vec<[u8; 8]> = self.pending_path_challenges.iter()
+        let expired: Vec<[u8; 8]> = self
+            .pending_path_challenges
+            .iter()
             .filter_map(|(data, deadline)| if now > *deadline { Some(*data) } else { None })
             .collect();
         for data in &expired {
@@ -956,7 +1042,9 @@ impl QuicConnection {
     /// 5. Toggle key phase bit
     pub fn initiate_key_update(&mut self) -> Result<(), String> {
         if self.client_app_traffic_secret.is_empty() {
-            return Err("Cannot initiate key update: no application traffic secret available".into());
+            return Err(
+                "Cannot initiate key update: no application traffic secret available".into(),
+            );
         }
 
         // Derive next client application traffic secret (RFC 8446 §7.2)
@@ -970,18 +1058,12 @@ impl QuicConnection {
         // Derive new keys from the next secret
         let key_len = 16; // AES-128-GCM
         let iv_len = 12;
-        let next_key = self.cipher_suite_hash.expand_label(
-            &next_secret,
-            "quic key",
-            &[],
-            key_len,
-        );
-        let next_iv = self.cipher_suite_hash.expand_label(
-            &next_secret,
-            "quic iv",
-            &[],
-            iv_len,
-        );
+        let next_key = self
+            .cipher_suite_hash
+            .expand_label(&next_secret, "quic key", &[], key_len);
+        let next_iv = self
+            .cipher_suite_hash
+            .expand_label(&next_secret, "quic iv", &[], iv_len);
 
         // Store old protection for in-flight packet decryption
         if let Some(old_protection) = self.protection.take() {
@@ -1027,17 +1109,15 @@ impl QuicConnection {
     /// Returns true if no packets have been received within the configured
     /// max_idle_timeout (or a default of 30 seconds).
     pub fn is_idle_timeout(&self) -> bool {
-        let timeout = std::time::Duration::from_millis(
-            self.transport.params.max_idle_timeout.max(30000)
-        );
+        let timeout =
+            std::time::Duration::from_millis(self.transport.params.max_idle_timeout.max(30000));
         self.transport.last_activity().elapsed() > timeout
     }
 
     /// Get time until idle timeout fires.
     pub fn time_until_idle_timeout(&self) -> std::time::Duration {
-        let timeout = std::time::Duration::from_millis(
-            self.transport.params.max_idle_timeout.max(30000)
-        );
+        let timeout =
+            std::time::Duration::from_millis(self.transport.params.max_idle_timeout.max(30000));
         let elapsed = self.transport.last_activity().elapsed();
         if elapsed >= timeout {
             std::time::Duration::ZERO
@@ -1052,8 +1132,8 @@ pub const QUIC_VERSION_V1: u32 = 0x00000001;
 
 /// Initial salt for QUIC v1 (RFC 9001)
 pub const INITIAL_SALT_V1: &[u8] = &[
-    0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8, 0x0c,
-    0xad, 0xcc, 0xbb, 0x7f, 0x0e,
+    0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad,
+    0xcc, 0xbb, 0x7f, 0x0e,
 ];
 
 /// QUIC connection ID
@@ -1072,9 +1152,10 @@ impl ConnectionId {
     /// Generate random connection ID using CSPRNG
     pub fn random() -> Self {
         let mut data = [0u8; 8];
-        edgerun_crypto::getrandom::fill(&mut data)
-            .expect("CSPRNG failure");
-        ConnectionId { data: data.to_vec() }
+        edgerun_crypto::getrandom::fill(&mut data).expect("CSPRNG failure");
+        ConnectionId {
+            data: data.to_vec(),
+        }
     }
 
     /// Get raw bytes
@@ -1240,7 +1321,9 @@ mod tests {
                 sent_packets_buffer: Vec::new(),
             };
 
-            let pn = conn.transport.next_packet_number(PacketNumberSpace::ApplicationData);
+            let pn = conn
+                .transport
+                .next_packet_number(PacketNumberSpace::ApplicationData);
             let pkt = QuicPacket::initial(
                 QUIC_VERSION_V1,
                 conn.transport.remote_cid.as_bytes().to_vec(),
@@ -1251,19 +1334,30 @@ mod tests {
             );
             let packet_bytes = pkt.to_bytes();
 
-            let payload_offset = packet::get_long_header_payload_offset(&packet_bytes).map_err(|e| e.to_string())?;
+            let payload_offset =
+                packet::get_long_header_payload_offset(&packet_bytes).map_err(|e| e.to_string())?;
             let aad = packet_bytes[..payload_offset].to_vec();
             let encrypted = packet_bytes[payload_offset..].to_vec();
 
-            let send_bytes = conn.initial_protection.as_mut().expect("prot")
+            let send_bytes = conn
+                .initial_protection
+                .as_mut()
+                .expect("prot")
                 .protect(&aad, &encrypted)
                 .map_err(|e| e.to_string())?;
 
-            conn.socket.send_to(&send_bytes, server_addr).await.expect("send");
+            conn.socket
+                .send_to(&send_bytes, server_addr)
+                .await
+                .expect("send");
             eprintln!("TIMEOUT TEST: Sent {} bytes", send_bytes.len());
 
             // Try to receive with timeout
-            let result = edgerun_rt::timeout(Duration::from_millis(100), server.recv_from(&mut [0u8; 4096])).await;
+            let result = edgerun_rt::timeout(
+                Duration::from_millis(100),
+                server.recv_from(&mut [0u8; 4096]),
+            )
+            .await;
 
             match result {
                 Ok(Ok((n, _))) => {
@@ -1278,7 +1372,8 @@ mod tests {
             }
 
             Ok::<(), String>(())
-        }).expect("test failed");
+        })
+        .expect("test failed");
     }
 
     #[test]
@@ -1302,9 +1397,9 @@ mod tests {
     /// a real connection).
     #[test]
     fn test_http3_request_response_roundtrip() {
+        use crate::header::HeaderMap;
         use crate::http3::connection::Http3Connection;
         use crate::http3::qpack::{QpackDecoder, QpackEncoder};
-        use crate::header::HeaderMap;
         use crate::method::Method;
         use crate::status::StatusCode;
         use crate::uri::Uri;
@@ -1314,13 +1409,15 @@ mod tests {
         let resp_headers = HeaderMap::new();
 
         let mut server_encoder = QpackEncoder::new();
-        let encoded_response = Http3Connection::encode_response(status, &resp_headers, &mut server_encoder).unwrap();
+        let encoded_response =
+            Http3Connection::encode_response(status, &resp_headers, &mut server_encoder).unwrap();
         assert!(!encoded_response.is_empty());
 
         // ── Step 2: Client decodes the response ────────────────────────
         let mut client_decoder = QpackDecoder::new();
         let (decoded_status, _decoded_resp_headers) =
-            Http3Connection::decode_response_header(&encoded_response, &mut client_decoder).unwrap();
+            Http3Connection::decode_response_header(&encoded_response, &mut client_decoder)
+                .unwrap();
 
         assert_eq!(decoded_status.as_u16(), 200);
 
@@ -1328,7 +1425,9 @@ mod tests {
         let uri = Uri::parse("https://localhost/").unwrap();
         let headers = HeaderMap::new();
         let mut req_encoder = QpackEncoder::new();
-        let encoded_request = Http3Connection::encode_request(&Method::GET, &uri, &headers, &mut req_encoder).unwrap();
+        let encoded_request =
+            Http3Connection::encode_request(&Method::GET, &uri, &headers, &mut req_encoder)
+                .unwrap();
 
         // ── Step 4: Server decodes the request ─────────────────────────
         let mut server_decoder = QpackDecoder::new();
@@ -1361,8 +1460,8 @@ mod tests {
         // Build a 1-RTT QUIC packet (short header) with the STREAM frame as payload
         let pkt = QuicPacket::one_rtt(
             vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], // DCID
-            0,                                                       // Packet number
-            frame_bytes.clone(),                                     // Payload (unencrypted for this test)
+            0,                                                    // Packet number
+            frame_bytes.clone(), // Payload (unencrypted for this test)
         );
         let packet_bytes = pkt.to_bytes();
 
@@ -1379,7 +1478,8 @@ mod tests {
             .build()
             .unwrap();
         let (stream_id, data, fin) = rt.block_on(async move {
-            conn.recv_stream_data().await
+            conn.recv_stream_data()
+                .await
                 .expect("recv_stream_data failed")
                 .expect("no stream data received")
         });
@@ -1401,11 +1501,9 @@ mod tests {
 
         // ── Client side: encode a request ──────────────────────────────
         let mut encoder = QpackEncoder::new();
-        let (header_block, _) = encoder.encode(&[
-            (":method", "GET"),
-            (":scheme", "https"),
-            (":path", "/"),
-        ]).unwrap();
+        let (header_block, _) = encoder
+            .encode(&[(":method", "GET"), (":scheme", "https"), (":path", "/")])
+            .unwrap();
 
         // Build a STREAM frame containing the HEADERS frame
         let headers_frame = Http3Frame::Headers { header_block };
@@ -1439,7 +1537,8 @@ mod tests {
             .build()
             .unwrap();
         let (stream_id, frame_data, fin) = rt.block_on(async move {
-            conn.recv_stream_data().await
+            conn.recv_stream_data()
+                .await
                 .expect("recv failed")
                 .expect("no data")
         });
@@ -1475,8 +1574,8 @@ mod tests {
 
         // ── Setup ──────────────────────────────────────────────────────
         let cert = generate_self_signed(&["localhost"]).expect("generate cert");
-        let client_dcid = ConnectionId::random();  // Client's dest connection ID (server's source)
-        let server_dcid = ConnectionId::random();  // Server's dest connection ID (client's source)
+        let client_dcid = ConnectionId::random(); // Client's dest connection ID (server's source)
+        let server_dcid = ConnectionId::random(); // Server's dest connection ID (client's source)
 
         let mut client = QuicTlsHandshaker::new("localhost");
         let mut server = QuicTlsServerHandshaker::new(cert.clone());
@@ -1486,31 +1585,37 @@ mod tests {
         assert_eq!(ch_data[0], 1); // ClientHello type
 
         // Server processes ClientHello, gets ServerHello
-        let sh_data = server.process_client_hello(&ch_data)
+        let sh_data = server
+            .process_client_hello(&ch_data)
             .expect("Server failed to process ClientHello");
         assert_eq!(sh_data[0], 2); // ServerHello type
 
         // ── Step 2: ServerHello exchange (Initial level) ───────────────
         // Client processes ServerHello from Initial packet
-        client.process_initial_crypto(&sh_data)
+        client
+            .process_initial_crypto(&sh_data)
             .expect("Client failed to process ServerHello");
         assert!(client.has_server_hello());
 
         // ── Step 3: Derive Handshake keys ──────────────────────────────
-        let client_hs_keys = client.handshake_keys()
+        let client_hs_keys = client
+            .handshake_keys()
             .expect("Client failed to derive handshake keys");
-        let server_hs_keys = server.handshake_keys()
+        let server_hs_keys = server
+            .handshake_keys()
             .expect("Server failed to derive handshake keys");
 
         // ── Step 4: Server builds encrypted handshake messages ─────────
-        let (server_handshake_crypto, expected_client_verify) = server.build_encrypted_handshake()
+        let (server_handshake_crypto, expected_client_verify) = server
+            .build_encrypted_handshake()
             .expect("Server failed to build encrypted handshake");
 
         // Should contain EE (8), Cert (11), CertVerify (15), Finished (20)
         assert!(server_handshake_crypto.len() > 100);
 
         // ── Step 5: Client processes handshake messages ────────────────
-        let client_finished = client.process_handshake_crypto(&server_handshake_crypto)
+        let client_finished = client
+            .process_handshake_crypto(&server_handshake_crypto)
             .expect("Client failed to process server handshake messages");
         // Client Finished is a Finished message (type 20 + length + verify_data)
         assert_eq!(client_finished[0], 20);
@@ -1518,7 +1623,8 @@ mod tests {
         // ── Step 6: Server verifies client's Finished ──────────────────
         // The client's Finished verify_data is at offset 4 in the message
         let client_verify_data = &client_finished[4..];
-        server.verify_client_finished(client_verify_data, &expected_client_verify)
+        server
+            .verify_client_finished(client_verify_data, &expected_client_verify)
             .expect("Server failed to verify client's Finished");
 
         // ── Step 7: Both sides derive application traffic keys ─────────
@@ -1527,7 +1633,8 @@ mod tests {
         client_transcript.extend_from_slice(&client_finished);
 
         let client_app_keys = client.app_keys(&client_transcript);
-        let server_result = server.build_result(&server_dcid.as_bytes().to_vec(), &client_transcript)
+        let server_result = server
+            .build_result(&server_dcid.as_bytes().to_vec(), &client_transcript)
             .expect("Server failed to build handshake result");
 
         // ── Verification: Both sides have usable keys ──────────────────
@@ -1538,7 +1645,8 @@ mod tests {
         let mut server_prot = crypto::PacketProtection::new(&server_result.app_keys);
 
         let plaintext = b"Hello HTTP/3!";
-        let ciphertext = client_prot.protect(b"header", plaintext)
+        let ciphertext = client_prot
+            .protect(b"header", plaintext)
             .expect("Client encryption failed");
 
         // Server should be able to decrypt with its read keys
@@ -1592,17 +1700,17 @@ mod tests {
             .enable_all()
             .build()
             .unwrap();
-        rt.block_on(async move {
-            quic.send_stream_data(1, &stream_bytes, true).await
-        })
+        rt.block_on(async move { quic.send_stream_data(1, &stream_bytes, true).await })
             .expect("send_stream_data failed");
 
         // Receive on the other end and verify it's a 1-RTT packet
         let mut buf = [0u8; 65536];
         let n = receiver.recv(&mut buf).expect("receive failed");
-        let (packet, _) = QuicPacket::from_bytes(&buf[..n])
-            .expect("parse received packet");
-        assert_eq!(packet.header.packet_type, crate::http3::quic::packet::PacketType::OneRtt);
+        let (packet, _) = QuicPacket::from_bytes(&buf[..n]).expect("parse received packet");
+        assert_eq!(
+            packet.header.packet_type,
+            crate::http3::quic::packet::PacketType::OneRtt
+        );
     }
 
     #[test]
@@ -1662,12 +1770,14 @@ mod tests {
 
         // Use send_request_raw with pre-encoded headers to avoid UDP send
         let mut encoder = QpackEncoder::new();
-        let (header_block, _) = encoder.encode(&[
-            (":method", "GET"),
-            (":scheme", "https"),
-            (":authority", "example.com"),
-            (":path", "/api/data"),
-        ]).unwrap();
+        let (header_block, _) = encoder
+            .encode(&[
+                (":method", "GET"),
+                (":scheme", "https"),
+                (":authority", "example.com"),
+                (":path", "/api/data"),
+            ])
+            .unwrap();
 
         // Build HEADERS frame manually and inject into server
         let headers_frame = Http3Frame::Headers { header_block };
@@ -1696,7 +1806,9 @@ mod tests {
             .build()
             .unwrap();
         let (stream_id, frame) = rt.block_on(async move {
-            server.accept_stream().await
+            server
+                .accept_stream()
+                .await
                 .expect("accept_stream failed")
                 .expect("no frame")
         });
@@ -1716,12 +1828,14 @@ mod tests {
         let status = crate::StatusCode::new(200).unwrap();
         let resp_headers = crate::HeaderMap::new();
         let mut resp_encoder = QpackEncoder::new();
-        let (resp_header_block, _) = resp_encoder.encode(&[
-            (":status", "200"),
-        ]).unwrap();
+        let (resp_header_block, _) = resp_encoder.encode(&[(":status", "200")]).unwrap();
 
-        let resp_headers_frame = Http3Frame::Headers { header_block: resp_header_block };
-        let resp_data_frame = Http3Frame::Data { payload: b"Hello, HTTP/3!".to_vec() };
+        let resp_headers_frame = Http3Frame::Headers {
+            header_block: resp_header_block,
+        };
+        let resp_data_frame = Http3Frame::Data {
+            payload: b"Hello, HTTP/3!".to_vec(),
+        };
 
         // Wrap HTTP/3 frames in QUIC STREAM frames for transport
         let h_stream_frame = QuicFrame::Stream {
@@ -1753,7 +1867,9 @@ mod tests {
 
         // Client receives response
         let response = rt.block_on(async move {
-            client.recv_response(0).await
+            client
+                .recv_response(0)
+                .await
                 .expect("recv_response failed")
                 .expect("no response")
         });
@@ -1795,9 +1911,7 @@ mod tests {
         }
 
         let mut encoder = crate::http3::qpack::QpackEncoder::new();
-        let (header_block, _) = encoder.encode(&[
-            (":status", "200"),
-        ]).unwrap();
+        let (header_block, _) = encoder.encode(&[(":status", "200")]).unwrap();
         let headers_frame = Http3Frame::Headers { header_block };
         push_data.extend_from_slice(&headers_frame.to_bytes());
 

@@ -97,7 +97,10 @@ fn array_index_or_panic(value: &mut JsonValue, index: usize) -> &mut JsonValue {
         JsonValue::Array(values) => {
             let len = values.len();
             values.get_mut(index).unwrap_or_else(|| {
-                panic!("cannot access index {} of JSON array of length {}", index, len)
+                panic!(
+                    "cannot access index {} of JSON array of length {}",
+                    index, len
+                )
             })
         }
         other => panic!(

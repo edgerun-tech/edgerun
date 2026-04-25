@@ -117,7 +117,7 @@ Based on the actual implemented code, edgerun reference core contains functional
 
 ---
 
-## Workspace Structure (138 Crates)
+## Workspace Structure (106 Crates)
 
 ### Protocol Core
 
@@ -315,7 +315,7 @@ Plus 30+ hardware inventory CLI tools (`linux-pci-tool`, `linux-usb-tool`, `linu
 # Check all crates compile
 cargo check --workspace
 
-# Run tests (197 passing)
+# Run tests (680 passing)
 cargo test --workspace
 
 # Run clippy
@@ -347,18 +347,7 @@ cargo run -q -p edgerun-node --bin edgerund -- run --config node.yaml
 
 | Area | Tests | Status |
 |---|---|---|
-| CSS value parser | 101 | ✅ |
-| Computed style | 17 | ✅ |
-| CSS minifier | 6 | ✅ |
-| Layout budget | 4 | ✅ |
-| A11y analyzer | 6 | ✅ |
-| Complexity analyzer | 3 | ✅ |
-| Replay engine | 5 | ✅ |
-| Rule optimizer | 5 | ✅ |
-| Incremental layout | 3 | ✅ |
-| Render proof | 5 | ✅ |
-| Conformance | 42 | ✅ |
-| **Total** | **197** | **All passing** |
+| Workspace tests | 680 | ✅ (all suites passing) |
 
 ---
 

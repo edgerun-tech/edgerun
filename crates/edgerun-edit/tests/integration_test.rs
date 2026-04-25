@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use edgerun_edit::edit_ops::{
     add_derive, add_fn, add_use, find_fn, incoming_refs, list_file, new_file, parse_file,
-    remove_fn, remove_file, rename_type_in_file, replace_fn_body, write_file,
+    remove_file, remove_fn, rename_type_in_file, replace_fn_body, write_file,
 };
 use edgerun_edit::git::{commit, diff, find_git_root, GitSafety};
 use edgerun_edit::project::{walk_rs, Project};
@@ -75,11 +75,7 @@ fn test_parse_missing_file() {
 #[test]
 fn test_replace_fn_body_found() {
     let dir = temp_dir();
-    let path = write_rs(
-        &dir,
-        "lib.rs",
-        "pub fn compute(x: u32) -> u32 { x + 1 }",
-    );
+    let path = write_rs(&dir, "lib.rs", "pub fn compute(x: u32) -> u32 { x + 1 }");
 
     let mut file = parse_file(&path).unwrap();
     let found = replace_fn_body(&mut file, "compute", "x * 2").unwrap();
@@ -118,19 +114,10 @@ fn test_replace_fn_body_invalid_body() {
 #[test]
 fn test_replace_fn_body_multiline() {
     let dir = temp_dir();
-    let path = write_rs(
-        &dir,
-        "lib.rs",
-        "pub fn foo() { println!(\"old\"); }",
-    );
+    let path = write_rs(&dir, "lib.rs", "pub fn foo() { println!(\"old\"); }");
 
     let mut file = parse_file(&path).unwrap();
-    let found = replace_fn_body(
-        &mut file,
-        "foo",
-        "let x = 1;\n    let y = 2;\n    x + y",
-    )
-    .unwrap();
+    let found = replace_fn_body(&mut file, "foo", "let x = 1;\n    let y = 2;\n    x + y").unwrap();
     assert!(found);
     write_file(&path, &file).unwrap();
 
@@ -212,11 +199,7 @@ fn test_add_fn_invalid_ret() {
 #[test]
 fn test_remove_fn_found() {
     let dir = temp_dir();
-    let path = write_rs(
-        &dir,
-        "lib.rs",
-        "pub fn keep() {}\npub fn remove() {}",
-    );
+    let path = write_rs(&dir, "lib.rs", "pub fn keep() {}\npub fn remove() {}");
 
     let mut file = parse_file(&path).unwrap();
     let removed = remove_fn(&mut file, "remove");
@@ -306,7 +289,11 @@ fn test_add_derive_to_enum() {
 #[test]
 fn test_add_derive_merge() {
     let dir = temp_dir();
-    let path = write_rs(&dir, "lib.rs", "#[derive(Debug)]\npub struct Foo { pub x: u32 }");
+    let path = write_rs(
+        &dir,
+        "lib.rs",
+        "#[derive(Debug)]\npub struct Foo { pub x: u32 }",
+    );
 
     let mut file = parse_file(&path).unwrap();
     let added = add_derive(&mut file, "Foo", "Clone").unwrap();
@@ -618,11 +605,7 @@ fn test_list_file_impl() {
 #[test]
 fn test_find_fn_exists() {
     let dir = temp_dir();
-    let path = write_rs(
-        &dir,
-        "lib.rs",
-        "pub fn compute(x: u32) -> u32 { x * 2 }",
-    );
+    let path = write_rs(&dir, "lib.rs", "pub fn compute(x: u32) -> u32 { x * 2 }");
 
     let file = parse_file(&path).unwrap();
     let result = find_fn(&file, "compute");
@@ -647,11 +630,7 @@ fn test_find_fn_not_found() {
 #[test]
 fn test_find_fn_pretty_printed() {
     let dir = temp_dir();
-    let path = write_rs(
-        &dir,
-        "lib.rs",
-        "pub fn ugly(  x:u32,  y:u32  )->u32{x+y}",
-    );
+    let path = write_rs(&dir, "lib.rs", "pub fn ugly(  x:u32,  y:u32  )->u32{x+y}");
 
     let file = parse_file(&path).unwrap();
     let result = find_fn(&file, "ugly");
@@ -674,11 +653,7 @@ fn test_incoming_refs_cross_file() {
         "src/lib.rs",
         "use crate::utils::Helper;\npub fn get_helper() -> Helper { Helper }",
     );
-    let utils = write_rs(
-        &dir,
-        "src/utils.rs",
-        "pub struct Helper;",
-    );
+    let utils = write_rs(&dir, "src/utils.rs", "pub struct Helper;");
 
     let files = vec![lib.clone(), utils.clone()];
     let count = incoming_refs(&files, &utils);
@@ -718,7 +693,10 @@ fn test_incoming_refs_type_usage() {
     // use crate::models::User -> counts User in use tree (1)
     // -> User -> counts in return type (1)
     // Total = 2 (use path segments + return type)
-    assert!(count >= 2, "lib has at least 2 refs to User (use + return type), got {count}");
+    assert!(
+        count >= 2,
+        "lib has at least 2 refs to User (use + return type), got {count}"
+    );
     cleanup(&dir);
 }
 

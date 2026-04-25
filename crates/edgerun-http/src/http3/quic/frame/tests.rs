@@ -58,16 +58,16 @@ fn test_crypto_frame_with_tls_handshake_data() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // random
         0x00, // session id length
     ];
-    
+
     let frame = QuicFrame::Crypto {
         offset: 0,
         data: tls_client_hello.clone(),
     };
     let bytes = frame.to_bytes();
-    
+
     // First byte should be 0x06 (CRYPTO frame type)
     assert_eq!(bytes[0], 0x06);
-    
+
     // Parse it back
     let (parsed, consumed) = QuicFrame::from_bytes(&bytes).unwrap();
     if let QuicFrame::Crypto { offset, data } = parsed {
@@ -86,7 +86,7 @@ fn test_crypto_frame_roundtrip() {
         data: original_data.clone(),
     };
     let encoded = frame.to_bytes();
-    
+
     let (parsed, _) = QuicFrame::from_bytes(&encoded).unwrap();
     if let QuicFrame::Crypto { data, .. } = parsed {
         assert_eq!(data, original_data);
@@ -102,19 +102,22 @@ fn test_crypto_exact_encoding() {
         data: tls_data.clone(),
     };
     let encoded = frame.to_bytes();
-    
+
     // First byte should be 0x06 (CRYPTO frame type)
-    assert_eq!(encoded[0], 0x06, "First byte should be 0x06 for CRYPTO frame");
-    
+    assert_eq!(
+        encoded[0], 0x06,
+        "First byte should be 0x06 for CRYPTO frame"
+    );
+
     // Second byte should be varint for offset (0)
     assert_eq!(encoded[1], 0, "Offset should be 0");
-    
+
     // Third byte should be varint for length
     // For length 10, that's stored as 0x0a
     // Actually in varint, values < 64 are single byte
     // So encoded[2] should be the length
     assert_eq!(encoded[2] as usize, tls_data.len(), "Length should match");
-    
+
     // Verify roundtrip
     let (parsed, _) = QuicFrame::from_bytes(&encoded).unwrap();
     if let QuicFrame::Crypto { offset, data } = parsed {
@@ -142,7 +145,11 @@ fn test_ack_frame_roundtrip() {
     let bytes = frame.to_bytes();
     assert_eq!(bytes[0], 0x02);
     let (parsed, _) = QuicFrame::from_bytes(&bytes).unwrap();
-    if let QuicFrame::Ack { largest_acknowledged, .. } = parsed {
+    if let QuicFrame::Ack {
+        largest_acknowledged,
+        ..
+    } = parsed
+    {
         assert_eq!(largest_acknowledged, 100);
     } else {
         panic!("Expected ACK frame");
@@ -159,7 +166,12 @@ fn test_reset_stream_frame_roundtrip() {
     let bytes = frame.to_bytes();
     assert_eq!(bytes[0], 0x04);
     let (parsed, _) = QuicFrame::from_bytes(&bytes).unwrap();
-    if let QuicFrame::ResetStream { stream_id, final_size, .. } = parsed {
+    if let QuicFrame::ResetStream {
+        stream_id,
+        final_size,
+        ..
+    } = parsed
+    {
         assert_eq!(stream_id, 4);
         assert_eq!(final_size, 1024);
     } else {
@@ -176,7 +188,11 @@ fn test_stop_sending_frame_roundtrip() {
     let bytes = frame.to_bytes();
     assert_eq!(bytes[0], 0x05);
     let (parsed, _) = QuicFrame::from_bytes(&bytes).unwrap();
-    if let QuicFrame::StopSending { stream_id, error_code } = parsed {
+    if let QuicFrame::StopSending {
+        stream_id,
+        error_code,
+    } = parsed
+    {
         assert_eq!(stream_id, 8);
         assert_eq!(error_code, 42);
     } else {
@@ -208,7 +224,11 @@ fn test_max_stream_data_roundtrip() {
     let bytes = frame.to_bytes();
     assert_eq!(bytes[0], 0x11);
     let (parsed, _) = QuicFrame::from_bytes(&bytes).unwrap();
-    if let QuicFrame::MaxStreamData { stream_id, max_stream_data } = parsed {
+    if let QuicFrame::MaxStreamData {
+        stream_id,
+        max_stream_data,
+    } = parsed
+    {
         assert_eq!(stream_id, 4);
         assert_eq!(max_stream_data, 8192);
     } else {
@@ -264,7 +284,11 @@ fn test_stream_data_blocked_roundtrip() {
     let bytes = frame.to_bytes();
     assert_eq!(bytes[0], 0x15);
     let (parsed, _) = QuicFrame::from_bytes(&bytes).unwrap();
-    if let QuicFrame::StreamDataBlocked { stream_id, max_stream_data } = parsed {
+    if let QuicFrame::StreamDataBlocked {
+        stream_id,
+        max_stream_data,
+    } = parsed
+    {
         assert_eq!(stream_id, 4);
         assert_eq!(max_stream_data, 32768);
     } else {
@@ -314,7 +338,8 @@ fn test_new_connection_id_roundtrip() {
         retire_prior_to,
         connection_id,
         stateless_reset_token,
-    } = parsed {
+    } = parsed
+    {
         assert_eq!(sequence_number, 1);
         assert_eq!(retire_prior_to, 0);
         assert_eq!(connection_id, vec![1, 2, 3, 4, 5, 6, 7, 8]);
@@ -400,7 +425,13 @@ fn test_ack_ecn_frame_roundtrip() {
     let bytes = frame.to_bytes();
     assert_eq!(bytes[0], 0x03);
     let (parsed, _) = QuicFrame::from_bytes(&bytes).unwrap();
-    if let QuicFrame::AckECN { ect0_count, ect1_count, ce_count, .. } = parsed {
+    if let QuicFrame::AckECN {
+        ect0_count,
+        ect1_count,
+        ce_count,
+        ..
+    } = parsed
+    {
         assert_eq!(ect0_count, 30);
         assert_eq!(ect1_count, 5);
         assert_eq!(ce_count, 0);

@@ -1,27 +1,21 @@
 //! Unit tests for task_map.rs — tests the task ID to poll function map
 //! directly without the runtime.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::task::{Context, Poll, Waker};
 use crate::task_map::TaskMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::{Context, Poll, Waker};
 
-static NOOP_WAKER: std::sync::LazyLock<Waker> =
-    std::sync::LazyLock::new(|| {
-        static VTABLE: std::task::RawWakerVTable =
-            std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-        const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-            std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-        }
-        const fn wake_noop(_: *const ()) {}
-        const fn drop_noop(_: *const ()) {}
-        unsafe {
-            Waker::from_raw(std::task::RawWaker::new(
-                std::ptr::null(),
-                &VTABLE,
-            ))
-        }
-    });
+static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
+    static VTABLE: std::task::RawWakerVTable =
+        std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
+    const fn clone_noop(_: *const ()) -> std::task::RawWaker {
+        std::task::RawWaker::new(std::ptr::null(), &VTABLE)
+    }
+    const fn wake_noop(_: *const ()) {}
+    const fn drop_noop(_: *const ()) {}
+    unsafe { Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+});
 
 fn cx() -> Context<'static> {
     Context::from_waker(&NOOP_WAKER)
@@ -114,7 +108,7 @@ fn poll_fn_can_mutate_state() {
 
     let mut f = map.take_for_poll(id).unwrap();
     assert!(!f(&mut cx())); // 3 < 3 is false
-    // Don't reinsert — task is done.
+                            // Don't reinsert — task is done.
     assert_eq!(map.len(), 0);
     assert_eq!(counter.load(Ordering::SeqCst), 3);
 }

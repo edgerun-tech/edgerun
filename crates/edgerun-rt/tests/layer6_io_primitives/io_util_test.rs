@@ -1,5 +1,8 @@
 // Test I/O utilities with the actual runtime.
-use edgerun_rt::{copy, copy_bidirectional, empty, sink, repeat, Runtime, AsyncReadExt, AsyncWriteExt, AsyncWrite, pipe};
+use edgerun_rt::{
+    copy, copy_bidirectional, empty, pipe, repeat, sink, AsyncReadExt, AsyncWrite, AsyncWriteExt,
+    Runtime,
+};
 use std::os::unix::io::AsRawFd;
 use std::time::Duration;
 
@@ -221,7 +224,9 @@ fn test_chain_two_readers() {
         let mut total = 0;
         loop {
             let n = chained.read(&mut buf[total..]).await.expect("read failed");
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             total += n;
         }
         assert_eq!(total, 5);

@@ -63,49 +63,90 @@ struct Cli {
 }
 
 enum Commands {
-    Serve { config: PathBuf, hot_reload: bool, foreground: bool },
-    Validate { config: PathBuf },
-    ImportDnsmasq { input: PathBuf, output: Option<PathBuf> },
-    ImportCorefile { input: PathBuf, output: Option<PathBuf> },
+    Serve {
+        config: PathBuf,
+        hot_reload: bool,
+        foreground: bool,
+    },
+    Validate {
+        config: PathBuf,
+    },
+    ImportDnsmasq {
+        input: PathBuf,
+        output: Option<PathBuf>,
+    },
+    ImportCorefile {
+        input: PathBuf,
+        output: Option<PathBuf>,
+    },
 }
 
 impl Parser for Cli {
     fn command() -> edgerun_clap::cli::Command {
         let mut cmd = edgerun_clap::cli::Command::new("edgerun-net")
             .about("One binary replaces dnsmasq + BIND + CoreDNS + ISC DHCP + Kea");
-        
+
         // Add serve subcommand
         cmd = cmd.subcommand(
             edgerun_clap::cli::Command::new("serve")
                 .about("Start all DNS and DHCP servers")
-                .arg(edgerun_clap::cli::Arg::new("config").short('c').long("config").default_value("/etc/edgerun/net.yaml"))
+                .arg(
+                    edgerun_clap::cli::Arg::new("config")
+                        .short('c')
+                        .long("config")
+                        .default_value("/etc/edgerun/net.yaml"),
+                )
                 .arg(edgerun_clap::cli::Arg::new("hot-reload").long("hot-reload"))
-                .arg(edgerun_clap::cli::Arg::new("foreground").long("foreground").default_value("true"))
+                .arg(
+                    edgerun_clap::cli::Arg::new("foreground")
+                        .long("foreground")
+                        .default_value("true"),
+                ),
         );
-        
+
         // Add validate subcommand
         cmd = cmd.subcommand(
             edgerun_clap::cli::Command::new("validate")
                 .about("Validate a config file without starting services")
-                .arg(edgerun_clap::cli::Arg::new("config").short('c').long("config"))
+                .arg(
+                    edgerun_clap::cli::Arg::new("config")
+                        .short('c')
+                        .long("config"),
+                ),
         );
-        
+
         // Add import-dnsmasq subcommand
         cmd = cmd.subcommand(
             edgerun_clap::cli::Command::new("import-dnsmasq")
                 .about("Convert dnsmasq.conf to edgerun YAML")
-                .arg(edgerun_clap::cli::Arg::new("input").short('i').long("input"))
-                .arg(edgerun_clap::cli::Arg::new("output").short('o').long("output"))
+                .arg(
+                    edgerun_clap::cli::Arg::new("input")
+                        .short('i')
+                        .long("input"),
+                )
+                .arg(
+                    edgerun_clap::cli::Arg::new("output")
+                        .short('o')
+                        .long("output"),
+                ),
         );
-        
+
         // Add import-corefile subcommand
         cmd = cmd.subcommand(
             edgerun_clap::cli::Command::new("import-corefile")
                 .about("Convert CoreDNS Corefile to edgerun YAML")
-                .arg(edgerun_clap::cli::Arg::new("input").short('i').long("input"))
-                .arg(edgerun_clap::cli::Arg::new("output").short('o').long("output"))
+                .arg(
+                    edgerun_clap::cli::Arg::new("input")
+                        .short('i')
+                        .long("input"),
+                )
+                .arg(
+                    edgerun_clap::cli::Arg::new("output")
+                        .short('o')
+                        .long("output"),
+                ),
         );
-        
+
         cmd
     }
 
@@ -113,19 +154,31 @@ impl Parser for Cli {
         let sub = matches.positional.first().cloned().unwrap_or_default();
         let command = match sub.as_str() {
             "serve" => Commands::Serve {
-                config: matches.get_one::<String>("config").map(PathBuf::from).unwrap_or(PathBuf::from("/etc/edgerun/net.yaml")),
+                config: matches
+                    .get_one::<String>("config")
+                    .map(PathBuf::from)
+                    .unwrap_or(PathBuf::from("/etc/edgerun/net.yaml")),
                 hot_reload: matches.contains_id("hot-reload"),
                 foreground: true,
             },
             "validate" => Commands::Validate {
-                config: matches.get_one::<String>("config").map(PathBuf::from).unwrap_or_default(),
+                config: matches
+                    .get_one::<String>("config")
+                    .map(PathBuf::from)
+                    .unwrap_or_default(),
             },
             "import-dnsmasq" => Commands::ImportDnsmasq {
-                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or_default(),
+                input: matches
+                    .get_one::<String>("input")
+                    .map(PathBuf::from)
+                    .unwrap_or_default(),
                 output: matches.get_one::<String>("output").map(PathBuf::from),
             },
             "import-corefile" => Commands::ImportCorefile {
-                input: matches.get_one::<String>("input").map(PathBuf::from).unwrap_or_default(),
+                input: matches
+                    .get_one::<String>("input")
+                    .map(PathBuf::from)
+                    .unwrap_or_default(),
                 output: matches.get_one::<String>("output").map(PathBuf::from),
             },
             _ => Commands::Serve {
@@ -144,7 +197,11 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { config, hot_reload, foreground } => {
+        Commands::Serve {
+            config,
+            hot_reload,
+            foreground,
+        } => {
             let config_path = config.to_string_lossy().to_string();
 
             edgerun_log::info!("edgerun-net v{} starting", env!("CARGO_PKG_VERSION"));
@@ -198,11 +255,15 @@ fn main() {
 
             match edgerun_config::import_dnsmasq(&conf) {
                 Ok(resources) => {
-                    let yaml = edgerun_config::to_yaml_all(&resources)
-                        .expect("failed to serialize YAML");
+                    let yaml =
+                        edgerun_config::to_yaml_all(&resources).expect("failed to serialize YAML");
                     if let Some(out) = output {
                         std::fs::write(&out, yaml).expect("failed to write output");
-                        edgerun_log::info!("edgerun-net: converted {} resources → {}", resources.len(), out.display());
+                        edgerun_log::info!(
+                            "edgerun-net: converted {} resources → {}",
+                            resources.len(),
+                            out.display()
+                        );
                     } else {
                         println!("{}", yaml);
                     }
@@ -225,11 +286,15 @@ fn main() {
 
             match edgerun_config::import_corefile(&corefile) {
                 Ok(resources) => {
-                    let yaml = edgerun_config::to_yaml_all(&resources)
-                        .expect("failed to serialize YAML");
+                    let yaml =
+                        edgerun_config::to_yaml_all(&resources).expect("failed to serialize YAML");
                     if let Some(out) = output {
                         std::fs::write(&out, yaml).expect("failed to write output");
-                        edgerun_log::info!("edgerun-net: converted {} resources → {}", resources.len(), out.display());
+                        edgerun_log::info!(
+                            "edgerun-net: converted {} resources → {}",
+                            resources.len(),
+                            out.display()
+                        );
                     } else {
                         println!("{}", yaml);
                     }

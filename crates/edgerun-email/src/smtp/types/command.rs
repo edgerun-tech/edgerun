@@ -34,7 +34,10 @@ pub enum SmtpCommand {
     /// BDAT chunked data transfer (RFC 3030).
     /// `size` is the exact number of data bytes in this chunk.
     /// `last` marks this as the final chunk (equivalent to DATA's `.`).
-    Bdat { size: usize, last: bool },
+    Bdat {
+        size: usize,
+        last: bool,
+    },
     /// Role reversal (RFC 5321 §3.3.6).
     /// Server becomes client, client becomes server.
     Turn,
@@ -58,20 +61,29 @@ impl SmtpCommand {
         match cmd.as_str() {
             "EHLO" => {
                 if args.is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "EHLO requires domain"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "EHLO requires domain",
+                    ));
                 }
                 Ok(Self::Ehlo(args.to_string()))
             }
             "HELO" => {
                 if args.is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "HELO requires domain"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "HELO requires domain",
+                    ));
                 }
                 Ok(Self::Helo(args.to_string()))
             }
             "MAIL" => {
                 let from_pos = args.to_uppercase().find("FROM:");
                 if from_pos.is_none() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "MAIL requires FROM"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "MAIL requires FROM",
+                    ));
                 }
                 let from_start = from_pos.unwrap() + 5;
                 let rest = &args[from_start..];
@@ -80,7 +92,10 @@ impl SmtpCommand {
                     if let Some(end) = rest.find('>') {
                         (rest[1..end].to_string(), rest[end + 1..].trim())
                     } else {
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, "MAIL FROM: missing closing >"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "MAIL FROM: missing closing >",
+                        ));
                     }
                 } else {
                     let end = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
@@ -88,12 +103,18 @@ impl SmtpCommand {
                 };
 
                 let parameters = parse_esmtp_parameters(params_str);
-                Ok(Self::MailFrom { address, parameters })
+                Ok(Self::MailFrom {
+                    address,
+                    parameters,
+                })
             }
             "RCPT" => {
                 let to_pos = args.to_uppercase().find("TO:");
                 if to_pos.is_none() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "RCPT requires TO"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "RCPT requires TO",
+                    ));
                 }
                 let to_start = to_pos.unwrap() + 3;
                 let rest = &args[to_start..];
@@ -102,7 +123,10 @@ impl SmtpCommand {
                     if let Some(end) = rest.find('>') {
                         (rest[1..end].to_string(), rest[end + 1..].trim())
                     } else {
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, "RCPT TO: missing closing >"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "RCPT TO: missing closing >",
+                        ));
                     }
                 } else {
                     let end = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
@@ -110,17 +134,24 @@ impl SmtpCommand {
                 };
 
                 let parameters = parse_esmtp_parameters(params_str);
-                Ok(Self::RcptTo { address, parameters })
+                Ok(Self::RcptTo {
+                    address,
+                    parameters,
+                })
             }
             "DATA" => Ok(Self::Data),
             "BDAT" => {
                 // BDAT <size> [LAST]
                 let parts: Vec<&str> = args.splitn(2, |c: char| c.is_whitespace()).collect();
                 if parts.is_empty() || parts[0].is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "BDAT requires a size"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "BDAT requires a size",
+                    ));
                 }
-                let size: usize = parts[0].parse()
-                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "BDAT size must be a number"))?;
+                let size: usize = parts[0].parse().map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "BDAT size must be a number")
+                })?;
                 let last = if parts.len() > 1 {
                     parts[1].trim().eq_ignore_ascii_case("LAST")
                 } else {
@@ -144,14 +175,20 @@ impl SmtpCommand {
             "TURN" => Ok(Self::Turn),
             "ETRN" => {
                 if args.is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "ETRN requires a domain"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "ETRN requires a domain",
+                    ));
                 }
                 Ok(Self::Etrn(args.to_string()))
             }
             "AUTH" => {
                 let auth_parts: Vec<&str> = args.splitn(2, |c: char| c.is_whitespace()).collect();
                 if auth_parts.is_empty() || auth_parts[0].is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "AUTH requires mechanism"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "AUTH requires mechanism",
+                    ));
                 }
                 let mechanism = auth_parts[0].to_string();
                 let initial_response = if auth_parts.len() > 1 {
@@ -159,7 +196,10 @@ impl SmtpCommand {
                 } else {
                     None
                 };
-                Ok(Self::Auth { mechanism, initial_response })
+                Ok(Self::Auth {
+                    mechanism,
+                    initial_response,
+                })
             }
             // Any unrecognized command — return a syntax error, NOT an AuthResponse.
             // Auth responses during AUTH exchanges are handled by the state machine
@@ -196,7 +236,8 @@ pub fn parse_esmtp_parameters(s: &str) -> Vec<(String, Option<String>)> {
 
 /// Extract DSN RET value from MAIL FROM parameters.
 pub fn extract_dsn_ret(params: &[(String, Option<String>)]) -> Option<DsnRet> {
-    params.iter()
+    params
+        .iter()
         .find(|(k, _)| k == "RET")
         .and_then(|(_, v)| v.as_ref())
         .and_then(|v| DsnRet::parse(v))
@@ -204,14 +245,16 @@ pub fn extract_dsn_ret(params: &[(String, Option<String>)]) -> Option<DsnRet> {
 
 /// Extract DSN ENVID from MAIL FROM parameters.
 pub fn extract_dsn_envid(params: &[(String, Option<String>)]) -> Option<String> {
-    params.iter()
+    params
+        .iter()
         .find(|(k, _)| k == "ENVID")
         .and_then(|(_, v)| v.clone())
 }
 
 /// Extract DSN NOTIFY from RCPT TO parameters.
 pub fn extract_dsn_notify(params: &[(String, Option<String>)]) -> Option<DsnNotify> {
-    params.iter()
+    params
+        .iter()
         .find(|(k, _)| k == "NOTIFY")
         .and_then(|(_, v)| v.as_ref())
         .map(|v| DsnNotify::parse(v))
@@ -219,7 +262,8 @@ pub fn extract_dsn_notify(params: &[(String, Option<String>)]) -> Option<DsnNoti
 
 /// Extract ORCPT (original recipient) from RCPT TO parameters.
 pub fn extract_dsn_orcpt(params: &[(String, Option<String>)]) -> Option<String> {
-    params.iter()
+    params
+        .iter()
         .find(|(k, _)| k == "ORCPT")
         .and_then(|(_, v)| v.clone())
 }
@@ -236,9 +280,14 @@ mod tests {
 
     #[test]
     fn test_parse_mail_from_with_dsn() {
-        let cmd = SmtpCommand::parse("MAIL FROM:<sender@example.com> SIZE=1024 RET=FULL ENVID=abc123").unwrap();
+        let cmd =
+            SmtpCommand::parse("MAIL FROM:<sender@example.com> SIZE=1024 RET=FULL ENVID=abc123")
+                .unwrap();
         match cmd {
-            SmtpCommand::MailFrom { address, parameters } => {
+            SmtpCommand::MailFrom {
+                address,
+                parameters,
+            } => {
                 assert_eq!(address, "sender@example.com");
                 assert_eq!(parameters.len(), 3);
             }
@@ -248,9 +297,15 @@ mod tests {
 
     #[test]
     fn test_parse_rcpt_to_with_dsn() {
-        let cmd = SmtpCommand::parse("RCPT TO:<recipient@example.com> NOTIFY=SUCCESS,FAILURE ORCPT=rfc822;orig@example.com").unwrap();
+        let cmd = SmtpCommand::parse(
+            "RCPT TO:<recipient@example.com> NOTIFY=SUCCESS,FAILURE ORCPT=rfc822;orig@example.com",
+        )
+        .unwrap();
         match cmd {
-            SmtpCommand::RcptTo { address, parameters } => {
+            SmtpCommand::RcptTo {
+                address,
+                parameters,
+            } => {
                 assert_eq!(address, "recipient@example.com");
                 assert_eq!(parameters.len(), 2);
             }
@@ -260,21 +315,54 @@ mod tests {
 
     #[test]
     fn test_parse_all_commands() {
-        assert!(matches!(SmtpCommand::parse("DATA").unwrap(), SmtpCommand::Data));
-        assert!(matches!(SmtpCommand::parse("RSET").unwrap(), SmtpCommand::Rset));
-        assert!(matches!(SmtpCommand::parse("NOOP").unwrap(), SmtpCommand::Noop));
-        assert!(matches!(SmtpCommand::parse("QUIT").unwrap(), SmtpCommand::Quit));
-        assert!(matches!(SmtpCommand::parse("STARTTLS").unwrap(), SmtpCommand::Starttls));
-        assert!(matches!(SmtpCommand::parse("VRFY user").unwrap(), SmtpCommand::Vrfy(_)));
-        assert!(matches!(SmtpCommand::parse("EXPN list").unwrap(), SmtpCommand::Expn(_)));
-        assert!(matches!(SmtpCommand::parse("HELP").unwrap(), SmtpCommand::Help(None)));
-        assert!(matches!(SmtpCommand::parse("HELP EHLO").unwrap(), SmtpCommand::Help(Some(_))));
+        assert!(matches!(
+            SmtpCommand::parse("DATA").unwrap(),
+            SmtpCommand::Data
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("RSET").unwrap(),
+            SmtpCommand::Rset
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("NOOP").unwrap(),
+            SmtpCommand::Noop
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("QUIT").unwrap(),
+            SmtpCommand::Quit
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("STARTTLS").unwrap(),
+            SmtpCommand::Starttls
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("VRFY user").unwrap(),
+            SmtpCommand::Vrfy(_)
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("EXPN list").unwrap(),
+            SmtpCommand::Expn(_)
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("HELP").unwrap(),
+            SmtpCommand::Help(None)
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("HELP EHLO").unwrap(),
+            SmtpCommand::Help(Some(_))
+        ));
     }
 
     #[test]
     fn test_parse_case_insensitive() {
-        assert!(matches!(SmtpCommand::parse("ehlo localhost").unwrap(), SmtpCommand::Ehlo(_)));
-        assert!(matches!(SmtpCommand::parse("mail FROM:<test@test.com>").unwrap(), SmtpCommand::MailFrom { .. }));
+        assert!(matches!(
+            SmtpCommand::parse("ehlo localhost").unwrap(),
+            SmtpCommand::Ehlo(_)
+        ));
+        assert!(matches!(
+            SmtpCommand::parse("mail FROM:<test@test.com>").unwrap(),
+            SmtpCommand::MailFrom { .. }
+        ));
     }
 
     #[test]
@@ -317,11 +405,15 @@ mod tests {
         assert_eq!(extract_dsn_ret(&mail_params), Some(DsnRet::Full));
         assert_eq!(extract_dsn_envid(&mail_params), Some("abc".to_string()));
 
-        let rcpt_params = parse_esmtp_parameters("NOTIFY=SUCCESS,FAILURE ORCPT=rfc822;orig@example.com");
+        let rcpt_params =
+            parse_esmtp_parameters("NOTIFY=SUCCESS,FAILURE ORCPT=rfc822;orig@example.com");
         let notify = extract_dsn_notify(&rcpt_params).unwrap();
         assert!(notify.success);
         assert!(notify.failure);
         assert!(!notify.never);
-        assert_eq!(extract_dsn_orcpt(&rcpt_params), Some("rfc822;orig@example.com".to_string()));
+        assert_eq!(
+            extract_dsn_orcpt(&rcpt_params),
+            Some("rfc822;orig@example.com".to_string())
+        );
     }
 }

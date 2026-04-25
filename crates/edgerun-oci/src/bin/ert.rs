@@ -12,11 +12,32 @@ fn main() {
     }
 
     // Rootless detection and re-exec (only for container commands)
-    let is_container_cmd = args.first().map(|s| {
-        matches!(s.as_str(), "create" | "start" | "exec" | "delete" | "kill" | "pause" | "resume" | "update" | "state" | "ps" | "events" | "checkpoint" | "restore")
-    }).unwrap_or(false);
+    let is_container_cmd = args
+        .first()
+        .map(|s| {
+            matches!(
+                s.as_str(),
+                "create"
+                    | "start"
+                    | "exec"
+                    | "delete"
+                    | "kill"
+                    | "pause"
+                    | "resume"
+                    | "update"
+                    | "state"
+                    | "ps"
+                    | "events"
+                    | "checkpoint"
+                    | "restore"
+            )
+        })
+        .unwrap_or(false);
 
-    if is_container_cmd && unsafe { libc::geteuid() } != 0 && std::env::var("_ERT_ROOTLESS_CHILD").is_err() {
+    if is_container_cmd
+        && unsafe { libc::geteuid() } != 0
+        && std::env::var("_ERT_ROOTLESS_CHILD").is_err()
+    {
         if let Some(code) = become_rootless() {
             std::process::exit(code);
         }
@@ -100,12 +121,21 @@ fn parse_subid_for_user(path: &str, username: &str, uid: u32) -> Vec<(u32, u32)>
     let mut ranges = Vec::new();
     for line in content.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') { continue; }
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
         let parts: Vec<&str> = line.split(':').collect();
-        if parts.len() != 3 { continue; }
+        if parts.len() != 3 {
+            continue;
+        }
         let name = parts[0].trim();
-        if name != username && name != "ALL" && name != uidstr { continue; }
-        if let (Ok(start), Ok(count)) = (parts[1].trim().parse::<u32>(), parts[2].trim().parse::<u32>()) {
+        if name != username && name != "ALL" && name != uidstr {
+            continue;
+        }
+        if let (Ok(start), Ok(count)) = (
+            parts[1].trim().parse::<u32>(),
+            parts[2].trim().parse::<u32>(),
+        ) {
             ranges.push((start, count));
         }
     }
@@ -113,14 +143,18 @@ fn parse_subid_for_user(path: &str, username: &str, uid: u32) -> Vec<(u32, u32)>
 }
 
 fn get_current_username() -> Option<String> {
-    if let Ok(user) = std::env::var("USER") { return Some(user); }
+    if let Ok(user) = std::env::var("USER") {
+        return Some(user);
+    }
     let uid = unsafe { libc::getuid() };
     if let Ok(content) = std::fs::read_to_string("/etc/passwd") {
         for line in content.lines() {
             let parts: Vec<&str> = line.split(':').collect();
             if parts.len() >= 3 {
                 if let Ok(entry_uid) = parts[2].parse::<u32>() {
-                    if entry_uid == uid { return Some(parts[0].to_string()); }
+                    if entry_uid == uid {
+                        return Some(parts[0].to_string());
+                    }
                 }
             }
         }
@@ -131,20 +165,29 @@ fn get_current_username() -> Option<String> {
 fn try_newuidmap(pid: i32, host_uid: u32, subuids: &[(u32, u32)]) -> bool {
     let uid_result = std::process::Command::new("newuidmap")
         .arg(format!("{}", pid))
-        .arg("0").arg(format!("{}", host_uid)).arg("1")
+        .arg("0")
+        .arg(format!("{}", host_uid))
+        .arg("1")
         .args(subuids.iter().flat_map(|(start, count)| {
             vec![format!("{}", 1), format!("{}", start), format!("{}", count)]
         }))
         .output();
-    let tool = match uid_result { Ok(o) => o, Err(_) => return false };
-    if !tool.status.success() { return false; }
+    let tool = match uid_result {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    if !tool.status.success() {
+        return false;
+    }
     let host_gid = unsafe { libc::getgid() };
     let username = get_current_username().unwrap_or_default();
     let subgids = parse_subid_for_user("/etc/subgid", &username, host_gid);
     if !subgids.is_empty() {
         let _ = std::process::Command::new("newgidmap")
             .arg(format!("{}", pid))
-            .arg("0").arg(format!("{}", host_gid)).arg("1")
+            .arg("0")
+            .arg(format!("{}", host_gid))
+            .arg("1")
             .args(subgids.iter().flat_map(|(start, count)| {
                 vec![format!("{}", 1), format!("{}", start), format!("{}", count)]
             }))
@@ -159,7 +202,10 @@ fn write_uid_map_for_pid(pid: i32, host_uid: u32) -> std::io::Result<()> {
     let _ = std::fs::write(&setgroups_path, "deny\n");
     let map = format!("0 {} 1\n", host_uid);
     std::fs::write(&uid_map_path, &map).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::PermissionDenied, format!("uid_map write failed: {}", e))
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("uid_map write failed: {}", e),
+        )
     })
 }
 
@@ -167,7 +213,10 @@ fn write_gid_map_for_pid(pid: i32, host_gid: u32) -> std::io::Result<()> {
     let gid_map_path = format!("/proc/{}/gid_map", pid);
     let map = format!("0 {} 1\n", host_gid);
     std::fs::write(&gid_map_path, &map).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::PermissionDenied, format!("gid_map write failed: {}", e))
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("gid_map write failed: {}", e),
+        )
     })
 }
 
@@ -192,16 +241,27 @@ fn become_rootless() -> Option<i32> {
 
     #[cfg(target_arch = "x86_64")]
     let ret = unsafe {
-        libc::syscall(56, (CLONE_NEWUSER | CLONE_NEWNS | SIGCHLD) as libc::c_ulong, std::ptr::null_mut::<libc::c_void>())
+        libc::syscall(
+            56,
+            (CLONE_NEWUSER | CLONE_NEWNS | SIGCHLD) as libc::c_ulong,
+            std::ptr::null_mut::<libc::c_void>(),
+        )
     };
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe {
-        libc::syscall(220, (CLONE_NEWUSER | CLONE_NEWNS | SIGCHLD) as libc::c_ulong, std::ptr::null_mut::<libc::c_void>())
+        libc::syscall(
+            220,
+            (CLONE_NEWUSER | CLONE_NEWNS | SIGCHLD) as libc::c_ulong,
+            std::ptr::null_mut::<libc::c_void>(),
+        )
     };
 
     if ret < 0 {
         eprintln!("ert: clone failed: {}", std::io::Error::last_os_error());
-        unsafe { libc::close(pipe_r); libc::close(pipe_w); }
+        unsafe {
+            libc::close(pipe_r);
+            libc::close(pipe_w);
+        }
         return Some(1);
     }
 
@@ -209,7 +269,11 @@ fn become_rootless() -> Option<i32> {
 
     if child_pid > 0 {
         unsafe { libc::close(pipe_r) };
-        let used_newuidmap = if !subuids.is_empty() { try_newuidmap(child_pid, host_uid, &subuids) } else { false };
+        let used_newuidmap = if !subuids.is_empty() {
+            try_newuidmap(child_pid, host_uid, &subuids)
+        } else {
+            false
+        };
         if !used_newuidmap {
             if let Err(e) = write_uid_map_for_pid(child_pid, host_uid) {
                 eprintln!("ert: {}", e);
@@ -227,17 +291,29 @@ fn become_rootless() -> Option<i32> {
         unsafe { libc::close(pipe_w) };
         let mut status: i32 = 0;
         let pid = unsafe { libc::waitpid(child_pid, &mut status as *mut i32, 0) };
-        if pid < 0 { return Some(1); }
-        if libc::WIFEXITED(status) { Some(libc::WEXITSTATUS(status)) } else { Some(128) }
+        if pid < 0 {
+            return Some(1);
+        }
+        if libc::WIFEXITED(status) {
+            Some(libc::WEXITSTATUS(status))
+        } else {
+            Some(128)
+        }
     } else {
         unsafe {
             libc::close(pipe_w);
             let mut buf: u8 = 0;
             let r = libc::read(pipe_r, &mut buf as *mut u8 as *mut libc::c_void, 1);
             libc::close(pipe_r);
-            if r != 1 { libc::_exit(1); }
-            if libc::setresuid(0, 0, 0) != 0 { libc::_exit(1); }
-            if libc::setresgid(0, 0, 0) != 0 { libc::_exit(1); }
+            if r != 1 {
+                libc::_exit(1);
+            }
+            if libc::setresuid(0, 0, 0) != 0 {
+                libc::_exit(1);
+            }
+            if libc::setresgid(0, 0, 0) != 0 {
+                libc::_exit(1);
+            }
             libc::setenv(c"_ERT_ROOTLESS_CHILD".as_ptr(), c"1".as_ptr(), 1);
             let mut uid_buf = [0i8; 16];
             let _ = libc::snprintf(uid_buf.as_mut_ptr(), 16, c"%u".as_ptr(), host_uid);
@@ -246,21 +322,33 @@ fn become_rootless() -> Option<i32> {
             let _ = libc::snprintf(gid_buf.as_mut_ptr(), 16, c"%u".as_ptr(), host_gid);
             libc::setenv(c"_ERT_ROOTLESS_GID".as_ptr(), gid_buf.as_ptr(), 1);
             let mut cwd_buf = [0i8; 4096];
-            if libc::getcwd(cwd_buf.as_mut_ptr(), cwd_buf.len()).is_null() { libc::_exit(1); }
+            if libc::getcwd(cwd_buf.as_mut_ptr(), cwd_buf.len()).is_null() {
+                libc::_exit(1);
+            }
             libc::chdir(cwd_buf.as_ptr());
             let cmdline_fd = libc::open(c"/proc/self/cmdline".as_ptr(), libc::O_RDONLY);
-            if cmdline_fd < 0 { libc::_exit(1); }
+            if cmdline_fd < 0 {
+                libc::_exit(1);
+            }
             let mut cmdline_buf = [0u8; 8192];
-            let n = libc::read(cmdline_fd, cmdline_buf.as_mut_ptr() as *mut libc::c_void, cmdline_buf.len());
+            let n = libc::read(
+                cmdline_fd,
+                cmdline_buf.as_mut_ptr() as *mut libc::c_void,
+                cmdline_buf.len(),
+            );
             libc::close(cmdline_fd);
-            if n <= 0 { libc::_exit(1); }
+            if n <= 0 {
+                libc::_exit(1);
+            }
             let mut argv_ptrs: [*const c_char; 128] = [std::ptr::null(); 128];
             let mut argc = 0usize;
             let mut pos = 0usize;
             let n = n as usize;
             while pos < n && argc < 127 {
                 let start = pos;
-                while pos < n && cmdline_buf[pos] != 0 { pos += 1; }
+                while pos < n && cmdline_buf[pos] != 0 {
+                    pos += 1;
+                }
                 if pos > start {
                     cmdline_buf[pos] = 0;
                     argv_ptrs[argc] = cmdline_buf.as_ptr().add(start) as *const c_char;
@@ -270,8 +358,14 @@ fn become_rootless() -> Option<i32> {
             }
             argv_ptrs[argc] = std::ptr::null();
             let mut exe_buf = [0i8; 4096];
-            let exe_len = libc::readlink(c"/proc/self/exe".as_ptr(), exe_buf.as_mut_ptr(), exe_buf.len() - 1);
-            if exe_len < 0 { libc::_exit(1); }
+            let exe_len = libc::readlink(
+                c"/proc/self/exe".as_ptr(),
+                exe_buf.as_mut_ptr(),
+                exe_buf.len() - 1,
+            );
+            if exe_len < 0 {
+                libc::_exit(1);
+            }
             exe_buf[exe_len as usize] = 0;
             libc::execv(exe_buf.as_ptr(), argv_ptrs.as_ptr());
             libc::_exit(127)

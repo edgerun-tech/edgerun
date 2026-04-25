@@ -55,8 +55,7 @@ impl AsyncTcpStream {
         unsafe {
             let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
                 std::mem::MaybeUninit::zeroed();
-            let mut len =
-                std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+            let mut len = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
             let res = libc::getpeername(
                 self.fd,
                 storage.as_mut_ptr() as *mut libc::sockaddr,
@@ -74,8 +73,7 @@ impl AsyncTcpStream {
         unsafe {
             let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
                 std::mem::MaybeUninit::zeroed();
-            let mut len =
-                std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+            let mut len = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
             let res = libc::getsockname(
                 self.fd,
                 storage.as_mut_ptr() as *mut libc::sockaddr,
@@ -213,8 +211,12 @@ impl AsyncTcpStream {
     pub fn split(self: &Arc<Self>) -> (AsyncReadHalf, AsyncWriteHalf) {
         self.refs.fetch_add(2, Ordering::Relaxed);
         (
-            AsyncReadHalf { inner: Arc::clone(self) },
-            AsyncWriteHalf { inner: Arc::clone(self) },
+            AsyncReadHalf {
+                inner: Arc::clone(self),
+            },
+            AsyncWriteHalf {
+                inner: Arc::clone(self),
+            },
         )
     }
 
@@ -270,8 +272,7 @@ impl AsyncRead for Arc<AsyncTcpStream> {
     ) -> Poll<io::Result<usize>> {
         unsafe {
             let fd = self.fd;
-            let slice =
-                std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
+            let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
             let n = libc::read(fd, slice.as_mut_ptr() as *mut libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
@@ -298,8 +299,7 @@ impl AsyncWrite for Arc<AsyncTcpStream> {
     ) -> Poll<io::Result<usize>> {
         unsafe {
             let fd = self.fd;
-            let n =
-                libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
+            let n = libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -341,8 +341,7 @@ impl AsyncRead for AsyncTcpStream {
     ) -> Poll<io::Result<usize>> {
         unsafe {
             let fd = self.fd;
-            let slice =
-                std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
+            let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
             let n = libc::read(fd, slice.as_mut_ptr() as *mut libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
@@ -369,8 +368,7 @@ impl AsyncWrite for AsyncTcpStream {
     ) -> Poll<io::Result<usize>> {
         unsafe {
             let fd = self.fd;
-            let n =
-                libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
+            let n = libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -420,8 +418,7 @@ impl AsyncRead for AsyncReadHalf {
     ) -> Poll<io::Result<usize>> {
         unsafe {
             let fd = self.inner.fd;
-            let slice =
-                std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
+            let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
             let n = libc::read(fd, slice.as_mut_ptr() as *mut libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
@@ -448,8 +445,7 @@ impl AsyncWrite for AsyncWriteHalf {
     ) -> Poll<io::Result<usize>> {
         unsafe {
             let fd = self.inner.fd;
-            let n =
-                libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
+            let n = libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -509,20 +505,23 @@ pub struct ConnectFuture {
 
 enum ConnectState {
     /// Still resolving addresses.
-    Resolving {
-        addrs: Vec<SocketAddr>,
-        idx: usize,
-    },
+    Resolving { addrs: Vec<SocketAddr>, idx: usize },
     /// Connect in progress on the given fd, with remaining addresses to try
     /// if this one fails.
-    Connecting { fd: RawFd, remaining: Vec<SocketAddr> },
+    Connecting {
+        fd: RawFd,
+        remaining: Vec<SocketAddr>,
+    },
     /// Done.
     Done,
 }
 
 impl ConnectFuture {
     pub fn new<A: ToSocketAddrs>(addrs: A) -> Self {
-        let addrs = addrs.to_socket_addrs().map(|a| a.collect()).unwrap_or_default();
+        let addrs = addrs
+            .to_socket_addrs()
+            .map(|a| a.collect())
+            .unwrap_or_default();
         Self {
             state: ConnectState::Resolving { addrs, idx: 0 },
         }
@@ -554,25 +553,14 @@ impl Future for ConnectFuture {
                         SocketAddr::V4(_) => libc::AF_INET,
                         SocketAddr::V6(_) => libc::AF_INET6,
                     };
-                    let fd = unsafe {
-                        libc::socket(
-                            family,
-                            libc::SOCK_STREAM | libc::SOCK_NONBLOCK,
-                            0,
-                        )
-                    };
+                    let fd =
+                        unsafe { libc::socket(family, libc::SOCK_STREAM | libc::SOCK_NONBLOCK, 0) };
                     if fd < 0 {
                         return Poll::Ready(Err(io::Error::last_os_error()));
                     }
 
                     let sock_addr = socket_addr_to_sockaddr(&addr);
-                    let res = unsafe {
-                        libc::connect(
-                            fd,
-                            sock_addr.as_ptr(),
-                            sock_addr.len(),
-                        )
-                    };
+                    let res = unsafe { libc::connect(fd, sock_addr.as_ptr(), sock_addr.len()) };
 
                     if res == 0 {
                         return Poll::Ready(Ok(Arc::new(AsyncTcpStream::from_fd(fd))));
@@ -601,8 +589,7 @@ impl Future for ConnectFuture {
                     let remaining = std::mem::take(remaining);
 
                     let mut error: libc::c_int = 0;
-                    let mut len =
-                        std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+                    let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
                     let res = unsafe {
                         libc::getsockopt(
                             current_fd,
@@ -615,9 +602,7 @@ impl Future for ConnectFuture {
 
                     if res == 0 && error == 0 {
                         this.state = ConnectState::Done;
-                        return Poll::Ready(Ok(Arc::new(AsyncTcpStream::from_fd(
-                            current_fd,
-                        ))));
+                        return Poll::Ready(Ok(Arc::new(AsyncTcpStream::from_fd(current_fd))));
                     }
 
                     unsafe { libc::close(current_fd) };
@@ -720,7 +705,10 @@ impl AsyncTcpListener {
         let listener = std::net::TcpListener::bind(addr)?;
         listener.set_nonblocking(true)?;
         let fd = listener.as_raw_fd();
-        Ok(Self { inner: listener, fd })
+        Ok(Self {
+            inner: listener,
+            fd,
+        })
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
@@ -783,13 +771,8 @@ fn fd_local_addr(fd: RawFd) -> io::Result<SocketAddr> {
     unsafe {
         let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
             std::mem::MaybeUninit::zeroed();
-        let mut len =
-            std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
-        let res = libc::getsockname(
-            fd,
-            storage.as_mut_ptr() as *mut libc::sockaddr,
-            &mut len,
-        );
+        let mut len = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+        let res = libc::getsockname(fd, storage.as_mut_ptr() as *mut libc::sockaddr, &mut len);
         if res < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -802,13 +785,8 @@ fn fd_peer_addr(fd: RawFd) -> io::Result<SocketAddr> {
     unsafe {
         let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
             std::mem::MaybeUninit::zeroed();
-        let mut len =
-            std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
-        let res = libc::getpeername(
-            fd,
-            storage.as_mut_ptr() as *mut libc::sockaddr,
-            &mut len,
-        );
+        let mut len = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+        let res = libc::getpeername(fd, storage.as_mut_ptr() as *mut libc::sockaddr, &mut len);
         if res < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -840,9 +818,7 @@ fn sockaddr_to_addr(
                 sin6.sin6_scope_id,
             )))
         } else {
-            Err(io::Error::other(
-                "unsupported address family",
-            ))
+            Err(io::Error::other("unsupported address family"))
         }
     }
 }

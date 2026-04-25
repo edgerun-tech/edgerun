@@ -4,15 +4,12 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-use rsa::{
-    pkcs1::EncodeRsaPublicKey,
-    pkcs8::DecodePrivateKey,
-    signature::SignatureEncoding,
-    RsaPrivateKey,
-};
-use edgerun_crypto::{OsRng, Digest as CryptoDigest};
-use edgerun_encoding::base64;
 use edgerun_crypto::sha2::Sha256;
+use edgerun_crypto::{Digest as CryptoDigest, OsRng};
+use edgerun_encoding::base64;
+use rsa::{
+    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding, RsaPrivateKey,
+};
 
 pub struct DkimSigner {
     selector: String,
@@ -31,8 +28,12 @@ impl DkimSigner {
 
     pub fn generate(domain: &str, selector: &str) -> io::Result<Self> {
         let mut rng = OsRng;
-        let private_key = RsaPrivateKey::new(&mut rng, 2048)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("RSA keygen failed: {}", e)))?;
+        let private_key = RsaPrivateKey::new(&mut rng, 2048).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("RSA keygen failed: {}", e),
+            )
+        })?;
 
         Ok(Self::new(
             domain.to_string(),
@@ -43,8 +44,12 @@ impl DkimSigner {
 
     pub fn load(domain: &str, selector: &str, path: &Path) -> io::Result<Self> {
         let pem = std::fs::read_to_string(path)?;
-        let private_key = RsaPrivateKey::from_pkcs8_pem(&pem)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("failed to parse DKIM key: {}", e)))?;
+        let private_key = RsaPrivateKey::from_pkcs8_pem(&pem).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to parse DKIM key: {}", e),
+            )
+        })?;
 
         Ok(Self::new(
             domain.to_string(),
@@ -61,16 +66,19 @@ impl DkimSigner {
 
     pub fn public_key_txt(&self) -> String {
         let public_key = self.private_key.to_public_key();
-        let public_key_der = public_key.to_pkcs1_der()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("failed to encode public key: {}", e)))
+        let public_key_der = public_key
+            .to_pkcs1_der()
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to encode public key: {}", e),
+                )
+            })
             .unwrap();
 
         let base64_key = base64::standard_encode(public_key_der.as_bytes());
 
-        format!(
-            "v=DKIM1; k=rsa; p={}",
-            base64_key
-        )
+        format!("v=DKIM1; k=rsa; p={}", base64_key)
     }
 
     pub fn selector(&self) -> &str {
@@ -104,10 +112,7 @@ impl DkimSigner {
 
         let dkim_header = format!(
             "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={}; h={}; bh={}; b=",
-            self.domain,
-            self.selector,
-            signed_header_names_str,
-            body_hash_b64
+            self.domain, self.selector, signed_header_names_str, body_hash_b64
         );
 
         let mut headers_with_dkim = headers_str.as_bytes().to_vec();
@@ -131,11 +136,7 @@ impl DkimSigner {
 
         let final_header = format!(
             "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={}; h={}; bh={}; b={}",
-            self.domain,
-            self.selector,
-            signed_header_names_str,
-            body_hash_b64,
-            signature_b64
+            self.domain, self.selector, signed_header_names_str, body_hash_b64, signature_b64
         );
 
         Ok(final_header)

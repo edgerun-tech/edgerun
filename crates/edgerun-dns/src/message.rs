@@ -3,7 +3,10 @@
 use std::io;
 use std::net::Ipv4Addr;
 
-use super::record::{DnsRecordType, DnsRecordData, encode_domain_name, encode_domain_name_compressed, decode_domain_name};
+use super::record::{
+    decode_domain_name, encode_domain_name, encode_domain_name_compressed, DnsRecordData,
+    DnsRecordType,
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -134,8 +137,8 @@ impl DnsHeader {
         let truncated = (flags & 0x0200) != 0;
         let recursion_desired = (flags & 0x0100) != 0;
         let recursion_available = (flags & 0x0080) != 0;
-        let response_code = DnsResponseCode::from_u8((flags & 0x0F) as u8)
-            .unwrap_or(DnsResponseCode::ServFail);
+        let response_code =
+            DnsResponseCode::from_u8((flags & 0x0F) as u8).unwrap_or(DnsResponseCode::ServFail);
 
         let question_count = u16::from_be_bytes([data[4], data[5]]);
         let answer_count = u16::from_be_bytes([data[6], data[7]]);
@@ -428,14 +431,29 @@ impl DnsRecord {
     }
 
     /// Create a NAPTR record (RFC 3403 — URI/telephone routing).
-    pub fn naptr(name: String, order: u16, preference: u16, flags: String,
-                 services: String, regexp: String, replacement: String, ttl: u32) -> Self {
+    pub fn naptr(
+        name: String,
+        order: u16,
+        preference: u16,
+        flags: String,
+        services: String,
+        regexp: String,
+        replacement: String,
+        ttl: u32,
+    ) -> Self {
         Self {
             name,
             rtype: DnsRecordType::NAPTR,
             rclass: 1,
             ttl,
-            data: DnsRecordData::NAPTR { order, preference, flags, services, regexp, replacement },
+            data: DnsRecordData::NAPTR {
+                order,
+                preference,
+                flags,
+                services,
+                regexp,
+                replacement,
+            },
         }
     }
 
@@ -446,19 +464,34 @@ impl DnsRecord {
             rtype: DnsRecordType::CAA,
             rclass: 1,
             ttl,
-            data: DnsRecordData::CAA { critical, tag, value },
+            data: DnsRecordData::CAA {
+                critical,
+                tag,
+                value,
+            },
         }
     }
 
     /// Create a TLSA record (RFC 6698 — DANE certificate binding).
-    pub fn tlsa(name: String, usage: u8, selector: u8, matching_type: u8,
-                certificate: Vec<u8>, ttl: u32) -> Self {
+    pub fn tlsa(
+        name: String,
+        usage: u8,
+        selector: u8,
+        matching_type: u8,
+        certificate: Vec<u8>,
+        ttl: u32,
+    ) -> Self {
         Self {
             name,
             rtype: DnsRecordType::TLSA,
             rclass: 1,
             ttl,
-            data: DnsRecordData::TLSA { usage, selector, matching_type, certificate },
+            data: DnsRecordData::TLSA {
+                usage,
+                selector,
+                matching_type,
+                certificate,
+            },
         }
     }
 
@@ -469,46 +502,89 @@ impl DnsRecord {
             rtype: DnsRecordType::HTTPS,
             rclass: 1,
             ttl,
-            data: DnsRecordData::SVCB { priority, target, params },
+            data: DnsRecordData::SVCB {
+                priority,
+                target,
+                params,
+            },
         }
     }
 
     /// Create a DS record (RFC 4034 — Delegation Signer).
-    pub fn ds(name: String, key_tag: u16, algorithm: u8, digest_type: u8,
-              digest: Vec<u8>, ttl: u32) -> Self {
+    pub fn ds(
+        name: String,
+        key_tag: u16,
+        algorithm: u8,
+        digest_type: u8,
+        digest: Vec<u8>,
+        ttl: u32,
+    ) -> Self {
         Self {
             name,
             rtype: DnsRecordType::DS,
             rclass: 1,
             ttl,
-            data: DnsRecordData::DS { key_tag, algorithm, digest_type, digest },
+            data: DnsRecordData::DS {
+                key_tag,
+                algorithm,
+                digest_type,
+                digest,
+            },
         }
     }
 
     /// Create a DNSKEY record (RFC 4034 — DNS Public Key).
-    pub fn dnskey(name: String, flags: u16, protocol: u8, algorithm: u8,
-                  public_key: Vec<u8>, ttl: u32) -> Self {
+    pub fn dnskey(
+        name: String,
+        flags: u16,
+        protocol: u8,
+        algorithm: u8,
+        public_key: Vec<u8>,
+        ttl: u32,
+    ) -> Self {
         Self {
             name,
             rtype: DnsRecordType::DNSKEY,
             rclass: 1,
             ttl,
-            data: DnsRecordData::DNSKEY { protocol, flags, algorithm, public_key },
+            data: DnsRecordData::DNSKEY {
+                protocol,
+                flags,
+                algorithm,
+                public_key,
+            },
         }
     }
 
     /// Create an RRSIG record (RFC 4034 — RRset Signature).
-    pub fn rrsig(name: String, type_covered: u16, algorithm: u8, labels: u8,
-                 original_ttl: u32, expiration: u32, inception: u32, key_tag: u16,
-                 signer_name: String, signature: Vec<u8>, ttl: u32) -> Self {
+    pub fn rrsig(
+        name: String,
+        type_covered: u16,
+        algorithm: u8,
+        labels: u8,
+        original_ttl: u32,
+        expiration: u32,
+        inception: u32,
+        key_tag: u16,
+        signer_name: String,
+        signature: Vec<u8>,
+        ttl: u32,
+    ) -> Self {
         Self {
             name,
             rtype: DnsRecordType::RRSIG,
             rclass: 1,
             ttl,
             data: DnsRecordData::RRSIG {
-                type_covered, algorithm, labels, original_ttl,
-                expiration, inception, key_tag, signer_name, signature,
+                type_covered,
+                algorithm,
+                labels,
+                original_ttl,
+                expiration,
+                inception,
+                key_tag,
+                signer_name,
+                signature,
             },
         }
     }
@@ -520,33 +596,65 @@ impl DnsRecord {
             rtype: DnsRecordType::NSEC,
             rclass: 1,
             ttl,
-            data: DnsRecordData::NSEC { next_owner, type_bits },
+            data: DnsRecordData::NSEC {
+                next_owner,
+                type_bits,
+            },
         }
     }
 
     /// Create an SOA record (Start of Authority).
-    pub fn soa(name: String, mname: String, rname: String, serial: u32,
-               refresh: u32, retry: u32, expire: u32, minimum: u32, ttl: u32) -> Self {
+    pub fn soa(
+        name: String,
+        mname: String,
+        rname: String,
+        serial: u32,
+        refresh: u32,
+        retry: u32,
+        expire: u32,
+        minimum: u32,
+        ttl: u32,
+    ) -> Self {
         Self {
             name,
             rtype: DnsRecordType::SOA,
             rclass: 1,
             ttl,
-            data: DnsRecordData::SOA { mname, rname, serial, refresh, retry, expire, minimum },
+            data: DnsRecordData::SOA {
+                mname,
+                rname,
+                serial,
+                refresh,
+                retry,
+                expire,
+                minimum,
+            },
         }
     }
 
     /// Create an NSEC3 record (RFC 5155 — Next SECure v3).
-    pub fn nsec3(name: String, hash_algorithm: u8, flags: u8, iterations: u16,
-                 salt: Vec<u8>, next_hashed_owner: Vec<u8>, type_bits: Vec<u8>, ttl: u32) -> Self {
+    pub fn nsec3(
+        name: String,
+        hash_algorithm: u8,
+        flags: u8,
+        iterations: u16,
+        salt: Vec<u8>,
+        next_hashed_owner: Vec<u8>,
+        type_bits: Vec<u8>,
+        ttl: u32,
+    ) -> Self {
         Self {
             name,
             rtype: DnsRecordType::NSEC3,
             rclass: 1,
             ttl,
             data: DnsRecordData::NSEC3 {
-                hash_algorithm, flags, iterations, salt,
-                next_hashed_owner, type_bits,
+                hash_algorithm,
+                flags,
+                iterations,
+                salt,
+                next_hashed_owner,
+                type_bits,
             },
         }
     }
@@ -554,7 +662,10 @@ impl DnsRecord {
     /// Create an HINFO record (RFC 1035 — Host Info).
     pub fn hinfo(name: String, cpu: String, os: String, ttl: u32) -> Self {
         Self {
-            name, rtype: DnsRecordType::HINFO, rclass: 1, ttl,
+            name,
+            rtype: DnsRecordType::HINFO,
+            rclass: 1,
+            ttl,
             data: DnsRecordData::HINFO { cpu, os },
         }
     }
@@ -562,24 +673,50 @@ impl DnsRecord {
     /// Create an RP record (RFC 1183 — Responsible Person).
     pub fn rp(name: String, mbox: String, txt: String, ttl: u32) -> Self {
         Self {
-            name, rtype: DnsRecordType::RP, rclass: 1, ttl,
+            name,
+            rtype: DnsRecordType::RP,
+            rclass: 1,
+            ttl,
             data: DnsRecordData::RP { mbox, txt },
         }
     }
 
     /// Create a LOC record (RFC 1876 — Location).
-    pub fn loc(name: String, version: u8, size: u32, horiz_pre: u32, vert_pre: u32,
-              latitude: u32, longitude: u32, altitude: u32, ttl: u32) -> Self {
+    pub fn loc(
+        name: String,
+        version: u8,
+        size: u32,
+        horiz_pre: u32,
+        vert_pre: u32,
+        latitude: u32,
+        longitude: u32,
+        altitude: u32,
+        ttl: u32,
+    ) -> Self {
         Self {
-            name, rtype: DnsRecordType::LOC, rclass: 1, ttl,
-            data: DnsRecordData::LOC { version, size, horiz_pre, vert_pre, latitude, longitude, altitude },
+            name,
+            rtype: DnsRecordType::LOC,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::LOC {
+                version,
+                size,
+                horiz_pre,
+                vert_pre,
+                latitude,
+                longitude,
+                altitude,
+            },
         }
     }
 
     /// Create an AFSDB record (RFC 1183 — AFS Database).
     pub fn afsdb(name: String, subtype: u16, hostname: String, ttl: u32) -> Self {
         Self {
-            name, rtype: DnsRecordType::AFSDB, rclass: 1, ttl,
+            name,
+            rtype: DnsRecordType::AFSDB,
+            rclass: 1,
+            ttl,
             data: DnsRecordData::AFSDB { subtype, hostname },
         }
     }
@@ -587,8 +724,15 @@ impl DnsRecord {
     /// Create a URI record (RFC 7553 — Uniform Resource Identifier).
     pub fn uri(name: String, priority: u16, weight: u16, target: String, ttl: u32) -> Self {
         Self {
-            name, rtype: DnsRecordType::URI, rclass: 1, ttl,
-            data: DnsRecordData::URI { priority, weight, target },
+            name,
+            rtype: DnsRecordType::URI,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::URI {
+                priority,
+                weight,
+                target,
+            },
         }
     }
 
@@ -596,7 +740,13 @@ impl DnsRecord {
     ///
     /// The `rclass` field holds the UDP payload size, and `ttl` encodes
     /// extended RCODE, version, and flags per the RFC.
-    pub fn opt(udp_payload_size: u16, ext_rcode: u8, version: u8, flags: u16, options: Vec<u8>) -> Self {
+    pub fn opt(
+        udp_payload_size: u16,
+        ext_rcode: u8,
+        version: u8,
+        flags: u16,
+        options: Vec<u8>,
+    ) -> Self {
         Self {
             name: ".".to_string(),
             rtype: DnsRecordType::OPT,
@@ -806,7 +956,9 @@ impl DnsMessage {
 
     /// Get the EDNS0 OPT record from the additional section, if present.
     pub fn opt_record(&self) -> Option<&DnsRecord> {
-        self.additional.iter().find(|r| r.rtype == DnsRecordType::OPT)
+        self.additional
+            .iter()
+            .find(|r| r.rtype == DnsRecordType::OPT)
     }
 
     /// Check if the client sent an EDNS0 query.
@@ -920,20 +1072,16 @@ mod tests {
     fn test_question_encoding() {
         let q = DnsQuestion::new("test.example.com".to_string(), DnsRecordType::AAAA);
         let wire = q.to_wire();
-        let offset_map: Vec<(usize, usize)> = wire.iter().enumerate().map(|(i, _)| (i, i)).collect();
-        let (parsed, _) =
-            DnsQuestion::from_wire(&wire, 0, &offset_map).unwrap();
+        let offset_map: Vec<(usize, usize)> =
+            wire.iter().enumerate().map(|(i, _)| (i, i)).collect();
+        let (parsed, _) = DnsQuestion::from_wire(&wire, 0, &offset_map).unwrap();
         assert_eq!(parsed.name, "test.example.com");
         assert_eq!(parsed.qtype, DnsRecordType::AAAA);
     }
 
     #[test]
     fn test_a_record_wire() {
-        let rr = DnsRecord::a(
-            "example.com".to_string(),
-            Ipv4Addr::new(1, 2, 3, 4),
-            300,
-        );
+        let rr = DnsRecord::a("example.com".to_string(), Ipv4Addr::new(1, 2, 3, 4), 300);
         let wire = rr.to_wire(0);
         // Should contain: name + type(2) + class(2) + ttl(4) + rdlength(2) + rdata(4)
         assert!(wire.len() > 14);
@@ -946,7 +1094,10 @@ mod tests {
             DnsRecord::a("example.com".to_string(), Ipv4Addr::new(2, 2, 2, 2), 60),
         ];
         let mut msg = DnsMessage::response(0x1111, DnsResponseCode::NoError, answers);
-        msg.questions.push(DnsQuestion::new("example.com".to_string(), DnsRecordType::A));
+        msg.questions.push(DnsQuestion::new(
+            "example.com".to_string(),
+            DnsRecordType::A,
+        ));
         msg.header.question_count = 1;
 
         let wire = msg.to_wire();

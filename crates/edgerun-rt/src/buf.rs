@@ -75,7 +75,11 @@ impl<R: AsyncRead + Unpin> BufReader<R> {
     /// Returns the line WITHOUT the line terminator.
     /// Returns `Ok(None)` on EOF with no data.
     pub fn read_line(&mut self) -> ReadLineFut<'_, R> {
-        ReadLineFut { reader: self, max_size: usize::MAX, line: Vec::new() }
+        ReadLineFut {
+            reader: self,
+            max_size: usize::MAX,
+            line: Vec::new(),
+        }
     }
 
     /// Read a line with a maximum size limit.
@@ -83,18 +87,29 @@ impl<R: AsyncRead + Unpin> BufReader<R> {
     /// If the line exceeds `max_size` bytes, returns an error with
     /// `ErrorKind::InvalidData`.
     pub fn read_line_max(&mut self, max_size: usize) -> ReadLineFut<'_, R> {
-        ReadLineFut { reader: self, max_size, line: Vec::new() }
+        ReadLineFut {
+            reader: self,
+            max_size,
+            line: Vec::new(),
+        }
     }
 
     /// Read exactly `n` bytes.
     pub fn read_exact<'a, 'b>(&'a mut self, buf: &'b mut [u8]) -> ReadExactFut<'a, 'b, R> {
-        ReadExactFut { reader: self, out: buf, out_pos: 0 }
+        ReadExactFut {
+            reader: self,
+            out: buf,
+            out_pos: 0,
+        }
     }
 
     /// Read up to `buf.len()` bytes.
     /// Returns the number of bytes read. `Ok(0)` means EOF.
     pub fn read<'a, 'b>(&'a mut self, buf: &'b mut [u8]) -> ReadFut<'a, 'b, R> {
-        ReadFut { reader: self, out: buf }
+        ReadFut {
+            reader: self,
+            out: buf,
+        }
     }
 
     /// Refill the internal buffer from the inner reader.
@@ -158,7 +173,11 @@ impl<R: AsyncRead + Unpin> AsyncRead for BufReader<R> {
 }
 
 impl<R: AsyncRead + Unpin + AsyncWrite> AsyncWrite for BufReader<R> {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         unsafe { self.map_unchecked_mut(|s| &mut s.inner) }.poll_write(cx, buf)
     }
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -220,7 +239,8 @@ impl<R: AsyncRead + Unpin> Future for ReadLineFut<'_, R> {
                     let avail_len = available.len();
                     if line_len + avail_len > max_size {
                         return Poll::Ready(Err(io::Error::new(
-                            io::ErrorKind::InvalidData, "line too long",
+                            io::ErrorKind::InvalidData,
+                            "line too long",
                         )));
                     }
 
@@ -299,7 +319,9 @@ impl<R: AsyncRead + Unpin> Future for ReadFut<'_, '_, R> {
             this.out[..to_copy].copy_from_slice(&available[..to_copy]);
             this.reader.pos -= to_copy;
             if this.reader.pos > 0 {
-                this.reader.buf.copy_within(to_copy..to_copy + this.reader.pos, 0);
+                this.reader
+                    .buf
+                    .copy_within(to_copy..to_copy + this.reader.pos, 0);
             }
             return Poll::Ready(Ok(to_copy));
         }
@@ -375,7 +397,9 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for BufWriter<W> {
         // If adding would exceed capacity, try to flush.
         if this.buf.len() + buf.len() > this.capacity && !this.buf.is_empty() {
             match Pin::new(&mut this.inner).poll_write(cx, &this.buf) {
-                Poll::Ready(Ok(n)) => { this.buf.drain(..n); }
+                Poll::Ready(Ok(n)) => {
+                    this.buf.drain(..n);
+                }
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                 Poll::Pending => return Poll::Pending,
             }

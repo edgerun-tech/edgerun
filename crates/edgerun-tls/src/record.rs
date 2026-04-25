@@ -7,7 +7,7 @@
 //!
 //! The AEAD nonce is computed as: nonce = write_iv XOR (sequence_number as 12 bytes)
 
-use edgerun_crypto::{AeadCipher, KeyInit, AeadInPlace};
+use edgerun_crypto::{AeadCipher, AeadInPlace, KeyInit};
 
 /// TLS record layer for encryption/decryption
 pub struct RecordCipher {
@@ -24,12 +24,16 @@ impl RecordCipher {
     /// Create a new record cipher from key and IV
     pub fn new(key: &[u8], iv: &[u8]) -> Result<Self, crate::TlsError> {
         if iv.len() != 12 {
-            return Err(crate::TlsError::Cipher(format!("IV must be 12 bytes, got {}", iv.len())));
+            return Err(crate::TlsError::Cipher(format!(
+                "IV must be 12 bytes, got {}",
+                iv.len()
+            )));
         }
         let mut iv_arr = [0u8; 12];
         iv_arr.copy_from_slice(iv);
 
-        let cipher = AeadCipher::new_from_key(key).map_err(|e| crate::TlsError::Cipher(e.to_string()))?;
+        let cipher =
+            AeadCipher::new_from_key(key).map_err(|e| crate::TlsError::Cipher(e.to_string()))?;
 
         Ok(RecordCipher {
             cipher,
@@ -50,7 +54,8 @@ impl RecordCipher {
         let length = plaintext_len + 1 /* content_type byte */ + Self::TAG_LEN;
         [
             content_type,
-            0x03, 0x03, // TLS 1.2 version (middlebox compat)
+            0x03,
+            0x03, // TLS 1.2 version (middlebox compat)
             (length >> 8) as u8,
             length as u8,
         ]
@@ -75,7 +80,9 @@ impl RecordCipher {
         let aad = Self::build_aad(0x17, plaintext.len()); // 0x17 = application_data
 
         let nonce = self.make_nonce();
-        let tag = self.cipher.encrypt_in_place_detached((&nonce), &aad, &mut buffer)
+        let tag = self
+            .cipher
+            .encrypt_in_place_detached((&nonce), &aad, &mut buffer)
             .expect("AEAD encryption failed");
 
         buffer.extend_from_slice(tag.as_ref());
@@ -100,13 +107,15 @@ impl RecordCipher {
 
         let mut buffer = ciphertext.to_vec();
         let tag_offset = buffer.len() - Self::TAG_LEN;
-        let tag_bytes: [u8; 16] = buffer[tag_offset..].try_into()
+        let tag_bytes: [u8; 16] = buffer[tag_offset..]
+            .try_into()
             .map_err(|_| "invalid tag length")?;
         let tag = edgerun_crypto::aes_gcm::Tag::from(tag_bytes);
         buffer.truncate(tag_offset);
 
         let nonce_bytes: [u8; 12] = nonce.try_into().map_err(|_| "invalid nonce length")?;
-        self.cipher.decrypt_in_place_detached(&nonce_bytes, &aad, &mut buffer, &tag)
+        self.cipher
+            .decrypt_in_place_detached(&nonce_bytes, &aad, &mut buffer, &tag)
             .map_err(|e| format!("AEAD decryption failed: {:?}", e))?;
 
         // Last byte is the real ContentType (RFC 8446 §5.4)
@@ -174,6 +183,13 @@ impl TlsRecord {
         }
 
         let fragment = data[5..5 + length].to_vec();
-        Ok((TlsRecord { content_type, version, fragment }, 5 + length))
+        Ok((
+            TlsRecord {
+                content_type,
+                version,
+                fragment,
+            },
+            5 + length,
+        ))
     }
 }

@@ -1,5 +1,5 @@
 // Test yieldnow with the actual runtime.
-use edgerun_rt::{yieldnow, YieldNow, Runtime, spawn};
+use edgerun_rt::{spawn, yieldnow, Runtime, YieldNow};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -49,7 +49,11 @@ fn test_yield_does_not_deadlock() {
     });
 
     std::thread::sleep(Duration::from_millis(500));
-    assert_eq!(counter.load(Ordering::SeqCst), 1, "task should not deadlock");
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        1,
+        "task should not deadlock"
+    );
     drop(h);
     println!("  test_yield_does_not_deadlock OK");
 }

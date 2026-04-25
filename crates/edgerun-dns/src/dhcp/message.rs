@@ -344,7 +344,10 @@ impl DhcpMessage {
         if data.len() < 236 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("DHCP/BOOTP message too short: {} bytes (min 236)", data.len()),
+                format!(
+                    "DHCP/BOOTP message too short: {} bytes (min 236)",
+                    data.len()
+                ),
             ));
         }
 
@@ -508,12 +511,7 @@ impl DhcpMessage {
     }
 
     /// Create a DHCP OFFER (server → client).
-    pub fn offer(
-        xid: u32,
-        mac: [u8; 6],
-        yiaddr: Ipv4Addr,
-        net: NetworkConfig,
-    ) -> Self {
+    pub fn offer(xid: u32, mac: [u8; 6], yiaddr: Ipv4Addr, net: NetworkConfig) -> Self {
         Self {
             op: DhcpOp::Reply,
             htype: HTYPE_ETHER,
@@ -547,12 +545,7 @@ impl DhcpMessage {
     }
 
     /// Create a DHCP ACK (server → client).
-    pub fn ack(
-        xid: u32,
-        mac: [u8; 6],
-        yiaddr: Ipv4Addr,
-        net: NetworkConfig,
-    ) -> Self {
+    pub fn ack(xid: u32, mac: [u8; 6], yiaddr: Ipv4Addr, net: NetworkConfig) -> Self {
         Self {
             op: DhcpOp::Reply,
             htype: HTYPE_ETHER,
@@ -677,7 +670,8 @@ impl DhcpOptions {
                 }
                 OPT_SUBNET_MASK => {
                     if value.len() == 4 {
-                        opts.subnet_mask = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                        opts.subnet_mask =
+                            Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
                     }
                 }
                 OPT_ROUTER => {
@@ -688,33 +682,39 @@ impl DhcpOptions {
                 OPT_DNS_SERVER => {
                     for chunk in value.chunks(4) {
                         if chunk.len() == 4 {
-                            opts.dns_servers.push(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]));
+                            opts.dns_servers
+                                .push(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]));
                         }
                     }
                 }
                 OPT_REQUESTED_IP => {
                     if value.len() == 4 {
-                        opts.requested_ip = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                        opts.requested_ip =
+                            Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
                     }
                 }
                 OPT_LEASE_TIME => {
                     if value.len() == 4 {
-                        opts.lease_time = Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.lease_time =
+                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
                     }
                 }
                 OPT_SERVER_ID => {
                     if value.len() == 4 {
-                        opts.server_id = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                        opts.server_id =
+                            Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
                     }
                 }
                 OPT_RENEWAL_TIME => {
                     if value.len() == 4 {
-                        opts.renewal_time = Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.renewal_time =
+                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
                     }
                 }
                 OPT_REBIND_TIME => {
                     if value.len() == 4 {
-                        opts.rebind_time = Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.rebind_time =
+                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
                     }
                 }
                 OPT_CLIENT_ID => {
@@ -753,14 +753,24 @@ impl DhcpOptions {
                     let mut j = 0;
                     while j < value.len() {
                         let sub_code = value[j];
-                        if sub_code == 255 { break; } // End
-                        if sub_code == 0 { j += 1; continue; } // Pad
+                        if sub_code == 255 {
+                            break;
+                        } // End
+                        if sub_code == 0 {
+                            j += 1;
+                            continue;
+                        } // Pad
                         j += 1;
-                        if j >= value.len() { break; }
+                        if j >= value.len() {
+                            break;
+                        }
                         let sub_len = value[j] as usize;
                         j += 1;
-                        if j + sub_len > value.len() { break; }
-                        opts.vendor_sub_options.push((sub_code, value[j..j+sub_len].to_vec()));
+                        if j + sub_len > value.len() {
+                            break;
+                        }
+                        opts.vendor_sub_options
+                            .push((sub_code, value[j..j + sub_len].to_vec()));
                         j += sub_len;
                     }
                 }
@@ -772,7 +782,8 @@ impl DhcpOptions {
                 }
                 OPT_BROADCAST_ADDR => {
                     if value.len() == 4 {
-                        opts.broadcast_addr = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                        opts.broadcast_addr =
+                            Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
                     }
                 }
                 OPT_INTERFACE_MTU => {
@@ -783,7 +794,8 @@ impl DhcpOptions {
                 OPT_NTP_SERVERS => {
                     for chunk in value.chunks(4) {
                         if chunk.len() == 4 {
-                            opts.ntp_servers.push(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]));
+                            opts.ntp_servers
+                                .push(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]));
                         }
                     }
                 }
@@ -804,10 +816,13 @@ impl DhcpOptions {
                         let prefix_len = value[j];
                         let prefix_bytes = prefix_len.div_ceil(8); // ceiling division
                         j += 1;
-                        if j + prefix_bytes as usize + 4 > value.len() { break; }
+                        if j + prefix_bytes as usize + 4 > value.len() {
+                            break;
+                        }
                         let prefix = value[j..j + prefix_bytes as usize].to_vec();
                         j += prefix_bytes as usize;
-                        let gateway = Ipv4Addr::new(value[j], value[j+1], value[j+2], value[j+3]);
+                        let gateway =
+                            Ipv4Addr::new(value[j], value[j + 1], value[j + 2], value[j + 3]);
                         j += 4;
                         opts.classless_routes.push((prefix_len, prefix, gateway));
                     }
@@ -1086,12 +1101,7 @@ mod tests {
             tftp_server: Some("192.168.1.1".to_string()),
             bootfile: Some("bootx64.efi".to_string()),
         };
-        let msg = DhcpMessage::offer(
-            0x12345678,
-            mac,
-            Ipv4Addr::new(192, 168, 1, 100),
-            net,
-        );
+        let msg = DhcpMessage::offer(0x12345678, mac, Ipv4Addr::new(192, 168, 1, 100), net);
         let wire = msg.to_wire();
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
 
@@ -1101,8 +1111,14 @@ mod tests {
         assert_eq!(parsed.options.server_id, Some(server));
         assert_eq!(parsed.options.lease_time, Some(86400));
         assert_eq!(parsed.options.dns_servers, vec![Ipv4Addr::new(8, 8, 8, 8)]);
-        assert_eq!(parsed.options.tftp_server_name, Some("192.168.1.1".to_string()));
-        assert_eq!(parsed.options.bootfile_name, Some("bootx64.efi".to_string()));
+        assert_eq!(
+            parsed.options.tftp_server_name,
+            Some("192.168.1.1".to_string())
+        );
+        assert_eq!(
+            parsed.options.bootfile_name,
+            Some("bootx64.efi".to_string())
+        );
     }
 
     #[test]
@@ -1129,18 +1145,31 @@ mod tests {
         assert_eq!(parsed.options.lease_time, Some(3600));
         assert_eq!(parsed.options.renewal_time, Some(1800));
         assert_eq!(parsed.options.rebind_time, Some(3150));
-        assert_eq!(parsed.options.tftp_server_name, Some("10.0.0.1".to_string()));
-        assert_eq!(parsed.options.bootfile_name, Some("bootx64.efi".to_string()));
+        assert_eq!(
+            parsed.options.tftp_server_name,
+            Some("10.0.0.1".to_string())
+        );
+        assert_eq!(
+            parsed.options.bootfile_name,
+            Some("bootx64.efi".to_string())
+        );
     }
 
     #[test]
     fn test_nak_roundtrip() {
-        let msg = DhcpMessage::nak(0xdeadbeef, Ipv4Addr::new(192, 168, 1, 1), [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+        let msg = DhcpMessage::nak(
+            0xdeadbeef,
+            Ipv4Addr::new(192, 168, 1, 1),
+            [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF],
+        );
         let wire = msg.to_wire();
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
 
         assert_eq!(parsed.options.message_type, Some(DhcpMessageType::Nak));
-        assert_eq!(parsed.options.server_id, Some(Ipv4Addr::new(192, 168, 1, 1)));
+        assert_eq!(
+            parsed.options.server_id,
+            Some(Ipv4Addr::new(192, 168, 1, 1))
+        );
     }
 
     #[test]
@@ -1156,7 +1185,10 @@ mod tests {
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
 
         assert_eq!(parsed.options.message_type, Some(DhcpMessageType::Request));
-        assert_eq!(parsed.options.requested_ip, Some(Ipv4Addr::new(172, 16, 0, 100)));
+        assert_eq!(
+            parsed.options.requested_ip,
+            Some(Ipv4Addr::new(172, 16, 0, 100))
+        );
         assert_eq!(parsed.options.server_id, Some(Ipv4Addr::new(172, 16, 0, 1)));
     }
 
@@ -1210,12 +1242,12 @@ mod tests {
         buf[2] = 6; // hlen = 6
         buf[3] = 0; // hops
         buf[4..8].copy_from_slice(&0x12345678u32.to_be_bytes()); // xid
-        // sname is 64 bytes at offset 44
+                                                                 // sname is 64 bytes at offset 44
         let sname_bytes = b"bootserver";
-        buf[44..44+sname_bytes.len()].copy_from_slice(sname_bytes);
+        buf[44..44 + sname_bytes.len()].copy_from_slice(sname_bytes);
         // file is 128 bytes at offset 108
         let file_bytes = b"pxelinux.0";
-        buf[108..108+file_bytes.len()].copy_from_slice(file_bytes);
+        buf[108..108 + file_bytes.len()].copy_from_slice(file_bytes);
 
         let msg = DhcpMessage::from_wire(&buf).unwrap();
         assert!(msg.is_bootp);

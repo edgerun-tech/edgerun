@@ -10,7 +10,7 @@ use edgerun_dns::client::DnsClient;
 use edgerun_dns::record::{DnsRecordData, DnsRecordType};
 
 use crate::smtp::client::SmtpClient;
-use crate::smtp::server::dsn_generator::{DsnAction, DsnBounce, DeliveryStatus};
+use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::types::response::EnhancedStatusCode;
 
 /// Configuration for the bounce sender.
@@ -62,41 +62,35 @@ pub async fn send_bounce(
         .iter()
         .map(|rec| {
             let (status_code, diag) = match &rec.failure_reason {
-                Some(reason) if reason.contains("refused") || reason.contains("connect") => {
-                    (
-                        EnhancedStatusCode::new(4, 4, 1),
-                        format!("Connection failed: {}", reason),
-                    )
-                }
-                Some(reason) if reason.contains("too large") || reason.contains("size") => {
-                    (
-                        EnhancedStatusCode::new(5, 3, 4),
-                        format!("Message too large: {}", reason),
-                    )
-                }
-                Some(reason) if reason.contains("user") || reason.contains("unknown") || reason.contains("mailbox") => {
+                Some(reason) if reason.contains("refused") || reason.contains("connect") => (
+                    EnhancedStatusCode::new(4, 4, 1),
+                    format!("Connection failed: {}", reason),
+                ),
+                Some(reason) if reason.contains("too large") || reason.contains("size") => (
+                    EnhancedStatusCode::new(5, 3, 4),
+                    format!("Message too large: {}", reason),
+                ),
+                Some(reason)
+                    if reason.contains("user")
+                        || reason.contains("unknown")
+                        || reason.contains("mailbox") =>
+                {
                     (
                         EnhancedStatusCode::new(5, 1, 1),
                         format!("User unknown: {}", reason),
                     )
                 }
-                Some(reason) => {
-                    (
-                        EnhancedStatusCode::new(5, 0, 0),
-                        format!("Delivery failed: {}", reason),
-                    )
-                }
-                None => {
-                    (
-                        EnhancedStatusCode::new(5, 0, 0),
-                        "Delivery failed".to_string(),
-                    )
-                }
+                Some(reason) => (
+                    EnhancedStatusCode::new(5, 0, 0),
+                    format!("Delivery failed: {}", reason),
+                ),
+                None => (
+                    EnhancedStatusCode::new(5, 0, 0),
+                    "Delivery failed".to_string(),
+                ),
             };
 
-            let last_attempt_str = rec.last_attempt.map(|ts| {
-                format_timestamp(ts)
-            });
+            let last_attempt_str = rec.last_attempt.map(|ts| format_timestamp(ts));
 
             DeliveryStatus {
                 original_recipient: Some(rec.recipient.clone()),
@@ -137,14 +131,20 @@ pub async fn send_bounce(
         bounce.subject,
         format_timestamp(now_secs()),
         now_secs(),
-        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
         config.domain,
         bounce_mime,
     );
 
     // Extract domain from sender address
     let sender_domain = extract_domain(envelope_sender).ok_or_else(|| {
-        format!("cannot extract domain from sender address: {}", envelope_sender)
+        format!(
+            "cannot extract domain from sender address: {}",
+            envelope_sender
+        )
     })?;
 
     // Resolve sender's MX
@@ -168,10 +168,11 @@ fn extract_domain(email: &str) -> Option<String> {
 
 /// Resolve MX for a domain, fall back to A.
 async fn resolve_mx(domain: &str, dns_server: &str) -> Result<String, String> {
-    let mut dns = DnsClient::new(dns_server)
-        .map_err(|e| format!("failed to create DNS client: {}", e))?;
+    let mut dns =
+        DnsClient::new(dns_server).map_err(|e| format!("failed to create DNS client: {}", e))?;
 
-    let response = dns.query(domain, DnsRecordType::MX)
+    let response = dns
+        .query(domain, DnsRecordType::MX)
         .await
         .map_err(|e| format!("DNS MX query failed: {}", e))?;
 
@@ -197,22 +198,31 @@ async fn deliver_bounce(
     bounce_message: &str,
     bounce_recipient: &str,
 ) -> Result<(), String> {
-    let mut client = SmtpClient::connect(addr).await
+    let mut client = SmtpClient::connect(addr)
+        .await
         .map_err(|e| format!("connection to {} failed: {}", addr, e))?;
 
-    client.ehlo(ehlo_domain).await
+    client
+        .ehlo(ehlo_domain)
+        .await
         .map_err(|e| format!("EHLO failed: {}", e))?;
 
     // MAIL FROM:<> (null sender for bounces)
-    client.mail_from("<>").await
+    client
+        .mail_from("<>")
+        .await
         .map_err(|e| format!("MAIL FROM rejected: {}", e))?;
 
     // RCPT TO:<sender>
-    client.rcpt_to(&format!("<{}>", bounce_recipient)).await
+    client
+        .rcpt_to(&format!("<{}>", bounce_recipient))
+        .await
         .map_err(|e| format!("RCPT TO rejected: {}", e))?;
 
     // DATA — bounce message
-    client.data(bounce_message.as_bytes()).await
+    client
+        .data(bounce_message.as_bytes())
+        .await
         .map_err(|e| format!("DATA rejected: {}", e))?;
 
     // QUIT
@@ -256,8 +266,14 @@ mod tests {
 
     #[test]
     fn test_extract_domain() {
-        assert_eq!(extract_domain("user@example.com"), Some("example.com".to_string()));
-        assert_eq!(extract_domain("<user@example.com>"), Some("example.com".to_string()));
+        assert_eq!(
+            extract_domain("user@example.com"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            extract_domain("<user@example.com>"),
+            Some("example.com".to_string())
+        );
         assert_eq!(extract_domain("invalid"), None);
         assert_eq!(extract_domain("@"), None);
         assert_eq!(extract_domain(""), None);

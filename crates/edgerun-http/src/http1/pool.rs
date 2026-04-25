@@ -23,8 +23,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use edgerun_rt::{
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
-    AsyncTcpStream, BufReader, ConnectFuture, timeout as rt_timeout,
+    timeout as rt_timeout, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
+    BufReader, ConnectFuture,
 };
 
 use edgerun_tls::async_tls::AsyncTlsStream;
@@ -32,9 +32,9 @@ use edgerun_tls::SessionCache;
 
 use edgerun_rt::sync::Mutex;
 
+use crate::http1::compression;
 use crate::http1::request::Request;
 use crate::http1::response::Response;
-use crate::http1::compression;
 use crate::{Error, HeaderMap, Method, Result, StatusCode};
 
 // ===========================================================================
@@ -240,11 +240,14 @@ impl ConnectionPool {
             let is_head = req.method() == &Method::HEAD;
             let is_https = uri.is_https();
 
-            let host = uri.host()
+            let host = uri
+                .host()
                 .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
             let port = uri.port().unwrap_or(if is_https { 443 } else { 80 });
 
-            let response = self.execute_single(&req, host, port, is_https, is_head).await?;
+            let response = self
+                .execute_single(&req, host, port, is_https, is_head)
+                .await?;
 
             // Check for redirect
             if remaining > 0 && self.follow_redirects {
@@ -254,7 +257,10 @@ impl ConnectionPool {
                         let loc = location.as_str();
                         remaining -= 1;
                         current_uri = Self::resolve_redirect_url(&current_uri, loc);
-                        if status == 303 && current_method != Method::GET && current_method != Method::HEAD {
+                        if status == 303
+                            && current_method != Method::GET
+                            && current_method != Method::HEAD
+                        {
                             current_method = Method::GET;
                         }
                         continue;
@@ -307,11 +313,13 @@ impl ConnectionPool {
             let is_head = req.method() == &Method::HEAD;
             let is_https = uri.is_https();
 
-            let host = uri.host()
+            let host = uri
+                .host()
                 .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
             let port = uri.port().unwrap_or(if is_https { 443 } else { 80 });
 
-            let response = Self::execute_single_async(pool, &req, host, port, is_https, is_head).await?;
+            let response =
+                Self::execute_single_async(pool, &req, host, port, is_https, is_head).await?;
 
             // Check for redirect
             if remaining > 0 && follow_redirects {
@@ -321,7 +329,10 @@ impl ConnectionPool {
                         let loc = location.as_str();
                         remaining -= 1;
                         current_uri = Self::resolve_redirect_url(&current_uri, loc);
-                        if status == 303 && current_method != Method::GET && current_method != Method::HEAD {
+                        if status == 303
+                            && current_method != Method::GET
+                            && current_method != Method::HEAD
+                        {
                             current_method = Method::GET;
                         }
                         continue;
@@ -366,12 +377,8 @@ impl ConnectionPool {
         // Try to reuse an existing connection — we need to extract from pool,
         // use it, then put it back. Can't hold mutable borrow across await.
         let conns = self.connections.remove(&key).unwrap_or_default();
-        let (result, leftover_conns) = Self::try_pooled_requests(
-            conns,
-            request,
-            is_head,
-            &self.auto_decompress,
-        ).await;
+        let (result, leftover_conns) =
+            Self::try_pooled_requests(conns, request, is_head, &self.auto_decompress).await;
 
         // Put leftover connections back
         if !leftover_conns.is_empty() {
@@ -429,9 +436,8 @@ impl ConnectionPool {
         };
 
         // Try pooled (no lock)
-        let (result, leftover_conns) = Self::try_pooled_requests(
-            conns, request, is_head, &auto_decompress,
-        ).await;
+        let (result, leftover_conns) =
+            Self::try_pooled_requests(conns, request, is_head, &auto_decompress).await;
 
         // Return leftovers (brief lock)
         if !leftover_conns.is_empty() {
@@ -441,7 +447,10 @@ impl ConnectionPool {
 
         if let Ok((response, conn)) = result {
             let mut p = pool.lock();
-            p.connections.entry(key).or_default().push((conn, Instant::now()));
+            p.connections
+                .entry(key)
+                .or_default()
+                .push((conn, Instant::now()));
             return Ok(response);
         }
 
@@ -451,12 +460,16 @@ impl ConnectionPool {
             (p.connect_timeout, p.dns_timeout, p.session_cache.clone())
         };
         let pooled = Self::create_connection_static(ct, dt, host, port, is_https, &sc).await?;
-        let (response, conn) = Self::try_request_on_conn_static(pooled, request, is_head, auto_decompress).await?;
+        let (response, conn) =
+            Self::try_request_on_conn_static(pooled, request, is_head, auto_decompress).await?;
 
         // Return to pool (brief lock)
         {
             let mut p = pool.lock();
-            p.connections.entry(key).or_default().push((conn, Instant::now()));
+            p.connections
+                .entry(key)
+                .or_default()
+                .push((conn, Instant::now()));
         }
         Ok(response)
     }
@@ -470,16 +483,21 @@ impl ConnectionPool {
         auto_decompress: &bool,
     ) -> (Result<(Response, PooledConn)>, Vec<(PooledConn, Instant)>) {
         while let Some((pooled, _last_used)) = conns.pop() {
-            match Self::try_request_on_conn_static(pooled, request, is_head, *auto_decompress).await {
+            match Self::try_request_on_conn_static(pooled, request, is_head, *auto_decompress).await
+            {
                 Ok(result) => return (Ok(result), conns),
                 Err(_) => {
                     // Connection is stale — continue
                 }
             }
         }
-        (Err(Error::Network(std::io::Error::new(
-            std::io::ErrorKind::ConnectionReset, "all pooled connections failed",
-        ))), conns)
+        (
+            Err(Error::Network(std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "all pooled connections failed",
+            ))),
+            conns,
+        )
     }
 
     /// Try a request on a connection (static method, no self borrow).
@@ -495,7 +513,10 @@ impl ConnectionPool {
 
         // Add Accept-Encoding if auto_decompress
         if auto_decompress {
-            let ae = format!("\r\nAccept-Encoding: {}", compression::accept_encoding_value());
+            let ae = format!(
+                "\r\nAccept-Encoding: {}",
+                compression::accept_encoding_value()
+            );
             if let Some(pos) = request_bytes.windows(4).rposition(|w| w == b"\r\n\r\n") {
                 let mut new_bytes = Vec::with_capacity(request_bytes.len() + ae.len());
                 new_bytes.extend_from_slice(&request_bytes[..pos]);
@@ -506,7 +527,8 @@ impl ConnectionPool {
         }
 
         // Write request
-        conn.write_request(&request_bytes).await
+        conn.write_request(&request_bytes)
+            .await
             .map_err(Error::Network)?;
 
         // Read response
@@ -537,33 +559,32 @@ impl ConnectionPool {
         session_cache: &SessionCache,
     ) -> Result<PooledConn> {
         if is_https {
-            let stream = Self::resolve_and_connect_static(
-                connect_timeout, dns_timeout, host, port,
-            ).await?;
-            let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache)).await
+            let stream =
+                Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port).await?;
+            let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache))
+                .await
                 .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
             let reader = BufReader::new(tls);
             Ok(PooledConn::Tls(reader))
         } else {
-            let stream = Self::resolve_and_connect_static(
-                connect_timeout, dns_timeout, host, port,
-            ).await?;
+            let stream =
+                Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port).await?;
             let reader = BufReader::new(stream);
             Ok(PooledConn::Plain(reader))
         }
     }
 
     /// Create a new connection (instance method for non-async use).
-    async fn create_connection(
-        &self,
-        host: &str,
-        port: u16,
-        is_https: bool,
-    ) -> Result<PooledConn> {
+    async fn create_connection(&self, host: &str, port: u16, is_https: bool) -> Result<PooledConn> {
         Self::create_connection_static(
-            self.connect_timeout, self.dns_timeout, host, port, is_https,
+            self.connect_timeout,
+            self.dns_timeout,
+            host,
+            port,
+            is_https,
             &self.session_cache,
-        ).await
+        )
+        .await
     }
 
     /// Resolve hostname and connect TCP — static version.
@@ -577,45 +598,60 @@ impl ConnectionPool {
             return Self::connect_sock_static(connect_timeout, &SocketAddr::new(ip, port)).await;
         }
 
-        let host_str = host.to_string();
-        if let Ok(Ok(addrs)) = rt_timeout(
+        let host_owned = host.to_string();
+        let dns_result = rt_timeout(
             dns_timeout,
             edgerun_rt::spawn_blocking(move || {
                 use std::net::ToSocketAddrs;
-                format!("{}:443", host_str).to_socket_addrs().unwrap().collect::<Vec<_>>()
-            })
-        ).await {
-            let mut ipv4_fallback = None;
-            for addr in addrs {
+                format!("{}:443", host_owned).to_socket_addrs()
+            }),
+        )
+        .await;
+
+        if let Ok(Ok(Ok(addrs))) = dns_result {
+            let addr_list: Vec<SocketAddr> = addrs.into_iter().collect();
+            for addr in addr_list.iter() {
                 match addr.ip() {
-                    IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, &addr).await,
-                    IpAddr::V4(_) => {
-                        if ipv4_fallback.is_none() {
-                            ipv4_fallback = Some(addr);
-                        }
-                    }
+                    IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, addr).await,
+                    IpAddr::V4(_) => continue,
                 }
             }
-            if let Some(addr) = ipv4_fallback {
-                return Self::connect_sock_static(connect_timeout, &addr).await;
+            for addr in addr_list.into_iter() {
+                if let IpAddr::V4(_) = addr.ip() {
+                    return Self::connect_sock_static(connect_timeout, &addr).await;
+                }
             }
         }
 
         if let Some(mut client) = edgerun_dns::DnsClient::system() {
             client.set_timeout(dns_timeout);
-            if let Ok(Ok(ip)) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
-                if let Some(ip) = ip.first() {
-                    return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V6(*ip), port)).await;
+            if let Ok(ips) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
+                if let Ok(ips) = ips {
+                    if let Some(ip) = ips.first() {
+                        return Self::connect_sock_static(
+                            connect_timeout,
+                            &SocketAddr::new(IpAddr::V6(*ip), port),
+                        )
+                        .await;
+                    }
                 }
             }
-            if let Ok(Ok(ip)) = rt_timeout(dns_timeout, client.query_a(host)).await {
-                if let Some(ip) = ip.first() {
-                    return Self::connect_sock_static(connect_timeout, &SocketAddr::new(IpAddr::V4(*ip), port)).await;
+            if let Ok(ips) = rt_timeout(dns_timeout, client.query_a(host)).await {
+                if let Ok(ips) = ips {
+                    if let Some(ip) = ips.first() {
+                        return Self::connect_sock_static(
+                            connect_timeout,
+                            &SocketAddr::new(IpAddr::V4(*ip), port),
+                        )
+                        .await;
+                    }
                 }
             }
         }
 
-        Err(Error::InvalidUri(format!("DNS resolution failed for {host}")))
+        Err(Error::InvalidUri(format!(
+            "DNS resolution failed for {host}"
+        )))
     }
 
     async fn connect_sock_static(
@@ -632,9 +668,7 @@ impl ConnectionPool {
 
     /// Resolve hostname and connect TCP.
     async fn resolve_and_connect(&self, host: &str, port: u16) -> Result<Arc<AsyncTcpStream>> {
-        Self::resolve_and_connect_static(
-            self.connect_timeout, self.dns_timeout, host, port,
-        ).await
+        Self::resolve_and_connect_static(self.connect_timeout, self.dns_timeout, host, port).await
     }
 
     async fn connect_sock(&self, addr: &SocketAddr) -> Result<Arc<AsyncTcpStream>> {
@@ -654,25 +688,35 @@ impl ConnectionPool {
 
     /// Read an HTTP/1.1 response from a pooled connection.
     async fn read_response(conn: &mut PooledConn, is_head: bool) -> Result<Response> {
-        let status_line = conn.read_line().await
+        let status_line = conn
+            .read_line()
+            .await
             .map_err(Error::Network)?
-            .ok_or_else(|| Error::InvalidResponse("Unexpected EOF reading status line".to_string()))?;
+            .ok_or_else(|| {
+                Error::InvalidResponse("Unexpected EOF reading status line".to_string())
+            })?;
 
         let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
         if parts.len() < 2 {
             return Err(Error::InvalidResponse("Invalid status line".to_string()));
         }
-        let status_code = parts[1].parse::<u16>()
+        let status_code = parts[1]
+            .parse::<u16>()
             .map_err(|_| Error::InvalidResponse("Invalid status code".to_string()))?;
-        let status = StatusCode::new(status_code)
-            .map_err(Error::InvalidResponse)?;
+        let status = StatusCode::new(status_code).map_err(Error::InvalidResponse)?;
 
         let mut headers = HeaderMap::new();
         loop {
-            let line = conn.read_line().await
+            let line = conn
+                .read_line()
+                .await
                 .map_err(Error::Network)?
-                .ok_or_else(|| Error::InvalidResponse("Unexpected EOF reading headers".to_string()))?;
-            if line.is_empty() { break; }
+                .ok_or_else(|| {
+                    Error::InvalidResponse("Unexpected EOF reading headers".to_string())
+                })?;
+            if line.is_empty() {
+                break;
+            }
             if let Some(colon) = line.find(':') {
                 let name = line[..colon].trim();
                 let value = line[colon + 1..].trim();
@@ -688,11 +732,13 @@ impl ConnectionPool {
         }
 
         // Read body
-        let is_chunked = headers.get("transfer-encoding")
+        let is_chunked = headers
+            .get("transfer-encoding")
             .map(|v| v.as_str().to_lowercase())
             .is_some_and(|v| v.contains("chunked"));
 
-        let content_length = headers.get("content-length")
+        let content_length = headers
+            .get("content-length")
             .and_then(|v| v.as_str().parse::<usize>().ok());
 
         let body = if is_chunked {
@@ -701,9 +747,10 @@ impl ConnectionPool {
             let mut buf = vec![0u8; len];
             let mut total = 0;
             while total < len {
-                let n = conn.read(&mut buf[total..]).await
-                    .map_err(Error::Network)?;
-                if n == 0 { break; }
+                let n = conn.read(&mut buf[total..]).await.map_err(Error::Network)?;
+                if n == 0 {
+                    break;
+                }
                 total += n;
             }
             buf.truncate(total);
@@ -725,15 +772,20 @@ impl ConnectionPool {
             line_buf.clear();
             loop {
                 let mut byte = [0u8; 1];
-                let n = conn.read(&mut byte).await
-                    .map_err(Error::Network)?;
+                let n = conn.read(&mut byte).await.map_err(Error::Network)?;
                 if n == 0 {
-                    return Err(Error::InvalidResponse("unexpected EOF reading chunk size".into()));
+                    return Err(Error::InvalidResponse(
+                        "unexpected EOF reading chunk size".into(),
+                    ));
                 }
-                if byte[0] == b'\n' { break; }
+                if byte[0] == b'\n' {
+                    break;
+                }
                 line_buf.push(byte[0]);
             }
-            if line_buf.last() == Some(&b'\r') { line_buf.pop(); }
+            if line_buf.last() == Some(&b'\r') {
+                line_buf.pop();
+            }
 
             let size_hex = std::str::from_utf8(&line_buf)
                 .map_err(|_| Error::InvalidResponse("invalid chunk size".into()))?;
@@ -744,9 +796,10 @@ impl ConnectionPool {
             if chunk_size == 0 {
                 // Drain trailer headers until blank line
                 loop {
-                    let line = conn.read_line().await
-                        .map_err(Error::Network)?;
-                    if line.is_none_or(|l| l.is_empty()) { break; }
+                    let line = conn.read_line().await.map_err(Error::Network)?;
+                    if line.is_none_or(|l| l.is_empty()) {
+                        break;
+                    }
                 }
                 break;
             }
@@ -756,9 +809,13 @@ impl ConnectionPool {
             let mut buf = [0u8; 8192];
             while remaining > 0 {
                 let to_read = remaining.min(buf.len());
-                let n = conn.read(&mut buf[..to_read]).await
+                let n = conn
+                    .read(&mut buf[..to_read])
+                    .await
                     .map_err(Error::Network)?;
-                if n == 0 { break; }
+                if n == 0 {
+                    break;
+                }
                 body.extend_from_slice(&buf[..n]);
                 remaining -= n;
             }

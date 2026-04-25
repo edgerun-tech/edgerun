@@ -1,5 +1,5 @@
 // Test Semaphore primitive with the actual runtime.
-use edgerun_rt::{Semaphore, Runtime, spawn};
+use edgerun_rt::{spawn, Runtime, Semaphore};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -112,7 +112,11 @@ fn test_concurrent_acquire_limited() {
             // Simulate work
             std::thread::sleep(Duration::from_millis(30));
             active.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-            println!("    task {} done, active now = {}", i, active.load(std::sync::atomic::Ordering::SeqCst));
+            println!(
+                "    task {} done, active now = {}",
+                i,
+                active.load(std::sync::atomic::Ordering::SeqCst)
+            );
         });
         handles.push(h);
     }
@@ -120,7 +124,11 @@ fn test_concurrent_acquire_limited() {
     std::thread::sleep(Duration::from_millis(300));
     let max = max_active.load(std::sync::atomic::Ordering::SeqCst);
     println!("    max concurrent acquires: {} (expected <= 2)", max);
-    assert!(max <= 2, "semaphore should limit to 2 concurrent, got {}", max);
+    assert!(
+        max <= 2,
+        "semaphore should limit to 2 concurrent, got {}",
+        max
+    );
     for h in handles {
         drop(h);
     }

@@ -124,7 +124,9 @@ fn mount_if_needed(source: &str, target: &str, fstype: &str) {
         Err(_) => {
             let msg = "mount: source path contains NUL bytes\n";
             let bytes = msg.as_bytes();
-            unsafe { libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len()); }
+            unsafe {
+                libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len());
+            }
             return;
         }
     };
@@ -133,7 +135,9 @@ fn mount_if_needed(source: &str, target: &str, fstype: &str) {
         Err(_) => {
             let msg = "mount: target path contains NUL bytes\n";
             let bytes = msg.as_bytes();
-            unsafe { libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len()); }
+            unsafe {
+                libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len());
+            }
             return;
         }
     };
@@ -142,7 +146,9 @@ fn mount_if_needed(source: &str, target: &str, fstype: &str) {
         Err(_) => {
             let msg = "mount: fstype contains NUL bytes\n";
             let bytes = msg.as_bytes();
-            unsafe { libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len()); }
+            unsafe {
+                libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len());
+            }
             return;
         }
     };
@@ -164,7 +170,12 @@ fn mount_if_needed(source: &str, target: &str, fstype: &str) {
             libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len());
         }
     } else {
-        let msg = format!("failed to mount {} on {}: {}\n", fstype, target, std::io::Error::last_os_error());
+        let msg = format!(
+            "failed to mount {} on {}: {}\n",
+            fstype,
+            target,
+            std::io::Error::last_os_error()
+        );
         let bytes = msg.as_bytes();
         unsafe {
             libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len());

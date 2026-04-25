@@ -1,5 +1,8 @@
-use edgerun_rt::{spawn, CancellationToken, timeout, AsyncTcpStream, AsyncTcpListener, TcpSocket, AsyncReadExt, AsyncWriteExt};
-use edgerun_log::{info, debug, warn};
+use edgerun_log::{debug, info, warn};
+use edgerun_rt::{
+    spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt,
+    CancellationToken, TcpSocket,
+};
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -44,8 +47,8 @@ pub struct ProxyServer {
 
 impl ProxyServer {
     pub fn new(config: ProxyConfig) -> Self {
-        Self { 
-            config, 
+        Self {
+            config,
             active_connections: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             graceful_shutdown: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -74,7 +77,7 @@ impl ProxyServer {
             let active = self.active_connections.clone();
             let max = self.config.max_connections;
             let graceful = self.graceful_shutdown.clone();
-async move {
+            async move {
                 loop {
                     if graceful.load(Ordering::Relaxed) {
                         debug!("Shutdown initiated, stopping HTTP accept loop");
@@ -173,7 +176,11 @@ const SOCKS5_REP_TTL_EXPIRED: u8 = 0x06;
 const SOCKS5_REP_CMD_NOT_SUPPORTED: u8 = 0x07;
 const SOCKS5_REP_ADDR_NOT_SUPPORTED: u8 = 0x08;
 
-async fn handle_http_proxy(socket: Arc<AsyncTcpStream>, _addr: SocketAddr, config: ProxyConfig) -> std::io::Result<()> {
+async fn handle_http_proxy(
+    socket: Arc<AsyncTcpStream>,
+    _addr: SocketAddr,
+    config: ProxyConfig,
+) -> std::io::Result<()> {
     let mut socket = socket.clone();
     let mut buffer = vec![0u8; config.tunnel_buffer_size];
 
@@ -206,23 +213,30 @@ async fn handle_http_proxy(socket: Arc<AsyncTcpStream>, _addr: SocketAddr, confi
     }
 }
 
-async fn handle_connect_tunnel(socket: Arc<AsyncTcpStream>, target: &str, config: &ProxyConfig) -> std::io::Result<()> {
+async fn handle_connect_tunnel(
+    socket: Arc<AsyncTcpStream>,
+    target: &str,
+    config: &ProxyConfig,
+) -> std::io::Result<()> {
     let (host, port) = parse_target(target);
-    
+
     let addr: SocketAddr = format!("{}:{}", host, port).parse().unwrap();
-    
+
     let is_ipv6 = host.starts_with('[') || host.contains(':');
-    let sock = if is_ipv6 { TcpSocket::new_v6()? } else { TcpSocket::new_v4()? };
-    
-    let connect_result = timeout(
-        config.connect_timeout,
-        sock.connect(addr),
-    ).await;
+    let sock = if is_ipv6 {
+        TcpSocket::new_v6()?
+    } else {
+        TcpSocket::new_v4()?
+    };
+
+    let connect_result = timeout(config.connect_timeout, sock.connect(addr)).await;
 
     match connect_result {
         Ok(Ok(upstream)) => {
             let mut socket = socket;
-            socket.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+            socket
+                .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                .await?;
             tunnel_bidirectional(socket, upstream).await;
             Ok(())
         }
@@ -239,7 +253,7 @@ async fn handle_connect_tunnel(socket: Arc<AsyncTcpStream>, target: &str, config
 
 async fn tunnel_bidirectional(a: Arc<AsyncTcpStream>, b: Arc<AsyncTcpStream>) {
     use edgerun_rt::copy_bidirectional;
-    
+
     let mut a = a;
     let mut b = b;
     let _ = copy_bidirectional(&mut a, &mut b).await;
@@ -270,7 +284,9 @@ async fn handle_http_forward(
     upstream_host: &str,
     upstream_port: u16,
 ) -> std::io::Result<()> {
-    let addr: SocketAddr = format!("{}:{}", upstream_host, upstream_port).parse().unwrap();
+    let addr: SocketAddr = format!("{}:{}", upstream_host, upstream_port)
+        .parse()
+        .unwrap();
 
     let sock = TcpSocket::new_v4()?;
     let upstream = match timeout(std::time::Duration::from_secs(30), sock.connect(addr)).await {
@@ -282,55 +298,89 @@ async fn handle_http_forward(
     let path = parts[1];
 
     let lines: Vec<&str> = request.lines().collect();
-    let host_idx = lines.iter().position(|l| l.to_lowercase().starts_with("host:"));
+    let host_idx = lines
+        .iter()
+        .position(|l| l.to_lowercase().starts_with("host:"));
     let host_header = if let Some(idx) = host_idx {
-        lines[idx].strip_prefix("Host:").map(|s| s.trim()).unwrap_or("")
+        lines[idx]
+            .strip_prefix("Host:")
+            .map(|s| s.trim())
+            .unwrap_or("")
     } else {
         ""
     };
 
-    let forwarded = format!("{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", method, path, host_header);
+    let forwarded = format!(
+        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        method, path, host_header
+    );
 
     socket.write_all(forwarded.as_bytes()).await?;
     tunnel_bidirectional(socket, upstream).await;
     Ok(())
 }
 
-async fn handle_socks5(socket: Arc<AsyncTcpStream>, _addr: SocketAddr, config: ProxyConfig) -> std::io::Result<()> {
+async fn handle_socks5(
+    socket: Arc<AsyncTcpStream>,
+    _addr: SocketAddr,
+    config: ProxyConfig,
+) -> std::io::Result<()> {
     let mut socket = socket.clone();
     let mut buffer = vec![0u8; 1024];
 
     let n = socket.read(&mut buffer).await?;
     if n < 3 || buffer[0] != SOCKS5_VERSION {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "only SOCKS5 supported"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "only SOCKS5 supported",
+        ));
     }
 
     let method_count = buffer[1] as usize;
     let methods = buffer.get(2..2 + method_count).unwrap_or(&[]);
     let has_no_auth = methods.contains(&0x00);
     let has_userpass = methods.contains(&0x02);
-    
-    let method = if has_userpass { 0x02 } else if has_no_auth { 0x00 } else { 0xFF };
-    
+
+    let method = if has_userpass {
+        0x02
+    } else if has_no_auth {
+        0x00
+    } else {
+        0xFF
+    };
+
     if method == 0xFF {
         socket.write_all(&[SOCKS5_VERSION, 0xFF]).await?;
-        return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "no acceptable auth"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "no acceptable auth",
+        ));
     }
-    
+
     socket.write_all(&[SOCKS5_VERSION, method]).await?;
-    
+
     if method == 0x02 {
         authenticate_socks5(&mut socket, &config).await?
     }
 
     let n = socket.read(&mut buffer).await?;
     if n < 5 || buffer[0] != SOCKS5_VERSION || buffer[2] != 0x00 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "bad request"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "bad request",
+        ));
     }
 
     let cmd = buffer[1];
     if cmd != SOCKS5_CMD_CONNECT {
-        send_socks_reply(&mut socket, SOCKS5_REP_CMD_NOT_SUPPORTED, SOCKS5_ATYP_IPV4, "", 0).await?;
+        send_socks_reply(
+            &mut socket,
+            SOCKS5_REP_CMD_NOT_SUPPORTED,
+            SOCKS5_ATYP_IPV4,
+            "",
+            0,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -352,7 +402,14 @@ async fn handle_socks5(socket: Arc<AsyncTcpStream>, _addr: SocketAddr, config: P
         SOCKS5_ATYP_DOMAIN => {
             let len = buffer[4] as usize;
             if n < 5 + len + 2 {
-                send_socks_reply(&mut socket, SOCKS5_REP_ADDR_NOT_SUPPORTED, SOCKS5_ATYP_IPV4, "", 0).await?;
+                send_socks_reply(
+                    &mut socket,
+                    SOCKS5_REP_ADDR_NOT_SUPPORTED,
+                    SOCKS5_ATYP_IPV4,
+                    "",
+                    0,
+                )
+                .await?;
                 return Ok(());
             }
             let host = String::from_utf8_lossy(&buffer[5..5 + len]).to_string();
@@ -360,17 +417,21 @@ async fn handle_socks5(socket: Arc<AsyncTcpStream>, _addr: SocketAddr, config: P
             (host, port)
         }
         _ => {
-            send_socks_reply(&mut socket, SOCKS5_REP_ADDR_NOT_SUPPORTED, SOCKS5_ATYP_IPV4, "", 0).await?;
+            send_socks_reply(
+                &mut socket,
+                SOCKS5_REP_ADDR_NOT_SUPPORTED,
+                SOCKS5_ATYP_IPV4,
+                "",
+                0,
+            )
+            .await?;
             return Ok(());
         }
     };
 
     let addr: SocketAddr = format!("{}:{}", host, port).parse().unwrap();
     let socket2 = TcpSocket::new_v4()?;
-    let connect_result = timeout(
-        config.connect_timeout,
-        socket2.connect(addr),
-    ).await;
+    let connect_result = timeout(config.connect_timeout, socket2.connect(addr)).await;
 
     match connect_result {
         Ok(Ok(upstream)) => {
@@ -392,50 +453,83 @@ async fn handle_socks5(socket: Arc<AsyncTcpStream>, _addr: SocketAddr, config: P
     }
 }
 
-async fn authenticate_socks5(socket: &mut Arc<AsyncTcpStream>, config: &ProxyConfig) -> std::io::Result<()> {
+async fn authenticate_socks5(
+    socket: &mut Arc<AsyncTcpStream>,
+    config: &ProxyConfig,
+) -> std::io::Result<()> {
     let mut buffer = vec![0u8; 515];
     let n = socket.read(&mut buffer).await?;
     if n < 3 || buffer[0] != 0x01 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid auth version"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "invalid auth version",
+        ));
     }
-    
+
     let user_len = buffer[1] as usize;
     if n < 2 + user_len + 1 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "truncated credentials"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "truncated credentials",
+        ));
     }
     let pass_len = buffer[2 + user_len] as usize;
     if n < 2 + user_len + 1 + pass_len {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "truncated credentials"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "truncated credentials",
+        ));
     }
-    
+
     let username = String::from_utf8_lossy(&buffer[2..2 + user_len]).to_string();
-    let password = String::from_utf8_lossy(&buffer[2 + user_len + 1..2 + user_len + 1 + pass_len]).to_string();
-    
+    let password =
+        String::from_utf8_lossy(&buffer[2 + user_len + 1..2 + user_len + 1 + pass_len]).to_string();
+
     let valid = match (&config.username, &config.password) {
         (Some(u), Some(p)) => u == &username && p == &password,
         _ => false,
     };
-    
+
     if valid {
         socket.write_all(&[0x01, 0x00]).await?;
         Ok(())
     } else {
         socket.write_all(&[0x01, 0x01]).await?;
-        Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "invalid credentials"))
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "invalid credentials",
+        ))
     }
 }
 
-async fn send_socks_reply(socket: &mut Arc<AsyncTcpStream>, rep: u8, atyp: u8, host: &str, port: u16) -> std::io::Result<()> {
+async fn send_socks_reply(
+    socket: &mut Arc<AsyncTcpStream>,
+    rep: u8,
+    atyp: u8,
+    host: &str,
+    port: u16,
+) -> std::io::Result<()> {
     let mut reply = vec![SOCKS5_VERSION, rep, 0x00, atyp];
     match atyp {
-        SOCKS5_ATYP_IPV4 => { reply.extend_from_slice(&[0, 0, 0, 0]); reply.extend_from_slice(&port.to_be_bytes()); }
-        SOCKS5_ATYP_DOMAIN => { reply.push(host.len() as u8); reply.extend_from_slice(host.as_bytes()); reply.extend_from_slice(&port.to_be_bytes()); }
+        SOCKS5_ATYP_IPV4 => {
+            reply.extend_from_slice(&[0, 0, 0, 0]);
+            reply.extend_from_slice(&port.to_be_bytes());
+        }
+        SOCKS5_ATYP_DOMAIN => {
+            reply.push(host.len() as u8);
+            reply.extend_from_slice(host.as_bytes());
+            reply.extend_from_slice(&port.to_be_bytes());
+        }
         _ => {}
     }
     socket.write_all(&reply).await
 }
 
-async fn write_response(socket: &mut Arc<AsyncTcpStream>, status: u16, message: &str) -> std::io::Result<()> {
+async fn write_response(
+    socket: &mut Arc<AsyncTcpStream>,
+    status: u16,
+    message: &str,
+) -> std::io::Result<()> {
     let body = message.to_string();
     let status_text = match status {
         400 => "Bad Request",
@@ -445,7 +539,10 @@ async fn write_response(socket: &mut Arc<AsyncTcpStream>, status: u16, message: 
     };
     let response = format!(
         "HTTP/1.1 {} {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        status, status_text, body.len(), body
+        status,
+        status_text,
+        body.len(),
+        body
     );
     socket.write_all(response.as_bytes()).await
 }

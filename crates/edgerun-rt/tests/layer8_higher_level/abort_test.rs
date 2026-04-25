@@ -1,5 +1,5 @@
 // Test JoinHandle::abort() with the actual runtime.
-use edgerun_rt::{Builder, JoinError, Runtime, RuntimeHandle, spawn, spawn_blocking};
+use edgerun_rt::{spawn, spawn_blocking, Builder, JoinError, Runtime, RuntimeHandle};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -59,8 +59,14 @@ fn test_abort_pending_sleep() {
 
     handle.abort();
     let result = rt.block_on(handle);
-    assert!(result.is_err(), "aborted sleeping task should return JoinError");
-    assert!(!completed.load(Ordering::SeqCst), "task body should not complete after abort");
+    assert!(
+        result.is_err(),
+        "aborted sleeping task should return JoinError"
+    );
+    assert!(
+        !completed.load(Ordering::SeqCst),
+        "task body should not complete after abort"
+    );
     println!("  test_abort_pending_sleep OK");
 }
 
@@ -73,7 +79,10 @@ fn test_abort_after_complete_noop() {
 
     // Abort after completion should be a no-op.
     handle.abort();
-    assert!(!handle.is_aborted(), "abort after complete should not set flag");
+    assert!(
+        !handle.is_aborted(),
+        "abort after complete should not set flag"
+    );
     println!("  test_abort_after_complete_noop OK");
 }
 
@@ -103,12 +112,18 @@ fn test_is_finished_after_abort() {
     });
 
     std::thread::sleep(Duration::from_millis(20));
-    assert!(!handle.is_finished(), "should not be finished while sleeping");
+    assert!(
+        !handle.is_finished(),
+        "should not be finished while sleeping"
+    );
 
     handle.abort();
     // is_finished should become true once the result is set.
     let _ = rt.block_on(handle.clone());
-    assert!(handle.is_finished(), "should be finished after abort resolves");
+    assert!(
+        handle.is_finished(),
+        "should be finished after abort resolves"
+    );
     println!("  test_is_finished_after_abort OK");
 }
 
@@ -142,7 +157,10 @@ fn test_abort_via_handle() {
     std::thread::sleep(Duration::from_millis(20));
     task_handle.abort();
     let result = rt.block_on(task_handle);
-    assert!(result.is_err(), "aborted task via handle should return JoinError");
+    assert!(
+        result.is_err(),
+        "aborted task via handle should return JoinError"
+    );
     println!("  test_abort_via_handle OK");
 }
 
@@ -166,7 +184,10 @@ fn test_abort_spawn_blocking() {
 
     // Let it start.
     std::thread::sleep(Duration::from_millis(20));
-    assert!(started.load(Ordering::SeqCst), "blocking task should have started");
+    assert!(
+        started.load(Ordering::SeqCst),
+        "blocking task should have started"
+    );
 
     // Abort should set the flag but blocking task runs to completion.
     handle.abort();
@@ -180,8 +201,14 @@ fn test_abort_spawn_blocking() {
     // Blocking tasks always complete; abort is a flag for async tasks.
     // Since the blocking task already ran, it should have a result.
     // The abort flag on blocking tasks is just metadata.
-    assert!(result.is_ok() || result.is_err(), "result depends on timing");
-    assert!(completed.load(Ordering::SeqCst), "blocking task ran to completion");
+    assert!(
+        result.is_ok() || result.is_err(),
+        "result depends on timing"
+    );
+    assert!(
+        completed.load(Ordering::SeqCst),
+        "blocking task ran to completion"
+    );
     println!("  test_abort_spawn_blocking OK");
 }
 
@@ -246,7 +273,10 @@ fn test_abort_does_not_run_closure() {
     );
 
     let _ = rt.block_on(handle);
-    println!("  test_abort_does_not_run_closure OK (ran {} iters)", after_abort);
+    println!(
+        "  test_abort_does_not_run_closure OK (ran {} iters)",
+        after_abort
+    );
 }
 
 fn test_free_spawn_abort() {
@@ -261,7 +291,10 @@ fn test_free_spawn_abort() {
         std::thread::sleep(Duration::from_millis(20));
         handle.abort();
         let result = handle.await;
-        assert!(result.is_err(), "free-spawn aborted task should return JoinError");
+        assert!(
+            result.is_err(),
+            "free-spawn aborted task should return JoinError"
+        );
     });
     println!("  test_free_spawn_abort OK");
 }

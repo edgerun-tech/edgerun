@@ -45,16 +45,8 @@ impl<P: RemoteCapabilityProvider> MeshCapabilityServer<P> {
     }
 
     /// Processes one inbound envelope for the server, if available.
-    pub fn serve_one(
-        &mut self,
-        _link: &mut MeshLink,
-    ) -> Result<bool, CapabilityError> {
-        let senders: Vec<NodeID> = self
-            .dispatcher
-            .inboxes_mut()
-            .keys()
-            .copied()
-            .collect();
+    pub fn serve_one(&mut self, _link: &mut MeshLink) -> Result<bool, CapabilityError> {
+        let senders: Vec<NodeID> = self.dispatcher.inboxes_mut().keys().copied().collect();
 
         for sender in senders {
             if let Some(inboxes) = self.dispatcher.inboxes_mut().get_mut(&sender) {
@@ -62,7 +54,9 @@ impl<P: RemoteCapabilityProvider> MeshCapabilityServer<P> {
                     if let Some(envelope) = inbox.pop() {
                         let response = self.process_envelope(&sender, envelope)?;
                         if let Some(resp_env) = response {
-                            if let Some(resp_inboxes) = self.dispatcher.inboxes_mut().get_mut(&sender) {
+                            if let Some(resp_inboxes) =
+                                self.dispatcher.inboxes_mut().get_mut(&sender)
+                            {
                                 if let Some(resp_inbox) = resp_inboxes.first_mut() {
                                     resp_inbox.push(resp_env);
                                 }
@@ -89,10 +83,14 @@ impl<P: RemoteCapabilityProvider> MeshCapabilityServer<P> {
                 }))
             }
             Some(capability_remote_envelope::Message::Invocation(invocation)) => {
-                let result = self.provider.invoke(&invocation.grant_id, &invocation, None);
+                let result = self
+                    .provider
+                    .invoke(&invocation.grant_id, &invocation, None);
                 let msg = match result {
                     Ok(resp) => capability_remote_envelope::Message::Result(resp.result),
-                    Err(err) => capability_remote_envelope::Message::Result(invocation_error_result(&invocation, err)),
+                    Err(err) => capability_remote_envelope::Message::Result(
+                        invocation_error_result(&invocation, err),
+                    ),
                 };
                 Ok(Some(CapabilityRemoteEnvelope { message: Some(msg) }))
             }
@@ -102,10 +100,16 @@ impl<P: RemoteCapabilityProvider> MeshCapabilityServer<P> {
                         "invocation frame must contain an invocation",
                     ));
                 };
-                let result = self.provider.invoke(&invocation.grant_id, &invocation, Some(&frame.inline_parameters));
+                let result = self.provider.invoke(
+                    &invocation.grant_id,
+                    &invocation,
+                    Some(&frame.inline_parameters),
+                );
                 let msg = match result {
                     Ok(resp) => capability_remote_envelope::Message::Result(resp.result),
-                    Err(err) => capability_remote_envelope::Message::Result(invocation_error_result(&invocation, err)),
+                    Err(err) => capability_remote_envelope::Message::Result(
+                        invocation_error_result(&invocation, err),
+                    ),
                 };
                 Ok(Some(CapabilityRemoteEnvelope { message: Some(msg) }))
             }

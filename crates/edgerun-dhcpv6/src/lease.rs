@@ -41,8 +41,13 @@ pub struct Dhcpv6Lease {
 
 impl Dhcpv6Lease {
     /// Create a new address lease.
-    pub fn new(client_duid: Vec<u8>, iaid: u32, address: Ipv6Addr,
-              preferred_lifetime: u32, valid_lifetime: u32) -> Self {
+    pub fn new(
+        client_duid: Vec<u8>,
+        iaid: u32,
+        address: Ipv6Addr,
+        preferred_lifetime: u32,
+        valid_lifetime: u32,
+    ) -> Self {
         Self {
             client_duid,
             iaid,
@@ -99,11 +104,21 @@ pub struct PrefixLease {
 }
 
 impl PrefixLease {
-    pub fn new(client_duid: Vec<u8>, iaid: u32, prefix: Ipv6Addr,
-              prefix_len: u8, preferred_lifetime: u32, valid_lifetime: u32) -> Self {
+    pub fn new(
+        client_duid: Vec<u8>,
+        iaid: u32,
+        prefix: Ipv6Addr,
+        prefix_len: u8,
+        preferred_lifetime: u32,
+        valid_lifetime: u32,
+    ) -> Self {
         Self {
-            client_duid, iaid, prefix, prefix_len,
-            preferred_lifetime, valid_lifetime,
+            client_duid,
+            iaid,
+            prefix,
+            prefix_len,
+            preferred_lifetime,
+            valid_lifetime,
             granted_at: Instant::now(),
             state: LeaseState::Bound,
         }
@@ -157,45 +172,64 @@ impl LeasePool {
     }
 
     /// Allocate an address to a client.
-    pub fn allocate_address(&mut self, client_duid: Vec<u8>, iaid: u32,
-                            preferred: u32, valid: u32) -> Option<Ipv6Addr> {
+    pub fn allocate_address(
+        &mut self,
+        client_duid: Vec<u8>,
+        iaid: u32,
+        preferred: u32,
+        valid: u32,
+    ) -> Option<Ipv6Addr> {
         // Find first available address
         if let Some(addr) = self.available_addresses.first().copied() {
             self.available_addresses.remove(0);
             let lease = Dhcpv6Lease::new(client_duid, iaid, addr, preferred, valid);
             self.address_leases.push(lease);
             Some(addr)
-        } else { None }
+        } else {
+            None
+        }
     }
 
     /// Release an address lease.
     pub fn release_address(&mut self, client_duid: &[u8], iaid: u32, addr: Ipv6Addr) {
-        if let Some(pos) = self.address_leases.iter().position(|l| {
-            l.client_duid == client_duid && l.iaid == iaid && l.address == addr
-        }) {
+        if let Some(pos) = self
+            .address_leases
+            .iter()
+            .position(|l| l.client_duid == client_duid && l.iaid == iaid && l.address == addr)
+        {
             let lease = self.address_leases.remove(pos);
             self.available_addresses.push(lease.address);
         }
     }
 
     /// Allocate a prefix to a client.
-    pub fn allocate_prefix(&mut self, client_duid: Vec<u8>, iaid: u32,
-                          preferred: u32, valid: u32) -> Option<(Ipv6Addr, u8)> {
+    pub fn allocate_prefix(
+        &mut self,
+        client_duid: Vec<u8>,
+        iaid: u32,
+        preferred: u32,
+        valid: u32,
+    ) -> Option<(Ipv6Addr, u8)> {
         if let Some((prefix, len)) = self.available_prefixes.first().copied() {
             self.available_prefixes.remove(0);
             let lease = PrefixLease::new(client_duid, iaid, prefix, len, preferred, valid);
             self.prefix_leases.push(lease);
             Some((prefix, len))
-        } else { None }
+        } else {
+            None
+        }
     }
 
     /// Release a prefix lease.
     pub fn release_prefix(&mut self, client_duid: &[u8], iaid: u32) {
-        if let Some(pos) = self.prefix_leases.iter().position(|l| {
-            l.client_duid == client_duid && l.iaid == iaid
-        }) {
+        if let Some(pos) = self
+            .prefix_leases
+            .iter()
+            .position(|l| l.client_duid == client_duid && l.iaid == iaid)
+        {
             let lease = self.prefix_leases.remove(pos);
-            self.available_prefixes.push((lease.prefix, lease.prefix_len));
+            self.available_prefixes
+                .push((lease.prefix, lease.prefix_len));
         }
     }
 
@@ -216,12 +250,18 @@ impl LeasePool {
 
     /// Count active address leases.
     pub fn active_address_count(&self) -> usize {
-        self.address_leases.iter().filter(|l| !l.is_expired()).count()
+        self.address_leases
+            .iter()
+            .filter(|l| !l.is_expired())
+            .count()
     }
 
     /// Count active prefix leases.
     pub fn active_prefix_count(&self) -> usize {
-        self.prefix_leases.iter().filter(|l| !l.is_expired()).count()
+        self.prefix_leases
+            .iter()
+            .filter(|l| !l.is_expired())
+            .count()
     }
 }
 
@@ -239,9 +279,13 @@ mod tests {
     #[test]
     fn test_lease_lifetimes() {
         let duid = vec![0, 1, 0, 1, 0xaa, 0xbb, 0xcc, 0xdd];
-        let lease = Dhcpv6Lease::new(duid, 1,
+        let lease = Dhcpv6Lease::new(
+            duid,
+            1,
             Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1),
-            3600, 7200);
+            3600,
+            7200,
+        );
 
         assert!(lease.preferred_remaining() <= 3600);
         assert!(lease.valid_remaining() <= 7200);

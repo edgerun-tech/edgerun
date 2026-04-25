@@ -7,8 +7,10 @@ use std::time::Duration;
 
 use edgerun_rt::{AsyncUdpSocket, Mutex};
 
-use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT, NetworkConfig};
 use super::lease::LeasePool;
+use super::message::{
+    DhcpMessage, DhcpMessageType, NetworkConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
+};
 
 /// DHCPv4 server configuration.
 pub struct DhcpServerConfig {
@@ -90,13 +92,12 @@ impl DhcpServer {
             DHCP_SERVER_PORT
         );
         let pool = self.pool.lock().await;
-        edgerun_log::info!(
-            "  pool: {} - {}",
-            pool.pool_start, pool.pool_end
-        );
+        edgerun_log::info!("  pool: {} - {}", pool.pool_start, pool.pool_end);
         edgerun_log::info!(
             "  server: {}, router: {}, dns: {:?}",
-            self.config.server_ip, self.config.router, self.config.dns_servers
+            self.config.server_ip,
+            self.config.router,
+            self.config.dns_servers
         );
         drop(pool);
 
@@ -148,9 +149,7 @@ impl DhcpServer {
             DhcpMessageType::Release => self.handle_release(msg).await,
             DhcpMessageType::Decline => self.handle_decline(msg).await,
             DhcpMessageType::Inform => self.handle_inform(msg).await,
-            DhcpMessageType::Offer | DhcpMessageType::Ack | DhcpMessageType::Nak => {
-                Ok(())
-            }
+            DhcpMessageType::Offer | DhcpMessageType::Ack | DhcpMessageType::Nak => Ok(()),
         }
     }
 
@@ -174,11 +173,7 @@ impl DhcpServer {
             }
         };
 
-        edgerun_log::info!(
-            "edgerun-dhcp: sending OFFER {} to {}",
-            ip,
-            format_mac(mac)
-        );
+        edgerun_log::info!("edgerun-dhcp: sending OFFER {} to {}", ip, format_mac(mac));
 
         let (tftp, bootfile) = self.pxe_boot_params(msg);
 
@@ -237,7 +232,8 @@ impl DhcpServer {
             if sid != self.config.server_ip {
                 edgerun_log::info!(
                     "edgerun-dhcp: REQUEST for server {} (we are {}) — ignoring",
-                    sid, self.config.server_ip
+                    sid,
+                    self.config.server_ip
                 );
                 return Ok(());
             }
@@ -261,25 +257,24 @@ impl DhcpServer {
                     pool.release(existing_mac);
                     match pool.allocate(mac, self.config.lease_time, msg.xid) {
                         Some(new_ip) if new_ip == ip => {}
-                        Some(_) => { drop(pool); return self.send_nak(msg.xid).await; }
-                        None => { drop(pool); return self.send_nak(msg.xid).await; }
+                        Some(_) => {
+                            drop(pool);
+                            return self.send_nak(msg.xid).await;
+                        }
+                        None => {
+                            drop(pool);
+                            return self.send_nak(msg.xid).await;
+                        }
                     }
                 }
             } else {
-                edgerun_log::warn!(
-                    "edgerun-dhcp: REQUEST for {} not in our pool — NAK",
-                    ip
-                );
+                edgerun_log::warn!("edgerun-dhcp: REQUEST for {} not in our pool — NAK", ip);
                 drop(pool);
                 return self.send_nak(msg.xid).await;
             }
         }
 
-        edgerun_log::info!(
-            "edgerun-dhcp: sending ACK {} to {}",
-            ip,
-            format_mac(mac)
-        );
+        edgerun_log::info!("edgerun-dhcp: sending ACK {} to {}", ip, format_mac(mac));
         self.send_ack(msg, ip).await
     }
 
@@ -367,9 +362,7 @@ impl DhcpServer {
                 .get(&arch_key)
                 .cloned()
                 .or_else(|| self.config.default_bootfile.clone())
-                .or_else(|| {
-                    Some(arch.default_bootfile().to_string())
-                })
+                .or_else(|| Some(arch.default_bootfile().to_string()))
         } else {
             self.config.default_bootfile.clone()
         };
@@ -379,10 +372,8 @@ impl DhcpServer {
     async fn send_nak(&self, xid: u32) -> Result<(), io::Error> {
         let nak = DhcpMessage::nak(xid, self.config.server_ip);
         let wire = nak.to_wire();
-        let broadcast = SocketAddr::new(
-            std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
-            DHCP_CLIENT_PORT,
-        );
+        let broadcast =
+            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
         let _ = self.socket.send_to(&wire, broadcast).await;
         Ok(())
     }
@@ -391,16 +382,11 @@ impl DhcpServer {
         let wire = msg.to_wire();
 
         if !original.ciaddr.is_unspecified() && !original.broadcast {
-            let addr = SocketAddr::new(
-                std::net::IpAddr::V4(original.ciaddr),
-                DHCP_CLIENT_PORT,
-            );
+            let addr = SocketAddr::new(std::net::IpAddr::V4(original.ciaddr), DHCP_CLIENT_PORT);
             self.socket.send_to(&wire, addr).await?;
         } else {
-            let broadcast = SocketAddr::new(
-                std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
-                DHCP_CLIENT_PORT,
-            );
+            let broadcast =
+                SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
             self.socket.send_to(&wire, broadcast).await?;
         }
         Ok(())
@@ -425,12 +411,7 @@ impl DhcpServer {
 fn network_broadcast(ip: Ipv4Addr, mask: Ipv4Addr) -> Ipv4Addr {
     let i = ip.octets();
     let m = mask.octets();
-    Ipv4Addr::new(
-        i[0] | !m[0],
-        i[1] | !m[1],
-        i[2] | !m[2],
-        i[3] | !m[3],
-    )
+    Ipv4Addr::new(i[0] | !m[0], i[1] | !m[1], i[2] | !m[2], i[3] | !m[3])
 }
 
 fn format_mac(mac: [u8; 6]) -> String {

@@ -60,22 +60,27 @@ mod registry {
 // Re-export runtime types
 pub use bundle::{create_bundle, write_bundle};
 pub use config_builder::ContainerProcessConfig;
-pub use error::{CgroupError, CapabilityError, ConfigError, FifoError, LifecycleError, NamespaceError, OciError, RootfsError, SeccompError};
+pub use error::{
+    CapabilityError, CgroupError, ConfigError, FifoError, LifecycleError, NamespaceError, OciError,
+    RootfsError, SeccompError,
+};
 pub use handle::RunningContainer;
 pub use hooks::execute_poststop_hooks;
 pub use init::fork_and_init;
 pub use json::*;
 pub use lifecycle::{
     delete_container, fork_container_child, run_bundle, run_create_runtime_hooks,
-    run_poststart_hooks, run_prestart_hooks, run_spec, run_spec_with_id,
-    run_poststop_and_cleanup, save_created_state, setup_container_cgroups,
-    signal_start, start_bundle, start_spec, start_spec_with_id,
-    update_state_running,
+    run_poststart_hooks, run_poststop_and_cleanup, run_prestart_hooks, run_spec, run_spec_with_id,
+    save_created_state, setup_container_cgroups, signal_start, start_bundle, start_spec,
+    start_spec_with_id, update_state_running,
 };
 pub use process::{setup_container_child, ContainerConfig};
 pub use rootfs::setup_rootfs;
 pub use rootless::{generate_gid_map, generate_uid_map};
-pub use state::{ContainerState, container_state_dir, fifo_path, load_state, save_state, state_exists, state_file_path, delete_state};
+pub use state::{
+    container_state_dir, delete_state, fifo_path, load_state, save_state, state_exists,
+    state_file_path, ContainerState,
+};
 pub use syscalls::*;
 pub use userns::drop_capabilities;
 
@@ -85,10 +90,11 @@ pub use registry::client::{ImageRef, RegistryClient};
 pub use registry::config::{HistoryEntry, ImageConfig, ImageConfigInner, RootFs};
 pub use registry::dbus_client::SecretClient;
 pub use registry::errors::RegistryError;
-pub use registry::layer::{build_rootfs as registry_build_rootfs, extract_layer, verify_blob_digest};
+pub use registry::layer::{
+    build_rootfs as registry_build_rootfs, extract_layer, verify_blob_digest,
+};
 pub use registry::manifest::{
-    ImageManifest, LayerDescriptor, ManifestDescriptor, PlatformDescriptor,
-    SingleManifest,
+    ImageManifest, LayerDescriptor, ManifestDescriptor, PlatformDescriptor, SingleManifest,
 };
 pub use registry::oci_spec::generate_oci_spec;
 
@@ -106,10 +112,13 @@ pub const DEFAULT_NAMESPACES: &[(&str, Option<&str>)] = &[
 ];
 
 pub fn default_namespaces() -> Vec<OciNamespace> {
-    DEFAULT_NAMESPACES.iter().map(|(t, p)| OciNamespace {
-        ns_type: t.to_string(),
-        path: p.map(String::from),
-    }).collect()
+    DEFAULT_NAMESPACES
+        .iter()
+        .map(|(t, p)| OciNamespace {
+            ns_type: t.to_string(),
+            path: p.map(String::from),
+        })
+        .collect()
 }
 
 pub fn namespace_flags(namespaces: &[OciNamespace]) -> i32 {

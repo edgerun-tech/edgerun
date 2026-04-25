@@ -1,5 +1,5 @@
 // Test Unix domain sockets with the actual runtime.
-use edgerun_rt::{UnixListener, UnixStream, AsyncReadExt, AsyncWriteExt, Runtime, spawn};
+use edgerun_rt::{spawn, AsyncReadExt, AsyncWriteExt, Runtime, UnixListener, UnixStream};
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,7 +72,8 @@ fn test_echo_server() {
 
     let client_path = path.clone();
     let client = spawn(async move {
-        let std_stream = std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
+        let std_stream =
+            std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
         std_stream.set_nonblocking(true).unwrap();
         let fd = unsafe { libc::dup(std_stream.as_raw_fd()) };
         std::mem::forget(std_stream);
@@ -111,7 +112,8 @@ fn test_split_read_write_halves() {
 
     let client_path = path.clone();
     let client = spawn(async move {
-        let std_stream = std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
+        let std_stream =
+            std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
         std_stream.set_nonblocking(true).unwrap();
         let fd = unsafe { libc::dup(std_stream.as_raw_fd()) };
         std::mem::forget(std_stream);
@@ -147,7 +149,8 @@ fn test_shutdown_write() {
 
     let client_path = path.clone();
     let client = spawn(async move {
-        let std_stream = std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
+        let std_stream =
+            std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
         std_stream.set_nonblocking(true).unwrap();
         let fd = unsafe { libc::dup(std_stream.as_raw_fd()) };
         std::mem::forget(std_stream);
@@ -195,7 +198,10 @@ fn test_multiple_connections() {
             let fd = unsafe { libc::dup(std_stream.as_raw_fd()) };
             std::mem::forget(std_stream);
             let mut stream = UnixStream::from_fd(fd);
-            stream.write_all(msg.as_bytes()).await.expect("write failed");
+            stream
+                .write_all(msg.as_bytes())
+                .await
+                .expect("write failed");
             let mut buf = [0u8; 32];
             let n = stream.read(&mut buf).await.expect("read failed");
             assert_eq!(&buf[..n], msg.as_bytes());
@@ -228,14 +234,18 @@ fn test_clone_stream() {
 
         let mut buf = [0u8; 32];
         let n = clone.read(&mut buf).await.expect("read via clone failed");
-        stream.write_all(&buf[..n]).await.expect("write back failed");
+        stream
+            .write_all(&buf[..n])
+            .await
+            .expect("write back failed");
     });
 
     std::thread::sleep(Duration::from_millis(20));
 
     let client_path = path.clone();
     let client = spawn(async move {
-        let std_stream = std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
+        let std_stream =
+            std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
         std_stream.set_nonblocking(true).unwrap();
         let fd = unsafe { libc::dup(std_stream.as_raw_fd()) };
         std::mem::forget(std_stream);
@@ -312,22 +322,33 @@ fn test_try_clone() {
         // underlying socket. Both FDs can read/write the same connection.
         let mut cloned = stream.try_clone().expect("try_clone failed");
         // Different FD numbers are expected — dup() allocates a new descriptor.
-        assert_ne!(stream.as_raw_fd(), cloned.as_raw_fd(), "try_clone should return a new fd");
+        assert_ne!(
+            stream.as_raw_fd(),
+            cloned.as_raw_fd(),
+            "try_clone should return a new fd"
+        );
 
         // Read from original (client sends data)
         let mut buf = [0u8; 32];
-        let n = stream.read(&mut buf).await.expect("read from original failed");
+        let n = stream
+            .read(&mut buf)
+            .await
+            .expect("read from original failed");
         assert_eq!(&buf[..n], b"clone test");
 
         // Write back via cloned handle — proves both FDs share the same socket
-        cloned.write_all(b"cloned echo").await.expect("write via clone failed");
+        cloned
+            .write_all(b"cloned echo")
+            .await
+            .expect("write via clone failed");
     });
 
     std::thread::sleep(Duration::from_millis(20));
 
     let client_path = path.clone();
     let client = spawn(async move {
-        let std_stream = std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
+        let std_stream =
+            std::os::unix::net::UnixStream::connect(&client_path).expect("client connect");
         std_stream.set_nonblocking(true).unwrap();
         let fd = unsafe { libc::dup(std_stream.as_raw_fd()) };
         std::mem::forget(std_stream);

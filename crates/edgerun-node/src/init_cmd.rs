@@ -15,8 +15,14 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("error: no secure hardware found.");
         eprintln!();
         eprintln!("Available hardware backends:");
-        eprintln!("  TPM 2.0:    {} (device: /dev/tpmrm0)", if has_tpm { "FOUND" } else { "not found" });
-        eprintln!("  YubiKey:    {}", if has_yubikey { "FOUND" } else { "not found" });
+        eprintln!(
+            "  TPM 2.0:    {} (device: /dev/tpmrm0)",
+            if has_tpm { "FOUND" } else { "not found" }
+        );
+        eprintln!(
+            "  YubiKey:    {}",
+            if has_yubikey { "FOUND" } else { "not found" }
+        );
         eprintln!();
         eprintln!("For development only, you can generate a software key with --software:");
         eprintln!("  edgerund init --config {} --software", path.display());
@@ -29,10 +35,11 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!();
         let mut key_bytes = [0u8; 32];
         edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
-        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).unwrap_or_else(|e| {
-            eprintln!("error: failed to create signing key: {}", e);
-            std::process::exit(1);
-        });
+        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
+            .unwrap_or_else(|e| {
+                eprintln!("error: failed to create signing key: {}", e);
+                std::process::exit(1);
+            });
         let verifying_key = signing_key.verifying_key();
         let encoded = verifying_key.to_encoded_point(false);
         let mut node_id_bytes = [0u8; 64];
@@ -53,15 +60,16 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("  TPM device: /dev/tpmrm0");
 
         // Find an available persistent handle
-        let persistent_handle = find_available_tpm_handle(0x8100_0001, 0x8100_00FF)
-            .unwrap_or_else(|e| {
+        let persistent_handle =
+            find_available_tpm_handle(0x8100_0001, 0x8100_00FF).unwrap_or_else(|e| {
                 eprintln!("error: failed to scan TPM handles: {}", e);
                 std::process::exit(1);
             });
 
         // Create and persist the TPM key using native TPM commands
         let provisioned_key = {
-            let mut tpm = edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
+            let mut tpm =
+                edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
             tpm.create_ecdsa_p256_signing_key(persistent_handle)
                 .unwrap_or_else(|e| {
                     eprintln!("error: failed to create TPM signing key: {}", e);
@@ -77,7 +85,10 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         pub_bytes[32..].copy_from_slice(y_bytes);
         let node_id = NodeID(pub_bytes);
 
-        eprintln!("  Persistent handle: 0x{:08X}", provisioned_key.persistent_handle);
+        eprintln!(
+            "  Persistent handle: 0x{:08X}",
+            provisioned_key.persistent_handle
+        );
         eprintln!("  Public key: {}", node_id.to_hex());
 
         let signer_block = format!(
@@ -98,7 +109,10 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         });
         let device_display = format!("{:03}:{:03}", device.bus, device.device);
 
-        let yubikey = edgerun_yubikey::LinuxPcscYubiKey::new(device, edgerun_yubikey::YubiKeyPivSlot::Authentication);
+        let yubikey = edgerun_yubikey::LinuxPcscYubiKey::new(
+            device,
+            edgerun_yubikey::YubiKeyPivSlot::Authentication,
+        );
         let yubi_key_info = yubikey.key_info().unwrap_or_else(|e| {
             eprintln!("error: failed to read YubiKey key info: {}", e);
             eprintln!();
@@ -117,7 +131,10 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         }
 
         if yubi_key_info.public_key.len() != 64 {
-            eprintln!("error: YubiKey public key is not 64 bytes (got {})", yubi_key_info.public_key.len());
+            eprintln!(
+                "error: YubiKey public key is not 64 bytes (got {})",
+                yubi_key_info.public_key.len()
+            );
             std::process::exit(1);
         }
 
@@ -132,7 +149,8 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         let signer_block = r#"signer:
   type: "yubikey"
   handle: "9a"
-"#.to_string();
+"#
+        .to_string();
         (node_id, signer_block)
     };
 
@@ -175,7 +193,10 @@ initial_grants: []
     println!("  Config:     {}", path.display());
     println!();
     println!("Start the node with:");
-    println!("  edgerund run --config {} --listen 0.0.0.0:8080", path.display());
+    println!(
+        "  edgerund run --config {} --listen 0.0.0.0:8080",
+        path.display()
+    );
     println!();
 
     // Run benchmarks and cache performance certificate
@@ -221,7 +242,12 @@ pub fn detect_yubikey_device() -> Result<edgerun_yubikey::LinuxUsbYubiKeyInfo, S
         .ok_or_else(|| "no YubiKey devices found on USB bus".into())
 }
 
-pub fn cmd_init_encrypted(path: &PathBuf, key_path: &PathBuf, name: Option<String>, passphrase: Option<String>) {
+pub fn cmd_init_encrypted(
+    path: &PathBuf,
+    key_path: &PathBuf,
+    name: Option<String>,
+    passphrase: Option<String>,
+) {
     let passphrase = passphrase.unwrap_or_else(|| {
         eprintln!("error: --passphrase is required for encrypted key generation");
         eprintln!("Usage: edgerund init-encrypted --config <path> --key-file <path> --passphrase <passphrase>");
@@ -236,10 +262,11 @@ pub fn cmd_init_encrypted(path: &PathBuf, key_path: &PathBuf, name: Option<Strin
     eprintln!("Generating ECDSA P-256 signing key...");
     let mut key_bytes = [0u8; 32];
     edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
-    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).unwrap_or_else(|e| {
-        eprintln!("error: failed to create signing key: {}", e);
-        std::process::exit(1);
-    });
+    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
+        .unwrap_or_else(|e| {
+            eprintln!("error: failed to create signing key: {}", e);
+            std::process::exit(1);
+        });
 
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(false);
@@ -299,9 +326,14 @@ initial_grants: []
     println!();
     println!("To start the node, set the passphrase and run:");
     println!("  export EDGERUN_KEY_PASSPHRASE='{}'", passphrase);
-    println!("  edgerund run --config {} --listen 0.0.0.0:8080", path.display());
+    println!(
+        "  edgerund run --config {} --listen 0.0.0.0:8080",
+        path.display()
+    );
     println!();
-    println!("IMPORTANT: Keep the key file safe. Without the passphrase, the key cannot be recovered.");
+    println!(
+        "IMPORTANT: Keep the key file safe. Without the passphrase, the key cannot be recovered."
+    );
 }
 
 const PIN_CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -320,10 +352,11 @@ pub fn generate_pairing_pin() -> String {
 pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Option<String>) {
     let mut key_bytes = [0u8; 32];
     edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
-    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).unwrap_or_else(|e| {
-        eprintln!("error: failed to create signing key: {}", e);
-        std::process::exit(1);
-    });
+    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
+        .unwrap_or_else(|e| {
+            eprintln!("error: failed to create signing key: {}", e);
+            std::process::exit(1);
+        });
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(false);
     let mut node_id_bytes = [0u8; 64];
@@ -337,7 +370,14 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     let controller_str = if controller_list.is_empty() {
         String::new()
     } else {
-        format!("controllers: [{}]", controller_list.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
+        format!(
+            "controllers: [{}]",
+            controller_list
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     };
 
     let signer_block = format!(
@@ -386,13 +426,22 @@ metadata:
     eprintln!("Configuration saved to: {}", path.display());
     eprintln!();
     eprintln!("FROM YOUR LAPTOP, run:");
-    eprintln!("  edgerund provision --config {} --pin {}", path.display(), pairing_pin);
+    eprintln!(
+        "  edgerund provision --config {} --pin {}",
+        path.display(),
+        pairing_pin
+    );
     eprintln!();
     eprintln!("The node is now advertising in provisioning mode.");
     eprintln!("Once provisioned, the password will be required on boot.");
 }
 
-pub fn cmd_provision(config_path: &PathBuf, pin: &str, password: Option<String>, target_addr: Option<String>) {
+pub fn cmd_provision(
+    config_path: &PathBuf,
+    pin: &str,
+    password: Option<String>,
+    target_addr: Option<String>,
+) {
     let yaml = fs::read_to_string(config_path).unwrap_or_else(|e| {
         eprintln!("error: failed to read config: {}", e);
         std::process::exit(1);
@@ -446,20 +495,22 @@ pub fn cmd_provision(config_path: &PathBuf, pin: &str, password: Option<String>,
 }
 
 fn provision_sync(target: &str, pin: &str, passphrase: &str, node_id: &str) -> Result<(), String> {
-    use std::net::TcpStream;
     use std::io::{Read, Write};
+    use std::net::TcpStream;
 
     let mut stream = TcpStream::connect(target).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
 
     let payload = format!(
         "{{\"type\":\"provision\",\"pin\":\"{}\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
-        pin,
-        passphrase,
-        node_id
+        pin, passphrase, node_id
     );
 
-    stream.write_all(payload.as_bytes()).map_err(|e| e.to_string())?;
+    stream
+        .write_all(payload.as_bytes())
+        .map_err(|e| e.to_string())?;
     stream.flush().map_err(|e| e.to_string())?;
 
     let mut buf = [0u8; 256];
@@ -513,19 +564,22 @@ pub fn cmd_unlock(config_path: &PathBuf, password: Option<String>, target_addr: 
 }
 
 fn unlock_sync(target: &str, passphrase: &str, node_id: &str) -> Result<(), String> {
-    use std::net::TcpStream;
     use std::io::{Read, Write};
+    use std::net::TcpStream;
 
     let mut stream = TcpStream::connect(target).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
 
     let payload = format!(
         "{{\"type\":\"unlock\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
-        passphrase,
-        node_id
+        passphrase, node_id
     );
 
-    stream.write_all(payload.as_bytes()).map_err(|e| e.to_string())?;
+    stream
+        .write_all(payload.as_bytes())
+        .map_err(|e| e.to_string())?;
     stream.flush().map_err(|e| e.to_string())?;
 
     let mut buf = [0u8; 256];

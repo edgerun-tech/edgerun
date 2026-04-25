@@ -1,7 +1,5 @@
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_linux_sysfs::{
-    parse_hex_u16, parse_hex_u8, parse_u32, parse_u8, read_trimmed,
-};
+use edgerun_linux_sysfs::{parse_hex_u16, parse_hex_u8, parse_u32, parse_u8, read_trimmed};
 use edgerun_usb::{
     default_usb_descriptor, UsbDeviceInfo, UsbInterfaceInfo, UsbInventory, UsbSpeed,
 };
@@ -434,7 +432,9 @@ mod tests {
         fs::create_dir_all(root.join("2-1")).unwrap();
         fs::write(root.join("2-1/idVendor"), "abcd\n").unwrap();
         fs::write(root.join("2-1/busnum"), "2\n").unwrap();
-        let backend = LinuxUsbBackend { root_path: root.clone() };
+        let backend = LinuxUsbBackend {
+            root_path: root.clone(),
+        };
         let devices = backend.list_devices().unwrap();
         assert_eq!(devices.len(), 1);
         assert_eq!(devices[0].vendor_id, Some(0xabcd));

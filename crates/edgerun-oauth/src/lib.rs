@@ -67,42 +67,24 @@ mod server;
 mod token_store;
 mod types;
 
-pub use edgerun_encoding::base64::{base64url_encode, base64url_decode, base64url_nopad_encode};
-pub use client::{OAuthClient as LegacyOAuthClient, DeviceFlowCallback};
-pub use discovery::{OidcDiscoveryDocument, JwksDocument, Jwk};
-pub use errors::{OAuthError, DeviceError};
-pub use jwt::{IdToken, JwtHeader, JwtPayload, JwtVerifier, verifier_from_jwk};
+pub use client::{DeviceFlowCallback, OAuthClient as LegacyOAuthClient};
+pub use discovery::{Jwk, JwksDocument, OidcDiscoveryDocument};
+pub use edgerun_encoding::base64::{base64url_decode, base64url_encode, base64url_nopad_encode};
+pub use errors::{DeviceError, OAuthError};
+pub use jwt::{verifier_from_jwk, IdToken, JwtHeader, JwtPayload, JwtVerifier};
 pub use oauth_client::{
-    OAuthClient,
-    OAuthClientBuilder,
-    BearerTokenMiddleware,
-    AutoRefreshMiddleware,
+    AutoRefreshMiddleware, BearerTokenMiddleware, OAuthClient, OAuthClientBuilder,
 };
 pub use pkce::PkcePair;
-pub use server::{OAuthServer, ServerConfig, ClientRegistration, Claims, BearerAuthMiddleware};
-pub use token_store::{TokenStore, default_token_path};
+pub use server::{BearerAuthMiddleware, Claims, ClientRegistration, OAuthServer, ServerConfig};
+pub use token_store::{default_token_path, TokenStore};
 
 // Re-export edgerun-http middleware types for convenience
 pub use edgerun_http::client_middleware::{
-    Chain as ClientChain,
-    Client,
-    ClientRequest,
-    ClientExtensions,
-    ClientMiddleware,
-    ClientNext,
-    ClientTransport,
-    client_middleware_fn,
+    client_middleware_fn, Chain as ClientChain, Client, ClientExtensions, ClientMiddleware,
+    ClientNext, ClientRequest, ClientTransport,
 };
 pub use types::{
-    ClientConfig,
-    Credentials,
-    GrantType,
-    OAuthCallback,
-    OAuthRequest,
-    OAuthResponse,
-    Scope,
-    TokenRequest,
-    TokenResponse,
-    DeviceAuthorizationRequest,
-    DeviceAuthorizationResponse,
+    ClientConfig, Credentials, DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType,
+    OAuthCallback, OAuthRequest, OAuthResponse, Scope, TokenRequest, TokenResponse,
 };

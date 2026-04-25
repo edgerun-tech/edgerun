@@ -7,10 +7,10 @@
 //!
 //! All messages after ServerHello are encrypted.
 
-use edgerun_crypto::CipherSuite;
 use crate::cipher::NamedGroup;
 use crate::Result;
 use crate::TlsError;
+use edgerun_crypto::CipherSuite;
 use std::io::Read;
 
 /// ClientHello message builder
@@ -65,8 +65,10 @@ impl ClientHelloBuilder {
         // KeyShareEntry encoding:
         //   group (2 bytes) + key_exchange length (2 bytes) + key_exchange (variable)
         self.key_share.clear();
-        self.key_share.extend_from_slice(&group.to_wire().to_be_bytes());
-        self.key_share.extend_from_slice(&(public_key.len() as u16).to_be_bytes());
+        self.key_share
+            .extend_from_slice(&group.to_wire().to_be_bytes());
+        self.key_share
+            .extend_from_slice(&(public_key.len() as u16).to_be_bytes());
         self.key_share.extend_from_slice(public_key);
         self
     }
@@ -201,7 +203,7 @@ impl ClientHelloBuilder {
             // PSK identities list
             let identities_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // identities length placeholder
-            // Identity entry
+                                                  // Identity entry
             psk_ext.extend_from_slice(&(ticket.len() as u16).to_be_bytes());
             psk_ext.extend_from_slice(ticket);
             psk_ext.extend_from_slice(&obfuscated_age.to_be_bytes());
@@ -213,7 +215,7 @@ impl ClientHelloBuilder {
             // PSK binders list
             let binders_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // binders length placeholder
-            // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
+                                                  // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
             let binder_len = 32; // SHA-256 output
             psk_ext.push(binder_len as u8);
             psk_ext.extend_from_slice(&vec![0u8; binder_len]);
@@ -271,9 +273,10 @@ impl ServerHello {
         }
 
         if data[0] != 2 {
-            return Err(TlsError::HandshakeFailure(
-                format!("Expected ServerHello (type 2), got {}", data[0]),
-            ));
+            return Err(TlsError::HandshakeFailure(format!(
+                "Expected ServerHello (type 2), got {}",
+                data[0]
+            )));
         }
 
         let msg_len = u32::from_be_bytes([0, data[1], data[2], data[3]]) as usize;
@@ -286,14 +289,18 @@ impl ServerHello {
 
         // Legacy version
         if pos + 2 > msg.len() {
-            return Err(TlsError::HandshakeFailure("ServerHello: legacy_version truncated".into()));
+            return Err(TlsError::HandshakeFailure(
+                "ServerHello: legacy_version truncated".into(),
+            ));
         }
         let legacy_version = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
         pos += 2;
 
         // Random
         if pos + 32 > msg.len() {
-            return Err(TlsError::HandshakeFailure("ServerHello: random truncated".into()));
+            return Err(TlsError::HandshakeFailure(
+                "ServerHello: random truncated".into(),
+            ));
         }
         let mut random = [0u8; 32];
         random.copy_from_slice(&msg[pos..pos + 32]);
@@ -301,28 +308,36 @@ impl ServerHello {
 
         // Session ID
         if pos >= msg.len() {
-            return Err(TlsError::HandshakeFailure("ServerHello: session_id length missing".into()));
+            return Err(TlsError::HandshakeFailure(
+                "ServerHello: session_id length missing".into(),
+            ));
         }
         let sid_len = msg[pos] as usize;
         pos += 1;
         if pos + sid_len > msg.len() {
-            return Err(TlsError::HandshakeFailure("ServerHello: session_id truncated".into()));
+            return Err(TlsError::HandshakeFailure(
+                "ServerHello: session_id truncated".into(),
+            ));
         }
         let session_id = msg[pos..pos + sid_len].to_vec();
         pos += sid_len;
 
         // Cipher suite
         if pos + 2 > msg.len() {
-            return Err(TlsError::HandshakeFailure("ServerHello: cipher_suite truncated".into()));
+            return Err(TlsError::HandshakeFailure(
+                "ServerHello: cipher_suite truncated".into(),
+            ));
         }
         let cs = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
-        let cipher_suite = CipherSuite::from_wire(cs)
-            .map_err(|e| TlsError::HandshakeFailure(e.to_string()))?;
+        let cipher_suite =
+            CipherSuite::from_wire(cs).map_err(|e| TlsError::HandshakeFailure(e.to_string()))?;
         pos += 2;
 
         // Legacy compression
         if pos >= msg.len() {
-            return Err(TlsError::HandshakeFailure("ServerHello: compression truncated".into()));
+            return Err(TlsError::HandshakeFailure(
+                "ServerHello: compression truncated".into(),
+            ));
         }
         let legacy_compression = msg[pos];
         pos += 1;
@@ -333,7 +348,9 @@ impl ServerHello {
 
         if pos < msg.len() {
             if pos + 2 > msg.len() {
-                return Err(TlsError::HandshakeFailure("ServerHello: ext_len truncated".into()));
+                return Err(TlsError::HandshakeFailure(
+                    "ServerHello: ext_len truncated".into(),
+                ));
             }
             let ext_len = u16::from_be_bytes([msg[pos], msg[pos + 1]]) as usize;
             pos += 2;

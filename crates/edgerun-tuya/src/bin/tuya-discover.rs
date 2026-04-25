@@ -20,8 +20,7 @@ fn main() {
             Ok(devices) if !devices.is_empty() => {
                 println!("Found {} device(s):", devices.len());
                 for dev in devices {
-                    println!("  - {} @ {} (type: {:?})",
-                        dev.id, dev.ip, dev.product_type);
+                    println!("  - {} @ {} (type: {:?})", dev.id, dev.ip, dev.product_type);
                 }
             }
             Ok(_) => {

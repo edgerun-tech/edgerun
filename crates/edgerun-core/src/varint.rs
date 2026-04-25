@@ -2,7 +2,7 @@
 //!
 //! Delegates to `edgerun_encoding::varint`.
 
-pub use edgerun_encoding::varint::{VarintError, decode_varint_slice, encode_varint};
+pub use edgerun_encoding::varint::{decode_varint_slice, encode_varint, VarintError};
 
 /// Decodes a varint from a `Read` source (backward-compatible wrapper).
 /// Returns `Ok(None)` on EOF (no bytes read), `Err` on partial read.
@@ -17,7 +17,10 @@ pub fn decode_varint_from_read<R: std::io::Read>(r: &mut R) -> std::io::Result<O
                 if shift == 0 {
                     return Ok(None);
                 } else {
-                    return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "truncated varint"));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "truncated varint",
+                    ));
                 }
             }
             Err(e) => return Err(e),
@@ -29,7 +32,10 @@ pub fn decode_varint_from_read<R: std::io::Read>(r: &mut R) -> std::io::Result<O
         }
         shift += 7;
         if shift >= 64 {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "varint too long"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "varint too long",
+            ));
         }
     }
 }

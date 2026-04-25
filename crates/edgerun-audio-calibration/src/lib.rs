@@ -103,10 +103,7 @@ pub fn run_speaker_mic_sweep(
     let mut level = config.start_level_percent;
     let mut out = Vec::new();
     loop {
-        let device_path = format!(
-            "/dev/snd/pcmC{}D{}c",
-            pcm.card_index, pcm.device_index
-        );
+        let device_path = format!("/dev/snd/pcmC{}D{}c", pcm.card_index, pcm.device_index);
         let mut mic = AlsaMicrophoneBackend {
             pcm: pcm.clone(),
             device_path,
@@ -336,7 +333,7 @@ mod tests {
     fn analyze_s16le_rms_lower_than_peak() {
         // Mix of quiet and loud samples
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(&100i16.to_le_bytes());  // quiet
+        bytes.extend_from_slice(&100i16.to_le_bytes()); // quiet
         bytes.extend_from_slice(&16000i16.to_le_bytes()); // loud
         let (rms_dbfs, peak_dbfs, _clipped, total) = analyze_s16le_monoish(&bytes);
         assert_eq!(total, 2);

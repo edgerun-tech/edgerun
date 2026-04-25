@@ -393,7 +393,9 @@ mod tests {
         .unwrap_err();
         assert!(matches!(
             err,
-            CameraBiometricError::InvalidRequest("liveness challenge must require at least one stream")
+            CameraBiometricError::InvalidRequest(
+                "liveness challenge must require at least one stream"
+            )
         ));
     }
 
@@ -455,7 +457,10 @@ mod tests {
     fn camera_pixel_format_variants() {
         assert_ne!(CameraPixelFormat::Mjpeg, CameraPixelFormat::Yuyv);
         assert_ne!(CameraPixelFormat::Nv12, CameraPixelFormat::Rgb24);
-        assert_ne!(CameraPixelFormat::Gray8, CameraPixelFormat::Other(0x12345678));
+        assert_ne!(
+            CameraPixelFormat::Gray8,
+            CameraPixelFormat::Other(0x12345678)
+        );
         assert_eq!(CameraPixelFormat::Other(42), CameraPixelFormat::Other(42));
         assert_ne!(CameraPixelFormat::Other(1), CameraPixelFormat::Other(2));
     }

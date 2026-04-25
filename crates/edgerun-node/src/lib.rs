@@ -17,12 +17,12 @@ use edgerun_core::command::{validate_command, CommandValidationContext};
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_core::result::Verdict;
 use edgerun_core::value::Value;
-use edgerun_stream::{StreamWriter, StreamError};
 use edgerun_hardware_signing::NodeID;
+use edgerun_stream::{StreamError, StreamWriter};
 // Simple YAML config parser (no serde dependency)
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::fmt;
+use std::sync::Arc;
 
 /// Node error types.
 #[derive(Debug)]
@@ -81,7 +81,9 @@ impl NodeConfig {
         let mut current_list: Option<&mut Vec<String>> = None;
         for line in yaml.lines() {
             let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
             if let Some(stripped) = trimmed.strip_prefix("- ") {
                 // List item continuation
                 if let Some(ref mut list) = current_list {
@@ -91,7 +93,7 @@ impl NodeConfig {
             }
             if let Some(colon) = trimmed.find(':') {
                 let key = trimmed[..colon].trim();
-                let val = trimmed[colon+1..].trim();
+                let val = trimmed[colon + 1..].trim();
                 current_list = None; // reset list context
                 match key {
                     "stream_id" => config.stream_id = unquote(val),
@@ -127,7 +129,9 @@ impl NodeConfig {
     pub fn to_yaml(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!("stream_id: \"{}\"\n", self.stream_id));
-        if let Some(ref name) = self.name { out.push_str(&format!("name: \"{}\"\n", name)); }
+        if let Some(ref name) = self.name {
+            out.push_str(&format!("name: \"{}\"\n", name));
+        }
         out.push_str(&format!("controllers: {:?}\n", self.controllers));
         out.push_str(&format!("trust_nodes: {:?}\n", self.trust_nodes));
         out
@@ -197,9 +201,12 @@ impl Node {
         // Controllers must be hex-encoded 64-byte identity IDs (P-256 public keys).
         // Strings that are not valid 128-char hex are silently skipped — they can
         // never match a real delegation root issuer.
-        let trusted_root_ids: Vec<Vec<u8>> = self.config.controllers.iter().filter_map(|s| {
-            edgerun_core::util::hex_to_bytes(s).ok()
-        }).collect();
+        let trusted_root_ids: Vec<Vec<u8>> = self
+            .config
+            .controllers
+            .iter()
+            .filter_map(|s| edgerun_core::util::hex_to_bytes(s).ok())
+            .collect();
 
         let ctx = CommandValidationContext {
             local_node_id: &self.identity.0,
@@ -215,26 +222,37 @@ impl Node {
         match result.verdict {
             Verdict::Accept => {
                 self.record_commitment(command);
-                if let Some(Value::String(cmd_id)) = result.derived.as_map().and_then(|m| m.get("command_id")) {
-                    if let Some(Value::String(cmd_hash)) = result.derived.as_map().and_then(|m| m.get("command_hash")) {
+                if let Some(Value::String(cmd_id)) =
+                    result.derived.as_map().and_then(|m| m.get("command_id"))
+                {
+                    if let Some(Value::String(cmd_hash)) =
+                        result.derived.as_map().and_then(|m| m.get("command_hash"))
+                    {
                         self.processed_commands.insert(
                             edgerun_core::util::hex_to_bytes(cmd_hash).unwrap_or_default(),
-                            (edgerun_core::util::hex_to_bytes(cmd_id).unwrap_or_default(), 0i64),
+                            (
+                                edgerun_core::util::hex_to_bytes(cmd_id).unwrap_or_default(),
+                                0i64,
+                            ),
                         );
                     }
                 }
                 Ok(())
             }
-            Verdict::Duplicate => {
-                Ok(())
-            }
+            Verdict::Duplicate => Ok(()),
             Verdict::Defer => {
-                let reason = result.reason_code.map(|r| r.as_str().to_string()).unwrap_or_else(|| "deferred".into());
+                let reason = result
+                    .reason_code
+                    .map(|r| r.as_str().to_string())
+                    .unwrap_or_else(|| "deferred".into());
                 self.record_rejection(command, &reason);
                 Err(NodeError::CommandDeferred(reason))
             }
             Verdict::Reject => {
-                let reason = result.reason_code.map(|r| r.as_str().to_string()).unwrap_or_else(|| "invalid".into());
+                let reason = result
+                    .reason_code
+                    .map(|r| r.as_str().to_string())
+                    .unwrap_or_else(|| "invalid".into());
                 self.record_rejection(command, &reason);
                 Err(NodeError::CommandRejected(reason))
             }
@@ -276,19 +294,15 @@ impl Node {
     }
 
     fn record_rejection(&mut self, _command: &CommandEnvelope, _reason: &str) {
-        let _ = self.stream_writer.append(
-            EventType::CommandRejected as i32,
-            1,
-            now_ms(),
-        );
+        let _ = self
+            .stream_writer
+            .append(EventType::CommandRejected as i32, 1, now_ms());
     }
 
     fn record_commitment(&mut self, _command: &CommandEnvelope) {
-        let _ = self.stream_writer.append(
-            EventType::CommandCommitted as i32,
-            1,
-            now_ms(),
-        );
+        let _ = self
+            .stream_writer
+            .append(EventType::CommandCommitted as i32, 1, now_ms());
     }
 }
 
@@ -318,11 +332,10 @@ fn parse_list(val: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_hardware_signing::MeshSigner;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_hardware_signing::MeshSigner;
     use std::sync::Arc;
-
 
     struct TestSigner {
         node_id: NodeID,
@@ -352,8 +365,10 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(digest)
-                .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
+                self.key.sign_prehash(digest).map_err(|e| {
+                    edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string())
+                })?;
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());
             Ok(bytes)
@@ -777,7 +792,13 @@ trust_nodes: []
                 node_id: node.identity().0.to_vec(),
             }),
             issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
-                identity_id: node.config().controllers.first().unwrap().as_bytes().to_vec(),
+                identity_id: node
+                    .config()
+                    .controllers
+                    .first()
+                    .unwrap()
+                    .as_bytes()
+                    .to_vec(),
                 identity_kind: Some(2),
                 key_hint: Some(vec![0u8; 64]), // wrong key, will fail signature
             }),
@@ -787,7 +808,8 @@ trust_nodes: []
                 seconds: (std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
-                    .as_millis() as i64) / 1000,
+                    .as_millis() as i64)
+                    / 1000,
                 nanos: 0,
             }),
             not_before: None,

@@ -3,17 +3,12 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use edgerun_http::{HttpClient, Request, Response, HeaderMap};
+use edgerun_http::{HeaderMap, HttpClient, Request, Response};
 
 use super::auth::{parse_bearer_auth, RegistryAuth};
-use super::config::{
-    parse_image_config, parse_json_bytes, parse_manifest,
-    parse_single_manifest,
-};
+use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest};
 use super::errors::RegistryError;
-use super::layer::{
-    apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest,
-};
+use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest};
 use super::manifest::{ImageManifest, SingleManifest};
 use super::oci_spec::generate_oci_spec;
 use super::urlencoding;
@@ -157,10 +152,15 @@ impl RegistryClient {
         let request = builder.build()?;
 
         let client = HttpClient::new().no_redirects();
-        let resp = client.execute(&request).await.map_err(|e| RegistryError::HttpError(e.to_string()))?;
+        let resp = client
+            .execute(&request)
+            .await
+            .map_err(|e| RegistryError::HttpError(e.to_string()))?;
 
         if resp.status().as_u16() == 401 {
-            let www_auth = resp.headers().get("www-authenticate")
+            let www_auth = resp
+                .headers()
+                .get("www-authenticate")
                 .or_else(|| resp.headers().get("WWW-Authenticate"))
                 .map(|v| v.as_str())
                 .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
@@ -176,7 +176,10 @@ impl RegistryClient {
                 builder2 = builder2.header("Authorization", &format!("Bearer {}", token));
             }
             let request2 = builder2.build()?;
-            let resp2 = client.execute(&request2).await.map_err(|e| RegistryError::HttpError(e.to_string()))?;
+            let resp2 = client
+                .execute(&request2)
+                .await
+                .map_err(|e| RegistryError::HttpError(e.to_string()))?;
             if resp2.status().as_u16() >= 400 {
                 return Err(RegistryError::HttpStatus(resp2.status().as_u16()));
             }
@@ -199,7 +202,9 @@ impl RegistryClient {
         let url = format!("https://{}{}", registry, path);
         let result = self.do_put(&url, body, extra_headers).await?;
         if result.status().as_u16() == 401 {
-            let www_auth = result.headers().get("www-authenticate")
+            let www_auth = result
+                .headers()
+                .get("www-authenticate")
                 .or_else(|| result.headers().get("WWW-Authenticate"))
                 .map(|v| v.as_str())
                 .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
@@ -216,7 +221,12 @@ impl RegistryClient {
         }
     }
 
-    async fn do_put(&self, url: &str, body: &[u8], extra_headers: &[(&str, &str)]) -> Result<Response, RegistryError> {
+    async fn do_put(
+        &self,
+        url: &str,
+        body: &[u8],
+        extra_headers: &[(&str, &str)],
+    ) -> Result<Response, RegistryError> {
         let mut builder = Request::builder()
             .method(edgerun_http::Method::PUT)
             .uri(url)
@@ -229,7 +239,10 @@ impl RegistryClient {
         }
         let request = builder.build()?;
         let client = HttpClient::new().no_redirects();
-        client.execute(&request).await.map_err(|e| RegistryError::HttpError(e.to_string()))
+        client
+            .execute(&request)
+            .await
+            .map_err(|e| RegistryError::HttpError(e.to_string()))
     }
 
     /// Perform an authenticated POST request.
@@ -243,7 +256,9 @@ impl RegistryClient {
         let url = format!("https://{}{}", registry, path);
         let result = self.do_post(&url, body, extra_headers).await?;
         if result.status().as_u16() == 401 {
-            let www_auth = result.headers().get("www-authenticate")
+            let www_auth = result
+                .headers()
+                .get("www-authenticate")
                 .or_else(|| result.headers().get("WWW-Authenticate"))
                 .map(|v| v.as_str())
                 .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
@@ -260,7 +275,12 @@ impl RegistryClient {
         }
     }
 
-    async fn do_post(&self, url: &str, body: &[u8], extra_headers: &[(&str, &str)]) -> Result<Response, RegistryError> {
+    async fn do_post(
+        &self,
+        url: &str,
+        body: &[u8],
+        extra_headers: &[(&str, &str)],
+    ) -> Result<Response, RegistryError> {
         let mut builder = Request::builder()
             .method(edgerun_http::Method::POST)
             .uri(url)
@@ -273,7 +293,10 @@ impl RegistryClient {
         }
         let request = builder.build()?;
         let client = HttpClient::new().no_redirects();
-        client.execute(&request).await.map_err(|e| RegistryError::HttpError(e.to_string()))
+        client
+            .execute(&request)
+            .await
+            .map_err(|e| RegistryError::HttpError(e.to_string()))
     }
 
     /// Handle OCI Registry V2 authentication (Bearer token exchange).
@@ -299,9 +322,11 @@ impl RegistryClient {
             RegistryAuth::Basic { username, password } => {
                 Some((username.clone(), password.clone()))
             }
-            RegistryAuth::FromSecretService { data_root, namespace, registry_host } => {
-                super::auth::resolve_from_secret_service(data_root, namespace, registry_host)
-            }
+            RegistryAuth::FromSecretService {
+                data_root,
+                namespace,
+                registry_host,
+            } => super::auth::resolve_from_secret_service(data_root, namespace, registry_host),
             _ => None,
         };
 
@@ -313,16 +338,23 @@ impl RegistryClient {
 
         let request = builder.build()?;
         let client = HttpClient::new();
-        let resp = client.execute(&request).await.map_err(|e| RegistryError::HttpError(e.to_string()))?;
+        let resp = client
+            .execute(&request)
+            .await
+            .map_err(|e| RegistryError::HttpError(e.to_string()))?;
 
-        let value = parse_json_bytes(resp.body())
-            .map_err(RegistryError::ParseError)?;
+        let value = parse_json_bytes(resp.body()).map_err(RegistryError::ParseError)?;
 
         self.token = if let edgerun_json::JsonValue::Object(fields) = &value {
-            fields.iter()
+            fields
+                .iter()
                 .find(|(k, _)| k == "token" || k == "access_token")
                 .and_then(|(_, v)| {
-                    if let edgerun_json::JsonValue::String(s) = v { Some(s.clone()) } else { None }
+                    if let edgerun_json::JsonValue::String(s) = v {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
                 })
         } else {
             None
@@ -363,18 +395,33 @@ impl RegistryClient {
         }
         let request = builder.build()?;
         let client = HttpClient::new().no_redirects();
-        client.execute(&request).await.map_err(|e| RegistryError::HttpError(e.to_string()))
+        client
+            .execute(&request)
+            .await
+            .map_err(|e| RegistryError::HttpError(e.to_string()))
     }
 
     /// Resolve an image reference to its manifest.
-    pub async fn resolve_manifest(&mut self, image: &ImageRef) -> Result<ImageManifest, RegistryError> {
+    pub async fn resolve_manifest(
+        &mut self,
+        image: &ImageRef,
+    ) -> Result<ImageManifest, RegistryError> {
         self.ensure_auth(&image.registry).await?;
 
-        let url = format!("https://{}/v2/{}/manifests/{}", image.registry, image.repository, image.tag);
+        let url = format!(
+            "https://{}/v2/{}/manifests/{}",
+            image.registry, image.repository, image.tag
+        );
         let headers = [
-            ("Accept", "application/vnd.docker.distribution.manifest.v2+json"),
+            (
+                "Accept",
+                "application/vnd.docker.distribution.manifest.v2+json",
+            ),
             ("Accept", "application/vnd.oci.image.manifest.v1+json"),
-            ("Accept", "application/vnd.docker.distribution.manifest.list.v2+json"),
+            (
+                "Accept",
+                "application/vnd.docker.distribution.manifest.list.v2+json",
+            ),
             ("Accept", "application/vnd.oci.image.index.v1+json"),
         ];
         let mut builder = Request::builder()
@@ -388,14 +435,20 @@ impl RegistryClient {
         }
         let request = builder.build()?;
         let client = HttpClient::new().no_redirects();
-        let resp = client.execute(&request).await.map_err(|e| RegistryError::HttpError(e.to_string()))?;
+        let resp = client
+            .execute(&request)
+            .await
+            .map_err(|e| RegistryError::HttpError(e.to_string()))?;
 
         if resp.status().as_u16() == 401 {
-            let www_auth = resp.headers().get("www-authenticate")
+            let www_auth = resp
+                .headers()
+                .get("www-authenticate")
                 .or_else(|| resp.headers().get("WWW-Authenticate"))
                 .map(|v| v.as_str())
                 .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
-            self.handle_auth_challenge(&image.registry, www_auth).await?;
+            self.handle_auth_challenge(&image.registry, www_auth)
+                .await?;
             // Retry
             let mut builder2 = Request::builder()
                 .method(edgerun_http::Method::GET)
@@ -407,7 +460,10 @@ impl RegistryClient {
                 builder2 = builder2.header(k, v);
             }
             let request2 = builder2.build()?;
-            let resp2 = client.execute(&request2).await.map_err(|e| RegistryError::HttpError(e.to_string()))?;
+            let resp2 = client
+                .execute(&request2)
+                .await
+                .map_err(|e| RegistryError::HttpError(e.to_string()))?;
             parse_manifest(resp2.body()).map_err(RegistryError::ParseError)
         } else if resp.status().as_u16() >= 400 {
             Err(RegistryError::HttpStatus(resp.status().as_u16()))
@@ -456,27 +512,31 @@ impl RegistryClient {
                 // Select manifest matching current platform (linux/amd64 preferred, fallback to first).
                 let current_arch = std::env::consts::ARCH;
                 let current_os = std::env::consts::OS;
-                let best = idx.manifests.iter()
+                let best = idx
+                    .manifests
+                    .iter()
                     .find(|m| {
-                        m.platform.as_ref().map(|p| {
-                            p.architecture.as_deref() == Some(current_arch) &&
-                            p.os.as_deref() == Some(current_os)
-                        }).unwrap_or(false)
+                        m.platform
+                            .as_ref()
+                            .map(|p| {
+                                p.architecture.as_deref() == Some(current_arch)
+                                    && p.os.as_deref() == Some(current_os)
+                            })
+                            .unwrap_or(false)
                     })
                     .unwrap_or(&idx.manifests[0]);
-                self.fetch_manifest_by_digest(
-                    &image.registry,
-                    &image.repository,
-                    &best.digest,
-                ).await?
+                self.fetch_manifest_by_digest(&image.registry, &image.repository, &best.digest)
+                    .await?
             }
         };
 
-        let config_blob = self.fetch_blob(
-            &image.registry,
-            &image.repository,
-            &manifest_data.config_digest,
-        ).await?;
+        let config_blob = self
+            .fetch_blob(
+                &image.registry,
+                &image.repository,
+                &manifest_data.config_digest,
+            )
+            .await?;
         let image_config = parse_image_config(&config_blob)
             .map_err(|e| RegistryError::ParseError(e.to_string()))?;
 
@@ -502,7 +562,9 @@ impl RegistryClient {
             let ext = match layer.media_type.as_deref() {
                 Some(mt) if mt.contains("zstd") => "tar.zst",
                 Some(mt) if mt.contains("gzip") || mt.contains("tar") => "tar.gz",
-                Some(mt) if mt.contains("oci") && !mt.contains("gzip") && !mt.contains("zstd") => "tar",
+                Some(mt) if mt.contains("oci") && !mt.contains("gzip") && !mt.contains("zstd") => {
+                    "tar"
+                }
                 _ => "tar.gz",
             };
             let blob_path = store_path.join(format!("{}.{}", &cache_key, ext));
@@ -512,7 +574,8 @@ impl RegistryClient {
                     &image.repository,
                     &layer.digest,
                     &blob_path,
-                ).await?;
+                )
+                .await?;
             }
 
             verify_blob_digest(&blob_path, &layer.digest)?;
@@ -553,7 +616,11 @@ impl RegistryClient {
     // ------------------------------------------------------------------
 
     /// Push a local bundle to a registry.
-    pub async fn push(&mut self, image: &ImageRef, bundle_path: &Path) -> Result<(), RegistryError> {
+    pub async fn push(
+        &mut self,
+        image: &ImageRef,
+        bundle_path: &Path,
+    ) -> Result<(), RegistryError> {
         self.ensure_auth(&image.registry).await?;
 
         let rootfs = bundle_path.join("rootfs");
@@ -565,55 +632,123 @@ impl RegistryClient {
         }
 
         let config_path = bundle_path.join("config.json");
-        let config_json = std::fs::read_to_string(&config_path)
-            .map_err(RegistryError::IoError)?;
+        let config_json = std::fs::read_to_string(&config_path).map_err(RegistryError::IoError)?;
 
         let config_blob = config_json.as_bytes().to_vec();
         let config_digest = format!("sha256:{}", hex_digest(&config_blob));
-        self.push_blob_raw(&image.registry, &image.repository, &config_blob, &config_digest).await?;
+        self.push_blob_raw(
+            &image.registry,
+            &image.repository,
+            &config_blob,
+            &config_digest,
+        )
+        .await?;
 
         let layer_data = create_tar_from_dir(&rootfs)?;
         let layer_digest = format!("sha256:{}", hex_digest(&layer_data));
-        self.push_blob_raw(&image.registry, &image.repository, &layer_data, &layer_digest).await?;
+        self.push_blob_raw(
+            &image.registry,
+            &image.repository,
+            &layer_data,
+            &layer_digest,
+        )
+        .await?;
 
         let manifest = format!(
             r#"{{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"{}","size":{}}},"layers":[{{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"{}","size":{}}}]}}"#,
-            config_digest, config_blob.len(), layer_digest, layer_data.len(),
+            config_digest,
+            config_blob.len(),
+            layer_digest,
+            layer_data.len(),
         );
 
-        self.push_manifest(&image.registry, &image.repository, manifest.as_bytes(), &image.tag).await?;
+        self.push_manifest(
+            &image.registry,
+            &image.repository,
+            manifest.as_bytes(),
+            &image.tag,
+        )
+        .await?;
         let manifest_digest = hex_digest(manifest.as_bytes());
-        self.push_manifest_by_digest(&image.registry, &image.repository, manifest.as_bytes(), &format!("sha256:{}", manifest_digest)).await?;
+        self.push_manifest_by_digest(
+            &image.registry,
+            &image.repository,
+            manifest.as_bytes(),
+            &format!("sha256:{}", manifest_digest),
+        )
+        .await?;
 
         Ok(())
     }
 
     /// Push a blob using monolithic upload.
-    async fn push_blob_raw(&mut self, registry: &str, repository: &str, data: &[u8], digest: &str) -> Result<(), RegistryError> {
+    async fn push_blob_raw(
+        &mut self,
+        registry: &str,
+        repository: &str,
+        data: &[u8],
+        digest: &str,
+    ) -> Result<(), RegistryError> {
         let init_path = format!("/v2/{}/blobs/uploads/", repository);
-        let _ = self.authenticated_post(registry, &init_path, &[], &[]).await?;
+        let _ = self
+            .authenticated_post(registry, &init_path, &[], &[])
+            .await?;
 
-        let upload_path = format!("/v2/{}/blobs/uploads/{}", repository, super::urlencoding::encode(digest));
-        let put_path = format!("{}?digest={}", upload_path, super::urlencoding::encode(digest));
-        self.authenticated_put(registry, &put_path, data, &[("Content-Type", "application/octet-stream")]).await?;
+        let upload_path = format!(
+            "/v2/{}/blobs/uploads/{}",
+            repository,
+            super::urlencoding::encode(digest)
+        );
+        let put_path = format!(
+            "{}?digest={}",
+            upload_path,
+            super::urlencoding::encode(digest)
+        );
+        self.authenticated_put(
+            registry,
+            &put_path,
+            data,
+            &[("Content-Type", "application/octet-stream")],
+        )
+        .await?;
         Ok(())
     }
 
     /// Push a manifest with a tag.
-    async fn push_manifest(&mut self, registry: &str, repository: &str, manifest: &[u8], tag: &str) -> Result<(), RegistryError> {
+    async fn push_manifest(
+        &mut self,
+        registry: &str,
+        repository: &str,
+        manifest: &[u8],
+        tag: &str,
+    ) -> Result<(), RegistryError> {
         let path = format!("/v2/{}/manifests/{}", repository, tag);
-        self.authenticated_put(registry, &path, manifest, &[
-            ("Content-Type", "application/vnd.oci.image.manifest.v1+json"),
-        ]).await?;
+        self.authenticated_put(
+            registry,
+            &path,
+            manifest,
+            &[("Content-Type", "application/vnd.oci.image.manifest.v1+json")],
+        )
+        .await?;
         Ok(())
     }
 
     /// Push a manifest by digest.
-    async fn push_manifest_by_digest(&mut self, registry: &str, repository: &str, manifest: &[u8], digest: &str) -> Result<(), RegistryError> {
+    async fn push_manifest_by_digest(
+        &mut self,
+        registry: &str,
+        repository: &str,
+        manifest: &[u8],
+        digest: &str,
+    ) -> Result<(), RegistryError> {
         let path = format!("/v2/{}/manifests/{}", repository, digest);
-        self.authenticated_put(registry, &path, manifest, &[
-            ("Content-Type", "application/vnd.oci.image.manifest.v1+json"),
-        ]).await?;
+        self.authenticated_put(
+            registry,
+            &path,
+            manifest,
+            &[("Content-Type", "application/vnd.oci.image.manifest.v1+json")],
+        )
+        .await?;
         Ok(())
     }
 }
@@ -663,18 +798,27 @@ mod tests {
         if let RegistryAuth::Basic { username, password } = client.auth {
             assert_eq!(username, "user");
             assert_eq!(password, "pass");
-        } else { panic!("expected Basic"); }
+        } else {
+            panic!("expected Basic");
+        }
     }
 
     #[test]
     fn with_secret_service_auth_sets_variant() {
         let root = tmp_root();
         let client = RegistryClient::with_secret_service_auth(&root, "registry", "docker.io");
-        if let RegistryAuth::FromSecretService { data_root, namespace, registry_host } = client.auth {
+        if let RegistryAuth::FromSecretService {
+            data_root,
+            namespace,
+            registry_host,
+        } = client.auth
+        {
             assert_eq!(data_root, root);
             assert_eq!(namespace, "registry");
             assert_eq!(registry_host, "docker.io");
-        } else { panic!("expected FromSecretService"); }
+        } else {
+            panic!("expected FromSecretService");
+        }
     }
 
     #[test]

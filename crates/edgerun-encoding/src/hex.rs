@@ -42,7 +42,8 @@ fn decode_hex_with_odd_prefix_handling(s: &str) -> Result<Vec<u8>, HexError> {
     // Handle odd-length strings by prepending a '0'
     let (s, mut result) = if !s.len().is_multiple_of(2) {
         let mut result = Vec::with_capacity(s.len() / 2 + 1);
-        let first = hex_byte(s.as_bytes()[0]).ok_or(HexError::InvalidCharacter(s.chars().next().unwrap()))?;
+        let first = hex_byte(s.as_bytes()[0])
+            .ok_or(HexError::InvalidCharacter(s.chars().next().unwrap()))?;
         result.push(first);
         (&s[1..], result)
     } else {
@@ -150,7 +151,10 @@ mod tests {
     fn test_bytes_to_hex_prefixed() {
         assert_eq!(bytes_to_hex_prefixed(&[0x00]), "0x00");
         assert_eq!(bytes_to_hex_prefixed(&[0xff]), "0xff");
-        assert_eq!(bytes_to_hex_prefixed(&[0x01, 0x02, 0xab, 0xcd]), "0x0102abcd");
+        assert_eq!(
+            bytes_to_hex_prefixed(&[0x01, 0x02, 0xab, 0xcd]),
+            "0x0102abcd"
+        );
         assert_eq!(bytes_to_hex_prefixed(&[]), "0x");
     }
 
@@ -158,17 +162,35 @@ mod tests {
     fn test_hex_to_bytes() {
         assert_eq!(hex_to_bytes("00").unwrap(), vec![0x00]);
         assert_eq!(hex_to_bytes("ff").unwrap(), vec![0xff]);
-        assert_eq!(hex_to_bytes("0102abcd").unwrap(), vec![0x01, 0x02, 0xab, 0xcd]);
-        assert_eq!(hex_to_bytes("0x0102abcd").unwrap(), vec![0x01, 0x02, 0xab, 0xcd]);
-        assert_eq!(hex_to_bytes("0X0102ABCD").unwrap(), vec![0x01, 0x02, 0xab, 0xcd]);
-        assert_eq!(hex_to_bytes("102abcd").unwrap(), vec![0x01, 0x02, 0xab, 0xcd]);
+        assert_eq!(
+            hex_to_bytes("0102abcd").unwrap(),
+            vec![0x01, 0x02, 0xab, 0xcd]
+        );
+        assert_eq!(
+            hex_to_bytes("0x0102abcd").unwrap(),
+            vec![0x01, 0x02, 0xab, 0xcd]
+        );
+        assert_eq!(
+            hex_to_bytes("0X0102ABCD").unwrap(),
+            vec![0x01, 0x02, 0xab, 0xcd]
+        );
+        assert_eq!(
+            hex_to_bytes("102abcd").unwrap(),
+            vec![0x01, 0x02, 0xab, 0xcd]
+        );
         assert_eq!(hex_to_bytes("").unwrap(), vec![]);
     }
 
     #[test]
     fn test_hex_to_bytes_invalid() {
-        assert!(matches!(hex_to_bytes("xyz"), Err(HexError::InvalidCharacter('x'))));
-        assert!(matches!(hex_to_bytes("0xxyz"), Err(HexError::InvalidCharacter('x'))));
+        assert!(matches!(
+            hex_to_bytes("xyz"),
+            Err(HexError::InvalidCharacter('x'))
+        ));
+        assert!(matches!(
+            hex_to_bytes("0xxyz"),
+            Err(HexError::InvalidCharacter('x'))
+        ));
     }
 
     #[test]
@@ -259,9 +281,13 @@ pub fn parse_mac(s: &str) -> Option<[u8; 6]> {
     let parts = s.split(':');
     let mut i = 0;
     for part in parts {
-        if i >= 6 { return None; }
+        if i >= 6 {
+            return None;
+        }
         let bytes = part.as_bytes();
-        if bytes.len() != 2 { return None; }
+        if bytes.len() != 2 {
+            return None;
+        }
         let hi = hex_byte(bytes[0])?;
         let lo = hex_byte(bytes[1])?;
         result[i] = (hi << 4) | lo;

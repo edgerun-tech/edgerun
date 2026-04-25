@@ -25,15 +25,13 @@ pub enum UserVerificationPolicy {
     RequiredBiometric,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct BiometricState {
     pub modality: Option<BiometricModality>,
     pub verified: bool,
     pub hardware_protected: bool,
     pub user_present: bool,
 }
-
 
 impl BiometricState {
     pub fn assurance_strength(&self) -> BiometricAssuranceStrength {
@@ -140,13 +138,21 @@ mod tests {
     #[test]
     fn assurance_strength_ordering() {
         assert!(BiometricAssuranceStrength::None < BiometricAssuranceStrength::UserPresence);
-        assert!(BiometricAssuranceStrength::UserPresence < BiometricAssuranceStrength::BiometricMatch);
-        assert!(BiometricAssuranceStrength::BiometricMatch < BiometricAssuranceStrength::HardwareProtectedBiometric);
+        assert!(
+            BiometricAssuranceStrength::UserPresence < BiometricAssuranceStrength::BiometricMatch
+        );
+        assert!(
+            BiometricAssuranceStrength::BiometricMatch
+                < BiometricAssuranceStrength::HardwareProtectedBiometric
+        );
     }
 
     #[test]
     fn modality_variants() {
-        assert_eq!(BiometricModality::Fingerprint, BiometricModality::Fingerprint);
+        assert_eq!(
+            BiometricModality::Fingerprint,
+            BiometricModality::Fingerprint
+        );
         assert_ne!(BiometricModality::Fingerprint, BiometricModality::Face);
         assert_ne!(BiometricModality::Face, BiometricModality::Iris);
         assert_ne!(BiometricModality::Voice, BiometricModality::Palm);
@@ -162,10 +168,22 @@ mod tests {
 
     #[test]
     fn user_verification_policy_variants() {
-        assert_ne!(UserVerificationPolicy::None, UserVerificationPolicy::OptionalPresence);
-        assert_ne!(UserVerificationPolicy::OptionalPresence, UserVerificationPolicy::RequiredPresence);
-        assert_ne!(UserVerificationPolicy::RequiredPresence, UserVerificationPolicy::PreferredBiometric);
-        assert_ne!(UserVerificationPolicy::PreferredBiometric, UserVerificationPolicy::RequiredBiometric);
+        assert_ne!(
+            UserVerificationPolicy::None,
+            UserVerificationPolicy::OptionalPresence
+        );
+        assert_ne!(
+            UserVerificationPolicy::OptionalPresence,
+            UserVerificationPolicy::RequiredPresence
+        );
+        assert_ne!(
+            UserVerificationPolicy::RequiredPresence,
+            UserVerificationPolicy::PreferredBiometric
+        );
+        assert_ne!(
+            UserVerificationPolicy::PreferredBiometric,
+            UserVerificationPolicy::RequiredBiometric
+        );
     }
 
     #[test]

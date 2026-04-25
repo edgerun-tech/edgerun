@@ -3,12 +3,12 @@
 //! Wraps `std::process::Command` with async `output()`, `status()`,
 //! and `Child::wait()` — all run on the blocking thread pool.
 
+use crate::reactor::Instant;
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::process::{Command, ExitStatus, Stdio};
 use std::task::{Context, Poll};
-use crate::reactor::Instant;
 use std::time::Duration;
 
 // ===========================================================================
@@ -38,11 +38,9 @@ pub async fn status<F>(f: F) -> io::Result<ExitStatus>
 where
     F: FnOnce() -> Command + Send + 'static,
 {
-    crate::runtime::spawn_blocking(move || {
-        f().status()
-    })
-    .await
-    .unwrap_or_else(|_| Err(io::Error::other("blocking task panicked")))
+    crate::runtime::spawn_blocking(move || f().status())
+        .await
+        .unwrap_or_else(|_| Err(io::Error::other("blocking task panicked")))
 }
 
 /// Execute a command and return its stdout as a `String`.
@@ -51,8 +49,7 @@ where
     F: FnOnce() -> Command + Send + 'static,
 {
     let out = output(f).await?;
-    String::from_utf8(out.stdout)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    String::from_utf8(out.stdout).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 // ===========================================================================

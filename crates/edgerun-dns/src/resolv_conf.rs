@@ -183,7 +183,8 @@ nameserver 127.0.0.53
 
     #[test]
     fn parse_ignores_extra_nameservers() {
-        let content = "nameserver 1.1.1.1\nnameserver 2.2.2.2\nnameserver 3.3.3.3\nnameserver 4.4.4.4\n";
+        let content =
+            "nameserver 1.1.1.1\nnameserver 2.2.2.2\nnameserver 3.3.3.3\nnameserver 4.4.4.4\n";
         let conf = ResolvConf::parse(content);
         assert_eq!(conf.nameservers.len(), 3); // MAXNS
     }

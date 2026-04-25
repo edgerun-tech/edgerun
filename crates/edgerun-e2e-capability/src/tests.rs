@@ -4,18 +4,16 @@
 //! Run with: `HARDWARE_E2E=1 cargo test -p edgerun-e2e-capability -- --ignored`
 
 use crate::require_hardware;
-use crate::test_policy::TestGrantedProvider;
 use crate::session_harness;
-use edgerun_capabilities::{
-    CapabilityAccessClass, CapabilityOperation, CapabilityProvider,
-};
+use crate::test_policy::TestGrantedProvider;
+use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation, CapabilityProvider};
 use edgerun_proto::edgerun::v0::capability::{
     CapabilityInvocation, CapabilityOperation as ProtoOp,
 };
 use edgerun_proto::edgerun::v0::capability_runtime::{
     capability_remote_envelope, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
-    CapabilityResultFrame, CapabilitySessionClose, CapabilitySessionMode, CapabilitySessionOpen,
-    CapabilitySessionEvent,
+    CapabilityResultFrame, CapabilitySessionClose, CapabilitySessionEvent, CapabilitySessionMode,
+    CapabilitySessionOpen,
 };
 use edgerun_remote_capability::{
     FramedRemoteTransport, InputRemoteAdapter, MicrophoneRemoteAdapter, PolicyWrappedProvider,
@@ -123,8 +121,8 @@ fn test_input_device_e2e_unix_socket_full_protocol() {
     let adapter = InputRemoteAdapter::new(backend, 64);
 
     let session_id = b"input-socket-session";
-    let _transport = session_harness::open_session(adapter, session_id)
-        .expect("open session over unix socket");
+    let _transport =
+        session_harness::open_session(adapter, session_id).expect("open session over unix socket");
 }
 
 // ===========================================================================
@@ -265,7 +263,7 @@ fn test_microphone_encoding_roundtrip_real_device() {
             session_id: b"test".to_vec(),
             sequence_no: 1,
             event_kinds: vec![
-                edgerun_proto::edgerun::v0::capability::CapabilityEventKind::Auditory as i32
+                edgerun_proto::edgerun::v0::capability::CapabilityEventKind::Auditory as i32,
             ],
             payload_object: None,
             inline_payload: cap.bytes.clone(),
@@ -426,7 +424,11 @@ fn test_camera_e2e_discover_and_open() {
 
     let dev = &cameras[0];
     let probe = dev.probe().expect("probe camera device");
-    println!("Found camera: {} ({})", probe.info.card, dev.devnode.display());
+    println!(
+        "Found camera: {} ({})",
+        probe.info.card,
+        dev.devnode.display()
+    );
 
     // Wrap as biometric reader (calls ioctl VIDIOC_QUERYCAP via probe internally)
     let camera_dev = edgerun_v4l2_camera::V4l2CameraDevice::new(&dev.devnode);
@@ -483,11 +485,11 @@ fn test_camera_e2e_remote_adapter_session() {
     require_hardware();
 
     use edgerun_camera_biometrics::CameraBiometricPurpose;
+    use edgerun_capabilities::{
+        capability_descriptor, CapabilityEventKind, CapabilityModality, CapabilityRole,
+    };
     use edgerun_remote_capability::CameraRemoteAdapter;
     use edgerun_v4l2_camera::{discover_camera_devices, V4l2CameraBiometricReader};
-    use edgerun_capabilities::{
-        capability_descriptor, CapabilityRole, CapabilityModality, CapabilityEventKind,
-    };
 
     let cameras = discover_camera_devices().expect("discover V4L2 cameras");
     if cameras.is_empty() {
@@ -577,10 +579,17 @@ fn test_tpm_e2e_get_random() {
     // Total size = 12 = 0x0000000C
     let bytes_requested: u16 = 32;
     let command: Vec<u8> = vec![
-        0x80, 0x01, // tag: TPM_ST_NO_SESSIONS
-        0x00, 0x00, 0x00, 0x0C, // size: 12 bytes total
-        0x00, 0x00, 0x01, 0x7B, // cc: TPM2_GetRandom
-        (bytes_requested >> 8) as u8, // bytesRequested high
+        0x80,
+        0x01, // tag: TPM_ST_NO_SESSIONS
+        0x00,
+        0x00,
+        0x00,
+        0x0C, // size: 12 bytes total
+        0x00,
+        0x00,
+        0x01,
+        0x7B,                           // cc: TPM2_GetRandom
+        (bytes_requested >> 8) as u8,   // bytesRequested high
         (bytes_requested & 0xFF) as u8, // bytesRequested low
     ];
 
@@ -591,13 +600,20 @@ fn test_tpm_e2e_get_random() {
             let tag = u16::from_be_bytes([resp[0], resp[1]]);
             let size = u32::from_be_bytes([resp[2], resp[3], resp[4], resp[5]]);
             let rc = u32::from_be_bytes([resp[6], resp[7], resp[8], resp[9]]);
-            assert_eq!(tag, 0x8001, "response tag should be TPM_ST_NO_SESSIONS (0x8001)");
+            assert_eq!(
+                tag, 0x8001,
+                "response tag should be TPM_ST_NO_SESSIONS (0x8001)"
+            );
             assert_eq!(size as usize, resp.len(), "response size mismatch");
             assert_eq!(rc, 0x00000000, "TPM returned error code: 0x{:08X}", rc);
 
             // Extract random bytes: after header (10) + randomBytesSize (2)
             let rand_size = u16::from_be_bytes([resp[10], resp[11]]) as usize;
-            assert!(rand_size >= 16, "TPM returned only {} random bytes", rand_size);
+            assert!(
+                rand_size >= 16,
+                "TPM returned only {} random bytes",
+                rand_size
+            );
             assert!(
                 rand_size <= 32,
                 "TPM returned more random bytes than requested: {}",
@@ -654,7 +670,8 @@ fn test_full_e2e_unix_socket_input_device() {
     thread::spawn(move || {
         let mut wrapped = granted;
         loop {
-            let continued = edgerun_remote_capability::serve_one(&mut wrapped, &mut server_transport);
+            let continued =
+                edgerun_remote_capability::serve_one(&mut wrapped, &mut server_transport);
             match continued {
                 Ok(true) => continue,
                 Ok(false) => break,
@@ -791,7 +808,7 @@ fn test_input_encoding_roundtrip_real_device() {
         session_id: b"test-session".to_vec(),
         sequence_no: 1,
         event_kinds: vec![
-            edgerun_proto::edgerun::v0::capability::CapabilityEventKind::State as i32
+            edgerun_proto::edgerun::v0::capability::CapabilityEventKind::State as i32,
         ],
         payload_object: None,
         inline_payload: format!("{} events captured", events.len()).into_bytes(),
@@ -846,10 +863,15 @@ fn test_policy_enforcement_real_device() {
         correlation_id: Vec::new(),
     };
 
-    let accept = wrapped.open_session(&open).expect("session open should not error");
+    let accept = wrapped
+        .open_session(&open)
+        .expect("session open should not error");
     assert!(!accept.session_id.is_empty());
     // With raw adapters, handle_request returns None → session is rejected
-    assert!(!accept.accepted, "raw adapter should reject session via policy");
+    assert!(
+        !accept.accepted,
+        "raw adapter should reject session via policy"
+    );
     println!(
         "Policy correctly rejected session (no backing grant store): accepted={}",
         accept.accepted
@@ -940,7 +962,10 @@ fn test_bluetooth_e2e_scan() {
         }
         Err(e) => {
             // mgmt socket requires root — this is expected on non-root systems
-            println!("Bluetooth mgmt discovery failed (expected without root): {:?}", e);
+            println!(
+                "Bluetooth mgmt discovery failed (expected without root): {:?}",
+                e
+            );
         }
     }
 }
@@ -989,8 +1014,8 @@ fn test_wifi_e2e_discover() {
 fn test_drm_display_e2e_discover() {
     require_hardware();
 
-    let connectors = edgerun_drm_display::discover_drm_connectors()
-        .expect("DRM discovery should not error");
+    let connectors =
+        edgerun_drm_display::discover_drm_connectors().expect("DRM discovery should not error");
 
     let connected: Vec<_> = connectors.iter().filter(|c| c.connected).collect();
     assert!(!connected.is_empty(), "no connected DRM displays found");
@@ -1026,8 +1051,7 @@ fn test_drm_display_e2e_discover() {
 fn test_npu_e2e_discover() {
     require_hardware();
 
-    let npus = edgerun_linux_npu::discover_linux_npus()
-        .expect("NPU discovery should not error");
+    let npus = edgerun_linux_npu::discover_linux_npus().expect("NPU discovery should not error");
 
     if npus.is_empty() {
         println!("No NPU devices found");

@@ -1,13 +1,12 @@
-use edgerun_hardware_signing::{MESH_SIGNATURE_LENGTH, NodeID};
 use crate::{
     FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
 };
+use edgerun_hardware_signing::{NodeID, MESH_SIGNATURE_LENGTH};
 
 // ---------------------------------------------------------------------------
 // Discovery packet (serialized payload)
 // ---------------------------------------------------------------------------
 use super::*;
-
 
 /// Serialized discovery packet payload.
 ///
@@ -83,4 +82,3 @@ impl DiscoveryPacket {
 // ---------------------------------------------------------------------------
 // Router state
 // ---------------------------------------------------------------------------
-

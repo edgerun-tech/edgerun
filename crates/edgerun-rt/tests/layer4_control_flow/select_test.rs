@@ -1,5 +1,5 @@
 // Test select! macro with the actual runtime.
-use edgerun_rt::{Runtime, select};
+use edgerun_rt::{select, Runtime};
 use std::time::Duration;
 
 fn main() {
@@ -54,7 +54,11 @@ async fn test_select_timing() {
     };
     let elapsed = start.elapsed();
     assert_eq!(result, 1, "fast future should win");
-    assert!(elapsed < Duration::from_millis(150), "select took too long: {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_millis(150),
+        "select took too long: {:?}",
+        elapsed
+    );
     println!("  test_select_timing OK ({:?})", elapsed);
 }
 
@@ -73,6 +77,10 @@ async fn test_select_with_sleep() {
     };
     let elapsed = start.elapsed();
     assert_eq!(result, "winner");
-    assert!(elapsed < Duration::from_millis(150), "select took too long: {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_millis(150),
+        "select took too long: {:?}",
+        elapsed
+    );
     println!("  test_select_with_sleep OK ({:?})", elapsed);
 }

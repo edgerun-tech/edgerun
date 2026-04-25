@@ -51,10 +51,9 @@ impl std::fmt::Display for Http3Error {
                 stream_id,
                 error_code,
             } => write!(f, "Stream {} error: {}", stream_id, error_code),
-            Http3Error::ConnectionError {
-                error_code,
-                reason,
-            } => write!(f, "Connection error {}: {}", error_code, reason),
+            Http3Error::ConnectionError { error_code, reason } => {
+                write!(f, "Connection error {}: {}", error_code, reason)
+            }
             Http3Error::TlsError(msg) => write!(f, "TLS error: {}", msg),
             Http3Error::Timeout => write!(f, "Connection timeout"),
         }
@@ -224,10 +223,16 @@ mod tests {
         let err = Http3Error::QuicError("quic test".to_string());
         assert_eq!(format!("{}", err), "QUIC error: quic test");
 
-        let err = Http3Error::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"));
+        let err = Http3Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "not found",
+        ));
         assert_eq!(format!("{}", err), "I/O error: not found");
 
-        let err = Http3Error::StreamError { stream_id: 42, error_code: 0x01 };
+        let err = Http3Error::StreamError {
+            stream_id: 42,
+            error_code: 0x01,
+        };
         assert_eq!(format!("{}", err), "Stream 42 error: 1");
     }
 

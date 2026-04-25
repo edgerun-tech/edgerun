@@ -207,7 +207,9 @@ pub fn resolve_byte_range(range: &ByteRange, resource_size: u64) -> Option<Range
 /// Check if a RangeSpecifier is satisfiable for a given resource size
 pub fn is_range_satisfiable(spec: &RangeSpecifier, resource_size: u64) -> bool {
     match spec {
-        RangeSpecifier::Bytes(ranges) => ranges.iter().all(|r| resolve_byte_range(r, resource_size).is_some()),
+        RangeSpecifier::Bytes(ranges) => ranges
+            .iter()
+            .all(|r| resolve_byte_range(r, resource_size).is_some()),
         RangeSpecifier::Unsatisfiable => false,
     }
 }
@@ -219,7 +221,9 @@ pub fn has_range_header(headers: &crate::HeaderMap) -> bool {
 
 /// Get the parsed RangeSpecifier from request headers
 pub fn get_range(headers: &crate::HeaderMap) -> Option<RangeSpecifier> {
-    headers.get("range").and_then(|v| parse_range_header(v.as_str()))
+    headers
+        .get("range")
+        .and_then(|v| parse_range_header(v.as_str()))
 }
 
 /// Build a 206 Partial Content response
@@ -332,12 +336,18 @@ mod tests {
         let resource_size = 1000;
 
         // Standard range
-        let range = ByteRange::Range { start: 100, end: Some(199) };
+        let range = ByteRange::Range {
+            start: 100,
+            end: Some(199),
+        };
         let resolved = resolve_byte_range(&range, resource_size).unwrap();
         assert_eq!(resolved, 100..200);
 
         // Open-ended range
-        let range = ByteRange::Range { start: 500, end: None };
+        let range = ByteRange::Range {
+            start: 500,
+            end: None,
+        };
         let resolved = resolve_byte_range(&range, resource_size).unwrap();
         assert_eq!(resolved, 500..1000);
 
@@ -352,7 +362,10 @@ mod tests {
         let resource_size = 100;
 
         // Start beyond resource
-        let range = ByteRange::Range { start: 200, end: Some(300) };
+        let range = ByteRange::Range {
+            start: 200,
+            end: Some(300),
+        };
         assert!(resolve_byte_range(&range, resource_size).is_none());
 
         // Empty suffix

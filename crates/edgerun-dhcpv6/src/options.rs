@@ -63,12 +63,20 @@ impl Dhcpv6Option {
         for sub in sub_options {
             sub.to_wire(&mut data);
         }
-        Self { code: OPT_IA_NA, data }
+        Self {
+            code: OPT_IA_NA,
+            data,
+        }
     }
 
     /// Create an IA Address sub-option.
     /// IPv6 address(16) + preferred-lifetime(4) + valid-lifetime(4) + [sub-options]
-    pub fn iaaddr(addr: Ipv6Addr, preferred_lifetime: u32, valid_lifetime: u32, sub_options: Vec<Dhcpv6Option>) -> Self {
+    pub fn iaaddr(
+        addr: Ipv6Addr,
+        preferred_lifetime: u32,
+        valid_lifetime: u32,
+        sub_options: Vec<Dhcpv6Option>,
+    ) -> Self {
         let mut data = Vec::new();
         data.extend_from_slice(&addr.octets());
         data.extend_from_slice(&preferred_lifetime.to_be_bytes());
@@ -76,7 +84,10 @@ impl Dhcpv6Option {
         for sub in sub_options {
             sub.to_wire(&mut data);
         }
-        Self { code: OPT_IAADDR, data }
+        Self {
+            code: OPT_IAADDR,
+            data,
+        }
     }
 
     /// Create an IA_PD option.
@@ -89,12 +100,21 @@ impl Dhcpv6Option {
         for sub in sub_options {
             sub.to_wire(&mut data);
         }
-        Self { code: OPT_IA_PD, data }
+        Self {
+            code: OPT_IA_PD,
+            data,
+        }
     }
 
     /// Create an IA Prefix sub-option.
     /// preferred-lifetime(4) + valid-lifetime(4) + prefix-len(1) + prefix(16) + [sub-options]
-    pub fn iaprefix(preferred_lifetime: u32, valid_lifetime: u32, prefix_len: u8, prefix: Ipv6Addr, sub_options: Vec<Dhcpv6Option>) -> Self {
+    pub fn iaprefix(
+        preferred_lifetime: u32,
+        valid_lifetime: u32,
+        prefix_len: u8,
+        prefix: Ipv6Addr,
+        sub_options: Vec<Dhcpv6Option>,
+    ) -> Self {
         let mut data = Vec::new();
         data.extend_from_slice(&preferred_lifetime.to_be_bytes());
         data.extend_from_slice(&valid_lifetime.to_be_bytes());
@@ -103,7 +123,10 @@ impl Dhcpv6Option {
         for sub in sub_options {
             sub.to_wire(&mut data);
         }
-        Self { code: OPT_IAPREFIX, data }
+        Self {
+            code: OPT_IAPREFIX,
+            data,
+        }
     }
 
     /// Create a Status Code option.
@@ -111,7 +134,10 @@ impl Dhcpv6Option {
         let mut data = Vec::new();
         data.extend_from_slice(&(status as u16).to_be_bytes());
         data.extend_from_slice(message.as_bytes());
-        Self { code: OPT_STATUS_CODE, data }
+        Self {
+            code: OPT_STATUS_CODE,
+            data,
+        }
     }
 
     /// Create a DNS Servers option.
@@ -120,7 +146,10 @@ impl Dhcpv6Option {
         for s in servers {
             data.extend_from_slice(&s.octets());
         }
-        Self { code: OPT_DNS_SERVERS, data }
+        Self {
+            code: OPT_DNS_SERVERS,
+            data,
+        }
     }
 
     /// Create a Domain List option (DNS wire format encoding).
@@ -135,13 +164,19 @@ impl Dhcpv6Option {
             }
             data.push(0); // root
         }
-        Self { code: OPT_DOMAIN_LIST, data }
+        Self {
+            code: OPT_DOMAIN_LIST,
+            data,
+        }
     }
 
     /// Create an Elapsed Time option (in centiseconds, per RFC 8415).
     /// Note: DHCPv6 uses centiseconds (1/100s), not milliseconds.
     pub fn elapsed_time(cs: u16) -> Self {
-        Self { code: OPT_ELAPSED_TIME, data: cs.to_be_bytes().to_vec() }
+        Self {
+            code: OPT_ELAPSED_TIME,
+            data: cs.to_be_bytes().to_vec(),
+        }
     }
 
     /// Parse options from wire format.
@@ -155,7 +190,10 @@ impl Dhcpv6Option {
             pos += 4;
 
             if pos + len > data.len() {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "Truncated DHCPv6 option"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Truncated DHCPv6 option",
+                ));
             }
 
             options.push(Self {
@@ -178,22 +216,43 @@ impl Dhcpv6Option {
     /// Get IAID from an IA_NA or IA_PD option.
     pub fn iaid(&self) -> Option<u32> {
         if (self.code == OPT_IA_NA || self.code == OPT_IA_PD) && self.data.len() >= 12 {
-            Some(u32::from_be_bytes([self.data[0], self.data[1], self.data[2], self.data[3]]))
-        } else { None }
+            Some(u32::from_be_bytes([
+                self.data[0],
+                self.data[1],
+                self.data[2],
+                self.data[3],
+            ]))
+        } else {
+            None
+        }
     }
 
     /// Get T1 from an IA_NA or IA_PD option.
     pub fn t1(&self) -> Option<u32> {
         if (self.code == OPT_IA_NA || self.code == OPT_IA_PD) && self.data.len() >= 12 {
-            Some(u32::from_be_bytes([self.data[4], self.data[5], self.data[6], self.data[7]]))
-        } else { None }
+            Some(u32::from_be_bytes([
+                self.data[4],
+                self.data[5],
+                self.data[6],
+                self.data[7],
+            ]))
+        } else {
+            None
+        }
     }
 
     /// Get T2 from an IA_NA or IA_PD option.
     pub fn t2(&self) -> Option<u32> {
         if (self.code == OPT_IA_NA || self.code == OPT_IA_PD) && self.data.len() >= 12 {
-            Some(u32::from_be_bytes([self.data[8], self.data[9], self.data[10], self.data[11]]))
-        } else { None }
+            Some(u32::from_be_bytes([
+                self.data[8],
+                self.data[9],
+                self.data[10],
+                self.data[11],
+            ]))
+        } else {
+            None
+        }
     }
 
     /// Parse sub-options from an IA_NA, IA_PD, or IAADDR option.
@@ -204,7 +263,9 @@ impl Dhcpv6Option {
             OPT_IAPREFIX => 25,
             _ => 0,
         };
-        if offset >= self.data.len() { return Ok(vec![]); }
+        if offset >= self.data.len() {
+            return Ok(vec![]);
+        }
         Self::parse_all(&self.data[offset..])
     }
 
@@ -213,18 +274,26 @@ impl Dhcpv6Option {
         if self.code == OPT_IAADDR && self.data.len() >= 16 {
             let octets: [u8; 16] = self.data[0..16].try_into().ok()?;
             Some(Ipv6Addr::from(octets))
-        } else { None }
+        } else {
+            None
+        }
     }
 
     /// Get preferred lifetime from IAADDR or IAPREFIX.
     pub fn preferred_lifetime(&self) -> Option<u32> {
         match self.code {
-            OPT_IAADDR if self.data.len() >= 20 => {
-                Some(u32::from_be_bytes([self.data[16], self.data[17], self.data[18], self.data[19]]))
-            }
-            OPT_IAPREFIX if self.data.len() >= 8 => {
-                Some(u32::from_be_bytes([self.data[0], self.data[1], self.data[2], self.data[3]]))
-            }
+            OPT_IAADDR if self.data.len() >= 20 => Some(u32::from_be_bytes([
+                self.data[16],
+                self.data[17],
+                self.data[18],
+                self.data[19],
+            ])),
+            OPT_IAPREFIX if self.data.len() >= 8 => Some(u32::from_be_bytes([
+                self.data[0],
+                self.data[1],
+                self.data[2],
+                self.data[3],
+            ])),
             _ => None,
         }
     }
@@ -232,12 +301,18 @@ impl Dhcpv6Option {
     /// Get valid lifetime from IAADDR or IAPREFIX.
     pub fn valid_lifetime(&self) -> Option<u32> {
         match self.code {
-            OPT_IAADDR if self.data.len() >= 24 => {
-                Some(u32::from_be_bytes([self.data[20], self.data[21], self.data[22], self.data[23]]))
-            }
-            OPT_IAPREFIX if self.data.len() >= 12 => {
-                Some(u32::from_be_bytes([self.data[4], self.data[5], self.data[6], self.data[7]]))
-            }
+            OPT_IAADDR if self.data.len() >= 24 => Some(u32::from_be_bytes([
+                self.data[20],
+                self.data[21],
+                self.data[22],
+                self.data[23],
+            ])),
+            OPT_IAPREFIX if self.data.len() >= 12 => Some(u32::from_be_bytes([
+                self.data[4],
+                self.data[5],
+                self.data[6],
+                self.data[7],
+            ])),
             _ => None,
         }
     }
@@ -248,7 +323,9 @@ impl Dhcpv6Option {
             let prefix_len = self.data[8];
             let octets: [u8; 16] = self.data[9..25].try_into().ok()?;
             Some((prefix_len, Ipv6Addr::from(octets)))
-        } else { None }
+        } else {
+            None
+        }
     }
 
     /// Get status code and message.
@@ -257,7 +334,9 @@ impl Dhcpv6Option {
             let code = u16::from_be_bytes([self.data[0], self.data[1]]);
             let msg = String::from_utf8_lossy(&self.data[2..]).to_string();
             Some((StatusCode::from_u16(code), msg))
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -327,7 +406,9 @@ mod tests {
     fn test_ia_na_roundtrip() {
         let sub = Dhcpv6Option::iaaddr(
             Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1),
-            3600, 7200, vec![],
+            3600,
+            7200,
+            vec![],
         );
         let opt = Dhcpv6Option::ia_na(0x12345678, 1800, 2700, vec![sub]);
 
@@ -337,7 +418,10 @@ mod tests {
 
         let subs = opt.sub_options().unwrap();
         assert_eq!(subs.len(), 1);
-        assert_eq!(subs[0].address(), Some(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1)));
+        assert_eq!(
+            subs[0].address(),
+            Some(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1))
+        );
         assert_eq!(subs[0].preferred_lifetime(), Some(3600));
     }
 
@@ -380,7 +464,13 @@ mod tests {
 
     #[test]
     fn test_ia_pd_roundtrip() {
-        let prefix_sub = Dhcpv6Option::iaprefix(3600, 7200, 64, Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0), vec![]);
+        let prefix_sub = Dhcpv6Option::iaprefix(
+            3600,
+            7200,
+            64,
+            Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0),
+            vec![],
+        );
         let opt = Dhcpv6Option::ia_pd(1, 1800, 2700, vec![prefix_sub]);
 
         assert_eq!(opt.iaid(), Some(1));

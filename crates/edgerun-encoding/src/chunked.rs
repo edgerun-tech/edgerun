@@ -3,9 +3,9 @@
 //! Wire format per chunk: `<hex-size>[;extension]\r\n<data>\r\n`
 //! Terminating chunk: `0\r\n<trailer-headers>\r\n\r\n`
 
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::format;
 
 /// Error type for chunked encoding operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,12 +51,12 @@ pub fn decode_chunked(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ChunkedError> {
 
     loop {
         let crlf = find_crlf(data, pos).ok_or(ChunkedError::Incomplete)?;
-        let size_line = core::str::from_utf8(&data[pos..crlf])
-            .map_err(|_| ChunkedError::InvalidUtf8)?;
+        let size_line =
+            core::str::from_utf8(&data[pos..crlf]).map_err(|_| ChunkedError::InvalidUtf8)?;
 
         let size_str = size_line.split(';').next().unwrap_or(size_line).trim();
-        let chunk_size = usize::from_str_radix(size_str, 16)
-            .map_err(|_| ChunkedError::InvalidChunkSize)?;
+        let chunk_size =
+            usize::from_str_radix(size_str, 16).map_err(|_| ChunkedError::InvalidChunkSize)?;
 
         pos = crlf + 2;
 
@@ -128,7 +128,11 @@ pub fn encode_chunks(chunks: &[&[u8]]) -> Vec<u8> {
 
 /// Encode data as chunked body with trailer headers.
 pub fn encode_chunked_with_trailers(data: &[u8], trailers: &[(String, String)]) -> Vec<u8> {
-    let mut out = if data.is_empty() { Vec::new() } else { encode_chunk(data) };
+    let mut out = if data.is_empty() {
+        Vec::new()
+    } else {
+        encode_chunk(data)
+    };
     out.extend_from_slice(b"0\r\n");
     for (name, value) in trailers {
         out.extend_from_slice(format!("{name}: {value}\r\n").as_bytes());
@@ -138,11 +142,17 @@ pub fn encode_chunked_with_trailers(data: &[u8], trailers: &[(String, String)]) 
 }
 
 fn find_crlf(data: &[u8], pos: usize) -> Option<usize> {
-    data[pos..].windows(2).position(|w| w == b"\r\n").map(|i| pos + i)
+    data[pos..]
+        .windows(2)
+        .position(|w| w == b"\r\n")
+        .map(|i| pos + i)
 }
 
 fn find_double_crlf(data: &[u8], pos: usize) -> Option<usize> {
-    data[pos..].windows(4).position(|w| w == b"\r\n\r\n").map(|i| pos + i)
+    data[pos..]
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|i| pos + i)
 }
 
 #[cfg(test)]

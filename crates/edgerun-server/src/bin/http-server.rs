@@ -26,20 +26,25 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--port" | "-p"
-                if i + 1 < args.len() => {
-                    if let Ok(p) = args[i + 1].parse() { port = p; }
-                    i += 1;
+            "--port" | "-p" if i + 1 < args.len() => {
+                if let Ok(p) = args[i + 1].parse() {
+                    port = p;
                 }
-            "--tls" => { tls = true; }
-            "--http3" | "--h3" => { http3 = true; }
+                i += 1;
+            }
+            "--tls" => {
+                tls = true;
+            }
+            "--http3" | "--h3" => {
+                http3 = true;
+            }
             _ => {}
         }
         i += 1;
     }
 
-    let mut server = edgerun_server::Server::new()
-        .with_http(EchoHandler, format!("127.0.0.1:{port}"));
+    let mut server =
+        edgerun_server::Server::new().with_http(EchoHandler, format!("127.0.0.1:{port}"));
 
     if tls {
         let cert = generate_self_signed(&["127.0.0.1", "localhost"])
@@ -57,10 +62,19 @@ fn main() {
         server = server.with_http3();
     }
 
-    let protocols = if http3 { "HTTP/1.1 + HTTP/2 + HTTP/3" } else if tls { "HTTP/1.1 + HTTP/2 + TLS" } else { "HTTP/1.1 + HTTP/2" };
+    let protocols = if http3 {
+        "HTTP/1.1 + HTTP/2 + HTTP/3"
+    } else if tls {
+        "HTTP/1.1 + HTTP/2 + TLS"
+    } else {
+        "HTTP/1.1 + HTTP/2"
+    };
     println!("HTTP server listening on 127.0.0.1:{port} ({protocols})");
 
-    let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap();
+    let rt = edgerun_rt::Runtime::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
     rt.block_on(async move {
         let shutdown = edgerun_rt::CancellationToken::new();
         match server.build().await {

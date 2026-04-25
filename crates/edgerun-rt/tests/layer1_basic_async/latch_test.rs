@@ -1,5 +1,5 @@
 // Test Latch with the actual runtime.
-use edgerun_rt::{Latch, Runtime, spawn};
+use edgerun_rt::{spawn, Latch, Runtime};
 use std::sync::Arc;
 use std::time::Duration;
 

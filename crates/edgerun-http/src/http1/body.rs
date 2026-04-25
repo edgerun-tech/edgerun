@@ -39,19 +39,25 @@ impl Body {
     pub fn new(capacity: usize) -> (Self, BodySender) {
         let (tx, rx) = mpsc::channel::<Vec<u8>>(capacity);
         (
-            Body { inner: BodyInner::Stream(StreamBody { rx }) },
+            Body {
+                inner: BodyInner::Stream(StreamBody { rx }),
+            },
             BodySender { tx },
         )
     }
 
     /// Create a body that is already fully buffered.
     pub fn full(data: Vec<u8>) -> Self {
-        Body { inner: BodyInner::Full(data) }
+        Body {
+            inner: BodyInner::Full(data),
+        }
     }
 
     /// Create an empty body.
     pub fn empty() -> Self {
-        Body { inner: BodyInner::Full(Vec::new()) }
+        Body {
+            inner: BodyInner::Full(Vec::new()),
+        }
     }
 
     /// True if the body is known to be empty.
@@ -154,9 +160,7 @@ impl Future for ReadChunkFut<'_> {
                             None => Ok(None),
                         })
                     }
-                    Err(edgerun_rt::mpsc::TryRecvError::Disconnected) => {
-                        Poll::Ready(Ok(None))
-                    }
+                    Err(edgerun_rt::mpsc::TryRecvError::Disconnected) => Poll::Ready(Ok(None)),
                 }
             }
         }
@@ -290,8 +294,7 @@ impl<R: AsyncRead + Unpin> AsyncBodyReader<R> {
 
     /// Returns true if the body is fully consumed.
     pub fn is_done(&self) -> bool {
-        self.state == ChunkState::Done
-            || self.remaining == Some(0)
+        self.state == ChunkState::Done || self.remaining == Some(0)
     }
 }
 
@@ -312,7 +315,9 @@ impl<R: AsyncRead + Unpin> Future for ReadBodyFut<'_, '_, R> {
                 return Poll::Ready(Ok(0));
             }
 
-            let max_read = this.reader.remaining
+            let max_read = this
+                .reader
+                .remaining
                 .map(|r| (r as usize).min(this.buf.len()))
                 .unwrap_or(this.buf.len());
 
@@ -379,11 +384,16 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         line.pop();
                     }
 
-                    let size_hex = std::str::from_utf8(&line)
-                        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid chunk size encoding"))?;
+                    let size_hex = std::str::from_utf8(&line).map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "invalid chunk size encoding",
+                        )
+                    })?;
                     let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
-                    let chunk_size = usize::from_str_radix(size_str, 16)
-                        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid chunk size"))?;
+                    let chunk_size = usize::from_str_radix(size_str, 16).map_err(|_| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid chunk size")
+                    })?;
 
                     if chunk_size == 0 {
                         self.reader.state = ChunkState::Trailers;
@@ -463,9 +473,13 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                                 self.reader.state = ChunkState::Done;
                                 return Poll::Ready(Ok(0));
                             }
-                            b'\n' => { self.reader.trailer_empty_line = true; }
+                            b'\n' => {
+                                self.reader.trailer_empty_line = true;
+                            }
                             b'\r' => {}
-                            _ => { self.reader.trailer_empty_line = false; }
+                            _ => {
+                                self.reader.trailer_empty_line = false;
+                            }
                         }
                     }
                 }

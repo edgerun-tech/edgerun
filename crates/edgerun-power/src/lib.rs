@@ -158,11 +158,7 @@ mod tests {
 
     #[test]
     fn lid_state_all_variants() {
-        let states = [
-            LidState::Unknown,
-            LidState::Open,
-            LidState::Closed,
-        ];
+        let states = [LidState::Unknown, LidState::Open, LidState::Closed];
         for (i, a) in states.iter().enumerate() {
             for (j, b) in states.iter().enumerate() {
                 if i != j {

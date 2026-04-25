@@ -11,10 +11,10 @@ use edgerun_rt::AsyncTcpListener;
 use edgerun_rt::AsyncUdpSocket;
 
 pub mod query;
-pub(crate) mod udp;
 pub(crate) mod tcp;
+pub(crate) mod udp;
 
-pub use query::{ServerState, handle_query, MAX_UDP_RESPONSE};
+pub use query::{handle_query, ServerState, MAX_UDP_RESPONSE};
 pub use tcp::handle_tcp_connection_raw;
 
 /// DNS server configuration.
@@ -61,13 +61,14 @@ impl RateLimiter {
 
     /// Check if a query from `addr` is allowed.
     pub fn allow(&self, addr: std::net::IpAddr) -> bool {
-        if self.max_qps == 0 { return true; }
+        if self.max_qps == 0 {
+            return true;
+        }
         let mut guard = self.state.lock().unwrap();
         let now = std::time::Instant::now();
         let (tokens, last) = guard.entry(addr).or_insert((self.max_qps, now));
         let elapsed = now.duration_since(*last).as_secs_f64();
-        *tokens = (*tokens as f64 + elapsed * self.max_qps as f64)
-            .min(self.max_qps as f64) as u32;
+        *tokens = (*tokens as f64 + elapsed * self.max_qps as f64).min(self.max_qps as f64) as u32;
         *last = now;
         if *tokens > 0 {
             *tokens -= 1;
@@ -127,10 +128,7 @@ impl DnsServer {
         let tcp_listener = Arc::new(AsyncTcpListener::bind(&config.bind_addr)?);
 
         let local = udp_socket.local_addr().unwrap();
-        edgerun_log::info!(
-            "edgerun-dns: server bound to {} (UDP + TCP)",
-            local
-        );
+        edgerun_log::info!("edgerun-dns: server bound to {} (UDP + TCP)", local);
 
         let (udp_ipv6, tcp_ipv6) = if let Some(ref v6_addr) = config.bind_addr_ipv6 {
             let udp6 = Arc::new(AsyncUdpSocket::bind(v6_addr)?);
@@ -189,7 +187,12 @@ impl DnsServer {
             let state = self.state.clone();
             let rate_limiter = self.rate_limiter.clone();
             let shutdown = Arc::clone(&self.shutdown_flag);
-            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(listener, state, rate_limiter, shutdown));
+            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(
+                listener,
+                state,
+                rate_limiter,
+                shutdown,
+            ));
         }
 
         // Spawn IPv6 loops if configured.
@@ -200,8 +203,17 @@ impl DnsServer {
             let udp6 = Arc::clone(udp6);
             let tcp6 = Arc::clone(tcp6);
             edgerun_rt::spawn(udp::udp_recv_loop_with_rate_limiting(
-                udp6, state.clone(), rate_limiter.clone(), shutdown.clone()));
-            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(tcp6, state, rate_limiter, shutdown));
+                udp6,
+                state.clone(),
+                rate_limiter.clone(),
+                shutdown.clone(),
+            ));
+            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(
+                tcp6,
+                state,
+                rate_limiter,
+                shutdown,
+            ));
         }
 
         // Run UDP receive loop.
@@ -210,7 +222,8 @@ impl DnsServer {
             self.state.clone(),
             self.rate_limiter.clone(),
             Arc::clone(&self.shutdown_flag),
-        ).await
+        )
+        .await
     }
 
     /// Signal the server to shut down.

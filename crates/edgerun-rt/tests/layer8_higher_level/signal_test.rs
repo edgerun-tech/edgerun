@@ -1,5 +1,5 @@
 // Test Unix signal handling with the actual runtime.
-use edgerun_rt::{Signal, SignalKind, signal, Runtime, AsyncReadExt, spawn};
+use edgerun_rt::{signal, spawn, AsyncReadExt, Runtime, Signal, SignalKind};
 use std::time::Duration;
 
 fn main() {
@@ -56,7 +56,7 @@ fn test_signal_send_and_recv_same_thread() {
     let h = spawn(async {
         // Create signal listener — masks SIGUSR1 for this thread.
         let mut sig = signal(SignalKind::user_defined1()).expect("create signal failed");
-        
+
         // Send SIGUSR1 to THIS thread specifically using pthread_kill.
         // This ensures the signal goes to the thread with the mask,
         // so it's delivered via signalfd (not the default handler).
@@ -64,10 +64,15 @@ fn test_signal_send_and_recv_same_thread() {
         let tid = unsafe { libc::pthread_self() };
         let ret = unsafe { libc::pthread_kill(tid, libc::SIGUSR1) };
         assert_eq!(ret, 0, "pthread_kill failed: {}", ret);
-        
+
         // Receive the signal via signalfd.
         let signo = sig.recv().await.expect("recv failed");
-        assert_eq!(signo, Some(libc::SIGUSR1), "expected SIGUSR1, got {:?}", signo);
+        assert_eq!(
+            signo,
+            Some(libc::SIGUSR1),
+            "expected SIGUSR1, got {:?}",
+            signo
+        );
     });
     std::thread::sleep(Duration::from_millis(500));
     drop(h);
@@ -78,13 +83,13 @@ fn test_signal_async_read_returns_siginfo() {
     println!("  test_signal_async_read_returns_siginfo...");
     let h = spawn(async {
         let mut sig = signal(SignalKind::user_defined2()).expect("create signal failed");
-        
+
         // Send SIGUSR2 to this thread.
         std::thread::sleep(Duration::from_millis(50));
         let tid = unsafe { libc::pthread_self() };
         let ret = unsafe { libc::pthread_kill(tid, libc::SIGUSR2) };
         assert_eq!(ret, 0, "pthread_kill failed: {}", ret);
-        
+
         // Read the signalfd_siginfo struct (128 bytes).
         let mut buf = [0u8; 256];
         let n = sig.read(&mut buf).await.expect("read failed");

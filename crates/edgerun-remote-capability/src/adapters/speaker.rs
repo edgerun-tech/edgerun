@@ -1,6 +1,8 @@
 //! Speaker device remote adapter.
 
-use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation};
+use edgerun_capabilities::{
+    CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
+};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionOpen,
@@ -10,7 +12,9 @@ use edgerun_speaker::{
     SpeakerSampleFormat,
 };
 
-use crate::protocol::{accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult};
+use crate::protocol::{
+    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
+};
 
 /// Binary-encode speaker playback request.
 pub fn encode_speaker_playback_request(request: &AudioPlaybackRequest) -> Vec<u8> {
@@ -189,9 +193,7 @@ where
             "speaker remote adapter requires inline playback parameters",
         ))?;
         let request = decode_speaker_playback_request(parameters)?;
-        let output_level = if invocation.operation
-            == CapabilityOperation::Control as i32
-        {
+        let output_level = if invocation.operation == CapabilityOperation::Control as i32 {
             let target =
                 request
                     .target_output_level_percent
@@ -202,12 +204,11 @@ where
         } else {
             None
         };
-        let playback =
-            if invocation.operation == CapabilityOperation::Render as i32 {
-                Some(self.device.play_audio(&request)?)
-            } else {
-                None
-            };
+        let playback = if invocation.operation == CapabilityOperation::Render as i32 {
+            Some(self.device.play_audio(&request)?)
+        } else {
+            None
+        };
         let inline_payload = if let Some(playback) = playback {
             encode_speaker_playback_result(&playback)
         } else if let Some(level) = output_level {

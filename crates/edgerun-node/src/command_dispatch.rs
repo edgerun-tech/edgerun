@@ -6,17 +6,21 @@
 //! - Controller set management and projection from event log
 //! - Revocation record processing
 
-
-use crate::config::{NodeConfig, parse_config};
+use crate::config::{parse_config, NodeConfig};
 use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
-use edgerun_core::protocol::{canonical_bytes, ProtocolRecord, EventEnvelope, Digest};
+use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use edgerun_core::result::Verdict;
-use edgerun_hardware_signing::MeshSigner;
-use edgerun_storage::NodeStore;
-use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
-use edgerun_proto::edgerun::v0::trust::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
-use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
 use edgerun_crypto::rand_core::RngCore;
+use edgerun_hardware_signing::MeshSigner;
+use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
+use edgerun_proto::edgerun::v0::stream::{
+    CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
+    CommandType, EventType,
+};
+use edgerun_proto::edgerun::v0::trust::{
+    DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord,
+};
+use edgerun_storage::NodeStore;
 use prost::Message;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -116,10 +120,10 @@ pub fn project_controller_set(
 }
 
 /// Projects node configuration from the event store.
-/// 
+///
 /// This replays UpdateConfig commands from the event log and applies them
 /// sequentially to build the current configuration state.
-/// 
+///
 /// On first boot (no events), returns the initial config from the YAML file.
 pub fn project_config(
     store: &NodeStore,
@@ -142,7 +146,7 @@ pub fn project_config(
     // TODO: Actually replay UpdateConfig events
     // For now, just use the initial config
     edgerun_log::info!("projecting config from event store ({} events)", head_seq);
-    
+
     parse_config(initial_config_yaml).map_err(|e| e.to_string())
 }
 
@@ -189,17 +193,36 @@ pub fn dispatch_command(
     let cmd_hash_hex = edgerun_core::util::bytes_to_hex(&computed_hash.value);
     if let Some(ref target) = command.target_node {
         let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
-        if let Ok(Some((_cmd_id, _event_seq))) = store.get_replay_entry(&target_hex, &cmd_hash_hex) {
+        if let Ok(Some((_cmd_id, _event_seq))) = store.get_replay_entry(&target_hex, &cmd_hash_hex)
+        {
             // Previously processed command — return DUPLICATE without re-execution
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                true, "duplicate_command", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                true,
+                "duplicate_command",
+                Vec::new(),
+                None,
+            );
         }
     }
 
     // Also check in-memory replay cache for this session's commands
     if replay_cache.contains_key(&computed_hash.value) {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            true, "duplicate_command", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            true,
+            "duplicate_command",
+            Vec::new(),
+            None,
+        );
     }
 
     // Build validation context for full validate_command
@@ -220,20 +243,50 @@ pub fn dispatch_command(
     // If validation rejected or deferred, record and return
     match validation_result.verdict {
         Verdict::Reject => {
-            let reason = validation_result.reason_code.map(|r| r.as_str().to_string()).unwrap_or_else(|| "rejected".into());
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, &reason, Vec::new(), None);
+            let reason = validation_result
+                .reason_code
+                .map(|r| r.as_str().to_string())
+                .unwrap_or_else(|| "rejected".into());
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &reason,
+                Vec::new(),
+                None,
+            );
         }
         Verdict::Defer => {
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "deferred", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "deferred",
+                Vec::new(),
+                None,
+            );
         }
         Verdict::Duplicate => {
             // Already processed — return prior acknowledgment per spec §19.10.
             // Same command_hash means the command was already committed/rejected.
             // No re-execution of side effects.
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                true, "duplicate_command", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                true,
+                "duplicate_command",
+                Vec::new(),
+                None,
+            );
         }
         Verdict::Accept => {}
     }
@@ -242,7 +295,11 @@ pub fn dispatch_command(
     // After deterministic core validation, apply local policy.
     // This is a bounded local policy rule: different nodes may configure
     // different controller sets and command-type allow-lists.
-    let issuer_id = command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default();
+    let issuer_id = command
+        .issuer
+        .as_ref()
+        .map(|i| i.identity_id.clone())
+        .unwrap_or_default();
     let policy_ctx = edgerun_core::command::CommandPolicyContext {
         issuer_identity_id: &issuer_id,
         command_type: command.command_type,
@@ -252,9 +309,21 @@ pub fn dispatch_command(
     };
     let policy_result = edgerun_core::command::validate_command_policy(&policy_ctx);
     if policy_result.verdict == Verdict::Reject {
-        let reason = policy_result.reason_code.map(|r| r.as_str().to_string()).unwrap_or_else(|| "policy_denied".into());
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, &reason, Vec::new(), None);
+        let reason = policy_result
+            .reason_code
+            .map(|r| r.as_str().to_string())
+            .unwrap_or_else(|| "policy_denied".into());
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            &reason,
+            Vec::new(),
+            None,
+        );
     }
 
     // Dispatch by command type
@@ -271,32 +340,84 @@ pub fn dispatch_command(
         }
         x if x == CommandType::PublishSnapshot as i32 => {
             // Snapshot publishing is handled via ProduceSnapshot request
-            record_and_respond(command, store, stream_id, signer, controllers,
-                false, "use_produce_snapshot_request", Vec::new(), None)
+            record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "use_produce_snapshot_request",
+                Vec::new(),
+                None,
+            )
         }
         x if x == CommandType::FetchObject as i32 => {
             // Object fetching is handled via FetchObject request
-            record_and_respond(command, store, stream_id, signer, controllers,
-                false, "use_fetch_object_request", Vec::new(), None)
+            record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "use_fetch_object_request",
+                Vec::new(),
+                None,
+            )
         }
         x if x == CommandType::Query as i32 => {
             // Queries are handled via Query request
-            record_and_respond(command, store, stream_id, signer, controllers,
-                true, "", Vec::new(), None)
+            record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                true,
+                "",
+                Vec::new(),
+                None,
+            )
         }
         #[cfg(feature = "oci")]
         x if x == CommandType::ExecuteWorkload as i32 => {
             // Execute workload with full accounting + capacity check
-            dispatch_execute_workload(command, store, stream_id, signer, controllers, capacity_tracker, workload_policy, rate_limiter, running_workloads)
+            dispatch_execute_workload(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                capacity_tracker,
+                workload_policy,
+                rate_limiter,
+                running_workloads,
+            )
         }
         #[cfg(not(feature = "oci"))]
-        x if x == CommandType::ExecuteWorkload as i32 => {
-            record_and_respond(command, store, stream_id, signer, controllers,
-                false, "oci_feature_not_enabled", Vec::new(), None)
-        }
+        x if x == CommandType::ExecuteWorkload as i32 => record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "oci_feature_not_enabled",
+            Vec::new(),
+            None,
+        ),
         x if x == CommandType::TerminateWorkload as i32 => {
             // Preempt/terminate a running workload
-            dispatch_terminate_workload(command, store, stream_id, signer, controllers, capacity_tracker, running_workloads)
+            dispatch_terminate_workload(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                capacity_tracker,
+                running_workloads,
+            )
         }
         x if x == CommandType::UpdateConfig as i32 => {
             // Update configuration via event store
@@ -307,13 +428,31 @@ pub fn dispatch_command(
             // CommandType is authority-critical. The proto reserves 13..=999.
             // Extension types start at 1000; unknown types below 1000 are rejected.
             if command_type > 0 && command_type < 1000 {
-                record_and_respond(command, store, stream_id, signer, controllers,
-                    false, "unknown_command_type_reserved", Vec::new(), None)
+                record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "unknown_command_type_reserved",
+                    Vec::new(),
+                    None,
+                )
             } else {
                 // Unknown extension type (>= 1000) — accept but don't execute.
                 // Local policy may allow specific extension types.
-                record_and_respond(command, store, stream_id, signer, controllers,
-                    true, "", Vec::new(), None)
+                record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    true,
+                    "",
+                    Vec::new(),
+                    None,
+                )
             }
         }
     }
@@ -333,29 +472,61 @@ fn dispatch_update_config(
 ) -> CommandDispatchResult {
     // Extract config patch from payload (JSON format)
     let config_patch: Vec<u8> = match &command.payload {
-        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(bytes)) => bytes.clone(),
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
         _ => {
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "missing_config_patch", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_config_patch",
+                Vec::new(),
+                None,
+            );
         }
     };
-    
+
     // Validate it's valid JSON (basic check)
-    if !config_patch.is_empty() && !config_patch.starts_with(b"{") && !config_patch.starts_with(b"[") {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "invalid_config_patch_json", Vec::new(), None);
+    if !config_patch.is_empty()
+        && !config_patch.starts_with(b"{")
+        && !config_patch.starts_with(b"[")
+    {
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "invalid_config_patch_json",
+            Vec::new(),
+            None,
+        );
     }
-    
+
     // TODO: Validate the config patch against a schema
     // For now, just accept it and store it
-    
+
     edgerun_log::info!("config update received");
-    
+
     // Apply the config patch by storing it in the event
     // The config will be projected on next boot or reload
     let response = b"config_update_received".to_vec();
-    record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, None)
+    record_and_respond(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response,
+        None,
+    )
 }
 
 fn dispatch_add_controller(
@@ -368,8 +539,17 @@ fn dispatch_add_controller(
     // Extract the new controller identity from the command's payload
     let new_controller_id = extract_identity_from_command(command);
     if new_controller_id.is_empty() {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "missing_controller_identity", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_controller_identity",
+            Vec::new(),
+            None,
+        );
     }
 
     // Add to controller set
@@ -377,9 +557,25 @@ fn dispatch_add_controller(
 
     edgerun_log::info!("controller added");
 
-    let response = format!("controller added: {}", edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id)).into_bytes();
-    record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id), "added")))
+    let response = format!(
+        "controller added: {}",
+        edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id)
+    )
+    .into_bytes();
+    record_and_respond(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response,
+        Some((
+            &edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id),
+            "added",
+        )),
+    )
 }
 
 fn dispatch_remove_controller(
@@ -391,27 +587,70 @@ fn dispatch_remove_controller(
 ) -> CommandDispatchResult {
     let target_id = extract_identity_from_command(command);
     if target_id.is_empty() {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "missing_controller_identity", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_controller_identity",
+            Vec::new(),
+            None,
+        );
     }
 
     if !controllers.remove(&target_id) {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "controller_not_found", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "controller_not_found",
+            Vec::new(),
+            None,
+        );
     }
 
     // Guard: never allow removing the last controller — node would be orphaned
     if controllers.to_vec().is_empty() {
         controllers.add(target_id); // revert
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "cannot_remove_last_controller", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "cannot_remove_last_controller",
+            Vec::new(),
+            None,
+        );
     }
 
     edgerun_log::info!("controller removed");
 
-    let response = format!("controller removed: {}", edgerun_core::util::bytes_to_hex_prefixed(&target_id)).into_bytes();
-    record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&edgerun_core::util::bytes_to_hex_prefixed(&target_id), "removed")))
+    let response = format!(
+        "controller removed: {}",
+        edgerun_core::util::bytes_to_hex_prefixed(&target_id)
+    )
+    .into_bytes();
+    record_and_respond(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response,
+        Some((
+            &edgerun_core::util::bytes_to_hex_prefixed(&target_id),
+            "removed",
+        )),
+    )
 }
 
 fn dispatch_transfer_control(
@@ -424,8 +663,17 @@ fn dispatch_transfer_control(
     // Extract new controller identity
     let new_controller_id = extract_identity_from_command(command);
     if new_controller_id.is_empty() {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "missing_target_identity", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_target_identity",
+            Vec::new(),
+            None,
+        );
     }
 
     // Spec §18.7 safe transfer step 1: add new controller.
@@ -436,9 +684,25 @@ fn dispatch_transfer_control(
 
     edgerun_log::info!("control transfer step 1 complete — new controller added; send REMOVE_CONTROLLER commands for old controllers after verification");
 
-    let response = format!("control transferred to: {}", edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id)).into_bytes();
-    record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id), "transferred")))
+    let response = format!(
+        "control transferred to: {}",
+        edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id)
+    )
+    .into_bytes();
+    record_and_respond(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response,
+        Some((
+            &edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id),
+            "transferred",
+        )),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -465,25 +729,48 @@ fn dispatch_execute_workload(
     rate_limiter: &super::workload_policy::RateLimiter,
     running_workloads: &std::sync::Arc<super::running_workloads::RunningWorkloads>,
 ) -> CommandDispatchResult {
-    use super::metering::{WorkMeter, compute_work_id};
-    use edgerun_core::accounting::{WorkloadClass, WorkPriority, WorkStatus};
+    use super::metering::{compute_work_id, WorkMeter};
+    use edgerun_core::accounting::{WorkPriority, WorkStatus, WorkloadClass};
     use std::sync::Arc;
 
     // === EMIT ACTION_STARTED BEFORE ANY WORK BEGINS ===
-    record_action_event(store, stream_id, signer, command,
+    record_action_event(
+        store,
+        stream_id,
+        signer,
+        command,
         1, // ACTION_STATUS_STARTED
-        EventType::ActionStarted, vec![]);
+        EventType::ActionStarted,
+        vec![],
+    );
 
     // Extract workload spec from command payload
     let workload_spec = match &command.payload {
-        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(bytes)) => bytes.clone(),
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
         _ => {
             // Already emitted ActionStarted; emit ActionFailed before returning
-            record_action_event(store, stream_id, signer, command,
+            record_action_event(
+                store,
+                stream_id,
+                signer,
+                command,
                 3, // ACTION_STATUS_FAILED
-                EventType::ActionFailed, vec![]);
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "missing_workload_spec", Vec::new(), None);
+                EventType::ActionFailed,
+                vec![],
+            );
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_workload_spec",
+                Vec::new(),
+                None,
+            );
         }
     };
 
@@ -494,33 +781,85 @@ fn dispatch_execute_workload(
     // === WORKLOAD POLICY CHECK: reject disallowed images ===
     if let Err(reason) = workload_policy.validate(&image_str) {
         edgerun_log::warn!("workload policy rejected: {} — {}", image_str, reason);
-        record_action_event(store, stream_id, signer, command,
+        record_action_event(
+            store,
+            stream_id,
+            signer,
+            command,
             3, // ACTION_STATUS_FAILED
-            EventType::ActionFailed, vec![]);
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, &format!("policy_violation: {}", reason), Vec::new(), None);
+            EventType::ActionFailed,
+            vec![],
+        );
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            &format!("policy_violation: {}", reason),
+            Vec::new(),
+            None,
+        );
     }
 
     let image_ref: edgerun_oci::ImageRef = match image_str.parse() {
         Ok(img) => img,
         Err(e) => {
-            record_action_event(store, stream_id, signer, command,
+            record_action_event(
+                store,
+                stream_id,
+                signer,
+                command,
                 3, // ACTION_STATUS_FAILED
-                EventType::ActionFailed, vec![]);
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, &format!("invalid_image_ref: {}", e), Vec::new(), None);
+                EventType::ActionFailed,
+                vec![],
+            );
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_image_ref: {}", e),
+                Vec::new(),
+                None,
+            );
         }
     };
 
     // === RATE LIMIT CHECK: prevent workload spam ===
-    let requester_id = command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default();
+    let requester_id = command
+        .issuer
+        .as_ref()
+        .map(|i| i.identity_id.clone())
+        .unwrap_or_default();
     if !rate_limiter.check_and_record(&requester_id) {
-        edgerun_log::warn!("rate limit exceeded for requester: {}", edgerun_core::util::bytes_to_hex(&requester_id));
-        record_action_event(store, stream_id, signer, command,
+        edgerun_log::warn!(
+            "rate limit exceeded for requester: {}",
+            edgerun_core::util::bytes_to_hex(&requester_id)
+        );
+        record_action_event(
+            store,
+            stream_id,
+            signer,
+            command,
             3, // ACTION_STATUS_FAILED
-            EventType::ActionFailed, vec![]);
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "rate_limit_exceeded", Vec::new(), None);
+            EventType::ActionFailed,
+            vec![],
+        );
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "rate_limit_exceeded",
+            Vec::new(),
+            None,
+        );
     }
 
     // Compute deterministic work ID (normalized spec)
@@ -539,8 +878,17 @@ fn dispatch_execute_workload(
             id
         }
         None => {
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "missing_requester_identity", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_requester_identity",
+                Vec::new(),
+                None,
+            );
         }
     };
 
@@ -583,40 +931,82 @@ fn dispatch_execute_workload(
     // === CERTIFICATE SIGNATURE VERIFICATION ===
     // The certificate must be self-signed by the node's key to prevent fabrication.
     if !cert.verify() {
-        edgerun_log::error!("performance certificate signature verification failed — possible fabrication");
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "invalid_certificate_signature", Vec::new(), None);
+        edgerun_log::error!(
+            "performance certificate signature verification failed — possible fabrication"
+        );
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "invalid_certificate_signature",
+            Vec::new(),
+            None,
+        );
     }
 
     // Also verify the certificate's node_id matches our node identity
     if cert.node_id != provider_id {
         edgerun_log::error!("performance certificate node_id does not match local node identity");
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "certificate_identity_mismatch", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "certificate_identity_mismatch",
+            Vec::new(),
+            None,
+        );
     }
 
     // === CERTIFICATE FRESHNESS CHECK: reject stale certs ===
     if let Err(reason) = check_cert_freshness_impl(&cert) {
         edgerun_log::warn!("certificate freshness check failed: {}", reason);
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, &format!("stale_certificate: {}", reason), Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            &format!("stale_certificate: {}", reason),
+            Vec::new(),
+            None,
+        );
     }
 
     // === CAPACITY CHECK: do we have enough resources? ===
     if !capacity_tracker.try_allocate(allocated_cores, allocated_memory_bytes) {
-        edgerun_log::warn!("insufficient capacity: need {} cores, {} bytes (have {} cores, {} bytes)",
-            allocated_cores, allocated_memory_bytes,
+        edgerun_log::warn!(
+            "insufficient capacity: need {} cores, {} bytes (have {} cores, {} bytes)",
+            allocated_cores,
+            allocated_memory_bytes,
             capacity_tracker.available_cores(),
-            capacity_tracker.available_memory());
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "insufficient_capacity", Vec::new(), None);
+            capacity_tracker.available_memory()
+        );
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "insufficient_capacity",
+            Vec::new(),
+            None,
+        );
     }
 
     // Determine workload class from image name and resource profile
     // Uses the parsed image_ref (not raw spec string) to avoid false substring matches.
     let workload_class = {
         let img_name = image_ref.repository.to_lowercase();
-        if img_name.contains("inference") || img_name.contains("llm") || img_name.contains("model") {
+        if img_name.contains("inference") || img_name.contains("llm") || img_name.contains("model")
+        {
             WorkloadClass::Inference
         } else if img_name.contains("compil") || img_name.contains("build") {
             WorkloadClass::Compilation
@@ -634,14 +1024,23 @@ fn dispatch_execute_workload(
 
     // Start metering BEFORE pull so download time is billed
     let meter = WorkMeter::new(
-        work_id, requester_id_bytes, provider_id, delegation_hash,
-        allocated_cores, allocated_memory_bytes,
-        workload_class, WorkPriority::Standard, &cert,
+        work_id,
+        requester_id_bytes,
+        provider_id,
+        delegation_hash,
+        allocated_cores,
+        allocated_memory_bytes,
+        workload_class,
+        WorkPriority::Standard,
+        &cert,
     );
 
     edgerun_log::info!("pulling: {}", image_str);
     let meter_for_pull = meter.clone();
-    let rt = edgerun_rt::Runtime::new_multi_thread().enable_all().build().map_err(|e| e.to_string());
+    let rt = edgerun_rt::Runtime::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string());
     let pull_result = match rt {
         Ok(rt) => {
             let image_ref2 = image_ref.clone();
@@ -658,8 +1057,17 @@ fn dispatch_execute_workload(
         capacity_tracker.release(allocated_cores, allocated_memory_bytes);
         let acc = meter.finalize(WorkStatus::Failed, None);
         let _ = store.record_work_accounting(&acc);
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, &format!("pull_failed: {}", e), Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            &format!("pull_failed: {}", e),
+            Vec::new(),
+            None,
+        );
     }
 
     // === PHASE 2: Apply resource limits ===
@@ -704,8 +1112,17 @@ fn dispatch_execute_workload(
                 let _ = std::fs::remove_dir_all(&paths.tmp_base);
                 let acc = meter.finalize(WorkStatus::Failed, None);
                 let _ = store.record_work_accounting(&acc);
-                return record_and_respond(command, store, stream_id, signer, controllers,
-                    false, "resource_limit_write_failed", Vec::new(), None);
+                return record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "resource_limit_write_failed",
+                    Vec::new(),
+                    None,
+                );
             }
         }
     }
@@ -720,8 +1137,17 @@ fn dispatch_execute_workload(
             let acc = meter.finalize(WorkStatus::Failed, None);
             let _ = store.record_work_accounting(&acc);
             let _ = std::fs::remove_dir_all(&paths.tmp_base);
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, &format!("run_failed: {}", e), Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("run_failed: {}", e),
+                Vec::new(),
+                None,
+            );
         }
     };
 
@@ -739,13 +1165,24 @@ fn dispatch_execute_workload(
     match running_workloads.register(workload_info) {
         Ok(()) => {}
         Err(_existing) => {
-            edgerun_log::warn!("work {} already running (duplicate work_id)",
-                edgerun_core::util::bytes_to_hex(&work_id[..8]));
+            edgerun_log::warn!(
+                "work {} already running (duplicate work_id)",
+                edgerun_core::util::bytes_to_hex(&work_id[..8])
+            );
             let _ = container.kill();
             capacity_tracker.release(allocated_cores, allocated_memory_bytes);
             let _ = std::fs::remove_dir_all(&paths.tmp_base);
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "duplicate_work_id", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "duplicate_work_id",
+                Vec::new(),
+                None,
+            );
         }
     }
 
@@ -784,12 +1221,23 @@ fn dispatch_execute_workload(
             // Catch panics so they are logged rather than silently killing the thread
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 workload_thread_body(
-                    work_id, container, container_pid,
-                    running_workloads_bg, capacity_tracker_bg,
-                    provider_id_bg, requester_id_bg, delegation_hash_bg,
-                    cpu_multiplier_bg, memory_multiplier_bg, storage_multiplier_bg,
-                    cert_digest_bg, allocated_cores, allocated_memory_bytes,
-                    image_str, paths, workload_class,
+                    work_id,
+                    container,
+                    container_pid,
+                    running_workloads_bg,
+                    capacity_tracker_bg,
+                    provider_id_bg,
+                    requester_id_bg,
+                    delegation_hash_bg,
+                    cpu_multiplier_bg,
+                    memory_multiplier_bg,
+                    storage_multiplier_bg,
+                    cert_digest_bg,
+                    allocated_cores,
+                    allocated_memory_bytes,
+                    image_str,
+                    paths,
+                    workload_class,
                 )
             }));
             if let Err(panic) = result {
@@ -800,8 +1248,11 @@ fn dispatch_execute_workload(
                 } else {
                     "unknown panic".to_string()
                 };
-                edgerun_log::error!("work {} thread panicked: {}",
-                    edgerun_core::util::bytes_to_hex(&cleanup_work_id[..8]), msg);
+                edgerun_log::error!(
+                    "work {} thread panicked: {}",
+                    edgerun_core::util::bytes_to_hex(&cleanup_work_id[..8]),
+                    msg
+                );
                 // Best-effort cleanup even on panic
                 cleanup_capacity.release(cleanup_allocated_cores, cleanup_allocated_memory);
                 let _ = std::fs::remove_dir_all(&cleanup_paths.tmp_base);
@@ -810,19 +1261,33 @@ fn dispatch_execute_workload(
         })
         .expect("failed to spawn workload thread");
 
-    edgerun_log::info!("work {} started (pid {}, {} running)",
+    edgerun_log::info!(
+        "work {} started (pid {}, {} running)",
         edgerun_core::util::bytes_to_hex(&work_id[..8]),
         container_pid,
-        running_workloads.count());
+        running_workloads.count()
+    );
 
     // === IMMEDIATE RESPONSE: workload accepted, running asynchronously ===
-    let response = format!("accepted {} (pid {}, work {})",
+    let response = format!(
+        "accepted {} (pid {}, work {})",
         image_str_for_response,
         container_pid,
-        edgerun_core::util::bytes_to_hex(&work_id[..8])).into_bytes();
+        edgerun_core::util::bytes_to_hex(&work_id[..8])
+    )
+    .into_bytes();
 
-    record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, None)
+    record_and_respond(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response,
+        None,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -921,12 +1386,14 @@ fn workload_thread_body(
     // 1. Log the accounting record
     let status_str = status.as_str();
     let elapsed_s = elapsed_us / 1_000_000;
-    edgerun_log::info!("work {} {} ({} RC-µs, {}s, pid {})",
+    edgerun_log::info!(
+        "work {} {} ({} RC-µs, {}s, pid {})",
         edgerun_core::util::bytes_to_hex(&work_id[..8]),
         status_str,
         billable_compute_rc_us,
         elapsed_s,
-        container_pid);
+        container_pid
+    );
 
     // 2. Release reserved resources (exactly once — terminate() never does this)
     capacity_tracker_bg.release(allocated_cores, allocated_memory_bytes);
@@ -957,10 +1424,21 @@ fn dispatch_terminate_workload(
 ) -> CommandDispatchResult {
     // Extract work_id from command payload
     let workload_spec = match &command.payload {
-        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(bytes)) => bytes.clone(),
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
         _ => {
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "missing_workload_spec", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_workload_spec",
+                Vec::new(),
+                None,
+            );
         }
     };
 
@@ -979,8 +1457,17 @@ fn dispatch_terminate_workload(
                 id
             }
             _ => {
-                return record_and_respond(command, store, stream_id, signer, controllers,
-                    false, "invalid_work_id", Vec::new(), None);
+                return record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "invalid_work_id",
+                    Vec::new(),
+                    None,
+                );
             }
         }
     };
@@ -1000,18 +1487,41 @@ fn dispatch_terminate_workload(
                 info.allocated_cores,
                 info.allocated_memory_bytes);
 
-            let response = format!("terminated work {} (pid {})",
+            let response = format!(
+                "terminated work {} (pid {})",
                 edgerun_core::util::bytes_to_hex(&work_id[..8]),
-                info.pid).into_bytes();
+                info.pid
+            )
+            .into_bytes();
 
-            record_and_respond(command, store, stream_id, signer, controllers,
-                true, "", response, None)
+            record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                true,
+                "",
+                response,
+                None,
+            )
         }
         None => {
-            edgerun_log::warn!("work {} not found in running workloads",
-                edgerun_core::util::bytes_to_hex(&work_id[..8]));
-            record_and_respond(command, store, stream_id, signer, controllers,
-                false, "work_not_found", Vec::new(), None)
+            edgerun_log::warn!(
+                "work {} not found in running workloads",
+                edgerun_core::util::bytes_to_hex(&work_id[..8])
+            );
+            record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "work_not_found",
+                Vec::new(),
+                None,
+            )
         }
     }
 }
@@ -1044,11 +1554,18 @@ fn parse_workload_spec(spec: &[u8]) -> (String, u32, u64) {
             let (num_s, unit) = mem_str.split_at(pi);
             if let Ok(n) = num_s.parse::<u64>() {
                 let u = unit.to_uppercase();
-                memory_gb = if u.starts_with('T') { n * 1024 }
-                    else if u.starts_with('G') { n }
-                    else if u.starts_with('M') { n.max(512) / 1024 }
-                    else { n };
-                if memory_gb == 0 { memory_gb = 1; }
+                memory_gb = if u.starts_with('T') {
+                    n * 1024
+                } else if u.starts_with('G') {
+                    n
+                } else if u.starts_with('M') {
+                    n.max(512) / 1024
+                } else {
+                    n
+                };
+                if memory_gb == 0 {
+                    memory_gb = 1;
+                }
             }
         } else if let Ok(n) = mem_str.parse::<u64>() {
             memory_gb = n;
@@ -1075,18 +1592,22 @@ async fn pull_with_metering(
     let mut client = edgerun_oci::RegistryClient::new();
 
     // Resolve manifest to know expected layer sizes
-    let manifest = client.resolve_manifest(image).await.map_err(|e| e.to_string())?;
+    let manifest = client
+        .resolve_manifest(image)
+        .await
+        .map_err(|e| e.to_string())?;
     let total_layer_bytes = match &manifest {
-        edgerun_oci::ImageManifest::Single(m) => {
-            m.layers.iter().map(|l| l.size).sum::<u64>()
-        }
+        edgerun_oci::ImageManifest::Single(m) => m.layers.iter().map(|l| l.size).sum::<u64>(),
         edgerun_oci::ImageManifest::Index(idx) => {
             idx.manifests.first().map(|m| m.size).unwrap_or(0)
         }
     };
 
     // Pull the image — download_blob() now tracks real bytes in the client
-    client.pull(image, bundle_dir, store_dir).await.map_err(|e| e.to_string())?;
+    client
+        .pull(image, bundle_dir, store_dir)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Report actual downloaded bytes (may differ from manifest due to retries, compression)
     let real_bytes = client.bytes_downloaded();
@@ -1117,8 +1638,11 @@ fn dir_size(path: &std::path::Path) -> std::io::Result<u64> {
         for entry in std::fs::read_dir(path)? {
             let e = entry?;
             let md = e.metadata()?;
-            if md.is_file() { total += md.len(); }
-            else if md.is_dir() { total += dir_size(&e.path())?; }
+            if md.is_file() {
+                total += md.len();
+            } else if md.is_dir() {
+                total += dir_size(&e.path())?;
+            }
         }
     }
     Ok(total)
@@ -1135,7 +1659,11 @@ fn load_cached_cert(store: &NodeStore) -> Option<edgerun_core::accounting::Perfo
 }
 
 #[cfg(feature = "oci")]
-fn cache_cert(store: &mut NodeStore, cert: &edgerun_core::accounting::PerformanceCertificate, signer: &dyn MeshSigner) {
+fn cache_cert(
+    store: &mut NodeStore,
+    cert: &edgerun_core::accounting::PerformanceCertificate,
+    signer: &dyn MeshSigner,
+) {
     // Sign the certificate if it's not already signed
     let mut cert = cert.clone();
     if cert.signature == [0u8; 64] {
@@ -1151,8 +1679,10 @@ fn cache_cert(store: &mut NodeStore, cert: &edgerun_core::accounting::Performanc
     // Persist to disk for fast loading
     let p = store.data_root().join("perf_cert.bin");
     if std::fs::write(&p, cert.to_bytes()).is_ok() {
-        edgerun_log::info!("perf cert cached: cpu {:.2}x ref",
-            cert.cpu_core_multiplier().to_raw() as f64 / 65536.0);
+        edgerun_log::info!(
+            "perf cert cached: cpu {:.2}x ref",
+            cert.cpu_core_multiplier().to_raw() as f64 / 65536.0
+        );
     }
 
     // Also store as an object so it's recoverable from the event stream
@@ -1205,14 +1735,19 @@ const MAX_CERT_AGE_US: u64 = 24 * 60 * 60 * 1_000_000; // 24 hours
 
 /// Check if a performance certificate is still fresh.
 #[cfg(feature = "oci")]
-fn check_cert_freshness_impl(cert: &edgerun_core::accounting::PerformanceCertificate) -> Result<(), String> {
+fn check_cert_freshness_impl(
+    cert: &edgerun_core::accounting::PerformanceCertificate,
+) -> Result<(), String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or(std::time::Duration::ZERO)
         .as_micros() as u64;
     let age = now.saturating_sub(cert.benchmark_completed_us);
     if age > MAX_CERT_AGE_US {
-        return Err(format!("cert is {} hours old (max 24h)", age / 3_600_000_000));
+        return Err(format!(
+            "cert is {} hours old (max 24h)",
+            age / 3_600_000_000
+        ));
     }
     Ok(())
 }
@@ -1236,10 +1771,24 @@ fn dispatch_custom_command(
         match payload {
             Payload::InlinePayload(bytes) => {
                 if let Ok(delegation) = ProtoDelegationRecord::decode(&bytes[..]) {
-                    return dispatch_create_delegation(command, store, stream_id, signer, controllers, &delegation);
+                    return dispatch_create_delegation(
+                        command,
+                        store,
+                        stream_id,
+                        signer,
+                        controllers,
+                        &delegation,
+                    );
                 }
                 if let Ok(revocation) = ProtoRevocationRecord::decode(&bytes[..]) {
-                    return dispatch_create_revocation(command, store, stream_id, signer, controllers, &revocation);
+                    return dispatch_create_revocation(
+                        command,
+                        store,
+                        stream_id,
+                        signer,
+                        controllers,
+                        &revocation,
+                    );
                 }
             }
             Payload::PayloadObject(_) => {
@@ -1249,8 +1798,17 @@ fn dispatch_custom_command(
         }
     }
 
-    record_and_respond(command, store, stream_id, signer, controllers,
-        false, "unknown_custom_command", Vec::new(), None)
+    record_and_respond(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        false,
+        "unknown_custom_command",
+        Vec::new(),
+        None,
+    )
 }
 
 /// Handles a delegation creation command.
@@ -1264,27 +1822,72 @@ fn dispatch_create_delegation(
 ) -> CommandDispatchResult {
     // Verify the delegation signature using domain-separated canonical verification.
     let Some(sig) = &delegation.signature else {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "missing_signature", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_signature",
+            Vec::new(),
+            None,
+        );
     };
     if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "bad_signature_length", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "bad_signature_length",
+            Vec::new(),
+            None,
+        );
     }
     let Some(issuer_ref) = &delegation.issuer else {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "missing_issuer", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_issuer",
+            Vec::new(),
+            None,
+        );
     };
     let Some(key_hint) = &issuer_ref.key_hint else {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "missing_key_hint", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_key_hint",
+            Vec::new(),
+            None,
+        );
     };
     let mut vk_sec1 = [0u8; 65];
     vk_sec1[0] = 0x04;
     vk_sec1[1..].copy_from_slice(key_hint);
     let Ok(vk) = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) else {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "bad_public_key", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "bad_public_key",
+            Vec::new(),
+            None,
+        );
     };
     let canonical = prost::Message::encode_to_vec(&{
         let mut s = delegation.clone();
@@ -1297,8 +1900,17 @@ fn dispatch_create_delegation(
         &canonical,
         &sig.value,
     ) {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "signature_verification_failed", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "signature_verification_failed",
+            Vec::new(),
+            None,
+        );
     }
 
     // Store the delegation as an object so it's cryptographically linked
@@ -1308,24 +1920,58 @@ fn dispatch_create_delegation(
         Ok(r) => r,
         Err(e) => {
             edgerun_log::warn!("failed to store delegation object: {}", e);
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "storage_failed", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "storage_failed",
+                Vec::new(),
+                None,
+            );
         }
     };
 
     // Also store in the index for efficient lookup
     let delegation_id_hex = edgerun_core::util::bytes_to_hex(&delegation.delegation_id);
-    let issuer_hex = delegation.issuer.as_ref().map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id)).unwrap_or_default();
-    let recipient_hex = delegation.recipient.as_ref().map(|r| edgerun_core::util::bytes_to_hex(&r.identity_id)).unwrap_or_default();
+    let issuer_hex = delegation
+        .issuer
+        .as_ref()
+        .map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id))
+        .unwrap_or_default();
+    let recipient_hex = delegation
+        .recipient
+        .as_ref()
+        .map(|r| edgerun_core::util::bytes_to_hex(&r.identity_id))
+        .unwrap_or_default();
     let expires_at = delegation.expires_at.as_ref().map(|t| t.seconds);
-    let capability_bytes = delegation.capability.as_ref()
+    let capability_bytes = delegation
+        .capability
+        .as_ref()
         .map(prost::Message::encode_to_vec)
         .unwrap_or_default();
 
-    if let Err(e) = store.store_delegation(&delegation_id_hex, &issuer_hex, &recipient_hex, &edgerun_core::util::bytes_to_hex(&capability_bytes), expires_at) {
+    if let Err(e) = store.store_delegation(
+        &delegation_id_hex,
+        &issuer_hex,
+        &recipient_hex,
+        &edgerun_core::util::bytes_to_hex(&capability_bytes),
+        expires_at,
+    ) {
         edgerun_log::warn!("failed to index delegation: {}", e);
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "index_failed", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "index_failed",
+            Vec::new(),
+            None,
+        );
     }
 
     edgerun_log::info!("delegation recorded");
@@ -1334,22 +1980,37 @@ fn dispatch_create_delegation(
     let command_ref = command_ref_from(command);
     let delegations = delegation_refs_from(command);
 
-    record_action_event(store, stream_id, signer, command,
+    record_action_event(
+        store,
+        stream_id,
+        signer,
+        command,
         1, // ACTION_STATUS_STARTED
-        EventType::ActionStarted, vec![]);
+        EventType::ActionStarted,
+        vec![],
+    );
 
     let _event_seq = append_signed_event(
-        store, stream_id, signer,
-        EventType::CommandCommitted, 1,
+        store,
+        stream_id,
+        signer,
+        EventType::CommandCommitted,
+        1,
         Some(object_ref),
         vec![command_ref],
         delegations,
         vec![],
     );
 
-    record_action_event(store, stream_id, signer, command,
+    record_action_event(
+        store,
+        stream_id,
+        signer,
+        command,
         2, // ACTION_STATUS_COMPLETED
-        EventType::ActionCompleted, vec![]);
+        EventType::ActionCompleted,
+        vec![],
+    );
 
     let response = format!("delegation recorded: {}", delegation_id_hex).into_bytes();
     CommandDispatchResult {
@@ -1370,14 +2031,19 @@ fn dispatch_create_revocation(
     revocation: &ProtoRevocationRecord,
 ) -> CommandDispatchResult {
     let revocation_id_hex = edgerun_core::util::bytes_to_hex(&revocation.revocation_id);
-    let issuer_hex = revocation.issuer.as_ref().map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id)).unwrap_or_default();
+    let issuer_hex = revocation
+        .issuer
+        .as_ref()
+        .map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id))
+        .unwrap_or_default();
 
     // Determine target type and hex from the oneof
     let (target_type, target_hex) = if let Some(ref target) = revocation.target {
         match target {
-            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetDelegation(d) => {
-                ("delegation", edgerun_core::util::bytes_to_hex(&d.delegation_id))
-            }
+            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetDelegation(d) => (
+                "delegation",
+                edgerun_core::util::bytes_to_hex(&d.delegation_id),
+            ),
             edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(i) => {
                 ("identity", edgerun_core::util::bytes_to_hex(&i.identity_id))
             }
@@ -1389,8 +2055,17 @@ fn dispatch_create_revocation(
             }
         }
     } else {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "missing_target", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_target",
+            Vec::new(),
+            None,
+        );
     };
 
     let effective_at = revocation.effective_at.as_ref().map(|t| t.seconds);
@@ -1402,16 +2077,40 @@ fn dispatch_create_revocation(
         Ok(r) => r,
         Err(e) => {
             edgerun_log::warn!("failed to store revocation object: {}", e);
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, "storage_failed", Vec::new(), None);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "storage_failed",
+                Vec::new(),
+                None,
+            );
         }
     };
 
     // Also store in the index for efficient lookup
-    if let Err(e) = store.store_revocation(&revocation_id_hex, &issuer_hex, target_type, &target_hex, effective_at) {
+    if let Err(e) = store.store_revocation(
+        &revocation_id_hex,
+        &issuer_hex,
+        target_type,
+        &target_hex,
+        effective_at,
+    ) {
         edgerun_log::warn!("failed to index revocation: {}", e);
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "index_failed", Vec::new(), None);
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "index_failed",
+            Vec::new(),
+            None,
+        );
     }
 
     edgerun_log::info!("revocation recorded");
@@ -1420,22 +2119,37 @@ fn dispatch_create_revocation(
     let command_ref = command_ref_from(command);
     let delegations = delegation_refs_from(command);
 
-    record_action_event(store, stream_id, signer, command,
+    record_action_event(
+        store,
+        stream_id,
+        signer,
+        command,
         1, // ACTION_STATUS_STARTED
-        EventType::ActionStarted, vec![]);
+        EventType::ActionStarted,
+        vec![],
+    );
 
     let _event_seq = append_signed_event(
-        store, stream_id, signer,
-        EventType::CommandCommitted, 1,
+        store,
+        stream_id,
+        signer,
+        EventType::CommandCommitted,
+        1,
         Some(object_ref),
         vec![command_ref],
         delegations,
         vec![],
     );
 
-    record_action_event(store, stream_id, signer, command,
+    record_action_event(
+        store,
+        stream_id,
+        signer,
+        command,
         2, // ACTION_STATUS_COMPLETED
-        EventType::ActionCompleted, vec![]);
+        EventType::ActionCompleted,
+        vec![],
+    );
 
     let response = format!("revocation recorded: {}", revocation_id_hex).into_bytes();
     CommandDispatchResult {
@@ -1457,8 +2171,8 @@ pub fn create_node_genesis_payload(
     node_id: &edgerun_hardware_signing::NodeID,
     initial_controllers: &[Vec<u8>],
 ) -> edgerun_proto::edgerun::v0::common::ObjectRef {
-    use edgerun_proto::edgerun::v0::stream::NodeGenesisPayload;
     use edgerun_proto::edgerun::v0::common::IdentityRef;
+    use edgerun_proto::edgerun::v0::stream::NodeGenesisPayload;
 
     // Spec §14.12: initial_controllers is repeated required — must have at least one
     if initial_controllers.is_empty() {
@@ -1469,11 +2183,14 @@ pub fn create_node_genesis_payload(
         };
     }
 
-    let controllers: Vec<IdentityRef> = initial_controllers.iter().map(|id| IdentityRef {
-        identity_id: id.clone(),
-        identity_kind: Some(2), // NODE
-        key_hint: None,
-    }).collect();
+    let controllers: Vec<IdentityRef> = initial_controllers
+        .iter()
+        .map(|id| IdentityRef {
+            identity_id: id.clone(),
+            identity_kind: Some(2), // NODE
+            key_hint: None,
+        })
+        .collect();
 
     let payload = NodeGenesisPayload {
         payload_version: 1,
@@ -1510,15 +2227,24 @@ pub(crate) fn append_signed_event(
     related_delegations: Vec<edgerun_proto::edgerun::v0::common::DelegationRef>,
     related_events: Vec<edgerun_proto::edgerun::v0::common::EventRef>,
 ) -> Option<u64> {
-    let head_seq = store.get_head(stream_id).ok().flatten().map(|(s, _)| s).unwrap_or(-1);
+    let head_seq = store
+        .get_head(stream_id)
+        .ok()
+        .flatten()
+        .map(|(s, _)| s)
+        .unwrap_or(-1);
     let mut event = EventEnvelope {
         envelope_version: 1,
         stream_id: stream_id.to_vec(),
         seq: (head_seq + 1) as u64,
-        prev_event_hash: store.get_head(stream_id).ok().flatten().map(|(_, h)| Digest {
-            algorithm: 1,
-            value: h,
-        }),
+        prev_event_hash: store
+            .get_head(stream_id)
+            .ok()
+            .flatten()
+            .map(|(_, h)| Digest {
+                algorithm: 1,
+                value: h,
+            }),
         event_type: event_type as i32,
         event_version,
         recorded_at: Some(edgerun_core::util::system_time_to_prost(SystemTime::now())),
@@ -1553,8 +2279,8 @@ pub fn record_command_sent_event(
     signer: &dyn MeshSigner,
     command: &CommandEnvelope,
 ) {
-    use edgerun_proto::edgerun::v0::stream::CommandSentPayload;
     use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
+    use edgerun_proto::edgerun::v0::stream::CommandSentPayload;
 
     let command_ref = command_ref_from(command);
 
@@ -1568,8 +2294,11 @@ pub fn record_command_sent_event(
     let object_ref = store_object_or_log(store, &payload_bytes, 1, &[stream_id.to_vec()]);
 
     let _seq = append_signed_event(
-        store, stream_id, signer,
-        EventType::CommandSent, 1,
+        store,
+        stream_id,
+        signer,
+        EventType::CommandSent,
+        1,
         Some(object_ref),
         vec![command_ref],
         vec![],
@@ -1594,7 +2323,13 @@ pub fn record_action_event(
 
     let command_ref = command_ref_from(command);
 
-    let action_id = format!("action-{}", edgerun_core::util::bytes_to_hex_prefixed(&command.command_id[..4.min(command.command_id.len())])).into_bytes();
+    let action_id = format!(
+        "action-{}",
+        edgerun_core::util::bytes_to_hex_prefixed(
+            &command.command_id[..4.min(command.command_id.len())]
+        )
+    )
+    .into_bytes();
     let payload = ActionLifecyclePayload {
         payload_version: 1,
         origin_command: Some(command_ref.clone()),
@@ -1609,8 +2344,11 @@ pub fn record_action_event(
     let object_ref = store_object_or_log(store, &payload_bytes, 1, &[stream_id.to_vec()]);
 
     let _seq = append_signed_event(
-        store, stream_id, signer,
-        event_type, 1,
+        store,
+        stream_id,
+        signer,
+        event_type,
+        1,
         Some(object_ref),
         vec![command_ref],
         vec![],
@@ -1633,7 +2371,11 @@ fn extract_identity_from_command(command: &CommandEnvelope) -> Vec<u8> {
     }
 
     // Fallback: use issuer identity
-    command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default()
+    command
+        .issuer
+        .as_ref()
+        .map(|i| i.identity_id.clone())
+        .unwrap_or_default()
 }
 
 /// Records a command result event and returns the response.
@@ -1659,19 +2401,26 @@ fn record_and_respond(
         command_hash: Some(command_hash(command)),
     };
 
-    let delegations: Vec<edgerun_proto::edgerun::v0::common::DelegationRef> =
-        command.delegation_chain.iter().map(|d| {
-            edgerun_proto::edgerun::v0::common::DelegationRef {
-                delegation_id: d.delegation_id.clone(),
-                delegation_hash: Some(delegation_hash(d)),
-            }
-        }).collect();
+    let delegations: Vec<edgerun_proto::edgerun::v0::common::DelegationRef> = command
+        .delegation_chain
+        .iter()
+        .map(|d| edgerun_proto::edgerun::v0::common::DelegationRef {
+            delegation_id: d.delegation_id.clone(),
+            delegation_hash: Some(delegation_hash(d)),
+        })
+        .collect();
 
     // 1. Emit ActionStarted for committed commands
     if committed {
-        record_action_event(store, stream_id, signer, command,
+        record_action_event(
+            store,
+            stream_id,
+            signer,
+            command,
             1, // ACTION_STATUS_STARTED
-            EventType::ActionStarted, vec![]);
+            EventType::ActionStarted,
+            vec![],
+        );
     }
 
     // 2. Build CommandResultPayload and store as encrypted object
@@ -1696,8 +2445,11 @@ fn record_and_respond(
         EventType::CommandRejected
     };
     let _event_seq = append_signed_event(
-        store, stream_id, signer,
-        event_type, 1,
+        store,
+        stream_id,
+        signer,
+        event_type,
+        1,
         Some(object_ref),
         vec![command_ref],
         delegations,
@@ -1708,11 +2460,10 @@ fn record_and_respond(
     // The replay key is command_hash, not command_id.
     if let Some(ref target) = command.target_node {
         let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
-        let cmd_hash_hex = edgerun_core::util::bytes_to_hex(
-            &command_hash(command).value,
-        );
+        let cmd_hash_hex = edgerun_core::util::bytes_to_hex(&command_hash(command).value);
         if let Err(e) = store.put_replay_entry(
-            &target_hex, &cmd_hash_hex,
+            &target_hex,
+            &cmd_hash_hex,
             &edgerun_core::util::bytes_to_hex(&command.command_id),
             _event_seq.unwrap_or(0) as i64,
         ) {
@@ -1720,27 +2471,42 @@ fn record_and_respond(
         }
     }
 
-
     // 4. Emit ActionCompleted or ActionFailed
     if committed {
-        record_action_event(store, stream_id, signer, command,
+        record_action_event(
+            store,
+            stream_id,
+            signer,
+            command,
             2, // ACTION_STATUS_COMPLETED
-            EventType::ActionCompleted, vec![]);
+            EventType::ActionCompleted,
+            vec![],
+        );
 
         // Generate assurance claim if the command requested one
         if let Some(ref req) = command.requested_assurance {
             if req.required_class > 0 {
                 if let Some(claim_ref) = super::assurance::generate_and_record_assurance_claim(
-                    store, stream_id, signer, command, req.required_class,
+                    store,
+                    stream_id,
+                    signer,
+                    command,
+                    req.required_class,
                 ) {
                     edgerun_log::info!("assurance claim generated for committed command");
                 }
             }
         }
     } else {
-        record_action_event(store, stream_id, signer, command,
+        record_action_event(
+            store,
+            stream_id,
+            signer,
+            command,
             3, // ACTION_STATUS_FAILED
-            EventType::ActionFailed, vec![]);
+            EventType::ActionFailed,
+            vec![],
+        );
     }
 
     // 5. Record controller change if this was a committed control command
@@ -1762,11 +2528,15 @@ fn record_and_respond(
 
 /// Sign an event envelope with the local node's key.
 /// Shared utility used by both command_dispatch and main node logic.
-pub(crate) fn sign_event_envelope(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
+pub(crate) fn sign_event_envelope(
+    event: &mut EventEnvelope,
+    signer: &dyn MeshSigner,
+) -> Result<(), String> {
     use edgerun_core::crypto::SIG_DOMAIN_EVENT_ENVELOPE;
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let sig = signer.sign_record(SIG_DOMAIN_EVENT_ENVELOPE, &canonical)
+    let sig = signer
+        .sign_record(SIG_DOMAIN_EVENT_ENVELOPE, &canonical)
         .map_err(|e| format!("signing failed: {}", e))?;
     event.signature = Some(edgerun_core::protocol::Signature {
         algorithm: 1,
@@ -1779,8 +2549,7 @@ fn delegation_hash(delegation: &edgerun_proto::edgerun::v0::trust::DelegationRec
     let mut signable = delegation.clone();
     signable.signature = None;
     let mut canonical = Vec::new();
-    prost::Message::encode(&signable, &mut canonical)
-        .expect("prost encode failed for delegation");
+    prost::Message::encode(&signable, &mut canonical).expect("prost encode failed for delegation");
     Digest {
         algorithm: 1,
         value: edgerun_core::crypto::sha256(&canonical).to_vec(),
@@ -1823,13 +2592,17 @@ fn command_ref_from(command: &CommandEnvelope) -> CommandRef {
 }
 
 /// Build DelegationRef vector from a command's delegation chain.
-fn delegation_refs_from(command: &CommandEnvelope) -> Vec<edgerun_proto::edgerun::v0::common::DelegationRef> {
-    command.delegation_chain.iter().map(|d| {
-        edgerun_proto::edgerun::v0::common::DelegationRef {
+fn delegation_refs_from(
+    command: &CommandEnvelope,
+) -> Vec<edgerun_proto::edgerun::v0::common::DelegationRef> {
+    command
+        .delegation_chain
+        .iter()
+        .map(|d| edgerun_proto::edgerun::v0::common::DelegationRef {
             delegation_id: d.delegation_id.clone(),
             delegation_hash: Some(delegation_hash(d)),
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 /// Store an object in the node store, logging warnings on failure.
@@ -1859,10 +2632,10 @@ fn store_object_or_log(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_hardware_signing::{MeshSigner, NodeID};
-    use edgerun_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
-    use std::sync::Arc;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_hardware_signing::{MeshSigner, NodeID};
+    use edgerun_storage::{BlobKeySource, NodeStore, NodeStoreConfig};
+    use std::sync::Arc;
 
     fn test_workload_policy() -> super::super::workload_policy::WorkloadPolicy {
         super::super::workload_policy::WorkloadPolicy::permissive()
@@ -1872,7 +2645,8 @@ mod tests {
         super::super::workload_policy::RateLimiter::new(1000, 60_000_000)
     }
 
-    fn test_running_workloads() -> std::sync::Arc<super::super::running_workloads::RunningWorkloads> {
+    fn test_running_workloads() -> std::sync::Arc<super::super::running_workloads::RunningWorkloads>
+    {
         std::sync::Arc::new(super::super::running_workloads::RunningWorkloads::new())
     }
 
@@ -1892,8 +2666,8 @@ mod tests {
     fn test_store() -> NodeStore {
         let root = tmp_data_root();
         let private_key = [0xBBu8; 32];
-        let binding = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes((&private_key).into())
-            .unwrap();
+        let binding =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes((&private_key).into()).unwrap();
         let vk = binding.verifying_key();
         let encoded = vk.to_encoded_point(false);
         let mut node_identity = [0u8; 64];
@@ -1942,8 +2716,10 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(digest)
-                .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
+                self.key.sign_prehash(digest).map_err(|e| {
+                    edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string())
+                })?;
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());
             Ok(bytes)
@@ -2109,10 +2885,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         assert_eq!(result.decision, 2); // REJECTED
@@ -2157,10 +2941,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         assert_eq!(result.decision, 2); // REJECTED
@@ -2205,10 +2997,18 @@ mod tests {
         command.target_node = None; // no target
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
@@ -2253,10 +3053,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Fails signature verification first (no signature on command)
@@ -2305,10 +3113,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
 
@@ -2357,10 +3173,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Should be rejected for structural reasons (empty command_id)
@@ -2374,7 +3198,8 @@ mod tests {
         let node_id = signer.node_id();
         let ctrl_to_remove = vec![10, 20, 30];
         let initial_ctrl = vec![1, 2, 3];
-        let mut controllers = ControllerSet::new(vec![initial_ctrl.clone(), ctrl_to_remove.clone()]);
+        let mut controllers =
+            ControllerSet::new(vec![initial_ctrl.clone(), ctrl_to_remove.clone()]);
         let mut replay_cache = HashMap::new();
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
@@ -2407,10 +3232,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Fails signature verification
@@ -2457,10 +3290,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Fails signature verification
@@ -2506,10 +3347,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Fails signature verification, but query type is recognized
@@ -2555,10 +3404,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Should be rejected with "use_produce_snapshot_request" after failing sig check
@@ -2604,10 +3461,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
@@ -2653,10 +3518,18 @@ mod tests {
         );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
@@ -2730,10 +3603,18 @@ mod tests {
         command.payload = Some(Payload::InlinePayload(delegation_bytes));
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Should try to process as delegation but fail signature verification
@@ -2791,11 +3672,15 @@ mod tests {
             replacement_id: vec![],
             revocation_metadata: None,
             signature: None,
-            target: Some(edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(edgerun_proto::edgerun::v0::common::IdentityRef {
-                identity_id: vec![5, 6, 7],
-                identity_kind: Some(2),
-                key_hint: None,
-            })),
+            target: Some(
+                edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
+                    edgerun_proto::edgerun::v0::common::IdentityRef {
+                        identity_id: vec![5, 6, 7],
+                        identity_kind: Some(2),
+                        key_hint: None,
+                    },
+                ),
+            ),
         };
         let revocation_bytes = prost::Message::encode_to_vec(&revocation);
 
@@ -2808,10 +3693,18 @@ mod tests {
         command.payload = Some(Payload::InlinePayload(revocation_bytes));
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Will fail signature verification but the dispatch path for revocation runs
@@ -2855,13 +3748,26 @@ mod tests {
             initial_ctrl.clone(),
             CommandType::CreateDelegation as i32,
         );
-        command.payload = Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(vec![0xFF; 10]));
+        command.payload = Some(
+            edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(vec![
+                0xFF;
+                10
+            ]),
+        );
 
         let result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &test_running_workloads(),
         );
         // Fails signature verification (no signature) — so rejected before reaching custom dispatch
@@ -2912,10 +3818,18 @@ mod tests {
         );
 
         let _result = dispatch_command(
-            &command, &mut store, &node_id.0, &signer,
-            &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
             &std::sync::Arc::new(crate::running_workloads::RunningWorkloads::new()),
         );
 

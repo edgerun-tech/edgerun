@@ -9,7 +9,7 @@ use std::io::{self, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use edgerun_rt::{RwLock, spawn_blocking};
+use edgerun_rt::{spawn_blocking, RwLock};
 
 // ===========================================================================
 // Record Types
@@ -194,7 +194,8 @@ pub struct MailIndex {
 impl MailIndex {
     pub async fn open(data_root: &Path) -> io::Result<Self> {
         let idx_dir = data_root.join("mail");
-        spawn_blocking(move || fs::create_dir_all(&idx_dir)).await
+        spawn_blocking(move || fs::create_dir_all(&idx_dir))
+            .await
             .map_err(io::Error::other)??;
 
         let index = Self {
@@ -221,7 +222,9 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("messages.bin");
             move || fs::read(&path)
-        }).await.map_err(io::Error::other)?;
+        })
+        .await
+        .map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -230,7 +233,10 @@ impl MailIndex {
                     msg.message_id.parse::<i64>().unwrap_or(0),
                     Ordering::Relaxed,
                 );
-                self.messages.write().await.insert(msg.message_id.clone(), msg);
+                self.messages
+                    .write()
+                    .await
+                    .insert(msg.message_id.clone(), msg);
             }
         }
 
@@ -238,7 +244,9 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("recipients.bin");
             move || fs::read(&path)
-        }).await.map_err(io::Error::other)?;
+        })
+        .await
+        .map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -252,7 +260,9 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("retry_queue.bin");
             move || fs::read(&path)
-        }).await.map_err(io::Error::other)?;
+        })
+        .await
+        .map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -265,7 +275,9 @@ impl MailIndex {
         let data = spawn_blocking({
             let path = dir.join("send_log.bin");
             move || fs::read(&path)
-        }).await.map_err(io::Error::other)?;
+        })
+        .await
+        .map_err(io::Error::other)?;
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
@@ -326,10 +338,19 @@ impl MailIndex {
             fs::write(dir.join("send_log.bin"), buf)?;
 
             Ok::<_, io::Error>(())
-        }).await.map_err(io::Error::other)?
+        })
+        .await
+        .map_err(io::Error::other)?
     }
 
-    pub async fn enqueue_message(&self, message_id: &str, envelope_sender: &str, recipients: Vec<String>, data: Vec<u8>, max_retries: i32) -> io::Result<()> {
+    pub async fn enqueue_message(
+        &self,
+        message_id: &str,
+        envelope_sender: &str,
+        recipients: Vec<String>,
+        data: Vec<u8>,
+        max_retries: i32,
+    ) -> io::Result<()> {
         let now = now_secs();
         let record = MailMessageRecord {
             message_id: message_id.to_string(),
@@ -347,14 +368,17 @@ impl MailIndex {
         {
             let mut recs = self.recipients.write().await;
             for recipient in &recipients {
-                recs.insert((message_id.to_string(), recipient.clone()), RecipientStatus {
-                    message_id: message_id.to_string(),
-                    recipient: recipient.clone(),
-                    status: RecipientStatusType::Pending,
-                    last_attempt: None,
-                    failure_reason: None,
-                    delivered_at: None,
-                });
+                recs.insert(
+                    (message_id.to_string(), recipient.clone()),
+                    RecipientStatus {
+                        message_id: message_id.to_string(),
+                        recipient: recipient.clone(),
+                        status: RecipientStatusType::Pending,
+                        last_attempt: None,
+                        failure_reason: None,
+                        delivered_at: None,
+                    },
+                );
             }
         }
 
@@ -364,7 +388,10 @@ impl MailIndex {
             retry_count: 0,
         });
 
-        self.messages.write().await.insert(message_id.to_string(), record);
+        self.messages
+            .write()
+            .await
+            .insert(message_id.to_string(), record);
         self.save().await
     }
 
@@ -426,7 +453,12 @@ impl MailIndex {
         self.save().await
     }
 
-    pub async fn mark_delivered(&self, message_id: &str, recipient: &str, remote_mta: Option<&str>) -> io::Result<()> {
+    pub async fn mark_delivered(
+        &self,
+        message_id: &str,
+        recipient: &str,
+        remote_mta: Option<&str>,
+    ) -> io::Result<()> {
         let now = now_secs();
         {
             let mut recs = self.recipients.write().await;
@@ -463,7 +495,13 @@ impl MailIndex {
         self.save().await
     }
 
-    pub async fn mark_failed(&self, message_id: &str, recipient: &str, error: &str, remote_mta: Option<&str>) -> io::Result<()> {
+    pub async fn mark_failed(
+        &self,
+        message_id: &str,
+        recipient: &str,
+        error: &str,
+        remote_mta: Option<&str>,
+    ) -> io::Result<()> {
         let now = now_secs();
         {
             let mut recs = self.recipients.write().await;
@@ -487,7 +525,12 @@ impl MailIndex {
         self.save().await
     }
 
-    pub async fn schedule_retry(&self, message_id: &str, retry_count: i32, next_retry_time: i64) -> io::Result<()> {
+    pub async fn schedule_retry(
+        &self,
+        message_id: &str,
+        retry_count: i32,
+        next_retry_time: i64,
+    ) -> io::Result<()> {
         let now = now_secs();
         {
             let mut msgs = self.messages.write().await;
@@ -530,15 +573,25 @@ impl MailIndex {
     }
 
     pub async fn get_failed_recipients(&self, message_id: &str) -> Vec<RecipientStatus> {
-        self.recipients.read().await
+        self.recipients
+            .read()
+            .await
             .iter()
-            .filter(|((mid, _), rec)| mid == message_id && matches!(rec.status, RecipientStatusType::Failed | RecipientStatusType::Bounced))
+            .filter(|((mid, _), rec)| {
+                mid == message_id
+                    && matches!(
+                        rec.status,
+                        RecipientStatusType::Failed | RecipientStatusType::Bounced
+                    )
+            })
             .map(|(_, rec)| rec.clone())
             .collect()
     }
 
     pub async fn list_queued(&self) -> Vec<MailMessageRecord> {
-        self.messages.read().await
+        self.messages
+            .read()
+            .await
             .values()
             .filter(|m| matches!(m.status, MailStatus::Queued | MailStatus::Retrying))
             .cloned()
@@ -651,7 +704,11 @@ fn read_retry_entry(r: &mut Cursor<&[u8]>) -> io::Result<RetryEntry> {
     let message_id = read_str(r)?;
     let next_retry_time = read_i64(r)?;
     let retry_count = read_i32(r)?;
-    Ok(RetryEntry { message_id, next_retry_time, retry_count })
+    Ok(RetryEntry {
+        message_id,
+        next_retry_time,
+        retry_count,
+    })
 }
 
 fn write_send_log_entry(w: &mut Vec<u8>, entry: &SendLogEntry) {
@@ -674,7 +731,15 @@ fn read_send_log_entry(r: &mut Cursor<&[u8]>) -> io::Result<SendLogEntry> {
     let success = success_flag[0] == 1;
     let error = read_option_str(r)?;
     let remote_mta = read_option_str(r)?;
-    Ok(SendLogEntry { message_id, recipient, attempt, timestamp, success, error, remote_mta })
+    Ok(SendLogEntry {
+        message_id,
+        recipient,
+        attempt,
+        timestamp,
+        success,
+        error,
+        remote_mta,
+    })
 }
 
 fn now_secs() -> i64 {

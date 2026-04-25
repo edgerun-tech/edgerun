@@ -19,11 +19,13 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use crate::config::NodeConfig;
 use crate::config::parse_config;
-use crate::signer::load_signer_from_config;
+use crate::config::NodeConfig;
 use crate::daemon::cmd_run;
-use crate::init_cmd::{cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision, cmd_unlock};
+use crate::init_cmd::{
+    cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision, cmd_unlock,
+};
+use crate::signer::load_signer_from_config;
 use crate::status_cmd::cmd_status;
 
 /// Parsed CLI arguments.
@@ -231,22 +233,50 @@ pub fn main() {
         }
     };
     match cmd {
-        Command::Init { config, name, software } => {
+        Command::Init {
+            config,
+            name,
+            software,
+        } => {
             cmd_init(&config, name, software);
         }
-        Command::InitEncrypted { config, key_file, name, passphrase } => {
+        Command::InitEncrypted {
+            config,
+            key_file,
+            name,
+            passphrase,
+        } => {
             cmd_init_encrypted(&config, &key_file, name, passphrase);
         }
-        Command::InitProvisioned { config, name, controller } => {
+        Command::InitProvisioned {
+            config,
+            name,
+            controller,
+        } => {
             cmd_init_provisioned(&config, name, controller);
         }
-        Command::Provision { config, pin, password, target_addr } => {
+        Command::Provision {
+            config,
+            pin,
+            password,
+            target_addr,
+        } => {
             cmd_provision(&config, &pin, password, target_addr);
         }
-        Command::Unlock { config, password, target_addr } => {
+        Command::Unlock {
+            config,
+            password,
+            target_addr,
+        } => {
             cmd_unlock(&config, password, target_addr);
         }
-        Command::Run { config, listen, health_port, log_level, init_mode } => {
+        Command::Run {
+            config,
+            listen,
+            health_port,
+            log_level,
+            init_mode,
+        } => {
             // Initialize structured logging
             env::set_var("RUST_LOG", &log_level);
             edgerun_log::init_from_env();

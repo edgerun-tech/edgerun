@@ -57,10 +57,7 @@ pub enum StoreRequest {
     /// Sent by a timer thread to ensure maintenance runs even during quiet periods.
     MaintenanceTick,
     /// Update a peer's connectivity status.
-    PeerStatusUpdate {
-        node_id_hex: String,
-        status: String,
-    },
+    PeerStatusUpdate { node_id_hex: String, status: String },
     /// Look up a peer's address by node_id_hex.
     PeerLookup {
         node_id_hex: String,

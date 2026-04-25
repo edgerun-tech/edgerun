@@ -9,20 +9,19 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use edgerun_rt::{
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
-    mpsc, oneshot, spawn, JoinHandle,
-    select, sleep_until,
+    mpsc, oneshot, select, sleep_until, spawn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
+    JoinHandle,
 };
 
+use crate::http2::flow_control::FlowControlManager;
 use crate::http2::frame::{
-    DataFrame, Frame, FrameType, flags, GoawayFrame, HeadersFrame,
-    PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
+    flags, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame,
+    SettingsFrame, WindowUpdateFrame,
 };
 use crate::http2::hpack::{Decoder, Encoder};
-use crate::http2::stream::{StreamManager, StreamState};
-use crate::http2::flow_control::FlowControlManager;
 use crate::http2::settings::Settings;
-use crate::http2::{CONNECTION_PREFACE, ErrorCode, Http2Error, Result};
+use crate::http2::stream::{StreamManager, StreamState};
+use crate::http2::{ErrorCode, Http2Error, Result, CONNECTION_PREFACE};
 use crate::{HeaderMap, StatusCode};
 
 /// Maximum body size per stream before we error (100 MB).
@@ -56,10 +55,12 @@ pub struct PendingRequest {
 impl PendingRequest {
     /// Wait for the response headers. Returns status + headers.
     pub async fn await_response(self) -> Result<(StatusCode, HeaderMap)> {
-        let resp = self.response_rx.await
-            .map_err(|_| Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset, "response channel closed",
-            )))??;
+        let resp = self.response_rx.await.map_err(|_| {
+            Http2Error::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "response channel closed",
+            ))
+        })??;
         Ok((resp.status, resp.headers))
     }
 
@@ -80,11 +81,17 @@ impl PendingRequest {
 
     /// Convenience: await response headers + collect body in one call.
     pub async fn into_full_response(self) -> Result<HttpResponse> {
-        let Self { response_rx, body_rx, .. } = self;
-        let resp = response_rx.await
-            .map_err(|_| Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset, "response channel closed",
-            )))??;
+        let Self {
+            response_rx,
+            body_rx,
+            ..
+        } = self;
+        let resp = response_rx.await.map_err(|_| {
+            Http2Error::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "response channel closed",
+            ))
+        })??;
         let mut body = Vec::new();
         let mut total = 0usize;
         let mut rx = body_rx;
@@ -95,7 +102,11 @@ impl PendingRequest {
             }
             body.extend_from_slice(&chunk);
         }
-        Ok(HttpResponse { status: resp.status, headers: resp.headers, body })
+        Ok(HttpResponse {
+            status: resp.status,
+            headers: resp.headers,
+            body,
+        })
     }
 }
 
@@ -139,19 +150,21 @@ impl AsyncClient {
 
         let client_settings = Settings::new();
         let settings_frame = SettingsFrame::new(client_settings.to_entries());
-        stream.write_all(&settings_frame.to_frame().to_bytes()).await?;
+        stream
+            .write_all(&settings_frame.to_frame().to_bytes())
+            .await?;
         stream.flush().await?;
 
         // Read server SETTINGS frame per RFC 9113 §3.4
-        let (server_settings_frame, _) = read_frame_async(&mut stream, client_settings.max_frame_size).await?;
+        let (server_settings_frame, _) =
+            read_frame_async(&mut stream, client_settings.max_frame_size).await?;
         if server_settings_frame.frame_type != FrameType::Settings {
             return Err(Http2Error::ProtocolViolation(
                 "Expected server SETTINGS frame".into(),
             ));
         }
-        let server_settings = Settings::from_entries(
-            &SettingsFrame::from_frame(&server_settings_frame)?.entries,
-        )?;
+        let server_settings =
+            Settings::from_entries(&SettingsFrame::from_frame(&server_settings_frame)?.entries)?;
         let max_frame_size = server_settings.max_frame_size;
 
         // Send SETTINGS ACK
@@ -165,11 +178,7 @@ impl AsyncClient {
             server_settings,
         )));
 
-        let task = spawn(connection_task(
-            stream,
-            frame_rx,
-            Arc::clone(&streams),
-        ));
+        let task = spawn(connection_task(stream, frame_rx, Arc::clone(&streams)));
 
         Ok(AsyncClient {
             frame_tx,
@@ -211,10 +220,12 @@ impl AsyncClient {
             headers: headers.to_vec(),
             end_stream,
         };
-        self.frame_tx.send(msg).await
-            .map_err(|_| Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe, "connection closed",
-            )))?;
+        self.frame_tx.send(msg).await.map_err(|_| {
+            Http2Error::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "connection closed",
+            ))
+        })?;
 
         if let Some(body_data) = body {
             self._send_data_frames(stream_id, body_data).await?;
@@ -224,13 +235,19 @@ impl AsyncClient {
                 data: Vec::new(),
                 end_stream: true,
             };
-            self.frame_tx.send(msg).await
-                .map_err(|_| Http2Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe, "connection closed",
-                )))?;
+            self.frame_tx.send(msg).await.map_err(|_| {
+                Http2Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "connection closed",
+                ))
+            })?;
         }
 
-        Ok(PendingRequest { stream_id, response_rx, body_rx })
+        Ok(PendingRequest {
+            stream_id,
+            response_rx,
+            body_rx,
+        })
     }
 
     /// Send a request with a streaming upload body.
@@ -274,10 +291,12 @@ impl AsyncClient {
             headers: headers.to_vec(),
             end_stream: false,
         };
-        self.frame_tx.send(msg).await
-            .map_err(|_| Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe, "connection closed",
-            )))?;
+        self.frame_tx.send(msg).await.map_err(|_| {
+            Http2Error::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "connection closed",
+            ))
+        })?;
 
         // Spawn a task to forward body chunks to the connection task
         let frame_tx = self.frame_tx.clone();
@@ -310,7 +329,11 @@ impl AsyncClient {
             let _ = frame_tx.send(msg).await;
         });
 
-        Ok(PendingRequest { stream_id, response_rx, body_rx: resp_body_rx })
+        Ok(PendingRequest {
+            stream_id,
+            response_rx,
+            body_rx: resp_body_rx,
+        })
     }
 
     /// Internal: split body into DATA frames and send them.
@@ -326,10 +349,12 @@ impl AsyncClient {
                 data: chunk,
                 end_stream: is_last,
             };
-            self.frame_tx.send(msg).await
-                .map_err(|_| Http2Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe, "connection closed",
-                )))?;
+            self.frame_tx.send(msg).await.map_err(|_| {
+                Http2Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "connection closed",
+                ))
+            })?;
             offset = chunk_end;
         }
         Ok(())
@@ -339,13 +364,18 @@ impl AsyncClient {
     pub async fn ping(&self) -> Result<u64> {
         let (tx, rx) = oneshot::channel();
         let msg = OutgoingFrame::Ping { reply_tx: tx };
-        self.frame_tx.send(msg).await
-            .map_err(|_| Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe, "connection closed",
-            )))?;
-        rx.await.map_err(|_| Http2Error::Io(std::io::Error::new(
-            std::io::ErrorKind::ConnectionReset, "ping channel closed",
-        )))?
+        self.frame_tx.send(msg).await.map_err(|_| {
+            Http2Error::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "connection closed",
+            ))
+        })?;
+        rx.await.map_err(|_| {
+            Http2Error::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "ping channel closed",
+            ))
+        })?
     }
 
     /// Gracefully close the connection.
@@ -443,11 +473,14 @@ impl StreamStateInner {
         response_tx: oneshot::Sender<Result<HttpResponse>>,
         body_tx: mpsc::Sender<Vec<u8>>,
     ) {
-        self.stream_callbacks.insert(stream_id, StreamCallbacks {
-            response_tx: Some(response_tx),
-            body_tx: Some(body_tx),
-            got_response_headers: false,
-        });
+        self.stream_callbacks.insert(
+            stream_id,
+            StreamCallbacks {
+                response_tx: Some(response_tx),
+                body_tx: Some(body_tx),
+                got_response_headers: false,
+            },
+        );
     }
 }
 
@@ -569,96 +602,113 @@ async fn connection_task<S>(
                     &frame,
                     &mut continuation_state,
                     max_frame_size,
-                ).await {
+                )
+                .await
+                {
                     edgerun_log::warn!("HTTP/2 connection task error: {:?}", e);
-                    let _ = write_frame_async(&mut stream, &Frame {
-                        frame_type: FrameType::Goaway,
-                        flags: 0,
-                        stream_id: 0,
-                        payload: {
-                            let mut p = Vec::with_capacity(8);
-                            p.extend_from_slice(&0u32.to_be_bytes());
-                            p.extend_from_slice(&ErrorCode::INTERNAL_ERROR.to_u32().to_be_bytes());
-                            p
+                    let _ = write_frame_async(
+                        &mut stream,
+                        &Frame {
+                            frame_type: FrameType::Goaway,
+                            flags: 0,
+                            stream_id: 0,
+                            payload: {
+                                let mut p = Vec::with_capacity(8);
+                                p.extend_from_slice(&0u32.to_be_bytes());
+                                p.extend_from_slice(
+                                    &ErrorCode::INTERNAL_ERROR.to_u32().to_be_bytes(),
+                                );
+                                p
+                            },
                         },
-                    }).await;
+                    )
+                    .await;
                     break;
                 }
             }
-            ConnectionEvent::OutgoingMessage(msg) => {
-                match msg {
-                    OutgoingFrame::SendHeaders { stream_id, headers, end_stream } => {
-                        let (encoded,) = {
-                            let mut s = state.lock().unwrap();
-                            let enc = s.encoder.encode(
-                                headers.iter().map(|(n, v)| (&n[..], &v[..])),
-                            );
-                            (enc,)
-                        };
-                        let hdr_frame = HeadersFrame::new(stream_id, encoded, end_stream);
-                        let frame_bytes = hdr_frame.to_frame().to_bytes();
-                        if let Err(e) = stream.write_all(&frame_bytes).await {
-                            edgerun_log::warn!("Error writing HEADERS: {:?}", e);
-                            break;
-                        }
-                        let _ = stream.flush().await;
-                    }
-                    OutgoingFrame::SendData { stream_id, data, end_stream } => {
-                        let data_len = data.len() as u32;
-                        let frame_bytes = {
-                            let data_frame = DataFrame::new(stream_id, data, end_stream);
-                            data_frame.to_frame().to_bytes()
-                        };
-
-                        let flow_ok = {
-                            let mut s = state.lock().unwrap();
-                            s.flow.consume_connection(data_len).is_ok()
-                                && s.flow.consume_stream(stream_id, data_len).is_ok()
-                        };
-                        if !flow_ok {
-                            edgerun_log::warn!("Flow control error for stream {}", stream_id);
-                            continue;
-                        }
-
-                        if let Err(e) = stream.write_all(&frame_bytes).await {
-                            edgerun_log::warn!("Error writing DATA: {:?}", e);
-                            break;
-                        }
-                        let _ = stream.flush().await;
-
-                        let wu_conn = WindowUpdateFrame::new(0, data_len);
-                        let _ = write_frame_async(&mut stream, &wu_conn.to_frame()).await;
-                        let wu_stream = WindowUpdateFrame::new(stream_id, data_len);
-                        let _ = write_frame_async(&mut stream, &wu_stream.to_frame()).await;
-                    }
-                    OutgoingFrame::Ping { reply_tx } => {
-                        let ping_id = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
-                        let data = ping_id.to_be_bytes();
-                        let ping_frame = PingFrame::new(data);
-                        let frame_bytes = ping_frame.to_frame().to_bytes();
-                        if let Err(e) = stream.write_all(&frame_bytes).await {
-                            let _ = reply_tx.send(Err(Http2Error::Io(e)));
-                            break;
-                        }
-                        let _ = stream.flush().await;
-                        let _ = reply_tx.send(Ok(ping_id));
-                    }
-                    OutgoingFrame::Goaway { error_code, debug_data } => {
-                        let last_stream = {
-                            let s = state.lock().unwrap();
-                            s.next_stream.saturating_sub(2)
-                        };
-                        let goaway = GoawayFrame::new(last_stream, error_code, debug_data);
-                        let frame_bytes = goaway.to_frame().to_bytes();
-                        let _ = stream.write_all(&frame_bytes).await;
-                        let _ = stream.flush().await;
+            ConnectionEvent::OutgoingMessage(msg) => match msg {
+                OutgoingFrame::SendHeaders {
+                    stream_id,
+                    headers,
+                    end_stream,
+                } => {
+                    let (encoded,) = {
+                        let mut s = state.lock().unwrap();
+                        let enc = s
+                            .encoder
+                            .encode(headers.iter().map(|(n, v)| (&n[..], &v[..])));
+                        (enc,)
+                    };
+                    let hdr_frame = HeadersFrame::new(stream_id, encoded, end_stream);
+                    let frame_bytes = hdr_frame.to_frame().to_bytes();
+                    if let Err(e) = stream.write_all(&frame_bytes).await {
+                        edgerun_log::warn!("Error writing HEADERS: {:?}", e);
                         break;
                     }
+                    let _ = stream.flush().await;
                 }
-            }
+                OutgoingFrame::SendData {
+                    stream_id,
+                    data,
+                    end_stream,
+                } => {
+                    let data_len = data.len() as u32;
+                    let frame_bytes = {
+                        let data_frame = DataFrame::new(stream_id, data, end_stream);
+                        data_frame.to_frame().to_bytes()
+                    };
+
+                    let flow_ok = {
+                        let mut s = state.lock().unwrap();
+                        s.flow.consume_connection(data_len).is_ok()
+                            && s.flow.consume_stream(stream_id, data_len).is_ok()
+                    };
+                    if !flow_ok {
+                        edgerun_log::warn!("Flow control error for stream {}", stream_id);
+                        continue;
+                    }
+
+                    if let Err(e) = stream.write_all(&frame_bytes).await {
+                        edgerun_log::warn!("Error writing DATA: {:?}", e);
+                        break;
+                    }
+                    let _ = stream.flush().await;
+
+                    let wu_conn = WindowUpdateFrame::new(0, data_len);
+                    let _ = write_frame_async(&mut stream, &wu_conn.to_frame()).await;
+                    let wu_stream = WindowUpdateFrame::new(stream_id, data_len);
+                    let _ = write_frame_async(&mut stream, &wu_stream.to_frame()).await;
+                }
+                OutgoingFrame::Ping { reply_tx } => {
+                    let ping_id = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let data = ping_id.to_be_bytes();
+                    let ping_frame = PingFrame::new(data);
+                    let frame_bytes = ping_frame.to_frame().to_bytes();
+                    if let Err(e) = stream.write_all(&frame_bytes).await {
+                        let _ = reply_tx.send(Err(Http2Error::Io(e)));
+                        break;
+                    }
+                    let _ = stream.flush().await;
+                    let _ = reply_tx.send(Ok(ping_id));
+                }
+                OutgoingFrame::Goaway {
+                    error_code,
+                    debug_data,
+                } => {
+                    let last_stream = {
+                        let s = state.lock().unwrap();
+                        s.next_stream.saturating_sub(2)
+                    };
+                    let goaway = GoawayFrame::new(last_stream, error_code, debug_data);
+                    let frame_bytes = goaway.to_frame().to_bytes();
+                    let _ = stream.write_all(&frame_bytes).await;
+                    let _ = stream.flush().await;
+                    break;
+                }
+            },
             ConnectionEvent::KeepaliveTick => {
                 let ping_id = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -689,7 +739,8 @@ async fn connection_task<S>(
     for (_, cb) in s.stream_callbacks.drain() {
         if let Some(tx) = cb.response_tx {
             let _ = tx.send(Err(Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset, "connection closed",
+                std::io::ErrorKind::ConnectionReset,
+                "connection closed",
             ))));
         }
         drop(cb.body_tx);
@@ -810,7 +861,8 @@ where
                         cb.body_tx = None;
                         if !cb.got_response_headers {
                             let resp = HttpResponse {
-                                status: StatusCode::new(200).unwrap_or_else(|_| StatusCode::new(200).unwrap()),
+                                status: StatusCode::new(200)
+                                    .unwrap_or_else(|_| StatusCode::new(200).unwrap()),
                                 headers: HeaderMap::new(),
                                 body: Vec::new(),
                             };
@@ -843,7 +895,8 @@ where
         FrameType::Goaway => {
             edgerun_log::debug!("HTTP/2 GOAWAY received");
             return Err(Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset, "GOAWAY received",
+                std::io::ErrorKind::ConnectionReset,
+                "GOAWAY received",
             )));
         }
 

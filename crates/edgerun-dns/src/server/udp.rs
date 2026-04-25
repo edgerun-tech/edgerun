@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use edgerun_rt::AsyncUdpSocket;
 
-use crate::message::{DnsMessage, DnsResponseCode};
 use super::query::{handle_query, ParseError, ServerState};
 use super::RateLimiter;
+use crate::message::{DnsMessage, DnsResponseCode};
 
 /// Run the UDP receive loop (async, runs until shutdown).
 pub async fn udp_recv_loop_with_rate_limiting(

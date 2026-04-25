@@ -63,22 +63,16 @@ impl Future for YieldNow {
 mod tests {
     use super::*;
 
-    static NOOP_WAKER: std::sync::LazyLock<std::task::Waker> =
-        std::sync::LazyLock::new(|| {
-            static VTABLE: std::task::RawWakerVTable =
-                std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-            const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-                std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-            }
-            const fn wake_noop(_: *const ()) {}
-            const fn drop_noop(_: *const ()) {}
-            unsafe {
-                std::task::Waker::from_raw(std::task::RawWaker::new(
-                    std::ptr::null(),
-                    &VTABLE,
-                ))
-            }
-        });
+    static NOOP_WAKER: std::sync::LazyLock<std::task::Waker> = std::sync::LazyLock::new(|| {
+        static VTABLE: std::task::RawWakerVTable =
+            std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
+        const fn clone_noop(_: *const ()) -> std::task::RawWaker {
+            std::task::RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        const fn wake_noop(_: *const ()) {}
+        const fn drop_noop(_: *const ()) {}
+        unsafe { std::task::Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+    });
 
     fn cx() -> Context<'static> {
         Context::from_waker(&NOOP_WAKER)
@@ -95,6 +89,9 @@ mod tests {
     fn yield_second_ready() {
         let mut fut = yieldnow();
         assert!(matches!(Pin::new(&mut fut).poll(&mut cx()), Poll::Pending));
-        assert!(matches!(Pin::new(&mut fut).poll(&mut cx()), Poll::Ready(())));
+        assert!(matches!(
+            Pin::new(&mut fut).poll(&mut cx()),
+            Poll::Ready(())
+        ));
     }
 }

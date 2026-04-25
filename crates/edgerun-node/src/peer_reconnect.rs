@@ -98,7 +98,8 @@ pub async fn run_peer_reconnection(
                                 edgerun_log::info!("peer {} session ended cleanly", node_id_hex);
                                 // Reset backoff on successful session
                                 *retry_count = 0;
-                                *next_attempt = now + std::time::Duration::from_secs(INITIAL_BACKOFF_SECS);
+                                *next_attempt =
+                                    now + std::time::Duration::from_secs(INITIAL_BACKOFF_SECS);
                             }
                             Err(e) => {
                                 edgerun_log::warn!("peer {} session error: {}", node_id_hex, e);
@@ -158,9 +159,7 @@ async fn get_peer_addr(
         .await
         .ok()?;
     match reply_rx.await {
-        Ok(StoreResponse::Ok(data)) if !data.is_empty() => {
-            String::from_utf8(data).ok()
-        }
+        Ok(StoreResponse::Ok(data)) if !data.is_empty() => String::from_utf8(data).ok(),
         _ => None,
     }
 }
@@ -241,8 +240,7 @@ where
     let accept = session::decode_accept(&payload)?;
     let peer_node_id = session::verify_session_accept(&accept, nonce)?;
 
-    let protocol_version = accept
-        .selected_protocol_version;
+    let protocol_version = accept.selected_protocol_version;
     let transport_features = accept.selected_transport_features.clone();
 
     let peer_identity = accept.responder.clone().ok_or("no responder identity")?;
@@ -370,9 +368,7 @@ async fn handle_peer_messages<R, W>(
         }
 
         // Try QueryRequest
-        if let Ok(query) =
-            edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..])
-        {
+        if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..]) {
             let raw = payload.clone();
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx

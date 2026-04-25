@@ -179,8 +179,11 @@ pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
 
 /// Verifies the event signature against the given writer identity.
 pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), StreamError> {
-    use edgerun_core::crypto::{SIG_DOMAIN_EVENT_ENVELOPE, verify_canonical_record};
-    let sig = event.signature.as_ref().ok_or(StreamError::MissingSignature)?;
+    use edgerun_core::crypto::{verify_canonical_record, SIG_DOMAIN_EVENT_ENVELOPE};
+    let sig = event
+        .signature
+        .as_ref()
+        .ok_or(StreamError::MissingSignature)?;
     if sig.value.len() != 64 {
         return Err(StreamError::InvalidSignature {
             expected: 64,
@@ -199,7 +202,9 @@ pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), Stream
         .map_err(|e| StreamError::InvalidPublicKey(e.to_string()))?;
 
     if !verify_canonical_record(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value) {
-        return Err(StreamError::SignatureVerification("invalid signature".into()));
+        return Err(StreamError::SignatureVerification(
+            "invalid signature".into(),
+        ));
     }
     Ok(())
 }
@@ -261,12 +266,24 @@ pub fn validate_stream(events: &[EventEnvelope], writer: &NodeID) -> Result<(), 
 #[derive(Debug)]
 pub enum StreamError {
     EmptyStream,
-    MissingGenesis { first_seq: u64 },
+    MissingGenesis {
+        first_seq: u64,
+    },
     GenesisHasPrevHash,
-    SequenceGap { expected: u64, actual: u64 },
-    InvalidPrevHash { seq: u64, expected: Digest, actual: Digest },
+    SequenceGap {
+        expected: u64,
+        actual: u64,
+    },
+    InvalidPrevHash {
+        seq: u64,
+        expected: Digest,
+        actual: Digest,
+    },
     MissingSignature,
-    InvalidSignature { expected: usize, actual: usize },
+    InvalidSignature {
+        expected: usize,
+        actual: usize,
+    },
     InvalidSignatureFormat(String),
     InvalidPublicKey(String),
     SignatureVerification(String),
@@ -295,7 +312,10 @@ impl std::fmt::Display for StreamError {
             }
             Self::MissingSignature => write!(f, "event signature is missing"),
             Self::InvalidSignature { expected, actual } => {
-                write!(f, "invalid signature length: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "invalid signature length: expected {expected}, got {actual}"
+                )
             }
             Self::InvalidSignatureFormat(e) => write!(f, "invalid signature format: {e}"),
             Self::InvalidPublicKey(e) => write!(f, "invalid public key: {e}"),
@@ -317,7 +337,6 @@ mod tests {
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner};
     use std::sync::Arc;
-
 
     #[derive(Clone)]
     struct TestSigner {
@@ -344,12 +363,9 @@ mod tests {
             self.node_id
         }
 
-        fn sign_digest(
-            &self,
-            digest: &[u8; 32],
-        ) -> Result<[u8; 64], HardwareSigningError> {
+        fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], HardwareSigningError> {
+            use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
             use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
             let sig: edgerun_crypto::p256::ecdsa::Signature =
                 self.key.sign_prehash(digest).unwrap();
             let mut bytes = [0u8; 64];
@@ -371,13 +387,10 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     #[test]
     fn append_creates_contiguous_sequence() {
         let signer = TestSigner::new();
-        let mut writer =
-            StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
+        let mut writer = StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
 
         for i in 0..3 {
-            writer
-                .append(100i32, 1, 1000 + i as i64)
-                .unwrap();
+            writer.append(100i32, 1, 1000 + i as i64).unwrap();
         }
 
         let head = writer.head().unwrap();
@@ -489,16 +502,13 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     fn stream_writer_produces_valid_chain() {
         let signer = TestSigner::new();
         let writer_id = signer.node_id();
-        let mut writer =
-            StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
+        let mut writer = StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
 
         let mut events = Vec::new();
         events.push(writer.head().unwrap().clone());
 
         for i in 0..5 {
-            let event = writer
-                .append(100i32, 1, 1000 + i as i64)
-                .unwrap();
+            let event = writer.append(100i32, 1, 1000 + i as i64).unwrap();
             events.push(event);
         }
 
@@ -775,7 +785,13 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         // Truncate signature
         genesis.signature.as_mut().unwrap().value.truncate(32);
         let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
-        assert!(matches!(err, StreamError::InvalidSignature { expected: 64, actual: 32 }));
+        assert!(matches!(
+            err,
+            StreamError::InvalidSignature {
+                expected: 64,
+                actual: 32
+            }
+        ));
     }
 
     #[test]
@@ -785,7 +801,13 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         sign_event(&mut genesis, &signer).unwrap();
         genesis.signature.as_mut().unwrap().value.clear();
         let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
-        assert!(matches!(err, StreamError::InvalidSignature { expected: 64, actual: 0 }));
+        assert!(matches!(
+            err,
+            StreamError::InvalidSignature {
+                expected: 64,
+                actual: 0
+            }
+        ));
     }
 
     #[test]
@@ -956,7 +978,10 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
     #[test]
     fn error_display_sequence_gap() {
-        let e = StreamError::SequenceGap { expected: 3, actual: 7 };
+        let e = StreamError::SequenceGap {
+            expected: 3,
+            actual: 7,
+        };
         assert_eq!(e.to_string(), "sequence gap at seq 7: expected 3");
     }
 
@@ -964,21 +989,36 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     fn error_display_invalid_prev_hash() {
         let e = StreamError::InvalidPrevHash {
             seq: 4,
-            expected: Digest { algorithm: 1, value: vec![0u8; 32] },
-            actual: Digest { algorithm: 1, value: vec![1u8; 32] },
+            expected: Digest {
+                algorithm: 1,
+                value: vec![0u8; 32],
+            },
+            actual: Digest {
+                algorithm: 1,
+                value: vec![1u8; 32],
+            },
         };
         assert_eq!(e.to_string(), "invalid prev_hash at seq 4");
     }
 
     #[test]
     fn error_display_missing_signature() {
-        assert_eq!(StreamError::MissingSignature.to_string(), "event signature is missing");
+        assert_eq!(
+            StreamError::MissingSignature.to_string(),
+            "event signature is missing"
+        );
     }
 
     #[test]
     fn error_display_invalid_signature() {
-        let e = StreamError::InvalidSignature { expected: 64, actual: 32 };
-        assert_eq!(e.to_string(), "invalid signature length: expected 64, got 32");
+        let e = StreamError::InvalidSignature {
+            expected: 64,
+            actual: 32,
+        };
+        assert_eq!(
+            e.to_string(),
+            "invalid signature length: expected 64, got 32"
+        );
     }
 
     #[test]
@@ -996,7 +1036,10 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     #[test]
     fn error_display_signature_verification() {
         let e = StreamError::SignatureVerification("verify failed".into());
-        assert_eq!(e.to_string(), "signature verification failed: verify failed");
+        assert_eq!(
+            e.to_string(),
+            "signature verification failed: verify failed"
+        );
     }
 
     #[test]

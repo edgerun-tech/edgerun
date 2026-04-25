@@ -1,8 +1,8 @@
 //! DNS record types and data structures.
 
+use std::fmt;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
-use std::fmt;
 
 // ---------------------------------------------------------------------------
 // Record type constants (RFC 1035 + extensions)
@@ -398,19 +398,10 @@ impl DnsRecordData {
         match (rtype, self) {
             (DnsRecordType::A, DnsRecordData::A(ip)) => ip.octets().to_vec(),
             (DnsRecordType::AAAA, DnsRecordData::AAAA(ip)) => ip.octets().to_vec(),
-            (DnsRecordType::CNAME, DnsRecordData::CNAME(name)) => {
-                encode_domain_name(name)
-            }
-            (DnsRecordType::NS, DnsRecordData::NS(name)) => {
-                encode_domain_name(name)
-            }
-            (DnsRecordType::PTR, DnsRecordData::PTR(name)) => {
-                encode_domain_name(name)
-            }
-            (
-                DnsRecordType::MX,
-                DnsRecordData::MX { priority, exchange },
-            ) => {
+            (DnsRecordType::CNAME, DnsRecordData::CNAME(name)) => encode_domain_name(name),
+            (DnsRecordType::NS, DnsRecordData::NS(name)) => encode_domain_name(name),
+            (DnsRecordType::PTR, DnsRecordData::PTR(name)) => encode_domain_name(name),
+            (DnsRecordType::MX, DnsRecordData::MX { priority, exchange }) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&priority.to_be_bytes());
                 buf.extend_from_slice(&encode_domain_name(exchange));
@@ -445,12 +436,15 @@ impl DnsRecordData {
                 buf.extend_from_slice(&minimum.to_be_bytes());
                 buf
             }
-            (DnsRecordType::SRV, DnsRecordData::SRV {
-                priority,
-                weight,
-                port,
-                target,
-            }) => {
+            (
+                DnsRecordType::SRV,
+                DnsRecordData::SRV {
+                    priority,
+                    weight,
+                    port,
+                    target,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&priority.to_be_bytes());
                 buf.extend_from_slice(&weight.to_be_bytes());
@@ -458,9 +452,17 @@ impl DnsRecordData {
                 buf.extend_from_slice(&encode_domain_name(target));
                 buf
             }
-            (DnsRecordType::NAPTR, DnsRecordData::NAPTR {
-                order, preference, flags, services, regexp, replacement,
-            }) => {
+            (
+                DnsRecordType::NAPTR,
+                DnsRecordData::NAPTR {
+                    order,
+                    preference,
+                    flags,
+                    services,
+                    regexp,
+                    replacement,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&order.to_be_bytes());
                 buf.extend_from_slice(&preference.to_be_bytes());
@@ -474,7 +476,14 @@ impl DnsRecordData {
                 buf.extend_from_slice(&encode_domain_name(replacement));
                 buf
             }
-            (DnsRecordType::CAA, DnsRecordData::CAA { critical, tag, value }) => {
+            (
+                DnsRecordType::CAA,
+                DnsRecordData::CAA {
+                    critical,
+                    tag,
+                    value,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.push(if *critical { 0x80 } else { 0 });
                 buf.push(tag.len() as u8);
@@ -482,9 +491,15 @@ impl DnsRecordData {
                 buf.extend_from_slice(value.as_bytes());
                 buf
             }
-            (DnsRecordType::TLSA, DnsRecordData::TLSA {
-                usage, selector, matching_type, certificate,
-            }) => {
+            (
+                DnsRecordType::TLSA,
+                DnsRecordData::TLSA {
+                    usage,
+                    selector,
+                    matching_type,
+                    certificate,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.push(*usage);
                 buf.push(*selector);
@@ -492,17 +507,37 @@ impl DnsRecordData {
                 buf.extend_from_slice(certificate);
                 buf
             }
-            (DnsRecordType::HTTPS, DnsRecordData::SVCB { priority, target, params })
-            | (DnsRecordType::SVCB, DnsRecordData::SVCB { priority, target, params }) => {
+            (
+                DnsRecordType::HTTPS,
+                DnsRecordData::SVCB {
+                    priority,
+                    target,
+                    params,
+                },
+            )
+            | (
+                DnsRecordType::SVCB,
+                DnsRecordData::SVCB {
+                    priority,
+                    target,
+                    params,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&priority.to_be_bytes());
                 buf.extend_from_slice(&encode_domain_name(target));
                 buf.extend_from_slice(params);
                 buf
             }
-            (DnsRecordType::DS, DnsRecordData::DS {
-                key_tag, algorithm, digest_type, digest,
-            }) => {
+            (
+                DnsRecordType::DS,
+                DnsRecordData::DS {
+                    key_tag,
+                    algorithm,
+                    digest_type,
+                    digest,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&key_tag.to_be_bytes());
                 buf.push(*algorithm);
@@ -510,9 +545,15 @@ impl DnsRecordData {
                 buf.extend_from_slice(digest);
                 buf
             }
-            (DnsRecordType::DNSKEY, DnsRecordData::DNSKEY {
-                protocol, flags, algorithm, public_key,
-            }) => {
+            (
+                DnsRecordType::DNSKEY,
+                DnsRecordData::DNSKEY {
+                    protocol,
+                    flags,
+                    algorithm,
+                    public_key,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&flags.to_be_bytes());
                 buf.push(*protocol);
@@ -520,10 +561,20 @@ impl DnsRecordData {
                 buf.extend_from_slice(public_key);
                 buf
             }
-            (DnsRecordType::RRSIG, DnsRecordData::RRSIG {
-                type_covered, algorithm, labels, original_ttl,
-                expiration, inception, key_tag, signer_name, signature,
-            }) => {
+            (
+                DnsRecordType::RRSIG,
+                DnsRecordData::RRSIG {
+                    type_covered,
+                    algorithm,
+                    labels,
+                    original_ttl,
+                    expiration,
+                    inception,
+                    key_tag,
+                    signer_name,
+                    signature,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&type_covered.to_be_bytes());
                 buf.push(*algorithm);
@@ -536,15 +587,28 @@ impl DnsRecordData {
                 buf.extend_from_slice(signature);
                 buf
             }
-            (DnsRecordType::NSEC, DnsRecordData::NSEC { next_owner, type_bits }) => {
+            (
+                DnsRecordType::NSEC,
+                DnsRecordData::NSEC {
+                    next_owner,
+                    type_bits,
+                },
+            ) => {
                 let mut buf = encode_domain_name(next_owner);
                 buf.extend_from_slice(type_bits);
                 buf
             }
-            (DnsRecordType::NSEC3, DnsRecordData::NSEC3 {
-                hash_algorithm, flags, iterations, salt,
-                next_hashed_owner, type_bits,
-            }) => {
+            (
+                DnsRecordType::NSEC3,
+                DnsRecordData::NSEC3 {
+                    hash_algorithm,
+                    flags,
+                    iterations,
+                    salt,
+                    next_hashed_owner,
+                    type_bits,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.push(*hash_algorithm);
                 buf.push(*flags);
@@ -558,7 +622,15 @@ impl DnsRecordData {
                 buf
             }
             (_, DnsRecordData::Raw(data)) => data.clone(),
-            (DnsRecordType::OPT, DnsRecordData::OPT { ext_rcode, version, flags, options }) => {
+            (
+                DnsRecordType::OPT,
+                DnsRecordData::OPT {
+                    ext_rcode,
+                    version,
+                    flags,
+                    options,
+                },
+            ) => {
                 let mut buf = Vec::with_capacity(4 + options.len());
                 buf.push(*ext_rcode);
                 buf.push(*version);
@@ -580,15 +652,14 @@ impl DnsRecordData {
                 buf.extend(encode_domain_name(txt));
                 buf
             }
-            (DnsRecordType::LOC, DnsRecordData::LOC {
+(DnsRecordType::LOC, DnsRecordData::LOC {
                 version, size, horiz_pre, vert_pre, latitude, longitude, altitude,
             }) => {
-                let mut buf = vec![
-                *version,
-                *size as u8,
-                *horiz_pre as u8,
-                *vert_pre as u8,
-            ];
+                let mut buf = Vec::new();
+                buf.push(*version);
+                buf.push(*size as u8);
+                buf.push(*horiz_pre as u8);
+                buf.push(*vert_pre as u8);
                 buf.extend_from_slice(&latitude.to_be_bytes());
                 buf.extend_from_slice(&longitude.to_be_bytes());
                 buf.extend_from_slice(&altitude.to_be_bytes());
@@ -599,7 +670,14 @@ impl DnsRecordData {
                 buf.extend(encode_domain_name(hostname));
                 buf
             }
-            (DnsRecordType::URI, DnsRecordData::URI { priority, weight, target }) => {
+            (
+                DnsRecordType::URI,
+                DnsRecordData::URI {
+                    priority,
+                    weight,
+                    target,
+                },
+            ) => {
                 let mut buf = priority.to_be_bytes().to_vec();
                 buf.extend_from_slice(&weight.to_be_bytes());
                 buf.extend_from_slice(target.as_bytes());
@@ -610,7 +688,11 @@ impl DnsRecordData {
     }
 
     /// Parse RDATA from wire format for a given record type.
-    pub fn from_wire(rtype: DnsRecordType, data: &[u8], offset_map: &[(usize, usize)]) -> Result<Self, std::io::Error> {
+    pub fn from_wire(
+        rtype: DnsRecordType,
+        data: &[u8],
+        offset_map: &[(usize, usize)],
+    ) -> Result<Self, std::io::Error> {
         match rtype {
             DnsRecordType::A => {
                 if data.len() == 4 {
@@ -666,11 +748,32 @@ impl DnsRecordData {
                 if pos + 20 > data.len() {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let serial = u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
-                let refresh = u32::from_be_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]]);
-                let retry = u32::from_be_bytes([data[pos + 8], data[pos + 9], data[pos + 10], data[pos + 11]]);
-                let expire = u32::from_be_bytes([data[pos + 12], data[pos + 13], data[pos + 14], data[pos + 15]]);
-                let minimum = u32::from_be_bytes([data[pos + 16], data[pos + 17], data[pos + 18], data[pos + 19]]);
+                let serial =
+                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+                let refresh = u32::from_be_bytes([
+                    data[pos + 4],
+                    data[pos + 5],
+                    data[pos + 6],
+                    data[pos + 7],
+                ]);
+                let retry = u32::from_be_bytes([
+                    data[pos + 8],
+                    data[pos + 9],
+                    data[pos + 10],
+                    data[pos + 11],
+                ]);
+                let expire = u32::from_be_bytes([
+                    data[pos + 12],
+                    data[pos + 13],
+                    data[pos + 14],
+                    data[pos + 15],
+                ]);
+                let minimum = u32::from_be_bytes([
+                    data[pos + 16],
+                    data[pos + 17],
+                    data[pos + 18],
+                    data[pos + 19],
+                ]);
                 Ok(Self::SOA {
                     mname,
                     rname,
@@ -705,7 +808,9 @@ impl DnsRecordData {
                 let mut pos = 4;
                 // Character strings: length byte + data
                 let parse_charstr = |d: &[u8], p: &mut usize| -> String {
-                    if *p >= d.len() { return String::new(); }
+                    if *p >= d.len() {
+                        return String::new();
+                    }
                     let len = d[*p] as usize;
                     *p += 1;
                     let end = (*p + len).min(d.len());
@@ -718,7 +823,12 @@ impl DnsRecordData {
                 let regexp = parse_charstr(data, &mut pos);
                 let replacement = decode_domain_name(data, pos, offset_map).unwrap_or_default();
                 Ok(Self::NAPTR {
-                    order, preference, flags, services, regexp, replacement,
+                    order,
+                    preference,
+                    flags,
+                    services,
+                    regexp,
+                    replacement,
                 })
             }
             DnsRecordType::CAA => {
@@ -731,7 +841,11 @@ impl DnsRecordData {
                 let tag_end = tag_start + tag_len.min(data.len().saturating_sub(2));
                 let tag = String::from_utf8_lossy(&data[tag_start..tag_end]).to_string();
                 let value = String::from_utf8_lossy(&data[tag_end..]).to_string();
-                Ok(Self::CAA { critical, tag, value })
+                Ok(Self::CAA {
+                    critical,
+                    tag,
+                    value,
+                })
             }
             DnsRecordType::TLSA => {
                 if data.len() < 3 {
@@ -752,7 +866,11 @@ impl DnsRecordData {
                 let target = decode_domain_name(data, 2, offset_map)?;
                 let target_len = domain_name_wire_len(data, 2);
                 let params = data[2 + target_len..].to_vec();
-                Ok(Self::SVCB { priority, target, params })
+                Ok(Self::SVCB {
+                    priority,
+                    target,
+                    params,
+                })
             }
             DnsRecordType::DS => {
                 if data.len() < 4 {
@@ -762,7 +880,9 @@ impl DnsRecordData {
                 let algorithm = data[2];
                 let digest_type = data[3];
                 Ok(Self::DS {
-                    key_tag, algorithm, digest_type,
+                    key_tag,
+                    algorithm,
+                    digest_type,
                     digest: data[4..].to_vec(),
                 })
             }
@@ -774,7 +894,9 @@ impl DnsRecordData {
                 let protocol = data[2];
                 let algorithm = data[3];
                 Ok(Self::DNSKEY {
-                    protocol, flags, algorithm,
+                    protocol,
+                    flags,
+                    algorithm,
                     public_key: data[4..].to_vec(),
                 })
             }
@@ -794,8 +916,14 @@ impl DnsRecordData {
                 let signer_len = domain_name_wire_len(data, 18);
                 let sig_start = 18 + signer_len;
                 Ok(Self::RRSIG {
-                    type_covered, algorithm, labels, original_ttl,
-                    expiration, inception, key_tag, signer_name,
+                    type_covered,
+                    algorithm,
+                    labels,
+                    original_ttl,
+                    expiration,
+                    inception,
+                    key_tag,
+                    signer_name,
                     signature: data[sig_start..].to_vec(),
                 })
             }
@@ -833,8 +961,12 @@ impl DnsRecordData {
                 let next_hashed_owner = data[hash_start..hash_end].to_vec();
                 let type_bits = data[hash_end..].to_vec();
                 Ok(Self::NSEC3 {
-                    hash_algorithm, flags, iterations, salt,
-                    next_hashed_owner, type_bits,
+                    hash_algorithm,
+                    flags,
+                    iterations,
+                    salt,
+                    next_hashed_owner,
+                    type_bits,
                 })
             }
             DnsRecordType::OPT => {
@@ -869,74 +1001,103 @@ impl DnsRecordData {
                 if pos + 10 > data.len() {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let time_hi = u32::from_be_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]);
-                let time_lo = u16::from_be_bytes([data[pos+4], data[pos+5]]);
+                let time_hi =
+                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+                let time_lo = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
                 let time_signed = ((time_hi as u64) << 16) | (time_lo as u64);
-                let fudge = u16::from_be_bytes([data[pos+6], data[pos+7]]);
-                let mac_size = u16::from_be_bytes([data[pos+8], data[pos+9]]);
+                let fudge = u16::from_be_bytes([data[pos + 6], data[pos + 7]]);
+                let mac_size = u16::from_be_bytes([data[pos + 8], data[pos + 9]]);
                 pos += 10;
                 if pos + mac_size as usize + 6 > data.len() {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let mac = data[pos..pos+mac_size as usize].to_vec();
+                let mac = data[pos..pos + mac_size as usize].to_vec();
                 pos += mac_size as usize;
-                let orig_id = u16::from_be_bytes([data[pos], data[pos+1]]);
-                let error = u16::from_be_bytes([data[pos+2], data[pos+3]]);
-                let other_len = u16::from_be_bytes([data[pos+4], data[pos+5]]);
+                let orig_id = u16::from_be_bytes([data[pos], data[pos + 1]]);
+                let error = u16::from_be_bytes([data[pos + 2], data[pos + 3]]);
+                let other_len = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
                 pos += 6;
                 let other_data = if other_len > 0 && pos + other_len as usize <= data.len() {
-                    data[pos..pos+other_len as usize].to_vec()
+                    data[pos..pos + other_len as usize].to_vec()
                 } else {
                     Vec::new()
                 };
                 Ok(Self::TSIG(TsigRdata {
-                    algorithm: alg_name, time_signed, fudge, mac_size, mac,
-                    orig_id, error, other_len, other_data,
+                    algorithm: alg_name,
+                    time_signed,
+                    fudge,
+                    mac_size,
+                    mac,
+                    orig_id,
+                    error,
+                    other_len,
+                    other_data,
                 }))
             }
             DnsRecordType::HINFO => {
-                if data.len() < 2 { return Ok(Self::Raw(data.to_vec())); }
+                if data.len() < 2 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
                 let cpu_len = data[0] as usize;
-                let cpu = String::from_utf8_lossy(&data[1..1+cpu_len.min(data.len()-1)]).to_string();
+                let cpu =
+                    String::from_utf8_lossy(&data[1..1 + cpu_len.min(data.len() - 1)]).to_string();
                 let rest_start = 1 + cpu_len;
                 let os = if rest_start < data.len() {
                     let os_len = data[rest_start] as usize;
                     let os_end = (rest_start + 1 + os_len).min(data.len());
-                    String::from_utf8_lossy(&data[rest_start+1..os_end]).to_string()
-                } else { String::new() };
+                    String::from_utf8_lossy(&data[rest_start + 1..os_end]).to_string()
+                } else {
+                    String::new()
+                };
                 Ok(Self::HINFO { cpu, os })
             }
             DnsRecordType::RP => {
-                if data.len() < 2 { return Ok(Self::Raw(data.to_vec())); }
+                if data.len() < 2 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
                 let mbox = decode_domain_name(data, 0, offset_map)?;
                 let mbox_len = domain_name_wire_len(data, 0);
                 let txt = if mbox_len < data.len() {
                     decode_domain_name(data, mbox_len, offset_map)?
-                } else { String::new() };
+                } else {
+                    String::new()
+                };
                 Ok(Self::RP { mbox, txt })
             }
             DnsRecordType::LOC => {
-                if data.len() < 16 { return Ok(Self::Raw(data.to_vec())); }
+                if data.len() < 16 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
                 Ok(Self::LOC {
-                    version: data[0], size: data[1] as u32,
-                    horiz_pre: data[2] as u32, vert_pre: data[3] as u32,
+                    version: data[0],
+                    size: data[1] as u32,
+                    horiz_pre: data[2] as u32,
+                    vert_pre: data[3] as u32,
                     latitude: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
                     longitude: u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
                     altitude: u32::from_be_bytes([data[12], data[13], data[14], data[15]]),
                 })
             }
             DnsRecordType::AFSDB => {
-                if data.len() < 4 { return Ok(Self::Raw(data.to_vec())); }
+                if data.len() < 4 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
                 let subtype = u16::from_be_bytes([data[0], data[1]]);
                 let hostname = decode_domain_name(data, 2, offset_map)?;
                 Ok(Self::AFSDB { subtype, hostname })
             }
             DnsRecordType::URI => {
-                if data.len() < 4 { return Ok(Self::Raw(data.to_vec())); }
+                if data.len() < 4 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
                 let priority = u16::from_be_bytes([data[0], data[1]]);
                 let weight = u16::from_be_bytes([data[2], data[3]]);
                 let target = String::from_utf8_lossy(&data[4..]).to_string();
-                Ok(Self::URI { priority, weight, target })
+                Ok(Self::URI {
+                    priority,
+                    weight,
+                    target,
+                })
             }
             _ => Ok(Self::Raw(data.to_vec())),
         }
@@ -1019,9 +1180,13 @@ pub fn encode_domain_name_compressed(name: &str, msg: &[u8]) -> Vec<u8> {
 /// Find a domain name in the buffer and return its offset.
 fn find_name_in_buffer(name: &str, buf: &[u8]) -> Option<usize> {
     let needle = encode_domain_name(name);
-    if needle.len() > buf.len() { return None; }
+    if needle.len() > buf.len() {
+        return None;
+    }
     for i in 0..=(buf.len() - needle.len()) {
-        if buf[i] & 0xC0 == 0xC0 { continue; }
+        if buf[i] & 0xC0 == 0xC0 {
+            continue;
+        }
         if buf[i..i + needle.len()] == needle[..] {
             return Some(i);
         }
@@ -1113,26 +1278,41 @@ fn decode_tsig_name(data: &[u8], offset: usize) -> Result<String, std::io::Error
     let mut labels = Vec::new();
     let mut pos = offset;
     loop {
-        if pos >= data.len() { break; }
+        if pos >= data.len() {
+            break;
+        }
         let len = data[pos] as usize;
-        if len == 0 { break; }
+        if len == 0 {
+            break;
+        }
         pos += 1;
         if pos + len > data.len() {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "truncated TSIG name"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "truncated TSIG name",
+            ));
         }
-        labels.push(String::from_utf8_lossy(&data[pos..pos+len]).to_string());
+        labels.push(String::from_utf8_lossy(&data[pos..pos + len]).to_string());
         pos += len;
     }
-    if labels.is_empty() { Ok(".".to_string()) } else { Ok(labels.join(".")) }
+    if labels.is_empty() {
+        Ok(".".to_string())
+    } else {
+        Ok(labels.join("."))
+    }
 }
 
 /// Wire length of a TSIG name.
 fn tsig_name_wire_len(data: &[u8], offset: usize) -> usize {
     let mut pos = offset;
     loop {
-        if pos >= data.len() { return data.len() - offset; }
+        if pos >= data.len() {
+            return data.len() - offset;
+        }
         let len = data[pos] as usize;
-        if len == 0 { return pos + 1 - offset; }
+        if len == 0 {
+            return pos + 1 - offset;
+        }
         pos += 1 + len;
     }
 }
@@ -1144,7 +1324,13 @@ mod tests {
     #[test]
     fn test_encode_domain_name() {
         let wire = encode_domain_name("www.example.com");
-        assert_eq!(wire, vec![3, b'w', b'w', b'w', 7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'c', b'o', b'm', 0]);
+        assert_eq!(
+            wire,
+            vec![
+                3, b'w', b'w', b'w', 7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'c', b'o',
+                b'm', 0
+            ]
+        );
     }
 
     #[test]
@@ -1228,7 +1414,10 @@ mod tests {
         let wire = data.to_wire(DnsRecordType::SRV);
         assert_eq!(wire[0..2], [0, 10]);
         assert_eq!(wire[2..4], [0, 60]);
-        assert_eq!(wire[4..6], [5060u16.to_be_bytes()[0], 5060u16.to_be_bytes()[1]]);
+        assert_eq!(
+            wire[4..6],
+            [5060u16.to_be_bytes()[0], 5060u16.to_be_bytes()[1]]
+        );
     }
 
     #[test]
@@ -1252,8 +1441,8 @@ mod tests {
         };
         let wire = data.to_wire(DnsRecordType::NAPTR);
         assert_eq!(wire[0..2], [0, 100]); // order
-        assert_eq!(wire[2..4], [0, 10]);  // preference
-        assert_eq!(wire[4], 1);            // flags length
+        assert_eq!(wire[2..4], [0, 10]); // preference
+        assert_eq!(wire[4], 1); // flags length
         assert_eq!(&wire[5..6], b"u");
     }
 
@@ -1266,7 +1455,7 @@ mod tests {
         };
         let wire = data.to_wire(DnsRecordType::CAA);
         assert_eq!(wire[0], 0x80); // critical flag
-        assert_eq!(wire[1], 5);    // tag length
+        assert_eq!(wire[1], 5); // tag length
         assert_eq!(&wire[2..7], b"issue");
         assert_eq!(&wire[7..], b"letsencrypt.org");
     }
@@ -1295,7 +1484,7 @@ mod tests {
         };
         let wire = data.to_wire(DnsRecordType::HTTPS);
         assert_eq!(wire[0..2], [0, 1]); // priority
-        // target is domain-name encoded after priority
+                                        // target is domain-name encoded after priority
     }
 
     #[test]
@@ -1326,14 +1515,14 @@ mod tests {
     fn test_ds_wire() {
         let data = DnsRecordData::DS {
             key_tag: 12345,
-            algorithm: 13, // ECDSAP256SHA256
+            algorithm: 13,  // ECDSAP256SHA256
             digest_type: 2, // SHA-256
             digest: vec![0xAB, 0xCD],
         };
         let wire = data.to_wire(DnsRecordType::DS);
         assert_eq!(wire[0..2], [48, 57]); // key_tag 12345
         assert_eq!(wire[2], 13); // algorithm
-        assert_eq!(wire[3], 2);  // digest type
+        assert_eq!(wire[3], 2); // digest type
         assert_eq!(&wire[4..], &[0xAB, 0xCD]);
     }
 
@@ -1341,14 +1530,14 @@ mod tests {
     fn test_dnskey_wire() {
         let data = DnsRecordData::DNSKEY {
             protocol: 3,
-            flags: 257, // KSK
+            flags: 257,    // KSK
             algorithm: 13, // ECDSAP256SHA256
             public_key: vec![0x04, 0xAB, 0xCD],
         };
         let wire = data.to_wire(DnsRecordType::DNSKEY);
         assert_eq!(wire[0..2], [1, 1]); // flags 257
-        assert_eq!(wire[2], 3);    // protocol
-        assert_eq!(wire[3], 13);   // algorithm
+        assert_eq!(wire[2], 3); // protocol
+        assert_eq!(wire[3], 13); // algorithm
         assert_eq!(&wire[4..], &[0x04, 0xAB, 0xCD]);
     }
 
@@ -1361,7 +1550,7 @@ mod tests {
         let wire = data.to_wire(DnsRecordType::NSEC);
         // Next owner is domain-name encoded
         assert!(wire.len() > 16); // at least the domain name
-        assert_eq!(&wire[wire.len()-4..], &[0x40, 0x01, 0x00, 0x01]);
+        assert_eq!(&wire[wire.len() - 4..], &[0x40, 0x01, 0x00, 0x01]);
     }
 
     #[test]
@@ -1375,19 +1564,22 @@ mod tests {
             type_bits: vec![0x40],
         };
         let wire = data.to_wire(DnsRecordType::NSEC3);
-        assert_eq!(wire[0], 1);   // hash algorithm
-        assert_eq!(wire[1], 0);   // flags
+        assert_eq!(wire[0], 1); // hash algorithm
+        assert_eq!(wire[1], 0); // flags
         assert_eq!(wire[2..4], [0, 5]); // iterations
-        assert_eq!(wire[4], 2);   // salt length
+        assert_eq!(wire[4], 2); // salt length
         assert_eq!(&wire[5..7], &[0xDE, 0xAD]);
-        assert_eq!(wire[7], 3);   // hash length
+        assert_eq!(wire[7], 3); // hash length
         assert_eq!(&wire[8..11], &[0xAB, 0xCD, 0xEF]);
         assert_eq!(wire[11], 0x40); // type bits
     }
 
     #[test]
     fn test_hinfo_wire() {
-        let data = DnsRecordData::HINFO { cpu: "x86_64".to_string(), os: "Linux".to_string() };
+        let data = DnsRecordData::HINFO {
+            cpu: "x86_64".to_string(),
+            os: "Linux".to_string(),
+        };
         let wire = data.to_wire(DnsRecordType::HINFO);
         assert_eq!(wire[0], 6); // "x86_64" len
         assert_eq!(&wire[1..7], b"x86_64");
@@ -1397,7 +1589,11 @@ mod tests {
 
     #[test]
     fn test_uri_wire() {
-        let data = DnsRecordData::URI { priority: 10, weight: 1, target: "http://example.com".to_string() };
+        let data = DnsRecordData::URI {
+            priority: 10,
+            weight: 1,
+            target: "http://example.com".to_string(),
+        };
         let wire = data.to_wire(DnsRecordType::URI);
         assert_eq!(wire[0..2], [0, 10]);
         assert_eq!(wire[2..4], [0, 1]);
@@ -1406,7 +1602,10 @@ mod tests {
 
     #[test]
     fn test_afsdb_wire() {
-        let data = DnsRecordData::AFSDB { subtype: 1, hostname: "afs.example.com".to_string() };
+        let data = DnsRecordData::AFSDB {
+            subtype: 1,
+            hostname: "afs.example.com".to_string(),
+        };
         let wire = data.to_wire(DnsRecordType::AFSDB);
         assert_eq!(wire[0..2], [0, 1]);
         // hostname follows as domain name encoding

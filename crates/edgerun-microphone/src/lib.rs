@@ -92,15 +92,30 @@ mod tests {
 
     #[test]
     fn sample_format_equality() {
-        assert_eq!(MicrophoneSampleFormat::PcmS16Le, MicrophoneSampleFormat::PcmS16Le);
-        assert_ne!(MicrophoneSampleFormat::PcmS16Le, MicrophoneSampleFormat::PcmS32Le);
+        assert_eq!(
+            MicrophoneSampleFormat::PcmS16Le,
+            MicrophoneSampleFormat::PcmS16Le
+        );
+        assert_ne!(
+            MicrophoneSampleFormat::PcmS16Le,
+            MicrophoneSampleFormat::PcmS32Le
+        );
     }
 
     #[test]
     fn sample_format_debug() {
-        assert_eq!(format!("{:?}", MicrophoneSampleFormat::PcmS16Le), "PcmS16Le");
-        assert_eq!(format!("{:?}", MicrophoneSampleFormat::Float32Le), "Float32Le");
-        assert_eq!(format!("{:?}", MicrophoneSampleFormat::Other(42)), "Other(42)");
+        assert_eq!(
+            format!("{:?}", MicrophoneSampleFormat::PcmS16Le),
+            "PcmS16Le"
+        );
+        assert_eq!(
+            format!("{:?}", MicrophoneSampleFormat::Float32Le),
+            "Float32Le"
+        );
+        assert_eq!(
+            format!("{:?}", MicrophoneSampleFormat::Other(42)),
+            "Other(42)"
+        );
     }
 
     #[test]

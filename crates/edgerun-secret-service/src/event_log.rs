@@ -12,8 +12,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use edgerun_proto::edgerun::v0::stream::{
-    SecretPutPayload, SecretDeletePayload,
-    CollectionCreatedPayload, CollectionDeletedPayload,
+    CollectionCreatedPayload, CollectionDeletedPayload, SecretDeletePayload, SecretPutPayload,
 };
 use prost::Message;
 
@@ -244,7 +243,7 @@ impl EventLog {
 // Helpers
 // ===========================================================================
 
-use edgerun_core::varint::{encode_varint, decode_varint_from_read as decode_varint_stream};
+use edgerun_core::varint::{decode_varint_from_read as decode_varint_stream, encode_varint};
 
 mod tests {
     use super::*;
@@ -262,9 +261,18 @@ mod tests {
     fn record_put_and_replay() {
         let root = tmp_root();
         let mut log = EventLog::open(&root).unwrap();
-        log.record_put("default", "k1", "Key 1", &[], "blob123").unwrap();
-        log.record_put("default", "k2", "Key 2", &[("server".into(), "github.com".into())], "blob456").unwrap();
-        log.record_delete("default", "k1", "Key 1", Some("no longer needed")).unwrap();
+        log.record_put("default", "k1", "Key 1", &[], "blob123")
+            .unwrap();
+        log.record_put(
+            "default",
+            "k2",
+            "Key 2",
+            &[("server".into(), "github.com".into())],
+            "blob456",
+        )
+        .unwrap();
+        log.record_delete("default", "k1", "Key 1", Some("no longer needed"))
+            .unwrap();
 
         let events = log.replay().unwrap();
         assert_eq!(events.len(), 3);
@@ -278,7 +286,9 @@ mod tests {
             assert_eq!(p.key, "k1");
             assert_eq!(p.label, "Key 1");
             assert_eq!(p.secret_blob_id, "blob123");
-        } else { panic!("expected Put"); }
+        } else {
+            panic!("expected Put");
+        }
     }
 
     #[test]
@@ -311,7 +321,9 @@ mod tests {
 
         if let SecretEvent::CollectionDeleted(p) = &events[1] {
             assert_eq!(p.items_removed, 3);
-        } else { panic!("expected CollectionDeleted"); }
+        } else {
+            panic!("expected CollectionDeleted");
+        }
     }
 
     #[test]
@@ -333,7 +345,18 @@ mod tests {
 
     #[test]
     fn varint_roundtrip() {
-        for &v in &[0u64, 1, 127, 128, 255, 256, 16383, 16384, 1_000_000, u64::MAX] {
+        for &v in &[
+            0u64,
+            1,
+            127,
+            128,
+            255,
+            256,
+            16383,
+            16384,
+            1_000_000,
+            u64::MAX,
+        ] {
             let encoded = encode_varint(v);
             let mut cursor = io::Cursor::new(encoded.clone());
             let decoded = decode_varint_stream(&mut cursor).unwrap().unwrap();
@@ -345,16 +368,25 @@ mod tests {
     fn event_log_attributes_roundtrip() {
         let root = tmp_root();
         let mut log = EventLog::open(&root).unwrap();
-        log.record_put("default", "k1", "Key 1", &[
-            ("server".into(), "github.com".into()),
-            ("type".into(), "password".into()),
-        ], "blob123").unwrap();
+        log.record_put(
+            "default",
+            "k1",
+            "Key 1",
+            &[
+                ("server".into(), "github.com".into()),
+                ("type".into(), "password".into()),
+            ],
+            "blob123",
+        )
+        .unwrap();
         let events = log.replay().unwrap();
         assert_eq!(events.len(), 1);
         if let SecretEvent::Put(p) = &events[0] {
             assert_eq!(p.attributes.len(), 2);
             assert_eq!(p.attributes["server"], "github.com");
-        } else { panic!("expected Put"); }
+        } else {
+            panic!("expected Put");
+        }
     }
 
     #[test]
@@ -372,11 +404,14 @@ mod tests {
     fn event_log_record_delete_with_reason() {
         let root = tmp_root();
         let mut log = EventLog::open(&root).unwrap();
-        log.record_delete("default", "k1", "Key 1", Some("user requested")).unwrap();
+        log.record_delete("default", "k1", "Key 1", Some("user requested"))
+            .unwrap();
         let events = log.replay().unwrap();
         if let SecretEvent::Delete(p) = &events[0] {
             assert_eq!(p.reason, "user requested");
-        } else { panic!("expected Delete"); }
+        } else {
+            panic!("expected Delete");
+        }
     }
 
     #[test]
@@ -387,7 +422,9 @@ mod tests {
         let events = log.replay().unwrap();
         if let SecretEvent::Delete(p) = &events[0] {
             assert_eq!(p.reason, "");
-        } else { panic!("expected Delete"); }
+        } else {
+            panic!("expected Delete");
+        }
     }
 
     #[test]
@@ -395,7 +432,8 @@ mod tests {
         let root = tmp_root();
         let mut log = EventLog::open(&root).unwrap();
         log.record_collection_created("default", "Default").unwrap();
-        log.record_put("default", "k1", "K1", &[("s".into(), "v".into())], "b1").unwrap();
+        log.record_put("default", "k1", "K1", &[("s".into(), "v".into())], "b1")
+            .unwrap();
         log.record_delete("default", "k1", "K1", None).unwrap();
         log.record_collection_deleted("default", 0).unwrap();
         let events = log.replay().unwrap();

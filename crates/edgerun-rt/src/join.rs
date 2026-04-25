@@ -77,12 +77,22 @@ pub mod join_internal {
     }
 
     pub async fn join2<F1: Future, F2: Future>(f1: F1, f2: F2) -> (F1::Output, F2::Output) {
-        Join2 { f1: Some(f1), f2: Some(f2), out1: None, out2: None }.await
+        Join2 {
+            f1: Some(f1),
+            f2: Some(f2),
+            out1: None,
+            out2: None,
+        }
+        .await
     }
 
     struct Join3<F1: Future, F2: Future, F3: Future> {
-        f1: Option<F1>, f2: Option<F2>, f3: Option<F3>,
-        out1: Option<F1::Output>, out2: Option<F2::Output>, out3: Option<F3::Output>,
+        f1: Option<F1>,
+        f2: Option<F2>,
+        f3: Option<F3>,
+        out1: Option<F1::Output>,
+        out2: Option<F2::Output>,
+        out3: Option<F3::Output>,
     }
 
     impl<F1: Future, F2: Future, F3: Future> Future for Join3<F1, F2, F3> {
@@ -92,17 +102,20 @@ pub mod join_internal {
             let this = unsafe { self.get_unchecked_mut() };
             if let Some(f) = this.f1.as_mut() {
                 if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.out1 = Some(v); this.f1 = None;
+                    this.out1 = Some(v);
+                    this.f1 = None;
                 }
             }
             if let Some(f) = this.f2.as_mut() {
                 if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.out2 = Some(v); this.f2 = None;
+                    this.out2 = Some(v);
+                    this.f2 = None;
                 }
             }
             if let Some(f) = this.f3.as_mut() {
                 if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.out3 = Some(v); this.f3 = None;
+                    this.out3 = Some(v);
+                    this.f3 = None;
                 }
             }
             if this.out1.is_some() && this.out2.is_some() && this.out3.is_some() {
@@ -117,14 +130,31 @@ pub mod join_internal {
         }
     }
 
-    pub async fn join3<F1: Future, F2: Future, F3: Future>(f1: F1, f2: F2, f3: F3) -> (F1::Output, F2::Output, F3::Output) {
-        Join3 { f1: Some(f1), f2: Some(f2), f3: Some(f3), out1: None, out2: None, out3: None }.await
+    pub async fn join3<F1: Future, F2: Future, F3: Future>(
+        f1: F1,
+        f2: F2,
+        f3: F3,
+    ) -> (F1::Output, F2::Output, F3::Output) {
+        Join3 {
+            f1: Some(f1),
+            f2: Some(f2),
+            f3: Some(f3),
+            out1: None,
+            out2: None,
+            out3: None,
+        }
+        .await
     }
 
     struct Join4<F1: Future, F2: Future, F3: Future, F4: Future> {
-        f1: Option<F1>, f2: Option<F2>, f3: Option<F3>, f4: Option<F4>,
-        out1: Option<F1::Output>, out2: Option<F2::Output>,
-        out3: Option<F3::Output>, out4: Option<F4::Output>,
+        f1: Option<F1>,
+        f2: Option<F2>,
+        f3: Option<F3>,
+        f4: Option<F4>,
+        out1: Option<F1::Output>,
+        out2: Option<F2::Output>,
+        out3: Option<F3::Output>,
+        out4: Option<F4::Output>,
     }
 
     impl<F1: Future, F2: Future, F3: Future, F4: Future> Future for Join4<F1, F2, F3, F4> {
@@ -134,29 +164,38 @@ pub mod join_internal {
             let this = unsafe { self.get_unchecked_mut() };
             if let Some(f) = this.f1.as_mut() {
                 if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.out1 = Some(v); this.f1 = None;
+                    this.out1 = Some(v);
+                    this.f1 = None;
                 }
             }
             if let Some(f) = this.f2.as_mut() {
                 if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.out2 = Some(v); this.f2 = None;
+                    this.out2 = Some(v);
+                    this.f2 = None;
                 }
             }
             if let Some(f) = this.f3.as_mut() {
                 if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.out3 = Some(v); this.f3 = None;
+                    this.out3 = Some(v);
+                    this.f3 = None;
                 }
             }
             if let Some(f) = this.f4.as_mut() {
                 if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f) }.poll(cx) {
-                    this.out4 = Some(v); this.f4 = None;
+                    this.out4 = Some(v);
+                    this.f4 = None;
                 }
             }
-            if this.out1.is_some() && this.out2.is_some()
-                && this.out3.is_some() && this.out4.is_some() {
+            if this.out1.is_some()
+                && this.out2.is_some()
+                && this.out3.is_some()
+                && this.out4.is_some()
+            {
                 Poll::Ready((
-                    this.out1.take().unwrap(), this.out2.take().unwrap(),
-                    this.out3.take().unwrap(), this.out4.take().unwrap(),
+                    this.out1.take().unwrap(),
+                    this.out2.take().unwrap(),
+                    this.out3.take().unwrap(),
+                    this.out4.take().unwrap(),
                 ))
             } else {
                 Poll::Pending
@@ -164,10 +203,22 @@ pub mod join_internal {
         }
     }
 
-    pub async fn join4<F1: Future, F2: Future, F3: Future, F4: Future>(f1: F1, f2: F2, f3: F3, f4: F4)
-        -> (F1::Output, F2::Output, F3::Output, F4::Output)
-    {
-        Join4 { f1: Some(f1), f2: Some(f2), f3: Some(f3), f4: Some(f4),
-                out1: None, out2: None, out3: None, out4: None }.await
+    pub async fn join4<F1: Future, F2: Future, F3: Future, F4: Future>(
+        f1: F1,
+        f2: F2,
+        f3: F3,
+        f4: F4,
+    ) -> (F1::Output, F2::Output, F3::Output, F4::Output) {
+        Join4 {
+            f1: Some(f1),
+            f2: Some(f2),
+            f3: Some(f3),
+            f4: Some(f4),
+            out1: None,
+            out2: None,
+            out3: None,
+            out4: None,
+        }
+        .await
     }
 }

@@ -194,10 +194,7 @@ mod tests {
     #[test]
     fn pci_descriptor_has_text_modality() {
         let descriptor = default_pci_descriptor("linux-pci", "root");
-        assert_eq!(
-            descriptor.modalities,
-            vec![CapabilityModality::Text as i32]
-        );
+        assert_eq!(descriptor.modalities, vec![CapabilityModality::Text as i32]);
     }
 
     #[test]

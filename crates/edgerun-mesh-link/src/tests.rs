@@ -1,13 +1,14 @@
 #![allow(dead_code)]
 use super::*;
-use edgerun_hardware_signing::{MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID};
-use edgerun_mesh::{sign_frame, DiscoveryPacket, FrameType, MeshFrame, MeshFrameHeader, MeshRoute, LocalNode};
-use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::p256::ecdsa::SigningKey;
 use crate::link_manager::current_unix_secs;
-use crate::multicast::SockaddrIn;
 use crate::multicast::IpMreq;
-
+use crate::multicast::SockaddrIn;
+use edgerun_crypto::p256::ecdsa::SigningKey;
+use edgerun_crypto::rand_core::RngCore;
+use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
+use edgerun_mesh::{
+    sign_frame, DiscoveryPacket, FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRoute,
+};
 
 // -----------------------------------------------------------------------
 // Test helpers
@@ -124,7 +125,10 @@ fn discovery_packet_encode_decode_multiple_routes() {
             cost: (i + 1) as u8,
         })
         .collect();
-    let packet = DiscoveryPacket { sequence: 100, routes };
+    let packet = DiscoveryPacket {
+        sequence: 100,
+        routes,
+    };
     let encoded = packet.encode();
     assert_eq!(encoded.len(), 5 + 5 * 65);
 
@@ -146,7 +150,10 @@ fn discovery_packet_encode_truncates_at_max_routes() {
             cost: 1,
         })
         .collect();
-    let packet = DiscoveryPacket { sequence: 1, routes };
+    let packet = DiscoveryPacket {
+        sequence: 1,
+        routes,
+    };
     let encoded = packet.encode();
     // MAX_ROUTES is 50, so only 50 routes should be encoded
     assert_eq!(encoded.len(), 5 + 50 * 65);
@@ -189,7 +196,7 @@ fn discovery_packet_decode_rejects_partial_last_route() {
 fn discovery_packet_decode_ignores_extra_bytes() {
     let mut buf = vec![0u8; 5 + 65 + 100];
     buf[4] = 1; // claim 1 route
-    // extra trailing bytes should be ignored
+                // extra trailing bytes should be ignored
     let decoded = DiscoveryPacket::decode(&buf).unwrap();
     assert_eq!(decoded.routes.len(), 1);
 }
@@ -448,7 +455,11 @@ fn frame_type_header_encode_decode_roundtrip() {
         };
         let encoded = header.encode();
         let decoded = MeshFrameHeader::decode(&encoded);
-        assert_eq!(decoded.frame_type, ft, "FrameType roundtrip failed for {:?}", ft);
+        assert_eq!(
+            decoded.frame_type, ft,
+            "FrameType roundtrip failed for {:?}",
+            ft
+        );
     }
 }
 
@@ -513,9 +524,7 @@ fn mesh_link_broadcast_fills_src_on_drain() {
     link.queue_frame(frame);
 
     // Create a router so drain_pending_frames can operate
-    let mut router = edgerun_mesh::MeshRouter::new(
-        edgerun_mesh::LocalNode::new(src_id),
-    );
+    let mut router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(src_id));
     // No transports available, so drain should attempt but not crash
     let result = link.drain_pending_frames(&mut router);
     // It will fail to actually send (no transports), but shouldn't panic
@@ -529,9 +538,7 @@ fn mesh_link_broadcast_fills_src_on_drain() {
 #[test]
 fn mesh_link_pump_with_no_transports_returns_zero() {
     let mut link = MeshLink::new();
-    let mut router = edgerun_mesh::MeshRouter::new(
-        edgerun_mesh::LocalNode::new(node_id(0xAA)),
-    );
+    let mut router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(node_id(0xAA)));
     let count = link.pump(&mut router).unwrap();
     assert_eq!(count, 0);
 }
@@ -539,9 +546,7 @@ fn mesh_link_pump_with_no_transports_returns_zero() {
 #[test]
 fn mesh_link_broadcast_discovery_no_transports_ok() {
     let mut link = MeshLink::new();
-    let mut router = edgerun_mesh::MeshRouter::new(
-        edgerun_mesh::LocalNode::new(node_id(0xAA)),
-    );
+    let mut router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(node_id(0xAA)));
     // Should not panic even with no transports
     let result = link.broadcast_discovery(&mut router);
     assert!(result.is_ok());
@@ -835,12 +840,10 @@ fn mesh_link_router_process_discovery_routes_discovery_frames() {
     let (my_id, _my_key) = make_real_keypair();
     let (peer_id, peer_key) = make_real_keypair();
 
-    let mut router =
-        edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
+    let mut router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
 
     // Build a discovery frame from the peer
-    let mut peer_router =
-        edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
+    let mut peer_router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
     let mut disc_frame = peer_router.build_discovery_frame();
     sign_frame(&mut disc_frame, &peer_key);
 
@@ -942,7 +945,11 @@ fn mesh_link_inject_unsigned_frame_goes_to_inbound_directly() {
     link.inject_inbound_frame(frame);
 
     let inbound = link.drain_inbound_data_frames();
-    assert_eq!(inbound.len(), 1, "inject bypasses sig check, goes to inbound");
+    assert_eq!(
+        inbound.len(),
+        1,
+        "inject bypasses sig check, goes to inbound"
+    );
 }
 
 #[test]
@@ -953,12 +960,9 @@ fn mesh_link_inject_frame_not_for_us_is_forwarded() {
     let mut link = MeshLink::new();
     link.set_local_node_id(src_id);
 
-    let mut router = edgerun_mesh::MeshRouter::new(
-        edgerun_mesh::LocalNode::new(src_id),
-    );
+    let mut router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(src_id));
     // Learn a route to other_id (simulated by discovery)
-    let mut other_router =
-        edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(other_id));
+    let mut other_router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(other_id));
     let disc = other_router.build_discovery_frame();
     let pkt = DiscoveryPacket::decode(&disc.payload).unwrap();
     router.process_discovery(other_id, &pkt, 1000);
@@ -966,8 +970,8 @@ fn mesh_link_inject_frame_not_for_us_is_forwarded() {
     // Learn a route to third_id via other_id (simulate multi-hop)
     // We manually inject a route into the routing table
     router.routing_table().clone(); // get a copy
-    // Actually we need to use process_discovery from other_id advertising third_id
-    // Build a synthetic discovery from other_id claiming a route to third_id
+                                    // Actually we need to use process_discovery from other_id advertising third_id
+                                    // Build a synthetic discovery from other_id claiming a route to third_id
     let adv_packet = DiscoveryPacket {
         sequence: 1,
         routes: vec![MeshRoute {
@@ -995,9 +999,7 @@ fn mesh_link_inject_frame_not_for_us_is_forwarded() {
     // Instead, let's use process_discovery on the router directly.
 
     // Reset and do it properly:
-    let mut router2 = edgerun_mesh::MeshRouter::new(
-        edgerun_mesh::LocalNode::new(src_id),
-    );
+    let mut router2 = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(src_id));
     // other_id advertises a route to third_id
     router2.process_discovery(other_id, &adv_packet, 1000);
     // Now router2 has a route to third_id via other_id
@@ -1196,9 +1198,7 @@ fn mesh_frame_not_equal_different_payload() {
 #[test]
 fn mesh_link_send_frame_no_route_returns_false() {
     let mut link = MeshLink::new();
-    let router = edgerun_mesh::MeshRouter::new(
-        edgerun_mesh::LocalNode::new(node_id(0xAA)),
-    );
+    let router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(node_id(0xAA)));
     let frame = MeshFrame::from_payload(node_id(0xBB), vec![]);
     let result = link.send_frame(&router, &frame).unwrap();
     assert!(!result, "should return false with no route");
@@ -1235,10 +1235,8 @@ fn mesh_link_process_discovery_learns_routes() {
     let (my_id, _my_key) = make_real_keypair();
     let (peer_id, peer_key) = make_real_keypair();
 
-    let mut router =
-        edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
-    let mut peer_router =
-        edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
+    let mut router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
+    let mut peer_router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
 
     // Build a discovery frame from the peer
     let mut disc_frame = peer_router.build_discovery_frame();
@@ -1269,14 +1267,7 @@ fn mesh_link_multiple_inbound_frames_processed_in_order() {
     link.set_local_node_id(src_id);
 
     for i in 0..5 {
-        let frame = make_signed_frame(
-            &src_key,
-            src_id,
-            src_id,
-            16,
-            FrameType::Data,
-            vec![i],
-        );
+        let frame = make_signed_frame(&src_key, src_id, src_id, 16, FrameType::Data, vec![i]);
         link.inject_inbound_frame(frame);
     }
 
@@ -1342,7 +1333,7 @@ fn from_wire_exactly_at_minimum_boundary() {
     // Fill header
     buf[128] = 5; // ttl
     buf[129] = 0; // Data
-    // Fill signature area
+                  // Fill signature area
     buf[193] = 0xFF;
 
     let parsed = MeshFrame::from_wire(&buf);
@@ -1377,19 +1368,23 @@ fn mesh_link_drain_frames_fills_src_with_local_id() {
     link.set_local_node_id(local_id);
 
     let dest = node_id(0xCC);
-    let frame = make_signed_frame(&local_key, local_id, dest, 16, FrameType::Data, b"x".to_vec());
+    let frame = make_signed_frame(
+        &local_key,
+        local_id,
+        dest,
+        16,
+        FrameType::Data,
+        b"x".to_vec(),
+    );
     link.queue_frame(frame);
 
-    let mut router = edgerun_mesh::MeshRouter::new(
-        edgerun_mesh::LocalNode::new(local_id),
-    );
+    let mut router = edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(local_id));
     // drain_pending_frames calls send_mesh_frame which clones and sets src
     let sent = link.drain_pending_frames(&mut router).unwrap();
     assert_eq!(sent, 1);
     // No transports, so no actual send, but queue is drained
     assert_eq!(link.pending_count(), 0);
 }
-
 
 // =======================================================================
 // Integration Tests
@@ -1401,7 +1396,6 @@ fn mesh_link_drain_frames_fills_src_with_local_id() {
 /// wire format, parsed back, and the signature still verifies.
 #[test]
 fn integration_discovery_frame_roundtrip() {
-
     let (my_node_id, signing_key) = make_real_keypair();
 
     // Create a discovery packet
@@ -1424,7 +1418,10 @@ fn integration_discovery_frame_roundtrip() {
     edgerun_mesh::sign_frame(&mut frame, &signing_key);
 
     // Verify signature
-    assert!(frame.verify_signature(), "discovery frame signature should be valid");
+    assert!(
+        frame.verify_signature(),
+        "discovery frame signature should be valid"
+    );
     assert_eq!(frame.header.frame_type, FrameType::Discovery);
     assert_eq!(frame.header.src, my_node_id);
 
@@ -1437,7 +1434,10 @@ fn integration_discovery_frame_roundtrip() {
     assert_eq!(parsed.header.frame_type, frame.header.frame_type);
     assert_eq!(parsed.payload, frame.payload);
     assert_eq!(parsed.signature, frame.signature);
-    assert!(parsed.verify_signature(), "parsed frame signature should verify");
+    assert!(
+        parsed.verify_signature(),
+        "parsed frame signature should verify"
+    );
 }
 
 /// Integration test: Discovery frame queued and processed through router.
@@ -1446,7 +1446,6 @@ fn integration_discovery_frame_roundtrip() {
 /// parsed, and processed by a MeshRouter to update routing state.
 #[test]
 fn integration_discovery_to_routing() {
-
     let (node_a_id, signing_key_a) = make_real_keypair();
     let (node_b_id, _) = make_real_keypair();
 
@@ -1488,8 +1487,13 @@ fn integration_discovery_to_routing() {
     }
 
     // B should have learned about A
-    assert!(router_b.has_route_to(&node_a_id),
-        "B should have route to A after processing discovery frame");
-    assert_eq!(router_b.next_hop_for(&node_a_id), Some(node_a_id),
-        "B's next hop to A should be A directly");
+    assert!(
+        router_b.has_route_to(&node_a_id),
+        "B should have route to A after processing discovery frame"
+    );
+    assert_eq!(
+        router_b.next_hop_for(&node_a_id),
+        Some(node_a_id),
+        "B's next hop to A should be A directly"
+    );
 }

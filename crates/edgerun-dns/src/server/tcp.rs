@@ -12,9 +12,9 @@ use edgerun_rt::AsyncTcpListener;
 use edgerun_rt::AsyncTcpStream;
 use edgerun_rt::AsyncWrite;
 
-use crate::message::{DnsMessage, DnsResponseCode};
 use super::query::{handle_query, ParseError, ServerState};
 use super::RateLimiter;
+use crate::message::{DnsMessage, DnsResponseCode};
 
 /// Run the TCP accept loop — spawns a handler for each connection.
 /// Runs until shutdown is requested.
@@ -37,7 +37,9 @@ pub async fn tcp_accept_loop_with_shutdown(
                 let state = state.clone();
                 let rate_limiter = rate_limiter.clone();
                 edgerun_rt::spawn(async move {
-                    if let Err(e) = handle_tcp_connection_raw(stream, peer, &state, &rate_limiter).await {
+                    if let Err(e) =
+                        handle_tcp_connection_raw(stream, peer, &state, &rate_limiter).await
+                    {
                         edgerun_log::warn!("edgerun-dns: TCP error from {}: {}", peer, e);
                     }
                 });
@@ -75,12 +77,20 @@ pub async fn handle_tcp_connection_raw(
         match tcp_read_exact(&stream_mutex, &mut len_buf).await {
             Ok(0) => return Ok(()),
             Ok(2) => {}
-            Ok(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "incomplete TCP length")),
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "incomplete TCP length",
+                ))
+            }
             Err(e) => return Err(e),
         }
         let msg_len = u16::from_be_bytes(len_buf) as usize;
         if msg_len == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "zero TCP message length"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "zero TCP message length",
+            ));
         }
 
         let mut query_buf = vec![0u8; msg_len];
@@ -119,11 +129,17 @@ async fn tcp_read_exact(
             let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
             let stream_mut = unsafe { &mut *stream_ptr };
             Pin::new(stream_mut).poll_read(cx, &mut buf[total..n])
-        }).await?;
+        })
+        .await?;
 
         if read == 0 {
-            return if total == 0 { Ok(0) } else {
-                Err(io::Error::new(io::ErrorKind::UnexpectedEof, "incomplete TCP read"))
+            return if total == 0 {
+                Ok(0)
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "incomplete TCP read",
+                ))
             };
         }
         total += read;
@@ -143,7 +159,8 @@ async fn tcp_write_length_prefixed(
         let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
         let stream_mut = unsafe { &mut *stream_ptr };
         Pin::new(stream_mut).poll_write(cx, &len_bytes)
-    }).await?;
+    })
+    .await?;
 
     let mut written = 0;
     while written < data.len() {
@@ -152,7 +169,8 @@ async fn tcp_write_length_prefixed(
             let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
             let stream_mut = unsafe { &mut *stream_ptr };
             Pin::new(stream_mut).poll_write(cx, &data[written..])
-        }).await?;
+        })
+        .await?;
         if n == 0 {
             return Err(io::Error::new(io::ErrorKind::WriteZero, "TCP write zero"));
         }

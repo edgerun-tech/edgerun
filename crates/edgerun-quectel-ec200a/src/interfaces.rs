@@ -5,8 +5,7 @@ pub enum UartPort {
     Uart2 = 2,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BaudRate {
     Baud9600 = 9600,
     Baud19200 = 19200,
@@ -19,34 +18,27 @@ pub enum BaudRate {
     Baud921600 = 921600,
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DataBits {
     #[default]
     Bits8 = 8,
     Bits7 = 7,
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StopBits {
     #[default]
     One = 1,
     Two = 2,
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Parity {
     #[default]
     None = 0,
     Odd = 1,
     Even = 2,
 }
-
 
 pub struct UartConfig {
     pub port: UartPort,
@@ -80,8 +72,7 @@ impl UartConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GpioMode {
     #[default]
     Input = 0,
@@ -90,16 +81,13 @@ pub enum GpioMode {
     Analog = 3,
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GpioPull {
     #[default]
     None = 0,
     Up = 1,
     Down = 2,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GpioState {

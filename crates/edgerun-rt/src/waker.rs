@@ -20,8 +20,7 @@ struct WData {
     q: Arc<ReadyQueue>,
 }
 
-static VTABLE: RawWakerVTable =
-    RawWakerVTable::new(wk_clone, wk_wake, wk_wake_by_ref, wk_drop);
+static VTABLE: RawWakerVTable = RawWakerVTable::new(wk_clone, wk_wake, wk_wake_by_ref, wk_drop);
 
 unsafe fn wk_clone(d: *const ()) -> RawWaker {
     Arc::increment_strong_count(d as *const WData);

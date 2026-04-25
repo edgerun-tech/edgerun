@@ -7,7 +7,7 @@
 // Fix: the reactor needs an eventfd/self-pipe so that register_timer
 // can wake it when a timer's deadline is sooner than the current epoll timeout.
 
-use edgerun_rt::{Runtime, sleep};
+use edgerun_rt::{sleep, Runtime};
 use std::time::{Duration, Instant};
 
 fn main() {
@@ -20,7 +20,10 @@ fn main() {
     let t0 = Instant::now();
     rt.block_on(sleep(Duration::from_millis(1)));
     let elapsed = t0.elapsed();
-    println!("  took {:?} (should be ~1ms, if ~100ms → reactor wakeup bug)", elapsed);
+    println!(
+        "  took {:?} (should be ~1ms, if ~100ms → reactor wakeup bug)",
+        elapsed
+    );
     assert!(
         elapsed < Duration::from_millis(20),
         "BUG PROVEN: sleep(1ms) took {:?} — reactor did not wake for new timer",
@@ -50,7 +53,10 @@ fn main() {
         rt.block_on(h).unwrap();
     }
     let elapsed = t0.elapsed();
-    println!("  all 5 completed in {:?} (should be ~1-5ms, not ~100ms)", elapsed);
+    println!(
+        "  all 5 completed in {:?} (should be ~1-5ms, not ~100ms)",
+        elapsed
+    );
 
     // Test 4: Rapid fire — spawn a sleep, immediately spawn another.
     // The second timer is registered while the reactor is waiting for the first.
@@ -64,7 +70,10 @@ fn main() {
         println!("  #{}: {:?}", i + 1, elapsed);
     }
     let avg = total / 10;
-    println!("  average: {:?} (should be ~1ms, if ~100ms → reactor wakeup bug)", avg);
+    println!(
+        "  average: {:?} (should be ~1ms, if ~100ms → reactor wakeup bug)",
+        avg
+    );
 
     println!("\n=== All probe tests completed ===");
 }

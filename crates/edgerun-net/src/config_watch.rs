@@ -86,11 +86,16 @@ impl ConfigWatcher {
                 match inotify.read_events(&mut buffer) {
                     Ok(events) => {
                         for event in events {
-                    let mask = WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE;
+                            let mask = WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE;
                             if event.mask.contains(mask) {
                                 if let Some(name) = &event.name {
-                                    if name.to_string_lossy().ends_with(".yaml") || name.to_string_lossy().ends_with(".yml") {
-                                        edgerun_log::info!("edgerun-net: config change detected: {:?}", name);
+                                    if name.to_string_lossy().ends_with(".yaml")
+                                        || name.to_string_lossy().ends_with(".yml")
+                                    {
+                                        edgerun_log::info!(
+                                            "edgerun-net: config change detected: {:?}",
+                                            name
+                                        );
                                         changed.store(true, Ordering::SeqCst);
                                     }
                                 }

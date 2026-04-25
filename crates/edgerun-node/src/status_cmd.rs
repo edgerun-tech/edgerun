@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::config::{NodeConfig, parse_config};
+use crate::config::{parse_config, NodeConfig};
 use crate::signer::load_signer_from_config;
 use edgerun_linux_netif::discover_network_interfaces;
 use edgerun_network_interface::NetworkLinkState;
@@ -10,7 +10,11 @@ pub fn cmd_status(path: &PathBuf) {
     let yaml = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(e) => {
-            eprintln!("error: config not found at {}: {}. Run `edgerund init` first.", path.display(), e);
+            eprintln!(
+                "error: config not found at {}: {}. Run `edgerund init` first.",
+                path.display(),
+                e
+            );
             std::process::exit(1);
         }
     };
@@ -23,11 +27,21 @@ pub fn cmd_status(path: &PathBuf) {
     let node_id = signer.node_id();
 
     println!("edgerun Node Status");
-    println!("  Name:       {}", config.name.as_deref().unwrap_or("(unnamed)"));
+    println!(
+        "  Name:       {}",
+        config.name.as_deref().unwrap_or("(unnamed)")
+    );
     println!("  Stream ID:  {}", config.stream_id);
     println!("  NodeID:     {}", node_id.to_hex());
     println!("  Short ID:   {}", node_id.short());
-    println!("  Signer:     {}", config.signer.as_ref().map(|s| &s.signer_type).unwrap_or(&"unconfigured".to_string()));
+    println!(
+        "  Signer:     {}",
+        config
+            .signer
+            .as_ref()
+            .map(|s| &s.signer_type)
+            .unwrap_or(&"unconfigured".to_string())
+    );
     println!("  Controllers: {:?}", config.controllers);
     println!("  Trust nodes: {:?}", config.trust_nodes);
 

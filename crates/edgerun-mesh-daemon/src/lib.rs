@@ -9,16 +9,16 @@
 //! 5. Forwards transit frames to the correct next-hop
 //! 6. Shuts down cleanly on SIGINT/SIGTERM
 
+use edgerun_hardware_signing::HardwareSigningError;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRouter};
-use edgerun_mesh_link::MeshLink;
 use edgerun_mesh_capability::{MeshCapabilityServer, MeshEnvelopeDispatcher};
+use edgerun_mesh_link::MeshLink;
 use edgerun_mesh_session::{HandshakeAccept, HandshakeInit, SessionError, SessionManager};
-use edgerun_remote_capability::RemoteCapabilityProvider;
-use edgerun_hardware_signing::HardwareSigningError;
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;
-use prost::Message;
+use edgerun_remote_capability::RemoteCapabilityProvider;
 use libc::{c_int, pollfd, POLLIN};
+use prost::Message;
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -180,7 +180,10 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     /// Returns the signer's NodeID, or zeros if no signer is attached.
     #[must_use]
     pub fn node_id(&self) -> NodeID {
-        self.signer.as_ref().map(|s| s.node_id()).unwrap_or(NodeID([0u8; 64]))
+        self.signer
+            .as_ref()
+            .map(|s| s.node_id())
+            .unwrap_or(NodeID([0u8; 64]))
     }
 
     // -----------------------------------------------------------------------
@@ -302,10 +305,8 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
 
             // Step 2: sign the preimage with domain separation
             let preimage = frame.signed_preimage();
-            frame.signature = signer.sign_record(
-                edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME,
-                &preimage,
-            )?;
+            frame.signature =
+                signer.sign_record(edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME, &preimage)?;
 
             signed.push(frame);
         }
@@ -403,7 +404,8 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                                         frame_type: FrameType::HandshakeAccept,
                                     },
                                     payload: accept.encode().to_vec(),
-                                    signature: [0u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH],
+                                    signature: [0u8;
+                                        edgerun_hardware_signing::MESH_SIGNATURE_LENGTH],
                                 };
                                 self.link.queue_frame(accept_frame);
                                 self.drain_and_encrypt_buffered(&peer)?;
@@ -419,7 +421,11 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                     if let Some(accept) = HandshakeAccept::decode(&frame.payload) {
                         let peer = accept.responder;
                         if let Some(secret) = self.pending_handshakes.remove(&peer) {
-                            if self.sessions.complete_handshake_initiator(&accept, &secret).is_ok() {
+                            if self
+                                .sessions
+                                .complete_handshake_initiator(&accept, &secret)
+                                .is_ok()
+                            {
                                 self.drain_and_encrypt_buffered(&peer)?;
                             }
                             processed_any = true;
@@ -431,8 +437,12 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                     match self.sessions.decrypt_from(sender, &frame.payload) {
                         Ok(decrypted) => {
                             // Try decoding as capability envelope first
-                            if let Ok(envelope) = CapabilityRemoteEnvelope::decode(decrypted.as_slice()) {
-                                if let Some(inboxes) = self.server.dispatcher().inboxes_mut().get_mut(&sender) {
+                            if let Ok(envelope) =
+                                CapabilityRemoteEnvelope::decode(decrypted.as_slice())
+                            {
+                                if let Some(inboxes) =
+                                    self.server.dispatcher().inboxes_mut().get_mut(&sender)
+                                {
                                     if let Some(inbox) = inboxes.first_mut() {
                                         inbox.push(envelope);
                                         processed_any = true;
@@ -456,7 +466,9 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                 FrameType::Discovery | FrameType::RouteAdv => {
                     // Already processed by link.pump()
                 }
-                FrameType::MetricsReport | FrameType::MigrationOrder | FrameType::MigrationComplete => {
+                FrameType::MetricsReport
+                | FrameType::MigrationOrder
+                | FrameType::MigrationComplete => {
                     if let Some(ref mut handler) = self.metrics_handler {
                         let src = frame.header.src;
                         let ft = frame.header.frame_type;
@@ -630,7 +642,10 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
 
 fn interface_name_to_ifindex(name: &str) -> Result<c_int, io::Error> {
     let c_name = std::ffi::CString::new(name).map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidInput, "interface name contains null byte")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "interface name contains null byte",
+        )
     })?;
     let ifindex = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
     if ifindex == 0 {
@@ -645,31 +660,50 @@ fn interface_name_to_ifindex(name: &str) -> Result<c_int, io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_remote_capability::{
-        RemoteCapabilityProvider, RemoteInvocationResult,
-    };
     use edgerun_capabilities::CapabilityError;
     use edgerun_proto::edgerun::v0::capability::{
-        CapabilityDescriptor, CapabilityGrant, CapabilityInvocation,
-        CapabilityRequest, CapabilityRevocation,
+        CapabilityDescriptor, CapabilityGrant, CapabilityInvocation, CapabilityRequest,
+        CapabilityRevocation,
     };
     use edgerun_proto::edgerun::v0::capability_runtime::{
         CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionOpen,
     };
+    use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteInvocationResult};
 
     struct TestProvider;
     impl RemoteCapabilityProvider for TestProvider {
-        fn descriptor(&self) -> CapabilityDescriptor { CapabilityDescriptor::default() }
-        fn open_session(&mut self, _open: &CapabilitySessionOpen) -> Result<CapabilitySessionAccept, CapabilityError> {
+        fn descriptor(&self) -> CapabilityDescriptor {
+            CapabilityDescriptor::default()
+        }
+        fn open_session(
+            &mut self,
+            _open: &CapabilitySessionOpen,
+        ) -> Result<CapabilitySessionAccept, CapabilityError> {
             Err(CapabilityError::Unsupported("test".into()))
         }
-        fn invoke(&mut self, _: &[u8], _: &CapabilityInvocation, _: Option<&[u8]>) -> Result<RemoteInvocationResult, CapabilityError> {
+        fn invoke(
+            &mut self,
+            _: &[u8],
+            _: &CapabilityInvocation,
+            _: Option<&[u8]>,
+        ) -> Result<RemoteInvocationResult, CapabilityError> {
             Err(CapabilityError::Unsupported("test".into()))
         }
-        fn close_session(&mut self, _: &CapabilitySessionClose) -> Result<(), CapabilityError> { Ok(()) }
-        fn handle_request(&mut self, _: &CapabilityRequest) -> Result<Option<CapabilityGrant>, CapabilityError> { Ok(None) }
-        fn handle_grant(&mut self, _: &CapabilityGrant) -> Result<(), CapabilityError> { Ok(()) }
-        fn handle_revocation(&mut self, _: &CapabilityRevocation) -> Result<(), CapabilityError> { Ok(()) }
+        fn close_session(&mut self, _: &CapabilitySessionClose) -> Result<(), CapabilityError> {
+            Ok(())
+        }
+        fn handle_request(
+            &mut self,
+            _: &CapabilityRequest,
+        ) -> Result<Option<CapabilityGrant>, CapabilityError> {
+            Ok(None)
+        }
+        fn handle_grant(&mut self, _: &CapabilityGrant) -> Result<(), CapabilityError> {
+            Ok(())
+        }
+        fn handle_revocation(&mut self, _: &CapabilityRevocation) -> Result<(), CapabilityError> {
+            Ok(())
+        }
     }
 
     type TestDaemon = MeshDaemon<TestProvider>;

@@ -1,5 +1,5 @@
 // Test watch channel with the actual runtime.
-use edgerun_rt::{Runtime, spawn, WatchSender};
+use edgerun_rt::{spawn, Runtime, WatchSender};
 use std::time::Duration;
 
 fn main() {

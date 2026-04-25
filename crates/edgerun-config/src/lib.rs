@@ -24,32 +24,24 @@
 //! - CoreDNS `Corefile` → `DnsServer` + `ForwardingRule` YAML
 //! - BIND zone files → `DnsZone` YAML
 
-mod types;
+mod importers;
 mod parser;
 mod projector;
-mod importers;
+mod types;
 
 pub use edgerun_json;
 
 // Explicit public API — no glob re-exports
-pub use types::{
-    API_VERSION, ResourceMetadata, Resource, ConfigResource,
-    DnsServerSpec, DnsZoneSpec, SoaRecord, ZoneRecord, DnssecConfig,
-    DnsForwarderSpec, ForwardingRuleSpec, TlsConfigSpec, RateLimitSpec,
-    DhcpServerSpec, DhcpReservation, DhcpPoolSpec, TftpServerSpec,
-    NodeSpec, NodeTaint,
-    ContainerSpec, ContainerRestartPolicy, Container, PodTemplateSpec, PodSpec,
-    ContainerPort, VolumeMount, EnvVar, ResourceRequirements,
-    SecretSpec, SecretType,
-    PeerSpec, PeerEndpoint,
-    GatewaySpec, GatewayListener, GatewayTlsConfig,
-    ServiceSpec, ServicePort, ServiceAffinity,
-    HttpRouteSpec, HttpRouteRule, HttpRouteMatch, HttpRouteHeaderMatch, HttpRouteBackend,
-    TcpRouteSpec, TcpRouteBackend,
-    TlsRouteSpec, TlsRouteBackend,
-};
-pub use parser::{parse_config_file, parse_and_validate, to_yaml_all, ConfigState, ConfigError};
+pub use importers::{import_corefile, import_dnsmasq, ImportError};
+pub use parser::{parse_and_validate, parse_config_file, to_yaml_all, ConfigError, ConfigState};
 pub use projector::{ConfigEvent, ConfigOp, ConfigProjector};
-pub use importers::{
-    import_dnsmasq, import_corefile, ImportError,
+pub use types::{
+    ConfigResource, Container, ContainerPort, ContainerRestartPolicy, ContainerSpec, DhcpPoolSpec,
+    DhcpReservation, DhcpServerSpec, DnsForwarderSpec, DnsServerSpec, DnsZoneSpec, DnssecConfig,
+    EnvVar, ForwardingRuleSpec, GatewayListener, GatewaySpec, GatewayTlsConfig, HttpRouteBackend,
+    HttpRouteHeaderMatch, HttpRouteMatch, HttpRouteRule, HttpRouteSpec, NodeSpec, NodeTaint,
+    PeerEndpoint, PeerSpec, PodSpec, PodTemplateSpec, RateLimitSpec, Resource, ResourceMetadata,
+    ResourceRequirements, SecretSpec, SecretType, ServiceAffinity, ServicePort, ServiceSpec,
+    SoaRecord, TcpRouteBackend, TcpRouteSpec, TftpServerSpec, TlsConfigSpec, TlsRouteBackend,
+    TlsRouteSpec, VolumeMount, ZoneRecord, API_VERSION,
 };

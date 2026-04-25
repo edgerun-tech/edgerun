@@ -70,7 +70,9 @@ impl QuicFrameType {
 /// QUIC frame
 #[derive(Debug, Clone)]
 pub enum QuicFrame {
-    Padding { length: usize },
+    Padding {
+        length: usize,
+    },
     Ping,
     Ack {
         largest_acknowledged: u64,
@@ -98,31 +100,60 @@ pub enum QuicFrame {
         stream_id: u64,
         error_code: u64,
     },
-    Crypto { offset: u64, data: Vec<u8> },
-    NewToken { token: Vec<u8> },
+    Crypto {
+        offset: u64,
+        data: Vec<u8>,
+    },
+    NewToken {
+        token: Vec<u8>,
+    },
     Stream {
         stream_id: u64,
         offset: u64,
         fin: bool,
         data: Vec<u8>,
     },
-    MaxData { max_data: u64 },
-    MaxStreamData { stream_id: u64, max_stream_data: u64 },
-    MaxStreamsBidi { max_streams: u64 },
-    MaxStreamsUni { max_streams: u64 },
-    DataBlocked { max_data: u64 },
-    StreamDataBlocked { stream_id: u64, max_stream_data: u64 },
-    StreamsBlockedBidi { max_streams: u64 },
-    StreamsBlockedUni { max_streams: u64 },
+    MaxData {
+        max_data: u64,
+    },
+    MaxStreamData {
+        stream_id: u64,
+        max_stream_data: u64,
+    },
+    MaxStreamsBidi {
+        max_streams: u64,
+    },
+    MaxStreamsUni {
+        max_streams: u64,
+    },
+    DataBlocked {
+        max_data: u64,
+    },
+    StreamDataBlocked {
+        stream_id: u64,
+        max_stream_data: u64,
+    },
+    StreamsBlockedBidi {
+        max_streams: u64,
+    },
+    StreamsBlockedUni {
+        max_streams: u64,
+    },
     NewConnectionId {
         sequence_number: u64,
         retire_prior_to: u64,
         connection_id: Vec<u8>,
         stateless_reset_token: [u8; 16],
     },
-    RetireConnectionId { sequence_number: u64 },
-    PathChallenge { data: [u8; 8] },
-    PathResponse { data: [u8; 8] },
+    RetireConnectionId {
+        sequence_number: u64,
+    },
+    PathChallenge {
+        data: [u8; 8],
+    },
+    PathResponse {
+        data: [u8; 8],
+    },
     ConnectionClose {
         error_code: u64,
         frame_type: u64,

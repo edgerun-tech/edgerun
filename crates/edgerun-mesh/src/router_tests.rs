@@ -1,7 +1,7 @@
-use edgerun_hardware_signing::{MESH_SIGNATURE_LENGTH, NodeID};
 use crate::{
     FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
 };
+use edgerun_hardware_signing::{NodeID, MESH_SIGNATURE_LENGTH};
 
 // ---------------------------------------------------------------------------
 // Discovery packet (serialized payload)
@@ -398,7 +398,11 @@ fn bellman_ford_equal_cost_no_update() {
     // But BB is a NEW peer, so the changed flag will be set for adding BB's direct route.
     // We verify the CC route is NOT changed (still via DD at cost 3).
     let old_cost = router.routing_table().lookup(&node_id(0xCC)).unwrap().cost;
-    let old_next_hop = router.routing_table().lookup(&node_id(0xCC)).unwrap().next_hop;
+    let old_next_hop = router
+        .routing_table()
+        .lookup(&node_id(0xCC))
+        .unwrap()
+        .next_hop;
 
     let packet = DiscoveryPacket {
         sequence: 1,
@@ -1396,17 +1400,14 @@ fn multiple_discoveries_converge_full_topology() {
 
     // All leaves discover center
     for leaf in [&mut leaf1, &mut leaf2, &mut leaf3] {
-        let pkt =
-            DiscoveryPacket::decode(&center.build_discovery_frame().payload).unwrap();
+        let pkt = DiscoveryPacket::decode(&center.build_discovery_frame().payload).unwrap();
         leaf.process_discovery(node_id(0x01), &pkt, 1000);
     }
 
     // Center discovers all leaves
     for leaf_id in [0x02, 0x03, 0x04] {
-        let pkt = DiscoveryPacket::decode(
-            &make_router(leaf_id).build_discovery_frame().payload,
-        )
-        .unwrap();
+        let pkt =
+            DiscoveryPacket::decode(&make_router(leaf_id).build_discovery_frame().payload).unwrap();
         center.process_discovery(node_id(leaf_id), &pkt, 1000);
     }
 
@@ -1426,14 +1427,11 @@ fn multiple_discoveries_converge_full_topology() {
 fn route_cost_accumulation_across_many_hops() {
     // Linear chain of 6 nodes: A-B-C-D-E-F
     // F should reach A at cost 5
-    let mut routers: Vec<MeshRouter> = (0..6)
-        .map(|i| make_router(0x10 + i))
-        .collect();
+    let mut routers: Vec<MeshRouter> = (0..6).map(|i| make_router(0x10 + i)).collect();
 
     // Each pair exchanges discovery (simulating propagation)
     for i in 0..5 {
-        let pkt =
-            DiscoveryPacket::decode(&routers[i].build_discovery_frame().payload).unwrap();
+        let pkt = DiscoveryPacket::decode(&routers[i].build_discovery_frame().payload).unwrap();
         let sender_id = routers[i].node_id();
         routers[i + 1].process_discovery(sender_id, &pkt, 1000);
     }
@@ -1474,8 +1472,5 @@ fn bellman_ford_converges_to_best_path() {
     let route = d.routing_table().lookup(&node_id(0xAA)).unwrap();
     assert_eq!(route.cost, 2);
     // Could be via BB or CC depending on processing order
-    assert!(
-        route.next_hop == Some(node_id(0xBB)) || route.next_hop == Some(node_id(0xCC))
-    );
+    assert!(route.next_hop == Some(node_id(0xBB)) || route.next_hop == Some(node_id(0xCC)));
 }
-

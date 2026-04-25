@@ -27,7 +27,13 @@ extern "C" {
     pub fn setuid(uid: u32) -> c_int;
     pub fn setgid(gid: u32) -> c_int;
     pub fn setgroups(size: usize, list: *const u32) -> c_int;
-    pub fn prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong) -> c_int;
+    pub fn prctl(
+        option: c_int,
+        arg2: c_ulong,
+        arg3: c_ulong,
+        arg4: c_ulong,
+        arg5: c_ulong,
+    ) -> c_int;
     pub fn sethostname(name: *const c_char, len: usize) -> c_int;
 }
 
@@ -38,31 +44,31 @@ extern "C" {
 /// Linux namespace clone flags (stable since 2.6).
 pub mod ns {
     use super::c_int;
-    pub const NEWNS: c_int     = 0x00020000;
+    pub const NEWNS: c_int = 0x00020000;
     pub const NEWCGROUP: c_int = 0x02000000;
-    pub const NEWUTS: c_int    = 0x04000000;
-    pub const NEWIPC: c_int    = 0x08000000;
-    pub const NEWUSER: c_int   = 0x10000000;
-    pub const NEWPID: c_int    = 0x20000000;
-    pub const NEWNET: c_int    = 0x40000000;
+    pub const NEWUTS: c_int = 0x04000000;
+    pub const NEWIPC: c_int = 0x08000000;
+    pub const NEWUSER: c_int = 0x10000000;
+    pub const NEWPID: c_int = 0x20000000;
+    pub const NEWNET: c_int = 0x40000000;
     pub const CONTAINER: c_int = NEWNS | NEWCGROUP | NEWUTS | NEWIPC | NEWPID | NEWNET;
 }
 
 /// Mount flags.
 pub mod ms {
     use super::c_ulong;
-    pub const NOSUID: c_ulong      = 2;
-    pub const NODEV: c_ulong       = 4;
-    pub const NOEXEC: c_ulong      = 8;
-    pub const REC: c_ulong         = 16384;
-    pub const PRIVATE: c_ulong     = 1 << 18;
-    pub const BIND: c_ulong        = 4096;
-    pub const RDONLY: c_ulong      = 1;
-    pub const REMOUNT: c_ulong     = 1 << 14;
+    pub const NOSUID: c_ulong = 2;
+    pub const NODEV: c_ulong = 4;
+    pub const NOEXEC: c_ulong = 8;
+    pub const REC: c_ulong = 16384;
+    pub const PRIVATE: c_ulong = 1 << 18;
+    pub const BIND: c_ulong = 4096;
+    pub const RDONLY: c_ulong = 1;
+    pub const REMOUNT: c_ulong = 1 << 14;
     pub const STRICTATIME: c_ulong = 1 << 24;
-    pub const SHARED: c_ulong      = 1 << 20;
-    pub const SLAVE: c_ulong       = 1 << 19;
-    pub const UNBINDABLE: c_ulong  = 1 << 21;
+    pub const SHARED: c_ulong = 1 << 20;
+    pub const SLAVE: c_ulong = 1 << 19;
+    pub const UNBINDABLE: c_ulong = 1 << 21;
 }
 
 pub const MNT_DETACH: c_int = 2;
@@ -95,8 +101,8 @@ pub const SYS_MOUNT_SETATTR: i64 = 442;
 /// open_tree flags.
 pub mod open_tree {
     use super::c_uint;
-    pub const CLOEXEC: c_uint   = 0x001;
-    pub const CLONE: c_uint     = 0x002;
+    pub const CLOEXEC: c_uint = 0x001;
+    pub const CLONE: c_uint = 0x002;
 }
 
 /// move_mount flags.
@@ -109,12 +115,12 @@ pub mod move_mount {
 /// mount_setattr flags (MOUNT_ATTR_*).
 pub mod mount_attr {
     use super::c_ulong;
-    pub const RDONLY: c_ulong       = 0x00000001;
-    pub const NOSUID: c_ulong       = 0x00000002;
-    pub const NODEV: c_ulong        = 0x00000004;
-    pub const NOEXEC: c_ulong       = 0x00000008;
-    pub const REC: c_ulong          = 0x00001000;  // Apply recursively to sub-mounts
-    pub const IDMAP: c_ulong        = 0x00100000;  // Idmapped mount (Linux 5.12+)
+    pub const RDONLY: c_ulong = 0x00000001;
+    pub const NOSUID: c_ulong = 0x00000002;
+    pub const NODEV: c_ulong = 0x00000004;
+    pub const NOEXEC: c_ulong = 0x00000008;
+    pub const REC: c_ulong = 0x00001000; // Apply recursively to sub-mounts
+    pub const IDMAP: c_ulong = 0x00100000; // Idmapped mount (Linux 5.12+)
 }
 
 /// mount_attr structure for mount_setattr(2).
@@ -130,42 +136,99 @@ pub struct MountAttr {
 ///
 /// Returns a file descriptor referencing the mount. Use with `move_mount` or `mount_setattr`.
 pub fn do_open_tree(dirfd: c_int, pathname: &str, flags: c_uint) -> io::Result<c_int> {
-    let path_c = CString::new(pathname).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let path_c =
+        CString::new(pathname).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     #[cfg(target_arch = "x86_64")]
     let ret = unsafe { syscall(SYS_OPEN_TREE, dirfd, path_c.as_ptr(), flags) as c_int };
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe { syscall(SYS_OPEN_TREE, dirfd, path_c.as_ptr(), flags) as c_int };
-    if ret < 0 { Err(io::Error::last_os_error()) } else { Ok(ret) }
+    if ret < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(ret)
+    }
 }
 
 /// Move a mount from one location to another.
 ///
 /// `from_dfd`/`from_path` is the source mount (from `open_tree` or AT_FDCWD).
 /// `to_dfd`/`to_path` is the destination path.
-pub fn do_move_mount(from_dfd: c_int, from_path: &str, to_dfd: c_int, to_path: &str, flags: c_uint) -> io::Result<()> {
-    let from_c = CString::new(from_path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+pub fn do_move_mount(
+    from_dfd: c_int,
+    from_path: &str,
+    to_dfd: c_int,
+    to_path: &str,
+    flags: c_uint,
+) -> io::Result<()> {
+    let from_c =
+        CString::new(from_path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let to_c = CString::new(to_path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     #[cfg(target_arch = "x86_64")]
-    let ret = unsafe { syscall(SYS_MOVE_MOUNT, from_dfd, from_c.as_ptr(), to_dfd, to_c.as_ptr(), flags) as c_int };
+    let ret = unsafe {
+        syscall(
+            SYS_MOVE_MOUNT,
+            from_dfd,
+            from_c.as_ptr(),
+            to_dfd,
+            to_c.as_ptr(),
+            flags,
+        ) as c_int
+    };
     #[cfg(target_arch = "aarch64")]
-    let ret = unsafe { syscall(SYS_MOVE_MOUNT, from_dfd, from_c.as_ptr(), to_dfd, to_c.as_ptr(), flags) as c_int };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    let ret = unsafe {
+        syscall(
+            SYS_MOVE_MOUNT,
+            from_dfd,
+            from_c.as_ptr(),
+            to_dfd,
+            to_c.as_ptr(),
+            flags,
+        ) as c_int
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Apply mount attributes recursively.
 ///
 /// Used for `mount.recursive` (OCI 1.1) — sets/clears mount flags on all sub-mounts.
-pub fn do_mount_setattr(dirfd: c_int, path: &str, attr: &MountAttr, flags: c_uint) -> io::Result<()> {
+pub fn do_mount_setattr(
+    dirfd: c_int,
+    path: &str,
+    attr: &MountAttr,
+    flags: c_uint,
+) -> io::Result<()> {
     let path_c = CString::new(path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     #[cfg(target_arch = "x86_64")]
     let ret = unsafe {
-        syscall(SYS_MOUNT_SETATTR, dirfd, path_c.as_ptr(), flags, attr as *const _ as u64, std::mem::size_of::<MountAttr>() as u64) as c_int
+        syscall(
+            SYS_MOUNT_SETATTR,
+            dirfd,
+            path_c.as_ptr(),
+            flags,
+            attr as *const _ as u64,
+            std::mem::size_of::<MountAttr>() as u64,
+        ) as c_int
     };
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe {
-        syscall(SYS_MOUNT_SETATTR, dirfd, path_c.as_ptr(), flags, attr as *const _ as u64, std::mem::size_of::<MountAttr>() as u64) as c_int
+        syscall(
+            SYS_MOUNT_SETATTR,
+            dirfd,
+            path_c.as_ptr(),
+            flags,
+            attr as *const _ as u64,
+            std::mem::size_of::<MountAttr>() as u64,
+        ) as c_int
     };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Seccomp syscall numbers per architecture.
@@ -186,15 +249,14 @@ pub const CAPSET_SYSCALL_NR: c_long = 94;
 pub mod prctl_const {
     use super::c_int;
     pub const SET_NO_NEW_PRIVS: c_int = 38;
-    pub const SET_DUMPABLE: c_int     = 4;
-    pub const PR_CAPBSET_DROP: c_int  = 24;
-    pub const PR_CAP_AMBIENT: c_int   = 47;
-    pub const PR_CAP_AMBIENT_IS_SET: c_int   = 1;
-    pub const PR_CAP_AMBIENT_RAISE: c_int    = 2;
-    pub const PR_CAP_AMBIENT_LOWER: c_int    = 3;
+    pub const SET_DUMPABLE: c_int = 4;
+    pub const PR_CAPBSET_DROP: c_int = 24;
+    pub const PR_CAP_AMBIENT: c_int = 47;
+    pub const PR_CAP_AMBIENT_IS_SET: c_int = 1;
+    pub const PR_CAP_AMBIENT_RAISE: c_int = 2;
+    pub const PR_CAP_AMBIENT_LOWER: c_int = 3;
     pub const PR_CAP_AMBIENT_CLEAR_ALL: c_int = 4;
 }
-
 
 /// Set process umask.
 pub fn do_umask(mask: u32) -> u32 {
@@ -229,46 +291,96 @@ pub fn do_unshare(flags: c_int) -> io::Result<()> {
     #[cfg(target_arch = "x86_64")]
     let ret = unsafe { syscall(272, flags) as c_int }; // __NR_unshare
     #[cfg(target_arch = "aarch64")]
-    let ret = unsafe { syscall(97, flags) as c_int };  // __NR_unshare
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    let ret = unsafe { syscall(97, flags) as c_int }; // __NR_unshare
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
-pub fn do_mount(source: &str, target: &str, fstype: &str, flags: c_ulong, data: &str) -> io::Result<()> {
+pub fn do_mount(
+    source: &str,
+    target: &str,
+    fstype: &str,
+    flags: c_ulong,
+    data: &str,
+) -> io::Result<()> {
     let s = CString::new(source).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let t = CString::new(target).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let f = CString::new(fstype).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let d = CString::new(data).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let ret = unsafe { mount(s.as_ptr(), t.as_ptr(), f.as_ptr(), flags, d.as_ptr() as *const _) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    let ret = unsafe {
+        mount(
+            s.as_ptr(),
+            t.as_ptr(),
+            f.as_ptr(),
+            flags,
+            d.as_ptr() as *const _,
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 pub fn do_pivot_root(new_root: &str, put_old: &str) -> io::Result<()> {
     let nr = CString::new(new_root).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let po = CString::new(put_old).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { pivot_root(nr.as_ptr(), po.as_ptr()) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 pub fn do_umount2(target: &str, flags: c_int) -> io::Result<()> {
     let t = CString::new(target).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { umount2(t.as_ptr(), flags) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 pub fn do_set_hostname(name: &str) -> io::Result<()> {
     let n = CString::new(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { sethostname(n.as_ptr(), n.as_bytes().len()) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 pub fn do_prctl_set_no_new_privs() -> io::Result<()> {
     let ret = unsafe { prctl(prctl_const::SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 pub fn do_prctl_set_dumpable(dumpable: bool) -> io::Result<()> {
-    let ret = unsafe { prctl(prctl_const::SET_DUMPABLE, if dumpable { 1 } else { 0 }, 0, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    let ret = unsafe {
+        prctl(
+            prctl_const::SET_DUMPABLE,
+            if dumpable { 1 } else { 0 },
+            0,
+            0,
+            0,
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Drop a capability from the bounding set using prctl(PR_CAPBSET_DROP).
@@ -276,53 +388,57 @@ pub fn do_prctl_set_dumpable(dumpable: bool) -> io::Result<()> {
 pub fn do_prctl_cap_bset_drop(cap_name: &str) -> io::Result<()> {
     let cap = cap_name_to_int(cap_name);
     let ret = unsafe { prctl(prctl_const::PR_CAPBSET_DROP, cap as c_ulong, 0, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Convert a CAP_* string name to its integer value.
 /// Returns the numeric value for known capabilities, or u32::MAX for unknown.
 pub fn cap_name_to_int(name: &str) -> u32 {
     match name.strip_prefix("CAP_").unwrap_or(name) {
-        "CHOWN"              => 0,
-        "DAC_OVERRIDE"       => 1,
-        "DAC_READ_SEARCH"    => 2,
-        "FOWNER"             => 3,
-        "FSETID"             => 4,
-        "KILL"               => 5,
-        "SETGID"             => 6,
-        "SETUID"             => 7,
-        "SETPCAP"            => 8,
-        "LINUX_IMMUTABLE"    => 9,
-        "NET_BIND_SERVICE"   => 10,
-        "NET_BROADCAST"      => 11,
-        "NET_ADMIN"          => 12,
-        "NET_RAW"            => 13,
-        "IPC_LOCK"           => 14,
-        "IPC_OWNER"          => 15,
-        "SYS_MODULE"         => 16,
-        "SYS_RAWIO"          => 17,
-        "SYS_CHROOT"         => 18,
-        "SYS_PTRACE"         => 19,
-        "SYS_PACCT"          => 20,
-        "SYS_ADMIN"          => 21,
-        "SYS_BOOT"           => 22,
-        "SYS_NICE"           => 23,
-        "SYS_RESOURCE"       => 24,
-        "SYS_TIME"           => 25,
-        "SYS_TTY_CONFIG"     => 26,
-        "MKNOD"              => 27,
-        "LEASE"              => 28,
-        "AUDIT_WRITE"        => 29,
-        "AUDIT_CONTROL"      => 30,
-        "SETFCAP"            => 31,
-        "MAC_OVERRIDE"       => 32,
-        "MAC_ADMIN"          => 33,
-        "SYSLOG"             => 34,
-        "WAKE_ALARM"         => 35,
-        "BLOCK_SUSPEND"      => 36,
-        "AUDIT_READ"         => 37,
-        "PERFMON"            => 38,
-        "BPF"                => 39,
+        "CHOWN" => 0,
+        "DAC_OVERRIDE" => 1,
+        "DAC_READ_SEARCH" => 2,
+        "FOWNER" => 3,
+        "FSETID" => 4,
+        "KILL" => 5,
+        "SETGID" => 6,
+        "SETUID" => 7,
+        "SETPCAP" => 8,
+        "LINUX_IMMUTABLE" => 9,
+        "NET_BIND_SERVICE" => 10,
+        "NET_BROADCAST" => 11,
+        "NET_ADMIN" => 12,
+        "NET_RAW" => 13,
+        "IPC_LOCK" => 14,
+        "IPC_OWNER" => 15,
+        "SYS_MODULE" => 16,
+        "SYS_RAWIO" => 17,
+        "SYS_CHROOT" => 18,
+        "SYS_PTRACE" => 19,
+        "SYS_PACCT" => 20,
+        "SYS_ADMIN" => 21,
+        "SYS_BOOT" => 22,
+        "SYS_NICE" => 23,
+        "SYS_RESOURCE" => 24,
+        "SYS_TIME" => 25,
+        "SYS_TTY_CONFIG" => 26,
+        "MKNOD" => 27,
+        "LEASE" => 28,
+        "AUDIT_WRITE" => 29,
+        "AUDIT_CONTROL" => 30,
+        "SETFCAP" => 31,
+        "MAC_OVERRIDE" => 32,
+        "MAC_ADMIN" => 33,
+        "SYSLOG" => 34,
+        "WAKE_ALARM" => 35,
+        "BLOCK_SUSPEND" => 36,
+        "AUDIT_READ" => 37,
+        "PERFMON" => 38,
+        "BPF" => 39,
         "CHECKPOINT_RESTORE" => 40,
         _ => u32::MAX, // Unknown — will cause error in caps_to_bitmask
     }
@@ -357,13 +473,29 @@ pub fn do_capset(effective: u64, permitted: u64, inheritable: u64) -> io::Result
     data[5] = (inheritable >> 32) as u32;
 
     let ret = unsafe { syscall(CAPSET_SYSCALL_NR, &data as *const _ as *const c_void) as c_int };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Set/clear an ambient capability via prctl.
 pub fn do_prctl_cap_ambient(action: c_int, cap: c_int) -> io::Result<()> {
-    let ret = unsafe { prctl(prctl_const::PR_CAP_AMBIENT, action as c_ulong, cap as c_ulong, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    let ret = unsafe {
+        prctl(
+            prctl_const::PR_CAP_AMBIENT,
+            action as c_ulong,
+            cap as c_ulong,
+            0,
+            0,
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Set a resource limit using prlimit64 syscall.
@@ -377,13 +509,29 @@ pub fn do_setrlimit(resource: u32, soft: u64, hard: u64) -> io::Result<()> {
 
     #[cfg(target_arch = "x86_64")]
     let ret = unsafe {
-        syscall(302, 0, resource, &new_rlim as *const _, std::ptr::null_mut::<u64>()) as c_int
+        syscall(
+            302,
+            0,
+            resource,
+            &new_rlim as *const _,
+            std::ptr::null_mut::<u64>(),
+        ) as c_int
     };
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe {
-        syscall(267, 0, resource, &new_rlim as *const _, std::ptr::null_mut::<u64>()) as c_int
+        syscall(
+            267,
+            0,
+            resource,
+            &new_rlim as *const _,
+            std::ptr::null_mut::<u64>(),
+        ) as c_int
     };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Set a namespace via setns syscall.
@@ -397,29 +545,33 @@ pub fn do_setns(fd: c_int, ns_type: c_int) -> io::Result<()> {
     let ret = unsafe { syscall(308, fd, ns_type) as c_int };
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe { syscall(268, fd, ns_type) as c_int };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Parse an RLIMIT_* name to its numeric constant.
 pub fn rlimit_name_to_int(name: &str) -> Option<u32> {
     // RLIMIT_* constants on Linux (x86_64/aarch64)
     match name.strip_prefix("RLIMIT_").unwrap_or(name) {
-        "CPU"        => Some(0),
-        "FSIZE"      => Some(1),
-        "DATA"       => Some(2),
-        "STACK"      => Some(3),
-        "CORE"       => Some(4),
-        "RSS"        => Some(5),
-        "NPROC"      => Some(6),
-        "NOFILE"     => Some(7),
-        "MEMLOCK"    => Some(8),
-        "AS"         => Some(9),
-        "LOCKS"      => Some(10),
+        "CPU" => Some(0),
+        "FSIZE" => Some(1),
+        "DATA" => Some(2),
+        "STACK" => Some(3),
+        "CORE" => Some(4),
+        "RSS" => Some(5),
+        "NPROC" => Some(6),
+        "NOFILE" => Some(7),
+        "MEMLOCK" => Some(8),
+        "AS" => Some(9),
+        "LOCKS" => Some(10),
         "SIGPENDING" => Some(11),
-        "MSGQUEUE"   => Some(12),
-        "NICE"       => Some(13),
-        "RTPRIO"     => Some(14),
-        "RTTIME"     => Some(15),
+        "MSGQUEUE" => Some(12),
+        "NICE" => Some(13),
+        "RTPRIO" => Some(14),
+        "RTTIME" => Some(15),
         _ => None,
     }
 }
@@ -469,19 +621,19 @@ pub mod ebpf_insn {
 
 /// eBPF JMP instruction constants (alias for compatibility).
 pub mod bpf_jmp {
-    pub use crate::syscalls::ebpf_insn::BPF_JEQ as BPF_JEQ;
-    pub use crate::syscalls::ebpf_insn::BPF_JNE as BPF_JNE;
-    pub use crate::syscalls::ebpf_insn::BPF_JGT as BPF_JGT;
-    pub use crate::syscalls::ebpf_insn::BPF_JGE as BPF_JGE;
-    pub use crate::syscalls::ebpf_insn::BPF_EXIT as BPF_EXIT;
+    pub use crate::syscalls::ebpf_insn::BPF_EXIT;
+    pub use crate::syscalls::ebpf_insn::BPF_JEQ;
+    pub use crate::syscalls::ebpf_insn::BPF_JGE;
+    pub use crate::syscalls::ebpf_insn::BPF_JGT;
+    pub use crate::syscalls::ebpf_insn::BPF_JNE;
 }
 
 /// eBPF size constants (alias for compatibility).
 pub mod bpf_size {
-    pub use crate::syscalls::ebpf_insn::BPF_W as BPF_W;
-    pub use crate::syscalls::ebpf_insn::BPF_H as BPF_H;
-    pub use crate::syscalls::ebpf_insn::BPF_B as BPF_B;
-    pub use crate::syscalls::ebpf_insn::BPF_DW as BPF_DW;
+    pub use crate::syscalls::ebpf_insn::BPF_B;
+    pub use crate::syscalls::ebpf_insn::BPF_DW;
+    pub use crate::syscalls::ebpf_insn::BPF_H;
+    pub use crate::syscalls::ebpf_insn::BPF_W;
 }
 
 /// eBPF program types (kernel include/uapi/linux/bpf.h).
@@ -568,7 +720,14 @@ pub fn bpf_prog_load(
         _padding: [0; 4],
     };
 
-    let ret = unsafe { libc::syscall(SYS_BPF, 5i64 /* BPF_PROG_LOAD */, &attr as *const _ as libc::c_ulong, std::mem::size_of::<BpfProgLoadAttr>()) };
+    let ret = unsafe {
+        libc::syscall(
+            SYS_BPF,
+            5i64, /* BPF_PROG_LOAD */
+            &attr as *const _ as libc::c_ulong,
+            std::mem::size_of::<BpfProgLoadAttr>(),
+        )
+    };
     if ret < 0 {
         Err(std::io::Error::last_os_error())
     } else {
@@ -593,7 +752,14 @@ pub fn bpf_prog_attach(cgroup_fd: i32, prog_fd: i32, attach_type: u32) -> std::i
         attach_flags: 0,
     };
 
-    let ret = unsafe { libc::syscall(SYS_BPF, 8i64 /* BPF_PROG_ATTACH */, &attr as *const _ as libc::c_ulong, std::mem::size_of::<BpfProgAttachAttr>()) };
+    let ret = unsafe {
+        libc::syscall(
+            SYS_BPF,
+            8i64, /* BPF_PROG_ATTACH */
+            &attr as *const _ as libc::c_ulong,
+            std::mem::size_of::<BpfProgAttachAttr>(),
+        )
+    };
     if ret < 0 {
         Err(std::io::Error::last_os_error())
     } else {
@@ -616,7 +782,14 @@ pub fn bpf_prog_detach(cgroup_fd: i32, prog_fd: i32, attach_type: u32) -> std::i
         attach_type,
     };
 
-    let ret = unsafe { libc::syscall(SYS_BPF, 15i64 /* BPF_PROG_DETACH */, &attr as *const _ as libc::c_ulong, std::mem::size_of::<BpfProgDetachAttr>()) };
+    let ret = unsafe {
+        libc::syscall(
+            SYS_BPF,
+            15i64, /* BPF_PROG_DETACH */
+            &attr as *const _ as libc::c_ulong,
+            std::mem::size_of::<BpfProgDetachAttr>(),
+        )
+    };
     if ret < 0 {
         Err(std::io::Error::last_os_error())
     } else {
@@ -649,8 +822,12 @@ pub fn mov_reg(dst: u8, src: u8) -> [u8; 8] {
 /// BPF_JMP | BPF_JNE | BPF_K: if dst != imm then jt else jf
 pub fn jmp_imm(jmp: u8, dst: u8, imm: i32, _jt: u8) -> [u8; 8] {
     ebpf_insn(0x05 | jmp, dst, 0, 0, imm)
-        .into_iter().enumerate()
-        .fold([0u8; 8], |mut arr, (i, b)| { arr[i] = b; arr })
+        .into_iter()
+        .enumerate()
+        .fold([0u8; 8], |mut arr, (i, b)| {
+            arr[i] = b;
+            arr
+        })
 }
 
 /// BPF_JMP | BPF_EXIT: return

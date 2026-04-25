@@ -1,7 +1,7 @@
 use edgerun_linux_npu::{discover_linux_npus_in, read_trimmed, LinuxNpuInfo};
 use edgerun_npu::{
-    CapabilityDescriptor, CapabilityError, CapabilityProvider, default_npu_descriptor,
-    validate_npu_workload_request, NpuDevice, NpuExecutionMode, NpuInfo, NpuWorkloadRequest,
+    default_npu_descriptor, validate_npu_workload_request, CapabilityDescriptor, CapabilityError,
+    CapabilityProvider, NpuDevice, NpuExecutionMode, NpuInfo, NpuWorkloadRequest,
     NpuWorkloadResult,
 };
 use std::collections::HashSet;
@@ -144,7 +144,9 @@ fn open_xdna_device(device_path: &Path) -> Result<std::fs::File, CapabilityError
         .read(true)
         .write(true)
         .open(device_path)
-        .map_err(|e| CapabilityError::Provider(format!("failed to open {}: {}", device_path.display(), e)))
+        .map_err(|e| {
+            CapabilityError::Provider(format!("failed to open {}: {}", device_path.display(), e))
+        })
 }
 
 /// Create a hardware context on the XDNA device.
@@ -169,7 +171,10 @@ fn create_hwctx(
         syncobj_handle: 0,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_CREATE_HWCTX, std::mem::size_of::<AmdxdnaDrmCreateHwctx>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_CREATE_HWCTX,
+        std::mem::size_of::<AmdxdnaDrmCreateHwctx>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut create_ctx) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -179,7 +184,9 @@ fn create_hwctx(
     }
 
     if create_ctx.handle == 0 {
-        return Err(CapabilityError::Provider("XDNA returned invalid context handle (0)".into()));
+        return Err(CapabilityError::Provider(
+            "XDNA returned invalid context handle (0)".into(),
+        ));
     }
 
     Ok((create_ctx.handle, create_ctx.syncobj_handle))
@@ -191,7 +198,10 @@ fn destroy_hwctx(fd: RawFd, ctx_handle: u32) {
         handle: ctx_handle,
         pad: 0,
     };
-    let ioctl = drm_iowr(DRM_AMDXDNA_DESTROY_HWCTX, std::mem::size_of::<AmdxdnaDrmDestroyHwctx>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_DESTROY_HWCTX,
+        std::mem::size_of::<AmdxdnaDrmDestroyHwctx>() as u32,
+    );
     unsafe { libc::ioctl(fd, ioctl as _, &mut destroy) };
 }
 
@@ -205,7 +215,10 @@ fn create_bo(fd: RawFd, size: usize, bo_type: u32) -> Result<u32, CapabilityErro
         handle: 0,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_CREATE_BO, std::mem::size_of::<AmdxdnaDrmCreateBo>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_CREATE_BO,
+        std::mem::size_of::<AmdxdnaDrmCreateBo>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut create) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -215,7 +228,9 @@ fn create_bo(fd: RawFd, size: usize, bo_type: u32) -> Result<u32, CapabilityErro
     }
 
     if create.handle == 0 {
-        return Err(CapabilityError::Provider("XDNA returned invalid BO handle (0)".into()));
+        return Err(CapabilityError::Provider(
+            "XDNA returned invalid BO handle (0)".into(),
+        ));
     }
 
     Ok(create.handle)
@@ -233,7 +248,10 @@ fn get_bo_info(fd: RawFd, bo_handle: u32) -> Result<(u64, u64, u64), CapabilityE
         xdna_addr: 0,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_GET_BO_INFO, std::mem::size_of::<AmdxdnaDrmGetBoInfo>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_GET_BO_INFO,
+        std::mem::size_of::<AmdxdnaDrmGetBoInfo>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut info) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -271,7 +289,10 @@ fn get_device_info<T>(fd: RawFd, param: u32, buf: &mut T) -> Result<(), Capabili
         buffer: buf as *mut T as u64,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_GET_INFO, std::mem::size_of::<AmdxdnaDrmGetInfo>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_GET_INFO,
+        std::mem::size_of::<AmdxdnaDrmGetInfo>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut req) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -291,7 +312,10 @@ pub fn set_power_mode(fd: RawFd, mode: u8) -> Result<(), CapabilityError> {
         buffer: &mut power_mode as *mut u8 as u64,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_SET_STATE, std::mem::size_of::<AmdxdnaDrmSetState>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_SET_STATE,
+        std::mem::size_of::<AmdxdnaDrmSetState>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut req) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -303,7 +327,13 @@ pub fn set_power_mode(fd: RawFd, mode: u8) -> Result<(), CapabilityError> {
 }
 
 /// Sync buffer object to/from device.
-fn sync_bo(fd: RawFd, bo_handle: u32, direction: u32, offset: u64, size: u64) -> Result<(), CapabilityError> {
+fn sync_bo(
+    fd: RawFd,
+    bo_handle: u32,
+    direction: u32,
+    offset: u64,
+    size: u64,
+) -> Result<(), CapabilityError> {
     let mut sync = AmdxdnaDrmSyncBo {
         handle: bo_handle,
         direction,
@@ -311,7 +341,10 @@ fn sync_bo(fd: RawFd, bo_handle: u32, direction: u32, offset: u64, size: u64) ->
         size,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_SYNC_BO, std::mem::size_of::<AmdxdnaDrmSyncBo>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_SYNC_BO,
+        std::mem::size_of::<AmdxdnaDrmSyncBo>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut sync) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -343,7 +376,10 @@ fn exec_cmd(
         seq: 0,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_EXEC_CMD, std::mem::size_of::<AmdxdnaDrmExecCmd>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_EXEC_CMD,
+        std::mem::size_of::<AmdxdnaDrmExecCmd>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut exec) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -356,12 +392,28 @@ fn exec_cmd(
 }
 
 /// Submit a dependency command — waits for a syncobj signal before proceeding.
-pub fn submit_dependency(fd: RawFd, hwctx: u32, args_ptr: u64, arg_count: u32) -> Result<u64, CapabilityError> {
-    exec_cmd(fd, hwctx, AMDXDNA_CMD_SUBMIT_DEPENDENCY, args_ptr, arg_count)
+pub fn submit_dependency(
+    fd: RawFd,
+    hwctx: u32,
+    args_ptr: u64,
+    arg_count: u32,
+) -> Result<u64, CapabilityError> {
+    exec_cmd(
+        fd,
+        hwctx,
+        AMDXDNA_CMD_SUBMIT_DEPENDENCY,
+        args_ptr,
+        arg_count,
+    )
 }
 
 /// Submit a signal command — signals a syncobj for other commands to wait on.
-pub fn submit_signal(fd: RawFd, hwctx: u32, args_ptr: u64, arg_count: u32) -> Result<u64, CapabilityError> {
+pub fn submit_signal(
+    fd: RawFd,
+    hwctx: u32,
+    args_ptr: u64,
+    arg_count: u32,
+) -> Result<u64, CapabilityError> {
     exec_cmd(fd, hwctx, AMDXDNA_CMD_SUBMIT_SIGNAL, args_ptr, arg_count)
 }
 
@@ -395,16 +447,19 @@ fn wait_cmd(fd: RawFd, syncobj_handle: u32, timeout_ms: u32) -> Result<(), Capab
         pad: [0; 8],
     };
 
-    let ret = unsafe {
-        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &mut wait)
-    };
+    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &mut wait) };
 
     if ret < 0 {
         let err = std::io::Error::last_os_error();
         if err.kind() == std::io::ErrorKind::TimedOut {
-            Err(CapabilityError::Provider(format!("syncobj wait timed out after {}ms", timeout_ms)))
+            Err(CapabilityError::Provider(format!(
+                "syncobj wait timed out after {}ms",
+                timeout_ms
+            )))
         } else {
-            Err(CapabilityError::Provider(format!("syncobj wait failed: {err}")))
+            Err(CapabilityError::Provider(format!(
+                "syncobj wait failed: {err}"
+            )))
         }
     } else {
         Ok(())
@@ -420,25 +475,25 @@ fn wait_cmd(fd: RawFd, syncobj_handle: u32, timeout_ms: u32) -> Result<(), Capab
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct XclbinHeader {
-    magic: [u8; 8],                    // "xclbin2\0"
-    signature_length: i32,             // -1 = no signature
-    _reserved: [u8; 28],              // 0xFF
-    _key_block: [u8; 256],            // Signature block
-    unique_id: u64,                    // Unique ID
+    magic: [u8; 8],        // "xclbin2\0"
+    signature_length: i32, // -1 = no signature
+    _reserved: [u8; 28],   // 0xFF
+    _key_block: [u8; 256], // Signature block
+    unique_id: u64,        // Unique ID
     // Inline axlf_header (152 bytes)
-    header_length: u64,                // Total size
-    header_timestamp: u64,             // Creation timestamp
+    header_length: u64,    // Total size
+    header_timestamp: u64, // Creation timestamp
     _feature_rom_timestamp: u64,
     version_patch: u16,
     version_major: u8,
     version_minor: u8,
-    mode: u16,                         // XCLBIN_MODE
+    mode: u16, // XCLBIN_MODE
     _action_mask: u16,
     _interface_uuid: [u8; 16],
     _platform_vbnv: [u8; 64],
     _next_axlf_or_uuid: [u8; 16],
     _debug_bin: [u8; 16],
-    num_sections: u32,                 // Number of section headers
+    num_sections: u32, // Number of section headers
 }
 
 const XCLBIN_MAGIC: [u8; 8] = *b"xclbin2\0";
@@ -460,7 +515,9 @@ impl AieModel {
     /// Returns the XCLBIN payload (excluding header) and CU metadata.
     fn parse_xclbin(data: &[u8]) -> Result<(u32, Vec<u64>), CapabilityError> {
         if data.len() < std::mem::size_of::<XclbinHeader>() {
-            return Err(CapabilityError::InvalidRequest("XCLBIN too small for header"));
+            return Err(CapabilityError::InvalidRequest(
+                "XCLBIN too small for header",
+            ));
         }
 
         let header = unsafe { &*(data.as_ptr() as *const XclbinHeader) };
@@ -524,7 +581,13 @@ impl AieModel {
         }
 
         // Sync to device
-        sync_bo(fd, bo_handle, SYNC_DIRECT_TO_DEVICE, 0, xclbin_data.len() as u64)?;
+        sync_bo(
+            fd,
+            bo_handle,
+            SYNC_DIRECT_TO_DEVICE,
+            0,
+            xclbin_data.len() as u64,
+        )?;
 
         // Unmap — XCLBIN is now on device
         unsafe {
@@ -596,7 +659,8 @@ fn config_hwctx_cu(
     const DRM_AMDXDNA_HWCTX_CONFIG_CU: u32 = 0;
 
     // Build config buffer: header + CU configs
-    let config_size = std::mem::size_of::<AmdxdnaHwctxConfigCu>() + (num_cus as usize) * std::mem::size_of::<AmdxdnaCuConfig>();
+    let config_size = std::mem::size_of::<AmdxdnaHwctxConfigCu>()
+        + (num_cus as usize) * std::mem::size_of::<AmdxdnaCuConfig>();
     let mut config_data = vec![0u8; config_size];
 
     // Write header
@@ -608,7 +672,9 @@ fn config_hwctx_cu(
 
     // Write CU configs
     let cu_configs_ptr = unsafe {
-        config_data.as_mut_ptr().add(std::mem::size_of::<AmdxdnaHwctxConfigCu>()) as *mut AmdxdnaCuConfig
+        config_data
+            .as_mut_ptr()
+            .add(std::mem::size_of::<AmdxdnaHwctxConfigCu>()) as *mut AmdxdnaCuConfig
     };
     for i in 0..num_cus as usize {
         unsafe {
@@ -636,7 +702,10 @@ fn config_hwctx_cu(
         pad: 0,
     };
 
-    let ioctl = drm_iowr(DRM_AMDXDNA_CONFIG_HWCTX, std::mem::size_of::<AmdxdnaDrmConfigHwctx>() as u32);
+    let ioctl = drm_iowr(
+        DRM_AMDXDNA_CONFIG_HWCTX,
+        std::mem::size_of::<AmdxdnaDrmConfigHwctx>() as u32,
+    );
     let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut config) };
     if ret < 0 {
         return Err(CapabilityError::Provider(format!(
@@ -713,11 +782,23 @@ impl XdnaBuffer {
     }
 
     pub fn sync_to_device(&self) -> Result<(), CapabilityError> {
-        sync_bo(self.fd, self.handle, SYNC_DIRECT_TO_DEVICE, 0, self.size as u64)
+        sync_bo(
+            self.fd,
+            self.handle,
+            SYNC_DIRECT_TO_DEVICE,
+            0,
+            self.size as u64,
+        )
     }
 
     pub fn sync_from_device(&self) -> Result<(), CapabilityError> {
-        sync_bo(self.fd, self.handle, SYNC_DIRECT_FROM_DEVICE, 0, self.size as u64)
+        sync_bo(
+            self.fd,
+            self.handle,
+            SYNC_DIRECT_FROM_DEVICE,
+            0,
+            self.size as u64,
+        )
     }
 }
 
@@ -898,10 +979,7 @@ impl XdnaContext {
 
     /// Submit a command buffer for execution.
     /// Requires a model to be loaded.
-    pub fn submit_command(
-        &self,
-        cmd_bo: &XdnaBuffer,
-    ) -> Result<u64, CapabilityError> {
+    pub fn submit_command(&self, cmd_bo: &XdnaBuffer) -> Result<u64, CapabilityError> {
         if self.model.is_none() {
             return Err(CapabilityError::InvalidRequest(
                 "no model loaded — cannot submit inference commands",
@@ -1087,17 +1165,12 @@ impl CapabilityProvider for AmdXdnaBackend {
 
 impl NpuDevice for AmdXdnaBackend {
     fn npu_info(&self) -> Result<NpuInfo, CapabilityError> {
-        let firmware_version = self
-            .info
-            .linux
-            .firmware_version
-            .clone()
-            .or_else(|| {
-                self.info
-                    .amdxdna_sysfs_path
-                    .as_ref()
-                    .and_then(|p| read_trimmed(&p.join("fw_version")))
-            });
+        let firmware_version = self.info.linux.firmware_version.clone().or_else(|| {
+            self.info
+                .amdxdna_sysfs_path
+                .as_ref()
+                .and_then(|p| read_trimmed(&p.join("fw_version")))
+        });
         Ok(NpuInfo {
             provider: "amd-xdna".into(),
             instance_id: self.info.linux.instance_id.clone(),
@@ -1123,14 +1196,14 @@ impl NpuDevice for AmdXdnaBackend {
     ) -> Result<NpuWorkloadResult, CapabilityError> {
         validate_npu_workload_request(request)?;
 
-        let device_path = self
-            .info
-            .linux
-            .character_device
-            .as_ref()
-            .ok_or(CapabilityError::Unsupported(
-                "amd-xdna device is not exposed via /dev/accel",
-            ))?;
+        let device_path =
+            self.info
+                .linux
+                .character_device
+                .as_ref()
+                .ok_or(CapabilityError::Unsupported(
+                    "amd-xdna device is not exposed via /dev/accel",
+                ))?;
 
         let start = Instant::now();
         let input_size = request.input_bytes.len();
@@ -1362,10 +1435,7 @@ mod tests {
             firmware_version: None,
             accelerator_class: true,
         };
-        assert_eq!(
-            classify_generation(&info),
-            AmdXdnaGeneration::Unknown
-        );
+        assert_eq!(classify_generation(&info), AmdXdnaGeneration::Unknown);
     }
 
     #[test]
@@ -1382,10 +1452,7 @@ mod tests {
             firmware_version: None,
             accelerator_class: true,
         };
-        assert_eq!(
-            classify_generation(&info),
-            AmdXdnaGeneration::Unknown
-        );
+        assert_eq!(classify_generation(&info), AmdXdnaGeneration::Unknown);
     }
 
     #[test]
@@ -1432,7 +1499,10 @@ mod tests {
         };
         let cloned = info.clone();
         assert_eq!(info.generation, cloned.generation);
-        assert_eq!(info.supported_execution_modes, cloned.supported_execution_modes);
+        assert_eq!(
+            info.supported_execution_modes,
+            cloned.supported_execution_modes
+        );
         let debug_str = format!("{info:?}");
         assert!(debug_str.contains("AmdXdnaInfo"));
     }

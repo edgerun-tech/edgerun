@@ -1,7 +1,7 @@
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_speaker::{
-    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,
-    SpeakerSampleFormat, default_speaker_descriptor, validate_audio_playback_request,
+    default_speaker_descriptor, validate_audio_playback_request, AudioPlaybackRequest,
+    AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel, SpeakerSampleFormat,
 };
 use std::ffi::c_long;
 use std::fs;

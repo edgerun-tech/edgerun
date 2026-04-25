@@ -1,6 +1,5 @@
-
-use serde::{Deserialize, Serialize};
 use edgerun_url::Url;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Directory {
@@ -31,8 +30,12 @@ pub enum DirectoryUrl {
 impl DirectoryUrl {
     pub fn url(&self) -> Url {
         match self {
-            DirectoryUrl::LetsEncrypt => Url::parse("https://acme-v02.api.letsencrypt.org/directory").unwrap(),
-            DirectoryUrl::LetsEncryptStaging => Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory").unwrap(),
+            DirectoryUrl::LetsEncrypt => {
+                Url::parse("https://acme-v02.api.letsencrypt.org/directory").unwrap()
+            }
+            DirectoryUrl::LetsEncryptStaging => {
+                Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory").unwrap()
+            }
             DirectoryUrl::Custom(u) => u.clone(),
         }
     }
@@ -65,7 +68,7 @@ pub enum Jwk {
 
 impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
-        use edgerun_crypto::{Sha256, Digest};
+        use edgerun_crypto::{Digest, Sha256};
         let jwk_json = edgerun_json::to_string(self).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());

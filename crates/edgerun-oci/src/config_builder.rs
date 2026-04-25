@@ -105,7 +105,8 @@ impl ContainerProcessConfig {
 
     /// Returns the namespace paths as a newline-separated string.
     pub fn namespace_paths_string(&self) -> String {
-        self.namespace_paths.iter()
+        self.namespace_paths
+            .iter()
             .map(|(t, p)| format!("{}:{}", t, p))
             .collect::<Vec<_>>()
             .join("\n")
@@ -151,7 +152,10 @@ impl ContainerConfigBuilder {
             rootfs: rootfs.into(),
             root_readonly: false,
             args: vec!["/bin/sh".into()],
-            env: crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect(),
+            env: crate::process::DEFAULT_ENV
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             cwd: "/".into(),
             hostname: "edgerun".into(),
             uid: 0,
@@ -181,7 +185,9 @@ impl ContainerConfigBuilder {
 
     /// Create a builder from a full OCI spec.
     pub fn from_spec(spec: &OciSpec) -> io::Result<Self> {
-        let root = spec.root.as_ref()
+        let root = spec
+            .root
+            .as_ref()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no root in OCI spec"))?;
 
         let linux = spec.linux.clone().unwrap_or_default();
@@ -189,12 +195,17 @@ impl ContainerConfigBuilder {
         let user = process.user.clone().unwrap_or_default();
         let caps = process.capabilities.clone().unwrap_or_default();
 
-        let ns_list = linux.namespaces.clone().unwrap_or_else(crate::default_namespaces);
-        let ns_types: Vec<String> = ns_list.iter()
+        let ns_list = linux
+            .namespaces
+            .clone()
+            .unwrap_or_else(crate::default_namespaces);
+        let ns_types: Vec<String> = ns_list
+            .iter()
             .filter(|ns| ns.path.is_none())
             .map(|ns| ns.ns_type.clone())
             .collect();
-        let ns_path_joins: Vec<(String, String)> = ns_list.iter()
+        let ns_path_joins: Vec<(String, String)> = ns_list
+            .iter()
             .filter_map(|ns| ns.path.as_ref().map(|p| (ns.ns_type.clone(), p.clone())))
             .collect();
 
@@ -202,7 +213,12 @@ impl ContainerConfigBuilder {
             rootfs: root.path.clone(),
             root_readonly: root.readonly.unwrap_or(false),
             args: process.args.unwrap_or_else(|| vec!["/bin/sh".into()]),
-            env: process.env.unwrap_or_else(|| crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect()),
+            env: process.env.unwrap_or_else(|| {
+                crate::process::DEFAULT_ENV
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            }),
             cwd: process.cwd.unwrap_or_else(|| "/".into()),
             hostname: spec.hostname.clone().unwrap_or_else(|| "edgerun".into()),
             uid: user.uid.unwrap_or(0),
@@ -588,7 +604,10 @@ mod tests {
         let config = ContainerConfigBuilder::new("/rootfs")
             .sysctl(sysctl)
             .build();
-        assert_eq!(config.sysctl.get("net.ipv4.ip_forward"), Some(&"1".to_string()));
+        assert_eq!(
+            config.sysctl.get("net.ipv4.ip_forward"),
+            Some(&"1".to_string())
+        );
     }
 
     // ===========================================================================
@@ -608,7 +627,12 @@ mod tests {
 
     #[test]
     fn from_spec_with_hostname() {
-        let spec = crate::create_bundle("/rootfs", vec!["/bin/true".into()], None, Some("myhost".into()));
+        let spec = crate::create_bundle(
+            "/rootfs",
+            vec!["/bin/true".into()],
+            None,
+            Some("myhost".into()),
+        );
         let builder = ContainerConfigBuilder::from_spec(&spec).unwrap();
         let config = builder.build();
 
@@ -672,7 +696,10 @@ mod tests {
             .namespaces(vec!["mount".into(), "pid".into()])
             .build();
         let flags = config.namespace_flags();
-        assert_eq!(flags, crate::syscalls::ns::NEWNS | crate::syscalls::ns::NEWPID);
+        assert_eq!(
+            flags,
+            crate::syscalls::ns::NEWNS | crate::syscalls::ns::NEWPID
+        );
     }
 
     #[test]
@@ -716,9 +743,7 @@ mod tests {
 
     #[test]
     fn builder_empty_args() {
-        let config = ContainerConfigBuilder::new("/rootfs")
-            .args(vec![])
-            .build();
+        let config = ContainerConfigBuilder::new("/rootfs").args(vec![]).build();
         assert!(config.args.is_empty());
     }
 

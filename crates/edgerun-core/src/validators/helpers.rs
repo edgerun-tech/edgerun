@@ -1,10 +1,10 @@
-pub use std::collections::{BTreeMap, BTreeSet};
 pub use crate::crypto::sha256;
 pub use crate::result::{
     accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult, Verdict,
 };
 pub use crate::util::{bytes_to_hex, must_hex_to_bytes, parse_rfc3339};
 pub use crate::value::{mapping, seq, ystr, Value};
+pub use std::collections::{BTreeMap, BTreeSet};
 
 pub trait FixtureVerifier {
     fn verify_signed_fixture(
@@ -22,7 +22,10 @@ pub fn get<'a>(m: &'a BTreeMap<String, Value>, key: &str) -> Option<&'a Value> {
     m.get(key)
 }
 
-pub fn get_map<'a>(m: &'a BTreeMap<String, Value>, key: &str) -> Option<&'a BTreeMap<String, Value>> {
+pub fn get_map<'a>(
+    m: &'a BTreeMap<String, Value>,
+    key: &str,
+) -> Option<&'a BTreeMap<String, Value>> {
     get(m, key)?.as_map()
 }
 pub fn get_seq<'a>(m: &'a BTreeMap<String, Value>, key: &str) -> Option<&'a [Value]> {
@@ -175,4 +178,3 @@ pub fn nonce_bytes(value: &Value) -> Option<Vec<u8>> {
         _ => None,
     }
 }
-

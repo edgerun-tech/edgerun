@@ -1,5 +1,5 @@
 // Test BufReader and BufWriter with the actual runtime.
-use edgerun_rt::{BufReader, BufWriter, DuplexStream, Runtime, AsyncReadExt, AsyncWriteExt, spawn};
+use edgerun_rt::{spawn, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, DuplexStream, Runtime};
 use std::time::Duration;
 
 fn main() {
@@ -43,14 +43,18 @@ fn test_buf_reader_refill() {
         let mut reader = BufReader::with_capacity(8, b);
 
         // Write more data than the buffer can hold
-        a.write_all(b"this is a longer message that exceeds buffer").await.expect("write failed");
+        a.write_all(b"this is a longer message that exceeds buffer")
+            .await
+            .expect("write failed");
 
         // Read multiple times — should trigger refills
         let mut buf = [0u8; 64];
         let mut total = 0;
         loop {
             let n = reader.read(&mut buf[total..]).await.expect("read failed");
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             total += n;
         }
         assert!(total > 0, "should have read some data");
@@ -86,7 +90,10 @@ fn test_buf_writer_basic() {
         let mut writer = BufWriter::new(a);
 
         // Write via BufWriter
-        writer.write_all(b"hello writer").await.expect("write failed");
+        writer
+            .write_all(b"hello writer")
+            .await
+            .expect("write failed");
 
         // Flush to push data through
         writer.flush().await.expect("flush failed");

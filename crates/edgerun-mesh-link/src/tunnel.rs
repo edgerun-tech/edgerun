@@ -12,14 +12,13 @@
 //! attaches the sender's MAC to incoming raw Ethernet frames so the
 //! router can learn peer identities from Ethernet source addresses.
 
+use super::*;
+use crate::multicast::SockaddrIn;
 use edgerun_hardware_signing::NodeID;
 use edgerun_mesh::{DiscoveryPacket, FrameType, MeshFrame, MeshRouter};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};
-use super::*;
-use crate::multicast::SockaddrIn;
-
 
 // IP tunnel (UDP point-to-point pipe for cross-subnet peers)
 // ---------------------------------------------------------------------------

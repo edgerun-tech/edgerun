@@ -10,8 +10,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 use edgerun_core::accounting::{
-    WorkAccounting, WorkloadClass, WorkPriority, WorkStatus,
-    PerformanceCertificate,
+    PerformanceCertificate, WorkAccounting, WorkPriority, WorkStatus, WorkloadClass,
 };
 use edgerun_core::fixed_point::FixedPoint16;
 
@@ -35,12 +34,30 @@ impl Clone for WorkMeter {
             start_monotonic_us: self.start_monotonic_us,
             allocated_cores: self.allocated_cores,
             allocated_memory_bytes: self.allocated_memory_bytes,
-            storage_read_bytes: AtomicU64::new(self.storage_read_bytes.load(std::sync::atomic::Ordering::Relaxed)),
-            storage_written_bytes: AtomicU64::new(self.storage_written_bytes.load(std::sync::atomic::Ordering::Relaxed)),
-            storage_read_ops: AtomicU32::new(self.storage_read_ops.load(std::sync::atomic::Ordering::Relaxed)),
-            storage_write_ops: AtomicU32::new(self.storage_write_ops.load(std::sync::atomic::Ordering::Relaxed)),
-            network_sent_bytes: AtomicU64::new(self.network_sent_bytes.load(std::sync::atomic::Ordering::Relaxed)),
-            network_received_bytes: AtomicU64::new(self.network_received_bytes.load(std::sync::atomic::Ordering::Relaxed)),
+            storage_read_bytes: AtomicU64::new(
+                self.storage_read_bytes
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            storage_written_bytes: AtomicU64::new(
+                self.storage_written_bytes
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            storage_read_ops: AtomicU32::new(
+                self.storage_read_ops
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            storage_write_ops: AtomicU32::new(
+                self.storage_write_ops
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            network_sent_bytes: AtomicU64::new(
+                self.network_sent_bytes
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            network_received_bytes: AtomicU64::new(
+                self.network_received_bytes
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ),
             workload_class: self.workload_class,
             priority: self.priority,
             provider_cert_digest: self.provider_cert_digest,
@@ -139,7 +156,8 @@ impl WorkMeter {
 
     /// Record a storage write operation.
     pub fn add_storage_write(&self, bytes: u64) {
-        self.storage_written_bytes.fetch_add(bytes, Ordering::Relaxed);
+        self.storage_written_bytes
+            .fetch_add(bytes, Ordering::Relaxed);
         self.storage_write_ops.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -150,7 +168,8 @@ impl WorkMeter {
 
     /// Record network data received.
     pub fn add_network_received(&self, bytes: u64) {
-        self.network_received_bytes.fetch_add(bytes, Ordering::Relaxed);
+        self.network_received_bytes
+            .fetch_add(bytes, Ordering::Relaxed);
     }
 
     /// Record GPU compute time (µs).
@@ -286,7 +305,9 @@ mod tests {
         // CPU multiplier is 2x, 4 cores × elapsed
         assert_eq!(
             accounting.billable_compute_rc_us,
-            accounting.cpu_multiplier.mul_u64(accounting.physical_core_us)
+            accounting
+                .cpu_multiplier
+                .mul_u64(accounting.physical_core_us)
         );
     }
 

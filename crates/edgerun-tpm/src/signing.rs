@@ -3,9 +3,9 @@ use std::path::Path;
 use edgerun_core::crypto::signature_input;
 
 use crate::constants::TPM_CC_SIGN;
+use crate::device::TpmDevice;
 use crate::traits::{TpmSigningKey, TpmTransport};
 use crate::types::*;
-use crate::device::TpmDevice;
 use crate::wire::encode_parsed_signature;
 
 // ---------------------------------------------------------------------------

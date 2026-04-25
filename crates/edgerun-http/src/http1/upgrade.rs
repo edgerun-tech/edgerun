@@ -166,10 +166,7 @@ impl UpgradeHandler {
     }
 
     /// Accept the upgrade and get response headers
-    pub fn accept_upgrade(
-        &mut self,
-        protocol: &UpgradeProtocol,
-    ) -> HeaderMap {
+    pub fn accept_upgrade(&mut self, protocol: &UpgradeProtocol) -> HeaderMap {
         self.state = UpgradeState::UpgradeAccepted;
         build_upgrade_response(protocol, None)
     }
@@ -291,7 +288,10 @@ mod tests {
         let protocol = UpgradeProtocol::websocket();
         let response_headers = handler.accept_upgrade(&protocol);
         assert!(handler.is_accepted());
-        assert_eq!(response_headers.get("upgrade").unwrap().as_str(), "websocket");
+        assert_eq!(
+            response_headers.get("upgrade").unwrap().as_str(),
+            "websocket"
+        );
     }
 
     #[test]

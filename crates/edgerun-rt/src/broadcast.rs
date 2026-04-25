@@ -4,12 +4,12 @@
 //! keep up with the sender), `recv()` returns `Err(RecvError::Lagged(n))`
 //! where `n` is the number of missed messages.
 
+use crate::sync::{Condvar, Mutex};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
 struct BroadcastInner<T> {
@@ -258,7 +258,9 @@ impl<T: Clone> Future for RecvFut<'_, T> {
         // Always re-register: send() drains the waker Vec to wake waiters,
         // so after being woken our waker is no longer in the queue.
         // Stale wakers are harmless — they're drained on the next send().
-        inner.recv_wakers.push_back((*this.next, cx.waker().clone()));
+        inner
+            .recv_wakers
+            .push_back((*this.next, cx.waker().clone()));
 
         Poll::Pending
     }

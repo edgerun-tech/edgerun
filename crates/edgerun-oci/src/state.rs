@@ -108,7 +108,8 @@ pub fn fifo_path(id: &str) -> PathBuf {
 pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = edgerun_json::to_string_pretty(state).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let json = edgerun_json::to_string_pretty(state)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     fs::write(state_file_path(id), json)?;
     Ok(())
 }
@@ -204,9 +205,10 @@ mod tests {
                 status: "created".into(),
                 pid: Some(12345),
                 bundle: "/tmp/bundle".into(),
-                annotations: Some(std::collections::HashMap::from([
-                    ("key".into(), "value".into()),
-                ])),
+                annotations: Some(std::collections::HashMap::from([(
+                    "key".into(),
+                    "value".into(),
+                )])),
             };
 
             save_state(&state, "test-1").unwrap();
@@ -284,7 +286,11 @@ mod tests {
                     oci_version: "1.0.2".into(),
                     id: "lifecycle".into(),
                     status: status.to_string(),
-                    pid: if *status == "creating" { None } else { Some(9999) },
+                    pid: if *status == "creating" {
+                        None
+                    } else {
+                        Some(9999)
+                    },
                     bundle: "/tmp/b".into(),
                     annotations: None,
                 };

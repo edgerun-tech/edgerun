@@ -1,6 +1,6 @@
 # edgerun Reference Core: Implementation Status & Gap Analysis
 
-**Last updated:** 2026-04-10  
+**Last updated:** 2026-04-24  
 **Project:** edgerun_core  
 **Status:** Active development — core protocol functional, security hardening in progress
 
@@ -8,7 +8,7 @@
 
 ## Project Overview
 
-A Rust multi-crate workspace (99 crates) implementing the **edgerun v0 protocol** — a distributed, identity-based, append-only information fabric for peer-to-peer mesh networking, capability-discovered hardware abstraction, and a compute marketplace.
+A Rust multi-crate workspace (142 crates) implementing the **edgerun v0 protocol** — a distributed, identity-based, append-only information fabric for peer-to-peer mesh networking, capability-discovered hardware abstraction, and a compute marketplace.
 
 ### Architecture Summary
 

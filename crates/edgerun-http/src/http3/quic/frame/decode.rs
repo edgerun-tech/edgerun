@@ -2,8 +2,7 @@ use super::QuicFrame;
 use super::QuicFrameType;
 
 fn decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
-    edgerun_encoding::quic_varint::decode_varint(data)
-        .map_err(|e| format!("{e}"))
+    edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| format!("{e}"))
 }
 
 pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
@@ -34,7 +33,13 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
                 return Err("Crypto frame data incomplete".to_string());
             }
             let frame_data = data[data_start..data_end].to_vec();
-            Ok((QuicFrame::Crypto { offset, data: frame_data }, data_end))
+            Ok((
+                QuicFrame::Crypto {
+                    offset,
+                    data: frame_data,
+                },
+                data_end,
+            ))
         }
         QuicFrameType::Stream => {
             let type_byte = data[0];
@@ -66,7 +71,12 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
             let frame_data = data[pos..data_end.min(data.len())].to_vec();
 
             Ok((
-                QuicFrame::Stream { stream_id, offset, fin, data: frame_data },
+                QuicFrame::Stream {
+                    stream_id,
+                    offset,
+                    fin,
+                    data: frame_data,
+                },
                 data_end.min(data.len()),
             ))
         }
@@ -105,10 +115,16 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
             pos += n;
             let mut ack_ranges = Vec::new();
             for _ in 0..ack_range_count {
-                if pos >= data.len() { break; }
-                let (gap, n) = decode_varint(&data[pos..])?; pos += n;
-                if pos >= data.len() { break; }
-                let (additional, n) = decode_varint(&data[pos..])?; pos += n;
+                if pos >= data.len() {
+                    break;
+                }
+                let (gap, n) = decode_varint(&data[pos..])?;
+                pos += n;
+                if pos >= data.len() {
+                    break;
+                }
+                let (additional, n) = decode_varint(&data[pos..])?;
+                pos += n;
                 ack_ranges.push((gap, additional));
             }
             Ok((
@@ -124,21 +140,34 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
         }
         QuicFrameType::AckECN => {
             let mut pos = 1;
-            let (largest_acknowledged, n) = decode_varint(&data[pos..])?; pos += n;
-            let (ack_delay, n) = decode_varint(&data[pos..])?; pos += n;
-            let (ack_range_count, n) = decode_varint(&data[pos..])?; pos += n;
-            let (first_ack_range, n) = decode_varint(&data[pos..])?; pos += n;
+            let (largest_acknowledged, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (ack_delay, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (ack_range_count, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (first_ack_range, n) = decode_varint(&data[pos..])?;
+            pos += n;
             let mut ack_ranges = Vec::new();
             for _ in 0..ack_range_count {
-                if pos >= data.len() { break; }
-                let (gap, n) = decode_varint(&data[pos..])?; pos += n;
-                if pos >= data.len() { break; }
-                let (additional, n) = decode_varint(&data[pos..])?; pos += n;
+                if pos >= data.len() {
+                    break;
+                }
+                let (gap, n) = decode_varint(&data[pos..])?;
+                pos += n;
+                if pos >= data.len() {
+                    break;
+                }
+                let (additional, n) = decode_varint(&data[pos..])?;
+                pos += n;
                 ack_ranges.push((gap, additional));
             }
-            let (ect0_count, n) = decode_varint(&data[pos..])?; pos += n;
-            let (ect1_count, n) = decode_varint(&data[pos..])?; pos += n;
-            let (ce_count, n) = decode_varint(&data[pos..])?; pos += n;
+            let (ect0_count, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (ect1_count, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (ce_count, n) = decode_varint(&data[pos..])?;
+            pos += n;
             Ok((
                 QuicFrame::AckECN {
                     largest_acknowledged,
@@ -155,20 +184,39 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
         }
         QuicFrameType::ResetStream => {
             let mut pos = 1;
-            let (stream_id, n) = decode_varint(&data[pos..])?; pos += n;
-            let (error_code, n) = decode_varint(&data[pos..])?; pos += n;
-            let (final_size, n) = decode_varint(&data[pos..])?; pos += n;
-            Ok((QuicFrame::ResetStream { stream_id, error_code, final_size }, pos))
+            let (stream_id, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (error_code, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (final_size, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            Ok((
+                QuicFrame::ResetStream {
+                    stream_id,
+                    error_code,
+                    final_size,
+                },
+                pos,
+            ))
         }
         QuicFrameType::StopSending => {
             let mut pos = 1;
-            let (stream_id, n) = decode_varint(&data[pos..])?; pos += n;
-            let (error_code, n) = decode_varint(&data[pos..])?; pos += n;
-            Ok((QuicFrame::StopSending { stream_id, error_code }, pos))
+            let (stream_id, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (error_code, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            Ok((
+                QuicFrame::StopSending {
+                    stream_id,
+                    error_code,
+                },
+                pos,
+            ))
         }
         QuicFrameType::NewToken => {
             let mut pos = 1;
-            let (token_len, n) = decode_varint(&data[pos..])?; pos += n;
+            let (token_len, n) = decode_varint(&data[pos..])?;
+            pos += n;
             let end = (pos + token_len as usize).min(data.len());
             let token = data[pos..end].to_vec();
             pos = end;
@@ -176,9 +224,17 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
         }
         QuicFrameType::MaxStreamData => {
             let mut pos = 1;
-            let (stream_id, n) = decode_varint(&data[pos..])?; pos += n;
-            let (max_stream_data, n) = decode_varint(&data[pos..])?; pos += n;
-            Ok((QuicFrame::MaxStreamData { stream_id, max_stream_data }, pos))
+            let (stream_id, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (max_stream_data, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            Ok((
+                QuicFrame::MaxStreamData {
+                    stream_id,
+                    max_stream_data,
+                },
+                pos,
+            ))
         }
         QuicFrameType::MaxStreamsBidi => {
             let (max_streams, n) = decode_varint(&data[1..])?;
@@ -194,9 +250,17 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
         }
         QuicFrameType::StreamDataBlocked => {
             let mut pos = 1;
-            let (stream_id, n) = decode_varint(&data[pos..])?; pos += n;
-            let (max_stream_data, n) = decode_varint(&data[pos..])?; pos += n;
-            Ok((QuicFrame::StreamDataBlocked { stream_id, max_stream_data }, pos))
+            let (stream_id, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (max_stream_data, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            Ok((
+                QuicFrame::StreamDataBlocked {
+                    stream_id,
+                    max_stream_data,
+                },
+                pos,
+            ))
         }
         QuicFrameType::StreamsBlockedBidi => {
             let (max_streams, n) = decode_varint(&data[1..])?;
@@ -208,8 +272,10 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
         }
         QuicFrameType::NewConnectionId => {
             let mut pos = 1;
-            let (sequence_number, n) = decode_varint(&data[pos..])?; pos += n;
-            let (retire_prior_to, n) = decode_varint(&data[pos..])?; pos += n;
+            let (sequence_number, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (retire_prior_to, n) = decode_varint(&data[pos..])?;
+            pos += n;
             if pos >= data.len() {
                 return Err("NEW_CONNECTION_ID: missing CID length".to_string());
             }
@@ -258,8 +324,10 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
         }
         QuicFrameType::ConnectionCloseApplication => {
             let mut pos = 1;
-            let (error_code, n) = decode_varint(&data[pos..])?; pos += n;
-            let (reason_len, n) = decode_varint(&data[pos..])?; pos += n;
+            let (error_code, n) = decode_varint(&data[pos..])?;
+            pos += n;
+            let (reason_len, n) = decode_varint(&data[pos..])?;
+            pos += n;
             let end = (pos + reason_len as usize).min(data.len());
             let reason = data[pos..end].to_vec();
             pos = end;

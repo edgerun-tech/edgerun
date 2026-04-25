@@ -21,11 +21,18 @@ pub struct MeshCapabilityClient {
 
 impl MeshCapabilityClient {
     /// Creates a client targeting the given remote node.
-    pub fn new(remote_id: NodeID, outbound: OutboundQueue, dispatcher: &mut MeshEnvelopeDispatcher) -> Self {
+    pub fn new(
+        remote_id: NodeID,
+        outbound: OutboundQueue,
+        dispatcher: &mut MeshEnvelopeDispatcher,
+    ) -> Self {
         let transport = MeshCapabilityTransport::new(remote_id, outbound);
         // Register this client's inbox with the dispatcher
         let _idx = dispatcher.register_inbox(remote_id);
-        Self { remote_id, transport }
+        Self {
+            remote_id,
+            transport,
+        }
     }
 
     #[must_use]
@@ -39,4 +46,3 @@ impl MeshCapabilityClient {
         &mut self.transport
     }
 }
-

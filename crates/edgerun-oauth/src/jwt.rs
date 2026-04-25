@@ -10,9 +10,9 @@
 //! - Signature creation (only verification)
 //! - Non-standard algorithms
 
-use edgerun_encoding::base64::base64url_decode;
 use crate::errors::{OAuthError, OAuthResult};
-use edgerun_json::{JsonValue, from_str, Map};
+use edgerun_encoding::base64::base64url_decode;
+use edgerun_json::{from_str, JsonValue, Map};
 
 // ---------------------------------------------------------------------------
 // JWT Header
@@ -28,14 +28,25 @@ pub struct JwtHeader {
 
 impl JwtHeader {
     pub fn from_base64url(s: &str) -> OAuthResult<Self> {
-        let bytes = base64url_decode(s).map_err(|e| OAuthError::JwtError(format!("header base64url decode: {e}")))?;
-        let text = String::from_utf8(bytes).map_err(|e| OAuthError::JwtError(format!("header UTF-8: {e}")))?;
-        let value: JsonValue = from_str(&text).map_err(|e| OAuthError::JwtError(format!("header JSON: {e}")))?;
-        let alg = value.get("alg").and_then(|v| v.as_str())
+        let bytes = base64url_decode(s)
+            .map_err(|e| OAuthError::JwtError(format!("header base64url decode: {e}")))?;
+        let text = String::from_utf8(bytes)
+            .map_err(|e| OAuthError::JwtError(format!("header UTF-8: {e}")))?;
+        let value: JsonValue =
+            from_str(&text).map_err(|e| OAuthError::JwtError(format!("header JSON: {e}")))?;
+        let alg = value
+            .get("alg")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| OAuthError::JwtError("missing 'alg' in JWT header".into()))?
             .to_string();
-        let typ = value.get("typ").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let kid = value.get("kid").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let typ = value
+            .get("typ")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let kid = value
+            .get("kid")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         Ok(Self { alg, typ, kid })
     }
 }
@@ -70,41 +81,97 @@ pub struct JwtPayload {
 
 impl JwtPayload {
     pub fn from_base64url(s: &str) -> OAuthResult<Self> {
-        let bytes = base64url_decode(s).map_err(|e| OAuthError::JwtError(format!("payload base64url decode: {e}")))?;
-        let text = String::from_utf8(bytes).map_err(|e| OAuthError::JwtError(format!("payload UTF-8: {e}")))?;
-        let value: JsonValue = from_str(&text).map_err(|e| OAuthError::JwtError(format!("payload JSON: {e}")))?;
+        let bytes = base64url_decode(s)
+            .map_err(|e| OAuthError::JwtError(format!("payload base64url decode: {e}")))?;
+        let text = String::from_utf8(bytes)
+            .map_err(|e| OAuthError::JwtError(format!("payload UTF-8: {e}")))?;
+        let value: JsonValue =
+            from_str(&text).map_err(|e| OAuthError::JwtError(format!("payload JSON: {e}")))?;
 
-        let iss = value.get("iss").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let sub = value.get("sub").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let iss = value
+            .get("iss")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let sub = value
+            .get("sub")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
         // aud can be string or array
         let aud = match value.get("aud") {
             Some(v) if v.is_string() => vec![v.as_str().unwrap().to_string()],
-            Some(v) if v.is_array() => {
-                v.as_array().iter().flat_map(|arr| arr.iter().filter_map(|x| x.as_str()).map(|s| s.to_string())).collect()
-            }
+            Some(v) if v.is_array() => v
+                .as_array()
+                .iter()
+                .flat_map(|arr| arr.iter().filter_map(|x| x.as_str()).map(|s| s.to_string()))
+                .collect(),
             _ => vec![],
         };
 
         let exp = value.get("exp").and_then(|v| v.as_u64()).unwrap_or(0);
         let iat = value.get("iat").and_then(|v| v.as_u64()).unwrap_or(0);
         let auth_time = value.get("auth_time").and_then(|v| v.as_u64());
-        let nonce = value.get("nonce").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let email = value.get("email").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let nonce = value
+            .get("nonce")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let email = value
+            .get("email")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         let email_verified = value.get("email_verified").and_then(|v| v.as_bool());
-        let name = value.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let picture = value.get("picture").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let azp = value.get("azp").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let acr = value.get("acr").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let name = value
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let picture = value
+            .get("picture")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let azp = value
+            .get("azp")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let acr = value
+            .get("acr")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         let amr = value.get("amr").and_then(|v| v.as_array()).map(|arr| {
-            arr.iter().filter_map(|x| x.as_str()).map(|s| s.to_string()).collect()
+            arr.iter()
+                .filter_map(|x| x.as_str())
+                .map(|s| s.to_string())
+                .collect()
         });
-        let sid = value.get("sid").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let at_hash = value.get("at_hash").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let sid = value
+            .get("sid")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let at_hash = value
+            .get("at_hash")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         // Collect extra claims
-        let known_keys = ["iss", "sub", "aud", "exp", "iat", "auth_time", "nonce",
-            "email", "email_verified", "name", "picture", "azp", "acr", "amr", "sid", "at_hash"];
+        let known_keys = [
+            "iss",
+            "sub",
+            "aud",
+            "exp",
+            "iat",
+            "auth_time",
+            "nonce",
+            "email",
+            "email_verified",
+            "name",
+            "picture",
+            "azp",
+            "acr",
+            "amr",
+            "sid",
+            "at_hash",
+        ];
         let mut extra = Map::new();
         if let Some(obj) = value.as_object() {
             for (k, v) in obj.iter() {
@@ -115,8 +182,23 @@ impl JwtPayload {
         }
 
         Ok(Self {
-            iss, sub, aud, exp, iat, auth_time, nonce,
-            email, email_verified, name, picture, azp, acr, amr, sid, at_hash, extra,
+            iss,
+            sub,
+            aud,
+            exp,
+            iat,
+            auth_time,
+            nonce,
+            email,
+            email_verified,
+            name,
+            picture,
+            azp,
+            acr,
+            amr,
+            sid,
+            at_hash,
+            extra,
         })
     }
 
@@ -185,7 +267,8 @@ impl IdToken {
         let parts: Vec<&str> = raw.split('.').collect();
         if parts.len() != 3 {
             return Err(OAuthError::JwtError(format!(
-                "JWT must have 3 parts, got {}", parts.len()
+                "JWT must have 3 parts, got {}",
+                parts.len()
             )));
         }
 
@@ -209,43 +292,52 @@ impl IdToken {
         match self.header.alg.as_str() {
             "HS256" => {
                 let JwtVerifier::Hmac { key } = verifier else {
-                    return Err(OAuthError::JwtError("expected HMAC verifier but got asymmetric".into()));
+                    return Err(OAuthError::JwtError(
+                        "expected HMAC verifier but got asymmetric".into(),
+                    ));
                 };
                 let expected = edgerun_crypto::hmac_sha256(key, signing_input.as_bytes());
                 if !constant_time_eq(&signature_bytes, &expected) {
-                    return Err(OAuthError::JwtError("HS256 signature verification failed".into()));
+                    return Err(OAuthError::JwtError(
+                        "HS256 signature verification failed".into(),
+                    ));
                 }
             }
             "ES256" => {
                 let JwtVerifier::Es256 { verifying_key } = verifier else {
-                    return Err(OAuthError::JwtError("expected ES256 verifier but got HMAC".into()));
+                    return Err(OAuthError::JwtError(
+                        "expected ES256 verifier but got HMAC".into(),
+                    ));
                 };
                 use edgerun_crypto::p256::ecdsa::signature::Verifier;
                 let sig = edgerun_crypto::p256::ecdsa::Signature::from_der(&signature_bytes)
                     .map_err(|e| OAuthError::JwtError(format!("ES256 DER parse: {e}")))?;
-                verifying_key.verify(signing_input.as_bytes(), &sig)
+                verifying_key
+                    .verify(signing_input.as_bytes(), &sig)
                     .map_err(|e| OAuthError::JwtError(format!("ES256 verification failed: {e}")))?;
             }
             "RS256" => {
                 let JwtVerifier::Rs256 { verifying_key } = verifier else {
-                    return Err(OAuthError::JwtError("expected RS256 verifier but got HMAC".into()));
+                    return Err(OAuthError::JwtError(
+                        "expected RS256 verifier but got HMAC".into(),
+                    ));
                 };
-                use edgerun_crypto::sha2::Sha256;
                 use edgerun_crypto::digest::Digest;
                 use edgerun_crypto::rsa::pkcs1v15::Pkcs1v15Sign;
+                use edgerun_crypto::sha2::Sha256;
 
                 let mut hasher = Sha256::new();
                 edgerun_crypto::digest::Update::update(&mut hasher, signing_input.as_bytes());
                 let digest = hasher.finalize();
 
-                verifying_key.verify(
-                    Pkcs1v15Sign::new::<Sha256>(),
-                    &digest,
-                    &signature_bytes,
-                ).map_err(|e| OAuthError::JwtError(format!("RS256 verification failed: {e}")))?;
+                verifying_key
+                    .verify(Pkcs1v15Sign::new::<Sha256>(), &digest, &signature_bytes)
+                    .map_err(|e| OAuthError::JwtError(format!("RS256 verification failed: {e}")))?;
             }
             other => {
-                return Err(OAuthError::JwtError(format!("unsupported JWT algorithm: {other}")));
+                return Err(OAuthError::JwtError(format!(
+                    "unsupported JWT algorithm: {other}"
+                )));
             }
         }
 
@@ -279,13 +371,13 @@ impl JwtVerifier {
 
     /// Create an ES256 verifier from a raw P-256 public key (uncompressed, 65 bytes starting with 0x04).
     pub fn es256_from_raw_bytes(bytes: &[u8]) -> OAuthResult<Self> {
-        use edgerun_crypto::p256::ecdsa::VerifyingKey;
         use edgerun_crypto::elliptic_curve::sec1::FromEncodedPoint;
+        use edgerun_crypto::p256::ecdsa::VerifyingKey;
         use edgerun_crypto::p256::{EncodedPoint, PublicKey};
 
         if bytes.len() != 65 || bytes[0] != 0x04 {
             return Err(OAuthError::JwtError(
-                "ES256 public key must be 65 bytes uncompressed starting with 0x04".into()
+                "ES256 public key must be 65 bytes uncompressed starting with 0x04".into(),
             ));
         }
 
@@ -307,8 +399,8 @@ impl JwtVerifier {
 
     /// Create an ES256 verifier from a PEM-encoded P-256 public key.
     pub fn es256_from_pem(pem: &str) -> OAuthResult<Self> {
-        use edgerun_crypto::p256::ecdsa::VerifyingKey;
         use edgerun_crypto::elliptic_curve::pkcs8::DecodePublicKey;
+        use edgerun_crypto::p256::ecdsa::VerifyingKey;
 
         let verifying_key = VerifyingKey::from_public_key_pem(pem)
             .map_err(|e| OAuthError::JwtError(format!("ES256 PEM parse: {e}")))?;
@@ -318,8 +410,8 @@ impl JwtVerifier {
 
     /// Create an RS256 verifier from a PEM-encoded RSA public key.
     pub fn rs256_from_pem(pem: &str) -> OAuthResult<Self> {
-        use edgerun_crypto::rsa::RsaPublicKey;
         use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
+        use edgerun_crypto::rsa::RsaPublicKey;
 
         let verifying_key = RsaPublicKey::from_public_key_pem(pem)
             .map_err(|e| OAuthError::JwtError(format!("RS256 PEM parse: {e}")))?;
@@ -329,8 +421,8 @@ impl JwtVerifier {
 
     /// Create an RS256 verifier from DER-encoded RSA public key (PKCS#1 or PKCS#8).
     pub fn rs256_from_der(der: &[u8]) -> OAuthResult<Self> {
-        use edgerun_crypto::rsa::RsaPublicKey;
         use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
+        use edgerun_crypto::rsa::RsaPublicKey;
 
         let verifying_key = RsaPublicKey::from_public_key_der(der)
             .map_err(|e| OAuthError::JwtError(format!("RS256 DER parse: {e}")))?;
@@ -350,25 +442,38 @@ impl JwtVerifier {
 /// - `"kty": "RSA"` → RS256
 /// - `"kty": "oct"` → HMAC
 pub fn verifier_from_jwk(jwk: &JsonValue) -> OAuthResult<(String, JwtVerifier)> {
-    let kty = jwk.get("kty").and_then(|v| v.as_str())
+    let kty = jwk
+        .get("kty")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| OAuthError::JwtError("JWK missing 'kty'".into()))?;
-    let kid = jwk.get("kid").and_then(|v| v.as_str())
-        .unwrap_or("").to_string();
+    let kid = jwk
+        .get("kid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
 
     match kty {
         "EC" => {
-            let crv = jwk.get("crv").and_then(|v| v.as_str())
+            let crv = jwk
+                .get("crv")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| OAuthError::JwtError("EC JWK missing 'crv'".into()))?;
             if crv != "P-256" {
                 return Err(OAuthError::JwtError(format!("unsupported EC curve: {crv}")));
             }
-            let x = jwk.get("x").and_then(|v| v.as_str())
+            let x = jwk
+                .get("x")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| OAuthError::JwtError("EC JWK missing 'x'".into()))?;
-            let y = jwk.get("y").and_then(|v| v.as_str())
+            let y = jwk
+                .get("y")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| OAuthError::JwtError("EC JWK missing 'y'".into()))?;
 
-            let x_bytes = base64url_decode(x).map_err(|e| OAuthError::JwtError(format!("JWK x decode: {e}")))?;
-            let y_bytes = base64url_decode(y).map_err(|e| OAuthError::JwtError(format!("JWK y decode: {e}")))?;
+            let x_bytes = base64url_decode(x)
+                .map_err(|e| OAuthError::JwtError(format!("JWK x decode: {e}")))?;
+            let y_bytes = base64url_decode(y)
+                .map_err(|e| OAuthError::JwtError(format!("JWK y decode: {e}")))?;
 
             // Reconstruct uncompressed point: 0x04 || x || y
             let mut raw = vec![0x04];
@@ -379,13 +484,16 @@ pub fn verifier_from_jwk(jwk: &JsonValue) -> OAuthResult<(String, JwtVerifier)> 
             Ok((kid, verifier))
         }
         "RSA" => {
-            let n = jwk.get("n").and_then(|v| v.as_str())
+            let n = jwk
+                .get("n")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| OAuthError::JwtError("RSA JWK missing 'n'".into()))?;
-            let e = jwk.get("e").and_then(|v| v.as_str())
-                .unwrap_or("AQAB");
+            let e = jwk.get("e").and_then(|v| v.as_str()).unwrap_or("AQAB");
 
-            let n_bytes = base64url_decode(n).map_err(|e| OAuthError::JwtError(format!("JWK n decode: {e}")))?;
-            let e_bytes = base64url_decode(e).map_err(|e| OAuthError::JwtError(format!("JWK e decode: {e}")))?;
+            let n_bytes = base64url_decode(n)
+                .map_err(|e| OAuthError::JwtError(format!("JWK n decode: {e}")))?;
+            let e_bytes = base64url_decode(e)
+                .map_err(|e| OAuthError::JwtError(format!("JWK e decode: {e}")))?;
 
             // RSA PKCS#1 DER encoding of SubjectPublicKeyInfo
             // SEQUENCE { SEQUENCE { OID rsaEncryption, NULL }, BIT STRING { SEQUENCE { INTEGER n, INTEGER e } } }
@@ -396,14 +504,17 @@ pub fn verifier_from_jwk(jwk: &JsonValue) -> OAuthResult<(String, JwtVerifier)> 
             Ok((kid, verifier))
         }
         "oct" => {
-            let k = jwk.get("k").and_then(|v| v.as_str())
+            let k = jwk
+                .get("k")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| OAuthError::JwtError("oct JWK missing 'k'".into()))?;
-            let key_bytes = base64url_decode(k).map_err(|e| OAuthError::JwtError(format!("JWK k decode: {e}")))?;
+            let key_bytes = base64url_decode(k)
+                .map_err(|e| OAuthError::JwtError(format!("JWK k decode: {e}")))?;
             Ok((kid, JwtVerifier::hmac_from_bytes(&key_bytes)))
         }
-        other => {
-            Err(OAuthError::JwtError(format!("unsupported JWK kty: {other}")))
-        }
+        other => Err(OAuthError::JwtError(format!(
+            "unsupported JWK kty: {other}"
+        ))),
     }
 }
 
@@ -417,7 +528,9 @@ fn build_rsa_spki_der(modulus: &[u8], exponent: &[u8]) -> Result<Vec<u8>, String
     // }
 
     // RSA OID: 1.2.840.113549.1.1.1 → encoded as 06 09 2a 86 48 86 f7 0d 01 01 01
-    let rsa_oid: &[u8] = &[0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01];
+    let rsa_oid: &[u8] = &[
+        0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,
+    ];
     let null_bytes: &[u8] = &[0x05, 0x00];
 
     // AlgorithmIdentifier SEQUENCE
@@ -495,7 +608,15 @@ fn der_write_len(buf: &mut Vec<u8>, len: usize) {
 }
 
 fn der_tag_len(_tag: u8, len: usize) -> (usize, usize) {
-    let len_bytes = if len < 0x80 { 1 } else if len < 0x100 { 2 } else if len < 0x10000 { 3 } else { 4 };
+    let len_bytes = if len < 0x80 {
+        1
+    } else if len < 0x100 {
+        2
+    } else if len < 0x10000 {
+        3
+    } else {
+        4
+    };
     (1, len_bytes)
 }
 
@@ -575,7 +696,8 @@ mod tests {
     #[test]
     fn test_aud_string_claim() {
         let header = base64url_nopad_encode(br#"{"alg":"HS256"}"#);
-        let payload = base64url_nopad_encode(br#"{"sub":"user1","aud":"my-client","exp":9999999999}"#);
+        let payload =
+            base64url_nopad_encode(br#"{"sub":"user1","aud":"my-client","exp":9999999999}"#);
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
         assert_eq!(token.payload.aud, vec!["my-client"]);
@@ -586,7 +708,9 @@ mod tests {
     #[test]
     fn test_aud_array_claim() {
         let header = base64url_nopad_encode(br#"{"alg":"HS256"}"#);
-        let payload = base64url_nopad_encode(br#"{"sub":"user1","aud":["client-a","client-b"],"exp":9999999999}"#);
+        let payload = base64url_nopad_encode(
+            br#"{"sub":"user1","aud":["client-a","client-b"],"exp":9999999999}"#,
+        );
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
         assert_eq!(token.payload.aud, vec!["client-a", "client-b"]);
@@ -598,7 +722,8 @@ mod tests {
     #[test]
     fn test_nonce_verification() {
         let header = base64url_nopad_encode(br#"{"alg":"HS256"}"#);
-        let payload = base64url_nopad_encode(br#"{"sub":"user1","nonce":"abc123","exp":9999999999}"#);
+        let payload =
+            base64url_nopad_encode(br#"{"sub":"user1","nonce":"abc123","exp":9999999999}"#);
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
 
@@ -623,7 +748,8 @@ mod tests {
     #[test]
     fn test_at_hash_parsing() {
         let header = base64url_nopad_encode(br#"{"alg":"ES256"}"#);
-        let payload = base64url_nopad_encode(br#"{"sub":"user1","at_hash":"abc123","exp":9999999999}"#);
+        let payload =
+            base64url_nopad_encode(br#"{"sub":"user1","at_hash":"abc123","exp":9999999999}"#);
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
         assert_eq!(token.payload.at_hash.as_deref(), Some("abc123"));
@@ -670,7 +796,8 @@ mod tests {
     #[test]
     fn test_extra_claims_captured() {
         let header = base64url_nopad_encode(br#"{"alg":"HS256"}"#);
-        let payload = base64url_nopad_encode(br#"{"sub":"u","exp":9999999999,"custom_key":"custom_val"}"#);
+        let payload =
+            base64url_nopad_encode(br#"{"sub":"u","exp":9999999999,"custom_key":"custom_val"}"#);
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
         assert!(token.payload.extra.get("custom_key").is_some());

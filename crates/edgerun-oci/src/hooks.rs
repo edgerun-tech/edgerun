@@ -45,7 +45,9 @@ impl ContainerState {
         json.push_str(&format!("  \"bundle\": \"{}\",\n", self.bundle));
         if !self.annotations.is_empty() {
             json.push_str("  \"annotations\": {\n");
-            let entries: Vec<_> = self.annotations.iter()
+            let entries: Vec<_> = self
+                .annotations
+                .iter()
                 .map(|(k, v)| format!("    \"{}\": \"{}\"", k, v))
                 .collect();
             json.push_str(&entries.join(",\n"));
@@ -72,10 +74,7 @@ impl std::fmt::Display for HookError {
 }
 
 /// Execute hooks in runtime namespace context.
-pub fn execute_hooks(
-    hooks: Option<&[OciHook]>,
-    state: &ContainerState,
-) -> Result<(), HookError> {
+pub fn execute_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> Result<(), HookError> {
     run_hook_chain(hooks, state, true)
 }
 
@@ -98,8 +97,13 @@ fn run_hook_chain(
 
     for hook in hooks {
         if !Path::new(&hook.path).exists() {
-            return Err(HookError { hook_path: hook.path.clone(),
-                error: io::Error::new(io::ErrorKind::NotFound, format!("hook not found: {}", hook.path)) });
+            return Err(HookError {
+                hook_path: hook.path.clone(),
+                error: io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("hook not found: {}", hook.path),
+                ),
+            });
         }
 
         let args = hook.args.as_deref().unwrap_or(&[]);
@@ -109,28 +113,64 @@ fn run_hook_chain(
         cmd.args(args);
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::null());
-        if capture_stderr { cmd.stderr(Stdio::piped()); } else { cmd.stderr(Stdio::null()); }
-        for e in env { if let Some((k, v)) = e.split_once('=') { cmd.env(k, v); } }
+        if capture_stderr {
+            cmd.stderr(Stdio::piped());
+        } else {
+            cmd.stderr(Stdio::null());
+        }
+        for e in env {
+            if let Some((k, v)) = e.split_once('=') {
+                cmd.env(k, v);
+            }
+        }
 
-        let mut child = cmd.spawn().map_err(|e| HookError { hook_path: hook.path.clone(), error: e })?;
-        if let Some(mut stdin) = child.stdin.take() { let _ = stdin.write_all(state_json.as_bytes()); }
+        let mut child = cmd.spawn().map_err(|e| HookError {
+            hook_path: hook.path.clone(),
+            error: e,
+        })?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(state_json.as_bytes());
+        }
 
         let timeout_secs = hook.timeout.unwrap_or(0);
         let start = Instant::now();
         let status = if timeout_secs > 0 {
             let timeout = Duration::from_secs(timeout_secs);
             loop {
-                if let Some(s) = child.try_wait().map_err(|e| HookError { hook_path: hook.path.clone(), error: e })? { break s; }
-                if start.elapsed() > timeout { let _ = child.kill(); return Err(HookError {
+                if let Some(s) = child.try_wait().map_err(|e| HookError {
                     hook_path: hook.path.clone(),
-                    error: io::Error::new(io::ErrorKind::TimedOut, format!("hook {:?} timed out after {}s", hook.path, timeout_secs)) }); }
+                    error: e,
+                })? {
+                    break s;
+                }
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    return Err(HookError {
+                        hook_path: hook.path.clone(),
+                        error: io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            format!("hook {:?} timed out after {}s", hook.path, timeout_secs),
+                        ),
+                    });
+                }
                 std::thread::sleep(Duration::from_millis(50));
             }
-        } else { child.wait().map_err(|e| HookError { hook_path: hook.path.clone(), error: e })? };
+        } else {
+            child.wait().map_err(|e| HookError {
+                hook_path: hook.path.clone(),
+                error: e,
+            })?
+        };
 
         if !status.success() {
-            return Err(HookError { hook_path: hook.path.clone(),
-                error: io::Error::other(format!("hook exited with code {:?} (took {:?})", status.code(), start.elapsed())) });
+            return Err(HookError {
+                hook_path: hook.path.clone(),
+                error: io::Error::other(format!(
+                    "hook exited with code {:?} (took {:?})",
+                    status.code(),
+                    start.elapsed()
+                )),
+            });
         }
     }
     Ok(())
@@ -140,23 +180,38 @@ fn run_hook_chain(
 // Lifecycle-specific hook execution helpers
 // ===========================================================================
 
-pub fn execute_prestart_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> Result<(), HookError> {
+pub fn execute_prestart_hooks(
+    hooks: Option<&[OciHook]>,
+    state: &ContainerState,
+) -> Result<(), HookError> {
     execute_hooks(hooks, state)
 }
 
-pub fn execute_create_runtime_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> Result<(), HookError> {
+pub fn execute_create_runtime_hooks(
+    hooks: Option<&[OciHook]>,
+    state: &ContainerState,
+) -> Result<(), HookError> {
     execute_hooks(hooks, state)
 }
 
-pub fn execute_create_container_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> io::Result<()> {
+pub fn execute_create_container_hooks(
+    hooks: Option<&[OciHook]>,
+    state: &ContainerState,
+) -> io::Result<()> {
     execute_hooks_in_context(hooks, state)
 }
 
-pub fn execute_start_container_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> io::Result<()> {
+pub fn execute_start_container_hooks(
+    hooks: Option<&[OciHook]>,
+    state: &ContainerState,
+) -> io::Result<()> {
     execute_hooks_in_context(hooks, state)
 }
 
-pub fn execute_poststart_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> Result<(), HookError> {
+pub fn execute_poststart_hooks(
+    hooks: Option<&[OciHook]>,
+    state: &ContainerState,
+) -> Result<(), HookError> {
     execute_hooks(hooks, state)
 }
 
@@ -166,25 +221,68 @@ pub fn execute_poststop_hooks(hooks: Option<&[OciHook]>, state: &ContainerState)
     for hook in hooks {
         let timeout_secs = hook.timeout.unwrap_or(0);
         let path = Path::new(&hook.path);
-        if !path.exists() { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} not found (warning only)", hook.path)); continue; }
+        if !path.exists() {
+            let _ = fs::write(
+                "/dev/kmsg",
+                format!(
+                    "edgerun: poststop hook {:?} not found (warning only)",
+                    hook.path
+                ),
+            );
+            continue;
+        }
         let args = hook.args.as_deref().unwrap_or(&[]);
         let env = hook.env.as_deref().unwrap_or(&[]);
         let mut cmd = Command::new(path);
-        cmd.args(args); cmd.stdin(Stdio::piped()); cmd.stdout(Stdio::null()); cmd.stderr(Stdio::piped());
-        for e in env { if let Some((k, v)) = e.split_once('=') { cmd.env(k, v); } }
+        cmd.args(args);
+        cmd.stdin(Stdio::piped());
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::piped());
+        for e in env {
+            if let Some((k, v)) = e.split_once('=') {
+                cmd.env(k, v);
+            }
+        }
         match cmd.spawn() {
             Ok(mut child) => {
-                if let Some(mut stdin) = child.stdin.take() { let _ = stdin.write_all(state_json.as_bytes()); }
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = stdin.write_all(state_json.as_bytes());
+                }
                 let timeout = Duration::from_secs(timeout_secs);
                 let start = Instant::now();
                 let ok = if timeout_secs > 0 {
-                    loop { if let Some(s) = child.try_wait().ok().flatten() { break s.success(); }
-                        if start.elapsed() > timeout { let _ = child.kill(); break false; }
-                        std::thread::sleep(Duration::from_millis(50)); }
-                } else { child.wait().is_ok_and(|s| s.success()) };
-                if !ok { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} failed (warning only)", hook.path)); }
+                    loop {
+                        if let Some(s) = child.try_wait().ok().flatten() {
+                            break s.success();
+                        }
+                        if start.elapsed() > timeout {
+                            let _ = child.kill();
+                            break false;
+                        }
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                } else {
+                    child.wait().is_ok_and(|s| s.success())
+                };
+                if !ok {
+                    let _ = fs::write(
+                        "/dev/kmsg",
+                        format!(
+                            "edgerun: poststop hook {:?} failed (warning only)",
+                            hook.path
+                        ),
+                    );
+                }
             }
-            Err(e) => { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} failed: {} (warning only)", hook.path, e)); }
+            Err(e) => {
+                let _ = fs::write(
+                    "/dev/kmsg",
+                    format!(
+                        "edgerun: poststop hook {:?} failed: {} (warning only)",
+                        hook.path, e
+                    ),
+                );
+            }
         }
     }
 }
@@ -234,11 +332,15 @@ mod tests {
     fn oci_hooks_deserializes_all_types() {
         let json = r#"{"prestart":[{"path":"/usr/bin/prestart"}],"createRuntime":[{"path":"/usr/bin/create-runtime","args":["arg1"],"env":["FOO=bar"],"timeout":10}],"createContainer":[{"path":"/usr/bin/create-container"}],"startContainer":[{"path":"/usr/bin/start-container"}],"poststart":[{"path":"/usr/bin/poststart","timeout":5}],"poststop":[{"path":"/usr/bin/poststop"}]}"#;
 
-        let hooks: crate::json::OciHooks = edgerun_json::from_slice::<crate::json::OciHooks>(json.as_bytes()).unwrap();
+        let hooks: crate::json::OciHooks =
+            edgerun_json::from_slice::<crate::json::OciHooks>(json.as_bytes()).unwrap();
 
         assert!(hooks.prestart.is_some());
         assert_eq!(hooks.prestart.as_ref().unwrap().len(), 1);
-        assert_eq!(hooks.prestart.as_ref().unwrap()[0].path, "/usr/bin/prestart");
+        assert_eq!(
+            hooks.prestart.as_ref().unwrap()[0].path,
+            "/usr/bin/prestart"
+        );
 
         assert!(hooks.create_runtime.is_some());
         let cr = hooks.create_runtime.as_ref().unwrap();
@@ -257,7 +359,8 @@ mod tests {
     #[test]
     fn oci_hooks_deserializes_empty() {
         let json = r#"{}"#;
-        let hooks: crate::json::OciHooks = edgerun_json::from_slice::<crate::json::OciHooks>(json.as_bytes()).unwrap();
+        let hooks: crate::json::OciHooks =
+            edgerun_json::from_slice::<crate::json::OciHooks>(json.as_bytes()).unwrap();
         assert!(hooks.prestart.is_none());
         assert!(hooks.create_runtime.is_none());
         assert!(hooks.create_container.is_none());

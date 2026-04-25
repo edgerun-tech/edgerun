@@ -18,7 +18,6 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};
 
-
 /// EtherType for edgerun mesh frames (unassigned, in the experiment range).
 pub const MESH_ETHERTYPE: u16 = 0x88B5;
 
@@ -44,16 +43,16 @@ const IP_MULTICAST_IF: c_int = 32;
 
 mod raw_ethernet;
 
+mod link_manager;
 mod multicast;
 mod tunnel;
 mod udp_broadcast;
-mod link_manager;
 
-pub use raw_ethernet::RawEthernetSocket;
+pub use link_manager::MeshLink;
 pub use multicast::MulticastSocket;
+pub use raw_ethernet::RawEthernetSocket;
 pub use tunnel::IpTunnel;
 pub use udp_broadcast::UdpBroadcastSocket;
-pub use link_manager::MeshLink;
 
 unsafe extern "C" {
     fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int;

@@ -1,16 +1,16 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use edgerun_crypto::sha2::Digest;
+use super::types::*;
 use edgerun_capabilities::{
     validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
     CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_crypto::sha2::Digest;
 use edgerun_proto::edgerun::v0::common::{IdentityRef, NodeRef};
 use prost_types::{Duration as ProstDuration, Timestamp};
-use super::types::*;
 
 pub(crate) fn dedupe_i32(values: Vec<i32>) -> Vec<i32> {
     let mut out = Vec::new();
@@ -52,7 +52,9 @@ pub(crate) fn constraint_identity(
     )
 }
 
-pub(crate) fn dedupe_constraints(constraints: Vec<CapabilityConstraint>) -> Vec<CapabilityConstraint> {
+pub(crate) fn dedupe_constraints(
+    constraints: Vec<CapabilityConstraint>,
+) -> Vec<CapabilityConstraint> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     for constraint in constraints {
@@ -141,4 +143,3 @@ pub(crate) fn revocation_id_for(grant_id: &[u8], reason: &RevocationReason) -> V
     h.update(reason.as_str().as_bytes());
     h.finalize().to_vec()
 }
-

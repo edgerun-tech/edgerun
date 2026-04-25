@@ -83,10 +83,7 @@ pub fn validate_request_headers(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationRes
                     ));
                 }
                 _ => {
-                    return Err((
-                        ErrorCode::PROTOCOL_ERROR.to_u32(),
-                        "unknown pseudo-header",
-                    ));
+                    return Err((ErrorCode::PROTOCOL_ERROR.to_u32(), "unknown pseudo-header"));
                 }
             }
         } else {
@@ -167,13 +164,12 @@ pub fn validate_header_name_case(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationRe
     for (name, _) in headers {
         let name_str = String::from_utf8_lossy(name);
         // Pseudo-headers always start with ':' and are lowercase by definition
-        if !name_str.starts_with(':')
-            && name_str.to_lowercase() != name_str {
-                return Err((
-                    ErrorCode::PROTOCOL_ERROR.to_u32(),
-                    "header field name not lowercase",
-                ));
-            }
+        if !name_str.starts_with(':') && name_str.to_lowercase() != name_str {
+            return Err((
+                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                "header field name not lowercase",
+            ));
+        }
     }
     Ok(())
 }
@@ -189,11 +185,7 @@ mod tests {
     }
 
     fn minimal_valid_request() -> Vec<(Vec<u8>, Vec<u8>)> {
-        vec![
-            h(":method", "GET"),
-            h(":scheme", "https"),
-            h(":path", "/"),
-        ]
+        vec![h(":method", "GET"), h(":scheme", "https"), h(":path", "/")]
     }
 
     // ── Valid request headers ──
@@ -439,10 +431,7 @@ mod tests {
 
     #[test]
     fn test_lowercase_header_names_valid() {
-        let headers = vec![
-            h("content-type", "text/html"),
-            h("accept-encoding", "gzip"),
-        ];
+        let headers = vec![h("content-type", "text/html"), h("accept-encoding", "gzip")];
         assert!(validate_header_name_case(&headers).is_ok());
     }
 

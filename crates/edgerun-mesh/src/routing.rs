@@ -1,9 +1,7 @@
-use edgerun_hardware_signing::{
-    MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID,
-};
-use edgerun_crypto::p256::ecdsa::Signature;
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
+use edgerun_crypto::p256::ecdsa::Signature;
 use edgerun_crypto::p256::ecdsa::VerifyingKey;
+use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
 
 use super::*;
 
@@ -53,7 +51,11 @@ impl MeshRoutingTable {
     /// already exists with equal or lower cost, it is left unchanged.
     /// If the new route has a lower cost, it replaces the existing one.
     pub fn update(&mut self, route: MeshRoute) {
-        if let Some(pos) = self.routes.iter().position(|r| r.destination == route.destination) {
+        if let Some(pos) = self
+            .routes
+            .iter()
+            .position(|r| r.destination == route.destination)
+        {
             if route.cost < self.routes[pos].cost {
                 self.routes[pos] = route;
             }
@@ -91,4 +93,3 @@ impl MeshRoutingTable {
         self.routes.is_empty()
     }
 }
-

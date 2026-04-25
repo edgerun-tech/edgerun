@@ -201,24 +201,31 @@ struct SockaddrNl {
 impl Nl80211Socket {
     /// Open a generic netlink socket and resolve the nl80211 family ID.
     fn open() -> Result<Self, CapabilityError> {
-        let fd = unsafe {
-            libc::socket(libc::AF_NETLINK, libc::SOCK_RAW, NETLINK_GENERIC)
-        };
+        let fd = unsafe { libc::socket(libc::AF_NETLINK, libc::SOCK_RAW, NETLINK_GENERIC) };
         if fd < 0 {
-            return Err(CapabilityError::Provider(
-                format!("failed to create netlink socket: {}", io::Error::last_os_error()),
-            ));
+            return Err(CapabilityError::Provider(format!(
+                "failed to create netlink socket: {}",
+                io::Error::last_os_error()
+            )));
         }
 
         // Bind to a local port
         let mut addr: SockaddrNl = unsafe { mem::zeroed() };
         addr.nl_family = libc::AF_NETLINK as u16;
         addr.nl_pid = unsafe { libc::getpid() } as u32;
-        if unsafe { libc::bind(fd, &addr as *const _ as *const _, mem::size_of::<SockaddrNl>() as u32) } < 0 {
+        if unsafe {
+            libc::bind(
+                fd,
+                &addr as *const _ as *const _,
+                mem::size_of::<SockaddrNl>() as u32,
+            )
+        } < 0
+        {
             unsafe { libc::close(fd) };
-            return Err(CapabilityError::Provider(
-                format!("failed to bind netlink socket: {}", io::Error::last_os_error()),
-            ));
+            return Err(CapabilityError::Provider(format!(
+                "failed to bind netlink socket: {}",
+                io::Error::last_os_error()
+            )));
         }
 
         let mut sock = Self {
@@ -234,7 +241,12 @@ impl Nl80211Socket {
     }
 
     /// Send a netlink message and wait for the ACK/response.
-    fn request(&mut self, cmd: u8, _ifindex: i32, attrs: &[u8]) -> Result<Vec<u8>, CapabilityError> {
+    fn request(
+        &mut self,
+        cmd: u8,
+        _ifindex: i32,
+        attrs: &[u8],
+    ) -> Result<Vec<u8>, CapabilityError> {
         self.seq += 1;
 
         // Build netlink header
@@ -281,9 +293,10 @@ impl Nl80211Socket {
             )
         };
         if sent < 0 {
-            return Err(CapabilityError::Provider(
-                format!("netlink send failed: {}", io::Error::last_os_error()),
-            ));
+            return Err(CapabilityError::Provider(format!(
+                "netlink send failed: {}",
+                io::Error::last_os_error()
+            )));
         }
 
         // Receive response(s)
@@ -291,7 +304,12 @@ impl Nl80211Socket {
     }
 
     /// Send a dump request (returns multiple messages).
-    fn request_dump(&mut self, cmd: u8, _ifindex: i32, attrs: &[u8]) -> Result<Vec<u8>, CapabilityError> {
+    fn request_dump(
+        &mut self,
+        cmd: u8,
+        _ifindex: i32,
+        attrs: &[u8],
+    ) -> Result<Vec<u8>, CapabilityError> {
         self.seq += 1;
 
         let mut msg = Vec::new();
@@ -333,9 +351,10 @@ impl Nl80211Socket {
             )
         };
         if sent < 0 {
-            return Err(CapabilityError::Provider(
-                format!("netlink send failed: {}", io::Error::last_os_error()),
-            ));
+            return Err(CapabilityError::Provider(format!(
+                "netlink send failed: {}",
+                io::Error::last_os_error()
+            )));
         }
 
         self.recv_responses()
@@ -360,9 +379,10 @@ impl Nl80211Socket {
                 )
             };
             if received < 0 {
-                return Err(CapabilityError::Provider(
-                    format!("netlink recv failed: {}", io::Error::last_os_error()),
-                ));
+                return Err(CapabilityError::Provider(format!(
+                    "netlink recv failed: {}",
+                    io::Error::last_os_error()
+                )));
             }
 
             let data = &buf[..received as usize];
@@ -372,20 +392,22 @@ impl Nl80211Socket {
             if data.len() < mem::size_of::<NlMsghdr>() {
                 continue;
             }
-            let hdr: NlMsghdr = unsafe {
-                std::ptr::read_unaligned(data.as_ptr() as *const NlMsghdr)
-            };
+            let hdr: NlMsghdr =
+                unsafe { std::ptr::read_unaligned(data.as_ptr() as *const NlMsghdr) };
 
             // NLMSG_ERROR with error=0 is ACK (success)
             if hdr.nlmsg_type == libc::NLMSG_ERROR as u16 {
                 if data.len() >= mem::size_of::<NlMsghdr>() + 4 {
                     let error: i32 = unsafe {
-                        std::ptr::read_unaligned(data[mem::size_of::<NlMsghdr>()..].as_ptr() as *const i32)
+                        std::ptr::read_unaligned(
+                            data[mem::size_of::<NlMsghdr>()..].as_ptr() as *const i32
+                        )
                     };
                     if error != 0 {
-                        return Err(CapabilityError::Provider(
-                            format!("nl80211 error: {}", io::Error::from_raw_os_error(-error)),
-                        ));
+                        return Err(CapabilityError::Provider(format!(
+                            "nl80211 error: {}",
+                            io::Error::from_raw_os_error(-error)
+                        )));
                     }
                 }
                 break; // Done (ACK with error=0)
@@ -448,9 +470,10 @@ impl Nl80211Socket {
             )
         };
         if sent < 0 {
-            return Err(CapabilityError::Provider(
-                format!("netlink send failed: {}", io::Error::last_os_error()),
-            ));
+            return Err(CapabilityError::Provider(format!(
+                "netlink send failed: {}",
+                io::Error::last_os_error()
+            )));
         }
 
         // Parse response to find family ID
@@ -534,7 +557,9 @@ fn put_nla_nested(buf: &mut Vec<u8>, attr_type: u16, inner: &[u8]) {
 /// Parse a CTRL_CMD_GETFAMILY response to extract the nl80211 family ID.
 fn parse_ctrl_getfamily_response(data: &[u8]) -> Result<u16, CapabilityError> {
     if data.len() < mem::size_of::<NlMsghdr>() + mem::size_of::<GenlMsghdr>() {
-        return Err(CapabilityError::Provider("short nl80211 family response".into()));
+        return Err(CapabilityError::Provider(
+            "short nl80211 family response".into(),
+        ));
     }
 
     // Skip netlink header, then generic netlink header
@@ -544,9 +569,8 @@ fn parse_ctrl_getfamily_response(data: &[u8]) -> Result<u16, CapabilityError> {
     // Parse attributes looking for CTRL_ATTR_FAMILY_ID (type 2)
     let mut offset = attr_start;
     while offset + mem::size_of::<NlAttr>() <= data.len() {
-        let attr: NlAttr = unsafe {
-            std::ptr::read_unaligned(data[offset..].as_ptr() as *const NlAttr)
-        };
+        let attr: NlAttr =
+            unsafe { std::ptr::read_unaligned(data[offset..].as_ptr() as *const NlAttr) };
         let data_start = offset + mem::size_of::<NlAttr>();
         let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
 
@@ -562,7 +586,9 @@ fn parse_ctrl_getfamily_response(data: &[u8]) -> Result<u16, CapabilityError> {
         offset = (offset + (attr.nla_len as usize) + 3) & !3;
     }
 
-    Err(CapabilityError::Provider("nl80211 family ID not found in response".into()))
+    Err(CapabilityError::Provider(
+        "nl80211 family ID not found in response".into(),
+    ))
 }
 
 // ============================================================================
@@ -573,7 +599,12 @@ fn parse_ctrl_getfamily_response(data: &[u8]) -> Result<u16, CapabilityError> {
 ///
 /// If `flush` is true, cached scan results are cleared before scanning.
 /// If `frequencies` is provided, only those frequencies (MHz) are scanned.
-fn nl80211_scan(ifindex: i32, ssids: Option<&[&[u8]]>, flush: bool, frequencies: Option<&[u32]>) -> Result<Vec<WifiNetworkObservation>, CapabilityError> {
+fn nl80211_scan(
+    ifindex: i32,
+    ssids: Option<&[&[u8]]>,
+    flush: bool,
+    frequencies: Option<&[u32]>,
+) -> Result<Vec<WifiNetworkObservation>, CapabilityError> {
     let mut sock = Nl80211Socket::open()?;
 
     // Build TRIGGER_SCAN attributes
@@ -634,9 +665,8 @@ fn parse_scan_results(data: &[u8]) -> Result<Vec<WifiNetworkObservation>, Capabi
     let mut offset = 0;
 
     while offset + mem::size_of::<NlMsghdr>() <= data.len() {
-        let hdr: NlMsghdr = unsafe {
-            std::ptr::read_unaligned(data[offset..].as_ptr() as *const NlMsghdr)
-        };
+        let hdr: NlMsghdr =
+            unsafe { std::ptr::read_unaligned(data[offset..].as_ptr() as *const NlMsghdr) };
 
         // Stop at NLMSG_DONE or NLMSG_ERROR
         if hdr.nlmsg_type == libc::NLMSG_DONE as u16 || hdr.nlmsg_type == libc::NLMSG_ERROR as u16 {
@@ -658,9 +688,8 @@ fn parse_scan_results(data: &[u8]) -> Result<Vec<WifiNetworkObservation>, Capabi
             continue;
         }
 
-        let genl: GenlMsghdr = unsafe {
-            std::ptr::read_unaligned(data[genl_start..].as_ptr() as *const GenlMsghdr)
-        };
+        let genl: GenlMsghdr =
+            unsafe { std::ptr::read_unaligned(data[genl_start..].as_ptr() as *const GenlMsghdr) };
 
         // Only process NEW_SCAN_RESULTS or GET_SCAN responses
         if genl.cmd == NL80211_CMD_NEW_SCAN_RESULTS || genl.cmd == NL80211_CMD_GET_SCAN {
@@ -677,7 +706,11 @@ fn parse_scan_results(data: &[u8]) -> Result<Vec<WifiNetworkObservation>, Capabi
 }
 
 /// Parse a single BSS info entry from nl80211 attributes.
-fn parse_bss_info(data: &[u8], attr_start: usize, msg_end: usize) -> Option<WifiNetworkObservation> {
+fn parse_bss_info(
+    data: &[u8],
+    attr_start: usize,
+    msg_end: usize,
+) -> Option<WifiNetworkObservation> {
     let mut ssid: Option<String> = None;
     let mut bssid: Option<String> = None;
     let mut signal_mbm: Option<i32> = None; // signal in mBm (milli-Bel-milli)
@@ -686,9 +719,8 @@ fn parse_bss_info(data: &[u8], attr_start: usize, msg_end: usize) -> Option<Wifi
 
     let mut offset = attr_start;
     while offset + mem::size_of::<NlAttr>() <= msg_end {
-        let attr: NlAttr = unsafe {
-            std::ptr::read_unaligned(data[offset..].as_ptr() as *const NlAttr)
-        };
+        let attr: NlAttr =
+            unsafe { std::ptr::read_unaligned(data[offset..].as_ptr() as *const NlAttr) };
         let data_start = offset + mem::size_of::<NlAttr>();
         let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
 
@@ -836,7 +868,11 @@ fn nl80211_connect_wpa(
     }
 
     // Open system authentication
-    put_nla_u32(&mut attrs, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
+    put_nla_u32(
+        &mut attrs,
+        NL80211_ATTR_AUTH_TYPE,
+        NL80211_AUTHTYPE_OPEN_SYSTEM,
+    );
 
     if let Some(pmk_bytes) = pmk {
         // Pass PMK to the kernel — it handles the 4-way handshake internally
@@ -856,7 +892,11 @@ fn nl80211_connect_wpa(
     let mut pairwise = Vec::new();
     pairwise.extend_from_slice(&WIFI_CIPHER_SUITE_CCMP.to_ne_bytes());
     put_nla(&mut attrs, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, &pairwise);
-    put_nla_u32(&mut attrs, NL80211_ATTR_CIPHER_SUITE_GROUP, WIFI_CIPHER_SUITE_CCMP);
+    put_nla_u32(
+        &mut attrs,
+        NL80211_ATTR_CIPHER_SUITE_GROUP,
+        WIFI_CIPHER_SUITE_CCMP,
+    );
 
     if let Some(freq) = frequency {
         put_nla_u32(&mut attrs, 14, freq); // NL80211_ATTR_WIPHY_FREQ
@@ -902,14 +942,15 @@ fn nl80211_get_interface_type(ifindex: i32) -> Result<u32, CapabilityError> {
     let msg_end = response.len();
     let genl_start = mem::size_of::<NlMsghdr>() + mem::size_of::<GenlMsghdr>();
     if genl_start + mem::size_of::<NlAttr>() > msg_end {
-        return Err(CapabilityError::Provider("truncated GET_INTERFACE response".into()));
+        return Err(CapabilityError::Provider(
+            "truncated GET_INTERFACE response".into(),
+        ));
     }
 
     let mut offset = genl_start;
     while offset + mem::size_of::<NlAttr>() <= msg_end {
-        let attr: NlAttr = unsafe {
-            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
-        };
+        let attr: NlAttr =
+            unsafe { std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr) };
         let data_start = offset + mem::size_of::<NlAttr>();
         let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
 
@@ -931,13 +972,18 @@ fn nl80211_get_interface_type(ifindex: i32) -> Result<u32, CapabilityError> {
         offset = (data_end + 3) & !3;
     }
 
-    Err(CapabilityError::Provider("IFTYPE not found in GET_INTERFACE response".into()))
+    Err(CapabilityError::Provider(
+        "IFTYPE not found in GET_INTERFACE response".into(),
+    ))
 }
 
 /// Query station info (connected BSS, signal, bitrate) via nl80211.
 ///
 /// Returns (signal_dbm, tx_bitrate_kbps) if connected.
-fn nl80211_get_station(ifindex: i32, bssid: &[u8; 6]) -> Result<(Option<i32>, Option<u32>), CapabilityError> {
+fn nl80211_get_station(
+    ifindex: i32,
+    bssid: &[u8; 6],
+) -> Result<(Option<i32>, Option<u32>), CapabilityError> {
     let mut sock = Nl80211Socket::open()?;
 
     let mut attrs = Vec::new();
@@ -955,9 +1001,8 @@ fn nl80211_get_station(ifindex: i32, bssid: &[u8; 6]) -> Result<(Option<i32>, Op
     // Parse nested station info attributes
     let mut offset = genl_start;
     while offset + mem::size_of::<NlAttr>() <= msg_end {
-        let attr: NlAttr = unsafe {
-            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
-        };
+        let attr: NlAttr =
+            unsafe { std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr) };
         let data_start = offset + mem::size_of::<NlAttr>();
         let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
 
@@ -988,8 +1033,10 @@ fn nl80211_get_station(ifindex: i32, bssid: &[u8; 6]) -> Result<(Option<i32>, Op
                     const NL80211_RATE_INFO_BITRATE32: u16 = 7;
                     if nested.nla_type == NL80211_RATE_INFO_BITRATE32 && n_end - n_start >= 4 {
                         let rate_100k = u32::from_ne_bytes([
-                            response[n_start], response[n_start + 1],
-                            response[n_start + 2], response[n_start + 3],
+                            response[n_start],
+                            response[n_start + 1],
+                            response[n_start + 2],
+                            response[n_start + 3],
                         ]);
                         tx_bitrate_kbps = Some(rate_100k / 10);
                     }
@@ -1009,7 +1056,9 @@ fn nl80211_get_station(ifindex: i32, bssid: &[u8; 6]) -> Result<(Option<i32>, Op
 ///
 /// Returns Vec of (mac, signal_dbm, tx_bitrate_kbps).
 #[allow(clippy::type_complexity)]
-fn nl80211_dump_stations(ifindex: i32) -> Result<Vec<([u8; 6], i32, Option<u32>)>, CapabilityError> {
+fn nl80211_dump_stations(
+    ifindex: i32,
+) -> Result<Vec<([u8; 6], i32, Option<u32>)>, CapabilityError> {
     let mut sock = Nl80211Socket::open()?;
 
     let mut attrs = Vec::new();
@@ -1023,9 +1072,8 @@ fn nl80211_dump_stations(ifindex: i32) -> Result<Vec<([u8; 6], i32, Option<u32>)
     let msg_end = response.len();
 
     while offset + mem::size_of::<NlMsghdr>() <= msg_end {
-        let nlhdr: NlMsghdr = unsafe {
-            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlMsghdr)
-        };
+        let nlhdr: NlMsghdr =
+            unsafe { std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlMsghdr) };
         if nlhdr.nlmsg_len == 0 || offset + nlhdr.nlmsg_len as usize > msg_end {
             break;
         }
@@ -1039,9 +1087,8 @@ fn nl80211_dump_stations(ifindex: i32) -> Result<Vec<([u8; 6], i32, Option<u32>)
 
         let mut attr_off = genl_start;
         while attr_off + mem::size_of::<NlAttr>() <= inner_end {
-            let attr: NlAttr = unsafe {
-                std::ptr::read_unaligned(response[attr_off..].as_ptr() as *const NlAttr)
-            };
+            let attr: NlAttr =
+                unsafe { std::ptr::read_unaligned(response[attr_off..].as_ptr() as *const NlAttr) };
             let d_start = attr_off + mem::size_of::<NlAttr>();
             let d_end = d_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
 
@@ -1064,7 +1111,9 @@ fn nl80211_dump_stations(ifindex: i32) -> Result<Vec<([u8; 6], i32, Option<u32>)
                     let mut nested_off = d_start;
                     while nested_off + mem::size_of::<NlAttr>() <= d_end {
                         let nested: NlAttr = unsafe {
-                            std::ptr::read_unaligned(response[nested_off..].as_ptr() as *const NlAttr)
+                            std::ptr::read_unaligned(
+                                response[nested_off..].as_ptr() as *const NlAttr
+                            )
                         };
                         let n_start = nested_off + mem::size_of::<NlAttr>();
                         let n_end = n_start + (nested.nla_len as usize - mem::size_of::<NlAttr>());
@@ -1073,8 +1122,10 @@ fn nl80211_dump_stations(ifindex: i32) -> Result<Vec<([u8; 6], i32, Option<u32>)
                         }
                         if nested.nla_type == NL80211_RATE_INFO_BITRATE32 && n_end - n_start >= 4 {
                             let rate_100k = u32::from_ne_bytes([
-                                response[n_start], response[n_start + 1],
-                                response[n_start + 2], response[n_start + 3],
+                                response[n_start],
+                                response[n_start + 1],
+                                response[n_start + 2],
+                                response[n_start + 3],
                             ]);
                             tx_bitrate_kbps = Some(rate_100k / 10);
                         }
@@ -1115,9 +1166,8 @@ pub fn nl80211_get_regulatory_domain() -> Result<(String, u8), CapabilityError> 
 
     let mut offset = genl_start;
     while offset + mem::size_of::<NlAttr>() <= msg_end {
-        let attr: NlAttr = unsafe {
-            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
-        };
+        let attr: NlAttr =
+            unsafe { std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr) };
         let data_start = offset + mem::size_of::<NlAttr>();
         let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
 
@@ -1171,7 +1221,11 @@ pub fn nl80211_set_regulatory_domain(country_code: &str) -> Result<(), Capabilit
     put_nla_string(&mut attrs, NL80211_ATTR_REG_ALPHA2, country_code.as_bytes());
 
     // Set by user (initiator type 1)
-    put_nla_u8(&mut attrs, NL80211_ATTR_REG_INITIATOR, NL80211_REGDOM_SET_BY_USER);
+    put_nla_u8(
+        &mut attrs,
+        NL80211_ATTR_REG_INITIATOR,
+        NL80211_REGDOM_SET_BY_USER,
+    );
 
     sock.request(NL80211_CMD_REQ_SET_REG, 0, &attrs)?;
     Ok(())
@@ -1199,9 +1253,8 @@ pub fn nl80211_get_wiphy_info(ifindex: i32) -> Result<(String, u64, Option<u32>)
 
     let mut offset = genl_start;
     while offset + mem::size_of::<NlAttr>() <= msg_end {
-        let attr: NlAttr = unsafe {
-            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
-        };
+        let attr: NlAttr =
+            unsafe { std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr) };
         let data_start = offset + mem::size_of::<NlAttr>();
         let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
 
@@ -1217,8 +1270,10 @@ pub fn nl80211_get_wiphy_info(ifindex: i32) -> Result<(String, u64, Option<u32>)
             }
             NL80211_ATTR_MAX_NUM_SCAN_SSIDS if data_end - data_start >= 4 => {
                 max_scan_ssids = Some(u32::from_ne_bytes([
-                    response[data_start], response[data_start + 1],
-                    response[data_start + 2], response[data_start + 3],
+                    response[data_start],
+                    response[data_start + 1],
+                    response[data_start + 2],
+                    response[data_start + 3],
                 ]));
             }
             _ => {}
@@ -1324,7 +1379,11 @@ fn nl80211_start_ap(
         let mut pairwise = Vec::new();
         pairwise.extend_from_slice(&WIFI_CIPHER_SUITE_CCMP.to_ne_bytes());
         put_nla(&mut attrs, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, &pairwise);
-        put_nla_u32(&mut attrs, NL80211_ATTR_CIPHER_SUITE_GROUP, WIFI_CIPHER_SUITE_CCMP);
+        put_nla_u32(
+            &mut attrs,
+            NL80211_ATTR_CIPHER_SUITE_GROUP,
+            WIFI_CIPHER_SUITE_CCMP,
+        );
     }
 
     sock.request(NL80211_CMD_START_AP, ifindex, &attrs)?;
@@ -1356,14 +1415,14 @@ fn nl80211_set_wiphy_freq(ifindex: i32, freq_mhz: u32) -> Result<(), CapabilityE
 
 /// Get the interface index (ifindex) for a network interface name.
 fn get_ifindex(name: &str) -> Result<i32, CapabilityError> {
-    let c_name = std::ffi::CString::new(name).map_err(|e| {
-        CapabilityError::Provider(format!("invalid interface name: {}", e))
-    })?;
+    let c_name = std::ffi::CString::new(name)
+        .map_err(|e| CapabilityError::Provider(format!("invalid interface name: {}", e)))?;
     let ifindex = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
     if ifindex == 0 {
-        Err(CapabilityError::Provider(
-            format!("interface {} not found", name),
-        ))
+        Err(CapabilityError::Provider(format!(
+            "interface {} not found",
+            name
+        )))
     } else {
         Ok(ifindex as i32)
     }
@@ -2032,8 +2091,8 @@ impl WifiAccessPointController for LinuxWifiBackend {
             ifindex,
             config.ssid.as_bytes(),
             config.frequency_mhz,
-            None,  // beacon interval: kernel default
-            None,  // dtim period: kernel default
+            None, // beacon interval: kernel default
+            None, // dtim period: kernel default
             config.secure,
         );
 
@@ -2100,9 +2159,9 @@ fn parse_mac_string(s: &str) -> Option<[u8; 6]> {
 /// The `ssid` is the network SSID as bytes.
 /// Returns a 32-byte PMK.
 pub fn derive_wpa_pmk(passphrase: &str, ssid: &[u8]) -> [u8; 32] {
+    use edgerun_crypto::hmac::Hmac;
     use edgerun_crypto::pbkdf2::pbkdf2;
     use edgerun_crypto::sha1::Sha1;
-    use edgerun_crypto::hmac::Hmac;
 
     let mut pmk = [0u8; 32];
     // WPA uses 4096 iterations per spec
@@ -2192,8 +2251,14 @@ pub fn parse_eapol_key_frame(data: &[u8]) -> Result<ParsedEapolKey, &'static str
     let key_info = u16::from_be_bytes([key_data[1], key_data[2]]);
     let key_length = u16::from_be_bytes([key_data[3], key_data[4]]);
     let replay_counter = u64::from_be_bytes([
-        key_data[5], key_data[6], key_data[7], key_data[8],
-        key_data[9], key_data[10], key_data[11], key_data[12],
+        key_data[5],
+        key_data[6],
+        key_data[7],
+        key_data[8],
+        key_data[9],
+        key_data[10],
+        key_data[11],
+        key_data[12],
     ]);
 
     let mut key_nonce = [0u8; 32];
@@ -2203,13 +2268,25 @@ pub fn parse_eapol_key_frame(data: &[u8]) -> Result<ParsedEapolKey, &'static str
     key_iv.copy_from_slice(&key_data[45..61]);
 
     let key_rsc = u64::from_be_bytes([
-        key_data[61], key_data[62], key_data[63], key_data[64],
-        key_data[65], key_data[66], key_data[67], key_data[68],
+        key_data[61],
+        key_data[62],
+        key_data[63],
+        key_data[64],
+        key_data[65],
+        key_data[66],
+        key_data[67],
+        key_data[68],
     ]);
 
     let key_id = u64::from_be_bytes([
-        key_data[69], key_data[70], key_data[71], key_data[72],
-        key_data[73], key_data[74], key_data[75], key_data[76],
+        key_data[69],
+        key_data[70],
+        key_data[71],
+        key_data[72],
+        key_data[73],
+        key_data[74],
+        key_data[75],
+        key_data[76],
     ]);
 
     let mut key_mic = [0u8; 16];
@@ -2302,10 +2379,7 @@ pub fn derive_ptk(
 /// Calculate the MIC for an EAPOL-Key frame.
 ///
 /// The MIC is computed over the entire EAPOL frame with the MIC field zeroed.
-pub fn calculate_eapol_mic(
-    ptk: &[u8],
-    eapol_frame: &[u8],
-) -> [u8; 16] {
+pub fn calculate_eapol_mic(ptk: &[u8], eapol_frame: &[u8]) -> [u8; 16] {
     use edgerun_crypto::hmac::{Hmac, Mac};
     use edgerun_crypto::sha1::Sha1;
 
@@ -2331,11 +2405,7 @@ pub fn calculate_eapol_mic(
 }
 
 /// Verify the MIC in a received EAPOL-Key frame.
-pub fn verify_eapol_mic(
-    ptk: &[u8],
-    eapol_frame: &[u8],
-    expected_mic: &[u8; 16],
-) -> bool {
+pub fn verify_eapol_mic(ptk: &[u8], eapol_frame: &[u8], expected_mic: &[u8; 16]) -> bool {
     let computed_mic = calculate_eapol_mic(ptk, eapol_frame);
     computed_mic == *expected_mic
 }

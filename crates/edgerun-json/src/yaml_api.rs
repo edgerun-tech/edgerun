@@ -1,17 +1,17 @@
 //! YAML API compatible with serde_yaml.
-//! 
+//!
 //! This module provides drop-in replacements for serde_yaml functionality.
 
-#[cfg(feature = "std")]
-use std::{format, string::String, vec};
-#[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec};
 #[cfg(not(feature = "std"))]
 use alloc::borrow::ToOwned;
 #[cfg(not(feature = "std"))]
 use alloc::string::ToString;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String, vec};
+#[cfg(feature = "std")]
+use std::{format, string::String, vec};
 
 use crate::{JsonValue, Map, Number};
 
@@ -322,7 +322,7 @@ fn parse_yaml_simple(s: &str) -> Result<YamlValue, YamlError> {
     }
 
     if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
-        let inner = &s[1..s.len()-1];
+        let inner = &s[1..s.len() - 1];
         return Ok(YamlValue::String(unescape_yaml_string(inner)));
     }
 
@@ -361,7 +361,11 @@ pub fn to_yaml_string(value: &YamlValue) -> Result<String, YamlError> {
     Ok(output)
 }
 
-fn to_yaml_string_impl(output: &mut String, value: &YamlValue, indent: usize) -> Result<(), YamlError> {
+fn to_yaml_string_impl(
+    output: &mut String,
+    value: &YamlValue,
+    indent: usize,
+) -> Result<(), YamlError> {
     let indent_str = "  ".repeat(indent);
     match value {
         YamlValue::Null => {
@@ -374,7 +378,12 @@ fn to_yaml_string_impl(output: &mut String, value: &YamlValue, indent: usize) ->
             output.push_str(&n.to_string());
         }
         YamlValue::String(s) => {
-            if s.contains(':') || s.contains('#') || s.starts_with(' ') || s.ends_with(' ') || s.contains('\n') {
+            if s.contains(':')
+                || s.contains('#')
+                || s.starts_with(' ')
+                || s.ends_with(' ')
+                || s.contains('\n')
+            {
                 output.push('"');
                 for c in s.chars() {
                     match c {

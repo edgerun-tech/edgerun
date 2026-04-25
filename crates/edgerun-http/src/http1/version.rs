@@ -8,8 +8,7 @@ use crate::Result;
 use std::fmt;
 
 /// HTTP protocol version
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HttpVersion {
     /// HTTP/1.0 (RFC 1945)
     Http10,
@@ -74,15 +73,20 @@ impl fmt::Display for HttpVersion {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_version_from_str() {
-        assert_eq!(HttpVersion::from_str("HTTP/1.0").unwrap(), HttpVersion::Http10);
-        assert_eq!(HttpVersion::from_str("HTTP/1.1").unwrap(), HttpVersion::Http11);
+        assert_eq!(
+            HttpVersion::from_str("HTTP/1.0").unwrap(),
+            HttpVersion::Http10
+        );
+        assert_eq!(
+            HttpVersion::from_str("HTTP/1.1").unwrap(),
+            HttpVersion::Http11
+        );
         assert!(HttpVersion::from_str("HTTP/2.0").is_err());
         assert!(HttpVersion::from_str("HTTP/3.0").is_err());
     }

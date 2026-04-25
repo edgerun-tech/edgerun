@@ -1,5 +1,5 @@
 // Test select! macro with the actual runtime — migrated to standard #[test] harness.
-use edgerun_rt::{Runtime, select};
+use edgerun_rt::{select, Runtime};
 use std::time::Duration;
 
 #[test]
@@ -50,7 +50,11 @@ fn select_timing() {
         (result, start.elapsed())
     });
     assert_eq!(result, 1, "fast future should win");
-    assert!(elapsed < Duration::from_millis(150), "select took too long: {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_millis(150),
+        "select took too long: {:?}",
+        elapsed
+    );
 }
 
 #[test]
@@ -71,14 +75,18 @@ fn select_with_sleep() {
         (result, start.elapsed())
     });
     assert_eq!(result, "winner");
-    assert!(elapsed < Duration::from_millis(150), "select took too long: {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_millis(150),
+        "select took too long: {:?}",
+        elapsed
+    );
 }
 
 #[test]
 fn select_drop_loser() {
     // Verify the losing future is dropped (not leaked).
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
 
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     let dropped = Arc::new(AtomicBool::new(false));
@@ -104,7 +112,10 @@ fn select_drop_loser() {
         }
     });
     // The DropWatcher should have been dropped after select returned.
-    assert!(dropped.load(Ordering::SeqCst), "losing future should be dropped");
+    assert!(
+        dropped.load(Ordering::SeqCst),
+        "losing future should be dropped"
+    );
 }
 
 #[test]

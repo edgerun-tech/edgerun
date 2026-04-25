@@ -1,6 +1,6 @@
 // Test mpsc (bounded multi-producer single-consumer) channel with the actual runtime.
 use edgerun_rt::mpsc::{self, TryRecvError};
-use edgerun_rt::{Runtime, spawn};
+use edgerun_rt::{spawn, Runtime};
 use std::time::Duration;
 
 fn main() {
@@ -104,7 +104,10 @@ fn test_async_send_with_backpressure() {
         }
         // After all sends, channel should close
         let val = rx.recv().await;
-        assert_eq!(val, None, "channel should be closed after all senders dropped");
+        assert_eq!(
+            val, None,
+            "channel should be closed after all senders dropped"
+        );
 
         // Verify we got exactly {1, 2, 3} regardless of order
         received.sort();
@@ -277,7 +280,11 @@ fn test_heavy_producer_consumer() {
             count += 1;
         }
         let expected_total = 4 * num_items;
-        assert_eq!(count, expected_total, "should receive all {} items", expected_total);
+        assert_eq!(
+            count, expected_total,
+            "should receive all {} items",
+            expected_total
+        );
     });
 
     std::thread::sleep(Duration::from_millis(1000));

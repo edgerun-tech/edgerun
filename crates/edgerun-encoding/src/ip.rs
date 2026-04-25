@@ -127,14 +127,20 @@ mod tests {
     fn test_broadcast_address() {
         let ip = Ipv4Addr::new(192, 168, 1, 10);
         let mask = Ipv4Addr::new(255, 255, 255, 0);
-        assert_eq!(broadcast_address(&ip, &mask), Ipv4Addr::new(192, 168, 1, 255));
+        assert_eq!(
+            broadcast_address(&ip, &mask),
+            Ipv4Addr::new(192, 168, 1, 255)
+        );
     }
 
     #[test]
     fn test_broadcast_address_class_a() {
         let ip = Ipv4Addr::new(10, 0, 0, 1);
         let mask = Ipv4Addr::new(255, 0, 0, 0);
-        assert_eq!(broadcast_address(&ip, &mask), Ipv4Addr::new(10, 255, 255, 255));
+        assert_eq!(
+            broadcast_address(&ip, &mask),
+            Ipv4Addr::new(10, 255, 255, 255)
+        );
     }
 
     #[test]

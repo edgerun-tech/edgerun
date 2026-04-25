@@ -73,7 +73,10 @@ pub fn criu_dump(opts: &CriuDumpOpts) -> io::Result<()> {
     let mut work_c = None;
     let work_ptr = if let Some(w) = opts.work {
         work_c = Some(CString::new(w.to_string_lossy().as_bytes())?);
-        work_c.as_ref().map(|c| c.as_ptr()).unwrap_or(std::ptr::null())
+        work_c
+            .as_ref()
+            .map(|c| c.as_ptr())
+            .unwrap_or(std::ptr::null())
     } else {
         std::ptr::null()
     };

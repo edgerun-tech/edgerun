@@ -2,13 +2,13 @@ use edgerun_capabilities::{
     capability_descriptor, CapabilityAccessClass, CapabilityDescriptor, CapabilityError,
     CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRole,
 };
-use edgerun_remote_capability::{
-    accept_session_open_unchecked, accept_tcp, accept_unix, serve_one, PolicyWrappedProvider,
-    RemoteCapabilityProvider, RemoteInvocationResult,
-};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionClose, CapabilitySessionEvent, CapabilitySessionOpen,
+};
+use edgerun_remote_capability::{
+    accept_session_open_unchecked, accept_tcp, accept_unix, serve_one, PolicyWrappedProvider,
+    RemoteCapabilityProvider, RemoteInvocationResult,
 };
 use std::env;
 use std::net::TcpListener;
@@ -82,8 +82,12 @@ fn run_one<T: edgerun_remote_capability::RemoteCapabilityTransport>(
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
-    let mode = args.next().ok_or("usage: capability-demo-server <unix|tcp> <path|addr>")?;
-    let target = args.next().ok_or("usage: capability-demo-server <unix|tcp> <path|addr>")?;
+    let mode = args
+        .next()
+        .ok_or("usage: capability-demo-server <unix|tcp> <path|addr>")?;
+    let target = args
+        .next()
+        .ok_or("usage: capability-demo-server <unix|tcp> <path|addr>")?;
 
     match mode.as_str() {
         "unix" => {

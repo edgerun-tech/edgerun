@@ -31,16 +31,16 @@
 //! }
 //! ```
 
+use crate::{Node, NodeConfig};
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope};
 use edgerun_hardware_signing::{MeshSigner, NodeID};
+use edgerun_mesh::MeshRouter;
 use edgerun_mesh::{LocalNode, MeshFrame};
 use edgerun_mesh_link::MeshLink;
-use edgerun_mesh::MeshRouter;
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
 use std::sync::Arc;
-use crate::{Node, NodeConfig};
 
 /// A mesh-connected edgerun node.
 ///
@@ -64,10 +64,7 @@ impl MeshNode {
     /// - The node's event log with the genesis event
     /// - The mesh network link (raw sockets on UP interfaces)
     /// - The mesh router with discovery
-    pub fn from_config(
-        config: NodeConfig,
-        signer: Box<dyn MeshSigner>,
-    ) -> Result<Self, String> {
+    pub fn from_config(config: NodeConfig, signer: Box<dyn MeshSigner>) -> Result<Self, String> {
         let identity = signer.node_id();
         let signer_arc: Arc<dyn MeshSigner> = Arc::from(signer);
         let node = Node::from_config(config, Arc::clone(&signer_arc))
@@ -213,14 +210,12 @@ impl MeshNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
     use edgerun_proto::edgerun::v0::common as proto_common;
     use edgerun_proto::edgerun::v0::stream as proto_stream;
     use edgerun_proto::edgerun::v0::stream::EventType;
-    use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-    
-
 
     struct TestSigner {
         node_id: NodeID,
@@ -395,7 +390,10 @@ metadata:
         // Bob should have recorded the command in his stream
         // genesis (seq 0) + rejected (seq 1, because signature is fake)
         assert_eq!(bob.events().len(), 2);
-        assert_eq!(bob.events()[1].event_type, EventType::CommandRejected as i32);
+        assert_eq!(
+            bob.events()[1].event_type,
+            EventType::CommandRejected as i32
+        );
     }
 
     // -----------------------------------------------------------------------

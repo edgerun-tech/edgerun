@@ -44,7 +44,11 @@ impl SpfResult {
 }
 
 /// Check SPF for the given client IP and domain.
-pub async fn check_spf<D: DnsQuery>(dns: &mut D, client_ip: &str, domain: &str) -> io::Result<SpfResult> {
+pub async fn check_spf<D: DnsQuery>(
+    dns: &mut D,
+    client_ip: &str,
+    domain: &str,
+) -> io::Result<SpfResult> {
     let records = dns.query_txt(domain).await?;
 
     // Find the SPF record
@@ -169,8 +173,16 @@ impl IpNetwork {
                 for i in 0..4 {
                     let bits = if prefix_bits >= (i + 1) * 8 {
                         8
-                    } else { prefix_bits.saturating_sub(i * 8) };
-                    let mask: u8 = if bits == 8 { 0xFF } else if bits == 0 { 0x00 } else { 0xFFu8 << (8 - bits) };
+                    } else {
+                        prefix_bits.saturating_sub(i * 8)
+                    };
+                    let mask: u8 = if bits == 8 {
+                        0xFF
+                    } else if bits == 0 {
+                        0x00
+                    } else {
+                        0xFFu8 << (8 - bits)
+                    };
                     if (net_bytes[i] & mask) != (ip_bytes[i] & mask) {
                         return false;
                     }
@@ -184,8 +196,16 @@ impl IpNetwork {
                 for i in 0..16 {
                     let bits = if prefix_bits >= (i + 1) * 8 {
                         8
-                    } else { prefix_bits.saturating_sub(i * 8) };
-                    let mask: u8 = if bits == 8 { 0xFF } else if bits == 0 { 0x00 } else { 0xFFu8 << (8 - bits) };
+                    } else {
+                        prefix_bits.saturating_sub(i * 8)
+                    };
+                    let mask: u8 = if bits == 8 {
+                        0xFF
+                    } else if bits == 0 {
+                        0x00
+                    } else {
+                        0xFFu8 << (8 - bits)
+                    };
                     if (net_bytes[i] & mask) != (ip_bytes[i] & mask) {
                         return false;
                     }
@@ -208,11 +228,17 @@ impl std::str::FromStr for IpNetwork {
             if prefix > max_prefix {
                 return Err(());
             }
-            Ok(IpNetwork { network, prefix_len: prefix })
+            Ok(IpNetwork {
+                network,
+                prefix_len: prefix,
+            })
         } else {
             let network: IpAddr = s.parse().map_err(|_| ())?;
             let prefix_len = if network.is_ipv4() { 32 } else { 128 };
-            Ok(IpNetwork { network, prefix_len })
+            Ok(IpNetwork {
+                network,
+                prefix_len,
+            })
         }
     }
 }
@@ -223,13 +249,21 @@ mod tests {
 
     #[test]
     fn test_spf_ipv4_match() {
-        let result = evaluate_spf("v=spf1 ip4:192.168.1.0/24 -all", &"192.168.1.50".parse().unwrap(), "example.com");
+        let result = evaluate_spf(
+            "v=spf1 ip4:192.168.1.0/24 -all",
+            &"192.168.1.50".parse().unwrap(),
+            "example.com",
+        );
         assert_eq!(result.unwrap(), SpfResult::Pass);
     }
 
     #[test]
     fn test_spf_ipv4_no_match() {
-        let result = evaluate_spf("v=spf1 ip4:192.168.1.0/24 -all", &"10.0.0.1".parse().unwrap(), "example.com");
+        let result = evaluate_spf(
+            "v=spf1 ip4:192.168.1.0/24 -all",
+            &"10.0.0.1".parse().unwrap(),
+            "example.com",
+        );
         assert_eq!(result.unwrap(), SpfResult::Fail);
     }
 
@@ -237,7 +271,11 @@ mod tests {
     fn test_spf_no_record() {
         // This test verifies the logic path when no SPF record exists
         // The actual DNS query is handled by the caller
-        let result = evaluate_spf("v=spf1 -all", &"192.168.1.1".parse().unwrap(), "example.com");
+        let result = evaluate_spf(
+            "v=spf1 -all",
+            &"192.168.1.1".parse().unwrap(),
+            "example.com",
+        );
         assert_eq!(result.unwrap(), SpfResult::Fail);
     }
 

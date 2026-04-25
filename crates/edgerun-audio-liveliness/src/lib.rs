@@ -36,12 +36,8 @@ use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
     CapabilityOperation,
 };
-use edgerun_microphone::{
-    AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
-};
-use edgerun_speaker::{
-    AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat,
-};
+use edgerun_microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
+use edgerun_speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 // ===========================================================================
@@ -108,10 +104,15 @@ impl AudioChallenge {
     pub fn prompt_text(&self) -> String {
         match self.kind {
             AudioChallengeKind::RepeatNumber => {
-                format!("Please say the number {}", self.expected_response.as_deref().unwrap_or("?"))
+                format!(
+                    "Please say the number {}",
+                    self.expected_response.as_deref().unwrap_or("?")
+                )
             }
             AudioChallengeKind::ClapDetection => "Please clap your hands once".into(),
-            AudioChallengeKind::VoiceActivity => "Please say anything to verify you're present".into(),
+            AudioChallengeKind::VoiceActivity => {
+                "Please say anything to verify you're present".into()
+            }
         }
     }
 }
@@ -297,8 +298,7 @@ impl VoiceActivityDetector {
             0.0
         };
 
-        let first_speech_offset_ms =
-            first_speech_frame.map(|f| (f as u32) * frame_duration_ms);
+        let first_speech_offset_ms = first_speech_frame.map(|f| (f as u32) * frame_duration_ms);
 
         (speech_detected, confidence, first_speech_offset_ms)
     }
@@ -349,11 +349,7 @@ impl VoiceActivityDetector {
         // A clap has:
         // 1. High peak amplitude (> 8000 = about -12 dBFS)
         // 2. High peak-to-RMS ratio (> 3:1 for sharp transients)
-        let peak_to_rms = if rms > 1.0 {
-            peak_abs / rms
-        } else {
-            0.0
-        };
+        let peak_to_rms = if rms > 1.0 { peak_abs / rms } else { 0.0 };
 
         let clap_detected = peak_abs > 8000.0 && peak_to_rms > 3.0;
 
@@ -507,7 +503,9 @@ impl AudioChallengeExecutor {
             self.vad.analyze_s16le(&capture.bytes, 48000);
 
         let response_latency_ms = speech_offset_ms.map(|offset| {
-            capture_latency_ms.saturating_add(offset).saturating_sub(500) // subtract prompt time
+            capture_latency_ms
+                .saturating_add(offset)
+                .saturating_sub(500) // subtract prompt time
         });
 
         // Use DTW keyword spotter to verify the spoken number
@@ -516,7 +514,9 @@ impl AudioChallengeExecutor {
             .match_digit(&capture.bytes, 48000)
             .unwrap_or((999, 0.0)); // 999 = no match
 
-        let expected_number = challenge.expected_response.as_deref()
+        let expected_number = challenge
+            .expected_response
+            .as_deref()
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(999);
 
@@ -540,7 +540,11 @@ impl AudioChallengeExecutor {
 
         let confidence = if passed {
             vad_confidence * 0.3 + keyword_confidence * 0.4 + {
-                if spectral.looks_like_natural_speech { 0.3 } else { 0.05 }
+                if spectral.looks_like_natural_speech {
+                    0.3
+                } else {
+                    0.05
+                }
             }
         } else if speech_detected && !number_match {
             // Speech detected but wrong number
@@ -570,7 +574,9 @@ impl AudioChallengeExecutor {
             self.vad.detect_clap(&capture.bytes, 48000);
 
         let response_latency_ms = clap_offset_ms.map(|offset| {
-            capture_latency_ms.saturating_add(offset).saturating_sub(500)
+            capture_latency_ms
+                .saturating_add(offset)
+                .saturating_sub(500)
         });
 
         let spectral = analyze_spectral(&capture.bytes, 48000);
@@ -616,7 +622,9 @@ impl AudioChallengeExecutor {
             self.vad.analyze_s16le(&capture.bytes, 48000);
 
         let response_latency_ms = speech_offset_ms.map(|offset| {
-            capture_latency_ms.saturating_add(offset).saturating_sub(500)
+            capture_latency_ms
+                .saturating_add(offset)
+                .saturating_sub(500)
         });
 
         let spectral = analyze_spectral(&capture.bytes, 48000);
@@ -699,7 +707,11 @@ impl AudioVisualLivelinessScorer {
         audio_passed: bool,
         audio_confidence: f32,
     ) -> (bool, f32) {
-        let camera_score = if camera_passed { camera_confidence } else { 0.0 };
+        let camera_score = if camera_passed {
+            camera_confidence
+        } else {
+            0.0
+        };
         let audio_score = if audio_passed { audio_confidence } else { 0.0 };
 
         let combined = camera_score * self.camera_weight + audio_score * self.audio_weight;
@@ -867,7 +879,10 @@ impl FormantSynth {
     /// Simple LCG noise generator.
     #[inline]
     fn noise(&mut self) -> f64 {
-        self.noise_state = self.noise_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        self.noise_state = self
+            .noise_state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1);
         ((self.noise_state >> 33) as i32 as f64) / (i32::MAX as f64)
     }
 
@@ -906,11 +921,7 @@ impl FormantSynth {
     }
 
     /// Synthesize a single phoneme.
-    fn synthesize_phoneme(
-        &mut self,
-        phoneme: &Phoneme,
-        duration_ms: u32,
-    ) -> Vec<i16> {
+    fn synthesize_phoneme(&mut self, phoneme: &Phoneme, duration_ms: u32) -> Vec<i16> {
         let num_samples = (self.sample_rate as u64 * duration_ms as u64 / 1000) as usize;
         let mut output = Vec::with_capacity(num_samples);
         let sr = self.sample_rate as f64;
@@ -923,12 +934,9 @@ impl FormantSynth {
             };
 
             // Cascade of 3 formant filters
-            let f1 = Self::formant_filter(&mut self.f1_state, source,
-                phoneme.f1, phoneme.bw1, sr);
-            let f2 = Self::formant_filter(&mut self.f2_state, f1,
-                phoneme.f2, phoneme.bw2, sr);
-            let f3 = Self::formant_filter(&mut self.f3_state, f2,
-                phoneme.f3, phoneme.bw3, sr);
+            let f1 = Self::formant_filter(&mut self.f1_state, source, phoneme.f1, phoneme.bw1, sr);
+            let f2 = Self::formant_filter(&mut self.f2_state, f1, phoneme.f2, phoneme.bw2, sr);
+            let f3 = Self::formant_filter(&mut self.f3_state, f2, phoneme.f3, phoneme.bw3, sr);
 
             let sample = (f3 * 28000.0).clamp(-32000.0, 32000.0) as i16;
             output.push(sample);
@@ -946,9 +954,13 @@ struct Phoneme {
     /// Fundamental frequency (Hz) — only for voiced
     f0: f64,
     /// Formant frequencies (Hz)
-    f1: f64, f2: f64, f3: f64,
+    f1: f64,
+    f2: f64,
+    f3: f64,
     /// Formant bandwidths (Hz)
-    bw1: f64, bw2: f64, bw3: f64,
+    bw1: f64,
+    bw2: f64,
+    bw3: f64,
     /// Amplitude (0.0 to 1.0)
     amplitude: f64,
     /// Duration in milliseconds
@@ -962,69 +974,465 @@ fn number_to_phonemes(n: u32) -> Vec<Phoneme> {
     let digit_phonemes: &[&[Phoneme]] = &[
         // "zero" — /zɪəroʊ/
         &[
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 80 },  // z (fricative)
-            Phoneme { voiced: true, f0: 120.0, f1: 400.0, f2: 2000.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 60 },  // ɪ
-            Phoneme { voiced: true, f0: 120.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 }, // ə
-            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // r
-            Phoneme { voiced: true, f0: 110.0, f1: 450.0, f2: 800.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 120 }, // oʊ
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.15,
+                duration_ms: 80,
+            }, // z (fricative)
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 400.0,
+                f2: 2000.0,
+                f3: 3000.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.4,
+                duration_ms: 60,
+            }, // ɪ
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 500.0,
+                f2: 1400.0,
+                f3: 2600.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 100,
+            }, // ə
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 500.0,
+                f2: 900.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // r
+            Phoneme {
+                voiced: true,
+                f0: 110.0,
+                f1: 450.0,
+                f2: 800.0,
+                f3: 2500.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.4,
+                duration_ms: 120,
+            }, // oʊ
         ],
         // "one" — /wʌn/
         &[
-            Phoneme { voiced: true, f0: 115.0, f1: 300.0, f2: 700.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // w
-            Phoneme { voiced: true, f0: 120.0, f1: 700.0, f2: 1200.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 }, // ʌ
-            Phoneme { voiced: true, f0: 115.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 80 },  // n
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 300.0,
+                f2: 700.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.3,
+                duration_ms: 60,
+            }, // w
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 700.0,
+                f2: 1200.0,
+                f3: 2600.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 100,
+            }, // ʌ
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 250.0,
+                f2: 1800.0,
+                f3: 2800.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.3,
+                duration_ms: 80,
+            }, // n
         ],
         // "two" — /tuː/
         &[
-            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 1200.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.2, duration_ms: 40 },  // t
-            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 850.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 150 },  // uː
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 350.0,
+                f2: 1200.0,
+                f3: 2500.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.2,
+                duration_ms: 40,
+            }, // t
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 350.0,
+                f2: 850.0,
+                f3: 2500.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 150,
+            }, // uː
         ],
         // "three" — /θriː/
         &[
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.12, duration_ms: 60 }, // θ
-            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // r
-            Phoneme { voiced: true, f0: 120.0, f1: 350.0, f2: 2300.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 120 }, // iː
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.12,
+                duration_ms: 60,
+            }, // θ
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 500.0,
+                f2: 900.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // r
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 350.0,
+                f2: 2300.0,
+                f3: 3000.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 120,
+            }, // iː
         ],
         // "four" — /fɔːr/
         &[
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.12, duration_ms: 60 }, // f
-            Phoneme { voiced: true, f0: 115.0, f1: 600.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 120 },  // ɔː
-            Phoneme { voiced: true, f0: 110.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 80 },  // r
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.12,
+                duration_ms: 60,
+            }, // f
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 600.0,
+                f2: 900.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 120,
+            }, // ɔː
+            Phoneme {
+                voiced: true,
+                f0: 110.0,
+                f1: 500.0,
+                f2: 900.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.4,
+                duration_ms: 80,
+            }, // r
         ],
         // "five" — /faɪv/
         &[
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.12, duration_ms: 50 }, // f
-            Phoneme { voiced: true, f0: 120.0, f1: 700.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // a
-            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 2200.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɪ
-            Phoneme { voiced: true, f0: 115.0, f1: 300.0, f2: 700.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // v
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.12,
+                duration_ms: 50,
+            }, // f
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 700.0,
+                f2: 1400.0,
+                f3: 2600.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // a
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 350.0,
+                f2: 2200.0,
+                f3: 3000.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // ɪ
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 300.0,
+                f2: 700.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.3,
+                duration_ms: 60,
+            }, // v
         ],
         // "six" — /sɪks/
         &[
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 60 }, // s
-            Phoneme { voiced: true, f0: 120.0, f1: 400.0, f2: 2000.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 60 },  // ɪ
-            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 1200.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.2, duration_ms: 40 },  // k
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 60 }, // s
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.15,
+                duration_ms: 60,
+            }, // s
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 400.0,
+                f2: 2000.0,
+                f3: 3000.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.4,
+                duration_ms: 60,
+            }, // ɪ
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 350.0,
+                f2: 1200.0,
+                f3: 2500.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.2,
+                duration_ms: 40,
+            }, // k
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.15,
+                duration_ms: 60,
+            }, // s
         ],
         // "seven" — /sɛvən/
         &[
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 50 }, // s
-            Phoneme { voiced: true, f0: 120.0, f1: 550.0, f2: 1800.0, f3: 2700.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɛ
-            Phoneme { voiced: true, f0: 115.0, f1: 300.0, f2: 700.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 50 },  // v
-            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 60 },  // ə
-            Phoneme { voiced: true, f0: 110.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // n
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.15,
+                duration_ms: 50,
+            }, // s
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 550.0,
+                f2: 1800.0,
+                f3: 2700.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // ɛ
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 300.0,
+                f2: 700.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.3,
+                duration_ms: 50,
+            }, // v
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 500.0,
+                f2: 1400.0,
+                f3: 2600.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.4,
+                duration_ms: 60,
+            }, // ə
+            Phoneme {
+                voiced: true,
+                f0: 110.0,
+                f1: 250.0,
+                f2: 1800.0,
+                f3: 2800.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.3,
+                duration_ms: 60,
+            }, // n
         ],
         // "eight" — /eɪt/
         &[
-            Phoneme { voiced: true, f0: 120.0, f1: 550.0, f2: 1800.0, f3: 2700.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 },  // e
-            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 2200.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɪ
-            Phoneme { voiced: true, f0: 110.0, f1: 350.0, f2: 1200.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.2, duration_ms: 40 },  // t
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 550.0,
+                f2: 1800.0,
+                f3: 2700.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 100,
+            }, // e
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 350.0,
+                f2: 2200.0,
+                f3: 3000.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // ɪ
+            Phoneme {
+                voiced: true,
+                f0: 110.0,
+                f1: 350.0,
+                f2: 1200.0,
+                f3: 2500.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.2,
+                duration_ms: 40,
+            }, // t
         ],
         // "nine" — /naɪn/
         &[
-            Phoneme { voiced: true, f0: 115.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 50 },  // n
-            Phoneme { voiced: true, f0: 120.0, f1: 700.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // a
-            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 2200.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɪ
-            Phoneme { voiced: true, f0: 110.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // n
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 250.0,
+                f2: 1800.0,
+                f3: 2800.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.3,
+                duration_ms: 50,
+            }, // n
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 700.0,
+                f2: 1400.0,
+                f3: 2600.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // a
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 350.0,
+                f2: 2200.0,
+                f3: 3000.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 80,
+            }, // ɪ
+            Phoneme {
+                voiced: true,
+                f0: 110.0,
+                f1: 250.0,
+                f2: 1800.0,
+                f3: 2800.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.3,
+                duration_ms: 60,
+            }, // n
         ],
     ];
 
@@ -1047,8 +1455,16 @@ fn number_to_phonemes(n: u32) -> Vec<Phoneme> {
         if i > 0 {
             // Brief pause between digits
             phonemes.push(Phoneme {
-                voiced: true, f0: 110.0, f1: 500.0, f2: 1400.0, f3: 2600.0,
-                bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.0, duration_ms: 100,
+                voiced: true,
+                f0: 110.0,
+                f1: 500.0,
+                f2: 1400.0,
+                f3: 2600.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.0,
+                duration_ms: 100,
             });
         }
         phonemes.extend_from_slice(digit_phonemes[digit as usize]);
@@ -1081,10 +1497,54 @@ fn text_to_speech_audio(text: &str, sample_rate: u32) -> Vec<u8> {
     if all_samples.is_empty() {
         // "hello" — /həloʊ/
         let hello = &[
-            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.1, duration_ms: 60 },
-            Phoneme { voiced: true, f0: 120.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 80 },
-            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 },
-            Phoneme { voiced: true, f0: 110.0, f1: 450.0, f2: 800.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 120 },
+            Phoneme {
+                voiced: false,
+                f0: 0.0,
+                f1: 4000.0,
+                f2: 4000.0,
+                f3: 4000.0,
+                bw1: 200.0,
+                bw2: 200.0,
+                bw3: 200.0,
+                amplitude: 0.1,
+                duration_ms: 60,
+            },
+            Phoneme {
+                voiced: true,
+                f0: 120.0,
+                f1: 500.0,
+                f2: 1400.0,
+                f3: 2600.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.4,
+                duration_ms: 80,
+            },
+            Phoneme {
+                voiced: true,
+                f0: 115.0,
+                f1: 500.0,
+                f2: 900.0,
+                f3: 2400.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.5,
+                duration_ms: 100,
+            },
+            Phoneme {
+                voiced: true,
+                f0: 110.0,
+                f1: 450.0,
+                f2: 800.0,
+                f3: 2500.0,
+                bw1: 60.0,
+                bw2: 90.0,
+                bw3: 120.0,
+                amplitude: 0.4,
+                duration_ms: 120,
+            },
         ];
         for ph in hello {
             all_samples.extend(synth.synthesize_phoneme(ph, ph.duration_ms));
@@ -1267,10 +1727,54 @@ fn word_to_phonemes(word: &str) -> Vec<Phoneme> {
         "nine" => number_to_phonemes(9),
         "hello" => {
             vec![
-                Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.1, duration_ms: 60 },
-                Phoneme { voiced: true, f0: 120.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 80 },
-                Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 },
-                Phoneme { voiced: true, f0: 110.0, f1: 450.0, f2: 800.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 120 },
+                Phoneme {
+                    voiced: false,
+                    f0: 0.0,
+                    f1: 4000.0,
+                    f2: 4000.0,
+                    f3: 4000.0,
+                    bw1: 200.0,
+                    bw2: 200.0,
+                    bw3: 200.0,
+                    amplitude: 0.1,
+                    duration_ms: 60,
+                },
+                Phoneme {
+                    voiced: true,
+                    f0: 120.0,
+                    f1: 500.0,
+                    f2: 1400.0,
+                    f3: 2600.0,
+                    bw1: 60.0,
+                    bw2: 90.0,
+                    bw3: 120.0,
+                    amplitude: 0.4,
+                    duration_ms: 80,
+                },
+                Phoneme {
+                    voiced: true,
+                    f0: 115.0,
+                    f1: 500.0,
+                    f2: 900.0,
+                    f3: 2400.0,
+                    bw1: 60.0,
+                    bw2: 90.0,
+                    bw3: 120.0,
+                    amplitude: 0.5,
+                    duration_ms: 100,
+                },
+                Phoneme {
+                    voiced: true,
+                    f0: 110.0,
+                    f1: 450.0,
+                    f2: 800.0,
+                    f3: 2500.0,
+                    bw1: 60.0,
+                    bw2: 90.0,
+                    bw3: 120.0,
+                    amplitude: 0.4,
+                    duration_ms: 120,
+                },
             ]
         }
         _ => Vec::new(),

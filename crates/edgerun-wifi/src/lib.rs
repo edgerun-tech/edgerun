@@ -232,7 +232,10 @@ mod tests {
     #[test]
     fn interface_mode_debug() {
         assert_eq!(format!("{:?}", WifiInterfaceMode::Client), "Client");
-        assert_eq!(format!("{:?}", WifiInterfaceMode::AccessPoint), "AccessPoint");
+        assert_eq!(
+            format!("{:?}", WifiInterfaceMode::AccessPoint),
+            "AccessPoint"
+        );
         assert_eq!(format!("{:?}", WifiInterfaceMode::Monitor), "Monitor");
     }
 
@@ -334,7 +337,9 @@ mod tests {
 
     #[test]
     fn scan_result_empty() {
-        let result = WifiScanResult { observations: vec![] };
+        let result = WifiScanResult {
+            observations: vec![],
+        };
         assert!(result.observations.is_empty());
     }
 
@@ -357,7 +362,9 @@ mod tests {
 
     #[test]
     fn scan_result_clone() {
-        let result = WifiScanResult { observations: vec![] };
+        let result = WifiScanResult {
+            observations: vec![],
+        };
         assert_eq!(result.clone(), result);
     }
 

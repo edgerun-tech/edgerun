@@ -7,8 +7,8 @@ pub mod response;
 pub mod state;
 
 pub use command::{
-    extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret, parse_esmtp_parameters,
-    SmtpCommand,
+    extract_dsn_envid, extract_dsn_notify, extract_dsn_orcpt, extract_dsn_ret,
+    parse_esmtp_parameters, SmtpCommand,
 };
 pub use dsn::{DsnNotify, DsnRet};
 pub use envelope::MailEnvelope;

@@ -10,8 +10,8 @@ use std::io::{self, BufReader, Read};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 
-use edgerun_crypto::sha2::Digest;
 use super::errors::RegistryError;
+use edgerun_crypto::sha2::Digest;
 
 // ===========================================================================
 // Path validation helpers
@@ -49,17 +49,12 @@ pub fn extract_layer(
 ) -> Result<(), RegistryError> {
     let file = File::open(blob_path).map_err(RegistryError::IoError)?;
 
-    let is_gzip = media_type
-        .map(|mt| mt.contains("gzip"))
-        .unwrap_or(false)
+    let is_gzip = media_type.map(|mt| mt.contains("gzip")).unwrap_or(false)
         || blob_path.extension().map(|e| e == "gz").unwrap_or(false);
-    let is_zstd = media_type
-        .map(|mt| mt.contains("zstd"))
-        .unwrap_or(false);
+    let is_zstd = media_type.map(|mt| mt.contains("zstd")).unwrap_or(false);
 
     if is_zstd {
-        let mut decoder =
-            zstd::Decoder::new(file).map_err(RegistryError::IoError)?;
+        let mut decoder = zstd::Decoder::new(file).map_err(RegistryError::IoError)?;
         extract_tar_secure(&mut decoder, dest)?;
     } else if is_gzip {
         let mut decoder = flate2::read::GzDecoder::new(file);
@@ -150,20 +145,22 @@ pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), Registr
 
 /// Verify that a blob matches the expected digest.
 /// Streams the file through a SHA-256 hasher — never loads the entire file into memory.
-pub fn verify_blob_digest(
-    blob_path: &Path,
-    expected_digest: &str,
-) -> Result<(), RegistryError> {
+pub fn verify_blob_digest(blob_path: &Path, expected_digest: &str) -> Result<(), RegistryError> {
     let mut file = File::open(blob_path).map_err(RegistryError::IoError)?;
     let mut hasher = edgerun_crypto::sha2::Sha256::new();
     let mut buf = [0u8; 65536]; // 64KB buffer
     loop {
         let n = file.read(&mut buf).map_err(RegistryError::IoError)?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         hasher.update(&buf[..n]);
     }
     let computed_hash = hasher.finalize();
-    let computed = format!("sha256:{}", edgerun_core::util::bytes_to_hex(&computed_hash));
+    let computed = format!(
+        "sha256:{}",
+        edgerun_core::util::bytes_to_hex(&computed_hash)
+    );
 
     if computed != expected_digest {
         return Err(RegistryError::DigestMismatch {
@@ -183,8 +180,7 @@ mod tests {
     fn tmp_dir() -> std::path::PathBuf {
         static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let p = std::env::temp_dir().join(format!("oci_layer_test_{}_{}",
-            std::process::id(), n));
+        let p = std::env::temp_dir().join(format!("oci_layer_test_{}_{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -262,8 +258,10 @@ mod tests {
         let blob_path = tmp.join("blob");
         std::fs::write(&blob_path, b"hello").unwrap();
 
-        let result = verify_blob_digest(&blob_path,
-            "sha256:0000000000000000000000000000000000000000000000000000000000000000");
+        let result = verify_blob_digest(
+            &blob_path,
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        );
         assert!(result.is_err());
     }
 }
@@ -377,24 +375,19 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> Result<(), RegistryError> {
             let _ = fs::create_dir_all(&dest_path);
             copy_dir_contents(&src_path, &dest_path)?;
         } else if src_path.is_symlink() {
-            let target =
-                fs::read_link(&src_path).map_err(RegistryError::IoError)?;
+            let target = fs::read_link(&src_path).map_err(RegistryError::IoError)?;
             // Atomic symlink: create temp link, then rename
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
             let temp_path = dest.join(format!(".tmp.{:x}-{:x}", std::process::id(), n));
             let _ = fs::remove_file(&temp_path);
-            symlink(&target, &temp_path)
-                .map_err(RegistryError::IoError)?;
-            fs::rename(&temp_path, &dest_path)
-                .map_err(RegistryError::IoError)?;
+            symlink(&target, &temp_path).map_err(RegistryError::IoError)?;
+            fs::rename(&temp_path, &dest_path).map_err(RegistryError::IoError)?;
         } else {
             // Atomic file copy: write to temp file, then rename
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
             let temp_path = dest.join(format!(".tmp.{:x}-{:x}", std::process::id(), n));
-            fs::copy(&src_path, &temp_path)
-                .map_err(RegistryError::IoError)?;
-            fs::rename(&temp_path, &dest_path)
-                .map_err(RegistryError::IoError)?;
+            fs::copy(&src_path, &temp_path).map_err(RegistryError::IoError)?;
+            fs::rename(&temp_path, &dest_path).map_err(RegistryError::IoError)?;
         }
     }
 

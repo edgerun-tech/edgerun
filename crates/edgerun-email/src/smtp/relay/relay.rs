@@ -6,8 +6,8 @@ use std::time::Duration;
 use edgerun_dns::client::DnsClient;
 use edgerun_dns::record::DnsRecordData;
 
-use crate::smtp::client::SmtpClient;
 use crate::server::read_line;
+use crate::smtp::client::SmtpClient;
 use crate::smtp::types::MailEnvelope;
 
 #[cfg(feature = "dkim")]
@@ -58,23 +58,27 @@ impl OutboundRelay {
         recipient: &str,
     ) -> Result<String, String> {
         // Extract domain from recipient
-        let domain = extract_domain(recipient).ok_or_else(|| {
-            format!("invalid recipient address: {}", recipient)
-        })?;
+        let domain = extract_domain(recipient)
+            .ok_or_else(|| format!("invalid recipient address: {}", recipient))?;
 
         // DNS MX lookup
         let mx_hosts = self.resolve_mx(&domain).await?;
         if mx_hosts.is_empty() {
             // Fall back to A record
             let a_host = format!("{}:25", domain);
-            return self.deliver_via_smtp(&a_host, envelope, recipient, &domain).await;
+            return self
+                .deliver_via_smtp(&a_host, envelope, recipient, &domain)
+                .await;
         }
 
         // Try each MX host in priority order
         let mut last_error = String::new();
         for (_priority, host) in &mx_hosts {
             let addr = format!("{}:25", host);
-            match self.deliver_via_smtp(&addr, envelope, recipient, host).await {
+            match self
+                .deliver_via_smtp(&addr, envelope, recipient, host)
+                .await
+            {
                 Ok(mta) => return Ok(mta),
                 Err(e) => {
                     last_error = e;
@@ -91,7 +95,8 @@ impl OutboundRelay {
         let mut dns = DnsClient::new(&self.dns_server)
             .map_err(|e| format!("failed to create DNS client: {}", e))?;
 
-        let response = dns.query(domain, edgerun_dns::record::DnsRecordType::MX)
+        let response = dns
+            .query(domain, edgerun_dns::record::DnsRecordType::MX)
             .await
             .map_err(|e| format!("DNS query failed: {}", e))?;
 
@@ -116,19 +121,28 @@ impl OutboundRelay {
         remote_mta: &str,
     ) -> Result<String, String> {
         // Connect
-        let mut client = SmtpClient::connect(addr).await
+        let mut client = SmtpClient::connect(addr)
+            .await
             .map_err(|e| format!("connection to {} failed: {}", addr, e))?;
 
         // EHLO
-        client.ehlo(&self.ehlo_domain).await
+        client
+            .ehlo(&self.ehlo_domain)
+            .await
             .map_err(|e| format!("EHLO failed: {}", e))?;
 
         // Check SIZE extension
         if self.max_message_size > 0 {
-            if let Some(max_size_str) = client.capabilities_map.get("SIZE").and_then(|v| v.as_ref()) {
+            if let Some(max_size_str) = client.capabilities_map.get("SIZE").and_then(|v| v.as_ref())
+            {
                 if let Ok(max_size) = max_size_str.parse::<usize>() {
                     if envelope.data.len() > max_size {
-                        return Err(format!("message too large for {}: {} > {}", remote_mta, envelope.data.len(), max_size));
+                        return Err(format!(
+                            "message too large for {}: {} > {}",
+                            remote_mta,
+                            envelope.data.len(),
+                            max_size
+                        ));
                     }
                 }
             }
@@ -140,11 +154,15 @@ impl OutboundRelay {
         } else {
             format!("<{}>", envelope.from)
         };
-        client.mail_from(&from_param).await
+        client
+            .mail_from(&from_param)
+            .await
             .map_err(|e| format!("MAIL FROM rejected: {}", e))?;
 
         // RCPT TO
-        client.rcpt_to(&format!("<{}>", recipient)).await
+        client
+            .rcpt_to(&format!("<{}>", recipient))
+            .await
             .map_err(|e| format!("RCPT TO rejected: {}", e))?;
 
         // DKIM sign the message if configured
@@ -169,7 +187,9 @@ impl OutboundRelay {
         };
 
         // DATA
-        client.data(&message_data).await
+        client
+            .data(&message_data)
+            .await
             .map_err(|e| format!("DATA rejected: {}", e))?;
 
         // QUIT
@@ -198,8 +218,14 @@ mod tests {
 
     #[test]
     fn test_extract_domain() {
-        assert_eq!(extract_domain("user@example.com"), Some("example.com".to_string()));
-        assert_eq!(extract_domain("<user@example.com>"), Some("example.com".to_string()));
+        assert_eq!(
+            extract_domain("user@example.com"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            extract_domain("<user@example.com>"),
+            Some("example.com".to_string())
+        );
         assert_eq!(extract_domain("invalid"), None);
         assert_eq!(extract_domain("@"), None);
     }

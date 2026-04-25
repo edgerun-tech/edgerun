@@ -1,5 +1,5 @@
 // Test Mutex primitive with the actual runtime.
-use edgerun_rt::{Mutex, Runtime, spawn};
+use edgerun_rt::{spawn, Mutex, Runtime};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -140,7 +140,13 @@ fn test_high_contention() {
     let mf = m.clone();
     let verifier = spawn(async move {
         let g = mf.lock().await;
-        assert_eq!(*g, 4 * iterations, "4 tasks x {} iters = {}", iterations, 4 * iterations);
+        assert_eq!(
+            *g,
+            4 * iterations,
+            "4 tasks x {} iters = {}",
+            iterations,
+            4 * iterations
+        );
     });
     std::thread::sleep(Duration::from_millis(50));
     drop(verifier);

@@ -1,8 +1,8 @@
 use edgerun_mgmt_bluetooth::{
-    MgmtBluetoothBackend, MgmtControllerEvent, MgmtDiscoveryTransport, discover_controllers,
-    read_controller_indices, read_management_version, set_controller_connectable,
-    set_controller_discoverable, set_controller_local_name, set_controller_pairable,
-    set_controller_powered,
+    discover_controllers, read_controller_indices, read_management_version,
+    set_controller_connectable, set_controller_discoverable, set_controller_local_name,
+    set_controller_pairable, set_controller_powered, MgmtBluetoothBackend, MgmtControllerEvent,
+    MgmtDiscoveryTransport,
 };
 
 fn parse_bool_arg(value: &str) -> Option<bool> {

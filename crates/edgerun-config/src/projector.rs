@@ -3,8 +3,8 @@
 //! Config changes are recorded as events in the stream. The projector
 //! replays these events to produce the current `ConfigState`.
 
-use crate::types::ConfigResource;
 use crate::parser::ConfigState;
+use crate::types::ConfigResource;
 
 /// A config change event stored in the event stream.
 #[derive(Debug, Clone)]
@@ -46,7 +46,8 @@ impl ConfigProjector {
     pub fn apply(&mut self, event: ConfigEvent) {
         match event.op {
             ConfigOp::Created | ConfigOp::Updated => {
-                self.resources.insert(event.resource.name().to_string(), event);
+                self.resources
+                    .insert(event.resource.name().to_string(), event);
             }
             ConfigOp::Deleted => {
                 self.resources.remove(event.resource.name());
@@ -63,7 +64,9 @@ impl ConfigProjector {
 
     /// Build the current ConfigState from all applied events.
     pub fn snapshot(&self) -> ConfigState {
-        let resources: Vec<_> = self.resources.values()
+        let resources: Vec<_> = self
+            .resources
+            .values()
             .map(|e| e.resource.clone())
             .collect();
 
@@ -115,7 +118,11 @@ mod tests {
             soa: SoaRecord {
                 mname: "ns1.example.com".to_string(),
                 rname: "admin.example.com".to_string(),
-                serial: 1, refresh: 3600, retry: 900, expire: 604800, minimum: 86400,
+                serial: 1,
+                refresh: 3600,
+                retry: 900,
+                expire: 604800,
+                minimum: 86400,
             },
             records: vec![],
             dnssec: None,

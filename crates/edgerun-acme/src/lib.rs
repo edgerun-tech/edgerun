@@ -7,24 +7,24 @@
 //! - Automatic certificate provisioning and renewal
 //! - Encrypted storage of private keys via edgerun-secret-service
 
-mod error;
-mod client;
-pub mod types;
 mod account;
-mod order;
-mod challenge;
-mod http_challenge;
-mod dns_challenge;
-mod tls_alpn_challenge;
 mod cert_store;
+mod challenge;
+mod client;
+mod dns_challenge;
+mod error;
+mod http_challenge;
+mod order;
+mod tls_alpn_challenge;
+pub mod types;
 
-pub use error::AcmeError;
-pub use client::{AcmeClient, AcmeConfig};
 pub use account::AccountKey;
-pub use order::Order;
+pub use cert_store::{CertInfo, CertStore, StoredCert};
 pub use challenge::Challenge;
-pub use http_challenge::{HttpChallengeHandler, HttpChallengeServer};
+pub use client::{AcmeClient, AcmeConfig};
 pub use dns_challenge::{DnsChallenge, DnsChallengeManager};
+pub use error::AcmeError;
+pub use http_challenge::{HttpChallengeHandler, HttpChallengeServer};
+pub use order::Order;
 pub use tls_alpn_challenge::{TlsAlpnChallenge, TlsAlpnManager};
-pub use cert_store::{CertStore, CertInfo, StoredCert};
-pub use types::{Directory, DirectoryUrl, OrderStatus, ChallengeType, ChallengeStatus};
+pub use types::{ChallengeStatus, ChallengeType, Directory, DirectoryUrl, OrderStatus};

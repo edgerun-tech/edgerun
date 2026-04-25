@@ -81,7 +81,9 @@ impl L2capSocket {
     pub fn new() -> GattResult<Self> {
         let fd = unsafe { socket(AF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP) };
         if fd < 0 {
-            return Err(GattError::SocketFailed("failed to create L2CAP socket".to_string()));
+            return Err(GattError::SocketFailed(
+                "failed to create L2CAP socket".to_string(),
+            ));
         }
         Ok(Self {
             fd,
@@ -136,11 +138,7 @@ impl L2capSocket {
         self.local_addr_type = addr_type;
     }
 
-    pub fn connect_to_device(
-        &mut self,
-        device_addr: &str,
-        addr_type: u8,
-    ) -> GattResult<()> {
+    pub fn connect_to_device(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
         let bdaddr = parse_bdaddr_string(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
@@ -211,15 +209,11 @@ impl L2capSocket {
         if rc < 0 {
             let err = io::Error::last_os_error();
             match err.kind() {
-                io::ErrorKind::ConnectionRefused => {
-                    Err(GattError::ConnectionRefused("device may not be in range or may reject connection".to_string()))
-                }
-                io::ErrorKind::TimedOut => {
-                    Err(GattError::Timeout(0))
-                }
-                io::ErrorKind::HostUnreachable => {
-                    Err(GattError::HostUnreachable)
-                }
+                io::ErrorKind::ConnectionRefused => Err(GattError::ConnectionRefused(
+                    "device may not be in range or may reject connection".to_string(),
+                )),
+                io::ErrorKind::TimedOut => Err(GattError::Timeout(0)),
+                io::ErrorKind::HostUnreachable => Err(GattError::HostUnreachable),
                 _ => Err(GattError::from(err)),
             }
         } else {
@@ -500,12 +494,7 @@ impl AttProtocol {
         self.send_recv(&req)
     }
 
-    pub fn read_by_type(
-        &mut self,
-        start: u16,
-        end: u16,
-        uuid: &[u8],
-    ) -> GattResult<Vec<u8>> {
+    pub fn read_by_type(&mut self, start: u16, end: u16, uuid: &[u8]) -> GattResult<Vec<u8>> {
         let mut req = vec![0x08];
         req.extend_from_slice(&start.to_le_bytes());
         req.extend_from_slice(&end.to_le_bytes());
@@ -526,12 +515,7 @@ impl AttProtocol {
         self.send_recv(&req)
     }
 
-    pub fn write_value(
-        &mut self,
-        handle: u16,
-        data: &[u8],
-        with_response: bool,
-    ) -> GattResult<()> {
+    pub fn write_value(&mut self, handle: u16, data: &[u8], with_response: bool) -> GattResult<()> {
         let opcode = if with_response { 0x12 } else { 0x52 };
         let mut req = vec![opcode];
         req.extend_from_slice(&handle.to_le_bytes());
@@ -557,12 +541,7 @@ impl AttProtocol {
         self.socket.send_data(&req, 500)
     }
 
-    pub fn prepare_write_value(
-        &mut self,
-        handle: u16,
-        offset: u16,
-        data: &[u8],
-    ) -> GattResult<()> {
+    pub fn prepare_write_value(&mut self, handle: u16, offset: u16, data: &[u8]) -> GattResult<()> {
         let mut req = vec![0x16];
         req.extend_from_slice(&handle.to_le_bytes());
         req.extend_from_slice(&offset.to_le_bytes());
@@ -739,9 +718,7 @@ mod tests {
         let socket = L2capSocket::new().unwrap();
         let mut proto = AttProtocol::new(socket);
         proto.set_mtu(50);
-        let data = vec![
-            0x11, 0x06, 0x01, 0x00, 0x08, 0x00, 0x00, 0x28,
-        ];
+        let data = vec![0x11, 0x06, 0x01, 0x00, 0x08, 0x00, 0x00, 0x28];
         let results = proto.parse_read_by_group_response(&data);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 0x0001);

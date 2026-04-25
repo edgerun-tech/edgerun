@@ -201,7 +201,10 @@ mod tests {
     #[test]
     fn seq_creates_seq_value() {
         let s = seq([yi64(1), yi64(2), yi64(3)]);
-        assert_eq!(s, Value::Seq(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
+        assert_eq!(
+            s,
+            Value::Seq(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
+        );
     }
 
     #[test]
@@ -277,7 +280,10 @@ mod tests {
         assert_eq!(Value::Bool(true), Value::Bool(true));
         assert_eq!(Value::Int(42), Value::Int(42));
         assert_eq!(Value::String("x".into()), Value::String("x".into()));
-        assert_eq!(Value::Seq(vec![Value::Int(1)]), Value::Seq(vec![Value::Int(1)]));
+        assert_eq!(
+            Value::Seq(vec![Value::Int(1)]),
+            Value::Seq(vec![Value::Int(1)])
+        );
     }
 
     #[test]

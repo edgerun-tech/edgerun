@@ -39,17 +39,31 @@ pub struct Flags {
 }
 
 impl Flags {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Format flags as an IMAP parenthesized list.
     pub fn format(&self) -> String {
         let mut parts = Vec::new();
-        if self.seen { parts.push("\\Seen"); }
-        if self.answered { parts.push("\\Answered"); }
-        if self.flagged { parts.push("\\Flagged"); }
-        if self.deleted { parts.push("\\Deleted"); }
-        if self.draft { parts.push("\\Draft"); }
-        if self.recent { parts.push("\\Recent"); }
+        if self.seen {
+            parts.push("\\Seen");
+        }
+        if self.answered {
+            parts.push("\\Answered");
+        }
+        if self.flagged {
+            parts.push("\\Flagged");
+        }
+        if self.deleted {
+            parts.push("\\Deleted");
+        }
+        if self.draft {
+            parts.push("\\Draft");
+        }
+        if self.recent {
+            parts.push("\\Recent");
+        }
         for kw in &self.keywords {
             parts.push(kw.as_str());
         }

@@ -10,15 +10,14 @@ struct InotifyEvent {
     mask: u32,
     cookie: u32,
     len: u32,
-    name: [ libc::c_char; 0 ],
+    name: [libc::c_char; 0],
 }
 
 pub struct Inotify {
     fd: i32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct WatchMask(u32);
 
 impl WatchMask {
@@ -40,7 +39,6 @@ impl WatchMask {
         self.0 & other.0 != 0
     }
 }
-
 
 impl core::ops::BitOr for WatchMask {
     type Output = Self;
@@ -97,7 +95,11 @@ impl Inotify {
             let name = if event_len > 0 {
                 let name_ptr = unsafe { (*ptr).name.as_ptr() };
                 Some(unsafe {
-                    std::ffi::OsStr::from_bytes(std::slice::from_raw_parts(name_ptr as *const u8, event_len)).to_owned()
+                    std::ffi::OsStr::from_bytes(std::slice::from_raw_parts(
+                        name_ptr as *const u8,
+                        event_len,
+                    ))
+                    .to_owned()
                 })
             } else {
                 None
@@ -140,18 +142,16 @@ pub struct Watches {
 }
 
 impl Watches {
-    pub fn add<P: AsRef<std::path::Path>>(&self, path: P, mask: WatchMask) -> io::Result<WatchDescriptor> {
+    pub fn add<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+        mask: WatchMask,
+    ) -> io::Result<WatchDescriptor> {
         let path_bytes = path.as_ref().as_os_str().as_bytes();
         let mut path_buf = path_bytes.to_vec();
         path_buf.push(0);
         let path_c = unsafe { std::ffi::CString::from_vec_unchecked(path_buf) };
-        let wd = unsafe {
-            libc::inotify_add_watch(
-                self.fd,
-                path_c.as_ptr(),
-                mask.0,
-            )
-        };
+        let wd = unsafe { libc::inotify_add_watch(self.fd, path_c.as_ptr(), mask.0) };
         if wd < 0 {
             return Err(io::Error::last_os_error());
         }

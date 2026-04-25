@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 
-use super::record::{DnsRecordType, DnsRecordData};
 use super::message::DnsRecord;
+use super::record::{DnsRecordData, DnsRecordType};
 
 /// A single DNS zone (authoritative for one domain).
 ///
@@ -71,7 +71,11 @@ impl DnsZone {
 
     /// Add an NS record.
     pub fn add_ns(&mut self, nameserver: &str) {
-        let rr = DnsRecord::ns(self.origin.clone(), nameserver.to_string(), self.default_ttl);
+        let rr = DnsRecord::ns(
+            self.origin.clone(),
+            nameserver.to_string(),
+            self.default_ttl,
+        );
         self.add_record(rr);
     }
 
@@ -117,7 +121,15 @@ impl DnsZone {
     }
 
     /// Add an SRV record.
-    pub fn add_srv(&mut self, name: &str, priority: u16, weight: u16, port: u16, target: &str, ttl: u32) {
+    pub fn add_srv(
+        &mut self,
+        name: &str,
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: &str,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
         let rr = DnsRecord {
             name: full_name,
@@ -135,11 +147,28 @@ impl DnsZone {
     }
 
     /// Add a NAPTR record (RFC 3403 — URI/telephone routing).
-    pub fn add_naptr(&mut self, name: &str, order: u16, preference: u16,
-                     flags: &str, services: &str, regexp: &str, replacement: &str, ttl: u32) {
+    pub fn add_naptr(
+        &mut self,
+        name: &str,
+        order: u16,
+        preference: u16,
+        flags: &str,
+        services: &str,
+        regexp: &str,
+        replacement: &str,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
-        let rr = DnsRecord::naptr(full_name, order, preference, flags.to_string(),
-                                  services.to_string(), regexp.to_string(), replacement.to_string(), ttl);
+        let rr = DnsRecord::naptr(
+            full_name,
+            order,
+            preference,
+            flags.to_string(),
+            services.to_string(),
+            regexp.to_string(),
+            replacement.to_string(),
+            ttl,
+        );
         self.add_record(rr);
     }
 
@@ -151,43 +180,93 @@ impl DnsZone {
     }
 
     /// Add a TLSA record (RFC 6698 — DANE certificate binding).
-    pub fn add_tlsa(&mut self, name: &str, usage: u8, selector: u8, matching_type: u8,
-                    certificate: Vec<u8>, ttl: u32) {
+    pub fn add_tlsa(
+        &mut self,
+        name: &str,
+        usage: u8,
+        selector: u8,
+        matching_type: u8,
+        certificate: Vec<u8>,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
         let rr = DnsRecord::tlsa(full_name, usage, selector, matching_type, certificate, ttl);
         self.add_record(rr);
     }
 
     /// Add an HTTPS/SVCB record (RFC 9460 — Service Binding).
-    pub fn add_https(&mut self, name: &str, priority: u16, target: &str, params: Vec<u8>, ttl: u32) {
+    pub fn add_https(
+        &mut self,
+        name: &str,
+        priority: u16,
+        target: &str,
+        params: Vec<u8>,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
         let rr = DnsRecord::svcb(full_name, priority, target.to_string(), params, ttl);
         self.add_record(rr);
     }
 
     /// Add a DS record (RFC 4034 — Delegation Signer).
-    pub fn add_ds(&mut self, name: &str, key_tag: u16, algorithm: u8, digest_type: u8,
-                  digest: Vec<u8>, ttl: u32) {
+    pub fn add_ds(
+        &mut self,
+        name: &str,
+        key_tag: u16,
+        algorithm: u8,
+        digest_type: u8,
+        digest: Vec<u8>,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
         let rr = DnsRecord::ds(full_name, key_tag, algorithm, digest_type, digest, ttl);
         self.add_record(rr);
     }
 
     /// Add a DNSKEY record (RFC 4034 — DNS Public Key).
-    pub fn add_dnskey(&mut self, name: &str, flags: u16, protocol: u8, algorithm: u8,
-                      public_key: Vec<u8>, ttl: u32) {
+    pub fn add_dnskey(
+        &mut self,
+        name: &str,
+        flags: u16,
+        protocol: u8,
+        algorithm: u8,
+        public_key: Vec<u8>,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
         let rr = DnsRecord::dnskey(full_name, flags, protocol, algorithm, public_key, ttl);
         self.add_record(rr);
     }
 
     /// Add an RRSIG record (RFC 4034 — RRset Signature).
-    pub fn add_rrsig(&mut self, name: &str, type_covered: u16, algorithm: u8, labels: u8,
-                     original_ttl: u32, expiration: u32, inception: u32, key_tag: u16,
-                     signer_name: &str, signature: Vec<u8>, ttl: u32) {
+    pub fn add_rrsig(
+        &mut self,
+        name: &str,
+        type_covered: u16,
+        algorithm: u8,
+        labels: u8,
+        original_ttl: u32,
+        expiration: u32,
+        inception: u32,
+        key_tag: u16,
+        signer_name: &str,
+        signature: Vec<u8>,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
-        let rr = DnsRecord::rrsig(full_name, type_covered, algorithm, labels, original_ttl,
-                                  expiration, inception, key_tag, signer_name.to_string(), signature, ttl);
+        let rr = DnsRecord::rrsig(
+            full_name,
+            type_covered,
+            algorithm,
+            labels,
+            original_ttl,
+            expiration,
+            inception,
+            key_tag,
+            signer_name.to_string(),
+            signature,
+            ttl,
+        );
         self.add_record(rr);
     }
 
@@ -199,11 +278,28 @@ impl DnsZone {
     }
 
     /// Add an NSEC3 record (RFC 5155 — Next SECure v3).
-    pub fn add_nsec3(&mut self, name: &str, hash_algorithm: u8, flags: u8, iterations: u16,
-                     salt: Vec<u8>, next_hashed_owner: Vec<u8>, type_bits: Vec<u8>, ttl: u32) {
+    pub fn add_nsec3(
+        &mut self,
+        name: &str,
+        hash_algorithm: u8,
+        flags: u8,
+        iterations: u16,
+        salt: Vec<u8>,
+        next_hashed_owner: Vec<u8>,
+        type_bits: Vec<u8>,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
-        let rr = DnsRecord::nsec3(full_name, hash_algorithm, flags, iterations, salt,
-                                  next_hashed_owner, type_bits, ttl);
+        let rr = DnsRecord::nsec3(
+            full_name,
+            hash_algorithm,
+            flags,
+            iterations,
+            salt,
+            next_hashed_owner,
+            type_bits,
+            ttl,
+        );
         self.add_record(rr);
     }
 
@@ -222,10 +318,19 @@ impl DnsZone {
     }
 
     /// Add a LOC record (RFC 1876 — Location).
-    pub fn add_loc(&mut self, name: &str, size: u32, latitude: u32, longitude: u32,
-                   altitude: u32, ttl: u32) {
+    pub fn add_loc(
+        &mut self,
+        name: &str,
+        size: u32,
+        latitude: u32,
+        longitude: u32,
+        altitude: u32,
+        ttl: u32,
+    ) {
         let full_name = self.full_name(name);
-        let rr = DnsRecord::loc(full_name, 0, size, 18582825, 18582825, latitude, longitude, altitude, ttl);
+        let rr = DnsRecord::loc(
+            full_name, 0, size, 18582825, 18582825, latitude, longitude, altitude, ttl,
+        );
         self.add_record(rr);
     }
 
@@ -282,7 +387,11 @@ impl DnsZone {
             if qtype == DnsRecordType::ANY {
                 Some(records.clone())
             } else {
-                let matching: Vec<_> = records.iter().filter(|r| r.rtype == qtype).cloned().collect();
+                let matching: Vec<_> = records
+                    .iter()
+                    .filter(|r| r.rtype == qtype)
+                    .cloned()
+                    .collect();
                 if !matching.is_empty() {
                     Some(matching)
                 } else {
@@ -324,7 +433,8 @@ impl DnsZone {
                 if qtype == DnsRecordType::ANY {
                     return Some(records.clone());
                 }
-                let matching: Vec<_> = records.iter()
+                let matching: Vec<_> = records
+                    .iter()
                     .filter(|r| r.rtype == qtype)
                     .cloned()
                     .collect();
@@ -338,7 +448,10 @@ impl DnsZone {
     /// Get all records for a name.
     pub fn get_records(&self, name: &str) -> Vec<&DnsRecord> {
         let full_name = self.full_name(name).to_lowercase();
-        self.records.get(&full_name).map(|v| v.iter().collect()).unwrap_or_default()
+        self.records
+            .get(&full_name)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
     }
 
     /// Get all names in this zone.
@@ -438,7 +551,9 @@ mod tests {
         zone.add_a("www", Ipv4Addr::new(192, 168, 1, 1), 3600);
         zone.add_cname("blog", "www.example.com", 3600);
 
-        let cname_records = zone.resolve("blog.example.com", DnsRecordType::CNAME).unwrap();
+        let cname_records = zone
+            .resolve("blog.example.com", DnsRecordType::CNAME)
+            .unwrap();
         assert_eq!(cname_records.len(), 1);
         if let DnsRecordData::CNAME(target) = &cname_records[0].data {
             assert_eq!(target, "www.example.com");
@@ -548,7 +663,9 @@ mod tests {
         zone.add_a("*", Ipv4Addr::new(10, 0, 0, 1), 300);
         zone.add_a("*.sub", Ipv4Addr::new(10, 0, 1, 1), 300);
 
-        let records = zone.resolve("foo.sub.example.com", DnsRecordType::A).unwrap();
+        let records = zone
+            .resolve("foo.sub.example.com", DnsRecordType::A)
+            .unwrap();
         assert_eq!(records.len(), 1);
         if let DnsRecordData::A(ip) = &records[0].data {
             assert_eq!(*ip, Ipv4Addr::new(10, 0, 1, 1)); // more specific wildcard

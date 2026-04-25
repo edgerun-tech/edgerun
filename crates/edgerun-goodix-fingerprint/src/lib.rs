@@ -537,18 +537,10 @@ fn ensure_goodix_ok(result: u8, context: &'static str) -> Result<(), GoodixFinge
     if result >= GOODIX_FAILED {
         // Classify known error codes for better diagnostics
         let err_msg = match result {
-            GOODIX_ERROR_FINGER_ID_NOEXIST => {
-                "finger ID does not exist"
-            }
-            GOODIX_ERROR_TEMPLATE_INCOMPLETE => {
-                "template incomplete — try re-enrolling"
-            }
-            GOODIX_ERROR_WAIT_FINGER_UP_TIMEOUT => {
-                "timeout waiting for finger lift"
-            }
-            GOODIX_ERROR_NO_AVAILABLE_SPACE => {
-                "no available storage space — delete some templates"
-            }
+            GOODIX_ERROR_FINGER_ID_NOEXIST => "finger ID does not exist",
+            GOODIX_ERROR_TEMPLATE_INCOMPLETE => "template incomplete — try re-enrolling",
+            GOODIX_ERROR_WAIT_FINGER_UP_TIMEOUT => "timeout waiting for finger lift",
+            GOODIX_ERROR_NO_AVAILABLE_SPACE => "no available storage space — delete some templates",
             _ => "unknown error",
         };
         return Err(GoodixFingerprintError::Parse(format!(
@@ -1444,8 +1436,9 @@ fn read_file_trimmed(path: PathBuf) -> Result<String, GoodixFingerprintError> {
 
 fn read_hex_u16(path: PathBuf) -> Result<u16, GoodixFingerprintError> {
     let text = read_file_trimmed(path)?;
-    edgerun_encoding::hex::parse_hex_int(text.trim_start_matches("0x"))
-        .ok_or_else(|| GoodixFingerprintError::Parse(format!("invalid hex device attribute: {text}")))
+    edgerun_encoding::hex::parse_hex_int(text.trim_start_matches("0x")).ok_or_else(|| {
+        GoodixFingerprintError::Parse(format!("invalid hex device attribute: {text}"))
+    })
 }
 
 fn read_dec_u8(path: PathBuf) -> Result<u8, GoodixFingerprintError> {

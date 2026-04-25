@@ -6,8 +6,8 @@ use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::os::raw::c_int;
 use std::time::{Duration, Instant};
 
-use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 use super::lease::Lease;
+use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 
 // ---------------------------------------------------------------------------
 // Socket options (for SO_BROADCAST, SO_BINDTODEVICE)
@@ -88,7 +88,10 @@ impl DhcpClient {
             };
             if rc < 0 {
                 // Non-fatal — may work without it
-                eprintln!("edgerun-dhcp: warning: SO_BINDTODEVICE failed for {}", interface);
+                eprintln!(
+                    "edgerun-dhcp: warning: SO_BINDTODEVICE failed for {}",
+                    interface
+                );
             }
         }
 
@@ -130,9 +133,10 @@ impl DhcpClient {
 
     /// Renew the current lease.
     pub fn renew_lease(&mut self) -> Result<Lease, io::Error> {
-        let lease = self.current_lease.as_ref().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "No active lease to renew")
-        })?;
+        let lease = self
+            .current_lease
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No active lease to renew"))?;
 
         let ip = lease.ip;
         let server_id = self.server_id.ok_or_else(|| {
@@ -152,13 +156,14 @@ impl DhcpClient {
 
     /// Release the current lease.
     pub fn release_lease(&mut self) -> Result<(), io::Error> {
-        let lease = self.current_lease.take().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "No active lease to release")
-        })?;
+        let lease = self
+            .current_lease
+            .take()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No active lease to release"))?;
 
-        let server_id = self.server_id.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "No server ID known")
-        })?;
+        let server_id = self
+            .server_id
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No server ID known"))?;
 
         let msg = DhcpMessage::release(self.xid, self.mac, lease.ip, server_id);
         // Send to server (unicast)
@@ -174,10 +179,8 @@ impl DhcpClient {
     fn send_discover(&mut self) -> Result<(), io::Error> {
         let msg = DhcpMessage::discover(self.xid, self.mac);
         let wire = msg.to_wire();
-        let broadcast = SocketAddr::new(
-            std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
-            DHCP_SERVER_PORT,
-        );
+        let broadcast =
+            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
         self.socket.send_to(&wire, broadcast)?;
         Ok(())
     }
@@ -185,10 +188,8 @@ impl DhcpClient {
     fn send_request(&mut self, ip: Ipv4Addr, server_id: Ipv4Addr) -> Result<(), io::Error> {
         let msg = DhcpMessage::request(self.xid, self.mac, ip, server_id);
         let wire = msg.to_wire();
-        let broadcast = SocketAddr::new(
-            std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
-            DHCP_SERVER_PORT,
-        );
+        let broadcast =
+            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
         self.socket.send_to(&wire, broadcast)?;
         Ok(())
     }
@@ -293,8 +294,12 @@ impl DhcpClient {
 fn read_mac_from_interface(interface: &str) -> Result<[u8; 6], io::Error> {
     let path = format!("/sys/class/net/{}/address", interface);
     let mac_str = std::fs::read_to_string(&path)?;
-    edgerun_encoding::hex::parse_mac(mac_str.trim())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, format!("Invalid MAC address: {}", mac_str.trim())))
+    edgerun_encoding::hex::parse_mac(mac_str.trim()).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid MAC address: {}", mac_str.trim()),
+        )
+    })
 }
 
 fn random_xid() -> u32 {

@@ -11,7 +11,7 @@
 /// Total runtime: ~1-2 seconds.
 use std::time::{Duration, Instant};
 
-use crate::{MeshFrame, MeshFrameHeader, FrameType, NodeID};
+use crate::{FrameType, MeshFrame, MeshFrameHeader, NodeID};
 
 // ===========================================================================
 // Mesh Frame Encode/Decode Benchmark
@@ -71,8 +71,7 @@ pub fn benchmark_frame_sign_verify() -> u64 {
     // Generate a real signing key using getrandom
     let mut key_bytes = [0u8; 32];
     edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
-    let signing_key = SigningKey::from_bytes((&key_bytes).into())
-        .expect("invalid key bytes");
+    let signing_key = SigningKey::from_bytes((&key_bytes).into()).expect("invalid key bytes");
     let src_id = node_id_from_signing_key(&signing_key);
 
     let dst_id = node_id_with_byte(0xBB);
@@ -179,7 +178,9 @@ pub fn benchmark_udp_throughput() -> u64 {
 
     // Drain remaining
     receiver.set_nonblocking(false).ok();
-    receiver.set_read_timeout(Some(Duration::from_millis(10))).ok();
+    receiver
+        .set_read_timeout(Some(Duration::from_millis(10)))
+        .ok();
     while pending > 0 {
         match receiver.recv(&mut recv_buf) {
             Ok(_) => {

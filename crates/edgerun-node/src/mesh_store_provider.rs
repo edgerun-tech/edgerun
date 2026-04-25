@@ -36,26 +36,34 @@ pub fn make_mesh_command_handler(
 
         edgerun_rt::spawn(async move {
             let raw = decrypted.clone();
-            if let Ok(command) = edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&decrypted[..]) {
+            if let Ok(command) =
+                edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&decrypted[..])
+            {
                 // Fire-and-forget — no reply channel needed.
-                let _ = tx.send(StoreRequest::Command {
-                    raw_bytes: raw,
-                    command,
-                    peer_id: Some(peer_id_bytes),
-                    reply_tx: None,
-                }).await;
+                let _ = tx
+                    .send(StoreRequest::Command {
+                        raw_bytes: raw,
+                        command,
+                        peer_id: Some(peer_id_bytes),
+                        reply_tx: None,
+                    })
+                    .await;
                 return;
             }
 
             let raw = decrypted.clone();
-            if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&decrypted[..]) {
+            if let Ok(query) =
+                edgerun_proto::edgerun::v0::access::QueryRequest::decode(&decrypted[..])
+            {
                 // Fire-and-forget — no reply channel needed.
-                let _ = tx.send(StoreRequest::Query {
-                    raw_bytes: raw,
-                    query,
-                    peer_id: Some(peer_id_bytes),
-                    reply_tx: None,
-                }).await;
+                let _ = tx
+                    .send(StoreRequest::Query {
+                        raw_bytes: raw,
+                        query,
+                        peer_id: Some(peer_id_bytes),
+                        reply_tx: None,
+                    })
+                    .await;
             }
         });
     }

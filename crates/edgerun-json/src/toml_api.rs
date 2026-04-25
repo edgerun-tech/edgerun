@@ -1,17 +1,17 @@
 //! TOML API compatible with toml crate.
-//! 
+//!
 //! This module provides drop-in replacements for toml functionality.
 
-#[cfg(feature = "std")]
-use std::{format, string::String};
-#[cfg(not(feature = "std"))]
-use alloc::{format, string::String};
 #[cfg(not(feature = "std"))]
 use alloc::borrow::ToOwned;
 #[cfg(not(feature = "std"))]
 use alloc::string::ToString;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String};
+#[cfg(feature = "std")]
+use std::{format, string::String};
 
 use crate::{JsonValue, Map, Number};
 
@@ -94,7 +94,10 @@ impl TomlValue {
     }
 
     pub fn get(&self, key: &str) -> Option<&TomlValue> {
-        self.as_table()?.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+        self.as_table()?
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v)
     }
 
     pub fn get_index(&self, index: usize) -> Option<&TomlValue> {
@@ -197,17 +200,17 @@ fn parse_toml_simple(s: &str) -> Result<TomlValue, TomlError> {
     let s = s.trim();
 
     if s.starts_with('"') && s.matches('"').count() >= 3 {
-        let inner = &s[1..s.len()-1];
+        let inner = &s[1..s.len() - 1];
         return Ok(TomlValue::String(unescape_toml_string(inner)));
     }
 
     if s.starts_with('\'') && s.matches('\'').count() >= 2 {
-        let inner = &s[1..s.len()-1];
+        let inner = &s[1..s.len() - 1];
         return Ok(TomlValue::String(inner.to_string()));
     }
 
     if s.starts_with('[') && s.ends_with(']') {
-        let inner = &s[1..s.len()-1];
+        let inner = &s[1..s.len() - 1];
         let items: Vec<&str> = inner.split(',').collect();
         let mut arr = Vec::new();
         for item in items {
@@ -265,7 +268,11 @@ pub fn to_toml_string(value: &TomlValue) -> Result<String, TomlError> {
     Ok(output)
 }
 
-fn to_toml_value(output: &mut String, value: &TomlValue, _unused_indent: usize) -> Result<(), TomlError> {
+fn to_toml_value(
+    output: &mut String,
+    value: &TomlValue,
+    _unused_indent: usize,
+) -> Result<(), TomlError> {
     match value {
         TomlValue::String(s) => {
             if s.contains('"') || s.contains('\n') || s.contains('\\') || s.contains('#') {
@@ -363,12 +370,12 @@ pub fn toml_to_json(value: TomlValue) -> JsonValue {
         TomlValue::String(s) => JsonValue::String(s),
         TomlValue::Integer(i) => JsonValue::Number(Number::I64(i)),
         TomlValue::Float(ref f) => {
-    if let Some(n) = Number::from_f64(*f) {
-        JsonValue::Number(n)
-    } else {
-        JsonValue::Null
-    }
-}
+            if let Some(n) = Number::from_f64(*f) {
+                JsonValue::Number(n)
+            } else {
+                JsonValue::Null
+            }
+        }
         TomlValue::Boolean(b) => JsonValue::Bool(b),
         TomlValue::Datetime(s) => JsonValue::String(s),
         TomlValue::Array(arr) => JsonValue::Array(arr.into_iter().map(toml_to_json).collect()),

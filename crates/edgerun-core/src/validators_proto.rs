@@ -167,14 +167,16 @@ fn verify_event_signature(event: &EventEnvelope, key: &[u8; 64]) -> bool {
     let canonical = canonical_bytes(&record, true);
     let record_hash = crate::crypto::sha256(&canonical);
 
-    let sig_input = crate::crypto::signature_input(
-        crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
-        &record_hash,
-    );
+    let sig_input =
+        crate::crypto::signature_input(crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE, &record_hash);
 
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
-    let Ok(r): Result<[u8; 32], _> = sig.value[..32].try_into() else { return false };
-    let Ok(s): Result<[u8; 32], _> = sig.value[32..].try_into() else { return false };
+    let Ok(r): Result<[u8; 32], _> = sig.value[..32].try_into() else {
+        return false;
+    };
+    let Ok(s): Result<[u8; 32], _> = sig.value[32..].try_into() else {
+        return false;
+    };
     let Ok(ecdsa_sig) = edgerun_crypto::p256::ecdsa::Signature::from_scalars(r, s) else {
         return false;
     };
@@ -209,10 +211,7 @@ pub fn validate_delegation_chain(
             .recipient
             .as_ref()
             .map(|r| r.identity_id.clone());
-        let curr_issuer = chain[i]
-            .issuer
-            .as_ref()
-            .map(|r| r.identity_id.clone());
+        let curr_issuer = chain[i].issuer.as_ref().map(|r| r.identity_id.clone());
         if prev_recipient != curr_issuer {
             return reject(
                 ReasonCode::AuthorityDenied,
@@ -249,8 +248,7 @@ pub fn validate_delegation_chain(
 
         // Check timing: not_before
         if let Some(ref not_before) = delegation.not_before {
-            let not_before_ms =
-                not_before.seconds * 1000 + (not_before.nanos as i64) / 1_000_000;
+            let not_before_ms = not_before.seconds * 1000 + (not_before.nanos as i64) / 1_000_000;
             if now_ms < not_before_ms {
                 return defer(
                     ReasonCode::TimeInvalid,
@@ -427,7 +425,7 @@ pub use crate::command::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{EventEnvelope, EventType, NodeRef, IdentityRef};
+    use crate::protocol::{EventEnvelope, EventType, IdentityRef, NodeRef};
 
     fn make_event(seq: u64, prev_hash: Option<crate::protocol::Digest>) -> EventEnvelope {
         EventEnvelope {
@@ -478,10 +476,13 @@ mod tests {
 
     #[test]
     fn stream_append_defers_without_genesis() {
-        let event = make_event(1, Some(crate::protocol::Digest {
-            algorithm: 1,
-            value: vec![1; 32],
-        }));
+        let event = make_event(
+            1,
+            Some(crate::protocol::Digest {
+                algorithm: 1,
+                value: vec![1; 32],
+            }),
+        );
         let result = validate_stream_append(&event, None, None);
         assert_eq!(result.verdict, crate::result::Verdict::Defer);
     }
@@ -489,10 +490,13 @@ mod tests {
     #[test]
     fn stream_append_defers_missing_predecessor() {
         let genesis = make_genesis_event();
-        let event = make_event(5, Some(crate::protocol::Digest {
-            algorithm: 1,
-            value: vec![1; 32],
-        }));
+        let event = make_event(
+            5,
+            Some(crate::protocol::Digest {
+                algorithm: 1,
+                value: vec![1; 32],
+            }),
+        );
         let result = validate_stream_append(&event, Some(&genesis), None);
         assert_eq!(result.verdict, crate::result::Verdict::Defer);
     }
@@ -500,10 +504,13 @@ mod tests {
     #[test]
     fn stream_append_rejects_prev_hash_mismatch() {
         let genesis = make_genesis_event();
-        let event = make_event(1, Some(crate::protocol::Digest {
-            algorithm: 1,
-            value: vec![0xFF; 32],
-        }));
+        let event = make_event(
+            1,
+            Some(crate::protocol::Digest {
+                algorithm: 1,
+                value: vec![0xFF; 32],
+            }),
+        );
         let result = validate_stream_append(&event, Some(&genesis), None);
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::CryptoInvalid));
@@ -523,8 +530,16 @@ mod tests {
         let deleg = DelegationRecord {
             record_version: 1,
             delegation_id: b"deleg-1".to_vec(),
-            issuer: Some(IdentityRef { identity_id: b"root".to_vec(), identity_kind: None, key_hint: None }),
-            recipient: Some(IdentityRef { identity_id: b"user".to_vec(), identity_kind: None, key_hint: None }),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: b"user".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
             issued_at: None,
             not_before: None,
             expires_at: None,
@@ -532,10 +547,17 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(crate::protocol::Signature { algorithm: 1, value: vec![1; 64] }),
+            signature: Some(crate::protocol::Signature {
+                algorithm: 1,
+                value: vec![1; 64],
+            }),
         };
 
-        let result = validate_delegation_chain(&[deleg], 1_700_000_000_000, &std::collections::HashSet::new());
+        let result = validate_delegation_chain(
+            &[deleg],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
         assert_eq!(result.verdict, crate::result::Verdict::Accept);
     }
 
@@ -544,8 +566,16 @@ mod tests {
         let deleg = DelegationRecord {
             record_version: 1,
             delegation_id: b"deleg-1".to_vec(),
-            issuer: Some(IdentityRef { identity_id: b"root".to_vec(), identity_kind: None, key_hint: None }),
-            recipient: Some(IdentityRef { identity_id: b"user".to_vec(), identity_kind: None, key_hint: None }),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: b"user".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
             issued_at: None,
             not_before: None,
             expires_at: None,
@@ -553,7 +583,10 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(crate::protocol::Signature { algorithm: 1, value: vec![1; 64] }),
+            signature: Some(crate::protocol::Signature {
+                algorithm: 1,
+                value: vec![1; 64],
+            }),
         };
 
         let mut revoked = std::collections::HashSet::new();
@@ -569,8 +602,16 @@ mod tests {
         let parent = DelegationRecord {
             record_version: 1,
             delegation_id: b"deleg-1".to_vec(),
-            issuer: Some(IdentityRef { identity_id: b"root".to_vec(), identity_kind: None, key_hint: None }),
-            recipient: Some(IdentityRef { identity_id: b"mid".to_vec(), identity_kind: None, key_hint: None }),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: b"mid".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
             issued_at: None,
             not_before: None,
             expires_at: None,
@@ -578,14 +619,25 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(crate::protocol::Signature { algorithm: 1, value: vec![1; 64] }),
+            signature: Some(crate::protocol::Signature {
+                algorithm: 1,
+                value: vec![1; 64],
+            }),
         };
 
         let child = DelegationRecord {
             record_version: 1,
             delegation_id: b"deleg-2".to_vec(),
-            issuer: Some(IdentityRef { identity_id: b"OTHER".to_vec(), identity_kind: None, key_hint: None }), // != "mid"
-            recipient: Some(IdentityRef { identity_id: b"user".to_vec(), identity_kind: None, key_hint: None }),
+            issuer: Some(IdentityRef {
+                identity_id: b"OTHER".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }), // != "mid"
+            recipient: Some(IdentityRef {
+                identity_id: b"user".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
             issued_at: None,
             not_before: None,
             expires_at: None,
@@ -593,10 +645,17 @@ mod tests {
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
-            signature: Some(crate::protocol::Signature { algorithm: 1, value: vec![1; 64] }),
+            signature: Some(crate::protocol::Signature {
+                algorithm: 1,
+                value: vec![1; 64],
+            }),
         };
 
-        let result = validate_delegation_chain(&[parent, child], 1_700_000_000_000, &std::collections::HashSet::new());
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
     }
@@ -608,7 +667,11 @@ mod tests {
             snapshot_id: b"snap-1".to_vec(),
             view_type: "timeline".into(),
             view_version: 1,
-            producer: Some(IdentityRef { identity_id: b"trusted".to_vec(), identity_kind: None, key_hint: None }),
+            producer: Some(IdentityRef {
+                identity_id: b"trusted".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
             produced_at: None,
             base_heads: vec![crate::protocol::HeadRef {
                 stream_id: b"stream-1".to_vec(),
@@ -618,7 +681,10 @@ mod tests {
             base_checkpoints: vec![],
             scope: None,
             completeness: 0,
-            payload_object: Some(crate::protocol::ObjectRef { object_id: b"obj-1".to_vec(), object_kind: None }),
+            payload_object: Some(crate::protocol::ObjectRef {
+                object_id: b"obj-1".to_vec(),
+                object_kind: None,
+            }),
             supersedes: None,
             snapshot_metadata: None,
             signature: None,
@@ -635,7 +701,11 @@ mod tests {
             snapshot_id: b"snap-1".to_vec(),
             view_type: "timeline".into(),
             view_version: 1,
-            producer: Some(IdentityRef { identity_id: b"untrusted".to_vec(), identity_kind: None, key_hint: None }),
+            producer: Some(IdentityRef {
+                identity_id: b"untrusted".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
             produced_at: None,
             base_heads: vec![crate::protocol::HeadRef {
                 stream_id: b"stream-1".to_vec(),
@@ -645,7 +715,10 @@ mod tests {
             base_checkpoints: vec![],
             scope: None,
             completeness: 0,
-            payload_object: Some(crate::protocol::ObjectRef { object_id: b"obj-1".to_vec(), object_kind: None }),
+            payload_object: Some(crate::protocol::ObjectRef {
+                object_id: b"obj-1".to_vec(),
+                object_kind: None,
+            }),
             supersedes: None,
             snapshot_metadata: None,
             signature: None,
@@ -662,7 +735,10 @@ mod tests {
     // ------------------------------------------------------------------
 
     /// Signs an event with a real ECDSA P-256 key and attaches the signature.
-    fn sign_event_envelope(event: &EventEnvelope, signing_key: &edgerun_crypto::p256::ecdsa::SigningKey) -> EventEnvelope {
+    fn sign_event_envelope(
+        event: &EventEnvelope,
+        signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
+    ) -> EventEnvelope {
         let record = ProtocolRecord::EventEnvelope(event.clone());
         let canonical = canonical_bytes(&record, true);
         let record_hash = crate::crypto::sha256(&canonical);
@@ -671,7 +747,8 @@ mod tests {
             signing_key,
             crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
             &record_hash,
-        ).expect("signing failed");
+        )
+        .expect("signing failed");
 
         let mut event = event.clone();
         event.signature = Some(crate::protocol::Signature {
@@ -683,7 +760,8 @@ mod tests {
 
     #[test]
     fn event_signature_valid_is_accepted() {
-        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 
@@ -696,7 +774,8 @@ mod tests {
 
     #[test]
     fn event_signature_invalid_is_rejected() {
-        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 
@@ -715,11 +794,13 @@ mod tests {
 
     #[test]
     fn event_signature_wrong_key_is_rejected() {
-        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 
-        let other_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[99u8; 32].into()).unwrap();
+        let other_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[99u8; 32].into()).unwrap();
 
         let genesis = make_genesis_event();
         let signed = sign_event_envelope(&genesis, &other_key);
@@ -732,7 +813,8 @@ mod tests {
 
     #[test]
     fn event_signature_bogus_bytes_are_rejected() {
-        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 

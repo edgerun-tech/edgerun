@@ -93,4 +93,3 @@ pub fn validate_snapshot_case(
     }
     reject(ReasonCode::SnapshotBaseConflict, empty_map(), empty_map())
 }
-

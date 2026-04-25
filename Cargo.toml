@@ -106,8 +106,16 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "MIT"
-publish = false
+publish = true
 version = "0.1.0"
+
+# Version management:
+# - Run: cargo install cargo-public-api
+# - CI automatically bumps version on main push based on API changes:
+#   - patch: bug fixes only, no API changes
+#   - minor: new public APIs added
+#   - major: public APIs removed/renamed
+# - Git tag triggers release build
 
 [profile.release]
 panic = "abort"

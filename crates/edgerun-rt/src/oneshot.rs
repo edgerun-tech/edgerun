@@ -3,10 +3,10 @@
 //! A `Sender` sends exactly one value to a `Receiver`.
 //! The receiver gets the value once; further sends fail.
 
+use crate::sync::{Condvar, Mutex};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
 /// Creates a new oneshot channel.
@@ -18,7 +18,9 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
         cvar: Condvar::new(),
     });
     (
-        Sender { inner: Some(inner.clone()) },
+        Sender {
+            inner: Some(inner.clone()),
+        },
         Receiver { inner },
     )
 }
@@ -163,7 +165,10 @@ mod tests {
         let (tx, rx) = channel::<i32>();
         tx.send(42).unwrap();
         let mut rx = rx;
-        assert!(matches!(Pin::new(&mut rx).poll(&mut cx()), Poll::Ready(Ok(42))));
+        assert!(matches!(
+            Pin::new(&mut rx).poll(&mut cx()),
+            Poll::Ready(Ok(42))
+        ));
     }
 
     #[test]
@@ -178,7 +183,10 @@ mod tests {
         let (tx, rx) = channel::<i32>();
         drop(tx);
         let mut rx = rx;
-        assert!(matches!(Pin::new(&mut rx).poll(&mut cx()), Poll::Ready(Err(_))));
+        assert!(matches!(
+            Pin::new(&mut rx).poll(&mut cx()),
+            Poll::Ready(Err(_))
+        ));
     }
 
     #[test]
@@ -188,6 +196,9 @@ mod tests {
         // Can't call send again — sender consumed by send().
         // But verify the receiver got the value.
         let mut rx = rx;
-        assert!(matches!(Pin::new(&mut rx).poll(&mut cx()), Poll::Ready(Ok(42))));
+        assert!(matches!(
+            Pin::new(&mut rx).poll(&mut cx()),
+            Poll::Ready(Ok(42))
+        ));
     }
 }

@@ -19,20 +19,18 @@
 
 use edgerun_crypto::getrandom;
 use edgerun_crypto::CipherSuite;
+use edgerun_tls::certificate_gen::CertificateAndKey;
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use edgerun_tls::prf::{
-    Hasher, Tls13KeySchedule, TrafficKeys,
-    quic_initial_server_keys, quic_traffic_keys, quic_hp_key,
-    INITIAL_SALT_V1,
+    quic_hp_key, quic_initial_server_keys, quic_traffic_keys, Hasher, Tls13KeySchedule,
+    TrafficKeys, INITIAL_SALT_V1,
 };
 use edgerun_tls::server::client_hello::ClientHello;
 use edgerun_tls::server::message_builder::{
-    build_server_hello, build_encrypted_extensions,
-    build_certificate_message, build_certificate_verify,
-    build_finished_message, compute_server_finished_verify_data,
+    build_certificate_message, build_certificate_verify, build_encrypted_extensions,
+    build_finished_message, build_server_hello, compute_server_finished_verify_data,
 };
-use edgerun_tls::certificate_gen::CertificateAndKey;
 
 use super::crypto::ProtectionKeys;
 use super::ConnectionId;
@@ -137,8 +135,8 @@ impl QuicTlsServerHandshaker {
         let mut server_random = [0u8; 32];
         getrandom::fill(&mut server_random).expect("CSPRNG failure");
 
-        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519)
-            .expect("X25519 key generation failed");
+        let key_pair =
+            EcdhKeyPair::generate(KeyExchangeGroup::X25519).expect("X25519 key generation failed");
 
         QuicTlsServerHandshaker {
             key_schedule: None,
@@ -273,7 +271,9 @@ impl QuicTlsServerHandshaker {
     ///
     /// Must be called after `process_client_hello()` succeeds.
     pub fn handshake_keys(&self) -> Result<ProtectionKeys, String> {
-        let ks = self.key_schedule.as_ref()
+        let ks = self
+            .key_schedule
+            .as_ref()
             .ok_or_else(|| "Key schedule not initialized".to_string())?;
 
         let transcript_hash = self.hasher.hash(&self.transcript);
@@ -284,8 +284,18 @@ impl QuicTlsServerHandshaker {
         // From server perspective:
         // - write: use server_hs_secret (server encrypts with its own secret)
         // - read: use client_hs_secret (server decrypts client's encrypted data)
-        let write = quic_traffic_keys(&server_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
-        let read = quic_traffic_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let write = quic_traffic_keys(
+            &server_hs_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
+        let read = quic_traffic_keys(
+            &client_hs_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
 
         Ok(ProtectionKeys::new(
             CipherSuite::TLS_AES_128_GCM_SHA256,
@@ -302,8 +312,9 @@ impl QuicTlsServerHandshaker {
     /// Returns a tuple of:
     /// - `(handshake_crypto_data, client_finished_verify_data)` — the data to send and the expected client verify data
     pub fn build_encrypted_handshake(&self) -> Result<(Vec<u8>, Vec<u8>), String> {
-        let ks = self.key_schedule.as_ref()
-            .ok_or_else(|| "Key schedule not initialized — process_client_hello first".to_string())?;
+        let ks = self.key_schedule.as_ref().ok_or_else(|| {
+            "Key schedule not initialized — process_client_hello first".to_string()
+        })?;
 
         let transcript_hash = self.hasher.hash(&self.transcript);
 
@@ -318,8 +329,12 @@ impl QuicTlsServerHandshaker {
         output.extend_from_slice(&cert_msg);
 
         // 3. CertificateVerify
-        let cv = build_certificate_verify(&self.transcript, &self.cert_and_key.signing_key, &self.hasher)
-            .map_err(|e| format!("CertificateVerify build failed: {:?}", e))?;
+        let cv = build_certificate_verify(
+            &self.transcript,
+            &self.cert_and_key.signing_key,
+            &self.hasher,
+        )
+        .map_err(|e| format!("CertificateVerify build failed: {:?}", e))?;
         output.extend_from_slice(&cv);
 
         // 4. Finished
@@ -329,7 +344,9 @@ impl QuicTlsServerHandshaker {
         let pre_finished_hash = self.hasher.hash(&pre_finished_transcript);
 
         // Derive finished_key from server_hs_secret (RFC 8446 §4.4.4)
-        let server_finished_key = self.hasher.expand_label(&server_hs_secret, "finished", &[], self.hasher.len());
+        let server_finished_key =
+            self.hasher
+                .expand_label(&server_hs_secret, "finished", &[], self.hasher.len());
 
         let verify_data = match self.hasher {
             Hasher::Sha256 => edgerun_crypto::hmac_sha256(&server_finished_key, &pre_finished_hash),
@@ -344,7 +361,9 @@ impl QuicTlsServerHandshaker {
         // The client's Finished verify_data is computed over the transcript INCLUDING
         // the server's Finished message (RFC 8446 §4.4.4).
         let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
-        let client_finished_key = self.hasher.expand_label(&client_hs_secret, "finished", &[], self.hasher.len());
+        let client_finished_key =
+            self.hasher
+                .expand_label(&client_hs_secret, "finished", &[], self.hasher.len());
 
         // Build the full transcript including server's Finished for client's verify_data
         let mut full_transcript = pre_finished_transcript.clone();
@@ -352,8 +371,12 @@ impl QuicTlsServerHandshaker {
         let full_transcript_hash = self.hasher.hash(&full_transcript);
 
         let client_verify_data = match self.hasher {
-            Hasher::Sha256 => edgerun_crypto::hmac_sha256(&client_finished_key, &full_transcript_hash),
-            Hasher::Sha384 => edgerun_crypto::hmac_sha384(&client_finished_key, &full_transcript_hash),
+            Hasher::Sha256 => {
+                edgerun_crypto::hmac_sha256(&client_finished_key, &full_transcript_hash)
+            }
+            Hasher::Sha384 => {
+                edgerun_crypto::hmac_sha384(&client_finished_key, &full_transcript_hash)
+            }
         };
 
         Ok((output, client_verify_data))
@@ -362,7 +385,11 @@ impl QuicTlsServerHandshaker {
     /// Verify the client's Finished message.
     ///
     /// Returns `Ok(())` if the verify_data matches, or an error string.
-    pub fn verify_client_finished(&self, client_verify_data: &[u8], expected: &[u8]) -> Result<(), String> {
+    pub fn verify_client_finished(
+        &self,
+        client_verify_data: &[u8],
+        expected: &[u8],
+    ) -> Result<(), String> {
         if client_verify_data.len() != expected.len() {
             return Err("Client Finished verify_data length mismatch".into());
         }
@@ -381,7 +408,9 @@ impl QuicTlsServerHandshaker {
         client_dcid: &[u8],
         transcript_after_finished: &[u8],
     ) -> Result<ServerHandshakeResult, String> {
-        let ks = self.key_schedule.as_ref()
+        let ks = self
+            .key_schedule
+            .as_ref()
             .ok_or_else(|| "Key schedule not initialized".to_string())?;
 
         let (init_write, init_read) = quic_initial_server_keys(client_dcid, 16, 12, &self.hasher);
@@ -390,15 +419,35 @@ impl QuicTlsServerHandshaker {
         let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
         let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
 
-        let hs_write = quic_traffic_keys(&server_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
-        let hs_read = quic_traffic_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let hs_write = quic_traffic_keys(
+            &server_hs_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
+        let hs_read = quic_traffic_keys(
+            &client_hs_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
 
         let app_transcript_hash = self.hasher.hash(transcript_after_finished);
         let client_app_secret = ks.client_app_traffic_secret(&app_transcript_hash);
         let server_app_secret = ks.server_app_traffic_secret(&app_transcript_hash);
 
-        let app_write = quic_traffic_keys(&server_app_secret, self.cipher_suite.key_len(), 12, &self.hasher);
-        let app_read = quic_traffic_keys(&client_app_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let app_write = quic_traffic_keys(
+            &server_app_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
+        let app_read = quic_traffic_keys(
+            &client_app_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
 
         Ok(ServerHandshakeResult {
             initial_keys: ProtectionKeys::new(
@@ -424,7 +473,8 @@ impl QuicTlsServerHandshaker {
             ),
             early_data_keys: self.server_early_traffic_secret.as_ref().map(|secret| {
                 // Server reads 0-RTT data from client, so client's write keys are server's read keys
-                let read_keys = quic_traffic_keys(secret, self.cipher_suite.key_len(), 12, &self.hasher);
+                let read_keys =
+                    quic_traffic_keys(secret, self.cipher_suite.key_len(), 12, &self.hasher);
                 // Server would write 0-RTT response using the same secret (same direction)
                 ProtectionKeys::new(
                     CipherSuite::TLS_AES_128_GCM_SHA256,
