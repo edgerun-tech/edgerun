@@ -54,7 +54,9 @@ pub fn benchmark_frame_encode_decode() -> u64 {
     }
 
     let elapsed_us = start.elapsed().as_micros() as u64;
-    ops.saturating_mul(1_000_000).checked_div(elapsed_us).unwrap_or(0)
+    ops.saturating_mul(1_000_000)
+        .checked_div(elapsed_us)
+        .unwrap_or(0)
 }
 
 // ===========================================================================
@@ -103,7 +105,9 @@ pub fn benchmark_frame_sign_verify() -> u64 {
     }
 
     let elapsed_us = start.elapsed().as_micros() as u64;
-    ops.saturating_mul(1_000_000).checked_div(elapsed_us).unwrap_or(0)
+    ops.saturating_mul(1_000_000)
+        .checked_div(elapsed_us)
+        .unwrap_or(0)
 }
 
 // ===========================================================================
@@ -184,7 +188,9 @@ pub fn benchmark_udp_throughput() -> u64 {
     }
 
     let elapsed_us = start.elapsed().as_micros() as u64;
-    ops.saturating_mul(1_000_000).checked_div(elapsed_us).unwrap_or(0)
+    ops.saturating_mul(1_000_000)
+        .checked_div(elapsed_us)
+        .unwrap_or(0)
 }
 
 // ===========================================================================

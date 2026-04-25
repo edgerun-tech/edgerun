@@ -207,9 +207,15 @@ pub fn parse_yaml_value(s: &str) -> Result<YamlValue, YamlError> {
     parse_yaml_at(&lines, 0, 0).map(|(v, _)| v)
 }
 
-fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(YamlValue, usize), YamlError> {
+fn parse_yaml_at(
+    lines: &[&str],
+    start: usize,
+    min_indent: usize,
+) -> Result<(YamlValue, usize), YamlError> {
     let mut values = Vec::new();
     let mut i = start;
+    let mut in_list = false;
+    let mut seen_list_key: Option<String> = None;
 
     while i < lines.len() {
         let line = lines[i];
@@ -227,11 +233,14 @@ fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(Yam
         let trimmed = line.trim();
 
         if trimmed.starts_with('-') {
+            in_list = true;
             let item = trimmed.trim_start_matches('-').trim();
             // Parse list item - could be simple value or nested object
             let item_value = if item.contains(':') {
                 // Multi-line nested object - parse as mapping directly
-                parse_yaml_at(&[item], 0, 0).map(|(v, _)| v).unwrap_or(YamlValue::Null)
+                parse_yaml_at(&[item], 0, 0)
+                    .map(|(v, _)| v)
+                    .unwrap_or(YamlValue::Null)
             } else {
                 parse_yaml_simple(item).unwrap_or(YamlValue::Null)
             };
@@ -243,8 +252,10 @@ fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(Yam
         if let Some(colon_pos) = trimmed.find(':') {
             let mut key = trimmed[..colon_pos].trim().to_string();
             // Strip quotes from keys
-            if (key.starts_with('"') && key.ends_with('"')) || (key.starts_with('\'') && key.ends_with('\'')) {
-                key = key[1..key.len()-1].to_string();
+            if (key.starts_with('"') && key.ends_with('"'))
+                || (key.starts_with('\'') && key.ends_with('\''))
+            {
+                key = key[1..key.len() - 1].to_string();
             }
             let value_str = trimmed[colon_pos + 1..].trim();
 
@@ -267,24 +278,23 @@ fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(Yam
     // Build the result - handle arrays and mappings properly
     let mut result_map: Vec<(String, YamlValue)> = Vec::new();
     let mut array_items: Vec<YamlValue> = Vec::new();
-    
+
     for v in &values {
         match v {
             YamlValue::Mapping(m) => {
+                // Check if this mapping came from a list item (single key like "issuer")
+                if in_list && m.len() == 1 {
+                    if let Some((k, _)) = m.first() {
+                        // Single-field mapping from list item - treat as array element
+                        array_items.push(v.clone());
+                        continue;
+                    }
+                }
                 // Add mapping entries
                 result_map.extend(m.iter().cloned());
             }
             YamlValue::Array(arr) => {
-                // Array with one item that is a Map: extract and add to map
-                if arr.len() == 1 {
-                    if let YamlValue::Mapping(m) = &arr[0] {
-                        result_map.extend(m.iter().cloned());
-                    } else {
-                        array_items.push(arr[0].clone());
-                    }
-                } else {
-                    array_items.extend(arr.iter().cloned());
-                }
+                array_items.extend(arr.iter().cloned());
             }
             _ => {
                 array_items.push(v.clone());
@@ -292,8 +302,11 @@ fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(Yam
         }
     }
 
-    if result_map.is_empty() && !values.is_empty() {
-        Ok((YamlValue::Array(values), i))
+    if in_list && array_items.is_empty() && !result_map.is_empty() {
+        // List produced mappings - convert to array of maps
+        Ok((YamlValue::Array(vec![YamlValue::Mapping(result_map)]), i))
+    } else if result_map.is_empty() && !array_items.is_empty() {
+        Ok((YamlValue::Array(array_items), i))
     } else {
         Ok((YamlValue::Mapping(result_map), i))
     }

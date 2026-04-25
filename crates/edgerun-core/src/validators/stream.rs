@@ -69,8 +69,7 @@ pub fn validate_stream_append_case(
     }
     let stream_id = string_value(event, "stream_id", "");
     let stream_heads = local_state.get("stream_heads").and_then(|v| v.as_map());
-    let head = stream_heads
-        .and_then(|m| m.get(&stream_id).and_then(|hv| hv.as_map()));
+    let head = stream_heads.and_then(|m| m.get(&stream_id).and_then(|hv| hv.as_map()));
     if head.is_none() {
         if seq_no == 0 {
             // Per spec §18.4: FAMILY_CHECK after POSITION_CHECK for genesis

@@ -82,7 +82,9 @@ impl CredentialStore {
         secret: &[u8],
         description: Option<&str>,
     ) -> Result<(), StorageError> {
-        let blob_id = self.blobs.store(secret, std::slice::from_ref(&self.node_identity))?;
+        let blob_id = self
+            .blobs
+            .store(secret, std::slice::from_ref(&self.node_identity))?;
 
         self.index
             .put_credential(namespace, name, &blob_id, description)?;

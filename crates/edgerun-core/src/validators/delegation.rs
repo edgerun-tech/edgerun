@@ -12,7 +12,7 @@ pub fn validate_delegation_case(
     let trust_roots = set_from_list(local_state.get("trust_roots"));
     let controllers = set_from_list(local_state.get("current_controller_set"));
     if controllers.contains(&issuer) {
-return accept(mapping([("authority_basis", ystr("direct"))]), empty_map());
+        return accept(mapping([("authority_basis", ystr("direct"))]), empty_map());
     }
     let chain = if let Some(v) = semantic_input.get("delegation_chain") {
         eprintln!("DEL: v type={:?}", v);

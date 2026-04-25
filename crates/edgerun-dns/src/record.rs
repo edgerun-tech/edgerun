@@ -653,7 +653,13 @@ impl DnsRecordData {
                 buf
             }
 (DnsRecordType::LOC, DnsRecordData::LOC {
-                version, size, horiz_pre, vert_pre, latitude, longitude, altitude,
+                version,
+                size,
+                horiz_pre,
+                vert_pre,
+                latitude,
+                longitude,
+                altitude,
             }) => {
                 let mut buf = Vec::new();
                 buf.push(*version);

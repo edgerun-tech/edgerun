@@ -65,7 +65,7 @@ fn matchGlob(pat: &str, pi: usize, path: &str, ti: usize, sep: char) -> bool {
                     return true;
                 }
                 let next_is_sep = rest_pat.starts_with(sep);
-                
+
                 if next_is_sep {
                     // * followed by /: only match at directory boundary
                     // Either no more path, or find /

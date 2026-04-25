@@ -292,16 +292,12 @@ impl BufMut for Vec<u8> {
         let len = self.len();
         let cap = self.capacity();
         if cap > len {
-            unsafe {
-                core::slice::from_raw_parts_mut(self.as_mut_ptr().add(len), cap - len)
-            }
+            unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr().add(len), cap - len) }
         } else {
             // Need to reserve more space
             self.reserve(64);
             let cap = self.capacity();
-            unsafe {
-                core::slice::from_raw_parts_mut(self.as_mut_ptr().add(len), cap - len)
-            }
+            unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr().add(len), cap - len) }
         }
     }
 
