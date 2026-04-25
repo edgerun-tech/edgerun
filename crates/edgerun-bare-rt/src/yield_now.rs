@@ -10,7 +10,7 @@ use core::task::{Context, Poll};
 // ===========================================================================
 
 pub struct YieldNow {
-    yielded: bool,
+    pub yielded: bool,
 }
 
 impl YieldNow {

@@ -10,8 +10,13 @@ mod log;
 mod error;
 #[macro_use]
 mod trace;
+#[allow(unused)]
+pub use trace::{span, EnterGuard, Span};
+
 #[macro_use]
 mod metrics;
+#[allow(unused)]
+pub use metrics::{RuntimeMetrics, TaskMetrics};
 
 mod time;
 pub use time::{Duration, Instant};
@@ -19,8 +24,13 @@ pub use log::Level;
 pub use error::Error;
 
 // Core sync primitives
+#[allow(unused)]
+pub mod sync {
+    pub use crate::sync_prim::{Condvar, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+}
+
 mod sync_prim;
-pub use sync_prim::{Condvar, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+pub use sync_prim::{Condvar, Mutex as SyncMutex, MutexGuard as SyncMutexGuard, RwLock as SyncRwLock, RwLockReadGuard as SyncRwLockReadGuard, RwLockWriteGuard as SyncRwLockWriteGuard};
 
 mod oneshot;
 pub use oneshot::{channel, Receiver, RecvError, Sender};
@@ -58,8 +68,13 @@ pub use cancellation::{CancellationToken, Cancelled};
 mod once_cell;
 pub use once_cell::{OnceCell, WaitUntilReady};
 
+#[macro_use]
 mod join;
-pub use join::{join_internal, select_2, select_3, select_4};
+pub use join::{join_internal, Select2Enum};
+
+#[macro_use]
+mod select;
+pub use select::{select_2, select_3, select_4};
 
 mod join_set;
 pub use join_set::{JoinNext, JoinSet};
@@ -74,6 +89,14 @@ pub use runtime::{spawn, spawn_blocking, Builder, Runtime, RuntimeHandle};
 
 mod yield_now;
 pub use yield_now::{yieldnow, YieldNow};
+
+mod sleep_until;
+pub use sleep_until::{sleep_until, timeout_at, Sleep, TimeoutAt, Elapsed};
+#[allow(unused)]
+pub type TimeoutError = Elapsed;
+
+mod timers;
+pub use timers::{ctrl_c, interval, interval_at, timeout, CtrlC, Interval, MissedTickBehavior, Sleep as TimerSleep, Timeout};
 
 mod task_map;
 pub use task_map::TaskMap;
