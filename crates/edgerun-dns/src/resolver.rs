@@ -1,3 +1,6 @@
+type AnswerCacheEntry = (Vec<DnsRecord>, Instant);
+type NsCacheEntry = (Ipv4Addr, Instant);
+
 //! Recursive DNS resolver — iterative resolution from the root hints.
 //!
 //! Implements RFC 1034 §5.3.3:

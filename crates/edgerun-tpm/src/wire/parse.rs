@@ -4,6 +4,9 @@ use crate::wire::{
     map_ecc_curve, map_name_algorithm, map_public_object_type, read_tpm2b, read_u16, read_u32,
 };
 
+type RsaParams = (Option<TpmEccCurve>, Option<u16>, Vec<u8>, Vec<u8>);
+type EccParams = (Option<TpmEccCurve>, Option<u16>, Vec<u8>, Vec<u8>);
+
 // ---------------------------------------------------------------------------
 // Response parsers
 // ---------------------------------------------------------------------------

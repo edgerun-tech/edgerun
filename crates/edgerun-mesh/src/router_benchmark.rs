@@ -50,11 +50,7 @@ pub fn benchmark_router_lookup() -> u64 {
     std::hint::black_box(ops);
 
     let elapsed_us = start.elapsed().as_micros() as u64;
-    if elapsed_us > 0 {
-        ops.saturating_mul(1_000_000) / elapsed_us
-    } else {
-        0
-    }
+    ops.saturating_mul(1_000_000).checked_div(elapsed_us).unwrap_or(0)
 }
 
 // ===========================================================================
