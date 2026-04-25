@@ -365,7 +365,7 @@ impl<T: AsRef<[u8]>> Buf for Cursor<T> {
     }
 }
 
-impl Buf for std::io::Cursor<&[u8]> {
+impl Buf for std::io::Cursor<Vec<u8>> {
     #[inline]
     fn remaining(&self) -> usize {
         let pos = self.position() as usize;
