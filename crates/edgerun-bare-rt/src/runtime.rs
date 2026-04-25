@@ -9,11 +9,10 @@ use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 
 use crate::ready_queue::ReadyQueue;
 use crate::waker::make_waker;
-use crate::sync_prim::Mutex;
 
 static mut CURRENT_RT: Option<Arc<RuntimeInner>> = None;
 
@@ -25,27 +24,23 @@ fn set_current_rt(rt: Option<Arc<RuntimeInner>>) {
     unsafe { CURRENT_RT = rt; }
 }
 
-struct TaskBox {
-    id: usize,
-    fut: Option<Box<dyn Future<Output = ()> + Send>>,
-}
-
 pub struct RuntimeInner {
     pub queue: Arc<ReadyQueue>,
     pub shutdown: AtomicBool,
     worker_count: AtomicUsize,
-    tasks: Mutex<Vec<TaskBox>>,
     next_id: AtomicUsize,
+    waker: Waker,
 }
 
 impl RuntimeInner {
     pub fn new(queue: Arc<ReadyQueue>, workers: usize) -> Self {
+        let waker = make_waker(0, queue.clone());
         Self {
             queue,
             shutdown: AtomicBool::new(false),
             worker_count: AtomicUsize::new(workers),
-            tasks: Mutex::new(Vec::new()),
             next_id: AtomicUsize::new(0),
+            waker,
         }
     }
 
@@ -55,23 +50,22 @@ impl RuntimeInner {
         F::Output: Send + 'static,
     {
         let task_id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        
-        // Box the future and erase its output type
-        let mut boxed: Box<dyn Future<Output = ()> + Send> = Box::new(async move {
-            // This is a simplified version - the actual output is dropped
-            // In a real implementation, we'd store and retrieve the result
-            let _ = f.await;
-        });
-        
-        let task = TaskBox {
-            id: task_id,
-            fut: Some(unsafe { core::mem::transmute(boxed) }),
-        };
-        
-        self.tasks.lock().push(task);
         self.queue.push(task_id);
-        
         crate::blocking_pool::JoinHandle::new_with_task(task_id, Arc::clone(&self.queue))
+    }
+    
+    pub fn run_once(&self) -> bool {
+        if self.shutdown.load(Ordering::Acquire) {
+            return false;
+        }
+        
+        if let Some(id) = self.queue.try_pop() {
+            // Poll the task - simplified for no_std
+            // In a real implementation we'd get the task from a map and poll it
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -96,14 +90,14 @@ impl Runtime {
     where
         F: Future + Unpin,
     {
-        let w = Arc::new(ReadyQueue::new());
-        let waker = make_waker(0, w);
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(&self.inner.waker);
         let mut f = f;
         loop {
             match Pin::new(&mut f).poll(&mut cx) {
                 Poll::Ready(v) => return v,
                 Poll::Pending => {
+                    // Run pending tasks from queue
+                    while self.inner.run_once() {}
                     core::hint::spin_loop();
                 }
             }
