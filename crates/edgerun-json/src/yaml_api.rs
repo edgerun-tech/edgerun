@@ -230,11 +230,12 @@ fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(Yam
             let item = trimmed.trim_start_matches('-').trim();
             // Parse list item - could be simple value or nested object
             let item_value = if item.contains(':') {
+                // Multi-line nested object - parse as mapping directly
                 parse_yaml_at(&[item], 0, 0).map(|(v, _)| v).unwrap_or(YamlValue::Null)
             } else {
                 parse_yaml_simple(item).unwrap_or(YamlValue::Null)
             };
-            values.push(YamlValue::Array(vec![item_value]));
+            values.push(item_value);
             i += 1;
             continue;
         }
@@ -259,21 +260,30 @@ fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(Yam
         }
     }
 
-    // Flatten all nested objects into one mapping
+    // Build the result - handle arrays and mappings properly
     let mut result_map: Vec<(String, YamlValue)> = Vec::new();
-    let mut all_arrays = true;
+    let mut array_items: Vec<YamlValue> = Vec::new();
+    
     for v in &values {
-        if let YamlValue::Mapping(m) = v {
-            all_arrays = false;
-            result_map.extend(m.iter().cloned());
-        } else if let YamlValue::Array(arr) = v {
-            // Keep as separate array entry
-            for item in arr {
-                if let YamlValue::Array(inner) = item {
-                    result_map.push((String::new(), item.clone()));
+        match v {
+            YamlValue::Mapping(m) => {
+                // Add mapping entries
+                result_map.extend(m.iter().cloned());
+            }
+            YamlValue::Array(arr) => {
+                // Array with one item that is a Map: extract and add to map
+                if arr.len() == 1 {
+                    if let YamlValue::Mapping(m) = &arr[0] {
+                        result_map.extend(m.iter().cloned());
+                    } else {
+                        array_items.push(arr[0].clone());
+                    }
                 } else {
-                    result_map.push((String::new(), item.clone()));
+                    array_items.extend(arr.iter().cloned());
                 }
+            }
+            _ => {
+                array_items.push(v.clone());
             }
         }
     }
