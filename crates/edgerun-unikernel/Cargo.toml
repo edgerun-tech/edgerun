@@ -1,0 +1,10 @@
+[[bin]]
+name = "edgerun"
+path = "src/main.rs"
+
+[package]
+name = "edgerun-unikernel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Edgerun unikernel - bare-metal bootable"

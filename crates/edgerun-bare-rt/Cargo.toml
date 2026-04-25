@@ -1,0 +1,9 @@
+[package]
+name = "edgerun-bare-rt"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Minimal bare-metal async runtime for edgerun unikernel"
+
+[lints]
+workspace = true

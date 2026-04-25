@@ -4,6 +4,8 @@ resolver = "2"
 members = [
   "crates/edgerun-error",
   "crates/edgerun-url",
+  "crates/edgerun-bare-rt",
+  "crates/edgerun-unikernel",
   "crates/edgerun-glob",
   "crates/edgerun-regex",
   "crates/edgerun-inotify",
