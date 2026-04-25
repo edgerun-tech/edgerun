@@ -30,7 +30,7 @@ pub mod tlv;
 pub mod varint;
 
 // Re-exports from edgerun-hpack
-pub use edgerun_hpack::{Decoder, Encoder};
+pub use edgerun_hpack::{Decoder, DecoderError, Encoder, HuffmanDecoder};
 
 pub use base64::{
     base64url_decode, base64url_encode, base64url_nopad_encode, standard_decode, standard_encode,

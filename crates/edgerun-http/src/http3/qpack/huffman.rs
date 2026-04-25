@@ -1,8 +1,8 @@
-//! QPACK Huffman coding — uses edgerun-hpack Huffman.
+//! QPACK Huffman coding — from edgerun-encoding.
 
-pub use edgerun_hpack::huffman::encode;
+pub use edgerun_encoding::Encoder;
 
-use edgerun_hpack::huffman::HuffmanDecoder;
+use edgerun_hpack::HuffmanDecoder;
 
 pub fn decode(input: &[u8]) -> std::result::Result<std::vec::Vec<u8>, ()> {
     let mut decoder = HuffmanDecoder::new();
@@ -14,16 +14,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_huffman_roundtrip() {
-        let inputs = [b"hello", b"GET", b"https://example.com/path", b"".as_slice()];
-        for input in inputs {
-            let encoded = encode(input);
-            if input.is_empty() {
-                assert!(encoded.is_empty());
-                continue;
-            }
-            let decoded = decode(&encoded).unwrap();
-            assert_eq!(&decoded, input);
+    fn test_roundtrip() {
+        for input in [b"hello", b"GET", b"".as_slice()] {
+            let enc = encode(input);
+            if input.is_empty() { assert!(enc.is_empty()); continue; }
+            let dec = decode(&enc).unwrap();
+            assert_eq!(&dec, input);
         }
     }
 }

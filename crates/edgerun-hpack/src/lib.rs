@@ -21,8 +21,9 @@ use std::iter;
 use std::slice;
 
 // Re-export the main HPACK API entry points.
-pub use self::decoder::Decoder;
+pub use self::decoder::{Decoder, DecoderError};
 pub use self::encoder::Encoder;
+pub use self::huffman::HuffmanDecoder;
 
 pub mod decoder;
 pub mod encoder;

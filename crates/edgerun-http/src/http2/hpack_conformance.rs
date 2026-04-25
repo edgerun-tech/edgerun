@@ -85,7 +85,7 @@ fn run_decoder_conformance() {
         total_stories += 1;
 
         // Create a fresh decoder for each story.
-        let mut decoder = edgerun_hpack::Decoder::new();
+        let mut decoder = edgerun_encoding::Decoder::new();
 
         for case in &story.cases {
             total_cases += 1;
