@@ -15,6 +15,7 @@ pub fn validate_delegation_case(
 return accept(mapping([("authority_basis", ystr("direct"))]), empty_map());
     }
     let chain = if let Some(v) = semantic_input.get("delegation_chain") {
+        eprintln!("DEL: v type={:?}", v);
         match v {
             Value::Seq(seq) => seq.clone(),
             Value::Map(m) => {
