@@ -225,6 +225,13 @@ impl RequestBuilder {
         self
     }
 
+    pub fn with_headers(mut self, headers: HeaderMap) -> Self {
+        for (name, value) in headers.iter() {
+            let _ = self.headers.insert(name.as_str(), value.as_str());
+        }
+        self
+    }
+
     pub fn body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = Some(body.into());
         self

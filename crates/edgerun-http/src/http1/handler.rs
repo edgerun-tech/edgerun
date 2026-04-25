@@ -39,8 +39,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::http1::request::Request;
-use crate::http1::response::Response;
+use crate::{Request, Response};
 
 /// An HTTP request handler.
 ///

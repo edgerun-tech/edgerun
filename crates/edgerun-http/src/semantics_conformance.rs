@@ -4,11 +4,10 @@
 //! in the relevant RFCs.
 
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
-use crate::http1::request::Request;
-use crate::http1::response::Response;
 use crate::method::Method;
 use crate::status::StatusCode;
 use crate::uri::Uri;
+use crate::{Request, Response};
 
 // ---------------------------------------------------------------------------
 // Method conformance (RFC 9110 Section 9)

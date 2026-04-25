@@ -33,9 +33,7 @@ use edgerun_tls::SessionCache;
 use edgerun_rt::sync::Mutex;
 
 use crate::http1::compression;
-use crate::http1::request::Request;
-use crate::http1::response::Response;
-use crate::{Error, HeaderMap, Method, Result, StatusCode};
+use crate::{Error, HeaderMap, Method, Request, Response, Result, StatusCode};
 
 // ===========================================================================
 // Pool key

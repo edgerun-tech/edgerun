@@ -11,7 +11,7 @@
 
 use crate::handler::Handler;
 use crate::header::HeaderMap;
-use crate::http1::BufReader;
+use edgerun_rt::BufReader;
 use crate::http2::frame::{flags, Frame, FrameType};
 use crate::http2::headers::{validate_header_name_case, validate_request_headers};
 use crate::http2::hpack::{Decoder, Encoder};
