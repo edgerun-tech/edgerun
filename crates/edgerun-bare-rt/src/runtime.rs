@@ -4,8 +4,6 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
-use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -58,14 +56,7 @@ impl RuntimeInner {
         if self.shutdown.load(Ordering::Acquire) {
             return false;
         }
-        
-        if let Some(id) = self.queue.try_pop() {
-            // Poll the task - simplified for no_std
-            // In a real implementation we'd get the task from a map and poll it
-            true
-        } else {
-            false
-        }
+        self.queue.try_pop().is_some()
     }
 }
 
@@ -96,7 +87,6 @@ impl Runtime {
             match Pin::new(&mut f).poll(&mut cx) {
                 Poll::Ready(v) => return v,
                 Poll::Pending => {
-                    // Run pending tasks from queue
                     while self.inner.run_once() {}
                     core::hint::spin_loop();
                 }
@@ -106,6 +96,10 @@ impl Runtime {
 
     pub fn shutdown(&self) {
         self.inner.shutdown.store(true, Ordering::Release);
+    }
+    
+    pub fn inner(&self) -> &Arc<RuntimeInner> {
+        &self.inner
     }
 }
 

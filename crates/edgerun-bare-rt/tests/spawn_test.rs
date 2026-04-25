@@ -6,6 +6,5 @@ fn spawn_compiles() {
     
     let handle = rt.spawn(async { 42 });
     
-    // Just verify it compiles - actual execution not tested without runtime
     assert!(!handle.is_finished());
 }
