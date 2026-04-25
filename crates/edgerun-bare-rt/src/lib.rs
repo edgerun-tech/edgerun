@@ -13,6 +13,8 @@ mod trace;
 #[macro_use]
 mod metrics;
 
+mod time;
+pub use time::{Duration, Instant};
 pub use log::Level;
 pub use error::Error;
 
@@ -57,7 +59,7 @@ mod once_cell;
 pub use once_cell::{OnceCell, WaitUntilReady};
 
 mod join;
-pub use join::{select_2, select_3, select_4};
+pub use join::{join_internal, select_2, select_3, select_4};
 
 mod join_set;
 pub use join_set::{JoinNext, JoinSet};
@@ -73,10 +75,10 @@ pub use runtime::{spawn, spawn_blocking, Builder, Runtime, RuntimeHandle};
 mod select;
 
 mod sleep_until;
-pub use sleep_until::{timeout_at, Sleep, TimeoutAt};
+pub use sleep_until::{Elapsed, Sleep, TimeoutAt, timeout_at};
 
 mod timers;
-pub use timers::{ctrl_c, interval, interval_at, sleep, timeout, CtrlC, Elapsed, Interval, MissedTickBehavior, Timeout};
+pub use timers::{ctrl_c, interval, interval_at, sleep, timeout, CtrlC, Interval, MissedTickBehavior, Timeout};
 
 mod yield_now;
 pub use yield_now::{yieldnow, YieldNow};
@@ -87,6 +89,11 @@ pub use task_map::TaskMap;
 // Platform I/O - TCP
 mod tcp;
 pub use tcp::{TcpSocket, SocketAddr, Error as IoError};
+
+mod io_traits;
+pub use io_traits::{
+    poll_fn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, PollFn, Take,
+};
 
 // Platform I/O - UDP
 mod udp;

@@ -8,34 +8,31 @@ use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
+use super::time::Instant;
 
-// ===========================================================================
-// Sleep
-// ===========================================================================
-
-struct SleepInner {
-    deadline: UnsafeCell<u64>,
+pub struct SleepInner {
+    deadline_tsc: UnsafeCell<u64>,
     waker: UnsafeCell<Option<Waker>>,
 }
 
-// Simple timer wheel for bare metal
 pub struct Sleep {
     inner: Arc<SleepInner>,
 }
 
 impl Sleep {
-    pub fn new(deadline: u64) -> Self {
+    pub fn new(deadline: Instant) -> Self {
         Self {
             inner: Arc::new(SleepInner {
-                deadline: UnsafeCell::new(deadline),
+                deadline_tsc: UnsafeCell::new(deadline.deadline_tsc()),
                 waker: UnsafeCell::new(None),
             }),
         }
+    }
+
+    pub fn deadline(&self) -> Instant {
+        Instant { tsc: unsafe { *self.inner.deadline_tsc.get() } }
     }
 }
 
@@ -44,12 +41,10 @@ impl Future for Sleep {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        let deadline = unsafe { *this.inner.deadline.get() };
+        let deadline_tsc = unsafe { *this.inner.deadline_tsc.get() };
+        let now = Instant::now().deadline_tsc();
         
-        // Use TSC or simple counter for time
-        let now = unsafe { core::arch::x86_64::_rdtsc() };
-        
-        if now >= deadline {
+        if now >= deadline_tsc {
             return Poll::Ready(());
         }
         
@@ -58,15 +53,11 @@ impl Future for Sleep {
     }
 }
 
-// ===========================================================================
-// Functions
-// ===========================================================================
-
-pub async fn sleep_until(deadline: u64) {
+pub async fn sleep_until(deadline: Instant) {
     Sleep::new(deadline).await
 }
 
-pub fn timeout_at<T>(deadline: u64, f: T) -> TimeoutAt<T>
+pub fn timeout_at<T>(deadline: Instant, f: T) -> TimeoutAt<T>
 where
     T: Future,
 {
@@ -75,7 +66,7 @@ where
 
 pub struct TimeoutAt<T> {
     future: T,
-    deadline: u64,
+    deadline: Instant,
 }
 
 impl<T: Future + Unpin> Future for TimeoutAt<T> {
@@ -83,9 +74,9 @@ impl<T: Future + Unpin> Future for TimeoutAt<T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        let now = unsafe { core::arch::x86_64::_rdtsc() };
+        let now = Instant::now().deadline_tsc();
         
-        if now >= this.deadline {
+        if now >= this.deadline.deadline_tsc() {
             return Poll::Ready(Err(Elapsed));
         }
         
@@ -98,22 +89,3 @@ impl<T: Future + Unpin> Future for TimeoutAt<T> {
 
 #[derive(Debug)]
 pub struct Elapsed;
-
-// Stub for Interval
-pub struct Interval {
-    period: u64,
-}
-
-impl Interval {
-    pub fn new(period: u64) -> Self {
-        Self { period }
-    }
-}
-
-impl Future for Interval {
-    type Output = ();
-    
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
-    }
-}

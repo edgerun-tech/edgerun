@@ -303,3 +303,83 @@ where
 }
 
 impl<F> Unpin for PollFn<F> {}
+
+// ===========================================================================
+// AsyncReadExt
+// ===========================================================================
+
+pub trait AsyncReadExt: AsyncRead + Sized {
+    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadFut<'a, Self>
+    where
+        Self: Unpin,
+    {
+        ReadFut { s: self, buf }
+    }
+
+    fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadExactFut<'a, Self>
+    where
+        Self: Unpin,
+    {
+        ReadExactFut {
+            s: self,
+            buf,
+            pos: 0,
+        }
+    }
+
+    fn read_to_end<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadToEndFut<'a, Self>
+    where
+        Self: Unpin,
+    {
+        ReadToEndFut { s: self, buf }
+    }
+
+    fn take(self, limit: u64) -> Take<Self> {
+        Take {
+            inner: self,
+            remaining: limit,
+        }
+    }
+
+    fn chain<R2>(self, other: R2) -> Chain<Self, R2>
+    where
+        R2: AsyncRead + Unpin,
+    {
+        Chain {
+            first: self,
+            second: other,
+            done_first: false,
+        }
+    }
+}
+
+impl<R: AsyncRead + Sized> AsyncReadExt for R {}
+
+pub trait AsyncWriteExt: AsyncWrite + Sized {
+    fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFut<'a, Self>
+    where
+        Self: Unpin,
+    {
+        WriteAllFut {
+            s: self,
+            buf,
+            pos: 0,
+        }
+    }
+
+    fn flush(&mut self) -> FlushFut<'_, Self>
+    where
+        Self: Unpin,
+    {
+        FlushFut { s: self }
+    }
+
+    fn shutdown(&mut self) -> ShutdownFut<'_, Self>
+    where
+        Self: Unpin,
+    {
+        ShutdownFut { s: self }
+    }
+}
+
+impl<W: AsyncWrite + Sized> AsyncWriteExt for W {}
