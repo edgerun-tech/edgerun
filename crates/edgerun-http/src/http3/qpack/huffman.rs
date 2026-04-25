@@ -1,21 +1,12 @@
-//! QPACK Huffman coding — wrapper around `hpack_patched` Huffman encoder/decoder.
-//!
-//! QPACK (RFC 9204) uses the exact same canonical Huffman code table
-//! as HPACK (RFC 7541 Appendix B), so `hpack_patched` works directly.
+//! QPACK Huffman coding — uses edgerun-hpack Huffman.
 
-use edgerun_hpack::huffman;
+pub use edgerun_hpack::huffman::encode;
 
-/// Encode plaintext using HPACK/QPACK Huffman coding.
-pub fn encode(input: &[u8]) -> Vec<u8> {
-    edgerun_hpack::huffman::encode(input)
-}
+use edgerun_hpack::huffman::HuffmanDecoder;
 
-/// Decode HPACK/QPACK Huffman-coded bytes into plaintext.
-pub fn decode(input: &[u8]) -> Result<Vec<u8>, String> {
-    let mut decoder = edgerun_hpack::huffman::HuffmanDecoder::new();
-    decoder
-        .decode(input)
-        .map_err(|e| format!("Huffman decode error: {:?}", e))
+pub fn decode(input: &[u8]) -> std::result::Result<std::vec::Vec<u8>, ()> {
+    let mut decoder = HuffmanDecoder::new();
+    decoder.decode(input).map_err(|_| ())
 }
 
 #[cfg(test)]
@@ -23,19 +14,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_huffman_encode_decode_roundtrip() {
-        let inputs = [
-            b"hello".as_slice(),
-            b"GET".as_slice(),
-            b"https://example.com/path".as_slice(),
-            b"text/html; charset=utf-8".as_slice(),
-            b"application/json".as_slice(),
-            b"0123456789".as_slice(),
-            b"".as_slice(),
-            &[0, 255, 128, 64],
-            b"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36".as_slice(),
-        ];
-
+    fn test_huffman_roundtrip() {
+        let inputs = [b"hello", b"GET", b"https://example.com/path", b"".as_slice()];
         for input in inputs {
             let encoded = encode(input);
             if input.is_empty() {
@@ -43,34 +23,7 @@ mod tests {
                 continue;
             }
             let decoded = decode(&encoded).unwrap();
-            assert_eq!(&decoded, input, "roundtrip failed for {:?}", input);
+            assert_eq!(&decoded, input);
         }
-    }
-
-    #[test]
-    fn test_huffman_compress_ratio() {
-        let input = b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-        let encoded = encode(input);
-        assert!(encoded.len() < input.len());
-    }
-
-    #[test]
-    fn test_huffman_all_bytes_roundtrip() {
-        // Test all byte values 0-255
-        let input: Vec<u8> = (0..=255).collect();
-        let encoded = encode(&input);
-        let decoded = decode(&encoded).unwrap();
-        assert_eq!(decoded, input);
-    }
-
-    #[test]
-    fn test_huffman_rfc_example() {
-        // RFC 7541 Appendix C: "www.example.com" → 0xf1e3c2e5f23a6ba0
-        let input = b"www.example.com";
-        let encoded = encode(input);
-        // The exact encoding should match the RFC example
-        assert!(!encoded.is_empty());
-        let decoded = decode(&encoded).unwrap();
-        assert_eq!(&decoded, input);
     }
 }

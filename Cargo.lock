@@ -1207,6 +1207,9 @@ dependencies = [
 [[package]]
 name = "edgerun-encoding"
 version = "0.1.0"
+dependencies = [
+ "edgerun-hpack",
+]
 
 [[package]]
 name = "edgerun-error"

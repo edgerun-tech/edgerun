@@ -12,6 +12,7 @@ std = []
 
 [dependencies]
 # No external dependencies — all implementations are self-contained
+edgerun-hpack = { path = "../edgerun-hpack" }
 
 [lints]
 workspace = true

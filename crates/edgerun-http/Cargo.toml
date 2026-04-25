@@ -27,9 +27,5 @@ serde = { version = "1", features = ["derive"] }
 edgerun-json = { workspace = true }
 futures = "0.3"
 
-[[bin]]
-name = "h2spec_server"
-path = "bin/h2spec_server.rs"
-
 [lints]
 workspace = true

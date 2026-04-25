@@ -31,6 +31,7 @@ pub mod chunked;
 pub mod cstring;
 pub mod frame;
 pub mod hex;
+pub mod huffman;
 pub mod ip;
 pub mod kv;
 pub mod net;
