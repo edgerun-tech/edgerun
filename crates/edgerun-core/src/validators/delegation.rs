@@ -12,25 +12,25 @@ pub fn validate_delegation_case(
     let trust_roots = set_from_list(local_state.get("trust_roots"));
     let controllers = set_from_list(local_state.get("current_controller_set"));
     if controllers.contains(&issuer) {
-        return accept(mapping([("authority_basis", ystr("direct"))]), empty_map());
+return accept(mapping([("authority_basis", ystr("direct"))]), empty_map());
     }
     let chain = if let Some(v) = semantic_input.get("delegation_chain") {
         match v {
             Value::Seq(seq) => seq.clone(),
             Value::Map(m) => {
-                // Broken YAML: Map({"": item}) -> Seq([item])
+                // Single item as Map - check key "" for the item
                 if let Some(item) = m.get("") {
                     vec![item.clone()]
                 } else {
                     vec![]
                 }
             }
+            Value::Null => vec![],
             _ => vec![],
         }
     } else {
         vec![]
     };
-    eprintln!("DEL: final chain len={}", chain.len());
     if chain.is_empty() {
         return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
     }
