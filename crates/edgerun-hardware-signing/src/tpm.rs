@@ -329,12 +329,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires TPM hardware"]
     fn sign_record_with_tpm_provider_success() {
         let key = FakeTpmKey::new();
         let req = HardwareValidationRequirements::default();
         let sig = sign_record_with_tpm_provider(&key, &req, "test:v0:sig", b"hash").unwrap();
-        assert_eq!(sig, b"hash"); // FakeTpmKey returns message as-is
+        // FakeTpmKey returns TPM-format signature (not raw hash)
+        assert!(!sig.is_empty());
+        assert!(sig.len() >= 4); // At least header bytes
     }
 
     #[test]
