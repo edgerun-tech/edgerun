@@ -87,3 +87,14 @@ impl core::ops::Sub<Instant> for Instant {
         self.checked_sub(other).expect("underflow")
     }
 }
+
+impl core::ops::Sub<Duration> for Instant {
+    type Output = Instant;
+    fn sub(self, duration: Duration) -> Self::Output {
+        let millis = duration.as_millis() as u64;
+        let tsc_per_ms: u64 = 10_000_000 / 1_000_0;
+        Instant {
+            tsc: self.tsc.saturating_sub(millis.saturating_mul(tsc_per_ms)),
+        }
+    }
+}
