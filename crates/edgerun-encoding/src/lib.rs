@@ -1,6 +1,6 @@
 //! # edgerun-encoding
 //!
-//! Consolidated encoding utilities for the edgerun workspace.
+//! Consolidated encoding utilities.
 
 #![no_std]
 
@@ -29,7 +29,7 @@ pub mod string_field;
 pub mod tlv;
 pub mod varint;
 
-// Re-exports from edgerun-hpack
+// HPACK (re-exported from edgerun-hpack)
 pub use edgerun_hpack::{Decoder, DecoderError, Encoder, HuffmanDecoder};
 
 pub use base64::{
