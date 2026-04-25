@@ -1,33 +1,54 @@
-//! Waker implementations for bare-metal.
-/// 
-/// Provides waker primitives for async/await.
+//! Custom waker implementation.
+//!
+//! Each waker carries a task ID. When `wake()` is called,
+//! the task ID is pushed onto the ready queue.
 
-use crate::executor::TaskId;
+#![no_std]
 
-/// Create a waker that wakes a specific task.
-pub fn local_waker(task_id: TaskId) -> LocalWaker {
-    LocalWaker(task_id)
+use alloc::sync::Arc;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use core::task::{RawWaker, RawWakerVTable, Waker};
+
+use crate::ready_queue::ReadyQueue;
+
+const Acquire: Ordering = Ordering::Acquire;
+const Release: Ordering = Ordering::Release;
+const AcqRel: Ordering = Ordering::AcqRel;
+
+// ===========================================================================
+// Waker
+// ===========================================================================
+
+struct WData {
+    id: usize,
+    q: Arc<ReadyQueue>,
 }
 
-/// Waker that wakes a specific task by ID.
-#[derive(Clone)]
-pub struct LocalWaker(TaskId);
+static VTABLE: RawWakerVTable = RawWakerVTable::new(wk_clone, wk_wake, wk_wake_by_ref, wk_drop);
 
-impl LocalWaker {
-    /// Wake the task.
-    pub fn wake(&self) {
-        // Task waking implemented in executor
-    }
+unsafe fn wk_clone(d: *const ()) -> RawWaker {
+    Arc::increment_strong_count(d as *const WData);
+    RawWaker::new(d, &VTABLE)
 }
 
-impl core::task::Wake for LocalWaker {
-    fn wake(self: &LocalWaker) {
-        // Forward to executor
-        self.wake();
-    }
-    
-    fn wake_by_ref(self: &LocalWaker) {
-        // Forward to executor
-        self.wake();
-    }
+unsafe fn wk_wake(d: *const ()) {
+    let a = Arc::from_raw(d as *const WData);
+    a.q.push(a.id);
+}
+
+unsafe fn wk_wake_by_ref(d: *const ()) {
+    Arc::increment_strong_count(d as *const WData);
+    let a = Arc::from_raw(d as *const WData);
+    a.q.push(a.id);
+}
+
+unsafe fn wk_drop(d: *const ()) {
+    let _ = Arc::from_raw(d as *const WData);
+}
+
+/// Create a waker that enqueues the given task ID on wake.
+pub fn make_waker(id: usize, q: Arc<ReadyQueue>) -> Waker {
+    let data = Arc::new(WData { id, q });
+    let ptr = Arc::into_raw(data) as *const ();
+    unsafe { Waker::from_raw(RawWaker::new(ptr, &VTABLE)) }
 }

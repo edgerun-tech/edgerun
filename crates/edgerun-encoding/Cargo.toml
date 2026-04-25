@@ -9,6 +9,7 @@ description = "Consolidated encoding utilities for the edgerun workspace"
 [features]
 default = ["std"]
 std = []
+alloc = []
 
 [dependencies]
 edgerun-hpack = { path = "../edgerun-hpack" }

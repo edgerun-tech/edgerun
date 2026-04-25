@@ -1,38 +1,49 @@
-#![allow(missing_docs)]
-#![allow(unused_comparisons)]
-//! Dependency-free TFTP server (RFC 1350) with RFC 2347/2348 option negotiation.
-//!
-//! # Architecture
-//! - **TFTP protocol** — RRQ/WRQ/DATA/ACK/ERROR/OACK over UDP
-//! - **RFC 2347 options** — blksize, tsize, timeout negotiation
-//! - **FileProvider trait** — pluggable backend (filesystem, encrypted blobs, memory)
-//! - **BlobProvider** — serves files from `edgerun-storage` encrypted blob store
-//!
-//! # PXE Boot Flow
-//! ```text
-//! Client                          Server (edgerund)
-//!   |                                 |
-//!   |--- DHCP DISCOVER (with arch) -->|
-//!   |<-- DHCP OFFER (IP + bootfile) -|
-//!   |--- DHCP REQUEST -------------->|
-//!   |<-- DHCP ACK -------------------|
-//!   |                                 |
-//!   |--- TFTP RRQ "bootx64.efi" ---->|  (UDP 69)
-//!   |<-- DATA block 1 ---------------|  (random port)
-//!   |-- ACK block 1 ---------------->|
-//!   |<-- DATA block 2 ---------------|
-//!   |-- ACK block 2 ---------------->|
-//!   |        ...                      |
-//!   |<-- DATA block N (< 512B) ------|
-//!   |-- ACK block N ---------------->|
-//!   |                                 |
-//!   |  (BIOS/UEFI loads and executes)|
-//! ```
+//! TFTP client for kernel loading over PXE
 
-pub mod blob_provider;
-pub mod message;
-pub mod server;
+#![no_std]
 
-pub use blob_provider::BlobTftpProvider;
-pub use message::{TftpError, TftpMessage, TftpOpcode, TftpOptions};
-pub use server::TftpServer;
+pub const TFTP_PORT: u16 = 69;
+pub const TFTP_BLOCK_SIZE: usize = 512;
+pub const TFTP_MAX_BLOCK: usize = 65535;
+
+pub const OP_RRQ: u16 = 1;
+pub const OP_WRQ: u16 = 2;
+pub const OP_DATA: u16 = 3;
+pub const OP_ACK: u16 = 4;
+pub const OP_ERROR: u16 = 5;
+pub const OP_OACK: u16 = 6;
+
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+pub struct TftpHeader {
+    pub opcode: u16,
+    pub block: u16,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct TftpError {
+    pub opcode: u16,
+    pub code: u16,
+    pub msg: [u8; 128],
+}
+
+impl Default for TftpError {
+    fn default() -> Self {
+        Self { opcode: OP_ERROR, code: 0, msg: [0; 128] }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct TftpData {
+    pub opcode: u16,
+    pub block: u16,
+    pub data: [u8; TFTP_BLOCK_SIZE],
+}
+
+impl Default for TftpData {
+    fn default() -> Self {
+        Self { opcode: OP_DATA, block: 0, data: [0; TFTP_BLOCK_SIZE] }
+    }
+}

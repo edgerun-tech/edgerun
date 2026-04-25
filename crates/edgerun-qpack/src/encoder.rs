@@ -293,10 +293,12 @@ impl From<ParseError> for EncoderError {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     extern crate alloc;
     use alloc::{format, vec, vec::Vec};
+    use std::io::Cursor;
 
     use super::*;
 
@@ -306,7 +308,7 @@ mod tests {
     fn check_encode_field(
         init_fields: &[HeaderField],
         field: &[HeaderField],
-        check: fn(Cursor<&mut Vec<u8>>, Cursor<&mut Vec<u8>>),
+        check: fn(&mut Cursor<Vec<u8>>, &mut Cursor<Vec<u8>>),
     ) {
         let mut table = build_table();
         table.set_max_size(TABLE_SIZE).unwrap();
@@ -319,7 +321,7 @@ mod tests {
         init_fields: &[HeaderField],
         field: &[HeaderField],
         stream_id: u64,
-        check: fn(Cursor<&mut Vec<u8>>, Cursor<&mut Vec<u8>>),
+        check: fn(&mut Cursor<&mut Vec<u8>>, &mut Cursor<&mut Vec<u8>>),
     ) {
         for field in init_fields {
             table.put(field.clone()).unwrap();
@@ -337,14 +339,14 @@ mod tests {
 
         let mut read_block = Cursor::new(&mut block);
         let mut read_encoder = Cursor::new(&mut encoder);
-        check(read_block, read_encoder);
+        check(&mut read_block, &mut read_encoder);
     }
 
     #[test]
     fn encode_static() {
         let field = HeaderField::new(":method", "GET");
-        check_encode_field(&[], &[field], |b, e| {
-            assert_eq!(Indexed::decode(b), Ok(Indexed::Static(17)));
+        check_encode_field(&[], &[field], &|b, e| {
+            assert_eq!(Indexed::decode(&mut b), Ok(Indexed::Static(17)));
             assert_eq!(e.get_ref().len(), 0);
         });
     }
@@ -352,13 +354,13 @@ mod tests {
     #[test]
     fn encode_static_nameref() {
         let field = HeaderField::new("location", "/bar");
-        check_encode_field(&[], &[field], |b, e| {
+        check_encode_field(&[], &[field], &|b, e| {
             assert_eq!(
-                IndexedWithPostBase::decode(b),
+                IndexedWithPostBase::decode(&mut b),
                 Ok(IndexedWithPostBase(0))
             );
             assert_eq!(
-                InsertWithNameRef::decode(e),
+                InsertWithNameRef::decode(&mut e),
                 Ok(Some(InsertWithNameRef::new_static(12, "/bar")))
             );
         });
@@ -367,8 +369,8 @@ mod tests {
     #[test]
     fn encode_static_nameref_indexed_in_dynamic() {
         let field = HeaderField::new("location", "/bar");
-        check_encode_field(&[field.clone()], &[field], |b, e| {
-            assert_eq!(Indexed::decode(b), Ok(Indexed::Dynamic(0)));
+        check_encode_field(&[field.clone()], &[field], &|b, e| {
+            assert_eq!(Indexed::decode(&mut b), Ok(Indexed::Dynamic(0)));
             assert_eq!(e.get_ref().len(), 0);
         });
     }
@@ -376,13 +378,13 @@ mod tests {
     #[test]
     fn encode_dynamic_insert() {
         let field = HeaderField::new("foo", "bar");
-        check_encode_field(&[], &[field], |b, e| {
+        check_encode_field(&[], &[field], &|b, e| {
             assert_eq!(
-                IndexedWithPostBase::decode(b),
+                IndexedWithPostBase::decode(&mut b),
                 Ok(IndexedWithPostBase(0))
             );
             assert_eq!(
-                InsertWithoutNameRef::decode(e),
+                InsertWithoutNameRef::decode(&mut e),
                 Ok(Some(InsertWithoutNameRef::new("foo", "bar")))
             );
         });
@@ -396,11 +398,11 @@ mod tests {
             &[field.with_value("quxx")],
             |b, e| {
                 assert_eq!(
-                    IndexedWithPostBase::decode(b),
+                    IndexedWithPostBase::decode(&mut b),
                     Ok(IndexedWithPostBase(0))
                 );
                 assert_eq!(
-                    InsertWithNameRef::decode(e),
+                    InsertWithNameRef::decode(&mut e),
                     Ok(Some(InsertWithNameRef::new_dynamic(1, "quxx")))
                 );
             },
@@ -413,7 +415,7 @@ mod tests {
         table.set_max_size(0).unwrap();
         let field = HeaderField::new("foo", "bar");
         check_encode_field_table(&mut table, &[], &[field], 1, |b, e| {
-            assert_eq!(Literal::decode(b), Ok(Literal::new("foo", "bar")));
+            assert_eq!(Literal::decode(&mut b), Ok(Literal::new("foo", "bar")));
             assert_eq!(e.get_ref().len(), 0);
         });
     }
@@ -426,7 +428,7 @@ mod tests {
 
         check_encode_field_table(&mut table, &[], &[field.clone()], 1, |b, _| {
             assert_eq!(
-                IndexedWithPostBase::decode(b),
+                IndexedWithPostBase::decode(&mut b),
                 Ok(IndexedWithPostBase(0))
             );
         });
@@ -437,7 +439,7 @@ mod tests {
             2,
             |b, e| {
                 assert_eq!(
-                    LiteralWithNameRef::decode(b),
+                    LiteralWithNameRef::decode(&mut b),
                     Ok(LiteralWithNameRef::new_dynamic(0, "quxx"))
                 );
                 assert_eq!(e.get_ref().len(), 0);
@@ -457,15 +459,15 @@ mod tests {
             1,
             &|b, mut e| {
                 assert_eq!(
-                    IndexedWithPostBase::decode(b),
+                    IndexedWithPostBase::decode(&mut b),
                     Ok(IndexedWithPostBase(0))
                 );
                 assert_eq!(
-                    LiteralWithPostBaseNameRef::decode(b),
+                    LiteralWithPostBaseNameRef::decode(&mut b),
                     Ok(LiteralWithPostBaseNameRef::new(0, "quxx"))
                 );
                 assert_eq!(
-                    InsertWithoutNameRef::decode(e),
+                    InsertWithoutNameRef::decode(&mut e),
                     Ok(Some(InsertWithoutNameRef::new("foo", "bar")))
                 );
             },
@@ -542,7 +544,7 @@ mod tests {
             IndexedWithPostBase::decode(&mut read_block),
             Ok(IndexedWithPostBase(2))
         );
-        assert_eq!(read_block.get_ref().len() as u64, read_block.position());
+        assert_eq!(read_block.get_ref().len(), read_block.position());
     }
 
     #[test]
@@ -555,7 +557,7 @@ mod tests {
             &[],
             &[field.clone(), field.with_value("quxx")],
             2,
-            &|_, _| {},
+            |_, _| {},
         );
 
         let mut buf = vec![];
@@ -587,7 +589,7 @@ mod tests {
             &[],
             &[field.clone(), field.with_value("quxx")],
             2,
-            &|_, _| {},
+            |_, _| {},
         );
 
         let mut buf = vec![];
@@ -621,7 +623,7 @@ mod tests {
             &[],
             &[HeaderField::new("foo", "bar")],
             2,
-            &|_, _| {},
+            |_, _| {},
         );
         let mut encoder = Encoder::from(table);
 

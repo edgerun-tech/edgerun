@@ -11,22 +11,28 @@ SECTIONS
     .text : {
         *(.text.entry)
         *(.text)
-    }
+    } :text
 
     .rodata : {
         *(.rodata)
-    }
+    } :rodata
 
     .data : {
         *(.data)
-    }
+    } :data
 
     .bss : {
-        _bss_start = .;
-        *(COMMON)
         *(.bss)
-        _bss_end = .;
-    }
+        *(COMMON)
+    } :bss
+
+    _bss_start = ADDR(.bss);
+    _bss_end = ADDR(.bss) + SIZEOF(.bss);
+
+    . = ALIGN(16);
+    _stack_end = .;
+    . += 16384;
+    _stack = .;
 
     _end = .;
 }

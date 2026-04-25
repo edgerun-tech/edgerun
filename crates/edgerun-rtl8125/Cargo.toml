@@ -1,0 +1,9 @@
+[package]
+name = "edgerun-rtl8125"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Realtek RTL8125 NIC driver"
+
+[dependencies]
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }

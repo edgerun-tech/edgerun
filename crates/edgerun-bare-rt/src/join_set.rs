@@ -1,0 +1,97 @@
+//! JoinSet - manage a dynamic set of spawned tasks.
+
+#![no_std]
+
+extern crate alloc;
+
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::cell::UnsafeCell;
+use core::future::Future;
+use core::pin::Pin;
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+use crate::oneshot;
+use crate::runtime::spawn;
+
+// ===========================================================================
+// JoinSet
+// ===========================================================================
+
+pub struct JoinSet<T> {
+    receivers: UnsafeCell<Vec<oneshot::Receiver<Result<T, crate::blocking_pool::JoinError>>>>,
+}
+
+impl<T> Default for JoinSet<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> JoinSet<T> {
+    pub fn new() -> Self {
+        Self {
+            receivers: UnsafeCell::new(Vec::new()),
+        }
+    }
+
+    pub fn spawn<F>(&mut self, f: F)
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        spawn(async move {
+            let result = f.await;
+            let _ = tx.send(Ok(result));
+        });
+        unsafe { (*self.receivers.get()).push(rx) };
+    }
+
+    pub fn len(&self) -> usize {
+        unsafe { (*self.receivers.get()).len() }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn join_next(&mut self) -> JoinNext<'_, T> {
+        JoinNext { set: self }
+    }
+
+    pub fn abort_all(&mut self) {
+        unsafe { (*self.receivers.get()).clear() };
+    }
+}
+
+pub struct JoinNext<'a, T> {
+    set: &'a mut JoinSet<T>,
+}
+
+impl<T: Send + 'static> Future for JoinNext<'_, T> {
+    type Output = Option<Result<T, crate::blocking_pool::JoinError>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        let receivers = unsafe { &mut *this.set.receivers.get() };
+        for i in (0..receivers.len()).rev() {
+            let rx = &mut receivers[i];
+            match Pin::new(rx).poll(cx) {
+                Poll::Ready(Ok(val)) => {
+                    receivers.remove(i);
+                    return Poll::Ready(Some(val));
+                }
+                Poll::Ready(Err(_)) => {
+                    receivers.remove(i);
+                    return Poll::Ready(Some(Err(crate::blocking_pool::JoinError)));
+                }
+                Poll::Pending => {}
+            }
+        }
+        if receivers.is_empty() {
+            return Poll::Ready(None);
+        }
+        Poll::Pending
+    }
+}
