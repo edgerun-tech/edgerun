@@ -42,7 +42,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use super::connection::Http3Connection;
-use super::http3::settings::Http3Settings;
+use crate::http3::settings::Http3Settings;
 use super::qpack::{QpackDecoder, QpackEncoder};
 use super::quic::crypto::PacketProtection;
 use super::quic::frame::QuicFrame;

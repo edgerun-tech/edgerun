@@ -118,8 +118,8 @@ impl From<String> for Http2Error {
     }
 }
 
-impl From<hpack_patched::decoder::DecoderError> for Http2Error {
-    fn from(err: hpack_patched::decoder::DecoderError) -> Self {
+impl From<edgerun_hpack::decoder::DecoderError> for Http2Error {
+    fn from(err: edgerun_hpack::decoder::DecoderError) -> Self {
         Http2Error::HpackDecode(format!("{:?}", err))
     }
 }

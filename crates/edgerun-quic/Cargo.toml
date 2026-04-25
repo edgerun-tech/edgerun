@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-quic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QUIC transport protocol (RFC 9000)"
+
+[lints]
+workspace = true
+
+[dependencies]
+edgerun-tls = { path = "../edgerun-tls" }
+edgerun-crypto = { path = "../edgerun-crypto" }
+edgerun-rt = { path = "../edgerun-rt" }
+edgerun-log = { path = "../edgerun-log" }
+edgerun-encoding = { path = "../edgerun-encoding" }

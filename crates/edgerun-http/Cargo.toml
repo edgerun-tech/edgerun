@@ -4,11 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Dependency-free HTTP/1.1, HTTP/2, and HTTP/3 implementation with HPACK/QPACK compression, stream multiplexing, and flow control"
-readme = "README.md"
-documentation = "https://docs.rs/edgerun-http"
-keywords = ["http", "http2", "http3", "quic", "hpack"]
-categories = ["network-programming", "web-programming"]
+description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 
 [features]
 default = []
@@ -21,10 +17,10 @@ edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
 edgerun-encoding = { path = "../edgerun-encoding" }
-hpack-patched = { path = "crates/hpack-patched" }
+edgerun-hpack = { path = "../edgerun-hpack" }
+edgerun-qpack = { path = "../edgerun-qpack" }
 flate2.workspace = true
 brotli.workspace = true
-edgerun-qpack = { path = "../edgerun-qpack" }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

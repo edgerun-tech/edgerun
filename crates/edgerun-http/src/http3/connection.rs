@@ -1,17 +1,16 @@
 //! HTTP/3 connection over QUIC
 
-use super::Http3Error;
+use crate::http3::{Http3Error, Result};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use super::error_codes;
-use super::http3::frame::{Http3Frame, Http3FrameType};
-use super::http3::settings::Http3Settings;
-use super::http3::stream::{Http3Stream, Http3StreamType};
-use super::http3::stream_types;
+use crate::http3::error_codes;
+use super::frame::{Http3Frame, Http3FrameType};
+use super::settings::Http3Settings;
+use super::stream::{Http3Stream, Http3StreamType};
+use super::stream_types;
 use super::qpack::{QpackDecoder, QpackEncoder};
 use super::quic::QuicConnection as QuicConn;
-use super::Result;
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::status::StatusCode;
@@ -412,7 +411,7 @@ impl Http3Connection {
                 Err(_) => {
                     let _ = self
                         .quic
-                        .send_reset_stream(*stream_id, error_codes::H3_FRAME_ERROR)
+                        .send_reset_stream(*stream_id, error_codes::HTTP_FRAME_ERROR as u64)
                         .await;
                     self.recv_buffers.remove(stream_id);
                 }

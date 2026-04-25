@@ -3,19 +3,16 @@
 //! QPACK (RFC 9204) uses the exact same canonical Huffman code table
 //! as HPACK (RFC 7541 Appendix B), so `hpack_patched` works directly.
 
-use hpack_patched::huffman;
+use edgerun_hpack::huffman;
 
 /// Encode plaintext using HPACK/QPACK Huffman coding.
 pub fn encode(input: &[u8]) -> Vec<u8> {
-    hpack_patched::huffman::encode(input)
+    edgerun_hpack::huffman::encode(input)
 }
 
 /// Decode HPACK/QPACK Huffman-coded bytes into plaintext.
-///
-/// Returns `Err` if the Huffman data is malformed (invalid codes,
-/// invalid padding, or EOS symbol in the middle of the stream).
 pub fn decode(input: &[u8]) -> Result<Vec<u8>, String> {
-    let mut decoder = hpack_patched::huffman::HuffmanDecoder::new();
+    let mut decoder = edgerun_hpack::huffman::HuffmanDecoder::new();
     decoder
         .decode(input)
         .map_err(|e| format!("Huffman decode error: {:?}", e))
