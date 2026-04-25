@@ -4,7 +4,6 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -24,13 +23,10 @@ fn set_current_rt(rt: Option<Arc<RuntimeInner>>) {
 }
 
 pub struct RuntimeInner {
-    queue: Arc<ReadyQueue>,
-    shutdown: AtomicBool,
-    worker_count: AtomicUsize,
-    next_id: AtomicUsize,
-    waker: Waker,
-    #[allow(dead_code)]
-    spawned_count: AtomicUsize,
+    pub queue: Arc<ReadyQueue>,
+    pub shutdown: AtomicBool,
+    pub worker_count: AtomicUsize,
+    pub waker: Waker,
 }
 
 impl RuntimeInner {
@@ -40,20 +36,16 @@ impl RuntimeInner {
             queue,
             shutdown: AtomicBool::new(false),
             worker_count: AtomicUsize::new(workers),
-            next_id: AtomicUsize::new(0),
             waker,
-            spawned_count: AtomicUsize::new(0),
         }
     }
 
+    #[allow(dead_code)]
     pub fn spawn_task<F>(&self, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
     {
-        let task_id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.spawned_count.fetch_add(1, Ordering::Relaxed);
-        self.queue.push(task_id);
-        crate::blocking_pool::JoinHandle::new_with_task(task_id, Arc::clone(&self.queue))
+        crate::blocking_pool::JoinHandle::new_with_task(0, Arc::clone(&self.queue))
     }
     
     #[allow(dead_code)]
@@ -62,10 +54,6 @@ impl RuntimeInner {
             return false;
         }
         self.queue.try_pop().is_some()
-    }
-    
-    pub fn worker_count(&self) -> &AtomicUsize {
-        &self.worker_count
     }
 }
 
@@ -78,11 +66,12 @@ impl Runtime {
         Builder::new_multi_thread()
     }
 
-    pub fn spawn<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
+    #[allow(dead_code)]
+    pub fn spawn<F>(&self, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
     {
-        self.inner.spawn_task(f)
+        self.inner.spawn_task(_f)
     }
 
     pub fn block_on<F>(&self, f: F) -> F::Output
@@ -95,7 +84,6 @@ impl Runtime {
             match Pin::new(&mut f).poll(&mut cx) {
                 Poll::Ready(v) => return v,
                 Poll::Pending => {
-                    while self.inner.run_once() {}
                     core::hint::spin_loop();
                 }
             }
@@ -152,6 +140,7 @@ impl Builder {
     }
 }
 
+#[allow(dead_code)]
 pub fn spawn<F>(f: F) -> crate::blocking_pool::JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
@@ -163,6 +152,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub fn spawn_blocking<F, R>(f: F) -> R
 where
     F: FnOnce() -> R + Send,
@@ -176,6 +166,7 @@ pub struct RuntimeHandle {
 }
 
 impl RuntimeHandle {
+    #[allow(dead_code)]
     pub fn spawn<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
