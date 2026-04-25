@@ -10,6 +10,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 
 use crate::cli::GlobalOpts;
+use crate::cli::resolve_registry_auth;
 use crate::json::{parse_oci_spec, OciSpec};
 use crate::lifecycle::{
     fork_container_child, run_create_runtime_hooks, run_poststart_hooks, run_prestart_hooks,
@@ -20,7 +21,6 @@ use crate::state::{delete_state, load_state};
 
 use crate::ImageRef;
 use crate::RegistryClient;
-use crate::SecretClient;
 
 struct RunOpts {
     rm: bool,
@@ -338,33 +338,4 @@ fn generate_container_id(image: &ImageRef) -> String {
         .next_back()
         .unwrap_or(&image.repository);
     format!("{}-{}-{}", short, image.tag, ts)
-}
-
-fn resolve_registry_auth(registry: &str) -> io::Result<crate::RegistryAuth> {
-    let mut secret_client = match SecretClient::connect() {
-        Ok(c) => c,
-        Err(_) => return Ok(crate::RegistryAuth::Anonymous),
-    };
-
-    secret_client.open_session()?;
-
-    match secret_client.get_registry_credential(registry) {
-        Ok(secret_bytes) => {
-            let secret_str = String::from_utf8(secret_bytes).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid credential encoding")
-            })?;
-            let (username, password) = secret_str.split_once(':').ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "credential must be username:password",
-                )
-            })?;
-            Ok(crate::RegistryAuth::Basic {
-                username: username.to_string(),
-                password: password.to_string(),
-            })
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(crate::RegistryAuth::Anonymous),
-        Err(e) => Err(e),
-    }
 }

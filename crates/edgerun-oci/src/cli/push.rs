@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 
 use crate::cli::GlobalOpts;
+use crate::cli::resolve_registry_auth;
 use crate::ImageRef;
 use crate::RegistryClient;
-use crate::SecretClient;
 
 pub fn cmd_push(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     let (image_ref, images_dir) = parse_push_args(args)?;
@@ -79,38 +79,4 @@ fn parse_push_args(args: &[String]) -> std::io::Result<(String, PathBuf)> {
     })?;
 
     Ok((image, images_dir))
-}
-
-fn resolve_registry_auth(registry: &str) -> std::io::Result<crate::RegistryAuth> {
-    let mut secret_client = match SecretClient::connect() {
-        Ok(c) => c,
-        Err(_) => return Ok(crate::RegistryAuth::Anonymous),
-    };
-
-    if secret_client.open_session().is_err() {
-        return Ok(crate::RegistryAuth::Anonymous);
-    }
-
-    match secret_client.get_registry_credential(registry) {
-        Ok(secret_bytes) => {
-            let secret_str = String::from_utf8(secret_bytes).map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "invalid credential encoding",
-                )
-            })?;
-            let (username, password) = secret_str.split_once(':').ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "credential must be username:password",
-                )
-            })?;
-            Ok(crate::RegistryAuth::Basic {
-                username: username.to_string(),
-                password: password.to_string(),
-            })
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(crate::RegistryAuth::Anonymous),
-        Err(_) => Ok(crate::RegistryAuth::Anonymous),
-    }
 }
