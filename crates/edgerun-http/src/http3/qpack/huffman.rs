@@ -26,7 +26,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "HPACK Huffman encoding needs fix"]
     fn test_huffman_encode_decode_roundtrip() {
         let inputs = [
             b"hello".as_slice(),
@@ -52,7 +51,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "HPACK Huffman encoding needs fix"]
     fn test_huffman_compress_ratio() {
         let input = b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
         let encoded = encode(input);
@@ -60,7 +58,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "HPACK Huffman encoding needs fix"]
     fn test_huffman_all_bytes_roundtrip() {
         // Test all byte values 0-255
         let input: Vec<u8> = (0..=255).collect();
@@ -70,7 +67,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "HPACK Huffman encoding needs fix"]
     fn test_huffman_rfc_example() {
         // RFC 7541 Appendix C: "www.example.com" → 0xf1e3c2e5f23a6ba0
         let input = b"www.example.com";

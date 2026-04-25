@@ -169,41 +169,33 @@ pub fn encode(input: &[u8]) -> Vec<u8> {
     }
 
     let mut result = Vec::with_capacity(input.len());
-    let mut bits: u32 = 0;
-    let mut bit_count: u8 = 0;
+    let mut bits: u64 = 0;
+    let mut bit_count: u32 = 0;
 
     for &byte in input {
-        let code = HUFFMAN_CODE_TABLE[byte as usize];
-        bits = (bits << code.1) | code.0;
-        bit_count += code.1;
-        // Safety: bit_count stays bounded because max code length is 30 bits
-        // We use a mask to avoid overflow
+        let (code_val, code_len) = HUFFMAN_CODE_TABLE[byte as usize];
+        bits = (bits << code_len) | code_val as u64;
+        bit_count = bit_count + code_len as u32;
+
         while bit_count >= 8 {
-            bit_count -= 8;
-            // Only shift if we have enough bits; mask to lower 8 bits
-            let masked = bits & 0xFFFFFFFF;
-            result.push((masked >> bit_count) as u8);
+            bit_count = bit_count - 8;
+            let shift = bit_count;
+            result.push(((bits >> shift) & 0xFF) as u8);
         }
     }
 
-    // Add EOS (256) and remaining bits
+    // Add padding: fill remaining bits with 1s to byte boundary
     if bit_count > 0 {
-        let eos = HUFFMAN_CODE_TABLE[256];
-        bits = (bits << eos.1) | eos.0;
-        bit_count += eos.1;
+        let padding: u32 = 8 - bit_count;
+        let pad_value: u64 = ((1u64 << padding) - 1) & 0xFF;
+        bits = (bits << padding) | pad_value;
+        bit_count = bit_count + padding;
 
+        // Output remaining bits
         while bit_count >= 8 {
-            bit_count -= 8;
-            let shift = 32 - bit_count;
-            result.push((bits >> shift) as u8);
-        }
-
-        // Padding: fill remaining bits with 1s, MSB first
-        if bit_count > 0 {
-            let padding_bits = 8 - bit_count;
-            let pad_mask = !((1u32 << padding_bits) - 1);
-            let last = ((bits << padding_bits) | (pad_mask & ((1 << padding_bits) - 1))) as u8;
-            result.push(last);
+            bit_count = bit_count - 8;
+            let shift = bit_count;
+            result.push(((bits >> shift) & 0xFF) as u8);
         }
     }
 
