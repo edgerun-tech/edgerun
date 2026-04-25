@@ -1,21 +1,6 @@
 //! # edgerun-encoding
 //!
 //! Consolidated encoding utilities for the edgerun workspace.
-//! Provides a single boundary for all encoding/decoding operations:
-//! - Hex encoding/decoding
-//! - Base64 (standard + URL-safe, with/without padding)
-//! - Percent/URL encoding
-//! - Protobuf canonical encoding + signing helpers
-//! - TLV (Tag-Length-Value) encoding/decoding
-//! - C-string utilities
-//! - Binary string field helpers
-//! - RFC3339 timestamp parsing/formatting
-//! - Varint (LEB128) encoding/decoding
-//! - Quoted-Printable encoding (RFC 2045)
-//! - Base32hex encoding (RFC 4648 extended hex)
-//! - RFC2822 date formatting
-//!
-//! All implementations are self-contained with zero external dependencies.
 
 #![no_std]
 
@@ -31,7 +16,6 @@ pub mod chunked;
 pub mod cstring;
 pub mod frame;
 pub mod hex;
-pub mod huffman;
 pub mod ip;
 pub mod kv;
 pub mod net;
@@ -44,6 +28,9 @@ pub mod rfc3339;
 pub mod string_field;
 pub mod tlv;
 pub mod varint;
+
+// Re-exports from edgerun-hpack
+pub use edgerun_hpack::{Decoder, Encoder};
 
 pub use base64::{
     base64url_decode, base64url_encode, base64url_nopad_encode, standard_decode, standard_encode,

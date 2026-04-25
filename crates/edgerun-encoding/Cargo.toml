@@ -1,9 +1,9 @@
 [package]
 name = "edgerun-encoding"
-version = "0.1.0"
-edition = "2024"
-license = "MIT"
-publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
 description = "Consolidated encoding utilities for the edgerun workspace"
 
 [features]
@@ -11,7 +11,6 @@ default = ["std"]
 std = []
 
 [dependencies]
-# No external dependencies — all implementations are self-contained
 edgerun-hpack = { path = "../edgerun-hpack" }
 
 [lints]
