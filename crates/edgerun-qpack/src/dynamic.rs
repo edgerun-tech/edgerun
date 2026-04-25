@@ -560,7 +560,7 @@ mod tests {
     use alloc::string::ToString;
     use core::cmp::Ordering;
 
-    use crate::{static_::StaticTable, tests::helpers::build_table};
+    use crate::{static_::StaticTable, helpers::build_table};
 
     const STREAM_ID: u64 = 0x4;
 

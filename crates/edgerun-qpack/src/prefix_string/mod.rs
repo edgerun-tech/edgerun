@@ -99,6 +99,10 @@ impl From<TryFromIntError> for Error {
 
 #[cfg(test)]
 mod tests {
+    extern crate alloc;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use super::*;
     use assert_matches::assert_matches;
     use edgerun_encoding::buf::Cursor;

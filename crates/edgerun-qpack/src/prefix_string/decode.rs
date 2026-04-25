@@ -339,6 +339,9 @@ impl HpackStringDecode for Vec<u8> {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::identity_op)]
+    extern crate alloc;
+    use alloc::vec;
+    use alloc::vec::Vec;
 
     use super::*;
 

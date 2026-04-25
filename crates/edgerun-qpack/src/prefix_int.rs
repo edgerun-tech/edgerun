@@ -81,6 +81,10 @@ const MAX_POWER: usize = 9 * 7;
 
 #[cfg(test)]
 mod test {
+    extern crate alloc;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use assert_matches::assert_matches;
     use edgerun_encoding::buf::Cursor;
 

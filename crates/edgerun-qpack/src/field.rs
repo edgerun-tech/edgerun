@@ -94,6 +94,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    extern crate alloc;
+    use alloc::borrow::Cow;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use super::*;
 
     /**

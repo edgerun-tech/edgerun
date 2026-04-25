@@ -78,6 +78,18 @@ pub enum Error {
     Index(usize),
 }
 
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::RelativeIndex(i) => write!(f, "relative index: {}", i),
+            Error::PostbaseIndex(i) => write!(f, "postbase index: {}", i),
+            Error::Index(i) => write!(f, "index: {}", i),
+        }
+    }
+}
+
+impl core::error::Error for Error {}
+
 #[derive(Debug, Default)]
 pub struct VirtualAddressSpace {
     inserted: usize,

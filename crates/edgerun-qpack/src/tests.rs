@@ -1,34 +1,12 @@
+extern crate alloc;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::decoder::Decoder;
 use crate::encoder::Encoder;
 use crate::{dynamic::DynamicTable, Decoded, DecoderError, HeaderField};
-use std::io::Cursor;
-
-pub mod helpers {
-    use crate::{dynamic::DynamicTable, HeaderField};
-
-    pub const TABLE_SIZE: usize = 4096;
-
-    pub fn build_table() -> DynamicTable {
-        let mut table = DynamicTable::new();
-        table.set_max_size(TABLE_SIZE).unwrap();
-        table.set_max_blocked(100).unwrap();
-        table
-    }
-
-    pub fn build_table_with_size(n_field: usize) -> DynamicTable {
-        let mut table = DynamicTable::new();
-        table.set_max_size(TABLE_SIZE).unwrap();
-        table.set_max_blocked(100).unwrap();
-
-        for i in 0..n_field {
-            table
-                .put(HeaderField::new(format!("foo{}", i + 1), "bar"))
-                .unwrap();
-        }
-
-        table
-    }
-}
+use edgerun_encoding::buf::Cursor;
+use crate::helpers::{build_table, build_table_with_size, TABLE_SIZE};
 
 #[test]
 fn codec_basic_get() {
@@ -60,7 +38,6 @@ fn codec_basic_get() {
     encoder.on_decoder_recv(&mut dec_cur).unwrap();
 }
 
-const TABLE_SIZE: usize = 4096;
 #[test]
 fn blocked_header() {
     let mut enc_table = DynamicTable::new();

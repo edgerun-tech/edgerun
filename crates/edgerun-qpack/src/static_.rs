@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use alloc::borrow::Cow;
 
 use super::field::HeaderField;
 
@@ -6,6 +6,16 @@ use super::field::HeaderField;
 pub enum Error {
     Unknown(usize),
 }
+
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::Unknown(i) => write!(f, "unknown static index: {}", i),
+        }
+    }
+}
+
+impl core::error::Error for Error {}
 
 pub struct StaticTable {}
 
@@ -311,6 +321,10 @@ const PREDEFINED_HEADERS: [HeaderField; 99] = decl_fields![
 
 #[cfg(test)]
 mod tests {
+    extern crate alloc;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use super::*;
 
     /**

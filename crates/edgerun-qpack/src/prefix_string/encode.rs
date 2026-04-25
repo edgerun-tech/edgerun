@@ -1,11 +1,9 @@
 use super::BitWindow;
+use alloc::vec::Vec;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Error {
-    buffer_pos: BitWindow,
-    len: usize,
-    capacity: usize,
-    text: String,
+    _priv: (),
 }
 
 #[derive(Clone, Debug)]
@@ -399,6 +397,9 @@ impl HpackStringEncode for Vec<u8> {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::identity_op)]
+    extern crate alloc;
+    use alloc::vec;
+    use alloc::vec::Vec;
 
     use super::*;
 

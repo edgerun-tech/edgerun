@@ -340,8 +340,11 @@ impl From<TryFromIntError> for DecoderError {
 
 #[cfg(test)]
 mod tests {
+    extern crate alloc;
+    use alloc::{format, vec, vec::Vec};
+
     use super::*;
-    use crate::tests::helpers::{build_table_with_size, TABLE_SIZE};
+    use crate::helpers::{build_table_with_size, TABLE_SIZE};
 
     // #[test]
     // fn test_header_too_long() {

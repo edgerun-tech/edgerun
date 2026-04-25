@@ -1,5 +1,7 @@
+use alloc::vec::Vec;
+use core::convert::TryInto;
+
 use edgerun_encoding::buf::{Buf, BufMut};
-use std::convert::TryInto;
 
 use super::{
     parse_error::ParseError,
@@ -322,8 +324,12 @@ impl StreamCancel {
 
 #[cfg(test)]
 mod test {
+    extern crate alloc;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use super::*;
-    use std::io::Cursor;
+    use edgerun_encoding::buf::Cursor;
 
     #[test]
     fn insert_with_name_ref() {

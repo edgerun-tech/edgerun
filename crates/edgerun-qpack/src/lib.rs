@@ -24,6 +24,7 @@ pub mod encoder;
 
 pub mod prefix_int;
 pub mod prefix_string;
+pub mod helpers;
 
 #[cfg(test)]
 mod tests;

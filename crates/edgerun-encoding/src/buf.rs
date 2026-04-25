@@ -329,15 +329,21 @@ impl<T: AsRef<[u8]>> Cursor<T> {
     pub fn new(buf: T) -> Self {
         Cursor { buf, pos: 0 }
     }
-}
 
-impl<T: AsRef<[u8]>> Cursor<T> {
     pub fn position(&self) -> usize {
         self.pos
     }
 
     pub fn set_position(&mut self, pos: usize) {
         self.pos = pos;
+    }
+
+    pub fn get_ref(&self) -> &T {
+        &self.buf
+    }
+
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.buf
     }
 }
 
@@ -476,6 +482,23 @@ impl Buf for &mut std::io::Cursor<&mut Vec<u8>> {
         for _ in 0..n {
             let _ = self.read(&mut skip);
         }
+    }
+}
+
+impl Buf for &mut Vec<u8> {
+    #[inline]
+    fn remaining(&self) -> usize {
+        self.len()
+    }
+
+    #[inline]
+    fn chunk(&self) -> &[u8] {
+        self
+    }
+
+    #[inline]
+    fn advance(&mut self, n: usize) {
+        let _ = self.drain(..n);
     }
 }
 
