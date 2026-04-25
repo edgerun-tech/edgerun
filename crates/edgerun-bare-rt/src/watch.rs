@@ -52,7 +52,7 @@ impl<T> Clone for Sender<T> {
     }
 }
 
-impl<T> Sender<T> {
+impl<T: Clone> Sender<T> {
     pub fn send_replace(&self, value: T) {
         unsafe {
             *self.inner.value.get() = value;
@@ -81,7 +81,7 @@ pub struct Receiver<T> {
     inner: Arc<WatchInner<T>>,
 }
 
-impl<T> Receiver<T> {
+impl<T: Clone> Receiver<T> {
     pub fn borrow(&self) -> Result<T, ClosedError> {
         if self.inner.closed.load(Acquire) {
             return Err(ClosedError);
@@ -106,7 +106,7 @@ pub struct Changed<'a, T> {
     registered: bool,
 }
 
-impl<T> Future for Changed<'_, T> {
+impl<T: Clone> Future for Changed<'_, T> {
     type Output = Result<(), ClosedError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

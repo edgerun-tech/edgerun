@@ -45,7 +45,7 @@ pub struct Sender<T> {
     inner: Arc<BroadcastInner<T>>,
 }
 
-impl<T> Clone for Sender<T> {
+impl<T: Clone> Clone for Sender<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -53,7 +53,7 @@ impl<T> Clone for Sender<T> {
     }
 }
 
-impl<T> Sender<T> {
+impl<T: Clone + Send> Sender<T> {
     pub fn send(&self, value: T) {
         unsafe { *self.inner.value.get() = value };
         self.inner.version.fetch_add(1, Release);
@@ -70,16 +70,22 @@ pub struct Receiver<T> {
     inner: Arc<BroadcastInner<T>>,
 }
 
-impl<T> Receiver<T> {
+impl<T: Clone> Receiver<T> {
     pub fn recv(&self) -> BroadcastRecv<'_, T> {
         BroadcastRecv { receiver: self }
     }
 
-    pub fn borrow(&self) -> T {
+    pub fn borrow(&self) -> T 
+    where
+        T: Clone,
+    {
         unsafe { (*self.inner.value.get()).clone() }
     }
 
-    pub fn try_recv(&self) -> Option<T> {
+    pub fn try_recv(&self) -> Option<T>
+    where
+        T: Clone,
+    {
         let v = self.inner.version.load(Acquire);
         if v > 0 {
             Some(unsafe { (*self.inner.value.get()).clone() })
@@ -93,7 +99,7 @@ pub struct BroadcastRecv<'a, T> {
     receiver: &'a Receiver<T>,
 }
 
-impl<T> Future for BroadcastRecv<'_, T> {
+impl<T: Clone> Future for BroadcastRecv<'_, T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

@@ -1,6 +1,4 @@
 //! Async mutex - exclusive access with async wait support.
-//!
-//! A sync Mutex guards the data. Data is behind an UnsafeCell, protected by the async protocol.
 
 #![no_std]
 
@@ -10,40 +8,37 @@ use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker};
 
-use crate::sync_prim::Mutex as SyncMutex;
+pub fn new<T>(data: T) -> Mutex<T> {
+    Mutex {
+        state: Arc::new(State {
+            acquired: AtomicBool::new(false),
+            waker: UnsafeCell::new(None),
+        }),
+        data: UnsafeCell::new(data),
+    }
+}
 
-// ===========================================================================
-// Async Mutex
-// ===========================================================================
-
-struct MutexInner {
+struct State {
     acquired: AtomicBool,
     waker: UnsafeCell<Option<Waker>>,
 }
 
-/// An async mutex for exclusive access to `T`.
 pub struct Mutex<T> {
-    state: Arc<MutexInner>,
+    state: Arc<State>,
     data: UnsafeCell<T>,
 }
 
 impl<T> Mutex<T> {
     pub fn new(data: T) -> Self {
-        Self {
-            state: Arc::new(MutexInner {
-                acquired: AtomicBool::new(false),
-                waker: UnsafeCell::new(None),
-            }),
-            data: UnsafeCell::new(data),
-        }
+        new(data)
     }
 
-    pub fn lock(&self) -> MutexLockFuture<'_> {
-        MutexLockFuture {
-            state: Arc::clone(&self.state),
+    pub fn lock(&self) -> LockFuture<'_, T> {
+        LockFuture {
+            state: self.state.clone(),
             data: &self.data,
             registered: false,
         }
@@ -54,19 +49,12 @@ impl<T> Mutex<T> {
     }
 }
 
-impl<T: Default> Default for Mutex<T> {
-    fn default() -> Self {
-        Self::new(T::default())
-    }
-}
-
 unsafe impl<T: Send> Send for Mutex<T> {}
 unsafe impl<T: Send> Sync for Mutex<T> {}
 
-/// A guard that holds exclusive access to the mutex.
 pub struct MutexGuard<'a, T> {
     data: &'a UnsafeCell<T>,
-    state: Arc<MutexInner>,
+    state: Arc<State>,
 }
 
 unsafe impl<T: Send> Send for MutexGuard<'_, T> {}
@@ -86,7 +74,7 @@ impl<T> core::ops::DerefMut for MutexGuard<'_, T> {
 
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.state.acquired.store(false, core::sync::atomic::Ordering::Release);
+        self.state.acquired.store(false, Ordering::Release);
         unsafe {
             if let Some(w) = (*self.state.waker.get()).take() {
                 w.wake();
@@ -95,23 +83,22 @@ impl<T> Drop for MutexGuard<'_, T> {
     }
 }
 
-/// A future that resolves to an async mutex lock guard.
-pub struct MutexLockFuture<'a, T> {
-    state: Arc<MutexInner>,
+pub struct LockFuture<'a, T> {
+    state: Arc<State>,
     data: &'a UnsafeCell<T>,
     registered: bool,
 }
 
-unsafe impl<T: Send> Send for MutexLockFuture<'_, T> {}
+unsafe impl<T: Send> Send for LockFuture<'_, T> {}
 
-impl<'a, T> Future for MutexLockFuture<'a, T> {
+impl<'a, T> Future for LockFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
 
-        if !this.state.acquired.load(core::sync::atomic::Ordering::Acquire) {
-            this.state.acquired.store(true, core::sync::atomic::Ordering::Release);
+        if !this.state.acquired.load(Ordering::Acquire) {
+            this.state.acquired.store(true, Ordering::Release);
             return Poll::Ready(MutexGuard {
                 data: this.data,
                 state: this.state.clone(),
@@ -124,5 +111,14 @@ impl<'a, T> Future for MutexLockFuture<'a, T> {
         }
 
         Poll::Pending
+    }
+}
+
+pub type MutexLockFuture<'a, T> = LockFuture<'a, T>;
+pub type AsyncMutexGuard<'a, T> = MutexGuard<'a, T>;
+
+impl<T: Default> Default for Mutex<T> {
+    fn default() -> Self {
+        Self::new(T::default())
     }
 }

@@ -6,13 +6,15 @@ extern crate alloc;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use core::task::{Context, Poll, Waker};
 
 use crate::oneshot;
-use crate::runtime::spawn;
+use crate::blocking_pool::JoinError;
 
 // ===========================================================================
 // JoinSet
@@ -35,13 +37,13 @@ impl<T> JoinSet<T> {
         }
     }
 
-    pub fn spawn<F>(&mut self, f: F)
+    pub fn spawn<F>(&mut self, _rt: &crate::runtime::RuntimeHandle, f: F)
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let (tx, rx) = oneshot::channel();
-        spawn(async move {
+        let (mut tx, rx) = oneshot::channel();
+        let fut = Box::pin(async move {
             let result = f.await;
             let _ = tx.send(Ok(result));
         });
@@ -77,7 +79,7 @@ impl<T: Send + 'static> Future for JoinNext<'_, T> {
         let receivers = unsafe { &mut *this.set.receivers.get() };
         for i in (0..receivers.len()).rev() {
             let rx = &mut receivers[i];
-            match Pin::new(rx).poll(cx) {
+            match Future::poll(Pin::new(rx), cx) {
                 Poll::Ready(Ok(val)) => {
                     receivers.remove(i);
                     return Poll::Ready(Some(val));

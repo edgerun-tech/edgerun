@@ -117,23 +117,24 @@ impl<T> Future for RecvFut<'_, T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        if this.inner.closed.load(Acquire) {
+        let receiver = this.receiver;
+        if receiver.inner.closed.load(Acquire) {
             unsafe {
-                if let Some(v) = (*this.inner.queue.get()).pop() {
+                if let Some(v) = (*receiver.inner.queue.get()).pop() {
                     return Poll::Ready(Some(v));
                 }
             }
             return Poll::Ready(None);
         }
         unsafe {
-            if let Some(v) = (*this.inner.queue.get()).pop() {
+            if let Some(v) = (*receiver.inner.queue.get()).pop() {
                 return Poll::Ready(Some(v));
             }
         }
-        unsafe { *this.inner.recv_waker.get() = Some(cx.waker().clone()) };
-        if this.inner.closed.load(Acquire) {
+        unsafe { *receiver.inner.recv_waker.get() = Some(cx.waker().clone()) };
+        if receiver.inner.closed.load(Acquire) {
             unsafe {
-                if let Some(v) = (*this.inner.queue.get()).pop() {
+                if let Some(v) = (*receiver.inner.queue.get()).pop() {
                     return Poll::Ready(Some(v));
                 }
             }

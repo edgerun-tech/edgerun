@@ -1,18 +1,17 @@
-//! Blocking thread pool and `JoinHandle`.
+//! Blocking thread pool and JoinHandle.
 
 #![no_std]
 
 extern crate alloc;
 
-use crate::sync_prim::{Condvar, Mutex};
 use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use crate::sync_prim::{Condvar, Mutex};
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::Waker;
 
-// ===========================================================================
-// JoinHandle
-// ===========================================================================
+pub struct JoinHandle<T> {
+    inner: Arc<JoinInner<T>>,
+}
 
 struct JoinInner<T> {
     result: Mutex<Option<Result<T, JoinError>>>,
@@ -32,26 +31,13 @@ impl<T> JoinInner<T> {
     }
 }
 
-    fn set_result(&self, result: Result<T, JoinError>) {
-        let mut guard = self.result.lock();
-        if guard.is_some() {
-            return;
-        }
-        *guard = Some(result);
-        self.completed.store(true, Ordering::Release);
-        self.cvar.notify_all();
-        if let Some(w) = self.waker.lock().take() {
-            w.wake();
+impl<T> JoinHandle<T> {
+    pub fn new_with_task(task_id: usize, queue: Arc<crate::ready_queue::ReadyQueue>) -> Self {
+        Self {
+            inner: Arc::new(JoinInner::new()),
         }
     }
-}
 
-/// Handle for a spawned task.
-pub struct JoinHandle<T> {
-    inner: Arc<JoinInner<T>>,
-}
-
-impl<T> JoinHandle<T> {
     pub fn blocking_recv(self) -> Result<T, JoinError> {
         let mut guard = self.inner.result.lock();
         while guard.is_none() {
@@ -63,26 +49,26 @@ impl<T> JoinHandle<T> {
     pub fn is_finished(&self) -> bool {
         self.inner.completed.load(Ordering::Acquire)
     }
+
+    pub fn abort(&self) {}
 }
 
 impl<T> Clone for JoinHandle<T> {
     fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
+        Self { inner: self.inner.clone() }
     }
 }
 
 #[derive(Debug)]
 pub struct JoinError;
 
-// ===========================================================================
-// Blocking pool (stub for now)
-// ===========================================================================
-
-pub struct BlockingPool {
-    _priv: (),
+#[derive(Debug)]
+pub enum PoolError {
+    Full,
+    Shutdown,
 }
+
+pub struct BlockingPool { _priv: () }
 
 impl BlockingPool {
     pub fn new(_size: usize) -> Self {
@@ -98,10 +84,4 @@ impl BlockingPool {
     }
 
     pub fn shutdown(&self) {}
-}
-
-#[derive(Debug)]
-pub enum PoolError {
-    Full,
-    Shutdown,
 }

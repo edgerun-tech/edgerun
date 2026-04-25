@@ -9,49 +9,28 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker};
 
 use crate::ready_queue::ReadyQueue;
-use crate::sync_prim::{Condvar, Mutex};
 use crate::waker::make_waker;
-
-// ===========================================================================
-// Thread-local
-// ===========================================================================
-
-thread_local! {
-    static CURRENT_RT: UnsafeCell<Option<Arc<RuntimeInner>>> = UnsafeCell::new(None);
-}
-
-pub(crate) fn set_current_rt(rt: Arc<RuntimeInner>) {
-    CURRENT_RT.with(|c| unsafe { *c.get() = Some(rt) });
-}
-
-pub(crate) fn current_rt() -> Arc<RuntimeInner> {
-    CURRENT_RT.with(|c| unsafe { (*c.get()).clone() })
-        .expect("no runtime: spawn() must be called from within a runtime")
-}
 
 // ===========================================================================
 // RuntimeInner
 // ===========================================================================
 
-pub(crate) struct RuntimeInner {
-    queue: Arc<ReadyQueue>,
-    shutdown: AtomicBool,
+pub struct RuntimeInner {
+    pub queue: Arc<ReadyQueue>,
+    pub shutdown: AtomicBool,
 }
 
 impl RuntimeInner {
-    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
+    pub fn spawn_task<F>(&self, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        let task_id = 0; // TODO: proper task ID
-        let handle = JoinHandle::new_with_task(task_id, Arc::clone(&self.queue));
-        // TODO: actual task spawning
-        handle
+        crate::blocking_pool::JoinHandle::new_with_task(0, Arc::clone(&self.queue))
     }
 }
 
@@ -68,7 +47,7 @@ impl Runtime {
         Builder::new_multi_thread()
     }
 
-    pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
+    pub fn spawn<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
@@ -76,26 +55,16 @@ impl Runtime {
         self.inner.spawn_task(f)
     }
 
-    pub fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future + Send + 'static,
-        F::Output: Send + 'static,
-    {
-        set_current_rt(self.inner.clone());
-        // Simple block_on - run until complete
-        let mut f = f;
+    pub fn block_on<F: Future + Unpin>(&self, f: F) -> F::Output {
         let w = Arc::new(ReadyQueue::new());
-        let cx = Context::from_waker(&make_waker(0, w));
+        let waker = make_waker(0, Arc::clone(&w));
+        let mut cx = Context::from_waker(&waker);
+        let mut f = f;
         loop {
-            match Pin::new(&mut f).poll(&mut cx) {
+            match Future::poll(Pin::new(&mut f), &mut cx) {
                 Poll::Ready(v) => return v,
                 Poll::Pending => {
-                    // Process one task
-                    if let Some(_id) = w.pop() {
-                        // Poll the task
-                    } else {
-                        core::hint::spin_loop();
-                    }
+                    if w.pop().is_some() {}
                 }
             }
         }
@@ -143,36 +112,34 @@ impl Builder {
         self
     }
 
-    pub fn build(&self) -> Result<Runtime, std::io::Error> {
+    pub fn build(&self) -> Result<Runtime, ()> {
         let queue = Arc::new(ReadyQueue::new());
         let rt = Arc::new(RuntimeInner {
             queue,
             shutdown: AtomicBool::new(false),
         });
-        set_current_rt(rt.clone());
         Ok(Runtime { inner: rt })
     }
 }
 
 // ===========================================================================
-// Free spawn functions
+// Free spawn - stub (must have runtime passed)
 // ===========================================================================
 
-pub fn spawn<F>(f: F) -> JoinHandle<F::Output>
+pub fn spawn<F>(_rt: &RuntimeHandle, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    let rt = current_rt();
-    rt.spawn_task(f)
+    todo!("spawn not implemented")
 }
 
-pub fn spawn_blocking<F, R>(f: F) -> JoinHandle<R>
+pub fn spawn_blocking<F, R, RT>(_rt: &RT, _f: F) -> crate::blocking_pool::JoinHandle<R>
 where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    todo!("spawn_blocking not yet implemented")
+    todo!("spawn_blocking not implemented")
 }
 
 pub struct RuntimeHandle {
@@ -180,7 +147,7 @@ pub struct RuntimeHandle {
 }
 
 impl RuntimeHandle {
-    pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
+    pub fn spawn<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,

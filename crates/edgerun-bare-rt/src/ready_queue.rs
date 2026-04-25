@@ -40,14 +40,14 @@ impl ReadyQueue {
 
     pub fn push(&self, id: usize) {
         let mut q = self.inner.q.lock();
-        q.push_back(id);
+        q.push(id);
         self.inner.cvar.notify_one();
     }
 
     pub fn pop(&self) -> Option<usize> {
         let mut q = self.inner.q.lock();
         loop {
-            if let Some(id) = q.pop_front() {
+            if let Some(id) = q.pop() {
                 return Some(id);
             }
             if self.inner.done.load(Ordering::Acquire) {
@@ -58,7 +58,7 @@ impl ReadyQueue {
     }
 
     pub fn try_pop(&self) -> Option<usize> {
-        self.inner.q.lock().pop_front()
+        self.inner.q.lock().pop()
     }
 
     pub fn shutdown(&self) {
