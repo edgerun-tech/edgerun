@@ -481,42 +481,21 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "requires large stack for corpus vectors"]
     fn conformance_parse_vectors() {
-        std::thread::Builder::new()
-            .stack_size(8 * 1024 * 1024)
-            .spawn(|| {
-                let dirs = find_vector_dirs();
-                assert!(!dirs.is_empty(), "No corpus vectors found");
-                assert!(
-                    dirs.len() >= 40,
-                    "Expected at least 40 vectors, found {}",
-                    dirs.len()
-                );
+        let dirs = find_vector_dirs();
+        assert!(!dirs.is_empty(), "No corpus vectors found");
+        assert!(dirs.len() >= 40, "Expected at least 40 vectors, found {}", dirs.len());
 
-                // Verify we can load all vectors
-                for dir in &dirs {
-                    let vc = load_vector(dir);
-                    assert!(vc.is_some(), "Failed to load vector: {:?}", dir);
-                }
-            })
-            .unwrap()
-            .join()
-            .unwrap();
+        for dir in &dirs {
+            let vc = load_vector(dir);
+            assert!(vc.is_some(), "Failed to load vector: {:?}", dir);
+        }
     }
 
     #[test]
-    #[ignore = "requires large stack for corpus vectors"]
     fn conformance_mandatory_corpus() {
-        // Increase stack size for this test to handle deep recursion
-        std::thread::Builder::new()
-            .stack_size(8 * 1024 * 1024) // 8MB stack
-            .spawn(|| {
-                let vector_dirs = find_vector_dirs();
-                assert!(
-                    !vector_dirs.is_empty(),
-                    "No corpus vector directories found"
-                );
+        let vector_dirs = find_vector_dirs();
+        assert!(!vector_dirs.is_empty(), "No corpus vector directories found");
 
                 let mut passed = 0;
                 let mut failed = 0;
@@ -560,9 +539,5 @@ mod tests {
                 }
 
                 assert_eq!(failed, 0, "{} conformance vectors failed", failed);
-            })
-            .unwrap()
-            .join()
-            .unwrap();
     }
 }

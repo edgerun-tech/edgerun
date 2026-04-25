@@ -204,27 +204,37 @@ pub fn from_yaml_str(s: &str) -> Result<YamlValue, YamlError> {
 
 pub fn parse_yaml_value(s: &str) -> Result<YamlValue, YamlError> {
     let lines: Vec<&str> = s.lines().collect();
-    parse_yaml_lines(&lines, 0).map(|(v, _)| v)
+    parse_yaml_at(&lines, 0, 0).map(|(v, _)| v)
 }
 
-fn parse_yaml_lines(lines: &[&str], _indent: usize) -> Result<(YamlValue, usize), YamlError> {
+fn parse_yaml_at(lines: &[&str], start: usize, min_indent: usize) -> Result<(YamlValue, usize), YamlError> {
     let mut values = Vec::new();
-    let mut i = 0;
+    let mut i = start;
 
     while i < lines.len() {
         let line = lines[i];
+        let leading = line.len() - line.trim_start().len();
 
         if line.trim().is_empty() {
             i += 1;
             continue;
         }
 
+        if leading < min_indent && i > start {
+            break;
+        }
+
         let trimmed = line.trim();
 
         if trimmed.starts_with('-') {
             let item = trimmed.trim_start_matches('-').trim();
-            let item_value = parse_yaml_item(item)?;
-            values.push(item_value);
+            // Parse list item - could be simple value or nested object
+            let item_value = if item.contains(':') {
+                parse_yaml_at(&[item], 0, 0).map(|(v, _)| v).unwrap_or(YamlValue::Null)
+            } else {
+                parse_yaml_simple(item).unwrap_or(YamlValue::Null)
+            };
+            values.push(YamlValue::Array(vec![item_value]));
             i += 1;
             continue;
         }
@@ -234,8 +244,9 @@ fn parse_yaml_lines(lines: &[&str], _indent: usize) -> Result<(YamlValue, usize)
             let value_str = trimmed[colon_pos + 1..].trim();
 
             if value_str.is_empty() {
+                // Nested block - parse lines at higher indentation
                 i += 1;
-                let (nested, new_i) = parse_yaml_lines(lines, 2)?;
+                let (nested, new_i) = parse_yaml_at(lines, i, leading + 2)?;
                 values.push(YamlValue::Mapping(vec![(key.to_owned(), nested)]));
                 i = new_i;
             } else {
@@ -244,20 +255,26 @@ fn parse_yaml_lines(lines: &[&str], _indent: usize) -> Result<(YamlValue, usize)
                 i += 1;
             }
         } else {
-            return parse_yaml_simple(trimmed).map(|v| (v, i + 1));
+            return Ok((parse_yaml_simple(trimmed)?, i + 1));
         }
     }
 
+    // Flatten all nested objects into one mapping
     let mut result_map: Vec<(String, YamlValue)> = Vec::new();
-    let mut all_objects = true;
+    let mut all_arrays = true;
     for v in &values {
         if let YamlValue::Mapping(m) = v {
-            for (k, vv) in m.iter() {
-                result_map.push((k.clone(), vv.clone()));
+            all_arrays = false;
+            result_map.extend(m.iter().cloned());
+        } else if let YamlValue::Array(arr) = v {
+            // Keep as separate array entry
+            for item in arr {
+                if let YamlValue::Array(inner) = item {
+                    result_map.push((String::new(), item.clone()));
+                } else {
+                    result_map.push((String::new(), item.clone()));
+                }
             }
-        } else {
-            all_objects = false;
-            break;
         }
     }
 
@@ -277,14 +294,14 @@ fn parse_yaml_item(item: &str) -> Result<YamlValue, YamlError> {
 
     if trimmed.starts_with('-') {
         let inner = trimmed.trim_start_matches('-').trim();
-        let (value, _) = parse_yaml_lines(&[inner], 0)?;
+        let (value, _) = parse_yaml_at(&[inner], 0, 0)?;
         Ok(value)
     } else if let Some(colon_pos) = trimmed.find(':') {
         let key = trimmed[..colon_pos].trim();
         let value_str = trimmed[colon_pos + 1..].trim();
 
         if value_str.is_empty() {
-            let (nested, _) = parse_yaml_lines(&[trimmed], 2)?;
+            let (nested, _) = parse_yaml_at(&[trimmed], 0, 2)?;
             Ok(YamlValue::Mapping(vec![(key.to_owned(), nested)]))
         } else {
             let value = parse_yaml_simple(value_str)?;

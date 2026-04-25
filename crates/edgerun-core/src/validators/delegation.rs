@@ -42,16 +42,24 @@ pub fn validate_delegation_case(
         if matches!(verifier.verify_signed_fixture(link, &expected), Some(false)) {
             return reject(ReasonCode::CryptoInvalid, empty_map(), empty_map());
         }
-        if local_state
-            .get("revocations")
-            .and_then(Value::as_seq)
-            .map(|arr| {
-                arr.iter()
-                    .any(|v| v.as_str() == link.get("delegation_id").and_then(Value::as_str))
-            })
-            .unwrap_or(false)
-        {
-            return reject(ReasonCode::RevocationActive, empty_map(), empty_map());
+        let link_id = string_value(link, "delegation_id", "");
+        if !link_id.is_empty() {
+            let is_revoked = local_state
+                .get("revocations")
+                .and_then(Value::as_seq)
+                .map(|arr| {
+                    arr.iter().any(|v| {
+                        v.as_map()
+                            .and_then(|m| m.get("target"))
+                            .and_then(Value::as_str)
+                            .map(|t| t == link_id)
+                            .unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
+            if is_revoked {
+                return reject(ReasonCode::RevocationActive, empty_map(), empty_map());
+            }
         }
         prev_recipient = string_value(link, "recipient", "");
     }
