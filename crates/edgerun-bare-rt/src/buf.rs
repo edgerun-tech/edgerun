@@ -1,6 +1,5 @@
 //! Buffered async I/O — `BufReader` and `BufWriter` (no_std).
 
-#![no_std]
 
 extern crate alloc;
 

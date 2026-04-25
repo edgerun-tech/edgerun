@@ -1,6 +1,5 @@
 //! Sleep utilities.
 
-#![no_std]
 
 extern crate alloc;
 

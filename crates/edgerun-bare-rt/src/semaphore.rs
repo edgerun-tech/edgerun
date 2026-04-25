@@ -1,6 +1,5 @@
 //! Async semaphore - capacity-limited concurrency control.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -11,9 +10,9 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const AcqRel: Ordering = Ordering::AcqRel;
-const Release: Ordering = Ordering::Release;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const ACQ_REL: Ordering = Ordering::AcqRel;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // Semaphore
@@ -52,12 +51,12 @@ impl Semaphore {
         if unsafe { *self.inner.closed.get() } {
             return Err(TryAcquireError::Closed);
         }
-        let mut prev = self.available.load(Acquire);
+        let mut prev = self.available.load(ACQUIRE);
         loop {
             if prev == 0 {
                 return Err(TryAcquireError::NoPermits);
             }
-            match self.available.compare_exchange(prev, prev - 1, AcqRel, Acquire) {
+            match self.available.compare_exchange(prev, prev - 1, ACQ_REL, ACQUIRE) {
                 Ok(_) => return Ok(Permit::new(self.clone())),
                 Err(v) => prev = v,
             }
@@ -68,7 +67,7 @@ impl Semaphore {
         if n == 0 {
             return;
         }
-        self.available.fetch_add(n, Release);
+        self.available.fetch_add(n, RELEASE);
         if n > 0 {
             unsafe {
                 if let Some(w) = (*self.inner.waiters.get()).take() {
@@ -79,7 +78,7 @@ impl Semaphore {
     }
 
     pub fn available_permits(&self) -> usize {
-        self.available.load(Acquire)
+        self.available.load(ACQUIRE)
     }
 
     pub fn close(&self) {
@@ -143,7 +142,7 @@ impl Future for Acquire<'_> {
         }
 
         // Fast path: try to atomically decrement
-        let mut prev = this.semaphore.available.load(Acquire);
+        let mut prev = this.semaphore.available.load(ACQUIRE);
         loop {
             if prev == 0 {
                 break;
@@ -151,8 +150,8 @@ impl Future for Acquire<'_> {
             match this.semaphore.available.compare_exchange(
                 prev,
                 prev - 1,
-                AcqRel,
-                Acquire,
+                ACQ_REL,
+                ACQUIRE,
             ) {
                 Ok(_) => return Poll::Ready(Ok(Permit::new(this.semaphore.clone()))),
                 Err(v) => prev = v,

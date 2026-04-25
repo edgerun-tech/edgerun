@@ -1,6 +1,5 @@
 //! Reactor-based fd readiness futures (no_std stub).
 
-#![no_std]
 
 extern crate alloc;
 

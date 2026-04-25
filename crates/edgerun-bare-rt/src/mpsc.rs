@@ -1,6 +1,5 @@
 //! Bounded mpsc channel with backpressure.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -9,12 +8,12 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
-const AcqRel: Ordering = Ordering::AcqRel;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
+const ACQ_REL: Ordering = Ordering::AcqRel;
 
 // ===========================================================================
 // MPSC channel
@@ -53,7 +52,7 @@ impl<T> Clone for Sender<T> {
 
 impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
-        self.inner.closed.store(true, Release);
+        self.inner.closed.store(true, RELEASE);
     }
 }
 
@@ -88,7 +87,7 @@ unsafe impl<T: Send> Send for Receiver<T> {}
 
 impl<T> Receiver<T> {
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
-        if self.inner.closed.load(Acquire) {
+        if self.inner.closed.load(ACQUIRE) {
             unsafe {
                 if let Some(v) = (*self.inner.queue.get()).pop() {
                     return Ok(v);
@@ -118,7 +117,7 @@ impl<T> Future for RecvFut<'_, T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         let receiver = this.receiver;
-        if receiver.inner.closed.load(Acquire) {
+        if receiver.inner.closed.load(ACQUIRE) {
             unsafe {
                 if let Some(v) = (*receiver.inner.queue.get()).pop() {
                     return Poll::Ready(Some(v));
@@ -132,7 +131,7 @@ impl<T> Future for RecvFut<'_, T> {
             }
         }
         unsafe { *receiver.inner.recv_waker.get() = Some(cx.waker().clone()) };
-        if receiver.inner.closed.load(Acquire) {
+        if receiver.inner.closed.load(ACQUIRE) {
             unsafe {
                 if let Some(v) = (*receiver.inner.queue.get()).pop() {
                     return Poll::Ready(Some(v));

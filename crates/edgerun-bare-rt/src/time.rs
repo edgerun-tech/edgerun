@@ -1,6 +1,5 @@
 //! Time types for no_std bare-metal runtime.
 
-#![no_std]
 
 pub use core::time::Duration;
 

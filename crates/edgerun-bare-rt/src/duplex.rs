@@ -1,6 +1,5 @@
 //! DuplexStream — two connected in-memory async streams (no_std).
 
-#![no_std]
 
 extern crate alloc;
 

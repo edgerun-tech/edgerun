@@ -1,11 +1,9 @@
 //! AsyncRead / AsyncWrite traits and extension methods (no_std).
 
-#![no_std]
 
 extern crate alloc;
 
 use alloc::vec::Vec;
-use alloc::string::String;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};

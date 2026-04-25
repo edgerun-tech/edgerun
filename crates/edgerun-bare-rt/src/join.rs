@@ -1,6 +1,5 @@
 //! `join!` macro — await multiple futures concurrently.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -19,8 +18,8 @@ macro_rules! join {
 
 pub mod join_internal {
     use core::future::Future;
-    use core::pin::Pin;
-    use core::task::{Context, Poll};
+    
+    
 
     pub async fn join2<F1, F2>(f1: F1, f2: F2) -> (F1::Output, F2::Output)
     where
@@ -50,7 +49,6 @@ pub mod join_internal {
     }
 }
 
-pub use join_internal::{join2, join3, join4};
 
 pub type Select2Enum<O> = alloc::boxed::Box<core::future::Ready<O>>;
 
@@ -81,4 +79,3 @@ where
     core::future::ready(unsafe { core::mem::zeroed() })
 }
 
-pub use select_2 as select_internal;

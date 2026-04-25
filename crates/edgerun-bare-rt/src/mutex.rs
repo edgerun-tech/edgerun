@@ -1,6 +1,5 @@
 //! Async mutex - exclusive access with async wait support.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -94,7 +93,7 @@ unsafe impl<T: Send> Send for LockFuture<'_, T> {}
 impl<'a, T> Future for LockFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
 
         if !this.state.acquired.load(Ordering::Acquire) {

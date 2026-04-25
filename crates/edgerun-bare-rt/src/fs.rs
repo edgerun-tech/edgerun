@@ -1,6 +1,5 @@
 //! Filesystem stub.
 
-#![no_std]
 
 pub struct File;
 impl File { pub fn new() -> Self { Self } }

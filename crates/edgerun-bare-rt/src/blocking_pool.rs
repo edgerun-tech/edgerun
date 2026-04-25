@@ -1,6 +1,5 @@
 //! Blocking thread pool and JoinHandle.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -90,7 +89,7 @@ impl BlockingPool {
         }
     }
 
-    pub fn spawn<F, R>(&self, f: F) -> Result<JoinHandle<R>, PoolError>
+    pub fn spawn<F, R>(&self, _f: F) -> Result<JoinHandle<R>, PoolError>
     where
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,

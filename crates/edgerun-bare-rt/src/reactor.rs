@@ -1,6 +1,5 @@
 //! I/O reactor stub for bare-metal runtime.
 
-#![no_std]
 
 extern crate alloc;
 

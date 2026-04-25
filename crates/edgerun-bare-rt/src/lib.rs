@@ -1,4 +1,4 @@
-//! edgerun-bare-rt: Bare-metal async runtime (no_std)
+//! edgerun-bare-rt: Bare-metal async runtime
 
 #![no_std]
 
@@ -71,14 +71,6 @@ pub use blocking_pool::{JoinError, JoinHandle, PoolError};
 mod waker;
 mod runtime;
 pub use runtime::{spawn, spawn_blocking, Builder, Runtime, RuntimeHandle};
-
-mod select;
-
-mod sleep_until;
-pub use sleep_until::{Elapsed, Sleep, TimeoutAt, timeout_at};
-
-mod timers;
-pub use timers::{ctrl_c, interval, interval_at, sleep, timeout, CtrlC, Interval, MissedTickBehavior, Timeout};
 
 mod yield_now;
 pub use yield_now::{yieldnow, YieldNow};

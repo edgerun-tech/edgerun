@@ -1,13 +1,11 @@
 //! Timers and intervals.
 
-#![no_std]
 
 extern crate alloc;
 
-use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 
 use super::time::{Duration, Instant};
 use super::sleep_until::Elapsed;

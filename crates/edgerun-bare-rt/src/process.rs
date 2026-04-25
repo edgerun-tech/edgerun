@@ -1,6 +1,5 @@
 //! Process handling stub.
 
-#![no_std]
 
 pub struct Command;
 

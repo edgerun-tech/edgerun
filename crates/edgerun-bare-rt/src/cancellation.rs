@@ -1,6 +1,5 @@
 //! Cancellation token - cooperative cancellation signal.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -11,8 +10,8 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // CancellationToken
@@ -46,7 +45,7 @@ impl CancellationToken {
     }
 
     pub fn cancel(&self) {
-        self.inner.cancelled.store(true, Release);
+        self.inner.cancelled.store(true, RELEASE);
         unsafe {
             if let Some(w) = (*self.inner.waker.get()).take() {
                 w.wake();
@@ -55,7 +54,7 @@ impl CancellationToken {
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.inner.cancelled.load(Acquire)
+        self.inner.cancelled.load(ACQUIRE)
     }
 
     pub fn cancelled(&self) -> Cancelled<'_> {
@@ -79,13 +78,13 @@ impl Future for Cancelled<'_> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        if this.token.inner.cancelled.load(Acquire) {
+        if this.token.inner.cancelled.load(ACQUIRE) {
             return Poll::Ready(());
         }
         unsafe {
             *this.token.inner.waker.get() = Some(cx.waker().clone());
         }
-        if this.token.inner.cancelled.load(Acquire) {
+        if this.token.inner.cancelled.load(ACQUIRE) {
             Poll::Ready(())
         } else {
             Poll::Pending

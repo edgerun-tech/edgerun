@@ -1,6 +1,5 @@
 //! Logging - built-in minimal logger.
 
-#![no_std]
 
 extern crate alloc;
 

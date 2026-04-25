@@ -1,6 +1,5 @@
 //! Unix socketpair stub.
 
-#![no_std]
 
 pub fn socketpair() -> Result<(i32, i32), Error> { Err(Error) }
 

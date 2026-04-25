@@ -1,6 +1,5 @@
 //! Async oneshot channel - single value sender/receiver.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -90,7 +89,7 @@ impl<T: Send> Receiver<T> {
 impl<T: Send> Future for Receiver<T> {
     type Output = Result<T, RecvError>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         unsafe {
             if let Some(v) = (*self.inner.val.get()).take() {
                 return Poll::Ready(Ok(v));

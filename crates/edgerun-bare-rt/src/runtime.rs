@@ -1,6 +1,5 @@
 //! Runtime core - Builder, Runtime, free spawn functions.
 
-#![no_std]
 
 extern crate alloc;
 

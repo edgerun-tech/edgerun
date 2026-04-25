@@ -1,13 +1,11 @@
 //! Rate limiter - token bucket algorithm.
 
-#![no_std]
 
 extern crate alloc;
 
 use alloc::sync::Arc;
-use core::cell::UnsafeCell;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
 
 pub struct RateLimiter {
@@ -73,7 +71,7 @@ pub struct AcquireFuture {
 impl core::future::Future for AcquireFuture {
     type Output = bool;
 
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(self.limiter.available.load(Ordering::Acquire) > 0)
     }
 }

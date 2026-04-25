@@ -3,17 +3,16 @@
 //! Each waker carries a task ID. When `wake()` is called,
 //! the task ID is pushed onto the ready queue.
 
-#![no_std]
 
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::Ordering;
 use core::task::{RawWaker, RawWakerVTable, Waker};
 
 use crate::ready_queue::ReadyQueue;
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
-const AcqRel: Ordering = Ordering::AcqRel;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
+const ACQ_REL: Ordering = Ordering::AcqRel;
 
 // ===========================================================================
 // Waker
@@ -51,4 +50,18 @@ pub fn make_waker(id: usize, q: Arc<ReadyQueue>) -> Waker {
     let data = Arc::new(WData { id, q });
     let ptr = Arc::into_raw(data) as *const ();
     unsafe { Waker::from_raw(RawWaker::new(ptr, &VTABLE)) }
+}
+
+const NOOP_VTABLE: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop);
+
+unsafe fn noop_clone(_: *const ()) -> RawWaker {
+    RawWaker::new(core::ptr::null(), &NOOP_VTABLE)
+}
+
+unsafe fn noop_wake(_: *const ()) {}
+
+unsafe fn noop_drop(_: *const ()) {}
+
+pub fn noop_waker() -> Waker {
+    unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &NOOP_VTABLE)) }
 }

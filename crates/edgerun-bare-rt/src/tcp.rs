@@ -1,6 +1,5 @@
 //! TCP socket stub.
 
-#![no_std]
 
 pub struct TcpSocket;
 

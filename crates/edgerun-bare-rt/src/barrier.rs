@@ -3,7 +3,6 @@
 //! When `wait()` is called on the barrier, the task pends until
 //! `n` tasks have called `wait()`. Then all are released simultaneously.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -14,9 +13,9 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const AcqRel: Ordering = Ordering::AcqRel;
-const Release: Ordering = Ordering::Release;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const ACQ_REL: Ordering = Ordering::AcqRel;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // Barrier
@@ -55,7 +54,7 @@ impl Barrier {
     pub fn wait(&self) -> BarrierWait<'_> {
         BarrierWait {
             barrier: self,
-            generation: self.inner.generation.load(Acquire),
+            generation: self.inner.generation.load(ACQUIRE),
             registered: false,
         }
     }
@@ -81,14 +80,14 @@ impl Future for BarrierWait<'_> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        let current_gen = this.barrier.inner.generation.load(Acquire);
+        let current_gen = this.barrier.inner.generation.load(ACQUIRE);
         if current_gen > this.generation {
             return Poll::Ready(BarrierWaitResult { is_leader: false });
         }
 
-        let prev = this.barrier.inner.count.fetch_add(1, AcqRel);
+        let prev = this.barrier.inner.count.fetch_add(1, ACQ_REL);
         if prev + 1 >= this.barrier.inner.n {
-            this.barrier.inner.generation.fetch_add(1, Release);
+            this.barrier.inner.generation.fetch_add(1, RELEASE);
             unsafe {
                 if let Some(w) = (*this.barrier.inner.waker.get()).take() {
                     w.wake();

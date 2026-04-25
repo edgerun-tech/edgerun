@@ -1,6 +1,5 @@
 //! TcpSocket — builder-pattern for TCP connections (no_std stub).
 
-#![no_std]
 
 extern crate alloc;
 

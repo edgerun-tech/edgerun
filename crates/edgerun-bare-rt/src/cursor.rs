@@ -1,6 +1,5 @@
 //! Async `Cursor` — in-memory reader/writer over `&[u8]` and `Vec<u8>` (no_std).
 
-#![no_std]
 
 extern crate alloc;
 

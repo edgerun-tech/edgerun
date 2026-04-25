@@ -1,6 +1,5 @@
 //! UDP socket stub.
 
-#![no_std]
 
 pub struct UdpSocket;
 

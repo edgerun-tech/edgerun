@@ -1,6 +1,5 @@
 //! AsyncFd — wrap any raw file descriptor with async readiness (no_std).
 
-#![no_std]
 
 extern crate alloc;
 

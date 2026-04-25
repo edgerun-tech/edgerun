@@ -1,6 +1,5 @@
 //! Task map - track spawned tasks by ID.
 
-#![no_std]
 
 extern crate alloc;
 

@@ -1,6 +1,5 @@
 //! Unbounded mpsc channel - no backpressure, always succeeds.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -9,8 +8,8 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // Unbounded channel
@@ -44,7 +43,7 @@ pub struct Sender<T> {
 
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
-        self.inner.sender_count.fetch_add(1, Release);
+        self.inner.sender_count.fetch_add(1, RELEASE);
         Self {
             inner: self.inner.clone(),
         }
@@ -53,8 +52,8 @@ impl<T> Clone for Sender<T> {
 
 impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
-        if self.inner.sender_count.fetch_sub(1, Acquire) == 1 {
-            self.inner.closed.store(true, Release);
+        if self.inner.sender_count.fetch_sub(1, ACQUIRE) == 1 {
+            self.inner.closed.store(true, RELEASE);
         }
     }
 }
@@ -77,7 +76,7 @@ impl<T> Sender<T> {
     }
 
     pub fn is_closed(&self) -> bool {
-        self.inner.closed.load(Acquire)
+        self.inner.closed.load(ACQUIRE)
     }
 }
 
@@ -87,7 +86,7 @@ pub struct Receiver<T> {
 
 impl<T> Receiver<T> {
     pub fn try_recv(&self) -> Option<T> {
-        if self.inner.closed.load(Acquire) && unsafe { (*self.inner.queue.get()).is_empty() } {
+        if self.inner.closed.load(ACQUIRE) && unsafe { (*self.inner.queue.get()).is_empty() } {
             None
         } else {
             unsafe { (*self.inner.queue.get()).pop() }
@@ -99,7 +98,7 @@ impl<T> Receiver<T> {
             if let Some(v) = self.try_recv() {
                 return Some(v);
             }
-            if self.inner.closed.load(Acquire) {
+            if self.inner.closed.load(ACQUIRE) {
                 return None;
             }
             core::hint::spin_loop();

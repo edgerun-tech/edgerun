@@ -1,6 +1,5 @@
 //! Async I/O utilities — `copy`, `copy_bidirectional`, `empty`, `sink`, `repeat` (no_std).
 
-#![no_std]
 
 extern crate alloc;
 

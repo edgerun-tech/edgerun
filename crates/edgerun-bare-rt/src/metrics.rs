@@ -1,6 +1,5 @@
 //! Runtime metrics stub.
 
-#![no_std]
 
 pub struct RuntimeMetrics;
 

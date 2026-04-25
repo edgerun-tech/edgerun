@@ -1,6 +1,5 @@
 //! Unix socket stub.
 
-#![no_std]
 
 pub struct UnixSocket;
 impl UnixSocket {

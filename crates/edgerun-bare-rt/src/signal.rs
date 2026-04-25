@@ -1,6 +1,5 @@
 //! Signal handling stub.
 
-#![no_std]
 
 #[derive(Debug, Clone, Copy)]
 pub enum SignalKind {

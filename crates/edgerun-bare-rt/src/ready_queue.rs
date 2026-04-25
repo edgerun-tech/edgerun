@@ -3,14 +3,13 @@
 //! Workers call `pop()` to get the next task ID to poll.
 //! Wakers call `push(id)` to schedule a task for polling.
 
-#![no_std]
 
 extern crate alloc;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use crate::sync_prim::{Condvar, Mutex};
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 // ===========================================================================
 // Ready Queue

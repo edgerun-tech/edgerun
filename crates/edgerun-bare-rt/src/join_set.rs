@@ -1,20 +1,16 @@
 //! JoinSet - manage a dynamic set of spawned tasks.
 
-#![no_std]
 
 extern crate alloc;
 
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicUsize, Ordering};
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 
 use crate::oneshot;
-use crate::blocking_pool::JoinError;
 
 // ===========================================================================
 // JoinSet
@@ -43,7 +39,7 @@ impl<T> JoinSet<T> {
         T: Send + 'static,
     {
         let (mut tx, rx) = oneshot::channel();
-        let fut = Box::pin(async move {
+        let _fut = Box::pin(async move {
             let result = f.await;
             let _ = tx.send(Ok(result));
         });

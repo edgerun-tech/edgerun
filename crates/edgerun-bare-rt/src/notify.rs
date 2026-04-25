@@ -3,7 +3,6 @@
 //! A `Notify` allows one or more tasks to be woken when notified.
 //! Unlike `Condvar`, this is fully async - no thread blocking.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -14,8 +13,8 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // Notify
@@ -48,7 +47,7 @@ impl Notify {
     }
 
     pub fn notify_one(&self) {
-        self.inner.notified.fetch_add(1, Release);
+        self.inner.notified.fetch_add(1, RELEASE);
         unsafe {
             if let Some(w) = (*self.inner.waiters.get()).take() {
                 w.wake();
@@ -57,7 +56,7 @@ impl Notify {
     }
 
     pub fn notify_waiters(&self) {
-        self.inner.notified.fetch_add(1, Release);
+        self.inner.notified.fetch_add(1, RELEASE);
         unsafe {
             if let Some(w) = (*self.inner.waiters.get()).take() {
                 w.wake();
@@ -94,8 +93,8 @@ impl Future for Notified<'_> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        if this.notify.inner.notified.load(Acquire) > 0 {
-            this.notify.inner.notified.fetch_sub(1, Release);
+        if this.notify.inner.notified.load(ACQUIRE) > 0 {
+            this.notify.inner.notified.fetch_sub(1, RELEASE);
             return Poll::Ready(());
         }
         unsafe {

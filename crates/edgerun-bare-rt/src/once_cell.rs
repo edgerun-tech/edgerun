@@ -1,6 +1,5 @@
 //! OnceCell - lazy initialization with async wait support.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -11,8 +10,8 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // OnceCell
@@ -47,7 +46,7 @@ impl<T> OnceCell<T> {
     }
 
     pub fn get(&self) -> Option<&T> {
-        if self.inner.initialized.load(Acquire) {
+        if self.inner.initialized.load(ACQUIRE) {
             unsafe { (*self.inner.value.get()).as_ref() }
         } else {
             None
@@ -55,17 +54,17 @@ impl<T> OnceCell<T> {
     }
 
     pub fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
-        if self.inner.initialized.load(Acquire) {
+        if self.inner.initialized.load(ACQUIRE) {
             return unsafe { (*self.inner.value.get()).as_ref().unwrap_unchecked() };
         }
         let value = f();
         unsafe { *self.inner.value.get() = Some(value) };
-        self.inner.initialized.store(true, Release);
+        self.inner.initialized.store(true, RELEASE);
         unsafe { (*self.inner.value.get()).as_ref().unwrap_unchecked() }
     }
 
     pub fn get_mut(&mut self) -> Option<&mut T> {
-        if self.inner.initialized.load(Acquire) {
+        if self.inner.initialized.load(ACQUIRE) {
             unsafe { (*self.inner.value.get()).as_mut() }
         } else {
             None
@@ -73,11 +72,11 @@ impl<T> OnceCell<T> {
     }
 
     pub fn try_insert(&self, value: T) -> Result<&T, T> {
-        if self.inner.initialized.load(Acquire) {
+        if self.inner.initialized.load(ACQUIRE) {
             return Err(value);
         }
         unsafe { *self.inner.value.get() = Some(value) };
-        self.inner.initialized.store(true, Release);
+        self.inner.initialized.store(true, RELEASE);
         unsafe {
             if let Some(w) = (*self.inner.waker.get()).take() {
                 w.wake();
@@ -91,7 +90,7 @@ impl<T> OnceCell<T> {
     }
 
     pub fn into_inner(self) -> Option<T> {
-        self.inner.initialized.store(true, Release);
+        self.inner.initialized.store(true, RELEASE);
         unsafe { (*self.inner.value.get()).take() }
     }
 }
@@ -120,13 +119,13 @@ impl<T> Future for WaitUntilReady<'_, T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        if this.cell.inner.initialized.load(Acquire) {
+        if this.cell.inner.initialized.load(ACQUIRE) {
             return Poll::Ready(());
         }
         unsafe {
             *this.cell.inner.waker.get() = Some(cx.waker().clone());
         }
-        if this.cell.inner.initialized.load(Acquire) {
+        if this.cell.inner.initialized.load(ACQUIRE) {
             Poll::Ready(())
         } else {
             Poll::Pending

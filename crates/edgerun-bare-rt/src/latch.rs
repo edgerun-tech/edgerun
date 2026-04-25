@@ -1,6 +1,5 @@
 //! `Latch` - a countdown primitive that fires when the count reaches zero.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -11,9 +10,9 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const AcqRel: Ordering = Ordering::AcqRel;
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
+const ACQ_REL: Ordering = Ordering::AcqRel;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // Latch
@@ -40,11 +39,11 @@ impl Latch {
     }
 
     pub fn count(&self) -> usize {
-        self.inner.count.load(Acquire)
+        self.inner.count.load(ACQUIRE)
     }
 
     pub fn count_down(&self) {
-        let prev = self.inner.count.fetch_sub(1, AcqRel);
+        let prev = self.inner.count.fetch_sub(1, ACQ_REL);
         if prev == 1 {
             unsafe {
                 if let Some(w) = (*self.inner.waker.get()).take() {
@@ -55,7 +54,7 @@ impl Latch {
     }
 
     pub fn reached_zero(&self) -> bool {
-        self.inner.count.load(Acquire) == 0
+        self.inner.count.load(ACQUIRE) == 0
     }
 
     pub fn wait(&self) -> WaitLatch<'_> {

@@ -1,6 +1,5 @@
 //! Yield now primitive.
 
-#![no_std]
 
 use core::future::Future;
 use core::pin::Pin;

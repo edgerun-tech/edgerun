@@ -1,6 +1,5 @@
 //! select! macro - race multiple futures.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -26,7 +25,7 @@ where
     impl<F1: Future<Output = O> + Unpin, F2: Future<Output = O> + Unpin, O: Unpin> Future for Select<F1, F2, O> {
         type Output = O;
 
-        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
             let this = self.get_mut();
 
             if !this.done1 {

@@ -1,6 +1,5 @@
 //! Broadcast channel - multi-sender, multi-receiver.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -12,8 +11,8 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
 
 // ===========================================================================
 // Broadcast
@@ -56,7 +55,7 @@ impl<T: Clone> Clone for Sender<T> {
 impl<T: Clone + Send> Sender<T> {
     pub fn send(&self, value: T) {
         unsafe { *self.inner.value.get() = value };
-        self.inner.version.fetch_add(1, Release);
+        self.inner.version.fetch_add(1, RELEASE);
         unsafe {
             let receivers = (*self.inner.receivers.get()).drain(..).collect::<Vec<_>>();
             for waker in receivers {
@@ -86,7 +85,7 @@ impl<T: Clone> Receiver<T> {
     where
         T: Clone,
     {
-        let v = self.inner.version.load(Acquire);
+        let v = self.inner.version.load(ACQUIRE);
         if v > 0 {
             Some(unsafe { (*self.inner.value.get()).clone() })
         } else {
@@ -104,7 +103,7 @@ impl<T: Clone> Future for BroadcastRecv<'_, T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        let v = this.receiver.inner.version.load(Acquire);
+        let v = this.receiver.inner.version.load(ACQUIRE);
         if v > 0 {
             return Poll::Ready(unsafe { (*this.receiver.inner.value.get()).clone() });
         }

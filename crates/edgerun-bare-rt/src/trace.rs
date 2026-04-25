@@ -1,6 +1,5 @@
 //! Tracing stubs for no_std.
 
-#![no_std]
 
 // ===========================================================================
 // Trace
@@ -16,7 +15,7 @@ impl Span {
         Self { id: 0, name }
     }
     
-    pub fn enter(&self) -> EnterGuard {
+    pub fn enter(&self) -> EnterGuard<'_> {
         EnterGuard { span: self }
     }
 }

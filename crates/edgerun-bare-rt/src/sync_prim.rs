@@ -1,6 +1,5 @@
 //! Synchronization primitives - no_std implementations.
 
-#![no_std]
 
 extern crate alloc;
 
@@ -8,10 +7,10 @@ use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
-const Acquire: Ordering = Ordering::Acquire;
-const Release: Ordering = Ordering::Release;
-const AcqRel: Ordering = Ordering::AcqRel;
-const Relaxed: Ordering = Ordering::Relaxed;
+const ACQUIRE: Ordering = Ordering::Acquire;
+const RELEASE: Ordering = Ordering::Release;
+const ACQ_REL: Ordering = Ordering::AcqRel;
+const RELAXED: Ordering = Ordering::Relaxed;
 
 // ===========================================================================
 // Mutex
@@ -36,16 +35,16 @@ impl<T> Mutex<T> {
 
 impl<T: ?Sized> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<'_, T> {
-        while self.state.load(Acquire) {
+        while self.state.load(ACQUIRE) {
             core::hint::spin_loop();
         }
-        self.state.store(true, Release);
+        self.state.store(true, RELEASE);
         MutexGuard { mutex: self }
     }
 
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
-        if self.state.load(Relaxed) == false
-            && self.state.compare_exchange(false, true, Acquire, Release).is_ok()
+        if self.state.load(RELAXED) == false
+            && self.state.compare_exchange(false, true, ACQUIRE, RELEASE).is_ok()
         {
             Some(MutexGuard { mutex: self })
         } else {
@@ -60,7 +59,7 @@ pub struct MutexGuard<'a, T: ?Sized> {
 
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.state.store(false, Release);
+        self.mutex.state.store(false, RELEASE);
     }
 }
 
@@ -103,9 +102,9 @@ impl<T> RwLock<T> {
 impl<T: ?Sized> RwLock<T> {
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
         loop {
-            let s = self.state.load(Relaxed);
+            let s = self.state.load(RELAXED);
             if s < WRITE_LOCKED {
-                if self.state.compare_exchange(s, s + 1, Acquire, Relaxed).is_ok() {
+                if self.state.compare_exchange(s, s + 1, ACQUIRE, RELAXED).is_ok() {
                     return RwLockReadGuard { lock: self };
                 }
             }
@@ -114,8 +113,8 @@ impl<T: ?Sized> RwLock<T> {
     }
 
     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
-        let s = self.state.load(Relaxed);
-        if s < WRITE_LOCKED && self.state.compare_exchange(s, s + 1, Acquire, Relaxed).is_ok() {
+        let s = self.state.load(RELAXED);
+        if s < WRITE_LOCKED && self.state.compare_exchange(s, s + 1, ACQUIRE, RELAXED).is_ok() {
             Some(RwLockReadGuard { lock: self })
         } else {
             None
@@ -124,7 +123,7 @@ impl<T: ?Sized> RwLock<T> {
 
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         loop {
-            if self.state.compare_exchange(0, WRITE_LOCKED, Acquire, Relaxed).is_ok() {
+            if self.state.compare_exchange(0, WRITE_LOCKED, ACQUIRE, RELAXED).is_ok() {
                 return RwLockWriteGuard { lock: self };
             }
             core::hint::spin_loop();
@@ -138,7 +137,7 @@ pub struct RwLockReadGuard<'a, T: ?Sized> {
 
 impl<T: ?Sized> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
-        self.lock.state.fetch_sub(1, Release);
+        self.lock.state.fetch_sub(1, RELEASE);
     }
 }
 
@@ -155,7 +154,7 @@ pub struct RwLockWriteGuard<'a, T: ?Sized> {
 
 impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
-        self.lock.state.store(0, Release);
+        self.lock.state.store(0, RELEASE);
     }
 }
 
@@ -204,13 +203,13 @@ impl Condvar {
     pub fn wait<T>(&self, guard: &mut MutexGuard<'_, T>) {
         let waiter = Box::into_raw(Box::new(Waiter::new())) as usize;
         loop {
-            let next = self.head.load(Relaxed);
+            let next = self.head.load(RELAXED);
             unsafe { (*(waiter as *mut Waiter)).next = next };
-            if self.head.compare_exchange(next, waiter, AcqRel, Relaxed).is_ok() {
+            if self.head.compare_exchange(next, waiter, ACQ_REL, RELAXED).is_ok() {
                 break;
             }
         }
-        while !unsafe { (*(waiter as *mut Waiter)).signaled.load(Acquire) } {
+        while !unsafe { (*(waiter as *mut Waiter)).signaled.load(ACQUIRE) } {
             core::hint::spin_loop();
         }
         guard.mutex.lock();
@@ -218,11 +217,11 @@ impl Condvar {
 
     pub fn notify_one(&self) {
         loop {
-            let ptr = self.head.load(Relaxed);
+            let ptr = self.head.load(RELAXED);
             if ptr == 0 { return; }
             let next = unsafe { (*(ptr as *mut Waiter)).next };
-            if self.head.compare_exchange(ptr, next, AcqRel, Relaxed).is_ok() {
-                unsafe { (*(ptr as *mut Waiter)).signaled.store(true, Release) };
+            if self.head.compare_exchange(ptr, next, ACQ_REL, RELAXED).is_ok() {
+                unsafe { (*(ptr as *mut Waiter)).signaled.store(true, RELEASE) };
                 return;
             }
         }
@@ -230,12 +229,12 @@ impl Condvar {
 
     pub fn notify_all(&self) {
         loop {
-            let ptr = self.head.swap(0, AcqRel);
+            let ptr = self.head.swap(0, ACQ_REL);
             if ptr == 0 { return; }
             let mut current = ptr;
             while current != 0 {
                 let next = unsafe { (*(current as *mut Waiter)).next };
-                unsafe { (*(current as *mut Waiter)).signaled.store(true, Release) };
+                unsafe { (*(current as *mut Waiter)).signaled.store(true, RELEASE) };
                 current = next;
             }
         }
