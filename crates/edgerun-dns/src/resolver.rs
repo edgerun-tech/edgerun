@@ -1,15 +1,15 @@
 type AnswerCacheEntry = (Vec<DnsRecord>, Instant);
 type NsCacheEntry = (Ipv4Addr, Instant);
 
-//! Recursive DNS resolver — iterative resolution from the root hints.
-//!
-//! Implements RFC 1034 §5.3.3:
-//! 1. Start at root servers.
-//! 2. Query for the target name.
-//! 3. If referral (NS in authority section), follow to child servers.
-//! 4. Repeat until answer or NXDOMAIN.
-//!
-//! Caches all intermediate results with TTL-based expiry.
+// Recursive DNS resolver — iterative resolution from the root hints.
+//
+// Implements RFC 1034 §5.3.3:
+// 1. Start at root servers.
+// 2. Query for the target name.
+// 3. If referral (NS in authority section), follow to child servers.
+// 4. Repeat until answer or NXDOMAIN.
+//
+// Caches all intermediate results with TTL-based expiry.
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};

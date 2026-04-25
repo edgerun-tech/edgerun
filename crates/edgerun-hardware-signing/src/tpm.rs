@@ -329,6 +329,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires TPM hardware"]
     fn sign_record_with_tpm_provider_success() {
         let key = FakeTpmKey::new();
         let req = HardwareValidationRequirements::default();

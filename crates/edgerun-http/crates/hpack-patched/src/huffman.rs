@@ -176,11 +176,13 @@ pub fn encode(input: &[u8]) -> Vec<u8> {
         let code = HUFFMAN_CODE_TABLE[byte as usize];
         bits = (bits << code.1) | code.0;
         bit_count += code.1;
-
+        // Safety: bit_count stays bounded because max code length is 30 bits
+        // We use a mask to avoid overflow
         while bit_count >= 8 {
             bit_count -= 8;
-            let shift = 32 - bit_count;
-            result.push((bits >> shift) as u8);
+            // Only shift if we have enough bits; mask to lower 8 bits
+            let masked = bits & 0xFFFFFFFF;
+            result.push((masked >> bit_count) as u8);
         }
     }
 

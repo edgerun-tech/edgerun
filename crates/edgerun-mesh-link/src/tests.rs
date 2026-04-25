@@ -432,7 +432,7 @@ fn frame_type_from_u8_all_variants() {
     assert_eq!(FrameType::from_u8(2), FrameType::RouteAdv);
     assert_eq!(FrameType::from_u8(3), FrameType::HandshakeInit);
     assert_eq!(FrameType::from_u8(4), FrameType::HandshakeAccept);
-    assert_eq!(FrameType::from_u8(5), FrameType::Unknown(5));
+    assert_eq!(FrameType::from_u8(5), FrameType::MetricsReport);
     assert_eq!(FrameType::from_u8(255), FrameType::Unknown(255));
 }
 

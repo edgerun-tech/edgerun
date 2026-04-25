@@ -143,58 +143,75 @@ pub trait BufMut {
     /// Write a single byte.
     fn put_u8(&mut self, val: u8) {
         if self.remaining() >= 1 {
-            self.chunk_mut()[0] = val;
-            self.advance(1);
+            let chunk = self.chunk_mut();
+            if !chunk.is_empty() {
+                chunk[0] = val;
+                self.advance(1);
+            }
         }
     }
 
     /// Write 2 bytes as big-endian u16.
     fn put_u16(&mut self, val: u16) {
-        let bytes = &mut self.chunk_mut()[..2];
-        bytes.copy_from_slice(&val.to_be_bytes());
-        self.advance(2);
+        let chunk = self.chunk_mut();
+        if chunk.len() >= 2 {
+            chunk[..2].copy_from_slice(&val.to_be_bytes());
+            self.advance(2);
+        }
     }
 
     /// Write 2 bytes as little-endian u16.
     fn put_u16_le(&mut self, val: u16) {
-        let bytes = &mut self.chunk_mut()[..2];
-        bytes.copy_from_slice(&val.to_le_bytes());
-        self.advance(2);
+        let chunk = self.chunk_mut();
+        if chunk.len() >= 2 {
+            chunk[..2].copy_from_slice(&val.to_le_bytes());
+            self.advance(2);
+        }
     }
 
     /// Write 4 bytes as big-endian u32.
     fn put_u32(&mut self, val: u32) {
-        let bytes = &mut self.chunk_mut()[..4];
-        bytes.copy_from_slice(&val.to_be_bytes());
-        self.advance(4);
+        let chunk = self.chunk_mut();
+        if chunk.len() >= 4 {
+            chunk[..4].copy_from_slice(&val.to_be_bytes());
+            self.advance(4);
+        }
     }
 
     /// Write 4 bytes as little-endian u32.
     fn put_u32_le(&mut self, val: u32) {
-        let bytes = &mut self.chunk_mut()[..4];
-        bytes.copy_from_slice(&val.to_le_bytes());
-        self.advance(4);
+        let chunk = self.chunk_mut();
+        if chunk.len() >= 4 {
+            chunk[..4].copy_from_slice(&val.to_le_bytes());
+            self.advance(4);
+        }
     }
 
     /// Write 8 bytes as big-endian u64.
     fn put_u64(&mut self, val: u64) {
-        let bytes = &mut self.chunk_mut()[..8];
-        bytes.copy_from_slice(&val.to_be_bytes());
-        self.advance(8);
+        let chunk = self.chunk_mut();
+        if chunk.len() >= 8 {
+            chunk[..8].copy_from_slice(&val.to_be_bytes());
+            self.advance(8);
+        }
     }
 
     /// Write 8 bytes as little-endian u64.
     fn put_u64_le(&mut self, val: u64) {
-        let bytes = &mut self.chunk_mut()[..8];
-        bytes.copy_from_slice(&val.to_le_bytes());
-        self.advance(8);
+        let chunk = self.chunk_mut();
+        if chunk.len() >= 8 {
+            chunk[..8].copy_from_slice(&val.to_le_bytes());
+            self.advance(8);
+        }
     }
 
     /// Write bytes from a slice.
     fn put(&mut self, src: &[u8]) {
-        let dst = &mut self.chunk_mut()[..src.len()];
-        dst.copy_from_slice(src);
-        self.advance(src.len());
+        let chunk = self.chunk_mut();
+        if chunk.len() >= src.len() {
+            chunk[..src.len()].copy_from_slice(src);
+            self.advance(src.len());
+        }
     }
 
     /// Reserve additional capacity.
@@ -265,26 +282,36 @@ impl BufMut for &mut [u8] {
 impl BufMut for Vec<u8> {
     #[inline]
     fn remaining(&self) -> usize {
-        // For Vec, we use capacity as "remaining" when implemented this way
-        // This is a simplified version - in practice you'd track position separately
-        usize::MAX - self.len()
+        // Allow writing even to empty Vec - let it grow as needed
+        // Use a large value that won't overflow
+        1024 * 1024
     }
 
     #[inline]
     fn chunk_mut(&mut self) -> &mut [u8] {
-        // This is a simplified implementation
-        // Real usage would need more careful position tracking
         let len = self.len();
-        unsafe {
-            core::slice::from_raw_parts_mut(self.as_mut_ptr().add(len), self.capacity() - len)
+        let cap = self.capacity();
+        if cap > len {
+            unsafe {
+                core::slice::from_raw_parts_mut(self.as_mut_ptr().add(len), cap - len)
+            }
+        } else {
+            // Need to reserve more space
+            self.reserve(64);
+            let cap = self.capacity();
+            unsafe {
+                core::slice::from_raw_parts_mut(self.as_mut_ptr().add(len), cap - len)
+            }
         }
     }
 
     #[inline]
     fn advance(&mut self, n: usize) {
-        let new_len = (self.len() + n).min(self.capacity());
-        unsafe {
-            self.set_len(new_len);
+        let new_len = self.len() + n;
+        if new_len <= self.capacity() {
+            unsafe {
+                self.set_len(new_len);
+            }
         }
     }
 }

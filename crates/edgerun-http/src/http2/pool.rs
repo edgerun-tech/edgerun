@@ -328,8 +328,8 @@ impl Http2Pool {
         )
         .await
         {
-            if let Ok(Ok(mut addrs)) = addrs {
-                let mut ipv4_fallback = None;
+            let mut ipv4_fallback = None;
+            if let Ok(mut addrs) = addrs {
                 for addr in addrs.by_ref() {
                     match addr.ip() {
                         IpAddr::V6(_) => {

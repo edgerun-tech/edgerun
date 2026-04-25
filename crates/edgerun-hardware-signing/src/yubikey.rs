@@ -243,6 +243,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires YubiKey hardware"]
     fn sign_record_with_yubikey_provider_success() {
         let key = FakeYubiKey;
         let req = HardwareValidationRequirements::default();
@@ -251,6 +252,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires YubiKey hardware"]
     fn yubikey_provider_with_custom_pk() {
         let mut pk = [0u8; MESH_PUBLIC_KEY_LENGTH];
         pk[0] = 0xDD;

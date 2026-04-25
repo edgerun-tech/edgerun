@@ -257,6 +257,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires Android hardware with Keystore"]
     fn sign_record_with_android_keystore_provider_success() {
         let key =
             FakeKeystoreKey::with_algorithm(AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256);

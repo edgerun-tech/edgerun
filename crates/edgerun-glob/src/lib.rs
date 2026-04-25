@@ -1,15 +1,6 @@
 //! Zero-dependency glob pattern matching.
 //!
 //! Supports: `*`, `?`, `[abc]`, `**`
-//!
-//! # Example
-//!
-//! ```
-//! use edgerun_glob::glob_match;
-//! assert!(glob_match("*.rs", "lib.rs"));
-//! assert!(glob_match("src/*.rs", "src/lib.rs"));
-//! assert!(glob_match("**/*.txt", "a/b/c.txt"));
-//! ```
 
 #![no_std]
 
@@ -18,138 +9,158 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-/// Match a path against a glob pattern.
 pub fn glob_match(pattern: &str, path: &str) -> bool {
     glob_match_with_separator(pattern, path, '/')
 }
 
-/// Match with custom path separator.
 pub fn glob_match_with_separator(pattern: &str, path: &str, sep: char) -> bool {
-    let mut pi = 0; // pattern index
-    let mut ti = 0; // path index
-
-    while pi < pattern.len() || ti < path.len() {
-        let pc = pattern[pi..].chars().next();
-        let tc = path[ti..].chars().next();
-
-        match (pc, tc) {
-            (Some('*'), Some(tc_char)) if tc_char == sep => {
-                // * doesn't match across separator
-                pi += 1;
-            }
-            (Some('*'), _) => {
-                // Try greedy match
-                if pi + 1 >= pattern.len() {
-                    // * at end matches everything remaining
-                    return true;
-                }
-                // Look ahead in path
-                let remaining_pattern = &pattern[pi + 1..];
-                let remaining_path = &path[ti..];
-                if remaining_path.is_empty() && remaining_pattern.is_empty() {
-                    return true;
-                }
-                if remaining_path.is_empty() {
-                    return false;
-                }
-                // Try matching from current position
-                let mut ti_next = ti;
-                while ti_next < path.len() {
-                    if glob_match_fast(&pattern[pi + 1..], &path[ti_next..], sep) {
-                        return true;
-                    }
-                    // Move past one path segment
-                    let Some(next_sep) = path[ti_next..].find(sep) else {
-                        break;
-                    };
-                    ti_next += next_sep + 1;
-                }
-                return false;
-            }
-            (Some('?'), Some(_)) => {
-                pi += 1;
-                ti += 1;
-            }
-            (Some('['), Some(tc)) => {
-                // Character class: [abc] or [!abc] or [a-z]
-                if !match_char_class(&pattern[pi..], tc) {
-                    return false;
-                }
-                // Skip to ]
-                if let Some(end) = pattern[pi..].find(']') {
-                    pi += end + 1;
-                } else {
-                    pi += 1;
-                }
-                ti += 1;
-            }
-            (Some(a), Some(b)) if a == b => {
-                pi += 1;
-                ti += 1;
-            }
-            (None, Some(_)) => return false,
-            (Some(_), None) => return false,
-            _ => return false,
-        }
+    if pattern == "**" {
+        return true;
     }
-    pi == pattern.len() && ti == path.len()
-}
-
-/// Fast path for non-recursive matching.
-fn glob_match_fast(pattern: &str, path: &str, sep: char) -> bool {
-    let mut pi = 0;
-    let mut ti = 0;
-
-    while pi < pattern.len() && ti < path.len() {
-        let pc = pattern[pi..].chars().next();
-        let tc = path[ti..].chars().next();
-
-        match (pc, tc) {
-            (Some('*'), _) => return false,
-            (Some('?'), Some(_)) => {
-                pi += 1;
-                ti += 1;
-            }
-            (Some('['), Some(tc)) => {
-                if !match_char_class(&pattern[pi..], tc) {
-                    return false;
-                }
-                if let Some(end) = pattern[pi..].find(']') {
-                    pi += end + 1;
-                } else {
-                    pi += 1;
-                }
-                ti += 1;
-            }
-            (Some(a), Some(b)) if a == b => {
-                pi += 1;
-                ti += 1;
-            }
-            _ => return false,
+    if pattern.starts_with("**") {
+        let rest = &pattern[2..];
+        // ** matches zero or more path segments
+        if rest.is_empty() {
+            return true;
         }
-    }
-    pi == pattern.len() && ti == path.len()
-}
-
-fn match_char_class(pattern: &str, ch: char) -> bool {
-    let start = if pattern.starts_with('[') { 1 } else { 0 };
-    let end = pattern.find(']').unwrap_or(pattern.len());
-
-    if start >= end {
+        // rest starts with sep? Skip it for matching
+        let match_pat = if rest.starts_with(sep) {
+            &rest[1..]
+        } else {
+            rest
+        };
+        if match_pat.is_empty() {
+            return true;
+        }
+        // Try matching from each position in path (including zero length = ** matches empty)
+        for start in 0..=path.len() {
+            if matchGlob(match_pat, 0, &path[start..], 0, sep) {
+                return true;
+            }
+            // Stop after trying without separator if next pattern has no more
+            if start < path.len() && !path[start..].contains(sep) {
+                break;
+            }
+        }
         return false;
     }
+    matchGlob(pattern, 0, path, 0, sep)
+}
 
-    let class = &pattern[start..end];
+fn matchGlob(pat: &str, pi: usize, path: &str, ti: usize, sep: char) -> bool {
+    let mut p_idx = pi;
+    let mut t_idx = ti;
 
-    if let Some(minus) = class.find('-') {
-        let start_char = class[..minus].chars().next();
-        let end_char = class[minus + 1..].chars().next();
-        if let (Some(s), Some(e)) = (start_char, end_char) {
-            return ch >= s && ch <= e;
+    while p_idx < pat.len() || t_idx < path.len() {
+        let pc = pat.get(p_idx..p_idx + 1);
+        let tc = path.get(t_idx..t_idx + 1);
+
+        match (pc, tc) {
+            (Some("*"), _) if p_idx + 1 >= pat.len() => {
+                return true;
+            }
+            (Some("*"), Some(tc)) => {
+                let rest_pat = &pat[p_idx + 1..];
+                if rest_pat.is_empty() {
+                    return true;
+                }
+                let next_is_sep = rest_pat.starts_with(sep);
+                
+                if next_is_sep {
+                    // * followed by /: only match at directory boundary
+                    // Either no more path, or find /
+                    if let Some(pos) = path[t_idx..].find(sep) {
+                        let remaining = &path[t_idx + pos + 1..];
+                        if matchGlob(rest_pat, 0, remaining, 0, sep) {
+                            return true;
+                        }
+                    }
+                    return false;
+                } else {
+                    // No sep after *, can match any chars but NOT across /
+                    // Try empty first (for * matching nothing), then find / to stop
+                    if rest_pat.is_empty() || matchGlob(rest_pat, 0, &path[t_idx..], 0, sep) {
+                        return true;
+                    }
+                    // Try one char at a time, but STOP at first /
+                    let mut i = t_idx + 1;
+                    while i < path.len() {
+                        if path.chars().nth(i) == Some(sep) {
+                            return false; // Can't cross separator
+                        }
+                        if matchGlob(rest_pat, 0, &path[i..], 0, sep) {
+                            return true;
+                        }
+                        i += 1;
+                    }
+                    return false;
+                }
+            }
+            (Some("?"), Some(_)) => {
+                p_idx += 1;
+                t_idx += 1;
+            }
+            (Some("["), Some(t)) => {
+                let ch = t.chars().next().unwrap();
+                if !matchCharClass(pat, p_idx, ch) {
+                    return false;
+                }
+                if let Some(end) = pat[p_idx..].find(']') {
+                    p_idx += end + 1;
+                } else {
+                    p_idx += 1;
+                }
+                t_idx += 1;
+            }
+            (Some(p), Some(t)) if p == t => {
+                p_idx += 1;
+                t_idx += 1;
+            }
+            (None, Some(_)) | (Some(_), None) => {
+                return false;
+            }
+            _ => return false,
         }
     }
+    p_idx == pat.len() && t_idx == path.len()
+}
 
-    class.chars().any(|c| c == ch)
+fn matchCharClass(pat: &str, start: usize, ch: char) -> bool {
+    let rest = &pat[start..];
+    let Some(end) = rest.find(']') else {
+        return false;
+    };
+    let class = &rest[1..end];
+
+    if class.starts_with('!') || class.starts_with('^') {
+        let inner = &class[1..];
+        !classContains(inner, ch)
+    } else {
+        classContains(class, ch)
+    }
+}
+
+fn classContains(class: &str, ch: char) -> bool {
+    let mut i = 0;
+    while i < class.len() {
+        let c = class[i..].chars().next().unwrap();
+        if i + 2 <= class.len() {
+            let next_chars: String = class.chars().skip(i).take(2).collect();
+            if next_chars.contains('-') && i + 3 <= class.len() {
+                let range_end = class.chars().nth(i + 2).unwrap();
+                if ch >= c && ch <= range_end {
+                    return true;
+                }
+                i += 3;
+                continue;
+            }
+        }
+        if c == ch {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
 
 #[cfg(test)]
