@@ -4,6 +4,7 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -23,11 +24,13 @@ fn set_current_rt(rt: Option<Arc<RuntimeInner>>) {
 }
 
 pub struct RuntimeInner {
-    pub queue: Arc<ReadyQueue>,
-    pub shutdown: AtomicBool,
+    queue: Arc<ReadyQueue>,
+    shutdown: AtomicBool,
     worker_count: AtomicUsize,
     next_id: AtomicUsize,
     waker: Waker,
+    #[allow(dead_code)]
+    spawned_count: AtomicUsize,
 }
 
 impl RuntimeInner {
@@ -39,24 +42,30 @@ impl RuntimeInner {
             worker_count: AtomicUsize::new(workers),
             next_id: AtomicUsize::new(0),
             waker,
+            spawned_count: AtomicUsize::new(0),
         }
     }
 
-    pub fn spawn_task<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
+    pub fn spawn_task<F>(&self, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
-        F::Output: Send + 'static,
     {
         let task_id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        self.spawned_count.fetch_add(1, Ordering::Relaxed);
         self.queue.push(task_id);
         crate::blocking_pool::JoinHandle::new_with_task(task_id, Arc::clone(&self.queue))
     }
     
+    #[allow(dead_code)]
     pub fn run_once(&self) -> bool {
         if self.shutdown.load(Ordering::Acquire) {
             return false;
         }
         self.queue.try_pop().is_some()
+    }
+    
+    pub fn worker_count(&self) -> &AtomicUsize {
+        &self.worker_count
     }
 }
 
@@ -72,7 +81,6 @@ impl Runtime {
     pub fn spawn<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
-        F::Output: Send + 'static,
     {
         self.inner.spawn_task(f)
     }
@@ -147,7 +155,6 @@ impl Builder {
 pub fn spawn<F>(f: F) -> crate::blocking_pool::JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
-    F::Output: Send + 'static,
 {
     if let Some(rt) = current_rt() {
         rt.spawn_task(f)
@@ -172,7 +179,6 @@ impl RuntimeHandle {
     pub fn spawn<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
-        F::Output: Send + 'static,
     {
         self.inner.spawn_task(f)
     }
