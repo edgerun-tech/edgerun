@@ -232,3 +232,36 @@ pub fn require_container_id(args: &[String]) -> std::io::Result<&str> {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "container ID required")
     })
 }
+
+/// Resolve registry authentication via secret service.
+/// Returns anonymous auth if secret service unavailable or credential not found.
+pub fn resolve_registry_auth(registry: &str) -> std::io::Result<crate::RegistryAuth> {
+    let mut secret_client = match crate::SecretClient::connect() {
+        Ok(c) => c,
+        Err(_) => return Ok(crate::RegistryAuth::Anonymous),
+    };
+
+    if secret_client.open_session().is_err() {
+        return Ok(crate::RegistryAuth::Anonymous);
+    }
+
+    match secret_client.get_registry_credential(registry) {
+        Ok(secret_bytes) => {
+            let secret_str = String::from_utf8(secret_bytes).map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid credential encoding")
+            })?;
+            let (username, password) = secret_str.split_once(':').ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "credential must be username:password",
+                )
+            })?;
+            Ok(crate::RegistryAuth::Basic {
+                username: username.to_string(),
+                password: password.to_string(),
+            })
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(crate::RegistryAuth::Anonymous),
+        Err(_) => Ok(crate::RegistryAuth::Anonymous),
+    }
+}
