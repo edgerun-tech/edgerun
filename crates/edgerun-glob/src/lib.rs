@@ -184,6 +184,6 @@ mod tests {
     #[test]
     fn test_question() {
         assert!(glob_match("?.rs", "a.rs"));
-        assert!(!glob_match("?.rs", "ab.rs"));
+assert!(!glob_match("?.rs", "ab.rs"));
     }
 }

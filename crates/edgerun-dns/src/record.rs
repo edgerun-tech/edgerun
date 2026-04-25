@@ -652,15 +652,18 @@ impl DnsRecordData {
                 buf.extend(encode_domain_name(txt));
                 buf
             }
-            (DnsRecordType::LOC, DnsRecordData::LOC {
-                version,
-                size,
-                horiz_pre,
-                vert_pre,
-                latitude,
-                longitude,
-                altitude,
-            }) => {
+            (
+                DnsRecordType::LOC,
+                DnsRecordData::LOC {
+                    version,
+                    size,
+                    horiz_pre,
+                    vert_pre,
+                    latitude,
+                    longitude,
+                    altitude,
+                },
+            ) => {
                 let mut buf = Vec::new();
                 buf.push(*version);
                 buf.push(*size as u8);
