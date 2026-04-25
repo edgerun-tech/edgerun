@@ -2,6 +2,8 @@
 
 #![no_std]
 
+extern crate alloc;
+
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -13,9 +15,9 @@ pub struct TaskMap {
     len: AtomicUsize,
 }
 
-struct TaskEntry {
+pub struct TaskEntry {
     id: u64,
-    name: alloc::string::String,
+    name: &'static str,
 }
 
 impl TaskMap {
@@ -26,7 +28,7 @@ impl TaskMap {
         }
     }
 
-    pub fn insert(&mut self, name: alloc::string::String) -> u64 {
+    pub fn insert(&mut self, name: &'static str) -> u64 {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         self.tasks.push(Arc::new(TaskEntry { id, name }));
         self.len.fetch_add(1, Ordering::Relaxed);

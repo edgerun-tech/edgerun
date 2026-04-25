@@ -1,27 +1,22 @@
-//! Metrics stubs.
+//! Runtime metrics stub.
 
 #![no_std]
 
-// ===========================================================================
-// Metrics
-// ===========================================================================
-
-pub struct RuntimeMetrics {
-    pub total_spawned: u64,
-    pub total_completed: u64,
-    pub total_aborted: u64,
-    pub active_tasks: u64,
-    pub blocking_threads: u64,
-}
+pub struct RuntimeMetrics;
 
 impl RuntimeMetrics {
-    pub fn new() -> Self {
-        Self {
-            total_spawned: 0,
-            total_completed: 0,
-            total_aborted: 0,
-            active_tasks: 0,
-            blocking_threads: 0,
-        }
-    }
+    pub fn new() -> Self { Self }
+    pub fn worker_count(&self) -> usize { 0 }
+    pub fn active_tasks(&self) -> usize { 0 }
+    pub fn completed_tasks(&self) -> u64 { 0 }
+    pub fn panic_count(&self) -> u64 { 0 }
+}
+
+pub struct TaskMetrics;
+
+impl TaskMetrics {
+    pub fn new(_name: &str) -> Self { Self }
+    pub fn id(&self) -> u64 { 0 }
+    pub fn name(&self) -> &str { "" }
+    pub fn latency(&self) -> u64 { 0 }
 }

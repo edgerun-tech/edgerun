@@ -95,3 +95,15 @@ pub use udp::{UdpSocket as UdpSocket, SocketAddr as UdpAddr, Error as UdpError};
 // Platform I/O - FS
 mod fs;
 pub use fs::{File, DirEntry, Dir, Error as FsError};
+
+// Rate limiting
+mod rate_limiter;
+pub use rate_limiter::{RateLimiter, TokenBucket};
+
+// Process
+mod process;
+pub use process::{Command, Child, ExitStatus, Error as ProcessError};
+
+// Signal
+mod signal;
+pub use signal::{SignalKind, signal, ignore, default};

@@ -5,19 +5,23 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 
 use crate::ready_queue::ReadyQueue;
 use crate::waker::make_waker;
 
-// ===========================================================================
-// RuntimeInner
-// ===========================================================================
+static mut CURRENT_RT: Option<Arc<RuntimeInner>> = None;
+
+fn current_rt() -> Option<&'static Arc<RuntimeInner>> {
+    unsafe { CURRENT_RT.as_ref() }
+}
+
+fn set_current_rt(rt: Option<Arc<RuntimeInner>>) {
+    unsafe { CURRENT_RT = rt; }
+}
 
 pub struct RuntimeInner {
     pub queue: Arc<ReadyQueue>,
@@ -34,7 +38,7 @@ impl RuntimeInner {
         }
     }
 
-    pub fn spawn_task<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
+    pub fn spawn_task<F>(&self, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
@@ -42,10 +46,6 @@ impl RuntimeInner {
         crate::blocking_pool::JoinHandle::new_with_task(0, Arc::clone(&self.queue))
     }
 }
-
-// ===========================================================================
-// Runtime
-// ===========================================================================
 
 pub struct Runtime {
     inner: Arc<RuntimeInner>,
@@ -76,7 +76,6 @@ impl Runtime {
             match Pin::new(&mut f).poll(&mut cx) {
                 Poll::Ready(v) => return v,
                 Poll::Pending => {
-                    // In no_std, we can't block - spin
                     core::hint::spin_loop();
                 }
             }
@@ -93,10 +92,6 @@ impl Drop for Runtime {
         self.shutdown();
     }
 }
-
-// ===========================================================================
-// Builder
-// ===========================================================================
 
 pub struct Builder {
     workers: usize,
@@ -128,20 +123,21 @@ impl Builder {
     pub fn build(&self) -> Result<Runtime, ()> {
         let queue = Arc::new(ReadyQueue::new());
         let rt = Arc::new(RuntimeInner::new(queue, self.workers));
+        set_current_rt(Some(rt.clone()));
         Ok(Runtime { inner: rt })
     }
 }
 
-// ===========================================================================
-// Free spawn functions
-// ===========================================================================
-
-pub fn spawn<F>(_f: F) -> crate::blocking_pool::JoinHandle<F::Output>
+pub fn spawn<F>(f: F) -> crate::blocking_pool::JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    todo!("spawn requires runtime context")
+    if let Some(rt) = current_rt() {
+        rt.spawn_task(f)
+    } else {
+        panic!("spawn() called without a Runtime")
+    }
 }
 
 pub fn spawn_blocking<F, R>(f: F) -> R

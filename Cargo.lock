@@ -939,9 +939,6 @@ dependencies = [
 [[package]]
 name = "edgerun-bare-rt"
 version = "0.1.0"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "edgerun-bench"

@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
-[dependencies]
-libc = { version = "0.2", default-features = false }
-
 [profile.release]
 opt-level = "s"
 lto = true
