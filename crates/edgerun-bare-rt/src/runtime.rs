@@ -4,6 +4,8 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -11,6 +13,7 @@ use core::task::{Context, Poll};
 
 use crate::ready_queue::ReadyQueue;
 use crate::waker::make_waker;
+use crate::sync_prim::Mutex;
 
 static mut CURRENT_RT: Option<Arc<RuntimeInner>> = None;
 
@@ -22,10 +25,17 @@ fn set_current_rt(rt: Option<Arc<RuntimeInner>>) {
     unsafe { CURRENT_RT = rt; }
 }
 
+struct TaskBox {
+    id: usize,
+    fut: Option<Box<dyn Future<Output = ()> + Send>>,
+}
+
 pub struct RuntimeInner {
     pub queue: Arc<ReadyQueue>,
     pub shutdown: AtomicBool,
     worker_count: AtomicUsize,
+    tasks: Mutex<Vec<TaskBox>>,
+    next_id: AtomicUsize,
 }
 
 impl RuntimeInner {
@@ -34,15 +44,34 @@ impl RuntimeInner {
             queue,
             shutdown: AtomicBool::new(false),
             worker_count: AtomicUsize::new(workers),
+            tasks: Mutex::new(Vec::new()),
+            next_id: AtomicUsize::new(0),
         }
     }
 
-    pub fn spawn_task<F>(&self, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
+    pub fn spawn_task<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        crate::blocking_pool::JoinHandle::new_with_task(0, Arc::clone(&self.queue))
+        let task_id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        
+        // Box the future and erase its output type
+        let mut boxed: Box<dyn Future<Output = ()> + Send> = Box::new(async move {
+            // This is a simplified version - the actual output is dropped
+            // In a real implementation, we'd store and retrieve the result
+            let _ = f.await;
+        });
+        
+        let task = TaskBox {
+            id: task_id,
+            fut: Some(unsafe { core::mem::transmute(boxed) }),
+        };
+        
+        self.tasks.lock().push(task);
+        self.queue.push(task_id);
+        
+        crate::blocking_pool::JoinHandle::new_with_task(task_id, Arc::clone(&self.queue))
     }
 }
 
