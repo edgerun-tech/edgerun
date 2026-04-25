@@ -128,10 +128,17 @@ case $CMD in
     V="${TAG#v}"
     
     cargo build --release -p edgerun-node
-    mkdir -p release
-    cp target/release/edgerund "release/edgerund-${V}-linux-amd64"
     
-    echo "Release: release/edgerund-${V}-linux-amd64"
+    # Find the binary (could be in musl or gnu target dir)
+    for binary in target/x86_64-unknown-linux-musl/release/edgerund target/release/edgerund; do
+      if [ -f "$binary" ]; then
+        mkdir -p release
+        cp "$binary" "release/edgerund-${V}-linux-amd64"
+        chmod +x "release/edgerund-${V}-linux-amd64"
+        echo "Release: release/edgerund-${V}-linux-amd64"
+        break
+      fi
+    done
     ;;
 
   *)

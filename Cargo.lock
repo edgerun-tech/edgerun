@@ -844,7 +844,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-acme"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-dns",
@@ -862,7 +862,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-alsa-microphone"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-microphone",
@@ -870,7 +870,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-alsa-speaker"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-linux-sysfs",
@@ -879,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-amd-xdna"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-linux-npu",
  "edgerun-log",
@@ -889,7 +889,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-android-hardware"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "android_log-sys",
  "edgerun-android-keystore",
@@ -907,7 +907,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-android-keystore"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "jni",
@@ -917,7 +917,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-audio-calibration"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-alsa-microphone",
  "edgerun-alsa-speaker",
@@ -928,7 +928,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-audio-liveliness"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
  "edgerun-capabilities",
@@ -938,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-bench"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -951,18 +951,18 @@ dependencies = [
 
 [[package]]
 name = "edgerun-biometrics"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-bluetooth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-bluetooth-gatt"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-encoding",
@@ -972,21 +972,21 @@ dependencies = [
 
 [[package]]
 name = "edgerun-camera-biometrics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
 ]
 
 [[package]]
 name = "edgerun-capabilities"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-proto",
 ]
 
 [[package]]
 name = "edgerun-capability-policy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-core",
@@ -997,14 +997,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-cec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-clap"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-clap-derive",
  "edgerun-json",
@@ -1013,7 +1013,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-clap-derive"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1022,7 +1022,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-dhcpv6",
  "edgerun-dns",
@@ -1034,7 +1034,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
@@ -1047,7 +1047,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-crypto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes-gcm",
  "base16ct 1.0.0",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-dhcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
  "edgerun-log",
@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-dhcpv6"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-error",
@@ -1111,14 +1111,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-display"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-dns"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
@@ -1130,7 +1130,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-drm-display"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-display",
@@ -1139,7 +1139,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-e2e-capability"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-alsa-microphone",
  "edgerun-alsa-speaker",
@@ -1166,7 +1166,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-edit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-clap",
  "edgerun-http",
@@ -1180,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-email"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-dns",
@@ -1193,7 +1193,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-email-auth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-dns",
@@ -1210,7 +1210,7 @@ version = "0.1.0"
 
 [[package]]
 name = "edgerun-error"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1219,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-evdev-input"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-input",
@@ -1229,7 +1229,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-face-detection"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
  "edgerun-camera-biometrics",
@@ -1238,18 +1238,18 @@ dependencies = [
 
 [[package]]
 name = "edgerun-fingerprint"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
 ]
 
 [[package]]
 name = "edgerun-glob"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-goodix-fingerprint"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
  "edgerun-fingerprint",
@@ -1258,14 +1258,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-gpu"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-hardware-signing"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-android-keystore",
  "edgerun-biometrics",
@@ -1277,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-http"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "brotli",
  "edgerun-crypto",
@@ -1296,21 +1296,21 @@ dependencies = [
 
 [[package]]
 name = "edgerun-inotify"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "edgerun-input"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-json"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion 0.8.2",
  "serde",
@@ -1320,7 +1320,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-cec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-cec",
@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-gpu"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-gpu",
@@ -1340,7 +1340,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-netif"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-linux-sysfs",
@@ -1349,7 +1349,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-nfc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-linux-sysfs",
@@ -1358,7 +1358,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-npu"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-linux-sysfs",
  "edgerun-npu",
@@ -1366,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-pci"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-linux-sysfs",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-power"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-linux-sysfs",
@@ -1384,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-sysfs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
  "libc",
@@ -1392,7 +1392,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-usb"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-linux-sysfs",
@@ -1401,7 +1401,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-linux-wifi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-crypto",
@@ -1416,11 +1416,11 @@ dependencies = [
 
 [[package]]
 name = "edgerun-log"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-machine-report"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
  "edgerun-json",
@@ -1436,7 +1436,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-mail-web"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-http",
  "edgerun-log",
@@ -1445,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-marketplace-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-clap",
  "edgerun-json",
@@ -1457,7 +1457,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-matter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-bluetooth-gatt",
  "edgerun-encoding",
@@ -1465,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-mesh"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -1476,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-mesh-capability"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-crypto",
@@ -1490,7 +1490,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-mesh-daemon"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-core",
@@ -1511,7 +1511,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-mesh-link"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -1523,7 +1523,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-mesh-session"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -1533,7 +1533,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-mgmt-bluetooth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-bluetooth",
  "edgerun-capabilities",
@@ -1542,14 +1542,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-microphone"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-net"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-clap",
  "edgerun-config",
@@ -1561,7 +1561,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-network-interface"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-quectel-ec200a",
@@ -1569,14 +1569,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-nfc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-node"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-alsa-microphone",
  "edgerun-alsa-speaker",
@@ -1644,14 +1644,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-npu"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-oauth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
@@ -1663,7 +1663,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-oci"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -1682,21 +1682,21 @@ dependencies = [
 
 [[package]]
 name = "edgerun-pci"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-power"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-proto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "prost",
  "prost-types",
@@ -1704,7 +1704,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-proxy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-log",
  "edgerun-rt",
@@ -1712,7 +1712,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-qpack"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_matches",
  "edgerun-encoding",
@@ -1721,15 +1721,15 @@ dependencies = [
 
 [[package]]
 name = "edgerun-quectel-ec200a"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-regex"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-remote-capability"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
  "edgerun-bluetooth",
@@ -1752,7 +1752,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-rt"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-log",
  "libc",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-scheduler"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-config",
  "edgerun-error",
@@ -1774,7 +1774,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-secret-service"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
  "edgerun-core",
@@ -1787,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-dhcp",
  "edgerun-dns",
@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-solana"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bs58",
  "edgerun-crypto",
@@ -1817,14 +1817,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-speaker"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-storage"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -1839,7 +1839,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-stream"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -1849,7 +1849,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-tcl-ac"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes",
  "cbc",
@@ -1861,7 +1861,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-tcl-ac-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-bluetooth-gatt",
  "edgerun-capabilities",
@@ -1875,7 +1875,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-tftp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-log",
  "edgerun-rt",
@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-tls"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
@@ -1893,14 +1893,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-tpm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
 ]
 
 [[package]]
 name = "edgerun-tuya"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-json",
@@ -1910,21 +1910,21 @@ dependencies = [
 
 [[package]]
 name = "edgerun-url"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "edgerun-usb"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-v4l2-camera"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
  "edgerun-camera-biometrics",
@@ -1936,7 +1936,7 @@ dependencies = [
 
 [[package]]
 name = "edgerun-vfs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion 0.5.1",
  "dashmap",
@@ -1954,21 +1954,21 @@ dependencies = [
 
 [[package]]
 name = "edgerun-virtual-disk"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
 ]
 
 [[package]]
 name = "edgerun-wifi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
 ]
 
 [[package]]
 name = "edgerun-yubikey"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-encoding",

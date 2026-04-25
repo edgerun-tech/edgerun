@@ -1,9 +1,17 @@
-.PHONY: check test build release-build docker-build install-ert
+.PHONY: check test build release docker-build install-ert version
 .PHONY: e2e e2e-full e2e-hardware e2e-mesh e2e-conformance e2e-runner
 
-# Default: workspace check
+# Run local CI checks (format, clippy, check, release build)
 check:
-	cargo check --workspace
+	./scripts/ci-local.sh check
+
+# Version bump (analyzes API changes and bumps version)
+version:
+	./scripts/ci-local.sh version
+
+# Build release binary
+release:
+	./scripts/ci-local.sh release
 
 # Run all Rust tests
 test:
@@ -19,12 +27,6 @@ install-ert:
 	sudo cp target/x86_64-unknown-linux-musl/release/ert /usr/local/bin/ert
 	sudo chmod 755 /usr/local/bin/ert
 	@echo "Installed ert to /usr/local/bin/ert"
-
-# Cross-compile release binaries
-release-build:
-	mkdir -p dist
-	cargo build --release -p edgerun-node --bin edgerund
-	cp target/release/edgerund dist/edgerund-linux-amd64
 
 # Build container image from Rust source
 docker-build:
