@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker};
 
 use crate::ready_queue::ReadyQueue;
@@ -22,19 +22,10 @@ use crate::waker::make_waker;
 pub struct RuntimeInner {
     pub queue: Arc<ReadyQueue>,
     pub shutdown: AtomicBool,
-    worker_count: AtomicUsize,
 }
 
 impl RuntimeInner {
-    pub fn new(queue: Arc<ReadyQueue>, workers: usize) -> Self {
-        Self {
-            queue,
-            shutdown: AtomicBool::new(false),
-            worker_count: AtomicUsize::new(workers),
-        }
-    }
-
-    pub fn spawn_task<F>(&self, f: F) -> crate::blocking_pool::JoinHandle<F::Output>
+    pub fn spawn_task<F>(&self, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
@@ -64,20 +55,16 @@ impl Runtime {
         self.inner.spawn_task(f)
     }
 
-    pub fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future + Unpin,
-    {
+    pub fn block_on<F: Future + Unpin>(&self, f: F) -> F::Output {
         let w = Arc::new(ReadyQueue::new());
-        let waker = make_waker(0, w);
+        let waker = make_waker(0, Arc::clone(&w));
         let mut cx = Context::from_waker(&waker);
         let mut f = f;
         loop {
-            match Pin::new(&mut f).poll(&mut cx) {
+            match Future::poll(Pin::new(&mut f), &mut cx) {
                 Poll::Ready(v) => return v,
                 Poll::Pending => {
-                    // In no_std, we can't block - spin
-                    core::hint::spin_loop();
+                    if w.pop().is_some() {}
                 }
             }
         }
@@ -127,29 +114,32 @@ impl Builder {
 
     pub fn build(&self) -> Result<Runtime, ()> {
         let queue = Arc::new(ReadyQueue::new());
-        let rt = Arc::new(RuntimeInner::new(queue, self.workers));
+        let rt = Arc::new(RuntimeInner {
+            queue,
+            shutdown: AtomicBool::new(false),
+        });
         Ok(Runtime { inner: rt })
     }
 }
 
 // ===========================================================================
-// Free spawn functions
+// Free spawn - stub (must have runtime passed)
 // ===========================================================================
 
-pub fn spawn<F>(_f: F) -> crate::blocking_pool::JoinHandle<F::Output>
+pub fn spawn<F>(_rt: &RuntimeHandle, _f: F) -> crate::blocking_pool::JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    todo!("spawn requires runtime context")
+    todo!("spawn not implemented")
 }
 
-pub fn spawn_blocking<F, R>(f: F) -> R
+pub fn spawn_blocking<F, R, RT>(_rt: &RT, _f: F) -> crate::blocking_pool::JoinHandle<R>
 where
-    F: FnOnce() -> R + Send,
+    F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    f()
+    todo!("spawn_blocking not implemented")
 }
 
 pub struct RuntimeHandle {

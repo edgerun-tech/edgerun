@@ -84,14 +84,17 @@ pub use yield_now::{yieldnow, YieldNow};
 mod task_map;
 pub use task_map::TaskMap;
 
-// Platform I/O - TCP
-mod tcp;
-pub use tcp::{TcpSocket, SocketAddr, Error as IoError};
+// Unix sockets
+mod unix;
+mod unix_dgram;
 
-// Platform I/O - UDP
-mod udp;
-pub use udp::{UdpSocket as UdpSocket, SocketAddr as UdpAddr, Error as UdpError};
+#[macro_use]
+mod log;
+#[macro_use]
+mod error;
+#[macro_use]
+mod trace;
+#[macro_use]
+mod metrics;
 
-// Platform I/O - FS
-mod fs;
-pub use fs::{File, DirEntry, Dir, Error as FsError};
+pub use log::Level;
