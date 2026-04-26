@@ -60,12 +60,13 @@ impl TftpClient {
         }
     }
 
-    pub fn request(&self, _buf: &mut [u8]) -> usize {
+    pub fn request(&mut self, _buf: &mut [u8]) -> usize {
         0
     }
 
-    pub fn ack(&self, _buf: &mut [u8], block: u16) -> usize {
+    pub fn ack(&mut self, _buf: &mut [u8], block: u16) -> usize {
         self.last_block = block;
+        let _ = _buf;
         0
     }
 

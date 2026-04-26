@@ -11,3 +11,4 @@ default = []
 [dependencies]
 edgerun-virtio = { path = "../edgerun-virtio" }
 edgerun-platform = { path = "../edgerun-platform" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }

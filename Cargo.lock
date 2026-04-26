@@ -1953,6 +1953,7 @@ dependencies = [
 name = "edgerun-unikernel"
 version = "0.1.0"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-platform",
  "edgerun-virtio",
 ]

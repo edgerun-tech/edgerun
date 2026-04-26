@@ -79,12 +79,12 @@ impl DhcpClient {
         }
     }
 
-    pub fn discover(&self, _buf: &mut [u8]) -> usize {
+    pub fn discover(&mut self, _buf: &mut [u8]) -> usize {
         self.state = DhcpState::Selecting;
         0
     }
 
-    pub fn request(&self, _buf: &mut [u8], _server_ip: u32) -> usize {
+    pub fn request(&mut self, _buf: &mut [u8], _server_ip: u32) -> usize {
         self.state = DhcpState::Requesting;
         0
     }

@@ -7,6 +7,9 @@ extern crate alloc;
 pub mod time;
 pub use time::{Duration, Instant};
 
+pub mod timer;
+pub use timer::{now, set_now, elapsed_since, sleep_us, sleep_ms, TimerWheel};
+
 pub mod runtime;
 pub use runtime::{Runtime, Builder, JoinHandle, JoinSet, spawn, spawn_local, block_on, shutdown};
 
