@@ -7,6 +7,9 @@ extern crate alloc;
 pub mod time;
 pub use time::{Duration, Instant};
 
+pub mod executor;
+pub use executor::{spawn_tasks_and_run};
+
 pub mod timer;
 pub use timer::{now, set_now, elapsed_since, sleep_us, sleep_ms, TimerWheel};
 

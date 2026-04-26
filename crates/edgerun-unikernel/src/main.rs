@@ -7,7 +7,23 @@ extern crate edgerun_bare_rt as rt;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
-use rt::{DhcpClient, TftpConfig, TcpSocket, TcpState};
+use rt::{DhcpClient, TftpConfig, TcpSocket, spawn_tasks_and_run, spawn};
+
+use core::future::Future;
+use core::pin::Pin;
+use core::task::{Context, Poll};
+
+struct NetworkTask;
+
+impl Future for NetworkTask {
+    type Output = ();
+    
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        rt::log::log(3, "Network task running");
+        cx.waker().wake_by_ref();
+        Poll::Pending
+    }
+}
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! { 
@@ -40,13 +56,12 @@ pub unsafe extern "C" fn main() {
     let _ = tcp.bind(addr);
     let _ = tcp.listen(10);
     
+    spawn(NetworkTask);
+    
     if net.is_link_up() {
         rt::log::log(3, "VirtIO Net: OK");
-        rt::log::log(3, "TCP listening on port 8080");
+        rt::log::log(3, "TCP listening on 8080");
     }
     
-    loop {
-        rt::timer::set_now(rt::timer::now() + 1);
-        unsafe { core::arch::asm!("pause") };
-    }
+    spawn_tasks_and_run();
 }

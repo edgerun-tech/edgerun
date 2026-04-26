@@ -11,7 +11,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::sync::atomic::{AtomicBool, Ordering};
 
-pub fn spawn<F>(f: F) -> JoinHandle<F::Output>
+pub fn spawn<F>(_f: F) -> JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
 {
