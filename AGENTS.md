@@ -8,7 +8,7 @@ cargo +nightly build --release -p edgerun-unikernel --target x86_64-unknown-none
 /usr/bin/objcopy -O binary target/x86_64-unknown-none/release/edgerun-unikernel /tmp/edgerun.bin
 ```
 
-Output: `/tmp/edgerun.bin` (~9KB)
+Output: `/tmp/edgerun.bin` (~15KB)
 
 **Note**: Requires nightly Rust with `-Zbuild-std=core,alloc` for no_std alloc support.
 
