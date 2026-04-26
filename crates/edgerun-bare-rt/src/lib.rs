@@ -58,5 +58,14 @@ pub use dhcp::{DhcpConfig, DhcpClient, DhcpState};
 pub mod tftp;
 pub use tftp::{TftpConfig, TftpClient, TftpState};
 
+pub mod udp;
+pub use udp::{UdpSocket, SocketAddr, UdpError};
+
+pub mod tcp;
+pub use tcp::{TcpSocket, TcpState, TcpError};
+
+pub mod ipv4;
+pub use ipv4::{Ipv4Addr, Ipv4Header, IP_VERSION, IP_DEFAULT_TTL};
+
 pub mod log;
 pub use log::Level;
