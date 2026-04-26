@@ -49,5 +49,11 @@ pub use weak::Weak;
 pub mod error;
 pub use error::Error;
 
+pub mod dhcp;
+pub use dhcp::{DhcpConfig, DhcpClient, DhcpState};
+
+pub mod tftp;
+pub use tftp::{TftpConfig, TftpClient, TftpState};
+
 pub mod log;
 pub use log::Level;

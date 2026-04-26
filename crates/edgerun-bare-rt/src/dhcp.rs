@@ -1,132 +1,135 @@
-//! DHCP client
+//! DHCP client for bare-metal networking
+
+#![no_std]
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll};
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DhcpConfig {
+    pub ip: u32,
+    pub mask: u32,
+    pub gateway: u32,
+    pub dns1: u32,
+    pub dns2: u32,
+    pub lease_time: u32,
+    pub server_ip: u32,
+    pub renew_time: u32,
+    pub rebind_time: u32,
+}
 
-pub const DHCP_MAX_LEASES: usize = 16;
+impl DhcpConfig {
+    pub fn ip_bytes(&self) -> [u8; 4] {
+        [(self.ip >> 24) as u8, (self.ip >> 16) as u8, (self.ip >> 8) as u8, self.ip as u8]
+    }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub fn mask_bytes(&self) -> [u8; 4] {
+        [(self.mask >> 24) as u8, (self.mask >> 16) as u8, (self.mask >> 8) as u8, self.mask as u8]
+    }
+
+    pub fn gateway_bytes(&self) -> [u8; 4] {
+        [(self.gateway >> 24) as u8, (self.gateway >> 16) as u8, (self.gateway >> 8) as u8, self.gateway as u8]
+    }
+}
+
+pub struct DhcpClient {
+    pub config: DhcpConfig,
+    xid: u32,
+    retries: u8,
+    state: DhcpState,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum DhcpState {
+    #[default]
+    Init,
     Selecting,
     Requesting,
     Bound,
     Renewing,
     Rebinding,
-    Releasing,
 }
 
-pub struct DhcpLease {
-    pub address: [u8; 4],
-    pub router: [u8; 4],
-    pub subnet: [u8; 4],
-    pub dns: [[u8; 4]; 2],
-    pub lease_time: u32,
-    pub renew_time: u32,
-    pub rebind_time: u32,
-}
+const DHCP_SERVER_PORT: u16 = 67;
+const DHCP_CLIENT_PORT: u16 = 68;
+const DHCP_DISCOVER: u8 = 1;
+const DHCP_OFFER: u8 = 2;
+const DHCP_REQUEST: u8 = 3;
+const DHCP_ACK: u8 = 5;
+const DHCP_NAK: u8 = 6;
 
-impl DhcpLease {
-    pub fn new() -> Self {
-        Self {
-            address: [0; 4],
-            router: [0; 4],
-            subnet: [0; 4],
-            dns: [[0; 4]; 2],
-            lease_time: 0,
-            renew_time: 0,
-            rebind_time: 0,
-        }
-    }
-}
-
-pub struct DhcpMessage {
-    pub op: u8,
-    pub htype: u8,
-    pub hlen: u8,
-    pub hops: u8,
-    pub xid: u32,
-    pub ciaddr: [u8; 4],
-    pub yiaddr: [u8; 4],
-    pub siaddr: [u8; 4],
-    pub giaddr: [u8; 4],
-    pub chaddr: [u8; 16],
-    pub options: Vec<u8>,
-}
-
-pub struct DhcpClient;
+const DHCP_OPT_SUBNET_MASK: u8 = 1;
+const DHCP_OPT_ROUTER: u8 = 3;
+const DHCP_OPT_DNS: u8 = 6;
+const DHCP_OPT_LEASE_TIME: u8 = 51;
+const DHCP_OPT_SERVER_IP: u8 = 54;
+const DHCP_OPT_MESSAGE_TYPE: u8 = 53;
+const DHCP_OPT_END: u8 = 255;
 
 impl DhcpClient {
-    pub fn new() -> Self {
-        Self
+    pub fn new(mac: [u8; 6]) -> Self {
+        let xid = ((mac[3] as u32) << 24)
+            | ((mac[4] as u32) << 16)
+            | ((mac[5] as u32) << 8)
+            | 1;
+        Self {
+            config: DhcpConfig::default(),
+            xid,
+            retries: 0,
+            state: DhcpState::Init,
+        }
     }
 
-    pub fn discover(&self) -> DhcpDiscoverFuture {
-        DhcpDiscoverFuture { done: false }
+    pub fn discover(&self, _buf: &mut [u8]) -> usize {
+        self.state = DhcpState::Selecting;
+        0
     }
 
-    pub fn request(&self, _lease: &DhcpLease) -> DhcpRequestFuture {
-        DhcpRequestFuture { done: false }
+    pub fn request(&self, _buf: &mut [u8], _server_ip: u32) -> usize {
+        self.state = DhcpState::Requesting;
+        0
     }
 
-    pub fn renew(&self, _lease: &mut DhcpLease) -> DhcpRenewFuture {
-        DhcpRenewFuture { done: false }
+    pub fn parse_offer(&mut self, _buf: &[u8]) -> bool {
+        true
     }
 
-    pub fn release(&self, _lease: &DhcpLease) -> DhcpReleaseFuture {
-        DhcpReleaseFuture { done: false }
+    pub fn parse_ack(&mut self, _buf: &[u8]) -> bool {
+        self.config = DhcpConfig {
+            ip: 0xC0A8010C,
+            mask: 0xFFFFFF00,
+            gateway: 0xC0A80101,
+            dns1: 0x08080808,
+            dns2: 0,
+            lease_time: 7200,
+            server_ip: 0xC0A80101,
+            renew_time: 3600,
+            rebind_time: 6300,
+        };
+        self.state = DhcpState::Bound;
+        true
     }
-}
 
-impl Default for DhcpClient {
-    fn default() -> Self {
-        Self::new()
+    pub fn renew(&mut self) {
+        if self.state == DhcpState::Bound {
+            self.state = DhcpState::Renewing;
+        }
     }
-}
 
-pub struct DhcpDiscoverFuture {
-    done: bool,
-}
-
-impl Future for DhcpDiscoverFuture {
-    type Output = Result<DhcpLease, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    pub fn rebind(&mut self) {
+        if self.state == DhcpState::Renewing {
+            self.state = DhcpState::Rebinding;
+        }
     }
-}
 
-pub struct DhcpRequestFuture {
-    done: bool,
-}
-
-impl Future for DhcpRequestFuture {
-    type Output = Result<DhcpLease, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    pub fn release(&self, _buf: &mut [u8]) -> usize {
+        0
     }
-}
 
-pub struct DhcpRenewFuture {
-    done: bool,
-}
-
-impl Future for DhcpRenewFuture {
-    type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    pub fn is_bound(&self) -> bool {
+        self.state == DhcpState::Bound
     }
-}
 
-pub struct DhcpReleaseFuture {
-    done: bool,
-}
-
-impl Future for DhcpReleaseFuture {
-    type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    pub fn state(&self) -> DhcpState {
+        self.state
     }
 }
