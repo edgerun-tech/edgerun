@@ -1,7 +1,5 @@
 //! DHCP client for bare-metal networking
 
-
-
 extern crate alloc;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -13,8 +11,6 @@ pub struct DhcpConfig {
     pub dns2: u32,
     pub lease_time: u32,
     pub server_ip: u32,
-    pub renew_time: u32,
-    pub rebind_time: u32,
 }
 
 impl DhcpConfig {
@@ -33,8 +29,6 @@ impl DhcpConfig {
 
 pub struct DhcpClient {
     pub config: DhcpConfig,
-    xid: u32,
-    retries: u8,
     state: DhcpState,
 }
 
@@ -49,32 +43,11 @@ pub enum DhcpState {
     Rebinding,
 }
 
-const DHCP_SERVER_PORT: u16 = 67;
-const DHCP_CLIENT_PORT: u16 = 68;
-const DHCP_DISCOVER: u8 = 1;
-const DHCP_OFFER: u8 = 2;
-const DHCP_REQUEST: u8 = 3;
-const DHCP_ACK: u8 = 5;
-const DHCP_NAK: u8 = 6;
-
-const DHCP_OPT_SUBNET_MASK: u8 = 1;
-const DHCP_OPT_ROUTER: u8 = 3;
-const DHCP_OPT_DNS: u8 = 6;
-const DHCP_OPT_LEASE_TIME: u8 = 51;
-const DHCP_OPT_SERVER_IP: u8 = 54;
-const DHCP_OPT_MESSAGE_TYPE: u8 = 53;
-const DHCP_OPT_END: u8 = 255;
-
 impl DhcpClient {
     pub fn new(mac: [u8; 6]) -> Self {
-        let xid = ((mac[3] as u32) << 24)
-            | ((mac[4] as u32) << 16)
-            | ((mac[5] as u32) << 8)
-            | 1;
+        let _ = mac;
         Self {
             config: DhcpConfig::default(),
-            xid,
-            retries: 0,
             state: DhcpState::Init,
         }
     }
@@ -82,15 +55,6 @@ impl DhcpClient {
     pub fn discover(&mut self, _buf: &mut [u8]) -> usize {
         self.state = DhcpState::Selecting;
         0
-    }
-
-    pub fn request(&mut self, _buf: &mut [u8], _server_ip: u32) -> usize {
-        self.state = DhcpState::Requesting;
-        0
-    }
-
-    pub fn parse_offer(&mut self, _buf: &[u8]) -> bool {
-        true
     }
 
     pub fn parse_ack(&mut self, _buf: &[u8]) -> bool {
@@ -102,8 +66,6 @@ impl DhcpClient {
             dns2: 0,
             lease_time: 7200,
             server_ip: 0xC0A80101,
-            renew_time: 3600,
-            rebind_time: 6300,
         };
         self.state = DhcpState::Bound;
         true
@@ -113,16 +75,6 @@ impl DhcpClient {
         if self.state == DhcpState::Bound {
             self.state = DhcpState::Renewing;
         }
-    }
-
-    pub fn rebind(&mut self) {
-        if self.state == DhcpState::Renewing {
-            self.state = DhcpState::Rebinding;
-        }
-    }
-
-    pub fn release(&self, _buf: &mut [u8]) -> usize {
-        0
     }
 
     pub fn is_bound(&self) -> bool {
