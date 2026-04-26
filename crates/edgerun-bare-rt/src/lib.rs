@@ -1,4 +1,4 @@
-//! edgerun-bare-rt: Bare-metal async runtime - core primitives only
+//! edgerun-bare-rt: Bare-metal async runtime
 
 #![no_std]
 
@@ -6,9 +6,6 @@ extern crate alloc;
 
 pub mod time;
 pub use time::{Duration, Instant};
-
-pub mod executor;
-pub use executor::{spawn_tasks_and_run};
 
 pub mod timer;
 pub use timer::{now, set_now, elapsed_since, sleep_us, sleep_ms, TimerWheel};
@@ -18,9 +15,6 @@ pub use runtime::{Runtime, Builder, JoinHandle, JoinSet, spawn, spawn_local, blo
 
 pub mod timers;
 pub use timers::{sleep, Elapsed, timeout, Timeout};
-
-pub mod interval;
-pub use interval::{interval, interval_at, Interval};
 
 pub mod sync;
 pub use sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Semaphore, SemaphoreGuard};
