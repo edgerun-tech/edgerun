@@ -1,146 +1,109 @@
-//! Timers and intervals.
+//! Timer-based async primitives
 
-
-extern crate alloc;
+extern crate edgerun_platform;
 
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use core::time::Duration;
+use core::sync::atomic::{AtomicBool, Ordering};
 
-use super::time::{Duration, Instant};
-use super::sleep_until::Elapsed;
-
-pub fn sleep(d: Duration) -> Sleep {
-    let deadline = Instant::now() + d;
-    Sleep::new(deadline)
+pub struct Sleep {
+    deadline: u64,
 }
 
-pub fn interval(period: Duration) -> Interval {
-    Interval::new(Instant::now() + period, period)
-}
+impl Unpin for Sleep {}
 
-pub fn interval_at(start: Instant, period: Duration) -> Interval {
-    Interval::new(start + period, period)
-}
-
-pub fn timeout<F>(d: Duration, f: F) -> Timeout<F> {
-    let deadline = Instant::now() + d;
-    Timeout { future: f, deadline }
-}
-
-pub fn timeout_at<F>(deadline: Instant, f: F) -> Timeout<F> {
-    Timeout { future: f, deadline }
-}
-
-pub struct Interval {
-    next: Instant,
-    period: Duration,
-}
-
-impl Interval {
-    fn new(next: Instant, period: Duration) -> Self {
-        Self { next, period }
+impl Sleep {
+    pub fn new(delay: Duration) -> Self {
+        let deadline = edgerun_platform::timer::timer_ticks() 
+            + edgerun_platform::timer::us_to_ticks(delay.as_micros() as u64);
+        Self { deadline }
     }
 
-    pub fn tick(&mut self) -> IntervalTick<'_> {
-        IntervalTick { interval: self }
-    }
-
-    pub fn period(&self) -> Duration {
-        self.period
-    }
-
-    pub fn reset(&mut self) {
-        self.next = Instant::now() + self.period;
-    }
-
-    fn check_and_advance(&mut self) -> bool {
-        let now = Instant::now();
-        if now >= self.next {
-            self.next = self.next + self.period;
-            if self.next <= now {
-                self.next = now + self.period;
-            }
-            true
-        } else {
-            false
-        }
+    pub fn is_ready(&self) -> bool {
+        edgerun_platform::timer::timer_ticks() >= self.deadline
     }
 }
 
-pub struct IntervalTick<'a> {
-    interval: &'a mut Interval,
-}
-
-impl Future for IntervalTick<'_> {
+impl Future for Sleep {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.interval.check_and_advance() {
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.is_ready() {
             Poll::Ready(())
         } else {
+            cx.waker().wake_by_ref();
             Poll::Pending
         }
     }
 }
 
-pub struct Timeout<T> {
-    future: T,
-    deadline: Instant,
+pub async fn sleep(delay: Duration) {
+    Sleep::new(delay).await;
 }
 
-impl<T: Future + Unpin> Future for Timeout<T> {
-    type Output = Result<T::Output, Elapsed>;
-    
+#[derive(Debug)]
+pub struct Elapsed;
+
+impl core::fmt::Display for Elapsed {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "timeout elapsed")
+    }
+}
+
+pub struct Timeout<F> {
+    inner: Option<F>,
+    deadline: u64,
+    elapsed: AtomicBool,
+}
+
+impl<F> Unpin for Timeout<F> {}
+
+impl<F> Timeout<F> {
+    pub fn new(delay: Duration, future: F) -> Self {
+        let deadline = edgerun_platform::timer::timer_ticks() 
+            + edgerun_platform::timer::us_to_ticks(delay.as_micros() as u64);
+        Self { inner: Some(future), deadline, elapsed: AtomicBool::new(false) }
+    }
+
+    pub fn is_elapsed(&self) -> bool {
+        self.elapsed.load(Ordering::Acquire)
+    }
+
+    pub fn into_inner(self) -> Option<F> {
+        self.inner
+    }
+}
+
+impl<F> Future for Timeout<F>
+where
+    F: Future + Unpin,
+{
+    type Output = Result<F::Output, Elapsed>;
+
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         
-        if Instant::now() >= this.deadline {
+        if edgerun_platform::timer::timer_ticks() >= this.deadline {
+            this.elapsed.store(true, Ordering::Release);
             return Poll::Ready(Err(Elapsed));
         }
         
-        match Pin::new(&mut this.future).poll(cx) {
-            Poll::Ready(v) => Poll::Ready(Ok(v)),
-            Poll::Pending => Poll::Pending,
+        if let Some(ref mut inner) = this.inner {
+            return match Pin::new(inner).poll(cx) {
+                Poll::Ready(v) => Poll::Ready(Ok(v)),
+                Poll::Pending => Poll::Pending,
+            };
         }
-    }
-}
-
-pub struct MissedTickBehavior;
-
-impl MissedTickBehavior {
-    pub fn skip() -> Self {
-        Self
-    }
-    
-    pub fn backlog() -> Self {
-        Self
-    }
-}
-
-pub use super::sleep_until::Sleep;
-
-pub struct CtrlC;
-
-impl CtrlC {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for CtrlC {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Future for CtrlC {
-    type Output = ();
-    
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        
         Poll::Pending
     }
 }
 
-pub fn ctrl_c() -> CtrlC {
-    CtrlC::new()
+pub fn timeout<F>(delay: Duration, future: F) -> Timeout<F>
+where
+    F: Future + Unpin,
+{
+    Timeout::new(delay, future)
 }

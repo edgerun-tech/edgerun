@@ -1,153 +1,114 @@
-//! Bounded mpsc channel with backpressure.
-
+//! MPSC channel for bare-metal async
 
 extern crate alloc;
 
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::cell::UnsafeCell;
+use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, Ordering};
-use core::task::{Context, Poll, Waker};
+use core::sync::atomic::{AtomicUsize, Ordering};
+use core::task::{Context, Poll};
 
-const ACQUIRE: Ordering = Ordering::Acquire;
-const RELEASE: Ordering = Ordering::Release;
-const ACQ_REL: Ordering = Ordering::AcqRel;
-
-// ===========================================================================
-// MPSC channel
-// ===========================================================================
-
-struct MpscInner<T> {
-    queue: UnsafeCell<Vec<T>>,
-    closed: AtomicBool,
-    recv_waker: UnsafeCell<Option<Waker>>,
+pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
+    let queue = Arc::new(Queue {
+        data: RefCell::new(VecDeque::new()),
+        sender_count: AtomicUsize::new(1),
+        closed: AtomicUsize::new(0),
+    });
+    (Sender { queue: queue.clone(), cap }, Receiver { queue })
 }
 
-/// Creates a new mpsc channel with the given capacity.
-pub fn channel<T: Send>(cap: usize) -> (Sender<T>, Receiver<T>) {
-    let cap = cap.max(1);
-    let inner = Arc::new(MpscInner {
-        queue: UnsafeCell::new(Vec::with_capacity(cap)),
-        closed: AtomicBool::new(false),
-        recv_waker: UnsafeCell::new(None),
-    });
-    (Sender { inner: inner.clone() }, Receiver { inner })
+struct Queue<T> {
+    data: RefCell<VecDeque<T>>,
+    sender_count: AtomicUsize,
+    closed: AtomicUsize,
 }
 
 pub struct Sender<T> {
-    inner: Arc<MpscInner<T>>,
-}
-
-unsafe impl<T: Send> Send for Sender<T> {}
-
-impl<T> Clone for Sender<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-impl<T> Drop for Sender<T> {
-    fn drop(&mut self) {
-        self.inner.closed.store(true, RELEASE);
-    }
+    queue: Arc<Queue<T>>,
+    cap: usize,
 }
 
 impl<T> Sender<T> {
-    pub fn try_send(&self, value: T) -> Result<(), SendError<T>> {
-        if self.inner.closed.load(Ordering::Relaxed) {
-            return Err(SendError(value));
+    pub fn send(&self, value: T) -> Result<(), SendError> {
+        if self.closed() {
+            return Err(SendError);
         }
-        let q = unsafe { &mut *self.inner.queue.get() };
-        if q.len() >= q.capacity() {
-            return Err(SendError(value));
+        if self.cap > 0 && self.queue.data.borrow().len() >= self.cap {
+            return Err(SendError);
         }
-        q.push(value);
-        unsafe {
-            if let Some(w) = (*self.inner.recv_waker.get()).take() {
-                w.wake();
-            }
-        }
+        self.queue.data.borrow_mut().push_back(value);
+        self.queue.sender_count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
-    pub fn send(&self, value: T) -> Result<(), SendError<T>> {
-        self.try_send(value)
+    pub fn closed(&self) -> bool {
+        self.queue.closed.load(Ordering::Acquire) != 0
+    }
+
+    pub fn try_send(&self, value: T) -> Result<(), TrySendError<T>> {
+        if self.closed() {
+            return Err(TrySendError(value));
+        }
+        if self.cap > 0 && self.queue.data.borrow().len() >= self.cap {
+            return Err(TrySendError(value));
+        }
+        self.queue.data.borrow_mut().push_back(value);
+        Ok(())
+    }
+}
+
+pub struct SendError;
+
+pub struct TrySendError<T>(pub T);
+
+impl core::fmt::Debug for SendError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Sender closed")
+    }
+}
+
+impl core::fmt::Display for SendError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "channel closed")
     }
 }
 
 pub struct Receiver<T> {
-    inner: Arc<MpscInner<T>>,
+    queue: Arc<Queue<T>>,
 }
 
-unsafe impl<T: Send> Send for Receiver<T> {}
+impl<T> Future for Receiver<T> {
+    type Output = T;
 
-impl<T> Receiver<T> {
-    pub fn try_recv(&self) -> Result<T, TryRecvError> {
-        if self.inner.closed.load(ACQUIRE) {
-            unsafe {
-                if let Some(v) = (*self.inner.queue.get()).pop() {
-                    return Ok(v);
-                }
-            }
-            return Err(TryRecvError::Disconnected);
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.queue.data.borrow().is_empty() {
+            return Poll::Ready(self.queue.data.borrow_mut().pop_front().unwrap());
         }
-        unsafe {
-            (*self.inner.queue.get()).pop().ok_or(TryRecvError::Empty)
+        if self.queue.closed.load(Ordering::Acquire) != 0 {
+            return Poll::Pending;
         }
-    }
-
-    pub fn recv(&self) -> RecvFut<'_, T> {
-        RecvFut { receiver: self }
-    }
-}
-
-pub struct RecvFut<'a, T> {
-    receiver: &'a Receiver<T>,
-}
-
-unsafe impl<T: Send> Send for RecvFut<'_, T> {}
-
-impl<T> Future for RecvFut<'_, T> {
-    type Output = Option<T>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-        let receiver = this.receiver;
-        if receiver.inner.closed.load(ACQUIRE) {
-            unsafe {
-                if let Some(v) = (*receiver.inner.queue.get()).pop() {
-                    return Poll::Ready(Some(v));
-                }
-            }
-            return Poll::Ready(None);
-        }
-        unsafe {
-            if let Some(v) = (*receiver.inner.queue.get()).pop() {
-                return Poll::Ready(Some(v));
-            }
-        }
-        unsafe { *receiver.inner.recv_waker.get() = Some(cx.waker().clone()) };
-        if receiver.inner.closed.load(ACQUIRE) {
-            unsafe {
-                if let Some(v) = (*receiver.inner.queue.get()).pop() {
-                    return Poll::Ready(Some(v));
-                }
-            }
-            return Poll::Ready(None);
-        }
+        cx.waker().wake_by_ref();
         Poll::Pending
     }
 }
 
-#[derive(Debug)]
-pub struct SendError<T>(pub T);
+impl<T> Receiver<T> {
+    pub fn try_recv(&self) -> Option<T> {
+        self.queue.data.borrow_mut().pop_front()
+    }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TryRecvError {
-    Empty,
-    Disconnected,
+    pub fn len(&self) -> usize {
+        self.queue.data.borrow().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.data.borrow().is_empty()
+    }
+
+    pub fn close(&self) {
+        self.queue.closed.store(1, Ordering::Release);
+    }
 }

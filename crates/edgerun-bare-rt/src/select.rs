@@ -1,218 +1,75 @@
-//! select! macro - race multiple futures.
+//! Select utilities for racing futures
 
-extern crate alloc;
-
-use core::marker::PhantomData;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
-struct Select2<F1, F2, O> {
-    f1: Option<F1>,
-    f2: Option<F2>,
-    done1: bool,
-    done2: bool,
-    _marker: PhantomData<O>,
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
 }
 
-impl<F1, F2, O> Future for Select2<F1, F2, O>
+impl<L, R> Either<L, R> {
+    pub fn into_left(self) -> core::option::Option<L> {
+        match self { Either::Left(l) => Some(l), Either::Right(_) => None }
+    }
+    pub fn into_right(self) -> core::option::Option<R> {
+        match self { Either::Left(_) => None, Either::Right(r) => Some(r) }
+    }
+    pub fn is_left(&self) -> bool { matches!(self, Either::Left(_)) }
+    pub fn is_right(&self) -> bool { matches!(self, Either::Right(_)) }
+}
+
+impl<L: Future, R: Future> Future for Either<L, R> {
+    type Output = L::Output;
+    
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.as_mut().poll(cx) {
+            Poll::Ready(v) => Poll::Ready(v),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+pub struct Select<F1, F2> {
+    fut1: Option<F1>,
+    fut2: Option<F2>,
+}
+
+impl<F1, F2> Unpin for Select<F1, F2> {}
+
+impl<F1, F2> Select<F1, F2> {
+    pub fn new(f1: F1, f2: F2) -> Self {
+        Self { fut1: Some(f1), fut2: Some(f2) }
+    }
+}
+
+impl<F1, F2> Future for Select<F1, F2>
 where
-    F1: Future<Output = O> + Unpin,
-    F2: Future<Output = O> + Unpin,
-    O: Unpin,
+    F1: Future + Unpin,
+    F2: Future<Output = F1::Output> + Unpin,
 {
-    type Output = O;
+    type Output = F1::Output;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.done1 {
-            if let Some(ref mut f) = self.f1 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done1 = true;
-                    return Poll::Ready(v);
-                }
+        if let Some(ref mut f1) = self.fut1 {
+            if let Poll::Ready(v) = Pin::new(f1).poll(cx) {
+                self.fut1 = None;
+                self.fut2 = None;
+                return Poll::Ready(v);
             }
         }
-
-        if !self.done2 {
-            if let Some(ref mut f) = self.f2 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done2 = true;
-                    return Poll::Ready(v);
-                }
-            }
+        if let Some(ref mut f2) = self.fut2 {
+            return Pin::new(f2).poll(cx);
         }
-
         Poll::Pending
     }
 }
 
-pub async fn select_2<F1, F2, O>(f1: F1, f2: F2) -> O
+pub fn select2<A, B>(a: A, b: B) -> Select<A, B>
 where
-    F1: Future<Output = O> + Unpin,
-    F2: Future<Output = O> + Unpin,
-    O: Unpin,
+    A: Future,
+    B: Future<Output = A::Output>,
 {
-    Select2 {
-        f1: Some(f1),
-        f2: Some(f2),
-        done1: false,
-        done2: false,
-        _marker: PhantomData,
-    }
-    .await
-}
-
-struct Select3<F1, F2, F3, O> {
-    f1: Option<F1>,
-    f2: Option<F2>,
-    f3: Option<F3>,
-    done1: bool,
-    done2: bool,
-    done3: bool,
-    _marker: PhantomData<O>,
-}
-
-impl<F1, F2, F3, O> Future for Select3<F1, F2, F3, O>
-where
-    F1: Future<Output = O> + Unpin,
-    F2: Future<Output = O> + Unpin,
-    F3: Future<Output = O> + Unpin,
-    O: Unpin,
-{
-    type Output = O;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.done1 {
-            if let Some(ref mut f) = self.f1 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done1 = true;
-                    return Poll::Ready(v);
-                }
-            }
-        }
-
-        if !self.done2 {
-            if let Some(ref mut f) = self.f2 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done2 = true;
-                    return Poll::Ready(v);
-                }
-            }
-        }
-
-        if !self.done3 {
-            if let Some(ref mut f) = self.f3 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done3 = true;
-                    return Poll::Ready(v);
-                }
-            }
-        }
-
-        Poll::Pending
-    }
-}
-
-pub async fn select_3<F1, F2, F3, O>(f1: F1, f2: F2, f3: F3) -> O
-where
-    F1: Future<Output = O> + Unpin,
-    F2: Future<Output = O> + Unpin,
-    F3: Future<Output = O> + Unpin,
-    O: Unpin,
-{
-    Select3 {
-        f1: Some(f1),
-        f2: Some(f2),
-        f3: Some(f3),
-        done1: false,
-        done2: false,
-        done3: false,
-        _marker: PhantomData,
-    }
-    .await
-}
-
-struct Select4<F1, F2, F3, F4, O> {
-    f1: Option<F1>,
-    f2: Option<F2>,
-    f3: Option<F3>,
-    f4: Option<F4>,
-    done1: bool,
-    done2: bool,
-    done3: bool,
-    done4: bool,
-    _marker: PhantomData<O>,
-}
-
-impl<F1, F2, F3, F4, O> Future for Select4<F1, F2, F3, F4, O>
-where
-    F1: Future<Output = O> + Unpin,
-    F2: Future<Output = O> + Unpin,
-    F3: Future<Output = O> + Unpin,
-    F4: Future<Output = O> + Unpin,
-    O: Unpin,
-{
-    type Output = O;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.done1 {
-            if let Some(ref mut f) = self.f1 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done1 = true;
-                    return Poll::Ready(v);
-                }
-            }
-        }
-
-        if !self.done2 {
-            if let Some(ref mut f) = self.f2 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done2 = true;
-                    return Poll::Ready(v);
-                }
-            }
-        }
-
-        if !self.done3 {
-            if let Some(ref mut f) = self.f3 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done3 = true;
-                    return Poll::Ready(v);
-                }
-            }
-        }
-
-        if !self.done4 {
-            if let Some(ref mut f) = self.f4 {
-                if let Poll::Ready(v) = Pin::new(f).poll(cx) {
-                    self.done4 = true;
-                    return Poll::Ready(v);
-                }
-            }
-        }
-
-        Poll::Pending
-    }
-}
-
-pub async fn select_4<F1, F2, F3, F4, O>(f1: F1, f2: F2, f3: F3, f4: F4) -> O
-where
-    F1: Future<Output = O> + Unpin,
-    F2: Future<Output = O> + Unpin,
-    F3: Future<Output = O> + Unpin,
-    F4: Future<Output = O> + Unpin,
-    O: Unpin,
-{
-    Select4 {
-        f1: Some(f1),
-        f2: Some(f2),
-        f3: Some(f3),
-        f4: Some(f4),
-        done1: false,
-        done2: false,
-        done3: false,
-        done4: false,
-        _marker: PhantomData,
-    }
-    .await
+    Select::new(a, b)
 }

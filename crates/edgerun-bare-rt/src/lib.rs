@@ -1,131 +1,53 @@
-//! edgerun-bare-rt: Bare-metal async runtime
+//! edgerun-bare-rt: Bare-metal async runtime - core primitives only
 
 #![no_std]
 
 extern crate alloc;
 
-#[macro_use]
-mod log;
-#[macro_use]
-mod error;
-#[macro_use]
-mod trace;
-#[allow(unused)]
-pub use trace::{span, EnterGuard, Span};
-
-#[macro_use]
-mod metrics;
-#[allow(unused)]
-pub use metrics::{RuntimeMetrics, TaskMetrics};
-
-mod time;
+pub mod time;
 pub use time::{Duration, Instant};
-pub use log::Level;
+
+pub mod runtime;
+pub use runtime::{Runtime, Builder, JoinHandle, JoinSet, spawn, spawn_local, block_on, shutdown};
+
+pub mod timers;
+pub use timers::{sleep, Elapsed, timeout, Timeout};
+
+pub mod interval;
+pub use interval::{interval, interval_at, Interval};
+
+pub mod sync;
+pub use sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Semaphore, SemaphoreGuard};
+
+pub mod join;
+pub use join::{join2, join3, join4, join5};
+
+pub mod select;
+pub use select::{Either, select2, Select};
+
+pub mod channel;
+pub use channel::{channel, Sender, Receiver, SendError};
+
+pub mod mpsc;
+pub use mpsc::{mpsc_channel, Sender as MpscSender, Receiver as MpscReceiver};
+
+pub mod broadcast;
+pub use broadcast::{broadcast, Publisher, Subscriber};
+
+pub mod watch;
+pub use watch::{watch, Sender as WatchSender, Receiver as WatchReceiver};
+
+pub mod task_local;
+pub use task_local::TaskLocal;
+
+pub mod lazy;
+pub use lazy::{LazyStatic, OnceCell};
+
+pub mod weak;
+pub use weak::Weak;
+
+pub mod error;
 pub use error::Error;
 
-// Core sync primitives
-#[allow(unused)]
-pub mod sync {
-    pub use crate::sync_prim::{Condvar, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
-}
-
-mod sync_prim;
-pub use sync_prim::{Condvar, Mutex as SyncMutex, MutexGuard as SyncMutexGuard, RwLock as SyncRwLock, RwLockReadGuard as SyncRwLockReadGuard, RwLockWriteGuard as SyncRwLockWriteGuard};
-
-mod oneshot;
-pub use oneshot::{channel, Receiver, RecvError, Sender};
-
-mod notify;
-pub use notify::{Notified, Notify};
-
-mod mutex;
-pub use mutex::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, MutexLockFuture};
-
-mod latch;
-pub use latch::{Latch, WaitLatch};
-
-mod barrier;
-pub use barrier::{Barrier, BarrierWait, BarrierWaitResult};
-
-mod semaphore;
-pub use semaphore::{AcquireError, Permit, Semaphore, TryAcquireError};
-
-mod mpsc;
-pub use mpsc::{channel as mpsc_channel, Receiver as MpscReceiver, Sender as MpscSender, TryRecvError};
-
-mod unbounded;
-pub use unbounded::{channel as unbounded_channel, Receiver as UnboundedReceiver, Sender as UnboundedSender};
-
-mod broadcast;
-pub use broadcast::{channel as broadcast_channel, Receiver as BroadcastReceiver, Sender as BroadcastSender};
-
-mod watch;
-pub use watch::{channel as watch_channel, ClosedError, Receiver as WatchReceiver, Sender as WatchSender};
-
-mod cancellation;
-pub use cancellation::{CancellationToken, Cancelled};
-
-mod once_cell;
-pub use once_cell::{OnceCell, WaitUntilReady};
-
-#[macro_use]
-mod join;
-pub use join::{join_internal, Select2Enum};
-
-#[macro_use]
-mod select;
-pub use select::{select_2, select_3, select_4};
-
-mod join_set;
-pub use join_set::{JoinNext, JoinSet};
-
-mod ready_queue;
-mod blocking_pool;
-pub use blocking_pool::{JoinError, JoinHandle, PoolError};
-
-mod waker;
-mod runtime;
-pub use runtime::{spawn, spawn_blocking, Builder, Runtime, RuntimeHandle};
-
-mod yield_now;
-pub use yield_now::{yieldnow, YieldNow};
-
-mod sleep_until;
-pub use sleep_until::{sleep_until, timeout_at, Sleep, TimeoutAt, Elapsed};
-#[allow(unused)]
-pub type TimeoutError = Elapsed;
-
-mod timers;
-pub use timers::{ctrl_c, interval, interval_at, timeout, CtrlC, Interval, MissedTickBehavior, Sleep as TimerSleep, Timeout};
-
-mod task_map;
-pub use task_map::TaskMap;
-
-// Platform I/O - TCP
-mod tcp;
-pub use tcp::{TcpSocket, SocketAddr, Error as IoError};
-
-mod io_traits;
-pub use io_traits::{
-    poll_fn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, PollFn, Take,
-};
-
-// Platform I/O - UDP
-mod udp;
-pub use udp::{UdpSocket as UdpSocket, SocketAddr as UdpAddr, Error as UdpError};
-
-// Platform I/O - FS
-mod fs;
-pub use fs::{File, DirEntry, Dir, Error as FsError};
-
-// Rate limiting
-mod rate_limiter;
-pub use rate_limiter::{RateLimiter, TokenBucket};
-
-// Process
-mod process;
-pub use process::{Command, Child, ExitStatus, Error as ProcessError};
-
-// Signal
-mod signal;
-pub use signal::{SignalKind, signal, ignore, default};
+pub mod log;
+pub use log::Level;

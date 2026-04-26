@@ -5,8 +5,9 @@ edition = "2021"
 license = "MIT"
 description = "Edgerun unikernel - bare-metal bootable"
 
+[features]
+default = []
+
 [dependencies]
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
-edgerun-ipxe = { path = "../edgerun-ipxe" }
-edgerun-tftp = { path = "../edgerun-tftp" }
-edgerun-rtl8125 = { path = "../edgerun-rtl8125" }
+edgerun-virtio = { path = "../edgerun-virtio" }
+edgerun-platform = { path = "../edgerun-platform" }

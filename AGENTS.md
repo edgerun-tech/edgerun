@@ -4,11 +4,13 @@
 
 ```bash
 cd /home/ken/edgerun_core
-cargo build --release -p edgerun-unikernel --target x86_64-unknown-none
-/usr/bin/objcopy -O binary target/x86_64-unknown-none/release/edgerun /tmp/edgerun.bin
+cargo +nightly build --release -p edgerun-unikernel --target x86_64-unknown-none -Zbuild-std=core,alloc
+/usr/bin/objcopy -O binary target/x86_64-unknown-none/release/edgerun-unikernel /tmp/edgerun.bin
 ```
 
 Output: `/tmp/edgerun.bin` (~8KB)
+
+**Note**: Requires nightly Rust with `-Zbuild-std=core,alloc` for no_std alloc support.
 
 ## Boot Flow
 
@@ -25,6 +27,5 @@ Output: `/tmp/edgerun.bin` (~8KB)
 
 - `edgerun-bare-rt`: no_std async runtime
 - `edgerun-unikernel`: bare-metal binary entry
-- `edgerun-ipxe`: iPXE API wrapper
-- `edgerun-rtl8125`: RTL8125 NIC driver
-- `edgerun-tftp`: TFTP structures
+- `edgerun-virtio`: virtio-net driver
+- `edgerun-platform`: bare-metal platform primitives

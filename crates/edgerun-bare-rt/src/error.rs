@@ -1,13 +1,24 @@
-//! Error handling - built-in Error trait and utilities.
+//! Error types for bare-metal runtime
 
+#[derive(Debug)]
+pub enum Error {
+    Cancelled,
+    Closed,
+    InvalidInput,
+    NotReady,
+    Timeout,
+    TooMany,
+}
 
-extern crate alloc;
-
-pub trait Error: core::fmt::Display + core::fmt::Debug {
-    fn description(&self) -> &str {
-        ""
-    }
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::Cancelled => write!(f, "operation cancelled"),
+            Error::Closed => write!(f, "channel closed"),
+            Error::InvalidInput => write!(f, "invalid input"),
+            Error::NotReady => write!(f, "not ready"),
+            Error::Timeout => write!(f, "timeout"),
+            Error::TooMany => write!(f, "too many"),
+        }
     }
 }

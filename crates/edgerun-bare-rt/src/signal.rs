@@ -1,32 +1,48 @@
-//! Signal handling stub.
+//! Signal/interrupt handling for bare-metal
 
+use core::sync::atomic::{AtomicBool, Ordering};
 
-#[derive(Debug, Clone, Copy)]
-pub enum SignalKind {
-    Interrupt,
-    Termination,
-    Child,
+pub struct Signal {
+    raised: AtomicBool,
 }
 
-impl SignalKind {
-    pub fn from_raw(_sig: i32) -> Option<Self> { None }
-    pub fn to_raw(&self) -> i32 {
-        match self {
-            SignalKind::Interrupt => 2,
-            SignalKind::Termination => 15,
-            SignalKind::Child => 17,
+impl Signal {
+    pub const fn new() -> Self {
+        Self { raised: AtomicBool::new(false) }
+    }
+    
+    pub fn raised(&self) -> bool {
+        self.raised.load(Ordering::Acquire)
+    }
+    
+    pub fn raise(&self) {
+        self.raised.store(true, Ordering::Release);
+    }
+    
+    pub fn clear(&self) {
+        self.raised.store(false, Ordering::Release);
+    }
+}
+
+pub struct SignalHandler<F> {
+    signal: Signal,
+    handler: F,
+}
+
+impl<F> SignalHandler<F> {
+    pub fn new(signal: Signal, handler: F) -> Self {
+        Self { signal, handler }
+    }
+    
+    pub fn poll(&mut self) where F: FnMut() {
+        if self.signal.raised() {
+            (self.handler)();
+            self.signal.clear();
         }
     }
 }
 
-pub fn signal(_sig: SignalKind, _handler: fn(SignalKind)) -> Result<(), Error> {
-    Err(Error)
-}
-
-pub fn ignore(_sig: SignalKind) -> Result<(), Error> { Ok(()) }
-pub fn default(_sig: SignalKind) -> Result<(), Error> { Ok(()) }
-
-#[derive(Debug)]
-pub struct Error;
-
-impl Error { pub fn new() -> Self { Self } }
+pub fn ctrl_c() -> Signal { Signal::new() }
+pub fn alarm() -> Signal { Signal::new() }
+pub fn usr1() -> Signal { Signal::new() }
+pub fn usr2() -> Signal { Signal::new() }

@@ -1,115 +1,82 @@
-//! Broadcast channel - multi-sender, multi-receiver.
-
+//! Broadcast channel - multiple subscribers
 
 extern crate alloc;
 
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::cell::UnsafeCell;
+use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicUsize, Ordering};
-use core::task::{Context, Poll, Waker};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::task::{Context, Poll};
 
-const ACQUIRE: Ordering = Ordering::Acquire;
-const RELEASE: Ordering = Ordering::Release;
-
-// ===========================================================================
-// Broadcast
-// ===========================================================================
-
-struct BroadcastInner<T> {
-    value: UnsafeCell<T>,
-    version: AtomicUsize,
-    receivers: UnsafeCell<Vec<Waker>>,
+pub fn broadcast<T: Clone + 'static>(cap: usize) -> (Publisher<T>, Subscriber<T>) {
+    let inner = Arc::new(Inner {
+        buffer: RefCell::new(VecDeque::new()),
+        cap,
+        seq: AtomicUsize::new(0),
+        closed: AtomicBool::new(false),
+    });
+    (Publisher { inner: inner.clone() }, Subscriber { inner })
 }
 
-impl<T> BroadcastInner<T> {
-    fn new(value: T) -> Self {
-        Self {
-            value: UnsafeCell::new(value),
-            version: AtomicUsize::new(0),
-            receivers: UnsafeCell::new(Vec::new()),
-        }
-    }
+struct Inner<T> {
+    buffer: RefCell<VecDeque<T>>,
+    cap: usize,
+    seq: AtomicUsize,
+    closed: AtomicBool,
 }
 
-/// Creates a new broadcast channel with the initial value.
-pub fn channel<T: Clone + Send>(initial: T) -> (Sender<T>, Receiver<T>) {
-    let inner = Arc::new(BroadcastInner::new(initial));
-    (Sender { inner: inner.clone() }, Receiver { inner })
+pub struct Publisher<T> {
+    inner: Arc<Inner<T>>,
 }
 
-pub struct Sender<T> {
-    inner: Arc<BroadcastInner<T>>,
-}
-
-impl<T: Clone> Clone for Sender<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-impl<T: Clone + Send> Sender<T> {
+impl<T: Clone> Publisher<T> {
     pub fn send(&self, value: T) {
-        unsafe { *self.inner.value.get() = value };
-        self.inner.version.fetch_add(1, RELEASE);
-        unsafe {
-            let receivers = (*self.inner.receivers.get()).drain(..).collect::<Vec<_>>();
-            for waker in receivers {
-                waker.wake();
-            }
+        if self.closed() {
+            return;
         }
-    }
-}
-
-pub struct Receiver<T> {
-    inner: Arc<BroadcastInner<T>>,
-}
-
-impl<T: Clone> Receiver<T> {
-    pub fn recv(&self) -> BroadcastRecv<'_, T> {
-        BroadcastRecv { receiver: self }
-    }
-
-    pub fn borrow(&self) -> T 
-    where
-        T: Clone,
-    {
-        unsafe { (*self.inner.value.get()).clone() }
-    }
-
-    pub fn try_recv(&self) -> Option<T>
-    where
-        T: Clone,
-    {
-        let v = self.inner.version.load(ACQUIRE);
-        if v > 0 {
-            Some(unsafe { (*self.inner.value.get()).clone() })
-        } else {
-            None
+        let mut buffer = self.inner.buffer.borrow_mut();
+        if buffer.len() >= self.inner.cap {
+            buffer.pop_front();
         }
+        buffer.push_back(value);
+        self.inner.seq.fetch_add(1, Ordering::Release);
+    }
+
+    pub fn closed(&self) -> bool {
+        self.inner.closed.load(Ordering::Acquire)
+    }
+
+    pub fn close(&self) {
+        self.inner.closed.store(true, Ordering::Release);
     }
 }
 
-pub struct BroadcastRecv<'a, T> {
-    receiver: &'a Receiver<T>,
+#[derive(Clone)]
+pub struct Subscriber<T> {
+    inner: Arc<Inner<T>>,
 }
 
-impl<T: Clone> Future for BroadcastRecv<'_, T> {
+impl<T: Clone + 'static> Future for Subscriber<T> {
     type Output = T;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-        let v = this.receiver.inner.version.load(ACQUIRE);
-        if v > 0 {
-            return Poll::Ready(unsafe { (*this.receiver.inner.value.get()).clone() });
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let buffer = self.inner.buffer.borrow();
+        if let Some(v) = buffer.front().cloned() {
+            return Poll::Ready(v);
         }
-        unsafe {
-            (*this.receiver.inner.receivers.get()).push(cx.waker().clone());
+        if self.inner.closed.load(Ordering::Acquire) {
+            return Poll::Pending;
         }
+        drop(buffer);
         Poll::Pending
+    }
+}
+
+impl<T: Clone + 'static> Subscriber<T> {
+    pub fn try_recv(&self) -> Option<T> {
+        self.inner.buffer.borrow_mut().pop_front()
     }
 }

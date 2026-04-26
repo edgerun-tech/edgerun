@@ -1,61 +1,28 @@
-//! Logging - built-in minimal logger.
-
-
-extern crate alloc;
-
-use core::sync::atomic::{AtomicUsize, Ordering};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Level {
-    Trace = 0,
-    Debug = 1,
-    Info = 2,
-    Warn = 3,
-    Error = 4,
-}
+pub struct Level(pub u8);
 
 impl Level {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Level::Trace => "TRACE",
-            Level::Debug => "DEBUG",
-            Level::Info => "INFO",
-            Level::Warn => "WARN",
-            Level::Error => "ERROR",
-        }
-    }
+    pub const Error: Self = Self(1);
+    pub const Warn: Self = Self(2);
+    pub const Info: Self = Self(3);
+    pub const Debug: Self = Self(4);
 }
 
-static LOG_LEVEL: AtomicUsize = AtomicUsize::new(Level::Info as usize);
-
-pub fn set_level(level: Level) {
-    LOG_LEVEL.store(level as usize, Ordering::Relaxed);
+#[macro_export]
+macro_rules! error {
+    ($($arg:tt)*) => {};
 }
 
-pub fn level() -> Level {
-    match LOG_LEVEL.load(Ordering::Relaxed) {
-        0 => Level::Trace,
-        1 => Level::Debug,
-        2 => Level::Info,
-        3 => Level::Warn,
-        _ => Level::Error,
-    }
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => {};
 }
 
-type LoggerFn = Option<fn(Level, &str, &str)>;
-
-static LOGGER: AtomicUsize = AtomicUsize::new(0);
-
-pub fn set_logger(logger: fn(Level, &str, &str)) {
-    LOGGER.store(logger as usize, Ordering::Relaxed);
+#[macro_export]
+macro_rules! info {
+    ($($arg:tt)*) => {};
 }
 
-pub fn log(level: Level, module: &str, message: &str) {
-    if (level as usize) < LOG_LEVEL.load(Ordering::Relaxed) {
-        return;
-    }
-    let logger_fn = unsafe { core::mem::transmute::<usize, LoggerFn>(LOGGER.load(Ordering::Relaxed)) };
-    if let Some(logger) = logger_fn {
-        logger(level, module, message);
-    }
+#[macro_export]
+macro_rules! debug {
+    ($($arg:tt)*) => {};
 }

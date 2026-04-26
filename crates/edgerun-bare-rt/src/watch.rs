@@ -1,127 +1,74 @@
-//! Watch channel - single-value broadcast with version tracking.
-
+//! Watch channel - single value observer
 
 extern crate alloc;
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::cell::UnsafeCell;
+use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicU64, AtomicBool, Ordering};
-use core::task::{Context, Poll, Waker};
+use core::sync::atomic::{AtomicUsize, Ordering};
+use core::task::{Context, Poll};
 
-const ACQUIRE: Ordering = Ordering::Acquire;
-const RELEASE: Ordering = Ordering::Release;
-
-// ===========================================================================
-// Watch channel
-// ===========================================================================
-
-struct WatchInner<T> {
-    value: UnsafeCell<T>,
-    version: AtomicU64,
-    waiters: UnsafeCell<Vec<Waker>>,
-    closed: AtomicBool,
-}
-
-/// Creates a new watch channel with the initial value.
-pub fn channel<T: Clone + Send>(initial: T) -> (Sender<T>, Receiver<T>) {
-    let inner = Arc::new(WatchInner {
-        value: UnsafeCell::new(initial),
-        version: AtomicU64::new(1),
-        waiters: UnsafeCell::new(Vec::new()),
-        closed: AtomicBool::new(false),
+pub fn watch<T: Clone>(value: T) -> (Sender<T>, Receiver<T>) {
+    let inner = Arc::new(Inner {
+        value: RefCell::new(value),
+        version: AtomicUsize::new(0),
+        closed: AtomicUsize::new(0),
     });
     (Sender { inner: inner.clone() }, Receiver { inner })
 }
 
-#[derive(Debug)]
-pub struct ClosedError;
-
-pub struct Sender<T> {
-    inner: Arc<WatchInner<T>>,
+struct Inner<T> {
+    value: RefCell<T>,
+    version: AtomicUsize,
+    closed: AtomicUsize,
 }
 
-impl<T> Clone for Sender<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
+pub struct Sender<T> {
+    inner: Arc<Inner<T>>,
 }
 
 impl<T: Clone> Sender<T> {
-    pub fn send_replace(&self, value: T) {
-        unsafe {
-            *self.inner.value.get() = value;
+    pub fn send(&self, value: T) {
+        if self.inner.closed.load(Ordering::Acquire) != 0 {
+            return;
         }
-        self.inner.version.fetch_add(1, RELEASE);
-        unsafe {
-            let waiters = (*self.inner.waiters.get()).drain(..).collect::<Vec<_>>();
-            for waker in waiters {
-                waker.wake();
-            }
-        }
+        *self.inner.value.borrow_mut() = value;
+        self.inner.version.fetch_add(1, Ordering::Release);
+    }
+
+    pub fn closed(&self) -> bool {
+        self.inner.closed.load(Ordering::Acquire) != 0
     }
 
     pub fn close(&self) {
-        self.inner.closed.store(true, RELEASE);
-        unsafe {
-            let waiters = (*self.inner.waiters.get()).drain(..).collect::<Vec<_>>();
-            for waker in waiters {
-                waker.wake();
-            }
-        }
+        self.inner.closed.store(1, Ordering::Release);
     }
 }
 
+#[derive(Clone)]
 pub struct Receiver<T> {
-    inner: Arc<WatchInner<T>>,
+    inner: Arc<Inner<T>>,
 }
 
 impl<T: Clone> Receiver<T> {
-    pub fn borrow(&self) -> Result<T, ClosedError> {
-        if self.inner.closed.load(ACQUIRE) {
-            return Err(ClosedError);
-        }
-        Ok(unsafe { (*self.inner.value.get()).clone() })
+    pub fn borrow(&self) -> T {
+        self.inner.value.borrow().clone()
     }
 
-    pub fn has_changed(&self) -> bool {
-        self.inner.version.load(ACQUIRE) > 0
-    }
-
-    pub fn changed(&mut self) -> Changed<'_, T> {
-        Changed {
-            receiver: self,
-            registered: false,
-        }
+    pub fn has_changed(&self, version: usize) -> bool {
+        self.inner.version.load(Ordering::Acquire) > version
     }
 }
 
-pub struct Changed<'a, T> {
-    receiver: &'a Receiver<T>,
-    registered: bool,
-}
+impl<T: Clone + 'static> Future for Receiver<T> {
+    type Output = T;
 
-impl<T: Clone> Future for Changed<'_, T> {
-    type Output = Result<(), ClosedError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        if this.receiver.inner.closed.load(ACQUIRE) {
-            return Poll::Ready(Err(ClosedError));
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.inner.closed.load(Ordering::Acquire) != 0 {
+            return Poll::Ready(self.borrow());
         }
-        if this.receiver.has_changed() {
-            return Poll::Ready(Ok(()));
-        }
-        if !this.registered {
-            unsafe {
-                (*this.receiver.inner.waiters.get()).push(cx.waker().clone());
-            }
-            this.registered = true;
-        }
+        cx.waker().wake_by_ref();
         Poll::Pending
     }
 }

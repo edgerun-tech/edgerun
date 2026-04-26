@@ -939,6 +939,9 @@ dependencies = [
 [[package]]
 name = "edgerun-bare-rt"
 version = "0.1.0"
+dependencies = [
+ "edgerun-platform",
+]
 
 [[package]]
 name = "edgerun-bench"
@@ -1708,6 +1711,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-platform"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-power"
 version = "0.1.1"
 dependencies = [
@@ -1946,10 +1953,8 @@ dependencies = [
 name = "edgerun-unikernel"
 version = "0.1.0"
 dependencies = [
- "edgerun-bare-rt",
- "edgerun-ipxe",
- "edgerun-rtl8125",
- "edgerun-tftp",
+ "edgerun-platform",
+ "edgerun-virtio",
 ]
 
 [[package]]
@@ -1995,6 +2000,10 @@ dependencies = [
  "sha1",
  "tempfile",
 ]
+
+[[package]]
+name = "edgerun-virtio"
+version = "0.1.0"
 
 [[package]]
 name = "edgerun-virtual-disk"
