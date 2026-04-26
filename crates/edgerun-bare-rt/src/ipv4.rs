@@ -1,6 +1,6 @@
 //! IPv4 packet handling
 
-#![no_std]
+
 
 pub const IP_VERSION: u8 = 4;
 pub const IP_DEFAULT_TTL: u8 = 64;

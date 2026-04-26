@@ -3,9 +3,6 @@
 extern crate edgerun_platform;
 extern crate alloc;
 
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};

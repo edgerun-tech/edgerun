@@ -1,6 +1,6 @@
 //! DHCP client for bare-metal networking
 
-#![no_std]
+
 
 extern crate alloc;
 

@@ -1,6 +1,6 @@
 //! Runtime - task executor stub
 
-#![no_std]
+
 
 pub fn spawn<F>(_future: F)
 where

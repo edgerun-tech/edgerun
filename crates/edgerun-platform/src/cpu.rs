@@ -1,7 +1,6 @@
 //! CPU identification and per-CPU state for SMP
 
 use core::sync::atomic::{AtomicU8, Ordering};
-use crate::tls::TlsArea;
 use crate::arch::x86_64::send_ipi;
 use crate::timer::timer_ticks;
 

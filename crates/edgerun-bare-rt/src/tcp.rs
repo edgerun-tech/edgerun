@@ -1,10 +1,10 @@
 //! TCP socket for bare-metal networking
 
-#![no_std]
+
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+
 use super::udp::SocketAddr;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]

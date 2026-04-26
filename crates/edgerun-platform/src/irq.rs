@@ -6,7 +6,6 @@
 
 extern crate alloc;
 
-use core::sync::atomic::Ordering;
 
 /// IRQ number (0-15ISA, 16-255 I/O APIC)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -84,6 +83,6 @@ pub unsafe fn restore(flags: usize) {
 }
 
 /// Register interrupt handler
-pub fn set_handler(irq: Irq, handler: IrqHandler) {
+pub fn set_handler(_irq: Irq, _handler: IrqHandler) {
     // IDT/Vector table setup - arch specific
 }

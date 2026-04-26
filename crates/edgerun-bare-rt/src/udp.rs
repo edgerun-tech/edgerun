@@ -1,10 +1,10 @@
 //! UDP socket for bare-metal networking
 
-#![no_std]
+
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SocketAddr(pub u32, pub u16);

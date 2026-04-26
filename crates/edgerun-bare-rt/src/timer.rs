@@ -1,6 +1,6 @@
 //! Timer abstraction for async delays
 
-#![no_std]
+
 
 extern crate alloc;
 

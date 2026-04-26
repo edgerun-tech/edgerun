@@ -1,6 +1,6 @@
 //! TFTP client for kernel loading over PXE
 
-#![no_std]
+
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TftpConfig {

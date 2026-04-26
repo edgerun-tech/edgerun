@@ -4,7 +4,7 @@ extern crate alloc;
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
+
 use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;

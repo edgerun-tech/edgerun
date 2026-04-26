@@ -1,7 +1,5 @@
 //! Simple bump allocator with freelist
 
-#![no_std]
-
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
