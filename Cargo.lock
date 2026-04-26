@@ -2004,6 +2004,9 @@ dependencies = [
 [[package]]
 name = "edgerun-virtio"
 version = "0.1.0"
+dependencies = [
+ "edgerun-platform",
+]
 
 [[package]]
 name = "edgerun-virtual-disk"
