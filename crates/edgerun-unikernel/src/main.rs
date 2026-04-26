@@ -7,7 +7,7 @@ extern crate edgerun_bare_rt as rt;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
-use rt::{DhcpClient, TftpClient, TftpConfig};
+use rt::{DhcpClient, TftpConfig, TcpSocket, TcpState};
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! { 
@@ -32,13 +32,17 @@ pub unsafe extern "C" fn main() {
     net.init();
     
     let mac = net.get_mac();
-    let mut dhcp = DhcpClient::new(mac);
-    
+    let _dhcp = DhcpClient::new(mac);
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
+    let mut tcp = TcpSocket::new();
+    
+    let addr = rt::SocketAddr::new(0xC0A8010C, 8080);
+    let _ = tcp.bind(addr);
+    let _ = tcp.listen(10);
     
     if net.is_link_up() {
         rt::log::log(3, "VirtIO Net: OK");
-        rt::log::log(3, "MAC: ");
+        rt::log::log(3, "TCP listening on port 8080");
     }
     
     loop {
