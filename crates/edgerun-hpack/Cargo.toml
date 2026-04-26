@@ -10,7 +10,6 @@ description = "HPACK header compression for HTTP/2 (RFC 7541)"
 workspace = true
 
 [dependencies]
-log = "^0.3"
 edgerun-log = { path = "../edgerun-log" }
 rustc-serialize = { version = "^0.3", optional = true }
 

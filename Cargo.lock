@@ -1290,7 +1290,6 @@ name = "edgerun-hpack"
 version = "0.1.1"
 dependencies = [
  "edgerun-log",
- "log 0.3.9",
  "rustc-serialize",
 ]
 
@@ -2267,7 +2266,7 @@ dependencies = [
  "cc",
  "cfg-if",
  "libc",
- "log 0.4.29",
+ "log",
  "rustversion",
  "windows-link",
  "windows-result",
@@ -2348,7 +2347,7 @@ checksum = "52dfc19153a48bde0cbd630453615c8151bce3a5adfac7a0aebfbf0a1e1f57e3"
 dependencies = [
  "aho-corasick",
  "bstr",
- "log 0.4.29",
+ "log",
  "regex-automata",
  "regex-syntax",
 ]
@@ -2461,7 +2460,7 @@ checksum = "d3d782a365a015e0f5c04902246139249abf769125006fbe7649e2ee88169b4a"
 dependencies = [
  "crossbeam-deque",
  "globset",
- "log 0.4.29",
+ "log",
  "memchr",
  "regex-automata",
  "same-file",
@@ -2545,7 +2544,7 @@ dependencies = [
  "combine",
  "jni-macros",
  "jni-sys 0.4.1",
- "log 0.4.29",
+ "log",
  "simd_cesu8",
  "thiserror",
  "walkdir",
@@ -2675,15 +2674,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
 dependencies = [
  "scopeguard",
-]
-
-[[package]]
-name = "log"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e19e8d5c34a3e0e2223db8e060f9e8264aeeb5c5fc64a4ee9965c062211c024b"
-dependencies = [
- "log 0.4.29",
 ]
 
 [[package]]
@@ -3904,7 +3894,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
 dependencies = [
- "log 0.4.29",
+ "log",
  "once_cell",
  "tracing-core",
 ]
@@ -4305,7 +4295,7 @@ dependencies = [
  "anyhow",
  "bitflags",
  "indexmap",
- "log 0.4.29",
+ "log",
  "serde",
  "serde_derive",
  "serde_json",
@@ -4324,7 +4314,7 @@ dependencies = [
  "anyhow",
  "id-arena",
  "indexmap",
- "log 0.4.29",
+ "log",
  "semver",
  "serde",
  "serde_derive",
