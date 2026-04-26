@@ -67,5 +67,14 @@ pub use tcp::{TcpSocket, TcpState, TcpError};
 pub mod ipv4;
 pub use ipv4::{Ipv4Addr, Ipv4Header, IP_VERSION, IP_DEFAULT_TTL};
 
+pub mod rng;
+pub use rng::Rng;
+
+pub mod crc32;
+pub use crc32::{Crc32, crc32};
+
+pub mod ring;
+pub use ring::RingBuffer;
+
 pub mod log;
 pub use log::Level;

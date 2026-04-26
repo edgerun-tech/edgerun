@@ -7,7 +7,7 @@ extern crate edgerun_bare_rt as rt;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
-use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn};
+use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn, Rng, crc32, RingBuffer};
 use rt::Ipv4Addr;
 
 use core::future::Future;
@@ -41,6 +41,14 @@ pub unsafe extern "C" fn _start() -> ! {
 pub unsafe extern "C" fn main() {
     rt::timer::set_now(0);
     
+    let mut rng = Rng::new_from_entropy();
+    let test_crc = crc32(b"hello");
+    let _ = test_crc;
+    
+    let mut rx_buf = RingBuffer::new(1024);
+    rx_buf.push_slice(b"test packet");
+    let _ = rx_buf.len();
+    
     let mut net = match edgerun_virtio::find_virtio_net() {
         Some(n) => n,
         None => loop { core::arch::asm!("hlt") },
@@ -52,13 +60,10 @@ pub unsafe extern "C" fn main() {
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
     let mut tcp = TcpSocket::new();
     
-    let local_ip = Ipv4Addr::new(192, 168, 1, 12);
-    let server_ip = Ipv4Addr::new(192, 168, 1, 1);
-    let mask = Ipv4Addr::new(255, 255, 255, 0);
-    
-    let addr = rt::SocketAddr::new(local_ip.0, 8080);
+    let addr = rt::SocketAddr::new(0xC0A8010C, 8080);
     let _ = tcp.bind(addr);
     let _ = tcp.listen(10);
+    let _ = rng.next();
     
     spawn(NetworkTask);
     
