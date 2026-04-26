@@ -8,10 +8,11 @@ extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
 use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn};
+use rt::Ipv4Addr;
 
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 
 struct NetworkTask;
 
@@ -46,13 +47,16 @@ pub unsafe extern "C" fn main() {
     };
     
     net.init();
-    
     let mac = net.get_mac();
     let _dhcp = DhcpClient::new(mac);
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
     let mut tcp = TcpSocket::new();
     
-    let addr = rt::SocketAddr::new(0xC0A8010C, 8080);
+    let local_ip = Ipv4Addr::new(192, 168, 1, 12);
+    let server_ip = Ipv4Addr::new(192, 168, 1, 1);
+    let mask = Ipv4Addr::new(255, 255, 255, 0);
+    
+    let addr = rt::SocketAddr::new(local_ip.0, 8080);
     let _ = tcp.bind(addr);
     let _ = tcp.listen(10);
     
@@ -60,6 +64,7 @@ pub unsafe extern "C" fn main() {
     
     if net.is_link_up() {
         rt::log::log(3, "VirtIO Net: OK");
+        rt::log::log(3, "IP: 192.168.1.12");
         rt::log::log(3, "TCP 8080");
     }
     
