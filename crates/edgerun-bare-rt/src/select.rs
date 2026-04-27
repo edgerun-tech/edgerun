@@ -18,15 +18,24 @@ impl<L, R> Either<L, R> {
     }
     pub fn is_left(&self) -> bool { matches!(self, Either::Left(_)) }
     pub fn is_right(&self) -> bool { matches!(self, Either::Right(_)) }
+
+    fn as_pin_mut(self: Pin<&mut Self>) -> Either<Pin<&mut L>, Pin<&mut R>> {
+        unsafe {
+            match self.get_unchecked_mut() {
+                Either::Left(l) => Either::Left(Pin::new_unchecked(l)),
+                Either::Right(r) => Either::Right(Pin::new_unchecked(r)),
+            }
+        }
+    }
 }
 
-impl<L: Future, R: Future> Future for Either<L, R> {
+impl<L: Future, R: Future<Output = L::Output>> Future for Either<L, R> {
     type Output = L::Output;
-    
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.as_mut().poll(cx) {
-            Poll::Ready(v) => Poll::Ready(v),
-            Poll::Pending => Poll::Pending,
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.as_pin_mut() {
+            Either::Left(l) => l.poll(cx),
+            Either::Right(r) => r.poll(cx),
         }
     }
 }

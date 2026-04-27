@@ -2,12 +2,9 @@
 
 #![allow(dead_code)]
 
-use crate::ip::{IpAddr, ETH_TYPE_IPV4};
-use crate::virtio_net::VirtioNet;
-use crate::storage::SECTOR_SIZE;
+use crate::ip::IpAddr;
 
-pub const DHCP_PORT_SERVER: u16 = 67;
-pub const DHCP_PORT_CLIENT: u16 = 68;
+pub use crate::ip::{DHCP_SERVER_PORT, DHCP_CLIENT_PORT};
 
 pub const DHCP_MSG_DISCOVER: u8 = 1;
 pub const DHCP_MSG_OFFER: u8 = 2;
@@ -123,7 +120,7 @@ impl DhcpClient {
     }
 
     pub fn discover(&self, buf: &mut [u8]) -> usize {
-        let mut msg = DhcpMessage::new(self.xid, self.mac);
+        let msg = DhcpMessage::new(self.xid, self.mac);
         let pos = 44;
         msg.to_bytes(buf);
         
@@ -151,7 +148,7 @@ impl DhcpClient {
     }
 
     pub fn request(&self, server_ip: IpAddr, requested: IpAddr, buf: &mut [u8]) -> usize {
-        let mut msg = DhcpMessage::new(self.xid, self.mac);
+        let msg = DhcpMessage::new(self.xid, self.mac);
         let pos = 44;
         msg.to_bytes(buf);
         
@@ -197,7 +194,6 @@ impl DhcpClient {
         }
         
         let mut msg_type = 0;
-        let mut server_ip = IpAddr::zero();
         let mut subnet = IpAddr::new(255, 255, 255, 0);
         let mut gateway = IpAddr::zero();
         
@@ -210,8 +206,6 @@ impl DhcpClient {
             }
             if code == DHCP_OPT_MSG_TYPE {
                 msg_type = buf[i + 2];
-            } else if code == DHCP_OPT_SERVER_ID {
-                server_ip = IpAddr::from_slice(&buf[i + 2..i + 6]);
             } else if code == DHCP_OPT_SUBNET_MASK {
                 subnet = IpAddr::from_slice(&buf[i + 2..i + 6]);
             } else if code == DHCP_OPT_ROUTER {

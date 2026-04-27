@@ -62,7 +62,7 @@ pub struct Subscriber<T> {
 impl<T: Clone + 'static> Future for Subscriber<T> {
     type Output = T;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         let buffer = self.inner.buffer.borrow();
         if let Some(v) = buffer.front().cloned() {
             return Poll::Ready(v);

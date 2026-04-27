@@ -97,24 +97,22 @@ impl NvmeController {
             return false;
         }
         let sectorsz = SECTOR_SIZE as u32;
-        unsafe {
-            let cmd = NvmeCommand {
-                opc: NVME_CMD_READ,
-                flags: 0,
-                cmdid: 0,
-                nsid: 1,
-                cdw2: [0; 2],
-                prp1: buf.as_mut_ptr() as u64,
-                prp2: 0,
-                cdw10: lba as u32,
-                cdw11: (lba >> 32) as u32,
-                cdw12: nblocks.saturating_sub(1),
-                cdw13: sectorsz,
-                cdw14: 0,
-                cdw15: 0,
-            };
-            self.submit(cmd)
-        }
+        let cmd = NvmeCommand {
+            opc: NVME_CMD_READ,
+            flags: 0,
+            cmdid: 0,
+            nsid: 1,
+            cdw2: [0; 2],
+            prp1: buf.as_mut_ptr() as u64,
+            prp2: 0,
+            cdw10: lba as u32,
+            cdw11: (lba >> 32) as u32,
+            cdw12: nblocks.saturating_sub(1),
+            cdw13: sectorsz,
+            cdw14: 0,
+            cdw15: 0,
+        };
+        self.submit(cmd)
     }
 
     pub fn write(&mut self, lba: u64, nblocks: u32, buf: &[u8]) -> bool {
@@ -122,24 +120,22 @@ impl NvmeController {
             return false;
         }
         let sectorsz = SECTOR_SIZE as u32;
-        unsafe {
-            let cmd = NvmeCommand {
-                opc: NVME_CMD_WRITE,
-                flags: 0,
-                cmdid: 0,
-                nsid: 1,
-                cdw2: [0; 2],
-                prp1: buf.as_ptr() as u64,
-                prp2: 0,
-                cdw10: lba as u32,
-                cdw11: (lba >> 32) as u32,
-                cdw12: nblocks.saturating_sub(1),
-                cdw13: sectorsz,
-                cdw14: 0,
-                cdw15: 0,
-            };
-            self.submit(cmd)
-        }
+        let cmd = NvmeCommand {
+            opc: NVME_CMD_WRITE,
+            flags: 0,
+            cmdid: 0,
+            nsid: 1,
+            cdw2: [0; 2],
+            prp1: buf.as_ptr() as u64,
+            prp2: 0,
+            cdw10: lba as u32,
+            cdw11: (lba >> 32) as u32,
+            cdw12: nblocks.saturating_sub(1),
+            cdw13: sectorsz,
+            cdw14: 0,
+            cdw15: 0,
+        };
+        self.submit(cmd)
     }
 
     fn submit(&mut self, cmd: NvmeCommand) -> bool {
@@ -155,25 +151,23 @@ impl NvmeController {
         if self.sq0.is_null() || self.cq0.is_null() {
             return false;
         }
-        let mut data = [0u8; SECTOR_SIZE];
-        unsafe {
-            let cmd = NvmeCommand {
-                opc: NVME_CMD_IDENTIFY,
-                flags: 0,
-                cmdid: 0,
-                nsid: 1,
-                cdw2: [0; 2],
-                prp1: data.as_mut_ptr() as u64,
-                prp2: 0,
-                cdw10: 0,
-                cdw11: 0,
-                cdw12: 0,
-                cdw13: 0,
-                cdw14: 0,
-                cdw15: 0,
-            };
-            self.submit(cmd)
-        }
+        let data = [0u8; SECTOR_SIZE];
+        let cmd = NvmeCommand {
+            opc: NVME_CMD_IDENTIFY,
+            flags: 0,
+            cmdid: 0,
+            nsid: 1,
+            cdw2: [0; 2],
+            prp1: data.as_ptr() as u64,
+            prp2: 0,
+            cdw10: 0,
+            cdw11: 0,
+            cdw12: 0,
+            cdw13: 0,
+            cdw14: 0,
+            cdw15: 0,
+        };
+        self.submit(cmd)
     }
 
     pub fn sectors(&self) -> u64 {

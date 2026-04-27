@@ -10,11 +10,13 @@ documentation = "https://docs.rs/edgerun-tls"
 keywords = ["tls", "ssl", "https", "security", "crypto"]
 categories = ["cryptography", "network-programming"]
 
+[features]
+default = []
+std = []
+
 [dependencies]
-libc = "0.2"
 edgerun-crypto.workspace = true
-edgerun-core = { path = "../edgerun-core" }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt.workspace = true
 
 [lints]
 workspace = true

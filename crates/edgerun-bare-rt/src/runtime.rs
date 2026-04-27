@@ -15,7 +15,7 @@ where
     JoinHandle { _phantom: core::marker::PhantomData }
 }
 
-pub fn spawn_local<F>(f: F) -> JoinHandle<F::Output>
+pub fn spawn_local<F>(_f: F) -> JoinHandle<F::Output>
 where
     F: Future + 'static,
 {

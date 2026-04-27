@@ -1,5 +1,8 @@
 //! TLS alert protocol
 
+use alloc::{format, string::String, vec, vec::Vec};
+use core::fmt;
+
 /// Alert level
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlertLevel {
@@ -132,8 +135,8 @@ impl Alert {
     }
 }
 
-impl std::fmt::Display for Alert {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Alert {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.description())
     }
 }

@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "edgerun-unikernel"
 version = "0.1.0"
@@ -13,3 +15,6 @@ edgerun-virtio = { path = "../edgerun-virtio" }
 edgerun-platform = { path = "../edgerun-platform" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 getrandom = { version = "0.2", features = ["rdrand"] }
+
+[profile.release]
+rustflags = ["-C", "link-arg=-Tlinker.ld"]

@@ -83,7 +83,7 @@ pub struct Receiver<T> {
 impl<T> Future for Receiver<T> {
     type Output = T;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.queue.data.borrow().is_empty() {
             return Poll::Ready(self.queue.data.borrow_mut().pop_front().unwrap());
         }

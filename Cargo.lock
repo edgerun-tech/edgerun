@@ -1695,10 +1695,8 @@ version = "0.1.0"
 name = "edgerun-tls"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
+ "edgerun-bare-rt",
  "edgerun-crypto",
- "edgerun-rt",
- "libc",
 ]
 
 [[package]]

@@ -64,7 +64,7 @@ impl<T: Clone> Receiver<T> {
 impl<T: Clone + 'static> Future for Receiver<T> {
     type Output = T;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if self.inner.closed.load(Ordering::Acquire) != 0 {
             return Poll::Ready(self.borrow());
         }

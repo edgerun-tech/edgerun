@@ -24,11 +24,19 @@
 //!
 //! All messages after ServerHello are encrypted with handshake keys.
 
-use edgerun_rt::sync::Mutex;
+#![no_std]
+
+extern crate alloc;
+
+pub use edgerun_bare_rt as rt;
+use alloc::string::String;
+use core::fmt;
 
 pub mod alert;
+#[cfg(feature = "std")]
 pub mod async_tls;
 pub mod certificate;
+#[cfg(feature = "std")]
 pub mod certificate_gen;
 pub mod cipher;
 pub mod handshake;
@@ -36,13 +44,17 @@ pub mod key_exchange;
 pub mod prf;
 pub mod record;
 pub mod server;
+#[cfg(feature = "std")]
 pub mod session_cache;
 pub mod tls_alpn;
 
+#[cfg(feature = "std")]
 pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
+#[cfg(feature = "std")]
 pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
 
 pub use alert::{Alert, AlertLevel};
+#[cfg(feature = "std")]
 pub use certificate_gen::{
     cert_from_pem, generate_self_signed, generate_self_signed_pem, signing_key_from_pem,
     signing_key_to_pem, CertificateAndKey,
@@ -52,8 +64,6 @@ pub use tls_alpn::ACME_TLS_ALPN_PROTOCOL;
 /// TLS error types
 #[derive(Debug)]
 pub enum TlsError {
-    /// IO error
-    Io(std::io::Error),
     /// Protocol error (malformed message)
     Protocol(String),
     /// Handshake failure
@@ -66,10 +76,9 @@ pub enum TlsError {
     Alert(AlertLevel, Alert),
 }
 
-impl std::fmt::Display for TlsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TlsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TlsError::Io(e) => write!(f, "IO error: {e}"),
             TlsError::Protocol(m) => write!(f, "Protocol error: {m}"),
             TlsError::HandshakeFailure(m) => write!(f, "Handshake failure: {m}"),
             TlsError::Certificate(m) => write!(f, "Certificate error: {m}"),
@@ -79,20 +88,7 @@ impl std::fmt::Display for TlsError {
     }
 }
 
-impl std::error::Error for TlsError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            TlsError::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<std::io::Error> for TlsError {
-    fn from(e: std::io::Error) -> Self {
-        TlsError::Io(e)
-    }
-}
+impl core::error::Error for TlsError {}
 
 impl From<String> for TlsError {
     fn from(m: String) -> Self {
@@ -100,17 +96,8 @@ impl From<String> for TlsError {
     }
 }
 
-impl From<TlsError> for std::io::Error {
-    fn from(e: TlsError) -> Self {
-        match e {
-            TlsError::Io(e) => e,
-            other => std::io::Error::other(other.to_string()),
-        }
-    }
-}
-
 /// Result type
-pub type Result<T> = std::result::Result<T, TlsError>;
+pub type Result<T> = core::result::Result<T, TlsError>;
 
 /// Re-export HMAC functions from prf module for Finished verification
 pub use crate::prf::{hmac_sha256, hmac_sha384};

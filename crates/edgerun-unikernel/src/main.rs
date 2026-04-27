@@ -17,28 +17,39 @@ struct NetworkTask;
 
 impl Future for NetworkTask {
     type Output = ();
-    
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let _ = cx;
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         rt::log::log(3, "Network task");
         Poll::Pending
     }
 }
 
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! { 
-    loop { unsafe { core::arch::asm!("hlt", options(noreturn)); } }
+unsafe fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop { core::arch::asm!("hlt", options(noreturn)); }
 }
+
+#[link_section = ".multiboot"]
+static MULTIBOOT_HEADER: [u32; 8] = [
+    0x1BADB002,
+    0x00010000,
+    0xE4514FFE,
+    0x100000,
+    0x100000,
+    0,
+    0,
+    0,
+];
 
 #[no_mangle]
 pub unsafe extern "C" fn _start() -> ! {
     main();
-    loop { unsafe { core::arch::asm!("hlt", options(noreturn)); } }
+    loop { core::arch::asm!("hlt", options(noreturn)); }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn main() {
     rt::timer::set_now(0);
+    rt::log::log(1, "Starting edgerun unikernel");
     
     let mut rng = Rng::new_from_entropy();
     let test_crc = crc32(b"hello");
@@ -48,11 +59,17 @@ pub unsafe extern "C" fn main() {
     rx_buf.push_slice(b"test packet");
     let _ = rx_buf.len();
     
+    rt::log::log(1, "Looking for VirtIO...");
+    
     let mut net = match edgerun_virtio::find_virtio_net() {
         Some(n) => n,
-        None => loop { core::arch::asm!("hlt") },
+        None => {
+            rt::log::log(1, "No VirtIO found");
+            loop { core::arch::asm!("hlt") }
+        }
     };
     
+    rt::log::log(1, "VirtIO found");
     net.init();
     let mac = net.get_mac();
     
@@ -115,7 +132,7 @@ pub unsafe extern "C" fn main() {
     if net.is_link_up() {
     }
     
-    let (ip, _, _) = (stack.ip, stack.netmask, stack.gateway);
+    let (_ip, _, _) = (stack.ip, stack.netmask, stack.gateway);
     
     block_on(NetworkTask);
 }

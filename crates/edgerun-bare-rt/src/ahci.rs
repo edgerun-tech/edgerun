@@ -145,7 +145,7 @@ impl AhciController {
         }
     }
 
-    pub fn read_sector(&mut self, port: u32, lba: u64, buf: &mut [u8]) -> bool {
+    pub fn read_sector(&mut self, port: u32, lba: u64, _buf: &mut [u8]) -> bool {
         unsafe {
             if port as usize >= 32 || self.ports[port as usize].is_null() {
                 return false;
@@ -158,7 +158,7 @@ impl AhciController {
             if tfd & (AHCI_TFD_ERR as u32) != 0 {
                 return false;
             }
-            let mut fis = FisNcq {
+            let _fis = FisNcq {
                 fis_type: FIS_TYPE_NCQ,
                 flags: 0,
                 cmd: SATA_CMD_NCQ_READ,
@@ -182,7 +182,7 @@ impl AhciController {
         }
     }
 
-    pub fn write_sector(&mut self, port: u32, lba: u64, buf: &[u8]) -> bool {
+    pub fn write_sector(&mut self, port: u32, lba: u64, _buf: &[u8]) -> bool {
         unsafe {
             if port as usize >= 32 || self.ports[port as usize].is_null() {
                 return false;
@@ -195,7 +195,7 @@ impl AhciController {
             if tfd & (AHCI_TFD_ERR as u32) != 0 {
                 return false;
             }
-            let mut fis = FisNcq {
+            let _fis = FisNcq {
                 fis_type: FIS_TYPE_NCQ,
                 flags: 0,
                 cmd: SATA_CMD_NCQ_WRITE,

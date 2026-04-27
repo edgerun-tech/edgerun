@@ -3,6 +3,7 @@
 //! Proper DER parsing via the `der` / `x509_cert` crates from edgerun-crypto.
 //! No hand-rolled DER walking — full ASN.1 structural decoding.
 
+use alloc::{format, string::{String, ToString}, vec::Vec};
 use edgerun_crypto::x509_cert::der::{Decode, DecodePem, Encode};
 use edgerun_crypto::x509_cert::ext::pkix::name::GeneralName;
 use edgerun_crypto::x509_cert::Certificate as DerCertificate;
@@ -207,19 +208,13 @@ impl Certificate {
 
     /// Convert x509_cert Time to Unix timestamp
     fn time_to_unix(time: &edgerun_crypto::x509_cert::time::Time) -> u64 {
-        use std::time::UNIX_EPOCH;
-        time.to_system_time()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+        let date_time = time.to_date_time();
+        date_time.unix_duration().as_secs()
     }
 
     /// Check if the certificate is currently valid
     pub fn is_valid_now(&self) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        let now = edgerun_bare_rt::now() / 1_000_000;
         now >= self.not_before && now <= self.not_after
     }
 

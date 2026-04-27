@@ -141,21 +141,19 @@ impl AtaDevice {
     }
 
     pub fn flush(&mut self) -> bool {
-        unsafe {
-            self.write_reg(ATA_CMD, ATA_CMD_FLUSH_CACHE);
-            let mut timeout = 0;
-            while timeout < 100000 {
-                let status = self.read_reg(ATA_STATUS);
-                if status & ATA_STATUS_ERR != 0 {
-                    return false;
-                }
-                if status & ATA_STATUS_BSY == 0 {
-                    return true;
-                }
-                timeout += 1;
+        self.write_reg(ATA_CMD, ATA_CMD_FLUSH_CACHE);
+        let mut timeout = 0;
+        while timeout < 100000 {
+            let status = self.read_reg(ATA_STATUS);
+            if status & ATA_STATUS_ERR != 0 {
+                return false;
             }
-            false
+            if status & ATA_STATUS_BSY == 0 {
+                return true;
+            }
+            timeout += 1;
         }
+        false
     }
 }
 

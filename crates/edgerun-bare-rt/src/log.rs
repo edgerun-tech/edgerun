@@ -11,16 +11,14 @@ impl Level {
 pub fn log(_level: u8, _msg: &str) {
     #[cfg(target_arch = "x86_64")]
     {
-        let mut pos = 0usize;
+        let serial_port = 0x3F8u16;
         for byte in _msg.bytes() {
-            if byte >= 0x20 {
-                let addr = 0xB8000 as *mut u8;
-                unsafe {
-                    addr.add(pos).write_volatile(byte);
-                    addr.add(pos + 1).write_volatile(0x07);
-                }
-                pos += 2;
+            unsafe {
+                core::arch::asm!("out dx, al", in("al") byte, in("dx") serial_port);
             }
+        }
+        unsafe {
+            core::arch::asm!("out dx, al", in("al") b'\n', in("dx") serial_port);
         }
     }
 }

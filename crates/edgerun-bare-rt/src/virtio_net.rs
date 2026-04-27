@@ -84,13 +84,11 @@ impl VirtioNet {
         }
     }
 
-    pub fn rx(&mut self, buf: &mut [u8]) -> Option<usize> {
-        unsafe {
-            if self.queue_mem.is_null() {
-                return None;
-            }
-            None
+    pub fn rx(&mut self, _buf: &mut [u8]) -> Option<usize> {
+        if self.queue_mem.is_null() {
+            return None;
         }
+        None
     }
 
     pub fn get_mac(&self) -> [u8; 6] {

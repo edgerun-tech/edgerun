@@ -7,7 +7,7 @@ extern crate alloc;
 
 
 use super::udp::SocketAddr;
-use super::ip::{IpHeader, TcpHeader, IpAddr, IpStack, ETH_TYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_SYN, TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_RST, TCP_FLAG_PSH};
+use super::ip::{TcpHeader, IpAddr, IpStack, ETH_TYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_PSH};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum TcpState {
@@ -79,9 +79,9 @@ impl TcpSocket {
         let mut packet = [0u8; 1514];
         let eth = stack.eth_header(dst_mac, ETH_TYPE_IPV4);
         eth.to_slice(&mut packet);
-        let mut ip = stack.ip_header(dst_ip, IP_PROTO_TCP, ip_len);
+        let ip = stack.ip_header(dst_ip, IP_PROTO_TCP, ip_len);
         ip.to_slice(&mut packet[14..]);
-        let mut tcp = TcpHeader {
+        let tcp = TcpHeader {
             src_port: self.local.1,
             dst_port: self.remote.1,
             seq: self.seq,

@@ -3,6 +3,8 @@
 //! Re-exports `CipherSuite` from `edgerun_crypto` for consistency
 //! across TLS and QUIC implementations.
 
+use alloc::{vec, vec::Vec};
+
 pub use edgerun_crypto::CipherSuite;
 
 /// Named elliptic curve groups for TLS 1.3
