@@ -101,16 +101,13 @@ impl ContainerConfig {
 
         // Validate namespace types — reject unknown types
         for ns in &ns_list {
-            if ns.path.is_none() {
-                match ns.ns_type.as_str() {
-                    "mount" | "cgroup" | "uts" | "ipc" | "user" | "pid" | "network" => {}
-                    _ => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("unknown namespace type: {}", ns.ns_type),
-                        ));
-                    }
-                }
+            if ns.path.is_none()
+                && !crate::validate::KNOWN_NAMESPACES.contains(&ns.ns_type.as_str())
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unknown namespace type: {}", ns.ns_type),
+                ));
             }
         }
 

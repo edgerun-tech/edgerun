@@ -12,6 +12,8 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 
 use super::errors::RegistryError;
+use crate::layer_pipeline::bytes_to_hex;
+use crate::tar_layer::{layer_compression, OciLayerCompression};
 use edgerun_crypto::sha2::Digest;
 
 // ===========================================================================
@@ -50,18 +52,27 @@ pub fn extract_layer(
 ) -> Result<(), RegistryError> {
     let file = File::open(blob_path).map_err(RegistryError::IoError)?;
 
-    let is_gzip = media_type.map(|mt| mt.contains("gzip")).unwrap_or(false)
-        || blob_path.extension().map(|e| e == "gz").unwrap_or(false);
-    let is_zstd = media_type.map(|mt| mt.contains("zstd")).unwrap_or(false);
+    let compression = match layer_compression(media_type) {
+        OciLayerCompression::Unknown
+            if blob_path.extension().map(|e| e == "gz").unwrap_or(false) =>
+        {
+            OciLayerCompression::Gzip
+        }
+        compression => compression,
+    };
 
-    if is_zstd {
-        let mut decoder = zstd::Decoder::new(file).map_err(RegistryError::IoError)?;
-        extract_tar_secure(&mut decoder, dest)?;
-    } else if is_gzip {
-        let mut decoder = flate2::read::GzDecoder::new(file);
-        extract_tar_secure(&mut decoder, dest)?;
-    } else {
-        extract_tar_secure(&mut BufReader::new(file), dest)?;
+    match compression {
+        OciLayerCompression::Zstd => {
+            let mut decoder = zstd::Decoder::new(file).map_err(RegistryError::IoError)?;
+            extract_tar_secure(&mut decoder, dest)?;
+        }
+        OciLayerCompression::Gzip => {
+            let mut decoder = flate2::read::GzDecoder::new(file);
+            extract_tar_secure(&mut decoder, dest)?;
+        }
+        OciLayerCompression::Uncompressed | OciLayerCompression::Unknown => {
+            extract_tar_secure(&mut BufReader::new(file), dest)?;
+        }
     }
 
     Ok(())
@@ -158,10 +169,7 @@ pub fn verify_blob_digest(blob_path: &Path, expected_digest: &str) -> Result<(),
         hasher.update(&buf[..n]);
     }
     let computed_hash = hasher.finalize();
-    let computed = format!(
-        "sha256:{}",
-        edgerun_core::util::bytes_to_hex(&computed_hash)
-    );
+    let computed = format!("sha256:{}", bytes_to_hex(&computed_hash));
 
     if computed != expected_digest {
         return Err(RegistryError::DigestMismatch {
