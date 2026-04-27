@@ -59,17 +59,21 @@ pub struct Receiver<T> {
     inner: Arc<Inner<T>>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct RecvError;
+
 impl<T> Future for Receiver<T> {
-    type Output = T;
+    type Output = Result<T, RecvError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if self.inner.sent.load(Ordering::Acquire) {
             let ptr = self.inner.data.get();
             unsafe {
                 if (*ptr).is_some() {
-                    return Poll::Ready((*ptr).take().unwrap());
+                    return Poll::Ready(Ok((*ptr).take().unwrap()));
                 }
             }
+            return Poll::Ready(Err(RecvError));
         }
         cx.waker().wake_by_ref();
         Poll::Pending

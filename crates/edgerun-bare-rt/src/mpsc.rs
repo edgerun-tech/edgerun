@@ -64,6 +64,12 @@ pub struct SendError;
 
 pub struct TrySendError<T>(pub T);
 
+impl<T: core::fmt::Debug> core::fmt::Debug for TrySendError<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("TrySendError").field(&self.0).finish()
+    }
+}
+
 impl core::fmt::Debug for SendError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Sender closed")
@@ -96,6 +102,10 @@ impl<T> Future for Receiver<T> {
 }
 
 impl<T> Receiver<T> {
+    pub fn recv(&self) -> Recv<'_, T> {
+        Recv { receiver: self }
+    }
+
     pub fn try_recv(&self) -> Option<T> {
         self.queue.data.borrow_mut().pop_front()
     }
@@ -110,5 +120,22 @@ impl<T> Receiver<T> {
 
     pub fn close(&self) {
         self.queue.closed.store(1, Ordering::Release);
+    }
+}
+
+pub struct Recv<'a, T> {
+    receiver: &'a Receiver<T>,
+}
+
+impl<T> Future for Recv<'_, T> {
+    type Output = Option<T>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if let Some(value) = self.receiver.try_recv() {
+            Poll::Ready(Some(value))
+        } else {
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
     }
 }

@@ -82,3 +82,132 @@ where
 {
     Select::new(a, b)
 }
+
+pub fn select_2<A, B>(a: A, b: B) -> Select<A, B>
+where
+    A: Future,
+    B: Future<Output = A::Output>,
+{
+    select2(a, b)
+}
+
+pub struct Select3<F1, F2, F3> {
+    fut1: Option<F1>,
+    fut2: Option<F2>,
+    fut3: Option<F3>,
+}
+
+impl<F1, F2, F3> Unpin for Select3<F1, F2, F3> {}
+
+impl<F1, F2, F3> Future for Select3<F1, F2, F3>
+where
+    F1: Future + Unpin,
+    F2: Future<Output = F1::Output> + Unpin,
+    F3: Future<Output = F1::Output> + Unpin,
+{
+    type Output = F1::Output;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if let Some(ref mut f1) = self.fut1 {
+            if let Poll::Ready(v) = Pin::new(f1).poll(cx) {
+                self.fut1 = None;
+                self.fut2 = None;
+                self.fut3 = None;
+                return Poll::Ready(v);
+            }
+        }
+        if let Some(ref mut f2) = self.fut2 {
+            if let Poll::Ready(v) = Pin::new(f2).poll(cx) {
+                self.fut1 = None;
+                self.fut2 = None;
+                self.fut3 = None;
+                return Poll::Ready(v);
+            }
+        }
+        if let Some(ref mut f3) = self.fut3 {
+            return Pin::new(f3).poll(cx);
+        }
+        Poll::Pending
+    }
+}
+
+pub fn select_3<A, B, C>(a: A, b: B, c: C) -> Select3<A, B, C>
+where
+    A: Future,
+    B: Future<Output = A::Output>,
+    C: Future<Output = A::Output>,
+{
+    Select3 {
+        fut1: Some(a),
+        fut2: Some(b),
+        fut3: Some(c),
+    }
+}
+
+pub struct Select4<F1, F2, F3, F4> {
+    fut1: Option<F1>,
+    fut2: Option<F2>,
+    fut3: Option<F3>,
+    fut4: Option<F4>,
+}
+
+impl<F1, F2, F3, F4> Unpin for Select4<F1, F2, F3, F4> {}
+
+impl<F1, F2, F3, F4> Future for Select4<F1, F2, F3, F4>
+where
+    F1: Future + Unpin,
+    F2: Future<Output = F1::Output> + Unpin,
+    F3: Future<Output = F1::Output> + Unpin,
+    F4: Future<Output = F1::Output> + Unpin,
+{
+    type Output = F1::Output;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if let Some(ref mut f1) = self.fut1 {
+            if let Poll::Ready(v) = Pin::new(f1).poll(cx) {
+                self.fut1 = None;
+                self.fut2 = None;
+                self.fut3 = None;
+                self.fut4 = None;
+                return Poll::Ready(v);
+            }
+        }
+        if let Some(ref mut f2) = self.fut2 {
+            if let Poll::Ready(v) = Pin::new(f2).poll(cx) {
+                self.fut1 = None;
+                self.fut2 = None;
+                self.fut3 = None;
+                self.fut4 = None;
+                return Poll::Ready(v);
+            }
+        }
+        if let Some(ref mut f3) = self.fut3 {
+            if let Poll::Ready(v) = Pin::new(f3).poll(cx) {
+                self.fut1 = None;
+                self.fut2 = None;
+                self.fut3 = None;
+                self.fut4 = None;
+                return Poll::Ready(v);
+            }
+        }
+        if let Some(ref mut f4) = self.fut4 {
+            return Pin::new(f4).poll(cx);
+        }
+        Poll::Pending
+    }
+}
+
+pub fn select_4<A, B, C, D>(a: A, b: B, c: C, d: D) -> Select4<A, B, C, D>
+where
+    A: Future,
+    B: Future<Output = A::Output>,
+    C: Future<Output = A::Output>,
+    D: Future<Output = A::Output>,
+{
+    Select4 {
+        fut1: Some(a),
+        fut2: Some(b),
+        fut3: Some(c),
+        fut4: Some(d),
+    }
+}

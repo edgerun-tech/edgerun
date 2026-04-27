@@ -46,3 +46,28 @@ pub fn ctrl_c() -> Signal { Signal::new() }
 pub fn alarm() -> Signal { Signal::new() }
 pub fn usr1() -> Signal { Signal::new() }
 pub fn usr2() -> Signal { Signal::new() }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SignalKind {
+    Interrupt,
+    Termination,
+    Child,
+}
+
+pub struct CtrlC(Signal);
+
+impl CtrlC {
+    pub fn new() -> Self {
+        Self(Signal::new())
+    }
+
+    pub fn raised(&self) -> bool {
+        self.0.raised()
+    }
+}
+
+impl Default for CtrlC {
+    fn default() -> Self {
+        Self::new()
+    }
+}

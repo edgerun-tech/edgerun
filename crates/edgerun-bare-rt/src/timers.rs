@@ -1,7 +1,6 @@
 //! Timer-based async primitives
 
-extern crate edgerun_platform;
-
+use crate::Instant;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
@@ -9,20 +8,26 @@ use core::time::Duration;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Sleep {
-    deadline: u64,
+    deadline: Instant,
 }
 
 impl Unpin for Sleep {}
 
 impl Sleep {
-    pub fn new(delay: Duration) -> Self {
-        let deadline = edgerun_platform::timer::timer_ticks() 
-            + edgerun_platform::timer::us_to_ticks(delay.as_micros() as u64);
+    pub fn new(deadline: Instant) -> Self {
         Self { deadline }
     }
 
+    pub fn after(delay: Duration) -> Self {
+        Self::new(Instant::now() + delay)
+    }
+
+    pub fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
     pub fn is_ready(&self) -> bool {
-        edgerun_platform::timer::timer_ticks() >= self.deadline
+        Instant::now() >= self.deadline
     }
 }
 
@@ -40,7 +45,11 @@ impl Future for Sleep {
 }
 
 pub async fn sleep(delay: Duration) {
-    Sleep::new(delay).await;
+    Sleep::after(delay).await;
+}
+
+pub fn sleep_until(deadline: Instant) -> Sleep {
+    Sleep::new(deadline)
 }
 
 #[derive(Debug)]
@@ -54,7 +63,7 @@ impl core::fmt::Display for Elapsed {
 
 pub struct Timeout<F> {
     inner: Option<F>,
-    deadline: u64,
+    deadline: Instant,
     elapsed: AtomicBool,
 }
 
@@ -62,9 +71,15 @@ impl<F> Unpin for Timeout<F> {}
 
 impl<F> Timeout<F> {
     pub fn new(delay: Duration, future: F) -> Self {
-        let deadline = edgerun_platform::timer::timer_ticks() 
-            + edgerun_platform::timer::us_to_ticks(delay.as_micros() as u64);
-        Self { inner: Some(future), deadline, elapsed: AtomicBool::new(false) }
+        Self::at(Instant::now() + delay, future)
+    }
+
+    pub fn at(deadline: Instant, future: F) -> Self {
+        Self {
+            inner: Some(future),
+            deadline,
+            elapsed: AtomicBool::new(false),
+        }
     }
 
     pub fn is_elapsed(&self) -> bool {
@@ -78,20 +93,20 @@ impl<F> Timeout<F> {
 
 impl<F> Future for Timeout<F>
 where
-    F: Future + Unpin,
+    F: Future,
 {
     type Output = Result<F::Output, Elapsed>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         
-        if edgerun_platform::timer::timer_ticks() >= this.deadline {
+        if Instant::now() >= this.deadline {
             this.elapsed.store(true, Ordering::Release);
             return Poll::Ready(Err(Elapsed));
         }
         
         if let Some(ref mut inner) = this.inner {
-            return match Pin::new(inner).poll(cx) {
+            return match unsafe { Pin::new_unchecked(inner) }.poll(cx) {
                 Poll::Ready(v) => Poll::Ready(Ok(v)),
                 Poll::Pending => Poll::Pending,
             };
@@ -103,7 +118,17 @@ where
 
 pub fn timeout<F>(delay: Duration, future: F) -> Timeout<F>
 where
-    F: Future + Unpin,
+    F: Future,
 {
     Timeout::new(delay, future)
 }
+
+pub fn timeout_at<F>(deadline: Instant, future: F) -> Timeout<F>
+where
+    F: Future,
+{
+    Timeout::at(deadline, future)
+}
+
+pub type SleepUntil = Sleep;
+pub type TimeoutAt<F> = Timeout<F>;

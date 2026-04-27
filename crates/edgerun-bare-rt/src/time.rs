@@ -1,21 +1,67 @@
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Duration {
-    secs: u64,
-    nanos: u32,
-}
+pub use core::time::Duration;
 
-impl Duration {
-    pub fn from_secs(s: u64) -> Self { Self { secs: s, nanos: 0 } }
-    pub fn from_millis(ms: u64) -> Self { Self { secs: ms / 1000, nanos: (ms % 1000) as u32 * 1_000_000 } }
-    pub fn as_secs(&self) -> u64 { self.secs }
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Instant {
+    ticks: u64,
 }
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Instant(Duration);
 
 impl Instant {
     pub fn now() -> Self {
-        Self(Duration { secs: edgerun_platform::timer::timer_ticks() / 10_000_000, nanos: 0 })
+        Self {
+            ticks: edgerun_platform::timer::timer_ticks(),
+        }
     }
-    pub fn elapsed(&self) -> Duration { Duration::default() }
+
+    pub const fn from_ticks(ticks: u64) -> Self {
+        Self { ticks }
+    }
+
+    pub const fn deadline_tsc(&self) -> u64 {
+        self.ticks
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        let now = Self::now();
+        if now.ticks <= self.ticks {
+            Duration::ZERO
+        } else {
+            Duration::from_micros(edgerun_platform::timer::ticks_to_us(now.ticks - self.ticks))
+        }
+    }
+}
+
+impl core::ops::Add<Duration> for Instant {
+    type Output = Instant;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Instant {
+            ticks: self
+                .ticks
+                .saturating_add(edgerun_platform::timer::us_to_ticks(rhs.as_micros() as u64)),
+        }
+    }
+}
+
+impl core::ops::Sub<Duration> for Instant {
+    type Output = Instant;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Instant {
+            ticks: self
+                .ticks
+                .saturating_sub(edgerun_platform::timer::us_to_ticks(rhs.as_micros() as u64)),
+        }
+    }
+}
+
+impl core::ops::Sub<Instant> for Instant {
+    type Output = Duration;
+
+    fn sub(self, rhs: Instant) -> Self::Output {
+        if self.ticks <= rhs.ticks {
+            Duration::ZERO
+        } else {
+            Duration::from_micros(edgerun_platform::timer::ticks_to_us(self.ticks - rhs.ticks))
+        }
+    }
 }

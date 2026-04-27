@@ -2,7 +2,10 @@
 
 extern crate alloc;
 
+use core::future::Future;
+use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::task::{Context, Poll};
 
 pub struct Mutex<T> {
     locked: AtomicBool,
@@ -79,27 +82,19 @@ impl Semaphore {
         }
     }
 
-    pub fn acquire(&self) -> Option<SemaphoreGuard<'_>> {
-        loop {
-            let n = self.permits.load(Ordering::Acquire);
-            if n == 0 {
-                return None;
-            }
-            if self.permits.compare_exchange(n, n - 1, Ordering::Acquire, Ordering::Acquire).is_ok() {
-                return Some(SemaphoreGuard(&self.permits));
-            }
-        }
+    pub fn acquire(&self) -> SemaphoreAcquire<'_> {
+        SemaphoreAcquire { semaphore: self }
     }
 
-    pub fn try_acquire(&self) -> Option<SemaphoreGuard<'_>> {
+    pub fn try_acquire(&self) -> Result<SemaphoreGuard<'_>, SemaphoreTryAcquireError> {
         let n = self.permits.load(Ordering::Acquire);
         if n == 0 {
-            return None;
+            return Err(SemaphoreTryAcquireError::NoPermits);
         }
         if self.permits.compare_exchange(n, n - 1, Ordering::Acquire, Ordering::Acquire).is_ok() {
-            return Some(SemaphoreGuard(&self.permits));
+            return Ok(SemaphoreGuard(&self.permits));
         }
-        None
+        Err(SemaphoreTryAcquireError::NoPermits)
     }
 }
 
@@ -108,6 +103,34 @@ pub struct SemaphoreGuard<'a>(&'a AtomicUsize);
 impl<'a> Drop for SemaphoreGuard<'a> {
     fn drop(&mut self) {
         self.0.fetch_add(1, Ordering::Release);
+    }
+}
+
+pub type Permit<'a> = SemaphoreGuard<'a>;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum SemaphoreTryAcquireError {
+    NoPermits,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct SemaphoreAcquireError;
+
+pub struct SemaphoreAcquire<'a> {
+    semaphore: &'a Semaphore,
+}
+
+impl<'a> Future for SemaphoreAcquire<'a> {
+    type Output = Result<SemaphoreGuard<'a>, SemaphoreAcquireError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.semaphore.try_acquire() {
+            Ok(guard) => Poll::Ready(Ok(guard)),
+            Err(_) => {
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+        }
     }
 }
 
@@ -180,6 +203,14 @@ impl<'a, T> Drop for RwLockReadGuard<'a, T> {
     }
 }
 
+impl<'a, T> core::ops::Deref for RwLockReadGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.lock.data.get() }
+    }
+}
+
 pub struct RwLockWriteGuard<'a, T> {
     lock: &'a RwLock<T>,
 }
@@ -187,5 +218,53 @@ pub struct RwLockWriteGuard<'a, T> {
 impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.writer.store(false, Ordering::Release);
+    }
+}
+
+impl<'a, T> core::ops::Deref for RwLockWriteGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.lock.data.get() }
+    }
+}
+
+impl<'a, T> core::ops::DerefMut for RwLockWriteGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *self.lock.data.get() }
+    }
+}
+
+pub struct AsyncMutex<T> {
+    inner: Mutex<T>,
+}
+
+impl<T> AsyncMutex<T> {
+    pub fn new(data: T) -> Self {
+        Self {
+            inner: Mutex::new(data),
+        }
+    }
+
+    pub fn lock(&self) -> AsyncMutexLock<'_, T> {
+        AsyncMutexLock { mutex: self }
+    }
+}
+
+pub struct AsyncMutexLock<'a, T> {
+    mutex: &'a AsyncMutex<T>,
+}
+
+impl<'a, T> Future for AsyncMutexLock<'a, T> {
+    type Output = MutexGuard<'a, T>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.mutex.inner.try_lock() {
+            Some(guard) => Poll::Ready(guard),
+            None => {
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+        }
     }
 }

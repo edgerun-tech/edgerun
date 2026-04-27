@@ -14,31 +14,79 @@ pub mod timer;
 pub use timer::{now, set_now, elapsed_since, sleep_us, sleep_ms, TimerWheel};
 
 pub mod runtime;
-pub use runtime::{Runtime, Builder, JoinHandle, JoinSet, spawn, spawn_local, block_on, shutdown};
+pub use runtime::{
+    block_on, shutdown, spawn, spawn_blocking, Builder, JoinError, JoinHandle, JoinSet, Runtime,
+    RuntimeHandle, spawn_local,
+};
 
 pub mod timers;
-pub use timers::{sleep, Elapsed, timeout, Timeout};
+pub use timers::{sleep, sleep_until, Elapsed, Sleep, SleepUntil, timeout, timeout_at, Timeout, TimeoutAt};
+
+pub mod interval;
+pub use interval::{interval, interval_at, Interval, MissedTickBehavior};
+
+pub mod yield_now;
+pub use yield_now::{yieldnow, YieldNow};
 
 pub mod sync;
-pub use sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Semaphore, SemaphoreGuard};
+pub use sync::{
+    AsyncMutex, AsyncMutexLock, Condvar, Mutex, MutexGuard, Permit, RwLock, RwLockReadGuard,
+    RwLockWriteGuard, Semaphore, SemaphoreAcquire, SemaphoreAcquireError, SemaphoreGuard,
+    SemaphoreTryAcquireError,
+};
+
+pub type SpinLock<T> = Mutex<T>;
+pub type SyncMutex<T> = Mutex<T>;
+pub type SyncRwLock<T> = RwLock<T>;
+
+pub mod notify;
+pub use notify::{Notified, Notify};
+
+pub mod cancellation;
+pub use cancellation::{Cancelled, CancellationToken};
+
+pub mod io;
+pub use io::{AsyncBufRead, AsyncRead, AsyncWrite, Cursor, IoError};
+
+pub mod poll_fn;
+pub use poll_fn::{poll_fn, PollFn};
 
 pub mod join;
 pub use join::{join2, join3, join4, join5};
 
+pub mod join_internal {
+    pub use crate::join::{join2, join3, join4, join5};
+}
+
 pub mod select;
-pub use select::{Either, select2, Select};
+pub use select::{select_2, select_3, select_4, Either, select2, Select, Select3, Select4};
 
 pub mod channel;
-pub use channel::{channel, Sender, Receiver, SendError};
+pub use channel::{channel, Receiver, RecvError, SendError, Sender};
 
 pub mod mpsc;
-pub use mpsc::{mpsc_channel, Sender as MpscSender, Receiver as MpscReceiver};
+pub use mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
+
+pub fn mpsc_channel<T>(cap: usize) -> (MpscSender<T>, MpscReceiver<T>) {
+    mpsc::mpsc_channel(cap)
+}
+
+pub fn unbounded_channel<T>() -> (MpscSender<T>, MpscReceiver<T>) {
+    mpsc::mpsc_channel(0)
+}
 
 pub mod broadcast;
 pub use broadcast::{broadcast, Publisher, Subscriber};
 
+pub fn broadcast_channel<T: Clone + 'static>(initial: T) -> (Publisher<T>, Subscriber<T>) {
+    let (publisher, subscriber) = broadcast::broadcast(1);
+    let _ = publisher.send(initial);
+    (publisher, subscriber)
+}
+
 pub mod watch;
 pub use watch::{watch, Sender as WatchSender, Receiver as WatchReceiver};
+pub use watch::watch as watch_channel;
 
 pub mod task_local;
 pub use task_local::TaskLocal;
@@ -52,10 +100,18 @@ pub use weak::Weak;
 pub mod error;
 pub use error::Error;
 
+pub mod compat;
+pub use compat::{
+    Barrier, BarrierWaitResult, Dir, File, Latch, RateLimiter, RuntimeMetrics, TaskMap,
+    Span, TaskMetrics, TokenBucket, WaitLatch,
+};
 
+pub mod signal;
+pub use signal::{ctrl_c, alarm, usr1, usr2, CtrlC, Signal, SignalHandler, SignalKind};
 
 pub mod udp;
 pub use udp::{UdpSocket, SocketAddr, UdpError};
+pub type UdpAddr = SocketAddr;
 
 pub mod tcp;
 pub use tcp::{TcpSocket, TcpState, TcpError, TcpListener};

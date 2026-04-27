@@ -53,6 +53,14 @@ impl<T> OnceCell<T> {
         }
     }
 
+    pub fn try_insert(&self, value: T) -> Result<&T, (&T, T)> {
+        if let Some(existing) = self.get() {
+            return Err((existing, value));
+        }
+        let _ = self.set(value);
+        Ok(self.get().unwrap())
+    }
+
     pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
         if let Some(v) = self.get() {
             return v;
