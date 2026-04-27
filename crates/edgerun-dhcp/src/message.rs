@@ -1,7 +1,61 @@
 //! DHCPv4 message parser/serializer — RFC 2131 wire format.
 
-use std::io;
-use std::net::Ipv4Addr;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+
+#[cfg(feature = "std")]
+pub use std::net::Ipv4Addr;
+
+#[cfg(not(feature = "std"))]
+pub use core::net::Ipv4Addr;
+
+#[cfg(feature = "std")]
+pub type DhcpError = std::io::Error;
+
+#[cfg(feature = "std")]
+mod io {
+    pub use std::io::{Error, ErrorKind};
+}
+
+#[cfg(not(feature = "std"))]
+mod io {
+    use alloc::string::{String, ToString};
+
+    #[derive(Debug, Clone, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+        message: String,
+    }
+
+    #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+    pub enum ErrorKind {
+        InvalidData,
+    }
+
+    impl Error {
+        pub fn new(kind: ErrorKind, message: impl ToString) -> Self {
+            Self {
+                kind,
+                message: message.to_string(),
+            }
+        }
+
+        pub fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+    }
+
+    impl core::fmt::Display for Error {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str(&self.message)
+        }
+    }
+}
+
+#[cfg(not(feature = "std"))]
+pub type DhcpError = io::Error;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -291,7 +345,7 @@ impl DhcpMessage {
     }
 
     /// Parse a DHCP message from wire format.
-    pub fn from_wire(data: &[u8]) -> Result<Self, io::Error> {
+    pub fn from_wire(data: &[u8]) -> Result<Self, DhcpError> {
         if data.len() < Self::HEADER_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -560,7 +614,7 @@ impl DhcpMessage {
 // ---------------------------------------------------------------------------
 
 impl DhcpOptions {
-    fn parse(data: &[u8]) -> Result<Self, io::Error> {
+    fn parse(data: &[u8]) -> Result<Self, DhcpError> {
         let mut opts = Self::default();
         let mut i = 0;
         while i < data.len() {
@@ -604,7 +658,7 @@ impl DhcpOptions {
                             MSG_INFORM => Some(DhcpMessageType::Inform),
                             v => {
                                 opts.raw.push((code, value.to_vec()));
-                                eprintln!("Unknown DHCP message type: {}", v);
+                                let _ = v;
                                 None
                             }
                         };

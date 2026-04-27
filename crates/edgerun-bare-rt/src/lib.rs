@@ -32,10 +32,9 @@ pub mod sync;
 pub use sync::{
     AsyncMutex, AsyncMutexLock, Condvar, Mutex, MutexGuard, Permit, RwLock, RwLockReadGuard,
     RwLockWriteGuard, Semaphore, SemaphoreAcquire, SemaphoreAcquireError, SemaphoreGuard,
-    SemaphoreTryAcquireError,
+    SemaphoreTryAcquireError, SpinLock, SpinLockGuard,
 };
 
-pub type SpinLock<T> = Mutex<T>;
 pub type SyncMutex<T> = Mutex<T>;
 pub type SyncRwLock<T> = RwLock<T>;
 

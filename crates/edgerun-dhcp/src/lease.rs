@@ -1,9 +1,18 @@
 //! DHCP lease tracking.
 
-use std::net::Ipv4Addr;
-use std::time::{Duration, Instant};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
+use core::time::Duration;
 
 use edgerun_encoding::ip::{ip_to_u32, u32_to_ip};
+
+use crate::message::Ipv4Addr;
+
+#[cfg(feature = "std")]
+use std::time::Instant;
+
+#[cfg(not(feature = "std"))]
+use edgerun_bare_rt::Instant;
 
 /// A DHCP lease record.
 #[derive(Debug, Clone)]
@@ -62,11 +71,11 @@ pub struct LeasePool {
     /// End of the pool (inclusive).
     pub pool_end: Ipv4Addr,
     /// Active leases, keyed by IP (as u32).
-    pub leases: std::collections::HashMap<u32, Lease>,
+    pub leases: BTreeMap<u32, Lease>,
     /// MAC → IP mapping for fast lookup.
-    pub mac_to_ip: std::collections::HashMap<[u8; 6], u32>,
+    pub mac_to_ip: BTreeMap<[u8; 6], u32>,
     /// Reserved IPs (not to be handed out).
-    pub reserved: std::collections::HashSet<u32>,
+    pub reserved: BTreeSet<u32>,
 }
 
 impl LeasePool {
@@ -75,9 +84,9 @@ impl LeasePool {
         Self {
             pool_start,
             pool_end,
-            leases: std::collections::HashMap::new(),
-            mac_to_ip: std::collections::HashMap::new(),
-            reserved: std::collections::HashSet::new(),
+            leases: BTreeMap::new(),
+            mac_to_ip: BTreeMap::new(),
+            reserved: BTreeSet::new(),
         }
     }
 
@@ -121,7 +130,7 @@ impl LeasePool {
             if self.reserved.contains(&ip_u32) {
                 continue;
             }
-            if let std::collections::hash_map::Entry::Vacant(e) = self.leases.entry(ip_u32) {
+            if let alloc::collections::btree_map::Entry::Vacant(e) = self.leases.entry(ip_u32) {
                 let ip = u32_to_ip(ip_u32);
                 let lease = Lease::new(mac, ip, lease_time, xid);
                 e.insert(lease);

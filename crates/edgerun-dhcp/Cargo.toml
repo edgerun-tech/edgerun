@@ -8,7 +8,7 @@ description = "DHCPv4 server and client"
 
 [features]
 default = ["std"]
-std = []
+std = ["edgerun-log", "edgerun-rt"]
 bare = ["edgerun-bare-rt"]
 
 [lints]
@@ -16,3 +16,6 @@ workspace = true
 
 [dependencies]
 edgerun-bare-rt = { version = "0.1", optional = true, path = "../edgerun-bare-rt" }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
+edgerun-log = { path = "../edgerun-log", optional = true }
+edgerun-rt = { path = "../edgerun-rt", optional = true }

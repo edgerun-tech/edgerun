@@ -1,5 +1,3 @@
-#![no_std]
-
 //! DHCP options convenience helpers.
 
 use alloc::vec;

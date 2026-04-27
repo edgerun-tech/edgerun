@@ -206,6 +206,7 @@ fn parse_authority(input: &str) -> Option<(&str, Authority)> {
     Some((rest, Authority { host, port }))
 }
 
+#[cfg(feature = "serde")]
 impl serde::Serialize for Url {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -215,6 +216,7 @@ impl serde::Serialize for Url {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Url {
     fn deserialize<D>(deserializer: D) -> Result<Url, D::Error>
     where

@@ -15,6 +15,56 @@ pub struct Mutex<T> {
 unsafe impl<T: Send> Send for Mutex<T> {}
 unsafe impl<T: Send> Sync for Mutex<T> {}
 
+pub struct SpinLock {
+    locked: AtomicBool,
+}
+
+impl SpinLock {
+    pub const fn new() -> Self {
+        Self {
+            locked: AtomicBool::new(false),
+        }
+    }
+
+    pub fn lock(&self) -> SpinLockGuard<'_> {
+        while self
+            .locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            core::hint::spin_loop();
+        }
+        SpinLockGuard { lock: self }
+    }
+
+    pub fn try_lock(&self) -> Option<SpinLockGuard<'_>> {
+        self.locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .ok()
+            .map(|_| SpinLockGuard { lock: self })
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.locked.load(Ordering::Acquire)
+    }
+}
+
+impl Default for SpinLock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct SpinLockGuard<'a> {
+    lock: &'a SpinLock,
+}
+
+impl Drop for SpinLockGuard<'_> {
+    fn drop(&mut self) {
+        self.lock.locked.store(false, Ordering::Release);
+    }
+}
+
 impl<T> Mutex<T> {
     pub fn new(data: T) -> Self {
         Self {

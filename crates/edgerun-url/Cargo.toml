@@ -7,11 +7,12 @@ publish.workspace = true
 description = "Zero-dependency URL parsing for edgerun (RFC 3986 subset)"
 
 [features]
-default = ["std"]
+default = ["std", "serde"]
 std = []
+serde = ["dep:serde"]
 
 [dependencies]
-serde.workspace = true
+serde = { workspace = true, optional = true }
 
 [lints]
 workspace = true
