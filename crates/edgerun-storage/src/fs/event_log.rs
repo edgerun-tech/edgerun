@@ -31,7 +31,7 @@ impl FsEventLog {
 
 impl EventLog for FsEventLog {
     fn append_event(&mut self, event: &EventEnvelope) -> Result<AppendReceipt, StorageError> {
-        let mut file = open_stream_file(&self.events_dir, &event.stream_id);
+        let mut file = open_stream_file(&self.events_dir, &event.stream_id)?;
         let offset = write_event_to_file(&mut file, event)?;
         let event_hash = canonical_event_hash(event).value;
         Ok(AppendReceipt {
@@ -57,17 +57,17 @@ impl EventLog for FsEventLog {
     }
 }
 
-pub fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> File {
+pub fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> Result<File, StorageError> {
     let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
     let log_path = events_dir.join(format!("{stream_id_hex}.log"));
     if let Some(parent) = log_path.parent() {
-        let _ = fs::create_dir_all(parent);
+        fs::create_dir_all(parent).map_err(StorageError::Io)?;
     }
-    OpenOptions::new()
+    Ok(OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_path)
-        .expect("failed to open event log file")
+        .map_err(StorageError::Io)?)
 }
 
 pub fn write_event_to_file(file: &mut File, event: &EventEnvelope) -> Result<u64, StorageError> {

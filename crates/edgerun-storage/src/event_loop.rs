@@ -201,9 +201,16 @@ impl DispatchContext {
 
         // Get or open the log file for this stream
         let mut stream_files = self.stream_files.lock().unwrap();
-        let file = stream_files
-            .entry(stream_id.clone())
-            .or_insert_with(|| open_stream_file(&self.events_dir, &stream_id));
+        if !stream_files.contains_key(&stream_id) {
+            let file = open_stream_file(&self.events_dir, &stream_id)?;
+            stream_files.insert(stream_id.clone(), file);
+        }
+        let file = stream_files.get_mut(&stream_id).ok_or_else(|| {
+            StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "stream file missing after open",
+            ))
+        })?;
 
         let offset = write_event_to_file(file, &event)?;
 
@@ -352,9 +359,26 @@ fn run_event_loop(
 
         // Get or open the log file for this stream
         let mut sf = stream_files.lock().unwrap();
-        let file = sf
-            .entry(stream_id.clone())
-            .or_insert_with(|| open_stream_file(&events_dir, &stream_id));
+        if !sf.contains_key(&stream_id) {
+            match open_stream_file(&events_dir, &stream_id) {
+                Ok(file) => {
+                    sf.insert(stream_id.clone(), file);
+                }
+                Err(e) => {
+                    let _ = request.result_tx.send(Err(e));
+                    continue;
+                }
+            }
+        }
+        let Some(file) = sf.get_mut(&stream_id) else {
+            let _ = request
+                .result_tx
+                .send(Err(StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "stream file missing after open",
+                ))));
+            continue;
+        };
 
         // Write event to disk
         let offset = match write_event_to_file(file, event) {
