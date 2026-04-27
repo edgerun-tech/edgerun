@@ -1,14 +1,14 @@
 //! Runtime core - bare-metal async
 
-extern crate edgerun_platform;
 extern crate alloc;
+extern crate edgerun_platform;
 
 use crate::Error;
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 pub fn spawn<F>(_f: F) -> JoinHandle<F::Output>
 where
@@ -42,7 +42,9 @@ where
     loop {
         match f.as_mut().poll(&mut cx) {
             Poll::Ready(v) => return v,
-            Poll::Pending => unsafe { edgerun_platform::yield_cpu(); },
+            Poll::Pending => unsafe {
+                edgerun_platform::yield_cpu();
+            },
         }
     }
 }
@@ -55,8 +57,7 @@ fn noop_waker() -> Waker {
     unsafe fn wake_by_ref(_: *const ()) {}
     unsafe fn drop(_: *const ()) {}
 
-    static NOOP_WAKER_VTABLE: RawWakerVTable =
-        RawWakerVTable::new(clone, wake, wake_by_ref, drop);
+    static NOOP_WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
 
     unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &NOOP_WAKER_VTABLE)) }
 }
@@ -66,17 +67,29 @@ pub fn shutdown() {}
 pub struct Builder;
 
 impl Builder {
-    pub fn new_multi_thread() -> Self { Self }
-    pub fn worker_threads(&mut self, _: usize) -> &mut Self { self }
-    pub fn max_blocking_threads(&mut self, _: usize) -> &mut Self { self }
-    pub fn enable_all(&mut self) -> &mut Self { self }
-    pub fn build(&self) -> Result<Runtime, Error> { Ok(Runtime) }
+    pub fn new_multi_thread() -> Self {
+        Self
+    }
+    pub fn worker_threads(&mut self, _: usize) -> &mut Self {
+        self
+    }
+    pub fn max_blocking_threads(&mut self, _: usize) -> &mut Self {
+        self
+    }
+    pub fn enable_all(&mut self) -> &mut Self {
+        self
+    }
+    pub fn build(&self) -> Result<Runtime, Error> {
+        Ok(Runtime)
+    }
 }
 
 pub struct Runtime;
 
 impl Runtime {
-    pub fn new_multi_thread() -> Builder { Builder::new_multi_thread() }
+    pub fn new_multi_thread() -> Builder {
+        Builder::new_multi_thread()
+    }
     pub fn shutdown(&self) {}
     pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
     where
@@ -103,11 +116,15 @@ impl Runtime {
     {
         block_on(f)
     }
-    pub fn handle(&self) -> RuntimeHandle { RuntimeHandle }
+    pub fn handle(&self) -> RuntimeHandle {
+        RuntimeHandle
+    }
 }
 
 impl Drop for Runtime {
-    fn drop(&mut self) { self.shutdown(); }
+    fn drop(&mut self) {
+        self.shutdown();
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -130,7 +147,9 @@ pub struct JoinHandle<T> {
 
 impl<T> Clone for JoinHandle<T> {
     fn clone(&self) -> Self {
-        Self { state: self.state.clone() }
+        Self {
+            state: self.state.clone(),
+        }
     }
 }
 
@@ -218,7 +237,10 @@ pub struct JoinSet<F> {
 
 impl<F> JoinSet<F> {
     pub fn new() -> Self {
-        Self { _phantom: core::marker::PhantomData, closed: AtomicBool::new(false) }
+        Self {
+            _phantom: core::marker::PhantomData,
+            closed: AtomicBool::new(false),
+        }
     }
 
     pub fn spawn(&mut self, _f: F) -> Option<JoinHandle<F>>

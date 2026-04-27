@@ -17,7 +17,10 @@ mod tests {
     fn test_roundtrip() {
         for input in [b"hello", b"GET", b"".as_slice()] {
             let enc = encode(input);
-            if input.is_empty() { assert!(enc.is_empty()); continue; }
+            if input.is_empty() {
+                assert!(enc.is_empty());
+                continue;
+            }
             let dec = decode(&enc).unwrap();
             assert_eq!(&dec, input);
         }

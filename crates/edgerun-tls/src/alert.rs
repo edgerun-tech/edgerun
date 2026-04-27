@@ -1,6 +1,11 @@
 //! TLS alert protocol
 
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 use core::fmt;
 
 /// Alert level

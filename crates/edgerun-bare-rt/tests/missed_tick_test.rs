@@ -1,4 +1,4 @@
-use edgerun_bare_rt::{MissedTickBehavior, Interval};
+use edgerun_bare_rt::{Interval, MissedTickBehavior};
 
 #[test]
 fn missed_tick_behavior() {

@@ -2,19 +2,19 @@
 
 #![no_std]
 
-pub mod cpu;
-pub mod timer;
-pub mod irq;
-pub mod tls;
 pub mod arch;
+pub mod cpu;
+pub mod irq;
+pub mod timer;
+pub mod tls;
 pub mod waker;
 
 mod allocator;
 pub use allocator::Allocator;
 
-pub use cpu::{CpuId, PerCpu, this_cpu, all_cpus, smp_init};
+pub use cpu::{all_cpus, smp_init, this_cpu, CpuId, PerCpu};
+pub use irq::{Ipi, Irq, IrqController, IrqHandler};
 pub use timer::{MonoTime, Timer};
-pub use irq::{Irq, IrqHandler, IrqController, Ipi};
 pub use tls::TlsArea;
 pub use waker::make_ipi_waker;
 

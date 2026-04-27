@@ -24,8 +24,8 @@ use edgerun_tls::prf::{
 };
 
 use super::crypto::ProtectionKeys;
-use crate::ConnectionId;
 use super::QuicFrame;
+use crate::ConnectionId;
 
 pub use super::handshake::HandshakeResult;
 pub use super::handshake::QuicTlsHandshaker;

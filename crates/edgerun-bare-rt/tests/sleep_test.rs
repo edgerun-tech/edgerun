@@ -1,8 +1,8 @@
-use edgerun_bare_rt::{Sleep, Instant};
-use core::time::Duration;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use core::time::Duration;
+use edgerun_bare_rt::{Instant, Sleep};
 
 fn noop_waker() -> Waker {
     unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
@@ -21,7 +21,7 @@ fn sleep_completed_if_past_deadline() {
     let mut sleep = Sleep::new(deadline);
     let waker = noop_waker();
     let cx = &mut Context::from_waker(&waker);
-    
+
     let result = Pin::new(&mut sleep).poll(cx);
     assert!(matches!(result, Poll::Ready(())));
 }
@@ -32,7 +32,7 @@ fn sleep_pending_if_future_deadline() {
     let mut sleep = Sleep::new(deadline);
     let waker = noop_waker();
     let cx = &mut Context::from_waker(&waker);
-    
+
     let result = Pin::new(&mut sleep).poll(cx);
     assert!(matches!(result, Poll::Pending));
 }

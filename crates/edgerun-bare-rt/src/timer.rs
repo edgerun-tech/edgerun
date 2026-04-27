@@ -1,7 +1,5 @@
 //! Timer abstraction for async delays
 
-
-
 extern crate alloc;
 
 use alloc::vec::Vec;
@@ -73,7 +71,11 @@ impl TimerWheel {
     }
 
     pub fn schedule(&mut self, deadline: u64, callback: fn(), periodic: bool) -> usize {
-        let entry = TimerEntry { deadline, callback, periodic };
+        let entry = TimerEntry {
+            deadline,
+            callback,
+            periodic,
+        };
         self.wheel.push(entry);
         self.wheel.len() - 1
     }

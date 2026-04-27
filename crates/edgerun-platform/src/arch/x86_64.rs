@@ -43,11 +43,7 @@ pub fn id() -> u8 {
 #[inline]
 pub fn eoi() {
     unsafe {
-        core::arch::asm!(
-            "mov dx, 0xFEE000B0",
-            "mov eax, 0",
-            "out dx, eax"
-        );
+        core::arch::asm!("mov dx, 0xFEE000B0", "mov eax, 0", "out dx, eax");
     }
 }
 
@@ -55,11 +51,7 @@ pub fn eoi() {
 #[inline]
 pub fn enable() {
     unsafe {
-        core::arch::asm!(
-            "mov dx, 0xFEE000F0",
-            "mov eax, 0x1FF",
-            "out dx, eax"
-        );
+        core::arch::asm!("mov dx, 0xFEE000F0", "mov eax, 0x1FF", "out dx, eax");
     }
 }
 
@@ -67,11 +59,7 @@ pub fn enable() {
 #[inline]
 pub fn disable() {
     unsafe {
-        core::arch::asm!(
-            "mov dx, 0xFEE000F0",
-            "mov eax, 0",
-            "out dx, eax"
-        );
+        core::arch::asm!("mov dx, 0xFEE000F0", "mov eax, 0", "out dx, eax");
     }
 }
 

@@ -17,7 +17,13 @@ pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
         sender_count: AtomicUsize::new(1),
         closed: AtomicUsize::new(0),
     });
-    (Sender { queue: queue.clone(), cap }, Receiver { queue })
+    (
+        Sender {
+            queue: queue.clone(),
+            cap,
+        },
+        Receiver { queue },
+    )
 }
 
 struct Queue<T> {

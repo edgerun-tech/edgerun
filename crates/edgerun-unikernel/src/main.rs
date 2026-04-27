@@ -5,17 +5,15 @@
 
 extern crate edgerun_bare_rt as rt;
 extern crate edgerun_dhcp;
+extern crate edgerun_platform;
 extern crate edgerun_tftp;
 extern crate edgerun_virtio;
-extern crate edgerun_platform;
 
 use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
 use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
-use rt::{
-    block_on, crc32, IpAddr, IpStack, Network, Rng, RingBuffer, TcpSocket,
-};
 use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
+use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
 
 use core::future::Future;
 use core::pin::Pin;
@@ -148,31 +146,24 @@ unsafe fn panic(_info: &core::panic::PanicInfo) -> ! {
 #[used]
 #[link_section = ".multiboot"]
 static MULTIBOOT_HEADER: [u32; 8] = [
-    0x1BADB002,
-    0x00010000,
-    0xE4514FFE,
-    0x100000,
-    0x100000,
-    0,
-    0,
-    0,
+    0x1BADB002, 0x00010000, 0xE4514FFE, 0x100000, 0x100000, 0, 0, 0,
 ];
 
 #[no_mangle]
 pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
-    
+
     let mut rng = Rng::new_from_entropy();
     let test_crc = crc32(b"hello");
     let _ = test_crc;
-    
+
     let mut rx_buf = RingBuffer::new(1024);
     rx_buf.push_slice(b"test packet");
     let _ = rx_buf.len();
-    
+
     rt::log::log(1, "Looking for VirtIO...");
-    
+
     let mut net = match edgerun_virtio::find_virtio_net() {
         Some(n) => n,
         None => {
@@ -182,7 +173,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             }
         }
     };
-    
+
     rt::log::log(1, "VirtIO found");
     if !net.init() {
         rt::log::log(1, "VirtIO init failed");
@@ -191,7 +182,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         }
     }
     let mac = net.get_mac();
-    
+
     let mut stack = IpStack::new();
     stack.configure(
         IpAddr::new(0, 0, 0, 0),
@@ -199,7 +190,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         IpAddr::zero(),
         mac,
     );
-    
+
     let dhcp_xid = 0x12345678;
     let mut dhcp_ip = IpAddr::zero();
     let mut dhcp_netmask = IpAddr::new(255, 255, 255, 0);
@@ -209,7 +200,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     let mut offered_gateway = None;
     let mut requested_lease = false;
     let mut network = Network::new(&mut stack);
-    
+
     let discover = DhcpMessage::discover(dhcp_xid, mac).to_wire();
     rt::log::log(1, "Sending DHCP discover");
     if let Some(pkt) = network.send_udp(
@@ -224,7 +215,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             rt::log::log(1, "DHCP discover send failed");
         }
     }
-    
+
     let mut rx_buf = [0u8; 1514];
     let mut logged_rx = false;
     for _ in 0..1000 {
@@ -233,7 +224,10 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                 rt::log::log(1, "VirtIO RX packet observed");
                 logged_rx = true;
             }
-            if let Some(ParsedPacket::Udp { header, payload, .. }) = network.recv(&rx_buf[..len]) {
+            if let Some(ParsedPacket::Udp {
+                header, payload, ..
+            }) = network.recv(&rx_buf[..len])
+            {
                 if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
                     if let Ok(message) = DhcpMessage::from_wire(payload) {
                         if message.xid != dhcp_xid || message.chaddr[..6] != mac {
@@ -307,7 +301,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     }
 
     drop(network);
-    
+
     if dhcp_ip != IpAddr::zero() {
         stack.ip = dhcp_ip;
         stack.netmask = dhcp_netmask;
@@ -332,16 +326,14 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             rt::log::log(1, "TFTP RRQ send failed");
         }
     }
-    
     let mut tcp = TcpSocket::new();
-    
+
     let addr = rt::SocketAddr::new(0xC0A8010C, 8080);
     let _ = tcp.bind(addr);
     let _ = tcp.listen(10);
     let _ = rng.next();
-    
-    if net.is_link_up() {
-    }
+
+    if net.is_link_up() {}
 
     block_on(NetPump {
         net: &mut net,

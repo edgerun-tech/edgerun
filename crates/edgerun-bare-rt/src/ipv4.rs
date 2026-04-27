@@ -1,7 +1,5 @@
 //! IPv4 packet handling
 
-
-
 pub const IP_VERSION: u8 = 4;
 pub const IP_DEFAULT_TTL: u8 = 64;
 
@@ -22,7 +20,12 @@ impl Ipv4Addr {
     pub const BROADCAST: Self = Self(0xFFFFFFFF);
 
     pub fn from_bytes(&self) -> [u8; 4] {
-        [(self.0 >> 24) as u8, (self.0 >> 16) as u8, (self.0 >> 8) as u8, self.0 as u8]
+        [
+            (self.0 >> 24) as u8,
+            (self.0 >> 16) as u8,
+            (self.0 >> 8) as u8,
+            self.0 as u8,
+        ]
     }
 
     pub fn octets(&self) -> [u8; 4] {

@@ -26,7 +26,9 @@ impl ConnectionId {
     pub fn random() -> Self {
         let mut data = [0u8; 8];
         getrandom::fill(&mut data).expect("random generation failed");
-        ConnectionId { data: data.to_vec() }
+        ConnectionId {
+            data: data.to_vec(),
+        }
     }
 
     pub fn as_bytes(&self) -> &[u8] {

@@ -27,7 +27,10 @@ impl Aes128 {
             sub_bytes(&mut state);
             shift_rows(&mut state);
             mix_columns(&mut state);
-            add_round_key(&mut state, make_key_array(&self.round_keys[round * 16..round * 16 + 16]));
+            add_round_key(
+                &mut state,
+                make_key_array(&self.round_keys[round * 16..round * 16 + 16]),
+            );
         }
         sub_bytes(&mut state);
         shift_rows(&mut state);
@@ -44,7 +47,10 @@ impl Aes128 {
         inv_sub_bytes(&mut state);
 
         for round in (1..10).rev() {
-            add_round_key(&mut state, make_key_array(&self.round_keys[round * 16..round * 16 + 16]));
+            add_round_key(
+                &mut state,
+                make_key_array(&self.round_keys[round * 16..round * 16 + 16]),
+            );
             inv_mix_columns(&mut state);
             inv_shift_rows(&mut state);
             inv_sub_bytes(&mut state);
@@ -83,7 +89,10 @@ impl Aes256 {
             sub_bytes(&mut state);
             shift_rows(&mut state);
             mix_columns(&mut state);
-            add_round_key(&mut state, make_key_array(&self.round_keys[round * 16..round * 16 + 16]));
+            add_round_key(
+                &mut state,
+                make_key_array(&self.round_keys[round * 16..round * 16 + 16]),
+            );
         }
         sub_bytes(&mut state);
         shift_rows(&mut state);
@@ -131,13 +140,19 @@ const INV_SBOX: [u8; 256] = [
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 ];
 
-const RCON_TABLE: [u8; 11] = [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
+const RCON_TABLE: [u8; 11] = [
+    0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
+];
 
 fn expand_key(round_keys: &mut [u8], nr: usize) {
     let nk = round_keys.len() / 4 / (nr + 1);
     for i in nk..4 * (nr + 1) {
-        let mut temp = [round_keys[(i - 1) * 4], round_keys[(i - 1) * 4 + 1],
-                       round_keys[(i - 1) * 4 + 2], round_keys[(i - 1) * 4 + 3]];
+        let mut temp = [
+            round_keys[(i - 1) * 4],
+            round_keys[(i - 1) * 4 + 1],
+            round_keys[(i - 1) * 4 + 2],
+            round_keys[(i - 1) * 4 + 3],
+        ];
         if i % nk == 0 {
             let t = temp[0];
             temp[0] = SBOX[temp[1] as usize] ^ temp[2] ^ RCON_TABLE[i / nk];
@@ -245,5 +260,9 @@ fn inv_mix_columns(state: &mut [u8; 16]) {
 
 fn xtime(x: u8) -> u8 {
     let x = x as u16;
-    if x & 0x80 != 0 { ((x << 1) ^ 0x11b) as u8 } else { (x << 1) as u8 }
+    if x & 0x80 != 0 {
+        ((x << 1) ^ 0x11b) as u8
+    } else {
+        (x << 1) as u8
+    }
 }

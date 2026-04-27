@@ -30,7 +30,10 @@ impl DateTimeUtc {
     /// Current time from system clock.
     #[allow(unused_variables)]
     pub fn now() -> Self {
-        Self { unix_secs: 0, nanos: 0 }
+        Self {
+            unix_secs: 0,
+            nanos: 0,
+        }
     }
 
     /// Subtract another DateTimeUtc, returning duration in seconds (f64).

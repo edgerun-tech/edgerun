@@ -39,7 +39,10 @@ pub struct DnsQuery {
 
 impl DnsQuery {
     pub fn new(name: &[u8], qtype: DnsType) -> Self {
-        Self { name: name.to_vec(), qtype }
+        Self {
+            name: name.to_vec(),
+            qtype,
+        }
     }
 }
 

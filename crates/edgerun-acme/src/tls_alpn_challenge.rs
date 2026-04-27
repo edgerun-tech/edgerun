@@ -1,4 +1,4 @@
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use edgerun_encoding::base64url_nopad_encode;
 
@@ -13,11 +13,11 @@ pub struct TlsAlpnChallenge {
 impl TlsAlpnChallenge {
     pub fn new(domain: &str, token: &str, thumbprint: &str) -> Self {
         let key_authorization = format!("{}.{}", token, thumbprint);
-        
+
         let mut hasher = Sha256::new();
         hasher.update(key_authorization.as_bytes());
         let digest = hasher.finalize();
-        
+
         Self {
             domain: domain.to_string(),
             token: token.to_string(),
@@ -59,6 +59,10 @@ impl TlsAlpnManager {
     }
 
     pub fn get_challenge_value(&self) -> Option<String> {
-        self.active_challenge.read().unwrap().as_ref().map(|c| c.challenge_value().to_string())
+        self.active_challenge
+            .read()
+            .unwrap()
+            .as_ref()
+            .map(|c| c.challenge_value().to_string())
     }
 }

@@ -155,7 +155,6 @@ impl DynamicTable {
         // a magic number determined by them (under reasonable assumptions of
         // how the table is stored).
         self.size += name.len() + value.len() + 32;
-        
     }
 
     /// Consolidates the table entries so that the table size is below the

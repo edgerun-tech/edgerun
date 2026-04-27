@@ -262,7 +262,10 @@ impl DhcpServer {
     fn send_to(&self, msg: &DhcpMessage, dest: Ipv4Addr, port: u16) -> Result<(), io::Error> {
         let wire = msg.to_wire();
         let addr = SocketAddr::new(u32::from_be_bytes(dest.octets()), port);
-        self.socket.send_to(&wire, addr).map(|_| ()).map_err(map_udp_error)
+        self.socket
+            .send_to(&wire, addr)
+            .map(|_| ())
+            .map_err(map_udp_error)
     }
 
     pub async fn stats(&self) -> String {

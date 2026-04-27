@@ -1,6 +1,6 @@
+use super::BitWindow;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
-use super::BitWindow;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
@@ -12,7 +12,11 @@ impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Error::MissingBits(bw) => write!(f, "missing bits at byte {} bit {}", bw.byte, bw.bit),
-            Error::Unhandled(bw, val) => write!(f, "unhandled value {} at byte {} bit {}", val, bw.byte, bw.bit),
+            Error::Unhandled(bw, val) => write!(
+                f,
+                "unhandled value {} at byte {} bit {}",
+                val, bw.byte, bw.bit
+            ),
         }
     }
 }

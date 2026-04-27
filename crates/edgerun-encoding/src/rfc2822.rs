@@ -91,7 +91,11 @@ fn is_leap_year(year: u64) -> bool {
 }
 
 fn days_in_year(year: u64) -> u64 {
-    if is_leap_year(year) { 366 } else { 365 }
+    if is_leap_year(year) {
+        366
+    } else {
+        365
+    }
 }
 
 /// Count leap years in range [start, end) (exclusive of end).

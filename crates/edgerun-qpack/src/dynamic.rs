@@ -1,5 +1,5 @@
 use alloc::borrow::Cow;
-use alloc::collections::{btree_map::Entry, btree_map::BTreeMap, VecDeque};
+use alloc::collections::{btree_map::BTreeMap, btree_map::Entry, VecDeque};
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -560,7 +560,7 @@ mod tests {
     use alloc::string::ToString;
     use core::cmp::Ordering;
 
-    use crate::{static_::StaticTable, helpers::build_table};
+    use crate::{helpers::build_table, static_::StaticTable};
 
     const STREAM_ID: u64 = 0x4;
 

@@ -19,7 +19,12 @@ where
     (a.await, b.await, c.await)
 }
 
-pub async fn join4<A, B, C, D>(a: A, b: B, c: C, d: D) -> (A::Output, B::Output, C::Output, D::Output)
+pub async fn join4<A, B, C, D>(
+    a: A,
+    b: B,
+    c: C,
+    d: D,
+) -> (A::Output, B::Output, C::Output, D::Output)
 where
     A: Future,
     B: Future,
@@ -29,7 +34,13 @@ where
     (a.await, b.await, c.await, d.await)
 }
 
-pub async fn join5<A, B, C, D, E>(a: A, b: B, c: C, d: D, e: E) -> (A::Output, B::Output, C::Output, D::Output, E::Output)
+pub async fn join5<A, B, C, D, E>(
+    a: A,
+    b: B,
+    c: C,
+    d: D,
+    e: E,
+) -> (A::Output, B::Output, C::Output, D::Output, E::Output)
 where
     A: Future,
     B: Future,

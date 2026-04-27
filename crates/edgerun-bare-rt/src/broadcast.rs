@@ -18,7 +18,12 @@ pub fn broadcast<T: Clone + 'static>(cap: usize) -> (Publisher<T>, Subscriber<T>
         seq: AtomicUsize::new(0),
         closed: AtomicBool::new(false),
     });
-    (Publisher { inner: inner.clone() }, Subscriber { inner })
+    (
+        Publisher {
+            inner: inner.clone(),
+        },
+        Subscriber { inner },
+    )
 }
 
 struct Inner<T> {

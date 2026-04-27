@@ -7,10 +7,15 @@
 //!
 //! All messages after ServerHello are encrypted.
 
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
 use crate::cipher::NamedGroup;
 use crate::Result;
 use crate::TlsError;
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 use edgerun_crypto::CipherSuite;
 
 /// ClientHello message builder

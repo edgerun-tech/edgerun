@@ -1,7 +1,7 @@
-use edgerun_bare_rt::Barrier;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use edgerun_bare_rt::Barrier;
 
 fn noop_waker() -> Waker {
     unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
@@ -25,7 +25,7 @@ fn barrier_wait_completes_when_count_reached() {
     let barrier = Barrier::new(2);
     let waker = noop_waker();
     let cx = &mut Context::from_waker(&waker);
-    
+
     let mut wait1 = barrier.wait();
     let poll1 = Pin::new(&mut wait1).poll(cx);
     // First waiter should be pending (waiting for second)

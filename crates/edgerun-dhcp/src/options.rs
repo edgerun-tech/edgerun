@@ -1,11 +1,11 @@
 //! DHCP options convenience helpers.
 
-use alloc::vec;
-use alloc::vec::Vec;
 use crate::message::{DhcpOptions, Ipv4Addr};
 use crate::message::{
     OPT_DNS_SERVER, OPT_LEASE_TIME, OPT_REBIND_TIME, OPT_RENEWAL_TIME, OPT_ROUTER, OPT_SUBNET_MASK,
 };
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// Builder for constructing DHCP option sets.
 pub struct OptionsBuilder {

@@ -240,8 +240,8 @@ impl<'a> Encoder<'a> {
     pub fn encode_header_into<W: Writer>(
         &mut self,
         header: (&[u8], &[u8]),
-writer: &mut W,
-) -> Result<(), ()> {
+        writer: &mut W,
+    ) -> Result<(), ()> {
         match self.header_table.find_header(header) {
             None => {
                 // The name of the header is in no tables: need to encode

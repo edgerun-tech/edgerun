@@ -7,9 +7,13 @@
 //!
 //! The AEAD nonce is computed as: nonce = write_iv XOR (sequence_number as 12 bytes)
 
-use alloc::{format, string::{String, ToString}, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use edgerun_crypto::aes_gcm::aead::generic_array::GenericArray;
-use edgerun_crypto::{Aes256GcmCipher as AeadCipher, AeadInPlace};
+use edgerun_crypto::{AeadInPlace, Aes256GcmCipher as AeadCipher};
 
 /// TLS record layer for encryption/decryption
 pub struct RecordCipher {

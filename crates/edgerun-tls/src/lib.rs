@@ -28,9 +28,9 @@
 
 extern crate alloc;
 
-pub use edgerun_bare_rt as rt;
 use alloc::string::String;
 use core::fmt;
+pub use edgerun_bare_rt as rt;
 
 pub mod alert;
 #[cfg(feature = "std")]

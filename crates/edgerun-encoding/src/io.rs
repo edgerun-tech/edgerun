@@ -80,8 +80,9 @@ pub trait Read {
     fn read_to_string(&mut self, out: &mut String) -> Result<usize> {
         let mut bytes = Vec::new();
         let n = self.read_to_end(&mut bytes)?;
-        let text = String::from_utf8(bytes)
-            .map_err(|_| Error::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8"))?;
+        let text = String::from_utf8(bytes).map_err(|_| {
+            Error::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8")
+        })?;
         out.push_str(&text);
         Ok(n)
     }
@@ -97,7 +98,12 @@ pub trait Write {
     fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
         while !buf.is_empty() {
             match self.write(buf)? {
-                0 => return Err(Error::new(ErrorKind::WriteZero, "failed to write whole buffer")),
+                0 => {
+                    return Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write whole buffer",
+                    ))
+                }
                 n => buf = &buf[n..],
             }
         }

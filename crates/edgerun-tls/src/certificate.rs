@@ -3,7 +3,11 @@
 //! Proper DER parsing via the `der` / `x509_cert` crates from edgerun-crypto.
 //! No hand-rolled DER walking — full ASN.1 structural decoding.
 
-use alloc::{format, string::{String, ToString}, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use edgerun_crypto::x509_cert::der::{Decode, DecodePem, Encode};
 use edgerun_crypto::x509_cert::ext::pkix::name::GeneralName;
 use edgerun_crypto::x509_cert::Certificate as DerCertificate;

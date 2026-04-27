@@ -34,7 +34,11 @@ pub struct TftpError {
 
 impl Default for TftpError {
     fn default() -> Self {
-        Self { opcode: OP_ERROR, code: 0, msg: [0; 128] }
+        Self {
+            opcode: OP_ERROR,
+            code: 0,
+            msg: [0; 128],
+        }
     }
 }
 
@@ -48,6 +52,10 @@ pub struct TftpData {
 
 impl Default for TftpData {
     fn default() -> Self {
-        Self { opcode: OP_DATA, block: 0, data: [0; TFTP_BLOCK_SIZE] }
+        Self {
+            opcode: OP_DATA,
+            block: 0,
+            data: [0; TFTP_BLOCK_SIZE],
+        }
     }
 }

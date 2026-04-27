@@ -1,5 +1,5 @@
 //! Xtensa (LX series) implementation
-//! 
+//!
 //! Xtensa uses the Configurable Interrupt Controller (CIC) and Event/Exception handling
 
 #![allow(unsafe_op_in_unsafe_fn)]

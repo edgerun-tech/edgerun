@@ -1,4 +1,4 @@
-use edgerun_bare_rt::{UdpSocket, UdpAddr};
+use edgerun_bare_rt::{UdpAddr, UdpSocket};
 
 #[test]
 fn udp_socket_new() {

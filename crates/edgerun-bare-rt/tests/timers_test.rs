@@ -1,5 +1,5 @@
-use edgerun_bare_rt::{interval_at, timeout};
 use core::time::Duration;
+use edgerun_bare_rt::{interval_at, timeout};
 
 #[test]
 fn interval_at_creates() {

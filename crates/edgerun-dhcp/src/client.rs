@@ -29,7 +29,9 @@ impl DhcpClient {
 
     pub fn new_with_mac(interface: &str, mac: [u8; 6]) -> Result<Self, io::Error> {
         let mut socket = UdpSocket::new();
-        socket.bind(SocketAddr::new(0, DHCP_CLIENT_PORT)).map_err(map_udp_error)?;
+        socket
+            .bind(SocketAddr::new(0, DHCP_CLIENT_PORT))
+            .map_err(map_udp_error)?;
         socket.set_nonblocking(true);
 
         Ok(Self {
@@ -100,7 +102,10 @@ impl DhcpClient {
     fn send_to(&self, msg: &DhcpMessage, dest: Ipv4Addr, port: u16) -> Result<(), io::Error> {
         let wire = msg.to_wire();
         let addr = SocketAddr::new(u32::from_be_bytes(dest.octets()), port);
-        self.socket.send_to(&wire, addr).map(|_| ()).map_err(map_udp_error)
+        self.socket
+            .send_to(&wire, addr)
+            .map(|_| ())
+            .map_err(map_udp_error)
     }
 
     fn wait_for_offer(&mut self, deadline: &Instant) -> Result<(Ipv4Addr, Ipv4Addr), io::Error> {
@@ -122,7 +127,10 @@ impl DhcpClient {
                 Err(_) => {}
             }
         }
-        Err(io::Error::new(io::ErrorKind::TimedOut, "No DHCP OFFER received"))
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "No DHCP OFFER received",
+        ))
     }
 
     fn wait_for_ack(&mut self, deadline: &Instant) -> Result<Lease, io::Error> {
@@ -152,7 +160,10 @@ impl DhcpClient {
                 Err(_) => {}
             }
         }
-        Err(io::Error::new(io::ErrorKind::TimedOut, "No DHCP ACK/NAK received"))
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "No DHCP ACK/NAK received",
+        ))
     }
 
     fn recv_message(&self) -> Result<(DhcpMessage, Ipv4Addr), io::Error> {

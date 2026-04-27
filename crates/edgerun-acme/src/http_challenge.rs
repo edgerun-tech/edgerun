@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
-use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_encoding::base64url_nopad_encode;
+use edgerun_http::{Handler, Request, Response, StatusCode};
 
 #[derive(Clone)]
 pub struct HttpChallengeHandler {
@@ -33,12 +33,15 @@ impl HttpChallengeHandler {
 }
 
 impl Handler for HttpChallengeHandler {
-    fn handle(&self, _req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    fn handle(
+        &self,
+        _req: Request,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
         Box::pin(async move {
             let path = _req.uri().path();
-            
+
             let expected_path = format!("/.well-known/acme-challenge/{}", self.token);
-            
+
             if path == expected_path {
                 Response::text(StatusCode::new(200).unwrap(), &self.key_authorization)
             } else {
@@ -81,14 +84,17 @@ impl HttpChallengeServer {
 }
 
 impl Handler for HttpChallengeServer {
-    fn handle(&self, req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    fn handle(
+        &self,
+        req: Request,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
         let handlers = Arc::clone(&self.handlers);
-        
+
         Box::pin(async move {
             let path = req.uri().path().to_string();
-            
+
             let handler = handlers.read().unwrap().get(&path).cloned();
-            
+
             if let Some(handler) = handler {
                 handler.handle(req).await
             } else {

@@ -109,7 +109,10 @@ impl Rtl8125 {
         self.spin_wait();
 
         self.write32(REG_TCR, TCR_DMAMAX | 0x03000100);
-        self.write32(REG_RCR, RCR_ACCEPT_BROAD | RCR_ACCEPT_MULTICAST | RCR_ACCEPT_ALL_PHYS | RCR_ACCEPT_OK);
+        self.write32(
+            REG_RCR,
+            RCR_ACCEPT_BROAD | RCR_ACCEPT_MULTICAST | RCR_ACCEPT_ALL_PHYS | RCR_ACCEPT_OK,
+        );
         self.write8(REG_CMD, CMD_RX_EN | CMD_TX_EN);
     }
 

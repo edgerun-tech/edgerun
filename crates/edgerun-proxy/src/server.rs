@@ -103,7 +103,9 @@ impl ProxyServer {
                                 }
                             });
                         }
-                        Err(e) => warn!("HTTP accept error: {}", e),
+                        Err(e) => {
+                            warn!("HTTP accept error: {}", e);
+                        }
                     }
                 }
             }
@@ -139,7 +141,9 @@ impl ProxyServer {
                                 }
                             });
                         }
-                        Err(e) => warn!("SOCKS5 accept error: {}", e),
+                        Err(e) => {
+                            warn!("SOCKS5 accept error: {}", e);
+                        }
                     }
                 }
             }))

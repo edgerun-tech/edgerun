@@ -5,9 +5,15 @@
 pub struct MonoTime(u64);
 
 impl MonoTime {
-    pub fn now() -> Self { Self(timer_ticks()) }
-    pub fn elapsed(self) -> u64 { timer_ticks() - self.0 }
-    pub fn ticks(&self) -> u64 { self.0 }
+    pub fn now() -> Self {
+        Self(timer_ticks())
+    }
+    pub fn elapsed(self) -> u64 {
+        timer_ticks() - self.0
+    }
+    pub fn ticks(&self) -> u64 {
+        self.0
+    }
 }
 
 pub trait Timer {
@@ -16,7 +22,9 @@ pub trait Timer {
     fn wait_for_irq();
 }
 
-pub fn timer_freq() -> u64 { 10_000_000 }
+pub fn timer_freq() -> u64 {
+    10_000_000
+}
 
 #[inline]
 pub fn timer_ticks() -> u64 {
@@ -24,34 +32,46 @@ pub fn timer_ticks() -> u64 {
     {
         let lo: u32;
         let hi: u32;
-        unsafe { core::arch::asm!("rdtsc", out("rax") lo, out("rdx") hi); }
+        unsafe {
+            core::arch::asm!("rdtsc", out("rax") lo, out("rdx") hi);
+        }
         ((hi as u64) << 32) | (lo as u64)
     }
-    
+
     #[cfg(target_arch = "aarch64")]
     {
         let ticks: u64;
-        unsafe { core::arch::asm!("mrs x0, CNTVCT_EL0", out("x0") ticks); }
+        unsafe {
+            core::arch::asm!("mrs x0, CNTVCT_EL0", out("x0") ticks);
+        }
         ticks
     }
-    
+
     #[cfg(target_arch = "riscv64")]
     {
         let ticks: u64;
-        unsafe { core::arch::asm!("csrr x0, time", out("x0") ticks); }
+        unsafe {
+            core::arch::asm!("csrr x0, time", out("x0") ticks);
+        }
         ticks
     }
-    
+
     #[cfg(target_arch = "xtensa")]
     {
         let ticks: u32;
-        unsafe { core::arch::asm!("rsr CCOUNT", out("x0") ticks); }
+        unsafe {
+            core::arch::asm!("rsr CCOUNT", out("x0") ticks);
+        }
         ticks as u64
     }
 }
 
-pub fn ticks_to_us(ticks: u64) -> u64 { ticks / (timer_freq() / 1_000_000) }
-pub fn us_to_ticks(us: u64) -> u64 { us * (timer_freq() / 1_000_000) }
+pub fn ticks_to_us(ticks: u64) -> u64 {
+    ticks / (timer_freq() / 1_000_000)
+}
+pub fn us_to_ticks(us: u64) -> u64 {
+    us * (timer_freq() / 1_000_000)
+}
 
 pub fn sleep_us(us: u64) {
     let start = timer_ticks();

@@ -1,7 +1,7 @@
-use edgerun_bare_rt::YieldNow;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use edgerun_bare_rt::YieldNow;
 
 fn noop_waker() -> Waker {
     unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
@@ -37,10 +37,10 @@ fn yield_immediately_ready_if_already_yielded() {
     let mut fut = YieldNow::new();
     let waker = noop_waker();
     let cx = &mut Context::from_waker(&waker);
-    
+
     // First poll - yields
     let _ = Pin::new(&mut fut).poll(cx);
-    
+
     // After yielded, next poll immediately returns Ready
     assert!(matches!(Pin::new(&mut fut).poll(cx), Poll::Ready(())));
 }
