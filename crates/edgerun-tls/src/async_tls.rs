@@ -1261,7 +1261,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
 
 pub(crate) fn generate_random() -> [u8; 32] {
     let mut buf = [0u8; 32];
-    edgerun_crypto::getrandom(&mut buf).expect("getrandom failed");
+    edgerun_crypto::fill_random(&mut buf).expect("random generation failed");
     buf
 }
 

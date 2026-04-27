@@ -1,14 +1,13 @@
 use anyhow::{Context, Ok, Result};
 use oci_spec::runtime::{ProcessBuilder, Spec, SpecBuilder};
-use rand::RngExt;
 use test_framework::{Test, TestGroup, TestResult, test_result};
 
+use crate::utils::support::random_range_i32;
 use crate::utils::test_inside_container;
 use crate::utils::test_utils::CreateOptions;
 
 fn generate_random_number() -> i32 {
-    let mut rng = rand::rng();
-    rng.random_range(300..=700)
+    random_range_i32(300, 700)
 }
 
 fn create_spec() -> Result<Spec> {

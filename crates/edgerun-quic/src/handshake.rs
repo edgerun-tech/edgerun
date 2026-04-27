@@ -24,7 +24,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use edgerun_crypto::getrandom;
+use edgerun_crypto::fill_random;
 use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
 use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
 use edgerun_crypto::p256::EncodedPoint;
@@ -332,7 +332,7 @@ impl QuicTlsHandshaker {
     /// Create a new handshaker for a QUIC client connection.
     pub fn new(server_name: &str) -> Self {
         let mut client_random = [0u8; 32];
-        getrandom(&mut client_random).expect("CSPRNG failure");
+        fill_random(&mut client_random).expect("CSPRNG failure");
 
         let key_pair =
             EcdhKeyPair::generate(KeyExchangeGroup::X25519).expect("X25519 key generation failed");

@@ -72,7 +72,7 @@ impl MeshSession {
     /// Creates a session from a derived AES-256-GCM key.
     pub(crate) fn new(peer: NodeID, key: [u8; 32]) -> Self {
         let mut nonce_prefix = [0u8; 4];
-        edgerun_crypto::getrandom(&mut nonce_prefix).expect("getrandom failed");
+        edgerun_crypto::fill_random(&mut nonce_prefix).expect("random generation failed");
 
         Self {
             peer,

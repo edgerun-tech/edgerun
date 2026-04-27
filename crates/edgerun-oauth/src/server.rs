@@ -11,15 +11,15 @@
 //! `OAuthServer` implements `edgerun_http::Handler` so it can be mounted
 //! directly on any `HttpServer`.
 
-use crate::prelude::*;
 use crate::device_state::{DeviceGrantStore, PendingDeviceGrant};
 use crate::discovery::{Jwk, JwksDocument};
 use crate::errors::{DeviceError, OAuthError, OAuthResult};
 use crate::jwt::{IdToken, JwtVerifier};
 use crate::pkce::PkcePair;
+use crate::prelude::*;
 use crate::types::{Credentials, TokenResponse};
 use edgerun_crypto::ecdsa::Signature;
-use edgerun_crypto::getrandom;
+use edgerun_crypto::fill_random;
 use edgerun_crypto::p256::ecdsa::signature::Signer;
 use edgerun_crypto::p256::ecdsa::SigningKey;
 use edgerun_crypto::sha256;
@@ -1149,7 +1149,7 @@ impl edgerun_http::Middleware for BearerAuthMiddleware {
 
 fn generate_token(len: usize) -> String {
     let mut bytes = vec![0u8; len];
-    edgerun_crypto::getrandom(&mut bytes).expect("random generation failed");
+    fill_random(&mut bytes).expect("random generation failed");
     base64url_nopad_encode(&bytes)
 }
 

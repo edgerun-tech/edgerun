@@ -17,7 +17,6 @@ pub use ::p256;
 pub use ::x25519_dalek;
 
 use crate::error::{CryptoError, Result};
-use crate::rng::fill_random;
 use crate::sha::Digest;
 
 pub use aead::{Aes256GcmCipher, CipherU12, CipherU16};
@@ -28,6 +27,7 @@ pub use aes_gcm::Nonce;
 pub use chacha20poly1305::ChaCha20Poly1305;
 pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
 pub use p256::ecdsa::SigningKey;
+pub use rng::{fill_random, mix_entropy, random_bytes, random_u32, random_u64};
 pub use signature::Signer;
 
 pub use crate::rng::OsRng;
@@ -382,10 +382,6 @@ pub mod signature {
     pub mod hazmat {
         pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
     }
-}
-
-pub fn getrandom(_dest: &mut [u8]) -> core::result::Result<(), CryptoError> {
-    fill_random(_dest).map_err(|_| CryptoError::RandomGenerationFailed)
 }
 
 #[cfg(feature = "tpm")]

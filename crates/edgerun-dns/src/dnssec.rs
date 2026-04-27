@@ -46,7 +46,7 @@ pub struct Ed25519SigningKey {
 impl Ed25519SigningKey {
     pub fn generate() -> Self {
         let mut bytes = [0u8; 32];
-        let _ = edgerun_crypto::getrandom(&mut bytes);
+        let _ = edgerun_crypto::fill_random(&mut bytes);
         Self { bytes }
     }
 

@@ -74,8 +74,8 @@ impl EcdhKeyPair {
             }
             KeyExchangeGroup::X25519 => {
                 let mut secret_bytes = [0u8; 32];
-                edgerun_crypto::getrandom(&mut secret_bytes)
-                    .map_err(|_| String::from("getrandom failed"))?;
+                edgerun_crypto::fill_random(&mut secret_bytes)
+                    .map_err(|_| String::from("random generation failed"))?;
                 let secret = X25519Secret::from(secret_bytes);
                 let public: X25519PublicKey = (&secret).into();
                 Ok(EcdhKeyPair::X25519 {

@@ -6,7 +6,6 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow};
 use flate2::read::GzDecoder;
 use oci_spec::runtime::{Process, Spec};
-use rand::RngExt;
 use tar::Archive;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -41,12 +40,11 @@ pub fn get_project_path() -> PathBuf {
 
 /// This will generate the UUID needed when creating the container.
 pub fn generate_uuid() -> Uuid {
-    let mut rng = rand::rng();
     const CHARSET: &[u8] = b"0123456789abcdefABCDEF";
 
     let rand_string: String = (0..32)
         .map(|_| {
-            let idx = rng.random_range(0..CHARSET.len());
+            let idx = random_range_usize(0, CHARSET.len() - 1);
             CHARSET[idx] as char
         })
         .collect();
@@ -55,6 +53,30 @@ pub fn generate_uuid() -> Uuid {
         Ok(uuid) => uuid,
         Err(e) => panic!("can not parse uuid, {e}"),
     }
+}
+
+pub fn random_u16() -> u16 {
+    let mut bytes = [0u8; 2];
+    edgerun_crypto::fill_random(&mut bytes).expect("random generation failed");
+    u16::from_le_bytes(bytes)
+}
+
+pub fn random_range_i32(min: i32, max: i32) -> i32 {
+    min + (random_u64() % ((max - min + 1) as u64)) as i32
+}
+
+pub fn random_range_u32(min: u32, max: u32) -> u32 {
+    min + (random_u64() % ((max - min + 1) as u64)) as u32
+}
+
+pub fn random_range_usize(min: usize, max: usize) -> usize {
+    min + (random_u64() % ((max - min + 1) as u64)) as usize
+}
+
+fn random_u64() -> u64 {
+    let mut bytes = [0u8; 8];
+    edgerun_crypto::fill_random(&mut bytes).expect("random generation failed");
+    u64::from_le_bytes(bytes)
 }
 
 /// Creates a bundle directory in a temp directory

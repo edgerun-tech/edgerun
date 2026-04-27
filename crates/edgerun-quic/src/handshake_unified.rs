@@ -36,7 +36,7 @@ pub use super::server_handshake::ServerHandshakeResult;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_crypto::getrandom;
+    use edgerun_crypto::fill_random;
     use edgerun_tls::handshake::ClientHelloBuilder;
     use edgerun_tls::prf::Hasher;
 
@@ -65,7 +65,7 @@ mod tests {
     #[test]
     fn test_client_server_hello_roundtrip() {
         let mut client_random = [0u8; 32];
-        getrandom(&mut client_random).unwrap();
+        fill_random(&mut client_random).unwrap();
 
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn test_server_processes_client_hello() {
         let mut client_random = [0u8; 32];
-        getrandom(&mut client_random).unwrap();
+        fill_random(&mut client_random).unwrap();
 
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn test_server_hello_exchange() {
         let mut client_random = [0u8; 32];
-        getrandom(&mut client_random).unwrap();
+        fill_random(&mut client_random).unwrap();
 
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")

@@ -3,7 +3,7 @@
 //! Generates a `code_verifier` and derives the `code_challenge` via SHA-256.
 
 use crate::prelude::*;
-use edgerun_crypto::getrandom;
+use edgerun_crypto::fill_random;
 use edgerun_crypto::sha256;
 use edgerun_encoding::base64::base64url_nopad_encode;
 
@@ -21,7 +21,7 @@ impl PkcePair {
     /// 32 bytes → 43 base64url characters (no padding).
     pub fn generate() -> std::io::Result<Self> {
         let mut code_verifier_bytes = [0u8; 32];
-        getrandom(&mut code_verifier_bytes)
+        fill_random(&mut code_verifier_bytes)
             .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
         let code_verifier = base64url_nopad_encode(&code_verifier_bytes);
 

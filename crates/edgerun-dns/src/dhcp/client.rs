@@ -385,7 +385,7 @@ fn read_mac_from_interface(interface: &str) -> Result<[u8; 6], io::Error> {
 }
 
 fn random_xid() -> u32 {
-    // Use getrandom for cryptographically secure XID (prevents DHCP spoofing)
+    // Use edgerun crypto RNG for cryptographically secure XID (prevents DHCP spoofing).
     use edgerun_crypto::RngCore;
     let mut bytes = [0u8; 4];
     edgerun_crypto::OsRng.fill_bytes(&mut bytes);

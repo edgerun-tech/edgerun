@@ -34,7 +34,7 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("This is for development/testing only. NEVER use in production.");
         eprintln!();
         let mut key_bytes = [0u8; 32];
-        edgerun_crypto::getrandom(&mut key_bytes).expect("getrandom failed");
+        edgerun_crypto::fill_random(&mut key_bytes).expect("random generation failed");
         let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
             .unwrap_or_else(|e| {
                 eprintln!("error: failed to create signing key: {}", e);
@@ -261,7 +261,7 @@ pub fn cmd_init_encrypted(
 
     eprintln!("Generating ECDSA P-256 signing key...");
     let mut key_bytes = [0u8; 32];
-    edgerun_crypto::getrandom(&mut key_bytes).expect("getrandom failed");
+    edgerun_crypto::fill_random(&mut key_bytes).expect("random generation failed");
     let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
         .unwrap_or_else(|e| {
             eprintln!("error: failed to create signing key: {}", e);
@@ -342,7 +342,7 @@ pub fn generate_pairing_pin() -> String {
     let mut pin = String::with_capacity(8);
     for _ in 0..8 {
         let mut byte = [0u8; 1];
-        edgerun_crypto::getrandom(&mut byte).expect("getrandom failed");
+        edgerun_crypto::fill_random(&mut byte).expect("random generation failed");
         let idx = (byte[0] as usize) % PIN_CHARSET.len();
         pin.push(PIN_CHARSET[idx] as char);
     }
@@ -351,7 +351,7 @@ pub fn generate_pairing_pin() -> String {
 
 pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Option<String>) {
     let mut key_bytes = [0u8; 32];
-    edgerun_crypto::getrandom(&mut key_bytes).expect("getrandom failed");
+    edgerun_crypto::fill_random(&mut key_bytes).expect("random generation failed");
     let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
         .unwrap_or_else(|e| {
             eprintln!("error: failed to create signing key: {}", e);

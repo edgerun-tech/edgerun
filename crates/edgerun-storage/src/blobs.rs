@@ -149,7 +149,7 @@ impl BlobStore {
 
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
-        edgerun_crypto::getrandom(&mut nonce_bytes).map_err(|e| {
+        edgerun_crypto::fill_random(&mut nonce_bytes).map_err(|e| {
             StorageError::Encryption(format!("random nonce generation failed: {e}"))
         })?;
         let nonce = &nonce_bytes;
@@ -356,7 +356,7 @@ fn load_or_create_sealed_key(
     } else {
         // Generate new key, seal it, store on disk
         let mut key = [0u8; 32];
-        edgerun_crypto::getrandom(&mut key).map_err(|e| {
+        edgerun_crypto::fill_random(&mut key).map_err(|e| {
             StorageError::Encryption(format!("random blob key generation failed: {e}"))
         })?;
 

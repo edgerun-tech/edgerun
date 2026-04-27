@@ -18,7 +18,7 @@ fn benchmark_software_sign(ops_target: u64) -> (u64, Duration) {
 
     // Generate a fresh key
     let mut key_bytes = [0u8; 32];
-    edgerun_crypto::getrandom(&mut key_bytes).expect("getrandom failed");
+    edgerun_crypto::fill_random(&mut key_bytes).expect("random generation failed");
     let signing_key = SigningKey::from_bytes((&key_bytes).into()).expect("valid key");
 
     let message = [0xDEu8; 32];

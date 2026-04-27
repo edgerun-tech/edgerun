@@ -1,21 +1,20 @@
 use anyhow::{Context, Ok, Result};
 use oci_spec::runtime::{ProcessBuilder, Spec, SpecBuilder, UserBuilder};
-use rand::RngExt;
 use test_framework::{Test, TestGroup, TestResult, test_result};
 
+use crate::utils::support::random_range_u32;
 use crate::utils::test_inside_container;
 use crate::utils::test_utils::CreateOptions;
 
 // Generates a Vec<u32> with a random number of elements (between 5 and 15),
 // where each element is a random u32 value between 0 and 65535.
 fn generate_unique_random_vec() -> Vec<u32> {
-    let mut rng = rand::rng();
-    let vec_size = rng.random_range(5..=10);
+    let vec_size = random_range_u32(5, 10) as usize;
     let mut ret = Vec::new();
     while ret.len() < vec_size {
-        let rand = rng.random_range(100..=200);
-        if !ret.contains(&rand) {
-            ret.push(rand);
+        let gid = random_range_u32(100, 200);
+        if !ret.contains(&gid) {
+            ret.push(gid);
         }
     }
     ret

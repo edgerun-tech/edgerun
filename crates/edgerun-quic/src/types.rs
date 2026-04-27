@@ -1,7 +1,7 @@
 //! QUIC types shared across modules
 
 use alloc::vec::Vec;
-use edgerun_crypto::getrandom;
+use edgerun_crypto::fill_random;
 
 /// QUIC version
 pub const QUIC_VERSION_V1: u32 = 0x00000001;
@@ -26,7 +26,7 @@ impl ConnectionId {
 
     pub fn random() -> Self {
         let mut data = [0u8; 8];
-        getrandom(&mut data).expect("random generation failed");
+        fill_random(&mut data).expect("random generation failed");
         ConnectionId {
             data: data.to_vec(),
         }

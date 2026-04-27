@@ -8,13 +8,14 @@ use oci_spec::runtime::{
 };
 use test_framework::{Test, TestGroup, TestResult, test_result};
 
+use crate::utils::support::random_u16;
 use crate::utils::test_utils::{
     CreateOptions, check_container_created, exec_container, start_container,
 };
 use crate::utils::{test_inside_container, test_outside_container};
 
 fn create_unique_name(prefix: &str) -> String {
-    let random_part: u16 = rand::random();
+    let random_part = random_u16();
     format!("{}{}", prefix, random_part)
 }
 

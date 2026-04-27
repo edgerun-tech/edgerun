@@ -1,7 +1,7 @@
 //! Server-side state for pending device authorization grants.
 
 use crate::prelude::*;
-use edgerun_crypto::getrandom;
+use edgerun_crypto::fill_random;
 use edgerun_crypto::sha256;
 use edgerun_encoding::base64::base64url_nopad_encode;
 use std::collections::HashMap;
@@ -163,7 +163,7 @@ impl DeviceGrantStore {
 
 fn generate_random_token(len: usize) -> std::io::Result<String> {
     let mut bytes = vec![0u8; len];
-    edgerun_crypto::getrandom(&mut bytes)
+    fill_random(&mut bytes)
         .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
     Ok(base64url_nopad_encode(&bytes))
 }
@@ -171,7 +171,7 @@ fn generate_random_token(len: usize) -> std::io::Result<String> {
 fn generate_user_code() -> std::io::Result<String> {
     const CHARSET: &[u8] = b"BCDFGHJKLMNPQRSTVWXYZ";
     let mut bytes = [0u8; 8];
-    edgerun_crypto::getrandom(&mut bytes)
+    fill_random(&mut bytes)
         .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
 
     // Use rejection sampling to ensure valid chars
@@ -179,7 +179,7 @@ fn generate_user_code() -> std::io::Result<String> {
     let mut byte_idx = 0;
     for i in 0..8 {
         if byte_idx >= bytes.len() {
-            edgerun_crypto::getrandom(&mut bytes)
+            fill_random(&mut bytes)
                 .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
             byte_idx = 0;
         }

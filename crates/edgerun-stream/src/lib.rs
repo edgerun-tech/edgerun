@@ -828,7 +828,7 @@ mod tests {
         sign_event(&mut genesis, &signer).unwrap();
         // Replace with random bytes
         let mut rng_bytes = [0u8; 64];
-        edgerun_crypto::getrandom(&mut rng_bytes).expect("getrandom failed");
+        edgerun_crypto::fill_random(&mut rng_bytes).expect("random generation failed");
         genesis.signature.as_mut().unwrap().value = rng_bytes.to_vec();
         let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
         // Should fail either as InvalidSignatureFormat or SignatureVerification

@@ -4,19 +4,17 @@ use oci_spec::runtime::{
     LinuxBuilder, LinuxIdMapping, LinuxIdMappingBuilder, LinuxNamespace, LinuxNamespaceBuilder,
     LinuxNamespaceType, ProcessBuilder, Spec, SpecBuilder,
 };
-use rand::RngExt;
 use test_framework::{Test, TestGroup, TestResult};
 
+use crate::utils::support::random_range_u32;
 use crate::utils::test_inside_container;
 use crate::utils::test_utils::CreateOptions;
 
 // The `host_id` is randomly chosen between 1000 and 2000, while the `size`
 // is randomly chosen between 100 and 2500. The `container_id` is fixed at 0.
 fn generate_random_id_mappings() -> Vec<LinuxIdMapping> {
-    let mut rng = rand::rng();
-
-    let host_id: u32 = rng.random_range(1000..=2000);
-    let size: u32 = rng.random_range(100..=2500);
+    let host_id = random_range_u32(1000, 2000);
+    let size = random_range_u32(100, 2500);
 
     // container_id 0 must exist, otherwise container creation will fail
     let id_mapping = LinuxIdMappingBuilder::default()
