@@ -23,6 +23,7 @@ pub const ATA_CMD_WRITE_DMA: u8 = 0xCA;
 pub const ATA_CMD_IDENTIFY: u8 = 0xEC;
 pub const ATA_CMD_READ: u8 = 0x20;
 pub const ATA_CMD_WRITE: u8 = 0x30;
+pub const ATA_CMD_FLUSH_CACHE: u8 = 0xE7;
 
 pub const ATA_STATUS_ERR: u8 = 1 << 0;
 pub const ATA_STATUS_DRQ: u8 = 1 << 3;
@@ -43,11 +44,9 @@ impl AtaDevice {
     }
 
     pub fn init(&mut self) -> bool {
-        unsafe {
-            self.write_reg(ATA_DRIVE, if self.slave { 0xB0 } else { 0xA0 });
-            let status = self.read_reg(ATA_STATUS);
-            status & ATA_STATUS_DRDY != 0
-        }
+        self.write_reg(ATA_DRIVE, if self.slave { 0xB0 } else { 0xA0 });
+        let status = self.read_reg(ATA_STATUS);
+        status & ATA_STATUS_DRDY != 0
     }
 
     fn read_reg(&self, off: usize) -> u8 {
@@ -81,11 +80,11 @@ impl AtaDevice {
             }
             
             let data = self.base as *mut u16;
-            let mut i = 0;
             let len = (count as usize * SECTOR_SIZE) / 2;
-            while i < len {
-                data.offset(i as isize).write(buf.as_mut_ptr().add(i * 2) as u16);
-                i += 1;
+            for i in 0..len {
+                let val = data.offset(i as isize).read();
+                buf.as_mut_ptr().add(i * 2).write(val as u8);
+                buf.as_mut_ptr().add(i * 2 + 1).write((val >> 8) as u8);
             }
             true
         }
@@ -114,27 +113,43 @@ impl AtaDevice {
             }
             
             let data = self.base as *mut u16;
-            let mut i = 0;
             let len = (count as usize * SECTOR_SIZE) / 2;
-            while i < len {
-                data.offset(i as isize).write(buf.as_ptr().add(i * 2) as u16);
-                i += 1;
+            for i in 0..len {
+                let lo = buf.as_ptr().add(i * 2).read();
+                let hi = buf.as_ptr().add(i * 2 + 1).read();
+                data.offset(i as isize).write((hi as u16) << 8 | lo as u16);
             }
             true
         }
     }
 
     pub fn identify(&mut self) -> bool {
+        self.write_reg(ATA_DRIVE, if self.slave { 0xB0 } else { 0xA0 });
+        self.write_reg(ATA_CMD, ATA_CMD_IDENTIFY);
+        let mut timeout = 0;
+        while timeout < 100000 {
+            let status = self.read_reg(ATA_STATUS);
+            if status & ATA_STATUS_ERR != 0 {
+                return false;
+            }
+            if status & ATA_STATUS_DRQ != 0 {
+                return true;
+            }
+            timeout += 1;
+        }
+        false
+    }
+
+    pub fn flush(&mut self) -> bool {
         unsafe {
-            self.write_reg(ATA_DRIVE, if self.slave { 0xB0 } else { 0xA0 });
-            self.write_reg(ATA_CMD, ATA_CMD_IDENTIFY);
+            self.write_reg(ATA_CMD, ATA_CMD_FLUSH_CACHE);
             let mut timeout = 0;
             while timeout < 100000 {
                 let status = self.read_reg(ATA_STATUS);
                 if status & ATA_STATUS_ERR != 0 {
                     return false;
                 }
-                if status & ATA_STATUS_DRQ != 0 {
+                if status & ATA_STATUS_BSY == 0 {
                     return true;
                 }
                 timeout += 1;
