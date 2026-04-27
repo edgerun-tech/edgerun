@@ -2,6 +2,7 @@
 
 mod bluetooth;
 mod camera;
+mod common;
 mod input;
 mod microphone;
 mod speaker;

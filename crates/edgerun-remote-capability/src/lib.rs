@@ -10,15 +10,15 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
-extern crate std;
 #[cfg(target_os = "none")]
 extern crate self as std;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 pub mod prelude {
     pub mod v1 {
-        pub use alloc::boxed::Box;
         pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
         pub use alloc::format;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec;
@@ -83,9 +83,9 @@ pub use protocol::{
     CapabilitySessionMode, CapabilitySessionOpen, RemoteCapabilityProvider,
     RemoteCapabilityTransport, RemoteInvocationResult,
 };
+pub use transport::MemoryRemoteTransport;
 #[cfg(not(target_os = "none"))]
 pub use transport::{accept_tcp, accept_unix, FramedRemoteTransport};
-pub use transport::MemoryRemoteTransport;
 
 #[cfg(test)]
 mod tests;

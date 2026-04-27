@@ -13,6 +13,10 @@ use edgerun_wifi::{
     WifiScanResult, WifiScanner,
 };
 
+use crate::adapters::common::{
+    decode_optional_string_field, decode_string_field, encode_optional_string_field,
+    encode_string_field,
+};
 use crate::protocol::{
     accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
 };
@@ -65,31 +69,6 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
             ))
         }
     })
-}
-
-// --- String helpers (shared with bluetooth) ---
-
-fn encode_string_field(value: &str, out: &mut Vec<u8>) {
-    edgerun_encoding::string_field::encode_string_field_u32(value, out)
-        .expect("string field encode failed");
-}
-
-fn decode_string_field(bytes: &[u8], cursor: &mut usize) -> Result<String, CapabilityError> {
-    edgerun_encoding::string_field::decode_string_field_u32(bytes, cursor)
-        .map_err(|_| CapabilityError::InvalidRequest("remote string field decode failed"))
-}
-
-fn encode_optional_string_field(value: &Option<String>, out: &mut Vec<u8>) {
-    edgerun_encoding::string_field::encode_optional_string_field_u32(value.as_deref(), out)
-        .expect("optional string field encode failed");
-}
-
-fn decode_optional_string_field(
-    bytes: &[u8],
-    cursor: &mut usize,
-) -> Result<Option<String>, CapabilityError> {
-    edgerun_encoding::string_field::decode_optional_string_field_u32(bytes, cursor)
-        .map_err(|_| CapabilityError::InvalidRequest("remote optional string field decode failed"))
 }
 
 // --- Encode/decode ---

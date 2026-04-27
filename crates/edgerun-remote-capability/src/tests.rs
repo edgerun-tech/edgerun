@@ -12,6 +12,7 @@ use std::collections::VecDeque;
 use std::os::unix::net::UnixStream;
 use std::rc::Rc;
 
+use crate::prelude::v1::*;
 use edgerun_bluetooth::{
     BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
     BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,
