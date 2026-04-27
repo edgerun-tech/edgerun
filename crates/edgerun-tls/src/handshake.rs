@@ -7,11 +7,11 @@
 //!
 //! All messages after ServerHello are encrypted.
 
+use alloc::{format, string::{String, ToString}, vec, vec::Vec};
 use crate::cipher::NamedGroup;
 use crate::Result;
 use crate::TlsError;
 use edgerun_crypto::CipherSuite;
-use std::io::Read;
 
 /// ClientHello message builder
 pub struct ClientHelloBuilder {

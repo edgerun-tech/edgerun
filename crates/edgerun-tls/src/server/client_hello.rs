@@ -4,6 +4,8 @@
 //! all relevant extensions: SNI, key_share, supported_versions,
 //! supported_groups, and signature_algorithms.
 
+use alloc::{format, string::{String, ToString}, vec::Vec};
+use core::str;
 use crate::cipher::NamedGroup;
 use crate::{Result, TlsError};
 use edgerun_crypto::CipherSuite;
@@ -185,7 +187,7 @@ impl ClientHello {
                                 if name_type == 0 {
                                     let name_len = u16::from_be_bytes([ext_data[3], ext_data[4]]) as usize;
                                     if 5 + name_len <= 2 + name_list_len {
-                                        if let Ok(name) = std::str::from_utf8(&ext_data[5..5 + name_len]) {
+                                        if let Ok(name) = str::from_utf8(&ext_data[5..5 + name_len]) {
                                             server_name = Some(name.to_string());
                                         }
                                     }

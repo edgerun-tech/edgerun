@@ -2,7 +2,7 @@
 //! Supports P-256 (SECP256R1) and X25519.
 //! All crypto flows through edgerun-crypto.
 
-use edgerun_crypto::getrandom;
+use alloc::{format, string::String, vec::Vec};
 use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::p256::EncodedPoint;
 use edgerun_crypto::x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
@@ -74,7 +74,8 @@ impl EcdhKeyPair {
             }
             KeyExchangeGroup::X25519 => {
                 let mut secret_bytes = [0u8; 32];
-                getrandom::fill(&mut secret_bytes).expect("getrandom failed");
+                edgerun_crypto::getrandom(&mut secret_bytes)
+                    .map_err(|_| String::from("getrandom failed"))?;
                 let secret = X25519Secret::from(secret_bytes);
                 let public: X25519PublicKey = (&secret).into();
                 Ok(EcdhKeyPair::X25519 {
