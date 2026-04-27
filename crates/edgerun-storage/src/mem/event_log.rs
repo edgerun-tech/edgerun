@@ -92,6 +92,26 @@ impl EventLog for MemEventLog {
                 location.file_offset, found.offset
             )));
         }
+        if location.stream_id != found.event.stream_id {
+            return Err(StorageError::Decode(format!(
+                "event location stream mismatch at seq {seq}: location has {}, event has {}",
+                edgerun_core::util::bytes_to_hex(&location.stream_id),
+                edgerun_core::util::bytes_to_hex(&found.event.stream_id),
+            )));
+        }
+        if location.seq != found.event.seq {
+            return Err(StorageError::Decode(format!(
+                "event location seq mismatch at seq {seq}: location has {}, event has {}",
+                location.seq, found.event.seq
+            )));
+        }
+        if location.event_hash != found.hash {
+            return Err(StorageError::Decode(format!(
+                "event hash mismatch at seq {seq}: location has {}, event has {}",
+                edgerun_core::util::bytes_to_hex(&location.event_hash),
+                edgerun_core::util::bytes_to_hex(&found.hash),
+            )));
+        }
 
         Ok(Some(found.event.clone()))
     }
@@ -198,6 +218,22 @@ mod tests {
             seq: 0,
             event_hash: receipt.event_hash,
             file_offset: receipt.file_offset + 1,
+            envelope_version: e1.envelope_version,
+        };
+        let result = log.read_event(&e1.stream_id, 0, &bad);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn read_mismatched_hash_is_error() {
+        let mut log = MemEventLog::new();
+        let e1 = event(b"stream", 0);
+        let receipt = log.append_event(&e1).unwrap();
+        let bad = EventLocation {
+            stream_id: e1.stream_id.clone(),
+            seq: 0,
+            event_hash: vec![0xff; 32],
+            file_offset: receipt.file_offset,
             envelope_version: e1.envelope_version,
         };
         let result = log.read_event(&e1.stream_id, 0, &bad);
