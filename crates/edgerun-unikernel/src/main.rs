@@ -135,6 +135,50 @@ unsafe fn probe_tpm2() -> Option<[u8; 32]> {
 }
 
 #[cfg(target_os = "none")]
+fn fill_tpm2_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> {
+    if out.is_empty() {
+        return Ok(());
+    }
+
+    if let Ok(Some(transport)) = unsafe { edgerun_tpm::CrbTpmTransport::discover_acpi() } {
+        if fill_tpm2_random_transport(transport.with_timeout_polls(10), out) {
+            return Ok(());
+        }
+    }
+
+    let transport = unsafe { edgerun_tpm::TisTpmTransport::new_default_x86() };
+    if fill_tpm2_random_transport(transport.with_timeout_polls(100_000), out) {
+        Ok(())
+    } else {
+        Err(edgerun_crypto::error::CryptoError::TpmUnavailable)
+    }
+}
+
+#[cfg(target_os = "none")]
+fn fill_tpm2_random_transport<T>(transport: T, out: &mut [u8]) -> bool
+where
+    T: edgerun_tpm::FixedTpmTransport + edgerun_tpm::TpmTransport,
+{
+    let mut device = edgerun_tpm::TpmDevice::new(transport);
+    let startup_code = device.startup_response_code(edgerun_tpm::TPM_SU_CLEAR);
+    if startup_code != edgerun_tpm::TPM_RC_SUCCESS && startup_code != 0x100 && startup_code != 0x120
+    {
+        return false;
+    }
+
+    let mut offset = 0usize;
+    while offset < out.len() {
+        let end = core::cmp::min(offset + 2048, out.len());
+        let n = device.get_random_into(&mut out[offset..end]);
+        if n == 0 || offset + n > end {
+            return false;
+        }
+        offset += n;
+    }
+    true
+}
+
+#[cfg(target_os = "none")]
 fn probe_tpm2_transport<T>(transport: T) -> Option<[u8; 32]>
 where
     T: edgerun_tpm::FixedTpmTransport + edgerun_tpm::TpmTransport,
@@ -240,6 +284,8 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
+
+    edgerun_crypto::rng::register_random_source(fill_tpm2_random_source);
 
     let mut rng = Rng::new_from_entropy();
     if let Some(tpm_entropy) = unsafe { probe_tpm2() } {
