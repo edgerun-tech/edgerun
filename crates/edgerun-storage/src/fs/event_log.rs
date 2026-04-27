@@ -49,7 +49,36 @@ impl EventLog for FsEventLog {
         seq: u64,
         location: &EventLocation,
     ) -> Result<Option<EventEnvelope>, StorageError> {
-        read_event_at(&self.events_dir, stream_id, seq, location.file_offset)
+        let Some(event) = read_event_at(&self.events_dir, stream_id, seq, location.file_offset)?
+        else {
+            return Ok(None);
+        };
+
+        if location.stream_id != event.stream_id {
+            return Err(StorageError::Decode(format!(
+                "event location stream mismatch at offset {}: location has {}, event has {}",
+                location.file_offset,
+                edgerun_core::util::bytes_to_hex(&location.stream_id),
+                edgerun_core::util::bytes_to_hex(&event.stream_id),
+            )));
+        }
+        if location.seq != event.seq {
+            return Err(StorageError::Decode(format!(
+                "event location seq mismatch at offset {}: location has {}, event has {}",
+                location.file_offset, location.seq, event.seq
+            )));
+        }
+        let event_hash = canonical_event_hash(&event).value;
+        if location.event_hash != event_hash {
+            return Err(StorageError::Decode(format!(
+                "event hash mismatch at offset {}: location has {}, event has {}",
+                location.file_offset,
+                edgerun_core::util::bytes_to_hex(&location.event_hash),
+                edgerun_core::util::bytes_to_hex(&event_hash),
+            )));
+        }
+
+        Ok(Some(event))
     }
 
     fn scan(&self) -> Result<Vec<ScannedEvent>, StorageError> {
@@ -104,6 +133,13 @@ pub fn read_event_at(
 
     let event = proto_stream::EventEnvelope::decode(&event_bytes[..])
         .map_err(|e| StorageError::Decode(format!("event protobuf decode failed: {e}")))?;
+    if event.stream_id != stream_id {
+        return Err(StorageError::Decode(format!(
+            "event stream mismatch at offset {file_offset}: expected {}, got {}",
+            stream_id_hex,
+            edgerun_core::util::bytes_to_hex(&event.stream_id),
+        )));
+    }
     if event.seq != expected_seq {
         return Err(StorageError::Decode(format!(
             "event seq mismatch at offset {file_offset}: expected {expected_seq}, got {}",
@@ -274,6 +310,26 @@ mod tests {
         std::fs::write(events_dir.join("aa.log"), frame).unwrap();
 
         let result = scan_event_logs(&events_dir);
+        assert!(matches!(result, Err(StorageError::Decode(_))));
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn read_event_rejects_location_hash_mismatch() {
+        let events_dir = tmp_events_dir();
+        let mut log = FsEventLog::new(events_dir.clone());
+        let event = event(b"stream", 0);
+        let receipt = log.append_event(&event).unwrap();
+
+        let bad_location = EventLocation {
+            stream_id: event.stream_id.clone(),
+            seq: event.seq,
+            event_hash: vec![0xff; 32],
+            file_offset: receipt.file_offset,
+            envelope_version: event.envelope_version,
+        };
+        let result = log.read_event(&event.stream_id, event.seq, &bad_location);
         assert!(matches!(result, Err(StorageError::Decode(_))));
 
         let _ = std::fs::remove_dir_all(events_dir);
