@@ -86,6 +86,9 @@ pub use ip::{IpStack, IpAddr, EthHeader, IpHeader, UdpHeader, TcpHeader, ArpHead
 pub mod dhcp;
 pub use dhcp::{DhcpClient, DhcpState};
 
+pub mod dns;
+pub use dns::{DnsQuery, DnsResponse, DnsRecord, DnsType, DnsResultCode, DNS_MAX_NAME, DnsClient};
+
 pub mod tftp;
 pub use tftp::{TftpClient, TftpState, TftpConfig};
 
