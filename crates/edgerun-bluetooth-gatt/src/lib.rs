@@ -254,9 +254,9 @@ impl GattUuid {
     pub fn as_16(&self) -> Option<u16> {
         let cleaned = self.0.replace('-', "").to_lowercase();
         if cleaned.len() == 4 {
-            u16::from_str_radix(&cleaned, 16).ok()
-        } else if cleaned.len() == 36 && cleaned.starts_with("0000") {
-            u16::from_str_radix(&cleaned[4..8], 16).ok()
+            edgerun_encoding::hex::parse_hex_int(&cleaned)
+        } else if cleaned.len() == 32 && cleaned.starts_with("0000") {
+            edgerun_encoding::hex::parse_hex_int(&cleaned[4..8])
         } else {
             None
         }
@@ -264,8 +264,7 @@ impl GattUuid {
 
     pub fn from_hex(hex: &str) -> Option<Self> {
         let cleaned = hex.replace('-', "").to_lowercase();
-        if (cleaned.len() == 4 || cleaned.len() == 32)
-            && cleaned.chars().all(|c| c.is_ascii_hexdigit())
+        if matches!(cleaned.len(), 4 | 32) && edgerun_encoding::hex::hex_to_bytes(&cleaned).is_ok()
         {
             Some(Self(cleaned))
         } else {

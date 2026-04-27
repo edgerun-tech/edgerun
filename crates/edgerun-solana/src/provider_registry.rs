@@ -301,39 +301,6 @@ impl HttpRuntime {
 }
 
 fn base64_decode(input: &str) -> Result<Vec<u8>, SolanaError> {
-    fn decode_char(b: u8) -> Result<u8, SolanaError> {
-        match b {
-            b'A'..=b'Z' => Ok(b - b'A'),
-            b'a'..=b'z' => Ok(b - b'a' + 26),
-            b'0'..=b'9' => Ok(b - b'0' + 52),
-            b'+' => Ok(62),
-            b'/' => Ok(63),
-            _ => Err(SolanaError::Rpc(format!(
-                "invalid base64 char: {}",
-                b as char
-            ))),
-        }
-    }
-    let input = input.trim_end_matches('=');
-    let mut result = Vec::with_capacity(input.len() * 3 / 4);
-    for chunk in input.as_bytes().chunks(4) {
-        if chunk.len() < 4 {
-            break;
-        }
-        let c0 = decode_char(chunk[0])?;
-        let c1 = decode_char(chunk[1])?;
-        result.push(c0 << 2 | c1 >> 4);
-        let c2 = if chunk.len() >= 3 && chunk[2] != b'=' {
-            let c = decode_char(chunk[2])?;
-            result.push(c1 << 4 | c >> 2);
-            Some(c)
-        } else {
-            None
-        };
-        if chunk.len() >= 4 && chunk[3] != b'=' {
-            let c3 = decode_char(chunk[3])?;
-            result.push((c2.unwrap_or(0)) << 6 | c3);
-        }
-    }
-    Ok(result)
+    edgerun_encoding::base64::standard_decode(input)
+        .map_err(|err| SolanaError::Rpc(err.to_string()))
 }

@@ -1091,7 +1091,8 @@ impl NodeStore {
         completeness: i32,
     ) -> Result<edgerun_proto::edgerun::v0::access::SnapshotDescriptor, StorageError> {
         use edgerun_proto::edgerun::v0::access::SnapshotDescriptor;
-        use edgerun_proto::edgerun::v0::common::{Digest, HeadRef, IdentityRef};
+        use edgerun_proto::edgerun::v0::common::{Digest, HeadRef, IdentityRef, StreamRef};
+        use edgerun_proto::edgerun::v0::trust::{ScopeDescriptor, ScopeKind};
 
         // Collect current stream heads
         let heads = self.list_stream_heads()?;
@@ -1105,6 +1106,12 @@ impl NodeStore {
                     algorithm: 1,
                     value: hash.clone(),
                 }),
+            })
+            .collect();
+        let target_streams = base_heads
+            .iter()
+            .map(|head| StreamRef {
+                stream_id: head.stream_id.clone(),
             })
             .collect();
 
@@ -1151,7 +1158,17 @@ impl NodeStore {
             }),
             base_heads,
             base_checkpoints: vec![],
-            scope: None,
+            scope: Some(ScopeDescriptor {
+                scope_version: 1,
+                scope_kind: ScopeKind::Stream as i32,
+                target_nodes: vec![],
+                target_streams,
+                target_object_kinds: vec![],
+                target_view_types: vec![view_type.to_string()],
+                target_domains: vec![],
+                time_bounds: None,
+                scope_metadata: None,
+            }),
             completeness,
             payload_object: Some(payload_object_ref.clone()),
             supersedes: None,

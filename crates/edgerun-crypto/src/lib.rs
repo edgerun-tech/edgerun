@@ -694,62 +694,11 @@ fn pem_block(pem: &str, label: &str) -> Option<alloc::vec::Vec<u8>> {
 }
 
 fn base64_encode(data: &[u8]) -> alloc::string::String {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = alloc::string::String::new();
-    let mut i = 0;
-    while i < data.len() {
-        let b0 = data[i];
-        let b1 = data.get(i + 1).copied().unwrap_or(0);
-        let b2 = data.get(i + 2).copied().unwrap_or(0);
-        out.push(TABLE[(b0 >> 2) as usize] as char);
-        out.push(TABLE[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
-        if i + 1 < data.len() {
-            out.push(TABLE[(((b1 & 0x0f) << 2) | (b2 >> 6)) as usize] as char);
-        } else {
-            out.push('=');
-        }
-        if i + 2 < data.len() {
-            out.push(TABLE[(b2 & 0x3f) as usize] as char);
-        } else {
-            out.push('=');
-        }
-        i += 3;
-    }
-    out
+    edgerun_encoding::base64::standard_encode(data)
 }
 
 fn base64_decode(input: &str) -> Option<alloc::vec::Vec<u8>> {
-    let mut out = alloc::vec::Vec::with_capacity(input.len() * 3 / 4);
-    let mut quartet = [0u8; 4];
-    let mut qlen = 0;
-    for byte in input.bytes() {
-        let value = match byte {
-            b'A'..=b'Z' => byte - b'A',
-            b'a'..=b'z' => byte - b'a' + 26,
-            b'0'..=b'9' => byte - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' => 64,
-            _ => return None,
-        };
-        quartet[qlen] = value;
-        qlen += 1;
-        if qlen == 4 {
-            out.push((quartet[0] << 2) | (quartet[1] >> 4));
-            if quartet[2] != 64 {
-                out.push((quartet[1] << 4) | (quartet[2] >> 2));
-            }
-            if quartet[3] != 64 {
-                out.push((quartet[2] << 6) | quartet[3]);
-            }
-            qlen = 0;
-        }
-    }
-    if qlen == 0 {
-        Some(out)
-    } else {
-        None
-    }
+    edgerun_encoding::base64::standard_decode(input).ok()
 }
 
 #[cfg(feature = "p256")]

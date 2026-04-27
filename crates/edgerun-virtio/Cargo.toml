@@ -6,4 +6,3 @@ license = "MIT"
 
 [dependencies]
 edgerun-platform = { path = "../edgerun-platform" }
-edgerun-rt = { path = "../edgerun-rt" }

@@ -638,9 +638,9 @@ fn wait_for_command_result(
 }
 
 fn format_bdaddr_le(bytes: &[u8]) -> String {
-    let mut reversed = bytes.to_vec();
-    reversed.reverse();
-    edgerun_encoding::hex::bytes_to_hex_sep(&reversed, ':')
+    edgerun_encoding::hex::format_bdaddr_le(bytes)
+        .map(|addr| addr.to_ascii_uppercase())
+        .unwrap_or_default()
 }
 
 /// Parse a BDADDR string (e.g. "AA:BB:CC:DD:EE:FF") into little-endian bytes

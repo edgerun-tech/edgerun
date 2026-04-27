@@ -3,6 +3,7 @@
 use crate::block::BlockStorage;
 use crate::error::StorageError;
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::{read_u32_le as read_u32, read_u64_le as read_u64};
 
 const MBR_SIGNATURE_OFFSET: usize = 510;
 const MBR_PARTITION_OFFSET: usize = 446;
@@ -311,28 +312,6 @@ fn decode_gpt_name(input: &[u8]) -> Option<String> {
         }
     }
     (!out.is_empty()).then_some(out)
-}
-
-fn read_u32(input: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        input[offset],
-        input[offset + 1],
-        input[offset + 2],
-        input[offset + 3],
-    ])
-}
-
-fn read_u64(input: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes([
-        input[offset],
-        input[offset + 1],
-        input[offset + 2],
-        input[offset + 3],
-        input[offset + 4],
-        input[offset + 5],
-        input[offset + 6],
-        input[offset + 7],
-    ])
 }
 
 #[cfg(test)]

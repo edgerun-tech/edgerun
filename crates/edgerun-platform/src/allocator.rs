@@ -3,11 +3,15 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-const HEAP_START: usize = 0x100000;
-const HEAP_END: usize = 0x200000;
+const HEAP_MIN_START: usize = 0x200000;
+const HEAP_END: usize = 0x1000000;
 
-static HEAP_FREE: AtomicUsize = AtomicUsize::new(HEAP_START);
+static HEAP_FREE: AtomicUsize = AtomicUsize::new(0);
 static HEAP_END_ADDR: AtomicUsize = AtomicUsize::new(HEAP_END);
+
+unsafe extern "C" {
+    static _end: u8;
+}
 
 #[cfg(target_os = "none")]
 #[global_allocator]
@@ -25,6 +29,13 @@ unsafe impl GlobalAlloc for Allocator {
         }
 
         let mut current = HEAP_FREE.load(Ordering::Acquire);
+        if current == 0 {
+            let start = initial_heap_start();
+            match HEAP_FREE.compare_exchange(0, start, Ordering::Release, Ordering::Acquire) {
+                Ok(_) => current = start,
+                Err(value) => current = value,
+            }
+        }
         loop {
             let aligned = (current + align - 1) & !(align - 1);
             let end = aligned + size;
@@ -43,4 +54,13 @@ unsafe impl GlobalAlloc for Allocator {
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
+}
+
+fn initial_heap_start() -> usize {
+    let linker_end = core::ptr::addr_of!(_end) as usize;
+    align_up(core::cmp::max(linker_end, HEAP_MIN_START), 4096)
+}
+
+fn align_up(value: usize, align: usize) -> usize {
+    (value + align - 1) & !(align - 1)
 }

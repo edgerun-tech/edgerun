@@ -11,8 +11,10 @@ extern crate std;
 pub mod base32hex;
 pub mod base64;
 pub mod buf;
+pub mod byteorder;
 pub mod chunked;
 pub mod cstring;
+pub mod crc32;
 pub mod frame;
 pub mod hex;
 #[cfg(feature = "hpack")]
@@ -39,3 +41,4 @@ pub use base64::{
     base64url_decode, base64url_encode, base64url_nopad_encode, standard_decode, standard_encode,
     standard_encode_wrapped,
 };
+pub use crc32::{crc32, Crc32};

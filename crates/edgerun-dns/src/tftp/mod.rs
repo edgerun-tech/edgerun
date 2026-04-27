@@ -1,19 +1,13 @@
-//! TFTP server (RFC 1350) with RFC 2347/2348 option extensions.
+//! TFTP compatibility re-exports.
 //!
-//! Supports block size negotiation, read requests, encrypted blob store.
-//! Used by PXE boot clients after DHCP provides server/bootfile info.
+//! TFTP is implemented by the dedicated `edgerun-tftp` crate. This module keeps
+//! the historical `edgerun_dns::tftp` path available without carrying a second
+//! protocol implementation.
 
-use alloc::{
-    boxed::Box,
-    format,
-    string::{String, ToString},
-    vec,
-    vec::Vec,
+pub use edgerun_tftp::{blob_provider, message, server};
+pub use edgerun_tftp::blob_provider::{BlobEntry, BlobTftpProvider, DecryptFn, MemFileProvider};
+pub use edgerun_tftp::message::{
+    TftpError, TftpMessage, TftpOpcode, TftpOptions, DEFAULT_BLKSIZE, DEFAULT_TIMEOUT,
+    MAX_BLKSIZE, TFTP_PORT,
 };
-pub mod blob_provider;
-pub mod message;
-pub mod server;
-
-pub use blob_provider::BlobTftpProvider;
-pub use message::{TftpError, TftpMessage, TftpOpcode, TftpOptions};
-pub use server::TftpServer;
+pub use edgerun_tftp::server::{FileProvider, TftpServer, TftpServerConfig};

@@ -151,7 +151,7 @@ Note: LLVM auto-vectorizes solid fills so well that AVX2 adds no benefit. Gradie
 ### Storage Issues (verified against actual source)
 | Issue | Evidence |
 |-------|----------|
-| `integrity_check_and_rebuild` stub | `store.rs:1014` — `// TODO: rebuild indexes from event log` returns `Ok(0)` |
+| `integrity_check_and_rebuild` | Fixed in `edgerun-storage`: runs `rebuild_indexes()` when `integrity_check()` fails |
 | Blob recipients spec violation | Spec §6.2 requires ≥1 recipient; code allows `&[]` |
 | No CAS for head updates | Spec §19.9 requires `compare_and_set_head`; implementation does separate `put_event` + `set_head` |
 | Stale doc comments | References to "SQLite" remain after migration to file-based binary indexes |

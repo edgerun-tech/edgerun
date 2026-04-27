@@ -165,13 +165,7 @@ pub fn format_digest(algorithm: &str, bytes: &[u8]) -> String {
 }
 
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push(HEX[(byte >> 4) as usize] as char);
-        out.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    out
+    edgerun_encoding::hex::bytes_to_hex(bytes)
 }
 
 #[cfg(all(test, not(target_os = "none")))]

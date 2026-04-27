@@ -1304,9 +1304,8 @@ fn unfold_encoded_word(s: &str) -> String {
                             decoded.push(b' ');
                             i += 1;
                         } else if bytes[i] == b'=' && i + 2 < bytes.len() {
-                            if let Ok(val) = u8::from_str_radix(
+                            if let Some(val) = edgerun_encoding::hex::parse_hex_int::<u8>(
                                 std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("00"),
-                                16,
                             ) {
                                 decoded.push(val);
                             }

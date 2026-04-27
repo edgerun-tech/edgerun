@@ -792,12 +792,7 @@ fn fixed_c_string(bytes: &[u8]) -> String {
 }
 
 fn hex_string(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        use core::fmt::Write as _;
-        let _ = write!(&mut out, "{b:02x}");
-    }
-    out
+    edgerun_encoding::hex::bytes_to_hex(bytes)
 }
 
 fn decode_hex_32(s: &str) -> Option<[u8; 32]> {

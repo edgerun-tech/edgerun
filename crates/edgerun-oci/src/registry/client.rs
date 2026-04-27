@@ -979,22 +979,9 @@ fn gzip_bytes(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(&[0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255]);
     out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(data, 6));
-    out.extend_from_slice(&crc32(data).to_le_bytes());
+    out.extend_from_slice(&edgerun_encoding::crc32::crc32(data).to_le_bytes());
     out.extend_from_slice(&(data.len() as u32).to_le_bytes());
     out
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffffu32;
-    for byte in data {
-        crc ^= *byte as u32;
-        for _ in 0..8 {
-            let mask = (crc & 1).wrapping_neg();
-            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
-        }
-    }
-    !crc
 }
 
 #[cfg(all(test, feature = "std", not(target_os = "none")))]

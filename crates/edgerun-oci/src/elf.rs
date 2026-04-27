@@ -5,6 +5,9 @@ use crate::rootfs_access::{
     build_launch_plan, normalize_rootfs_path, OciLaunchPlan, OciRootfs, OciRootfsError,
 };
 use core::fmt;
+use edgerun_encoding::byteorder::{
+    read_u16_le as read_u16, read_u32_le as read_u32, read_u64_le as read_u64,
+};
 
 const ELF_HEADER_LEN: usize = 64;
 const ELF64_PHDR_LEN: usize = 56;
@@ -1608,32 +1611,6 @@ fn elf_machine(value: u16) -> OciElfMachine {
         243 => OciElfMachine::RiscV,
         value => OciElfMachine::Other(value),
     }
-}
-
-fn read_u16(input: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes([input[offset], input[offset + 1]])
-}
-
-fn read_u32(input: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        input[offset],
-        input[offset + 1],
-        input[offset + 2],
-        input[offset + 3],
-    ])
-}
-
-fn read_u64(input: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes([
-        input[offset],
-        input[offset + 1],
-        input[offset + 2],
-        input[offset + 3],
-        input[offset + 4],
-        input[offset + 5],
-        input[offset + 6],
-        input[offset + 7],
-    ])
 }
 
 #[cfg(all(test, not(target_os = "none")))]

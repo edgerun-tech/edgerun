@@ -360,16 +360,16 @@ fn parse_uevent_list(path: &Path) -> Vec<(String, String)> {
 
 fn parse_product_id(value: &str) -> (Option<u16>, Option<u16>, Option<u16>, Option<u16>) {
     let mut parts = value.split('/');
-    let bus = parts.next().and_then(|v| u16::from_str_radix(v, 16).ok());
-    let vendor = parts.next().and_then(|v| u16::from_str_radix(v, 16).ok());
-    let product = parts.next().and_then(|v| u16::from_str_radix(v, 16).ok());
-    let version = parts.next().and_then(|v| u16::from_str_radix(v, 16).ok());
+    let bus = parts.next().and_then(edgerun_encoding::hex::parse_hex_int);
+    let vendor = parts.next().and_then(edgerun_encoding::hex::parse_hex_int);
+    let product = parts.next().and_then(edgerun_encoding::hex::parse_hex_int);
+    let version = parts.next().and_then(edgerun_encoding::hex::parse_hex_int);
     (bus, vendor, product, version)
 }
 
 fn parse_hex_bitmap(text: &str) -> Vec<u64> {
     text.split_whitespace()
-        .filter_map(|chunk| u64::from_str_radix(chunk, 16).ok())
+        .filter_map(edgerun_encoding::hex::parse_hex_int)
         .collect()
 }
 

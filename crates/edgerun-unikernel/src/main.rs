@@ -621,9 +621,9 @@ mod disk_boot {
         }
     }
 
-    impl<T: edgerun_rt::storage::BlockDevice + Send> BlockStorage for RtBlockDeviceStorage<T> {
+    impl BlockStorage for RtBlockDeviceStorage<edgerun_virtio::VirtBlk> {
         fn sector_size(&self) -> usize {
-            edgerun_rt::storage::SECTOR_SIZE
+            edgerun_virtio::SECTOR_SIZE
         }
 
         fn sectors(&self) -> u64 {
@@ -670,6 +670,74 @@ mod disk_boot {
                     "bare block write failed",
                 )))
             }
+        }
+    }
+
+    pub struct RtPartitionStorage<'a, S: BlockStorage> {
+        parent: &'a mut S,
+        start_lba: u64,
+        sectors: u64,
+    }
+
+    impl<'a, S: BlockStorage> RtPartitionStorage<'a, S> {
+        pub fn new(parent: &'a mut S, start_lba: u64, sectors: u64) -> Self {
+            Self {
+                parent,
+                start_lba,
+                sectors,
+            }
+        }
+    }
+
+    impl<S: BlockStorage> BlockStorage for RtPartitionStorage<'_, S> {
+        fn sector_size(&self) -> usize {
+            BlockStorage::sector_size(&*self.parent)
+        }
+
+        fn sectors(&self) -> u64 {
+            self.sectors
+        }
+
+        fn read_sector(
+            &mut self,
+            sector: u64,
+            buf: &mut [u8],
+        ) -> core::result::Result<(), StorageError> {
+            if sector >= self.sectors {
+                return Err(StorageError::Io(edgerun_storage::io::Error::new(
+                    edgerun_storage::io::ErrorKind::UnexpectedEof,
+                    "partition sector index out of range",
+                )));
+            }
+            let Some(parent_sector) = self.start_lba.checked_add(sector) else {
+                return Err(StorageError::Io(edgerun_storage::io::Error::other(
+                    "partition sector overflow",
+                )));
+            };
+            BlockStorage::read_sector(&mut *self.parent, parent_sector, buf)
+        }
+
+        fn write_sector(
+            &mut self,
+            sector: u64,
+            buf: &[u8],
+        ) -> core::result::Result<(), StorageError> {
+            if sector >= self.sectors {
+                return Err(StorageError::Io(edgerun_storage::io::Error::new(
+                    edgerun_storage::io::ErrorKind::UnexpectedEof,
+                    "partition sector index out of range",
+                )));
+            }
+            let Some(parent_sector) = self.start_lba.checked_add(sector) else {
+                return Err(StorageError::Io(edgerun_storage::io::Error::other(
+                    "partition sector overflow",
+                )));
+            };
+            BlockStorage::write_sector(&mut *self.parent, parent_sector, buf)
+        }
+
+        fn sync(&mut self) -> core::result::Result<(), StorageError> {
+            BlockStorage::sync(&mut *self.parent)
         }
     }
 
@@ -1240,6 +1308,24 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             } else {
                 rt::log::log(1, "VirtIO block second sector read failed");
             }
+            if first_sector[510] == 0x55 && first_sector[511] == 0xaa {
+                let mut partition_sector = [0u8; 512];
+                if block.read_sector(2048, &mut partition_sector) {
+                    rt::log::log(1, "VirtIO block partition sector read ok");
+                } else {
+                    rt::log::log(1, "VirtIO block partition sector read failed");
+                }
+                if block.read_sector(2112, &mut partition_sector) {
+                    rt::log::log(1, "VirtIO block probe sector read ok");
+                } else {
+                    rt::log::log(1, "VirtIO block probe sector read failed");
+                }
+                if block.read_sector(2308, &mut partition_sector) {
+                    rt::log::log(1, "VirtIO block FAT root sector read ok");
+                } else {
+                    rt::log::log(1, "VirtIO block FAT root sector read failed");
+                }
+            }
             rt::log::log(1, "VirtIO block scanning partitions");
             let mut storage = disk_boot::RtBlockDeviceStorage::new(block);
             match edgerun_storage::BlockStorage::read_sector(&mut storage, 0, &mut first_sector) {
@@ -1249,9 +1335,83 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             if first_sector[510] != 0x55 || first_sector[511] != 0xaa {
                 rt::log::log(1, "VirtIO block has no partitions");
             } else {
-                match disk_boot::scan_partition_filesystems(&mut storage) {
-                    Ok((_, probes)) if !probes.is_empty() => {
-                        rt::log::log(1, "VirtIO block partitions detected");
+                match edgerun_storage::detect_partitions(&mut storage) {
+                    Ok(table) if !table.partitions.is_empty() => {
+                        rt::log::log(1, "VirtIO block partition table detected");
+                        for partition in &table.partitions {
+                            let mut partition_boot_sector = [0u8; 512];
+                            match edgerun_storage::BlockStorage::read_sector(
+                                &mut storage,
+                                partition.start_lba,
+                                &mut partition_boot_sector,
+                            ) {
+                                Ok(()) if partition_boot_sector.iter().all(|byte| *byte == 0) => {
+                                    rt::log::log(1, "VirtIO partition is blank")
+                                }
+                                Ok(()) => {
+                                    rt::log::log(1, "VirtIO block partitions detected");
+                                    let mut partition_storage = disk_boot::RtPartitionStorage::new(
+                                        &mut storage,
+                                        partition.start_lba,
+                                        partition.sectors,
+                                    );
+                                    let mut fat_root_sector = [0u8; 512];
+                                    match edgerun_storage::BlockStorage::read_sector(
+                                        &mut partition_storage,
+                                        260,
+                                        &mut fat_root_sector,
+                                    ) {
+                                        Ok(()) => {
+                                            rt::log::log(1, "VirtIO FAT relative root read ok")
+                                        }
+                                        Err(_) => {
+                                            rt::log::log(1, "VirtIO FAT relative root read failed")
+                                        }
+                                    }
+                                    rt::log::log(1, "VirtIO opening FAT boot partition");
+                                    match edgerun_storage::FatReadOnly::open(partition_storage) {
+                                        Ok(mut fat) => {
+                                            rt::log::log(1, "VirtIO FAT boot partition open ok");
+                                            match fat.root_entries() {
+                                                Ok(_) => rt::log::log(
+                                                    1,
+                                                    "VirtIO FAT root directory read ok",
+                                                ),
+                                                Err(_) => rt::log::log(
+                                                    1,
+                                                    "VirtIO FAT root directory read failed",
+                                                ),
+                                            }
+                                            rt::log::log(1, "VirtIO FAT boot config read start");
+                                            match fat.read_file("/edgerun/boot.cfg") {
+                                                Ok(bytes) => {
+                                                    rt::log::log(
+                                                        1,
+                                                        "VirtIO FAT boot config bytes read ok",
+                                                    );
+                                                    match boot_config::BootConfig::parse(&bytes) {
+                                                        Ok(_) => rt::log::log(
+                                                            1,
+                                                            "VirtIO FAT boot config read ok",
+                                                        ),
+                                                        Err(_) => rt::log::log(
+                                                            1,
+                                                            "VirtIO FAT boot config parse failed",
+                                                        ),
+                                                    }
+                                                }
+                                                Err(_) => rt::log::log(
+                                                    1,
+                                                    "VirtIO FAT boot config missing",
+                                                ),
+                                            }
+                                        }
+                                        Err(_) => rt::log::log(1, "VirtIO partition is not FAT"),
+                                    }
+                                }
+                                Err(_) => rt::log::log(1, "VirtIO partition read failed"),
+                            }
+                        }
                     }
                     Ok(_) => {
                         rt::log::log(1, "VirtIO block has no partitions");

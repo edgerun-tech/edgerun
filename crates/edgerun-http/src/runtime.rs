@@ -40,6 +40,7 @@ where
 pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
 where
     F: core::future::Future + Send + 'static,
+    F::Output: Send + 'static,
 {
     edgerun_rt::spawn(future)
 }

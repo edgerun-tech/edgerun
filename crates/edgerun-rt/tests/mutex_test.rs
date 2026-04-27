@@ -1,18 +1,7 @@
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use edgerun_rt::AsyncMutex;
-
-fn noop_waker() -> Waker {
-    unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
-}
-
-unsafe fn noop_clone(_: *const ()) -> RawWaker {
-    RawWaker::new(core::ptr::null(), &VTABLE)
-}
-unsafe fn noop_wake(_: *const ()) {}
-unsafe fn noop_drop(_: *const ()) {}
-static VTABLE: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop);
+use core::task::{Context, Poll};
+use edgerun_rt::{noop_waker, AsyncMutex};
 
 #[test]
 fn mutex_new_creates_mutex() {

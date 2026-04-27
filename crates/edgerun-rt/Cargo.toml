@@ -5,5 +5,6 @@ edition.workspace = true
 license = "MIT"
 
 [dependencies]
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 edgerun-platform = { path = "../edgerun-platform" }
 edgerun-log = { path = "../edgerun-log" }

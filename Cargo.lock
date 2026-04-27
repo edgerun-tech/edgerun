@@ -462,6 +462,7 @@ dependencies = [
  "aes-gcm",
  "ecdsa",
  "ed25519-dalek",
+ "edgerun-encoding",
  "elliptic-curve",
  "hmac",
  "p256",
@@ -504,9 +505,11 @@ name = "edgerun-dns"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-dhcp",
  "edgerun-encoding",
  "edgerun-log",
  "edgerun-rt",
+ "edgerun-tftp",
 ]
 
 [[package]]
@@ -627,6 +630,7 @@ name = "edgerun-evdev-input"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
+ "edgerun-encoding",
  "edgerun-input",
  "edgerun-linux-sysfs",
  "libc",
@@ -1162,6 +1166,7 @@ dependencies = [
 name = "edgerun-rt"
 version = "0.1.0"
 dependencies = [
+ "edgerun-encoding",
  "edgerun-log",
  "edgerun-platform",
 ]
@@ -1219,6 +1224,7 @@ name = "edgerun-solana"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-error",
  "edgerun-http",
  "edgerun-json",
@@ -1239,6 +1245,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-hardware-signing",
  "edgerun-log",
  "edgerun-proto",
@@ -1376,7 +1383,6 @@ name = "edgerun-virtio"
 version = "0.1.0"
 dependencies = [
  "edgerun-platform",
- "edgerun-rt",
 ]
 
 [[package]]

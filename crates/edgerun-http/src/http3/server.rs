@@ -557,11 +557,11 @@ impl Http3Server {
         }
 
         let mut pos = 1;
-        let (offset, n) = Self::decode_varint_at(data, pos).ok()?;
+        let (offset, n) = super::varint::quic_decode_varint_at(data, pos).ok()?;
         pos += n;
         let _offset = offset;
 
-        let (length, n) = Self::decode_varint_at(data, pos).ok()?;
+        let (length, n) = super::varint::quic_decode_varint_at(data, pos).ok()?;
         pos += n;
 
         if pos + length as usize > data.len() {
@@ -570,15 +570,6 @@ impl Http3Server {
 
         let crypto_data = data[pos..pos + length as usize].to_vec();
         Some((crypto_data, pos + length as usize))
-    }
-
-    fn decode_varint_at(data: &[u8], pos: usize) -> Result<(u64, usize), String> {
-        if pos >= data.len() {
-            return Err("Out of bounds".into());
-        }
-        let (value, len) = edgerun_encoding::quic_varint::decode_varint(&data[pos..])
-            .map_err(|e| format!("{e}"))?;
-        Ok((value, len))
     }
 
     /// Run the HTTP/3 server, dispatching incoming requests to the given handler.

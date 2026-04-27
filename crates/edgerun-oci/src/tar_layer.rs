@@ -8,6 +8,7 @@ use crate::oci_path::layer_path_safe;
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use core::fmt;
+use edgerun_encoding::crc32::crc32;
 
 const BLOCK_SIZE: usize = 512;
 
@@ -671,18 +672,6 @@ fn verify_checksum(header: &[u8]) -> Result<(), TarLayerError> {
             "checksum mismatch: expected {expected}, got {actual}"
         )))
     }
-}
-
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffffu32;
-    for byte in data {
-        crc ^= u32::from(*byte);
-        for _ in 0..8 {
-            let mask = 0u32.wrapping_sub(crc & 1);
-            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
-        }
-    }
-    !crc
 }
 
 fn is_zero_block(block: &[u8]) -> bool {

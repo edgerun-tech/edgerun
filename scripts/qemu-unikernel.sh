@@ -23,6 +23,45 @@ qemu_virtio_blk="${QEMU_VIRTIO_BLK:-1}"
 qemu_console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-console.log}"
 qemu_disk_img="${QEMU_DISK_IMG:-/tmp/edgerun-qemu-virtio-blk.img}"
 qemu_disk_size="${QEMU_DISK_SIZE:-64M}"
+qemu_disk_layout="${QEMU_DISK_LAYOUT:-empty}"
+qemu_boot_config="${QEMU_BOOT_CONFIG:-image=registry.local/edge/test:latest
+edgefs=partition
+rootfs_path=/apps/test
+}"
+
+create_qemu_disk_image() {
+    local image="$1"
+    local size="$2"
+    local layout="$3"
+
+    truncate -s "$size" "$image"
+    case "$layout" in
+        empty)
+            ;;
+        mbr-blank)
+            printf '\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x08\x00\x00\x00\xf8\x01\x00' |
+                dd of="$image" bs=1 seek=446 conv=notrunc status=none
+            printf '\x55\xaa' | dd of="$image" bs=1 seek=510 conv=notrunc status=none
+            ;;
+        fat-boot)
+            printf '\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x08\x00\x00\x00\xf8\x01\x00' |
+                dd of="$image" bs=1 seek=446 conv=notrunc status=none
+            printf '\x55\xaa' | dd of="$image" bs=1 seek=510 conv=notrunc status=none
+            mkfs.fat --invariant --offset=2048 -F 16 -r 16 -n EDGERUN "$image" 64512
+            local cfg_dir
+            cfg_dir="$(mktemp -d)"
+            printf '%s' "$qemu_boot_config" >"$cfg_dir/boot.cfg"
+            mmd -i "$image@@1048576" ::/edgerun
+            mcopy -i "$image@@1048576" "$cfg_dir/boot.cfg" ::/edgerun/
+            rm -f "$cfg_dir/boot.cfg"
+            rmdir "$cfg_dir"
+            ;;
+        *)
+            echo "Unsupported QEMU_DISK_LAYOUT: $layout" >&2
+            exit 2
+            ;;
+    esac
+}
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
@@ -62,7 +101,7 @@ fi
 
 if [[ "$qemu_virtio_blk" != "0" ]]; then
     if [[ ! -e "$qemu_disk_img" ]]; then
-        truncate -s "$qemu_disk_size" "$qemu_disk_img"
+        create_qemu_disk_image "$qemu_disk_img" "$qemu_disk_size" "$qemu_disk_layout"
     fi
     qemu_extra_args+=(
         -drive "if=none,id=edgerun-blk,file=$qemu_disk_img,format=raw"

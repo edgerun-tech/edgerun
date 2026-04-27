@@ -34,6 +34,7 @@ pub const VIRTIO_BLK_T_IN: u32 = 0;
 pub const VIRTIO_BLK_T_OUT: u32 = 1;
 pub const VIRTIO_BLK_T_FLUSH: u32 = 4;
 pub const VIRTIO_BLK_S_OK: u8 = 0;
+pub const SECTOR_SIZE: usize = 512;
 
 const VIRTIO_PCI_CAP_VENDOR: u8 = 0x09;
 const VIRTIO_PCI_CAP_COMMON_CFG: u8 = 1;
@@ -41,16 +42,16 @@ const VIRTIO_PCI_CAP_NOTIFY_CFG: u8 = 2;
 const VIRTIO_PCI_CAP_ISR_CFG: u8 = 3;
 const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
 
-const QUEUE_SIZE: usize = 8;
+const QUEUE_SIZE: usize = 16;
 const RX_QUEUE: u16 = 0;
 const TX_QUEUE: u16 = 1;
 const CONSOLE_TX_QUEUE: u16 = 1;
 const NET_HDR_LEN: usize = core::mem::size_of::<VirtioNetHdr>();
 const BUFFER_SIZE: usize = 2048;
-const TX_FREE_ALL_MASK: u16 = (1u16 << QUEUE_SIZE) - 1;
+const TX_FREE_ALL_MASK: u16 = u16::MAX >> (u16::BITS as usize - QUEUE_SIZE);
 const VIRTQ_DESC_F_NEXT: u16 = 1;
 const VIRTQ_DESC_F_WRITE: u16 = 2;
-const VIRTIO_POLL_SPINS: usize = 50_000;
+const VIRTIO_POLL_SPINS: usize = 5_000;
 
 const PCI_CONFIG_ADDRESS: u16 = 0xcf8;
 const PCI_CONFIG_DATA: u16 = 0xcfc;
@@ -235,7 +236,7 @@ struct VirtioBlkReqHeader {
 struct BlkDescTable([VirtqDesc; QUEUE_SIZE]);
 
 #[repr(align(512))]
-struct BlkData([u8; edgerun_rt::storage::SECTOR_SIZE]);
+struct BlkData([u8; SECTOR_SIZE]);
 
 static mut BLK_DESC: BlkDescTable = BlkDescTable([EMPTY_DESC; QUEUE_SIZE]);
 static mut BLK_AVAIL: VirtqAvail = VirtqAvail {
@@ -255,7 +256,7 @@ static mut BLK_HEADER: VirtioBlkReqHeader = VirtioBlkReqHeader {
     reserved: 0,
     sector: 0,
 };
-static mut BLK_DATA: BlkData = BlkData([0; edgerun_rt::storage::SECTOR_SIZE]);
+static mut BLK_DATA: BlkData = BlkData([0; SECTOR_SIZE]);
 static mut BLK_STATUS: u8 = 0xff;
 
 #[repr(align(16))]
@@ -818,7 +819,7 @@ impl VirtBlk {
             last_used_idx: 0,
             sectors: 0,
             read_only: false,
-            block_size: edgerun_rt::storage::SECTOR_SIZE as u32,
+            block_size: SECTOR_SIZE as u32,
         }
     }
 
@@ -858,7 +859,7 @@ impl VirtBlk {
         if self.features & VIRTIO_BLK_F_BLK_SIZE != 0 {
             self.block_size = read_u32(unsafe { self.device_cfg.add(20) });
         }
-        if self.sectors == 0 || self.block_size != edgerun_rt::storage::SECTOR_SIZE as u32 {
+        if self.sectors == 0 || self.block_size != SECTOR_SIZE as u32 {
             fail_device(self.common_cfg);
             return false;
         }
@@ -907,7 +908,7 @@ impl VirtBlk {
     }
 
     pub fn read_sector(&mut self, sector: u64, out: &mut [u8]) -> bool {
-        if out.len() != edgerun_rt::storage::SECTOR_SIZE || sector >= self.sectors {
+        if out.len() != SECTOR_SIZE || sector >= self.sectors {
             return false;
         }
 
@@ -918,7 +919,7 @@ impl VirtBlk {
             core::ptr::copy_nonoverlapping(
                 core::ptr::addr_of!(BLK_DATA.0) as *const u8,
                 out.as_mut_ptr(),
-                edgerun_rt::storage::SECTOR_SIZE,
+                SECTOR_SIZE,
             );
         }
         true
@@ -926,7 +927,7 @@ impl VirtBlk {
 
     pub fn write_sector(&mut self, sector: u64, data: &[u8]) -> bool {
         if self.read_only
-            || data.len() != edgerun_rt::storage::SECTOR_SIZE
+            || data.len() != SECTOR_SIZE
             || sector >= self.sectors
         {
             return false;
@@ -936,7 +937,7 @@ impl VirtBlk {
             core::ptr::copy_nonoverlapping(
                 data.as_ptr(),
                 core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
-                edgerun_rt::storage::SECTOR_SIZE,
+                SECTOR_SIZE,
             );
             self.submit_request(VIRTIO_BLK_T_OUT, sector, false)
         }
@@ -970,7 +971,7 @@ impl VirtBlk {
         core::ptr::write_bytes(
             core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
             0,
-            edgerun_rt::storage::SECTOR_SIZE,
+            SECTOR_SIZE,
         );
         BLK_STATUS = 0xff;
     }
@@ -997,7 +998,7 @@ impl VirtBlk {
             desc.add(1),
             VirtqDesc {
                 addr: core::ptr::addr_of_mut!(BLK_DATA.0) as u64,
-                len: edgerun_rt::storage::SECTOR_SIZE as u32,
+                len: SECTOR_SIZE as u32,
                 flags: if read {
                     VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT
                 } else {
@@ -1045,20 +1046,6 @@ impl VirtBlk {
 impl Default for VirtBlk {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl edgerun_rt::storage::BlockDevice for VirtBlk {
-    fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> bool {
-        Self::read_sector(self, sector, buf)
-    }
-
-    fn write_sector(&mut self, sector: u64, buf: &[u8]) -> bool {
-        Self::write_sector(self, sector, buf)
-    }
-
-    fn sectors(&self) -> u64 {
-        self.sectors
     }
 }
 

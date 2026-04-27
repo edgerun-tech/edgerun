@@ -66,7 +66,7 @@ impl Drop for SpinLockGuard<'_> {
 }
 
 impl<T> Mutex<T> {
-    pub fn new(data: T) -> Self {
+    pub const fn new(data: T) -> Self {
         Self {
             locked: AtomicBool::new(false),
             data: core::cell::UnsafeCell::new(data),

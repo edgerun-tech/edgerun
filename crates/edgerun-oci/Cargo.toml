@@ -15,7 +15,7 @@ edgerun-storage = { workspace = true, optional = true }
 edgerun-rt = { path = "../edgerun-rt", optional = true }
 edgerun-secret-service = { path = "../edgerun-secret-service", optional = true }
 edgerun-core = { path = "../edgerun-core", optional = true }
-edgerun-encoding = { path = "../edgerun-encoding", optional = true }
+edgerun-encoding = { path = "../edgerun-encoding" }
 miniz_oxide = { workspace = true, optional = true }
 ruzstd = { version = "0.8.2", default-features = false, optional = true }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
@@ -23,7 +23,7 @@ serde = { version = "1", default-features = false, features = ["alloc", "derive"
 [features]
 default = []
 json = ["dep:edgerun-json", "dep:edgerun-crypto", "dep:miniz_oxide"]
-registry-client = ["json", "dep:edgerun-http", "dep:edgerun-encoding"]
+registry-client = ["json", "dep:edgerun-http"]
 edgefs = ["json", "dep:edgerun-edgefs", "dep:edgerun-storage"]
 serde = ["json", "dep:serde", "edgerun-json/serde"]
 zstd = ["json", "dep:ruzstd"]

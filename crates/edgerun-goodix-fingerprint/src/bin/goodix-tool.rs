@@ -171,15 +171,8 @@ fn real_main() -> Result<(), String> {
                 .ok_or_else(|| "missing template_id_hex".to_string())?;
             let label = args.next().ok_or_else(|| "missing label".to_string())?;
             let bytes = {
-                if template_id.len() != 64 {
-                    return Err("template_id_hex must be 64 hex chars".into());
-                }
-                let mut out = [0u8; 32];
-                for i in 0..32 {
-                    out[i] = u8::from_str_radix(&template_id[i * 2..i * 2 + 2], 16)
-                        .map_err(|_| "invalid template_id hex".to_string())?;
-                }
-                out
+                edgerun_encoding::hex::hex_to_bytes_fixed::<32>(&template_id)
+                    .ok_or_else(|| "template_id_hex must be 64 valid hex chars".to_string())?
             };
             let reader = open_reader()?;
             reader

@@ -3,6 +3,7 @@
 use crate::block::BlockStorage;
 use crate::error::StorageError;
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::{read_u16_le as read_u16, read_u32_le as read_u32};
 
 const EDGEFS_MAGIC: &[u8; 8] = b"EDGEFS01";
 const ISO9660_MAGIC: &[u8; 5] = b"CD001";
@@ -245,19 +246,6 @@ fn exfat_info(sector: &[u8]) -> ExFatInfo {
         cluster_count: read_u32(sector, 92),
         root_cluster: read_u32(sector, 96),
     }
-}
-
-fn read_u16(input: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes([input[offset], input[offset + 1]])
-}
-
-fn read_u32(input: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        input[offset],
-        input[offset + 1],
-        input[offset + 2],
-        input[offset + 3],
-    ])
 }
 
 fn utf8_label(input: &[u8]) -> Option<String> {

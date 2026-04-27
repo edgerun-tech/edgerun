@@ -24,10 +24,10 @@ const HEADER_SECTOR: u64 = 0;
 const DATA_START_SECTOR: u64 = 1;
 const MAX_VARINT_BYTES: u32 = 10;
 
-/// Trait matching the raw block storage contract used by `edgerun-rt`.
+/// Trait for sector-addressable block storage.
 ///
-/// Implementations can be backed by FAT/ATA/NVMe in unikernel, or by a small
-/// in-memory or file-based test adapter in hosted builds.
+/// Implementations can be backed by bare-metal disk drivers in the unikernel, or
+/// by small in-memory or file-based test adapters in hosted builds.
 pub trait BlockStorage: Send {
     fn sector_size(&self) -> usize;
     fn sectors(&self) -> u64;
@@ -62,23 +62,23 @@ impl BlockStorage for Box<dyn BlockStorage + Send> {
 
 impl<T: BlockStorage + ?Sized> BlockStorage for &mut T {
     fn sector_size(&self) -> usize {
-        (**self).sector_size()
+        BlockStorage::sector_size(&**self)
     }
 
     fn sectors(&self) -> u64 {
-        (**self).sectors()
+        BlockStorage::sectors(&**self)
     }
 
     fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), StorageError> {
-        (**self).read_sector(sector, buf)
+        BlockStorage::read_sector(&mut **self, sector, buf)
     }
 
     fn write_sector(&mut self, sector: u64, buf: &[u8]) -> Result<(), StorageError> {
-        (**self).write_sector(sector, buf)
+        BlockStorage::write_sector(&mut **self, sector, buf)
     }
 
     fn sync(&mut self) -> Result<(), StorageError> {
-        (**self).sync()
+        BlockStorage::sync(&mut **self)
     }
 }
 
@@ -448,53 +448,6 @@ impl BlockStorage for InMemoryBlockDevice {
         }
         data[sector as usize].copy_from_slice(buf);
         Ok(())
-    }
-}
-
-#[cfg(feature = "bare-rt")]
-impl<T: edgerun_rt::storage::BlockDevice + Send> BlockStorage for T {
-    fn sector_size(&self) -> usize {
-        edgerun_rt::storage::SECTOR_SIZE
-    }
-
-    fn sectors(&self) -> u64 {
-        self.sectors()
-    }
-
-    fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), StorageError> {
-        if buf.len() != self.sector_size() {
-            return Err(StorageError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "sector buffer size mismatch",
-            )));
-        }
-
-        if self.read_sector(sector, buf) {
-            return Ok(());
-        }
-
-        Err(StorageError::Io(std::io::Error::other(format!(
-            "failed to read sector {} from bare-rt block device",
-            sector
-        ))))
-    }
-
-    fn write_sector(&mut self, sector: u64, buf: &[u8]) -> Result<(), StorageError> {
-        if buf.len() != self.sector_size() {
-            return Err(StorageError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "sector buffer size mismatch",
-            )));
-        }
-
-        if self.write_sector(sector, buf) {
-            return Ok(());
-        }
-
-        Err(StorageError::Io(std::io::Error::other(format!(
-            "failed to write sector {} to bare-rt block device",
-            sector
-        ))))
     }
 }
 

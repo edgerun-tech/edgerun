@@ -105,7 +105,7 @@ pub use tsig::{TsigAlgorithm, TsigError, TsigKey, TsigSigner, TsigVerifier};
 pub use dhcp::DhcpClient;
 #[cfg(feature = "dhcp")]
 pub use dhcp::{
-    DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease, NetworkConfig,
+    DhcpError, DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease, NetworkConfig,
     PxeClientArch,
 };
 #[cfg(feature = "dhcp")]

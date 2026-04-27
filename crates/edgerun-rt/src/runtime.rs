@@ -4,17 +4,46 @@ extern crate alloc;
 extern crate edgerun_platform;
 
 use crate::Error;
+use alloc::boxed::Box;
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
-pub fn spawn<F>(_f: F) -> JoinHandle<F::Output>
+type TaskFuture = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
+
+static TASK_QUEUE: crate::sync::Mutex<VecDeque<TaskFuture>> =
+    crate::sync::Mutex::new(VecDeque::new());
+static PENDING_TASKS: AtomicUsize = AtomicUsize::new(0);
+static RUN_COUNT: AtomicU32 = AtomicU32::new(0);
+
+pub fn spawn<F>(f: F) -> JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
+    F::Output: Send + 'static,
 {
-    JoinHandle::pending()
+    let handle = JoinHandle::pending();
+    let state = handle.state.clone();
+    enqueue_task(Box::pin(async move {
+        if state.aborted.load(Ordering::Acquire) {
+            let mut result = state.result.lock();
+            if result.is_none() {
+                *result = Some(Err(JoinError));
+            }
+            return;
+        }
+
+        let value = f.await;
+        let mut result = state.result.lock();
+        if state.aborted.load(Ordering::Acquire) {
+            *result = Some(Err(JoinError));
+        } else {
+            *result = Some(Ok(value));
+        }
+    }));
+    handle
 }
 
 pub fn spawn_local<F>(_f: F) -> JoinHandle<F::Output>
@@ -43,13 +72,50 @@ where
         match f.as_mut().poll(&mut cx) {
             Poll::Ready(v) => return v,
             Poll::Pending => unsafe {
+                run_queue();
                 edgerun_platform::yield_cpu();
             },
         }
     }
 }
 
-fn noop_waker() -> Waker {
+fn enqueue_task(task: TaskFuture) {
+    TASK_QUEUE.lock().push_back(task);
+    PENDING_TASKS.fetch_add(1, Ordering::Release);
+}
+
+pub fn run_queue() {
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let initial_len = TASK_QUEUE.lock().len();
+
+    for _ in 0..initial_len {
+        let Some(mut task) = TASK_QUEUE.lock().pop_front() else {
+            break;
+        };
+
+        match task.as_mut().poll(&mut cx) {
+            Poll::Ready(()) => {
+                PENDING_TASKS.fetch_sub(1, Ordering::AcqRel);
+            }
+            Poll::Pending => {
+                TASK_QUEUE.lock().push_back(task);
+            }
+        }
+    }
+
+    RUN_COUNT.fetch_add(1, Ordering::AcqRel);
+}
+
+pub fn pending() -> usize {
+    PENDING_TASKS.load(Ordering::Acquire)
+}
+
+pub fn runs() -> u32 {
+    RUN_COUNT.load(Ordering::Acquire)
+}
+
+pub fn noop_waker() -> Waker {
     unsafe fn clone(_: *const ()) -> RawWaker {
         RawWaker::new(core::ptr::null(), &NOOP_WAKER_VTABLE)
     }
@@ -94,6 +160,7 @@ impl Runtime {
     pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
+        F::Output: Send + 'static,
     {
         spawn(f)
     }
@@ -213,6 +280,7 @@ impl RuntimeHandle {
     pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
+        F::Output: Send + 'static,
     {
         spawn(f)
     }

@@ -104,16 +104,7 @@ unsafe extern "C" {
 }
 
 fn parse_bdaddr_string(addr: &str) -> Option<[u8; 6]> {
-    let parts: Vec<u8> = addr
-        .split(':')
-        .map(|p| u8::from_str_radix(p, 16).ok())
-        .collect::<Option<_>>()?;
-    if parts.len() != 6 {
-        return None;
-    }
-    let mut result = [0u8; 6];
-    result.copy_from_slice(&parts);
-    Some(result)
+    edgerun_encoding::hex::parse_mac(addr)
 }
 
 fn reverse_bdaddr(addr: &str) -> Option<[u8; 6]> {

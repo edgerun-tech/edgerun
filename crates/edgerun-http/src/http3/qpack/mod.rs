@@ -10,7 +10,6 @@ use core::fmt;
 
 pub mod decoder;
 pub mod encoder;
-pub mod huffman;
 
 pub use decoder::QpackDecoder;
 pub use encoder::QpackEncoder;

@@ -3,6 +3,7 @@
 use crate::block::{probe_filesystem, BlockStorage, FatInfo, FileSystemDetails, FileSystemKind};
 use crate::error::StorageError;
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::{read_u16_le as read_u16, read_u32_le as read_u32};
 
 #[derive(Debug)]
 pub enum FatError {
@@ -116,7 +117,7 @@ impl<S: BlockStorage> FatReadOnly<S> {
     }
 
     pub fn read_file(&mut self, path: &str) -> Result<Vec<u8>, FatError> {
-        let entry = self.resolve_path(path)?;
+        let entry = self.resolve_path_streaming(path)?;
         if entry.is_directory() {
             return Err(FatError::DirectoryOnly);
         }
@@ -150,7 +151,7 @@ impl<S: BlockStorage> FatReadOnly<S> {
         }
 
         let mut entries = self.root_entries()?;
-        let mut current = None;
+        let mut current: Option<FatDirectoryEntry> = None;
         for component in trimmed.split('/') {
             if component.is_empty() || component == "." || component == ".." {
                 return Err(FatError::InvalidPath(path.into()));
@@ -168,6 +169,97 @@ impl<S: BlockStorage> FatReadOnly<S> {
             };
         }
         current.ok_or_else(|| FatError::InvalidPath(path.into()))
+    }
+
+    fn resolve_path_streaming(&mut self, path: &str) -> Result<FatDirectoryEntry, FatError> {
+        let trimmed = trim_path(path);
+        if trimmed.is_empty() {
+            return Err(FatError::InvalidPath(path.into()));
+        }
+
+        let mut current: Option<FatDirectoryEntry> = None;
+        for component in trimmed.split('/') {
+            if component.is_empty() || component == "." || component == ".." {
+                return Err(FatError::InvalidPath(path.into()));
+            }
+            let wanted = normalize_8_3(component);
+            let entry = match current.as_ref() {
+                None => self.find_root_entry(&wanted)?,
+                Some(parent) if parent.is_directory() => self.find_child_entry(parent, &wanted)?,
+                _ => return Err(FatError::NotDirectory(component.into())),
+            }
+            .ok_or_else(|| FatError::NotFound(path.into()))?;
+            current = Some(entry);
+        }
+
+        current.ok_or_else(|| FatError::InvalidPath(path.into()))
+    }
+
+    fn find_root_entry(&mut self, wanted: &str) -> Result<Option<FatDirectoryEntry>, FatError> {
+        match self.kind {
+            FileSystemKind::Fat12 | FileSystemKind::Fat16 => self.find_entry_in_directory_sectors(
+                self.root_dir_sector,
+                self.root_dir_sectors,
+                wanted,
+            ),
+            FileSystemKind::Fat32 => {
+                let root = self.info.root_cluster.ok_or(FatError::InvalidGeometry)?;
+                self.find_entry_in_directory_cluster_chain(root, wanted)
+            }
+            kind => Err(FatError::UnsupportedFat(kind)),
+        }
+    }
+
+    fn find_child_entry(
+        &mut self,
+        parent: &FatDirectoryEntry,
+        wanted: &str,
+    ) -> Result<Option<FatDirectoryEntry>, FatError> {
+        self.find_entry_in_directory_cluster_chain(parent.first_cluster, wanted)
+    }
+
+    fn find_entry_in_directory_sectors(
+        &mut self,
+        start_sector: u64,
+        sectors: u64,
+        wanted: &str,
+    ) -> Result<Option<FatDirectoryEntry>, FatError> {
+        let mut long_name = Vec::<u16>::new();
+        for sector in 0..sectors {
+            let mut data = vec![0u8; self.info.bytes_per_sector as usize];
+            self.read_sectors(start_sector + sector, &mut data)?;
+            let (entry, done) = find_entry_in_data(&mut long_name, &data, wanted);
+            if entry.is_some() || done {
+                return Ok(entry);
+            }
+        }
+        Ok(None)
+    }
+
+    fn find_entry_in_directory_cluster_chain(
+        &mut self,
+        first_cluster: u32,
+        wanted: &str,
+    ) -> Result<Option<FatDirectoryEntry>, FatError> {
+        let mut long_name = Vec::<u16>::new();
+        let mut cluster = first_cluster;
+        while !self.is_eoc(cluster) {
+            let first_sector = self.cluster_first_sector(cluster)?;
+            for sector_offset in 0..self.info.sectors_per_cluster as u64 {
+                let mut data = vec![0u8; self.info.bytes_per_sector as usize];
+                self.read_sectors(first_sector + sector_offset, &mut data)?;
+                let (entry, done) = find_entry_in_data(&mut long_name, &data, wanted);
+                if entry.is_some() || done {
+                    return Ok(entry);
+                }
+            }
+            let next = self.next_cluster(cluster)?;
+            if next == cluster || next < 2 {
+                break;
+            }
+            cluster = next;
+        }
+        Ok(None)
     }
 
     fn read_directory_entry(
@@ -189,7 +281,9 @@ impl<S: BlockStorage> FatReadOnly<S> {
         while !self.is_eoc(cluster) {
             let mut data = vec![0u8; self.cluster_size()];
             self.read_cluster(cluster, &mut data)?;
-            append_entries(&mut entries, &data);
+            if append_entries(&mut entries, &data) {
+                break;
+            }
             let next = self.next_cluster(cluster)?;
             if next == cluster || next < 2 {
                 break;
@@ -204,10 +298,14 @@ impl<S: BlockStorage> FatReadOnly<S> {
         start_sector: u64,
         sectors: u64,
     ) -> Result<Vec<FatDirectoryEntry>, FatError> {
-        let mut data = vec![0u8; sectors as usize * self.info.bytes_per_sector as usize];
-        self.read_sectors(start_sector, &mut data)?;
         let mut entries = Vec::new();
-        append_entries(&mut entries, &data);
+        for sector in 0..sectors {
+            let mut data = vec![0u8; self.info.bytes_per_sector as usize];
+            self.read_sectors(start_sector + sector, &mut data)?;
+            if append_entries(&mut entries, &data) {
+                break;
+            }
+        }
         Ok(entries)
     }
 
@@ -218,10 +316,19 @@ impl<S: BlockStorage> FatReadOnly<S> {
         let mut out = Vec::with_capacity(size);
         let mut cluster = first_cluster;
         while out.len() < size && !self.is_eoc(cluster) && cluster >= 2 {
-            let mut data = vec![0u8; self.cluster_size()];
-            self.read_cluster(cluster, &mut data)?;
-            let copy_len = core::cmp::min(size - out.len(), data.len());
-            out.extend_from_slice(&data[..copy_len]);
+            let first_sector = self.cluster_first_sector(cluster)?;
+            for sector_offset in 0..self.info.sectors_per_cluster as u64 {
+                if out.len() >= size {
+                    break;
+                }
+                let mut data = vec![0u8; self.info.bytes_per_sector as usize];
+                self.read_sectors(first_sector + sector_offset, &mut data)?;
+                let copy_len = core::cmp::min(size - out.len(), data.len());
+                out.extend_from_slice(&data[..copy_len]);
+            }
+            if out.len() >= size {
+                break;
+            }
             let next = self.next_cluster(cluster)?;
             if next == cluster {
                 break;
@@ -232,11 +339,14 @@ impl<S: BlockStorage> FatReadOnly<S> {
     }
 
     fn read_cluster(&mut self, cluster: u32, out: &mut [u8]) -> Result<(), FatError> {
-        let sector = self
-            .first_data_sector
-            .checked_add((cluster as u64).saturating_sub(2) * self.info.sectors_per_cluster as u64)
-            .ok_or(FatError::InvalidGeometry)?;
+        let sector = self.cluster_first_sector(cluster)?;
         self.read_sectors(sector, out)
+    }
+
+    fn cluster_first_sector(&self, cluster: u32) -> Result<u64, FatError> {
+        self.first_data_sector
+            .checked_add((cluster as u64).saturating_sub(2) * self.info.sectors_per_cluster as u64)
+            .ok_or(FatError::InvalidGeometry)
     }
 
     fn read_sectors(&mut self, start_sector: u64, out: &mut [u8]) -> Result<(), FatError> {
@@ -296,11 +406,11 @@ fn validate_info(info: &FatInfo) -> Result<(), FatError> {
     }
 }
 
-fn append_entries(out: &mut Vec<FatDirectoryEntry>, data: &[u8]) {
+fn append_entries(out: &mut Vec<FatDirectoryEntry>, data: &[u8]) -> bool {
     let mut long_name = Vec::<u16>::new();
     for entry in data.chunks_exact(32) {
         if entry[0] == 0x00 {
-            break;
+            return true;
         }
         if entry[0] == 0xe5 {
             long_name.clear();
@@ -309,6 +419,10 @@ fn append_entries(out: &mut Vec<FatDirectoryEntry>, data: &[u8]) {
         if entry[11] == 0x0f {
             let part = long_name_part(entry);
             long_name.splice(0..0, part);
+            continue;
+        }
+        if is_volume_label_entry(entry) {
+            long_name.clear();
             continue;
         }
         let name = if long_name.is_empty() {
@@ -327,6 +441,59 @@ fn append_entries(out: &mut Vec<FatDirectoryEntry>, data: &[u8]) {
             });
         }
     }
+    false
+}
+
+fn find_entry_in_data(
+    long_name: &mut Vec<u16>,
+    data: &[u8],
+    wanted: &str,
+) -> (Option<FatDirectoryEntry>, bool) {
+    for entry in data.chunks_exact(32) {
+        if entry[0] == 0x00 {
+            return (None, true);
+        }
+        if entry[0] == 0xe5 {
+            long_name.clear();
+            continue;
+        }
+        if entry[11] == 0x0f {
+            let part = long_name_part(entry);
+            long_name.splice(0..0, part);
+            continue;
+        }
+        if is_volume_label_entry(entry) {
+            long_name.clear();
+            continue;
+        }
+        let name = if long_name.is_empty() {
+            short_name(entry)
+        } else {
+            let decoded = decode_utf16_name(long_name).or_else(|| short_name(entry));
+            long_name.clear();
+            decoded
+        };
+        let Some(name) = name else {
+            continue;
+        };
+        if normalize_8_3(name.as_str()) == wanted {
+            return (
+                Some(FatDirectoryEntry {
+                    name,
+                    attr: entry[11],
+                    first_cluster: ((read_u16(entry, 20) as u32) << 16)
+                        | read_u16(entry, 26) as u32,
+                    size: read_u32(entry, 28),
+                }),
+                false,
+            );
+        }
+    }
+    (None, false)
+}
+
+fn is_volume_label_entry(entry: &[u8]) -> bool {
+    entry[11] & 0x08 != 0
 }
 
 fn long_name_part(entry: &[u8]) -> Vec<u16> {
@@ -383,19 +550,6 @@ fn normalize_8_3(name: &str) -> String {
 
 fn trim_path(path: &str) -> &str {
     path.trim_matches('/')
-}
-
-fn read_u16(input: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes([input[offset], input[offset + 1]])
-}
-
-fn read_u32(input: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        input[offset],
-        input[offset + 1],
-        input[offset + 2],
-        input[offset + 3],
-    ])
 }
 
 #[cfg(test)]
@@ -458,8 +612,10 @@ mod tests {
 
         let mut root = vec![0u8; 512];
         root[0..11].copy_from_slice(b"CONFIG     ");
-        root[11] = 0x10;
-        root[26..28].copy_from_slice(&3u16.to_le_bytes());
+        root[11] = 0x08;
+        root[32..43].copy_from_slice(b"CONFIG     ");
+        root[43] = 0x10;
+        root[58..60].copy_from_slice(&3u16.to_le_bytes());
         device.write_sector(2, &root).unwrap();
 
         let mut dir = vec![0u8; 512];
@@ -475,6 +631,7 @@ mod tests {
 
         let mut fat = FatReadOnly::open(device).unwrap();
         assert_eq!(fat.list_dir_8_3("/CONFIG").unwrap()[0].name, "IMAGE.TXT");
+        assert_eq!(fat.root_entries().unwrap()[0].name, "CONFIG");
         assert_eq!(fat.read_file_8_3("/config/image.txt").unwrap(), b"alpine");
     }
 

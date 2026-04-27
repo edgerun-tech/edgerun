@@ -281,9 +281,13 @@ mod tests {
 
     #[test]
     fn test_lmtp_client_struct() {
-        // Verify the struct can be constructed
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let stream = std::net::TcpStream::connect(addr).unwrap();
+        let (_server, _) = listener.accept().unwrap();
+
         let _ = LmtpClient {
-            stream: AsyncTcpStream::from_fd(-1),
+            stream: AsyncTcpStream::from_std(stream).unwrap(),
             capabilities: vec![],
             capabilities_map: HashMap::new(),
         };

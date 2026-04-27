@@ -377,23 +377,11 @@ unsafe impl Send for L2capSocket {}
 unsafe impl Sync for L2capSocket {}
 
 fn parse_bdaddr_string(addr: &str) -> Option<[u8; 6]> {
-    let parts: Vec<u8> = addr
-        .split(':')
-        .map(|p| u8::from_str_radix(p, 16).ok())
-        .collect::<Option<_>>()?;
-    if parts.len() != 6 {
-        return None;
-    }
-    let mut result = [0u8; 6];
-    result.copy_from_slice(&parts);
-    Some(result)
+    edgerun_encoding::hex::parse_mac(addr)
 }
 
 fn format_bdaddr_hex(bytes: &[u8]) -> String {
-    format!(
-        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
-    )
+    edgerun_encoding::hex::format_mac_bytes(bytes).unwrap_or_default()
 }
 
 fn reverse_bdaddr(addr: &str) -> Option<[u8; 6]> {

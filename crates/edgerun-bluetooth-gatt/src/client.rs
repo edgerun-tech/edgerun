@@ -96,18 +96,13 @@ impl LinuxGattClient {
         let cleaned = uuid.0.replace('-', "").to_lowercase();
         match cleaned.len() {
             4 => {
-                let val = u16::from_str_radix(&cleaned, 16)
-                    .map_err(|_| GattError::InvalidUuid(uuid.0.clone()))?;
+                let val = edgerun_encoding::hex::parse_hex_int::<u16>(&cleaned)
+                    .ok_or_else(|| GattError::InvalidUuid(uuid.0.clone()))?;
                 Ok(val.to_le_bytes().to_vec())
             }
             32 => {
-                let mut bytes = Vec::with_capacity(16);
-                for i in (0..32).step_by(2) {
-                    let byte = u8::from_str_radix(&cleaned[i..i + 2], 16)
-                        .map_err(|_| GattError::InvalidUuid(uuid.0.clone()))?;
-                    bytes.push(byte);
-                }
-                Ok(bytes)
+                edgerun_encoding::hex::hex_to_bytes(&cleaned)
+                    .map_err(|_| GattError::InvalidUuid(uuid.0.clone()))
             }
             _ => Err(GattError::InvalidUuid(uuid.0.clone())),
         }
