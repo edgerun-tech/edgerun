@@ -1,5 +1,6 @@
 //! Memory-only content-addressed object store for tests and simple backends.
 
+use crate::prelude::v1::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 

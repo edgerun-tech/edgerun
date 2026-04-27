@@ -2,6 +2,7 @@
 //!
 //! Storage errors.
 
+use crate::prelude::v1::*;
 use std::fmt;
 
 #[derive(Debug)]
@@ -12,6 +13,7 @@ pub enum StorageError {
     Encryption(String),
     Decryption(String),
     InvalidBlob(String),
+    Stream(String),
 }
 
 impl fmt::Display for StorageError {
@@ -23,12 +25,13 @@ impl fmt::Display for StorageError {
             Self::Encryption(e) => write!(f, "encryption error: {e}"),
             Self::Decryption(e) => write!(f, "decryption error: {e}"),
             Self::InvalidBlob(e) => write!(f, "invalid blob: {e}"),
+            Self::Stream(e) => write!(f, "stream error: {e}"),
         }
     }
 }
 
-impl std::error::Error for StorageError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for StorageError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
             _ => None,
@@ -39,5 +42,11 @@ impl std::error::Error for StorageError {
 impl From<std::io::Error> for StorageError {
     fn from(e: std::io::Error) -> Self {
         Self::Io(e)
+    }
+}
+
+impl From<edgerun_stream::StreamError> for StorageError {
+    fn from(e: edgerun_stream::StreamError) -> Self {
+        Self::Stream(e.to_string())
     }
 }

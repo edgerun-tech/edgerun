@@ -6,6 +6,8 @@
 //! - `BlobStore` — AES-GCM encrypted payload objects on the filesystem
 //! - Append-only event log — protobuf records on the filesystem
 
+use crate::prelude::v1::*;
+
 use edgerun_core::protocol::{Digest, EventEnvelope};
 use prost::Message;
 use std::collections::HashMap;
@@ -20,11 +22,11 @@ use crate::core::{ContentStore, EventLocation, ScannedEvent};
 use crate::credentials::CredentialStore;
 use crate::error::StorageError;
 use crate::event_loop::{
-    EventLoopBuilder, EventWriter, FetchHandler, OpEventType, PeerDiscoveryHandler,
-    materialize_event_to_index,
+    materialize_event_to_index, EventLoopBuilder, EventWriter, FetchHandler, OpEventType,
+    PeerDiscoveryHandler,
 };
 use crate::file_index::FileIndex;
-use crate::fs::{FsContentStore, read_event_at, scan_event_logs};
+use crate::fs::{read_event_at, scan_event_logs, FsContentStore};
 use std::collections::HashSet;
 
 enum EventBackend {
@@ -1318,6 +1320,14 @@ impl NodeStore {
 
     /// Checks available disk space on the data root partition.
     /// Returns available bytes, or `None` if the stat couldn't be obtained.
+    #[cfg(target_os = "none")]
+    pub fn available_disk_space(&self) -> Result<Option<u64>, std::io::Error> {
+        Ok(None)
+    }
+
+    /// Checks available disk space on the data root partition.
+    /// Returns available bytes, or `None` if the stat couldn't be obtained.
+    #[cfg(not(target_os = "none"))]
     pub fn available_disk_space(&self) -> Result<Option<u64>, std::io::Error> {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;

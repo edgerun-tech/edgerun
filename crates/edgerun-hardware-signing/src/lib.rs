@@ -6,8 +6,15 @@
 //! - `yubikey` — YubiKey PIV
 //! - `all-hardware` — enables all backends
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
+
 use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
 use edgerun_core::crypto::signature_input;
+use edgerun_core::prelude::v1::*;
 
 // ---------------------------------------------------------------------------
 // Conditional backend modules
@@ -48,7 +55,7 @@ pub const MESH_SIGNATURE_LENGTH: usize = 64;
 /// This is the raw uncompressed ECDSA P-256 public key (64 bytes: x || y).
 /// The same format is produced by TPMs, YubiKeys, Android Keystore,
 /// and iOS Secure Enclave — making it the universal hardware-backed identity.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeID(pub [u8; MESH_PUBLIC_KEY_LENGTH]);
 
 impl NodeID {
@@ -240,7 +247,7 @@ impl core::fmt::Display for HardwareSigningError {
     }
 }
 
-impl std::error::Error for HardwareSigningError {}
+impl core::error::Error for HardwareSigningError {}
 
 #[cfg(feature = "tpm")]
 impl From<edgerun_tpm::TpmError> for HardwareSigningError {
@@ -336,7 +343,7 @@ pub trait MeshSigner {
     }
 
     /// Returns self as `Any` for downcasting (used by TCP task cloning).
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn core::any::Any {
         &()
     }
 }
@@ -497,6 +504,8 @@ pub fn sign_record_with_hardware_checked(
 
 #[cfg(test)]
 mod tests {
+    use core::hash::{Hash, Hasher};
+
     use super::*;
 
     // A generic fake key that implements HardwareSigningKey directly
@@ -643,7 +652,6 @@ mod tests {
     #[test]
     fn node_id_hash_consistency() {
         use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
         let bytes = [42u8; 64];
         let id1 = NodeID(bytes);
         let id2 = NodeID(bytes);

@@ -2,6 +2,8 @@
 //!
 //! Gate with `feature = "android-keystore"`.
 
+use alloc::vec::Vec;
+
 use edgerun_android_keystore::{
     sign_record_with_keystore_checked, AndroidKeystoreAssuranceLevel,
     AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
@@ -144,6 +146,7 @@ fn map_hardware_to_keystore_algorithm(
 mod tests {
     use super::*;
     use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
+    use alloc::vec;
     use edgerun_android_keystore::{
         AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo,
         AndroidKeystoreSignatureAlgorithm,

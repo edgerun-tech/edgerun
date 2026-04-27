@@ -2,6 +2,8 @@
 //!
 //! Gate with `feature = "tpm"`.
 
+use alloc::vec::Vec;
+
 use edgerun_tpm::{
     sign_record_with_tpm_checked, TpmAssuranceLevel, TpmSignatureAlgorithm, TpmSigningKey,
 };
@@ -159,6 +161,7 @@ mod tests {
     use super::*;
     use crate::validate_hardware_key_info;
     use crate::{HardwareAssuranceStrength, MESH_SIGNATURE_LENGTH};
+    use alloc::vec;
     use edgerun_tpm::{TpmAssuranceLevel, TpmError, TpmKeyInfo, TpmSignatureAlgorithm};
 
     // -----------------------------------------------------------------------

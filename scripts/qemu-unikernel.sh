@@ -16,6 +16,7 @@ expected_marker="${QEMU_EXPECT:-VirtIO found}"
 qemu_net_dump="${QEMU_NET_DUMP:-}"
 qemu_netdev="${QEMU_NETDEV:-user,id=n0}"
 qemu_tpm_socket="${QEMU_TPM_SOCKET:-}"
+qemu_tpm_device="${QEMU_TPM_DEVICE:-tpm-crb}"
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
@@ -33,7 +34,7 @@ if [[ -n "$qemu_tpm_socket" ]]; then
     qemu_extra_args+=(
         -chardev "socket,id=chrtpm,path=$qemu_tpm_socket"
         -tpmdev "emulator,id=tpm0,chardev=chrtpm"
-        -device "tpm-crb,tpmdev=tpm0"
+        -device "$qemu_tpm_device,tpmdev=tpm0"
     )
 fi
 
@@ -43,6 +44,7 @@ dd if="$boot_bin" of="$boot_sector" bs=512 count=1 status=none
 
 set +e
 timeout "$timeout_seconds" qemu-system-x86_64 \
+    -machine "${QEMU_MACHINE:-pc}" \
     -m "${QEMU_MEMORY:-128M}" \
     -nographic \
     -serial mon:stdio \

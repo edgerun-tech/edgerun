@@ -1,5 +1,6 @@
 //! Memory-only event-log backend used for trait validation and tests.
 
+use crate::prelude::v1::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 

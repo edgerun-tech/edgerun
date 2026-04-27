@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -7,7 +8,7 @@ use alloc::vec::Vec;
 
 use crate::device::TpmDevice;
 use crate::signing::{sign_params_for_message, sign_prehashed_with_device};
-use crate::traits::{TpmSigningKey, TpmTransport};
+use crate::traits::{FixedTpmTransport, TpmSigningKey, TpmTransport};
 use crate::types::*;
 use crate::wire::encode_parsed_signature;
 
@@ -59,6 +60,19 @@ impl TpmTransport for LinuxTpmDevice {
             out.extend_from_slice(&rest);
         }
         Ok(out)
+    }
+}
+
+impl FixedTpmTransport for LinuxTpmDevice {
+    fn transact_into(&mut self, command: &[u8], response: &mut [u8]) -> Result<usize, TpmError> {
+        let owned = self.transact(command)?;
+        if owned.len() > response.len() {
+            return Err(TpmError::Protocol(
+                "TPM response exceeds fixed buffer".into(),
+            ));
+        }
+        response[..owned.len()].copy_from_slice(&owned);
+        Ok(owned.len())
     }
 }
 

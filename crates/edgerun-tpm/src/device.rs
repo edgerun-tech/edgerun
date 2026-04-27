@@ -1,14 +1,16 @@
+use crate::prelude::v1::*;
 use alloc::format;
 use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::constants::*;
-use crate::traits::TpmTransport;
+use crate::traits::{FixedTpmTransport, TpmTransport};
 use crate::types::*;
 use crate::wire::commands::*;
 use crate::wire::parse::{
-    ensure_success_response, key_info_from_read_public, parse_hash_response,
-    parse_read_public_response, parse_sign_response, parse_start_auth_session_response,
+    ensure_success_response, key_info_from_read_public, parse_get_random_response,
+    parse_hash_response, parse_read_public_response, parse_sign_response,
+    parse_start_auth_session_response,
 };
 use crate::wire::{read_u16, read_u32};
 
@@ -55,6 +57,12 @@ impl<T: TpmTransport> TpmDevice<T> {
     pub fn hash(&mut self, params: &TpmHashParams) -> Result<TpmHashResponse, TpmError> {
         let response = self.transmit_command(&build_hash_command(params))?;
         parse_hash_response(&response)
+    }
+
+    /// Read random bytes from the TPM RNG.
+    pub fn get_random(&mut self, bytes_requested: u16) -> Result<Vec<u8>, TpmError> {
+        let response = self.transmit_command(&build_get_random_command(bytes_requested))?;
+        parse_get_random_response(&response)
     }
 
     /// Sign a pre-hashed digest (no authorization).
@@ -140,11 +148,157 @@ impl<T: TpmTransport> TpmDevice<T> {
     /// Send TPM2_Startup. Idempotent — ignores `TPM_RC_INITIALIZE`.
     pub fn startup(&mut self, startup_type: u16) -> Result<(), TpmError> {
         let cmd = build_startup_command(startup_type);
-        match self.transmit_command(&cmd) {
-            Ok(_) => Ok(()),
-            Err(TpmError::TpmResponseCode(0x120)) => Ok(()), // already started
-            Err(e) => Err(e),
+        let response = self.transport.transact(&cmd)?;
+        let result = if response.len() < 10 {
+            Err(TpmError::TpmResponseCode(0xffff_fffc))
+        } else {
+            let size = u32::from_be_bytes([response[2], response[3], response[4], response[5]]);
+            let code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+            if size as usize != response.len() {
+                Err(TpmError::TpmResponseCode(0xffff_fffc))
+            } else if code == TPM_RC_SUCCESS || code == 0x100 || code == 0x120 {
+                Ok(())
+            } else {
+                Err(TpmError::TpmResponseCode(code))
+            }
+        };
+        core::mem::forget(response);
+        core::mem::forget(cmd);
+        result
+    }
+}
+
+impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
+    fn response_code_from_fixed(&mut self, command: &[u8], response: &mut [u8]) -> u32 {
+        let Ok(response_len) = self.transport.transact_into(command, response) else {
+            return 0xffff_fffb;
+        };
+
+        if response_len < 10 {
+            return 0xffff_fffc;
         }
+
+        u32::from_be_bytes([response[6], response[7], response[8], response[9]])
+    }
+
+    /// Send TPM2_Startup and return only the raw response code.
+    pub fn startup_response_code(&mut self, startup_type: u16) -> u32 {
+        let mut cmd = [
+            0x80, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x01, 0x44, 0x00, 0x00,
+        ];
+        cmd[10..12].copy_from_slice(&startup_type.to_be_bytes());
+        let mut response = [0u8; 32];
+        self.response_code_from_fixed(&cmd, &mut response)
+    }
+
+    /// Send TPM2_ReadPublic and return only the raw response code.
+    pub fn read_public_response_code(&mut self, handle: TpmHandle) -> u32 {
+        let mut cmd = [
+            0x80, 0x01, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x01, 0x73, 0x00, 0x00, 0x00, 0x00,
+        ];
+        cmd[10..14].copy_from_slice(&handle.0.to_be_bytes());
+        let mut response = [0u8; 1024];
+        self.response_code_from_fixed(&cmd, &mut response)
+    }
+
+    /// Send TPM2_Sign with an empty password authorization session and return
+    /// only the raw response code.
+    pub fn sign_response_code(&mut self, handle: TpmHandle, digest: &[u8; 32]) -> u32 {
+        let mut signature = [0u8; 64];
+        match self.sign_p256_sha256_into(handle, digest, &mut signature) {
+            Ok(_) => TPM_RC_SUCCESS,
+            Err(code) => code,
+        }
+    }
+
+    /// Send TPM2_Sign with an empty password authorization session and write a
+    /// raw P-256 ECDSA signature (`r || s`) into caller-owned storage.
+    pub fn sign_p256_sha256_into(
+        &mut self,
+        handle: TpmHandle,
+        digest: &[u8; 32],
+        signature: &mut [u8; 64],
+    ) -> Result<usize, u32> {
+        const COMMAND_SIZE: usize = 73;
+        let mut cmd = [0u8; COMMAND_SIZE];
+        let mut offset = 0;
+
+        cmd[offset..offset + 2].copy_from_slice(&TPM_ST_SESSIONS.to_be_bytes());
+        offset += 2;
+        cmd[offset..offset + 4].copy_from_slice(&(COMMAND_SIZE as u32).to_be_bytes());
+        offset += 4;
+        cmd[offset..offset + 4].copy_from_slice(&TPM_CC_SIGN.to_be_bytes());
+        offset += 4;
+        cmd[offset..offset + 4].copy_from_slice(&handle.0.to_be_bytes());
+        offset += 4;
+
+        cmd[offset..offset + 4].copy_from_slice(&9u32.to_be_bytes());
+        offset += 4;
+        cmd[offset..offset + 4].copy_from_slice(&TPM_RS_PW.to_be_bytes());
+        offset += 4;
+        cmd[offset..offset + 2].copy_from_slice(&0u16.to_be_bytes());
+        offset += 2;
+        cmd[offset] = 0;
+        offset += 1;
+        cmd[offset..offset + 2].copy_from_slice(&0u16.to_be_bytes());
+        offset += 2;
+
+        cmd[offset..offset + 2].copy_from_slice(&32u16.to_be_bytes());
+        offset += 2;
+        cmd[offset..offset + 32].copy_from_slice(digest);
+        offset += 32;
+        cmd[offset..offset + 2].copy_from_slice(&TPM_ALG_ECDSA.to_be_bytes());
+        offset += 2;
+        cmd[offset..offset + 2].copy_from_slice(&TPM_ALG_SHA256.to_be_bytes());
+        offset += 2;
+        cmd[offset..offset + 2].copy_from_slice(&TPM_ST_HASHCHECK.to_be_bytes());
+        offset += 2;
+        cmd[offset..offset + 4].copy_from_slice(&TPM_RH_NULL.to_be_bytes());
+        offset += 4;
+        cmd[offset..offset + 2].copy_from_slice(&0u16.to_be_bytes());
+
+        let mut response = [0u8; 256];
+        let Ok(response_len) = self.transport.transact_into(&cmd, &mut response) else {
+            return Err(0xffff_fffb);
+        };
+        parse_p256_sha256_signature_response(&response[..response_len], signature)
+    }
+
+    /// Fill `out` with bytes from TPM2_GetRandom using caller-owned buffers.
+    pub fn get_random_into(&mut self, out: &mut [u8]) -> usize {
+        let requested = core::cmp::min(out.len(), u16::MAX as usize) as u16;
+        let cmd = [
+            0x80,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x0c,
+            0x00,
+            0x00,
+            0x01,
+            0x7b,
+            (requested >> 8) as u8,
+            requested as u8,
+        ];
+        let mut response = [0u8; 4096];
+        let Ok(response_len) = self.transport.transact_into(&cmd, &mut response) else {
+            return 0;
+        };
+        if response_len < 12 {
+            return 0;
+        }
+        let response_code =
+            u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+        if response_code != TPM_RC_SUCCESS {
+            return 0;
+        }
+        let random_len = u16::from_be_bytes([response[10], response[11]]) as usize;
+        if 12 + random_len > response_len || random_len > out.len() {
+            return 0;
+        }
+        out[..random_len].copy_from_slice(&response[12..12 + random_len]);
+        random_len
     }
 
     /// Create and persist an ECDSA P-256 signing key.
@@ -306,5 +460,100 @@ impl<T: TpmTransport> TpmDevice<T> {
             public_key_bytes,
             name,
         })
+    }
+}
+
+fn parse_p256_sha256_signature_response(
+    response: &[u8],
+    signature: &mut [u8; 64],
+) -> Result<usize, u32> {
+    if response.len() < 10 {
+        return Err(0xffff_fffc);
+    }
+
+    let tag = u16::from_be_bytes([response[0], response[1]]);
+    let size = u32::from_be_bytes([response[2], response[3], response[4], response[5]]) as usize;
+    let code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+    if code != TPM_RC_SUCCESS {
+        return Err(code);
+    }
+    if size != response.len() {
+        return Err(0xffff_fffc);
+    }
+
+    let mut cursor = if tag == TPM_ST_SESSIONS {
+        if response.len() < 14 {
+            return Err(0xffff_fffc);
+        }
+        14
+    } else {
+        10
+    };
+
+    if response.len().saturating_sub(cursor) < 4 {
+        return Err(0xffff_fffc);
+    }
+    let scheme = u16::from_be_bytes([response[cursor], response[cursor + 1]]);
+    cursor += 2;
+    let hash = u16::from_be_bytes([response[cursor], response[cursor + 1]]);
+    cursor += 2;
+    if scheme != TPM_ALG_ECDSA || hash != TPM_ALG_SHA256 {
+        return Err(0xffff_fffa);
+    }
+
+    let r = read_fixed_tpm2b(response, &mut cursor)?;
+    let s = read_fixed_tpm2b(response, &mut cursor)?;
+    if r.len() > 32 || s.len() > 32 {
+        return Err(0xffff_fffa);
+    }
+
+    signature.fill(0);
+    signature[32 - r.len()..32].copy_from_slice(r);
+    signature[64 - s.len()..64].copy_from_slice(s);
+    Ok(64)
+}
+
+fn read_fixed_tpm2b<'a>(bytes: &'a [u8], cursor: &mut usize) -> Result<&'a [u8], u32> {
+    if bytes.len().saturating_sub(*cursor) < 2 {
+        return Err(0xffff_fffc);
+    }
+    let len = u16::from_be_bytes([bytes[*cursor], bytes[*cursor + 1]]) as usize;
+    *cursor += 2;
+    if bytes.len().saturating_sub(*cursor) < len {
+        return Err(0xffff_fffc);
+    }
+    let start = *cursor;
+    *cursor += len;
+    Ok(&bytes[start..start + len])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_fixed_p256_signature_response_pads_components() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&TPM_ALG_ECDSA.to_be_bytes());
+        body.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());
+        body.extend_from_slice(&31u16.to_be_bytes());
+        body.extend_from_slice(&[0x11; 31]);
+        body.extend_from_slice(&32u16.to_be_bytes());
+        body.extend_from_slice(&[0x22; 32]);
+
+        let mut response = Vec::new();
+        response.extend_from_slice(&TPM_ST_NO_SESSIONS.to_be_bytes());
+        response.extend_from_slice(&((10 + body.len()) as u32).to_be_bytes());
+        response.extend_from_slice(&TPM_RC_SUCCESS.to_be_bytes());
+        response.extend_from_slice(&body);
+
+        let mut signature = [0u8; 64];
+        assert_eq!(
+            parse_p256_sha256_signature_response(&response, &mut signature),
+            Ok(64)
+        );
+        assert_eq!(signature[0], 0);
+        assert_eq!(&signature[1..32], &[0x11; 31]);
+        assert_eq!(&signature[32..64], &[0x22; 32]);
     }
 }

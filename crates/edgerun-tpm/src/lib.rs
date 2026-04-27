@@ -12,9 +12,45 @@
 //! let sig = key.sign_message(b"hello")?;
 //! ```
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 extern crate alloc;
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
+pub mod error {
+    pub use core::error::*;
+}
+
+pub mod option {
+    pub use core::option::*;
+}
+
+pub mod result {
+    pub use core::result::*;
+}
+
+pub mod string {
+    pub use alloc::string::*;
+}
+
+pub mod vec {
+    pub use alloc::vec::*;
+}
 
 // TSS2 ESAPI module removed — we now use raw TPM commands via /dev/tpmrm0
 
@@ -22,9 +58,10 @@ mod acpi;
 mod constants;
 mod crb;
 mod device;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 mod linux;
 mod signing;
+mod tis;
 mod traits;
 mod types;
 mod wire;
@@ -32,19 +69,20 @@ mod wire;
 // Explicit public API — no glob re-exports
 pub use acpi::{discover_tpm2_info, parse_tpm2_table, AcpiTpm2Info};
 pub use constants::{
-    TPM_ALG_ECC, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_SIGN, TPM_ECC_NIST_P256, TPM_RC_SUCCESS,
-    TPM_RH_NULL, TPM_RS_PW, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
+    TPM_ALG_ECC, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_GET_RANDOM, TPM_CC_SIGN, TPM_ECC_NIST_P256,
+    TPM_RC_SUCCESS, TPM_RH_NULL, TPM_RS_PW, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
 };
 pub use crb::CrbTpmTransport;
 pub use device::TpmDevice;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use linux::{LinuxTpmDevice, LinuxTpmSigningKey};
 pub use signing::{
     default_sign_scheme_for_algorithm, hash_message_for_algorithm, sign_params_for_message,
     sign_prehashed_with_device, sign_record_with_tpm, sign_record_with_tpm_checked,
     signature_input_for_record, TpmTransportSigningKey,
 };
-pub use traits::{TpmSigningKey, TpmTransport};
+pub use tis::TisTpmTransport;
+pub use traits::{FixedTpmTransport, TpmSigningKey, TpmTransport};
 pub use types::{
     TpmAssuranceLevel, TpmAuthCommand, TpmEccCurve, TpmError, TpmHandle, TpmHashParams, TpmKeyInfo,
     TpmNameAlgorithm, TpmParsedSignature, TpmPasswordAuthSession, TpmPolicySession,
@@ -52,15 +90,16 @@ pub use types::{
     TpmSignatureAlgorithm, TpmSignatureScheme,
 };
 pub use wire::commands::{
-    build_hash_command, build_policy_authorize_command, build_policy_command_code_command,
-    build_policy_pcr_command, build_read_public_command, build_sign_command,
-    build_sign_command_with_password_auth, build_sign_command_with_policy_session,
-    build_start_auth_session_command, build_startup_command, build_verify_signature_command,
+    build_get_random_command, build_hash_command, build_policy_authorize_command,
+    build_policy_command_code_command, build_policy_pcr_command, build_read_public_command,
+    build_sign_command, build_sign_command_with_password_auth,
+    build_sign_command_with_policy_session, build_start_auth_session_command,
+    build_startup_command, build_verify_signature_command,
 };
 pub use wire::parse::{
     ensure_success_response, infer_signature_algorithm, key_info_from_read_public,
-    parse_hash_response, parse_public_area, parse_read_public_response, parse_response_header,
-    parse_sign_response, parse_start_auth_session_response,
+    parse_get_random_response, parse_hash_response, parse_public_area, parse_read_public_response,
+    parse_response_header, parse_sign_response, parse_start_auth_session_response,
 };
 pub use wire::{
     build_auth_command, build_password_auth_area, encode_command_header, encode_name_algorithm,
@@ -119,6 +158,13 @@ mod tests {
         };
         let cmd = build_hash_command(&params);
         assert_eq!(cmd.len(), 10 + 2 + 16 + 2 + 4); // header + len + data + alg + hierarchy
+    }
+
+    #[test]
+    fn get_random_command_has_correct_size() {
+        let cmd = build_get_random_command(32);
+        assert_eq!(cmd.len(), 12);
+        assert_eq!(&cmd[10..12], &32u16.to_be_bytes());
     }
 
     // -----------------------------------------------------------------------
@@ -223,6 +269,16 @@ mod tests {
         let resp = parse_hash_response(&response).unwrap();
         assert_eq!(resp.digest.len(), 32);
         assert_eq!(resp.validation.tag, TPM_ST_HASHCHECK);
+    }
+
+    #[test]
+    fn parse_get_random_response_success() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&4u16.to_be_bytes());
+        body.extend_from_slice(&[1, 2, 3, 4]);
+        let response = fake_success_response(TPM_ST_NO_SESSIONS, &body);
+        let random = parse_get_random_response(&response).unwrap();
+        assert_eq!(random, vec![1, 2, 3, 4]);
     }
 
     // -----------------------------------------------------------------------

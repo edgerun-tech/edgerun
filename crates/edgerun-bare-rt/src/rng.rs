@@ -11,6 +11,23 @@ impl Rng {
         Self { state: seed }
     }
 
+    pub fn mix_seed(&mut self, seed: u64) {
+        self.state ^= seed;
+        self.state = self
+            .state
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            .wrapping_add(0xD1B5_4A32_D192_ED03);
+    }
+
+    pub fn mix_entropy(&mut self, bytes: &[u8]) {
+        let mut acc = 0xA076_1D64_78BD_642Fu64;
+        for (idx, byte) in bytes.iter().enumerate() {
+            acc ^= (*byte as u64) << ((idx & 7) * 8);
+            acc = acc.rotate_left(9).wrapping_mul(0xE703_7ED1_A0B4_28DB);
+        }
+        self.mix_seed(acc);
+    }
+
     pub fn new_from_entropy() -> Self {
         let mut seed: u64 = 0;
         unsafe {

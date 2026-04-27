@@ -114,36 +114,84 @@ fn dhcp_ipv4_to_rt(ip: edgerun_dhcp::Ipv4Addr) -> IpAddr {
 }
 
 #[cfg(target_os = "none")]
-unsafe fn probe_tpm2() {
+unsafe fn probe_tpm2() -> Option<[u8; 32]> {
     rt::log::log(1, "Looking for TPM2 ACPI table...");
-    let transport = match unsafe { edgerun_tpm::CrbTpmTransport::discover_acpi() } {
+    match unsafe { edgerun_tpm::CrbTpmTransport::discover_acpi() } {
         Ok(Some(transport)) => {
             rt::log::log(1, "TPM2 CRB transport discovered");
-            transport
+            return probe_tpm2_transport(transport.with_timeout_polls(10));
         }
         Ok(None) => {
             rt::log::log(1, "No TPM2 ACPI table found");
-            return;
         }
         Err(_) => {
             rt::log::log(1, "TPM2 ACPI discovery failed");
-            return;
         }
+    }
+
+    rt::log::log(1, "Trying TPM2 TIS transport...");
+    let transport = unsafe { edgerun_tpm::TisTpmTransport::new_default_x86() };
+    probe_tpm2_transport(transport.with_timeout_polls(100_000))
+}
+
+#[cfg(target_os = "none")]
+fn probe_tpm2_transport<T>(transport: T) -> Option<[u8; 32]>
+where
+    T: edgerun_tpm::FixedTpmTransport + edgerun_tpm::TpmTransport,
+{
+    let mut device = edgerun_tpm::TpmDevice::new(transport);
+    let startup_code = device.startup_response_code(edgerun_tpm::TPM_SU_CLEAR);
+    if startup_code == edgerun_tpm::TPM_RC_SUCCESS || startup_code == 0x100 || startup_code == 0x120
+    {
+        rt::log::log(1, "TPM2 startup ok");
+    } else if startup_code == 0x144 {
+        rt::log::log(1, "TPM2 startup failed: command size");
+        return None;
+    } else if startup_code == 0xffff_fffb {
+        rt::log::log(1, "TPM2 startup failed: transport");
+        return None;
+    } else if startup_code == 0xffff_fffc {
+        rt::log::log(1, "TPM2 startup failed: malformed response");
+        return None;
+    } else {
+        rt::log::log(1, "TPM2 startup failed");
+        return None;
+    }
+
+    let mut tpm_random = [0u8; 32];
+    let random_len = device.get_random_into(&mut tpm_random);
+    let entropy = if random_len != 0 {
+        rt::log::log(1, "TPM2 random ok");
+        Some(tpm_random)
+    } else {
+        rt::log::log(1, "TPM2 random failed");
+        None
     };
 
-    let mut device = edgerun_tpm::TpmDevice::new(transport);
-    match device.startup(edgerun_tpm::TPM_SU_CLEAR) {
-        Ok(()) => rt::log::log(1, "TPM2 startup ok"),
-        Err(_) => {
-            rt::log::log(1, "TPM2 startup failed");
-            return;
-        }
+    let Some(entropy) = entropy else {
+        return None;
+    };
+
+    let read_public_code = device.read_public_response_code(edgerun_tpm::TpmHandle(0x8100_0001));
+    if read_public_code == edgerun_tpm::TPM_RC_SUCCESS {
+        rt::log::log(1, "TPM2 persistent key readable");
+    } else {
+        rt::log::log(1, "TPM2 persistent key not readable");
+        return Some(entropy);
     }
 
-    match device.read_public(edgerun_tpm::TpmHandle(0x8100_0001)) {
-        Ok(_) => rt::log::log(1, "TPM2 persistent key readable"),
-        Err(_) => rt::log::log(1, "TPM2 persistent key not readable"),
+    let digest = [0u8; 32];
+    let mut signature = [0u8; 64];
+    if device
+        .sign_p256_sha256_into(edgerun_tpm::TpmHandle(0x8100_0001), &digest, &mut signature)
+        .is_ok()
+    {
+        rt::log::log(1, "TPM2 sign ok");
+    } else {
+        rt::log::log(1, "TPM2 sign failed");
     }
+
+    Some(entropy)
 }
 
 impl Future for NetPump<'_, '_> {
@@ -192,11 +240,12 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
 
-    unsafe {
-        probe_tpm2();
+    let mut rng = Rng::new_from_entropy();
+    if let Some(tpm_entropy) = unsafe { probe_tpm2() } {
+        rng.mix_entropy(&tpm_entropy);
+        rt::log::log(1, "RNG mixed TPM entropy");
     }
 
-    let mut rng = Rng::new_from_entropy();
     let test_crc = crc32(b"hello");
     let _ = test_crc;
 

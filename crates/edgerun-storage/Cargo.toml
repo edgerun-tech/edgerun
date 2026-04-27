@@ -6,10 +6,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-bare-rt = { path = "../edgerun-bare-rt", optional = true }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-proto = { path = "../edgerun-proto" }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-stream = { path = "../edgerun-stream" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", default-features = false }
 edgerun-crypto.workspace = true
 prost.workspace = true
@@ -18,7 +18,7 @@ libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }
 
 [features]
-bare-rt = ["dep:edgerun-bare-rt"]
+bare-rt = []
 
 [lints]
 workspace = true

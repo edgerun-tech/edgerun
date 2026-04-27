@@ -1,15 +1,18 @@
+use crate::prelude::v1::*;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ptr::{read_volatile, write_volatile};
+use core::sync::atomic::{compiler_fence, Ordering};
 
 use crate::acpi::AcpiTpm2Info;
-use crate::traits::TpmTransport;
+use crate::traits::{FixedTpmTransport, TpmTransport};
 use crate::types::TpmError;
 
 const HEADER_SIZE: usize = 10;
 const DEFAULT_TIMEOUT_POLLS: usize = 1_000_000;
 
 const CTRL_REQ_OFFSET: usize = 0x40;
+const CTRL_CANCEL_OFFSET: usize = 0x48;
 const CTRL_START_OFFSET: usize = 0x4c;
 const CTRL_CMD_SIZE_OFFSET: usize = 0x58;
 const CTRL_CMD_ADDR_OFFSET: usize = 0x5c;
@@ -18,12 +21,13 @@ const CTRL_RSP_ADDR_OFFSET: usize = 0x68;
 
 const CTRL_REQ_CMD_READY: u32 = 1 << 0;
 const CTRL_START: u32 = 1 << 0;
+const TPM_CRB_TIMEOUT_CODE: u32 = 0xffff_fffe;
 
 /// TPM 2.0 Command Response Buffer transport over memory-mapped registers.
 ///
 /// The `control_area` should come from the ACPI `TPM2` table. For early board
-/// bring-up, `from_control_area` can also be pointed at a known CRB base such
-/// as `0xfed4_0000` on many x86 systems.
+/// bring-up with a known CRB locality base such as `0xfed4_0000`, use
+/// `from_register_base`.
 #[derive(Clone, Copy, Debug)]
 pub struct CrbTpmTransport {
     control_area: usize,
@@ -59,21 +63,66 @@ impl CrbTpmTransport {
         }
     }
 
-    /// Create a CRB transport by reading buffer descriptors from the control area.
+    /// Create a CRB transport by reading buffer descriptors from an ACPI TPM2
+    /// control area pointer.
     ///
     /// # Safety
     ///
     /// `control_area` must point at a TPM2 CRB control area. This performs
     /// volatile reads from that region.
-    pub unsafe fn from_control_area(control_area: usize) -> Self {
-        let command_buffer_size = unsafe { read_u32(control_area + CTRL_CMD_SIZE_OFFSET) } as usize;
-        let command_buffer = unsafe { read_u64(control_area + CTRL_CMD_ADDR_OFFSET) } as usize;
-        let response_buffer_size =
-            unsafe { read_u32(control_area + CTRL_RSP_SIZE_OFFSET) } as usize;
-        let response_buffer = unsafe { read_u64(control_area + CTRL_RSP_ADDR_OFFSET) } as usize;
+    pub unsafe fn from_control_area(control_area: usize) -> Result<Self, TpmError> {
+        let first_base = if control_area & 0xfff == 0 {
+            control_area
+        } else {
+            control_area.saturating_sub(CTRL_REQ_OFFSET)
+        };
+        let second_base = if first_base == control_area {
+            control_area.saturating_sub(CTRL_REQ_OFFSET)
+        } else {
+            control_area
+        };
+
+        let first = unsafe { Self::from_register_base(first_base) };
+        if first.has_sane_descriptors() {
+            return Ok(first);
+        }
+
+        let second = unsafe { Self::from_register_base(second_base) };
+        if second.has_sane_descriptors() {
+            return Ok(second);
+        }
+
+        Err(TpmError::Protocol("invalid TPM CRB descriptors".into()))
+    }
+
+    /// Create a CRB transport by reading buffer descriptors from a CRB locality
+    /// register base, usually `0xfed4_0000` on x86.
+    ///
+    /// # Safety
+    ///
+    /// `register_base` must point at a TPM2 CRB locality register block. This
+    /// performs volatile reads from that region.
+    pub unsafe fn from_register_base(register_base: usize) -> Self {
+        let command_buffer_size =
+            unsafe { read_u32(register_base + CTRL_CMD_SIZE_OFFSET) } as usize;
+        let command_buffer = unsafe { read_u64(register_base + CTRL_CMD_ADDR_OFFSET) } as usize;
+        let advertised_response_buffer_size =
+            unsafe { read_u32(register_base + CTRL_RSP_SIZE_OFFSET) } as usize;
+        let advertised_response_buffer =
+            unsafe { read_u64(register_base + CTRL_RSP_ADDR_OFFSET) } as usize;
+        let response_buffer_size = if advertised_response_buffer == command_buffer {
+            advertised_response_buffer_size
+        } else {
+            command_buffer_size
+        };
+        let response_buffer = if advertised_response_buffer == command_buffer {
+            advertised_response_buffer
+        } else {
+            command_buffer
+        };
 
         Self {
-            control_area,
+            control_area: register_base,
             command_buffer,
             command_buffer_size,
             response_buffer,
@@ -91,7 +140,7 @@ impl CrbTpmTransport {
         if !info.is_crb() {
             return Err(TpmError::Protocol("ACPI TPM2 table is not CRB".into()));
         }
-        Ok(unsafe { Self::from_control_area(info.control_area as usize) })
+        unsafe { Self::from_control_area(info.control_area as usize) }
     }
 
     /// Discover a CRB TPM from ACPI firmware tables.
@@ -119,8 +168,38 @@ impl CrbTpmTransport {
         self.command_buffer
     }
 
+    pub fn command_buffer_size(&self) -> usize {
+        self.command_buffer_size
+    }
+
     pub fn response_buffer(&self) -> usize {
         self.response_buffer
+    }
+
+    pub fn response_buffer_size(&self) -> usize {
+        self.response_buffer_size
+    }
+
+    fn has_sane_descriptors(&self) -> bool {
+        const MAX_CRB_BUFFER_SIZE: usize = 64 * 1024;
+        const MAX_CRB_MMIO_SPAN: usize = 64 * 1024;
+
+        self.command_buffer >= 0x1000
+            && self.response_buffer >= 0x1000
+            && self.command_buffer >= self.control_area
+            && self.response_buffer >= self.control_area
+            && self.command_buffer - self.control_area < MAX_CRB_MMIO_SPAN
+            && self.response_buffer - self.control_area < MAX_CRB_MMIO_SPAN
+            && (HEADER_SIZE..=MAX_CRB_BUFFER_SIZE).contains(&self.command_buffer_size)
+            && (HEADER_SIZE..=MAX_CRB_BUFFER_SIZE).contains(&self.response_buffer_size)
+            && self
+                .command_buffer
+                .checked_add(self.command_buffer_size)
+                .is_some()
+            && self
+                .response_buffer
+                .checked_add(self.response_buffer_size)
+                .is_some()
     }
 
     fn request_command_ready(&self) -> Result<(), TpmError> {
@@ -132,9 +211,11 @@ impl CrbTpmTransport {
 
     fn start_command(&self) -> Result<(), TpmError> {
         unsafe {
+            write_u32(self.control_area + CTRL_CANCEL_OFFSET, 0);
+            compiler_fence(Ordering::SeqCst);
             write_u32(self.control_area + CTRL_START_OFFSET, CTRL_START);
         }
-        self.wait_u32_clear(self.control_area + CTRL_START_OFFSET, CTRL_START)
+        Ok(())
     }
 
     fn wait_u32_clear(&self, address: usize, mask: u32) -> Result<(), TpmError> {
@@ -145,7 +226,7 @@ impl CrbTpmTransport {
             }
             core::hint::spin_loop();
         }
-        Err(TpmError::Io("TPM CRB timeout".into()))
+        Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE))
     }
 
     fn copy_to_command_buffer(&self, command: &[u8]) -> Result<(), TpmError> {
@@ -170,31 +251,67 @@ impl CrbTpmTransport {
         }
 
         let mut header = [0u8; HEADER_SIZE];
-        unsafe {
-            for (offset, byte) in header.iter_mut().enumerate() {
-                *byte = read_volatile((self.response_buffer + offset) as *const u8);
-            }
-        }
+        let response_size = 'wait_response: loop {
+            for _ in 0..self.timeout_polls {
+                unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
 
-        let response_size =
-            u32::from_be_bytes([header[2], header[3], header[4], header[5]]) as usize;
-        if response_size < HEADER_SIZE {
-            return Err(TpmError::Protocol(
-                "TPM response shorter than header".into(),
-            ));
-        }
-        if response_size > self.response_buffer_size {
-            return Err(TpmError::Protocol("TPM response exceeds CRB buffer".into()));
-        }
+                let size =
+                    u32::from_be_bytes([header[2], header[3], header[4], header[5]]) as usize;
+                if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
+                    break 'wait_response size;
+                }
+
+                core::hint::spin_loop();
+            }
+
+            return Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE));
+        };
 
         let mut response = vec![0u8; response_size];
         response[..HEADER_SIZE].copy_from_slice(&header);
         unsafe {
-            for (offset, byte) in response.iter_mut().enumerate().skip(HEADER_SIZE) {
-                *byte = read_volatile((self.response_buffer + offset) as *const u8);
-            }
-        }
+            read_mmio_bytes(
+                self.response_buffer + HEADER_SIZE,
+                &mut response[HEADER_SIZE..],
+            )
+        };
         Ok(response)
+    }
+
+    fn read_response_into(&self, response: &mut [u8]) -> Result<usize, TpmError> {
+        if self.response_buffer_size < HEADER_SIZE || response.len() < HEADER_SIZE {
+            return Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE));
+        }
+
+        let mut header = [0u8; HEADER_SIZE];
+        let response_size = 'wait_response: loop {
+            for _ in 0..self.timeout_polls {
+                unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
+
+                let size =
+                    u32::from_be_bytes([header[2], header[3], header[4], header[5]]) as usize;
+                if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
+                    break 'wait_response size;
+                }
+
+                core::hint::spin_loop();
+            }
+
+            return Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE));
+        };
+
+        if response_size > response.len() {
+            return Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE));
+        }
+
+        response[..HEADER_SIZE].copy_from_slice(&header);
+        unsafe {
+            read_mmio_bytes(
+                self.response_buffer + HEADER_SIZE,
+                &mut response[HEADER_SIZE..response_size],
+            )
+        };
+        Ok(response_size)
     }
 }
 
@@ -204,6 +321,15 @@ impl TpmTransport for CrbTpmTransport {
         self.copy_to_command_buffer(command)?;
         self.start_command()?;
         self.read_response()
+    }
+}
+
+impl FixedTpmTransport for CrbTpmTransport {
+    fn transact_into(&mut self, command: &[u8], response: &mut [u8]) -> Result<usize, TpmError> {
+        self.request_command_ready()?;
+        self.copy_to_command_buffer(command)?;
+        self.start_command()?;
+        self.read_response_into(response)
     }
 }
 
@@ -221,4 +347,17 @@ unsafe fn read_u64(address: usize) -> u64 {
     let low = unsafe { read_u32(address) } as u64;
     let high = unsafe { read_u32(address + 4) } as u64;
     low | (high << 32)
+}
+
+unsafe fn read_mmio_bytes(address: usize, out: &mut [u8]) {
+    let mut offset = 0;
+    while offset < out.len() {
+        let aligned = (address + offset) & !0x3;
+        let word = unsafe { read_u32(aligned) }.to_le_bytes();
+        while offset < out.len() && (address + offset) < aligned + 4 {
+            let byte_index = (address + offset) - aligned;
+            out[offset] = word[byte_index];
+            offset += 1;
+        }
+    }
 }

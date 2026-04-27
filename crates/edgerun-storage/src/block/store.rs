@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use std::collections::BTreeMap;
 
 use edgerun_core::protocol::EventEnvelope;

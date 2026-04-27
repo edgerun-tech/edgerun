@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use alloc::vec::Vec;
 
 use crate::types::{TpmError, TpmKeyInfo};
@@ -11,4 +12,9 @@ pub trait TpmSigningKey {
 /// Abstract byte-level TPM transport (e.g. `/dev/tpmrm0`, simulator, fake).
 pub trait TpmTransport {
     fn transact(&mut self, command: &[u8]) -> Result<Vec<u8>, TpmError>;
+}
+
+/// Byte-level TPM transport that can write a response into caller-owned storage.
+pub trait FixedTpmTransport {
+    fn transact_into(&mut self, command: &[u8], response: &mut [u8]) -> Result<usize, TpmError>;
 }

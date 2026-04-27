@@ -18,7 +18,9 @@ use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_core::result::Verdict;
 use edgerun_core::value::Value;
 use edgerun_hardware_signing::NodeID;
-use edgerun_stream::{StreamError, StreamWriter};
+use edgerun_storage::core::EventLog;
+use edgerun_storage::{DurableStreamWriter, MemEventLog, StorageError};
+use edgerun_stream::StreamError;
 // Simple YAML config parser (no serde dependency)
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -35,6 +37,8 @@ pub enum NodeError {
     CommandDeferred(String),
     /// Stream error.
     Stream(edgerun_stream::StreamError),
+    /// Storage error.
+    Storage(String),
 }
 
 impl fmt::Display for NodeError {
@@ -44,6 +48,7 @@ impl fmt::Display for NodeError {
             NodeError::CommandRejected(reason) => write!(f, "command rejected: {reason}"),
             NodeError::CommandDeferred(reason) => write!(f, "command deferred: {reason}"),
             NodeError::Stream(e) => write!(f, "stream error: {e}"),
+            NodeError::Storage(e) => write!(f, "storage error: {e}"),
         }
     }
 }
@@ -53,6 +58,12 @@ impl std::error::Error for NodeError {}
 impl From<edgerun_stream::StreamError> for NodeError {
     fn from(e: edgerun_stream::StreamError) -> Self {
         NodeError::Stream(e)
+    }
+}
+
+impl From<StorageError> for NodeError {
+    fn from(e: StorageError) -> Self {
+        NodeError::Storage(e.to_string())
     }
 }
 
@@ -143,13 +154,13 @@ impl NodeConfig {
 /// The node owns its stream, manages capability grants, and processes
 /// incoming commands through the full validation → authorization →
 /// event recording pipeline.
-pub struct Node {
+pub struct Node<L = MemEventLog> {
     /// The node's identity (public key).
     identity: NodeID,
     /// The node's configuration.
     config: NodeConfig,
-    /// The node's event stream writer.
-    stream_writer: StreamWriter,
+    /// The node's signed durable event stream writer.
+    stream_writer: DurableStreamWriter<L>,
     /// Capability grant store.
     policy: SimplePolicyEngine,
     /// Replay cache: command_hash -> (command_id, decision_event_seq) for already-processed commands.
@@ -159,7 +170,7 @@ pub struct Node {
     revoked_delegation_ids: HashSet<Vec<u8>>,
 }
 
-impl Node {
+impl Node<MemEventLog> {
     /// Creates a new node from a YAML configuration.
     ///
     /// This creates a genesis event containing the configuration,
@@ -167,10 +178,22 @@ impl Node {
     pub fn from_config(
         config: NodeConfig,
         signer: Arc<dyn edgerun_hardware_signing::MeshSigner>,
-    ) -> Result<Self, StreamError> {
+    ) -> Result<Self, NodeError> {
+        Self::from_config_with_event_log(config, signer, MemEventLog::new())
+    }
+}
+
+impl<L: EventLog> Node<L> {
+    /// Creates a new node backed by a caller-provided durable event log.
+    pub fn from_config_with_event_log(
+        config: NodeConfig,
+        signer: Arc<dyn edgerun_hardware_signing::MeshSigner>,
+        event_log: L,
+    ) -> Result<Self, NodeError> {
         let identity = signer.node_id();
         let stream_id = config.stream_id.clone();
-        let stream_writer = StreamWriter::new(stream_id.clone(), signer, now_ms())?;
+        let stream_writer =
+            DurableStreamWriter::new(stream_id.clone(), signer, now_ms(), event_log)?;
 
         // Record the config as the genesis event metadata
         // The genesis event is already created by StreamWriter::new
@@ -221,7 +244,7 @@ impl Node {
 
         match result.verdict {
             Verdict::Accept => {
-                self.record_commitment(command);
+                self.record_commitment(command)?;
                 if let Some(Value::String(cmd_id)) =
                     result.derived.as_map().and_then(|m| m.get("command_id"))
                 {
@@ -245,7 +268,7 @@ impl Node {
                     .reason_code
                     .map(|r| r.as_str().to_string())
                     .unwrap_or_else(|| "deferred".into());
-                self.record_rejection(command, &reason);
+                self.record_rejection(command, &reason)?;
                 Err(NodeError::CommandDeferred(reason))
             }
             Verdict::Reject => {
@@ -253,7 +276,7 @@ impl Node {
                     .reason_code
                     .map(|r| r.as_str().to_string())
                     .unwrap_or_else(|| "invalid".into());
-                self.record_rejection(command, &reason);
+                self.record_rejection(command, &reason)?;
                 Err(NodeError::CommandRejected(reason))
             }
         }
@@ -293,16 +316,26 @@ impl Node {
         self.stream_writer.head()
     }
 
-    fn record_rejection(&mut self, _command: &CommandEnvelope, _reason: &str) {
-        let _ = self
-            .stream_writer
-            .append(EventType::CommandRejected as i32, 1, now_ms());
+    /// Returns the durable event log backing this node.
+    #[must_use]
+    pub fn event_log(&self) -> &L {
+        self.stream_writer.event_log()
     }
 
-    fn record_commitment(&mut self, _command: &CommandEnvelope) {
-        let _ = self
-            .stream_writer
-            .append(EventType::CommandCommitted as i32, 1, now_ms());
+    fn record_rejection(
+        &mut self,
+        _command: &CommandEnvelope,
+        _reason: &str,
+    ) -> Result<(), NodeError> {
+        self.stream_writer
+            .append(EventType::CommandRejected as i32, 1, now_ms())?;
+        Ok(())
+    }
+
+    fn record_commitment(&mut self, _command: &CommandEnvelope) -> Result<(), NodeError> {
+        self.stream_writer
+            .append(EventType::CommandCommitted as i32, 1, now_ms())?;
+        Ok(())
     }
 }
 
@@ -569,6 +602,18 @@ trust_nodes: []
         let events = node.events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].seq, 0);
+    }
+
+    #[test]
+    fn node_can_use_caller_provided_event_log() {
+        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let signer = Arc::new(TestSigner::new());
+        let node = Node::from_config_with_event_log(config, signer, MemEventLog::new()).unwrap();
+
+        let scanned = node.event_log().scan().unwrap();
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].event.seq, 0);
+        assert!(scanned[0].event.signature.is_some());
     }
 
     #[test]

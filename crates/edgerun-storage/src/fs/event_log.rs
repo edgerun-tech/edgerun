@@ -1,5 +1,6 @@
 //! Filesystem event-log backend.
 
+use crate::prelude::v1::*;
 use edgerun_core::protocol::EventEnvelope;
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
@@ -92,8 +93,8 @@ pub fn read_event_at(
     let mut file = File::open(&log_path)?;
     file.seek(SeekFrom::Start(file_offset))?;
 
-    let Some(len) =
-        edgerun_core::varint::decode_varint_from_read(&mut file).map_err(StorageError::Io)?
+    let Some(len) = edgerun_core::varint::decode_varint_from_read(&mut file)
+        .map_err(varint_io_to_storage_io)?
     else {
         return Ok(None);
     };
@@ -123,15 +124,14 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
     for entry in fs::read_dir(events_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("log") {
+        if path.extension().and_then(path_part_to_string) != Some("log".to_string()) {
             continue;
         }
 
         let stream_id_hex = path
             .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
+            .and_then(path_part_to_string)
+            .unwrap_or_else(String::new);
         let stream_id = match edgerun_core::util::hex_to_bytes(&stream_id_hex) {
             Ok(id) => id,
             Err(_) => continue,
@@ -143,8 +143,8 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
             let len = match edgerun_core::varint::decode_varint_from_read(&mut file) {
                 Ok(Some(v)) => v,
                 Ok(None) => break,
-                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                Err(e) => return Err(StorageError::Io(e)),
+                Err(e) if varint_is_unexpected_eof(&e) => break,
+                Err(e) => return Err(varint_io_to_storage_io(e)),
             };
 
             let mut event_bytes = vec![0u8; len as usize];
@@ -169,4 +169,40 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
     }
 
     Ok(scanned)
+}
+
+#[cfg(target_os = "none")]
+fn path_part_to_string(part: crate::std_compat::path::PathPart) -> Option<String> {
+    Some(part.into_string())
+}
+
+#[cfg(not(target_os = "none"))]
+fn path_part_to_string(part: &std::ffi::OsStr) -> Option<String> {
+    part.to_str().map(ToOwned::to_owned)
+}
+
+#[cfg(target_os = "none")]
+fn varint_is_unexpected_eof(err: &edgerun_core::io::Error) -> bool {
+    err.kind() == edgerun_core::io::ErrorKind::UnexpectedEof
+}
+
+#[cfg(not(target_os = "none"))]
+fn varint_is_unexpected_eof(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::UnexpectedEof
+}
+
+#[cfg(target_os = "none")]
+fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
+    let kind = match err.kind() {
+        edgerun_core::io::ErrorKind::UnexpectedEof => std::io::ErrorKind::UnexpectedEof,
+        edgerun_core::io::ErrorKind::InvalidData => std::io::ErrorKind::InvalidData,
+        edgerun_core::io::ErrorKind::NotFound => std::io::ErrorKind::NotFound,
+        edgerun_core::io::ErrorKind::Other => std::io::ErrorKind::Other,
+    };
+    StorageError::Io(std::io::Error::new(kind, err))
+}
+
+#[cfg(not(target_os = "none"))]
+fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
+    StorageError::Io(err)
 }

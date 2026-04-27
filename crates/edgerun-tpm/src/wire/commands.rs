@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use alloc::vec::Vec;
 
 use crate::constants::*;
@@ -133,6 +134,21 @@ pub fn build_hash_command(params: &TpmHashParams) -> Vec<u8> {
         &mut out,
     );
     out.extend_from_slice(&body);
+    out
+}
+
+/// Build a TPM2_GetRandom command.
+pub fn build_get_random_command(bytes_requested: u16) -> Vec<u8> {
+    let mut out = Vec::with_capacity(12);
+    encode_command_header(
+        TpmCommandHeader {
+            tag: TPM_ST_NO_SESSIONS,
+            size: 12,
+            command_code: TPM_CC_GET_RANDOM,
+        },
+        &mut out,
+    );
+    out.extend_from_slice(&bytes_requested.to_be_bytes());
     out
 }
 

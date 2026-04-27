@@ -18,7 +18,9 @@
 //!   {data_root}/indexes/fetch_queue.bin    — append-only records
 //!   {data_root}/indexes/object_presence.bin — key-value store
 
-use edgerun_rt::sync::RwLock;
+use crate::prelude::v1::*;
+
+use edgerun_bare_rt::RwLock;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};

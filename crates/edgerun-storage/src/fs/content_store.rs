@@ -1,5 +1,6 @@
 //! Filesystem content-addressed object backend.
 
+use crate::prelude::v1::*;
 use edgerun_proto::edgerun::v0::common::ObjectRef;
 use std::sync::Arc;
 

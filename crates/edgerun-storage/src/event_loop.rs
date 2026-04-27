@@ -10,6 +10,8 @@
 //!
 //! The event log IS the source of truth. FileIndex is a materialized view.
 
+use crate::prelude::v1::*;
+
 use edgerun_core::protocol::EventEnvelope;
 use std::collections::HashMap;
 use std::fs::File;
@@ -121,7 +123,7 @@ impl EventWriter {
             })?;
         }
 
-        edgerun_rt::spawn_blocking(move || {
+        edgerun_bare_rt::spawn_blocking(move || {
             result_rx.recv().map_err(|e| {
                 StorageError::Io(std::io::Error::new(
                     std::io::ErrorKind::BrokenPipe,

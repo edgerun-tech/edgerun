@@ -3,6 +3,7 @@
 //! This backend stores the same varint-framed protobuf event records used by the
 //! filesystem backend, but on a raw sector-addressable block storage device.
 
+use crate::prelude::v1::*;
 use std::cell::RefCell;
 use std::cmp::min;
 use std::sync::{Arc, Mutex};
@@ -12,7 +13,7 @@ use edgerun_proto::edgerun::v0::stream::EventEnvelope as ProtoEventEnvelope;
 use prost::Message;
 
 use crate::core::{
-    AppendReceipt, EventLocation, EventLog, ScannedEvent, canonical_event_hash, encode_event_frame,
+    canonical_event_hash, encode_event_frame, AppendReceipt, EventLocation, EventLog, ScannedEvent,
 };
 use crate::error::StorageError;
 

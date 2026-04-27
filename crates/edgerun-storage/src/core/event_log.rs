@@ -1,5 +1,6 @@
 //! Shared event-log framing and hashing.
 
+use crate::prelude::v1::*;
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;

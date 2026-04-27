@@ -19,12 +19,19 @@
 //! serialized event envelope with the `signature` field omitted.
 //! Canonical encoding is deterministic protobuf wire format (protocol §17).
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
+
+use alloc::sync::Arc;
+use edgerun_core::prelude::v1::*;
 use edgerun_core::protocol::{
     canonical_bytes, Digest, EventEnvelope, EventType, ProtocolRecord, Signature,
 };
 use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
 use prost_types::Timestamp;
-use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // Stream writer
@@ -179,7 +186,9 @@ pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
 
 /// Verifies the event signature against the given writer identity.
 pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), StreamError> {
-    use edgerun_core::crypto::{verify_canonical_record, SIG_DOMAIN_EVENT_ENVELOPE};
+    use edgerun_core::crypto::{
+        verify_canonical_record, verify_canonical_record_hw, SIG_DOMAIN_EVENT_ENVELOPE,
+    };
     let sig = event
         .signature
         .as_ref()
@@ -201,7 +210,9 @@ pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), Stream
     let vk = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
         .map_err(|e| StreamError::InvalidPublicKey(e.to_string()))?;
 
-    if !verify_canonical_record(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value) {
+    if !verify_canonical_record(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value)
+        && !verify_canonical_record_hw(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value)
+    {
         return Err(StreamError::SignatureVerification(
             "invalid signature".into(),
         ));
@@ -296,8 +307,8 @@ impl From<HardwareSigningError> for StreamError {
     }
 }
 
-impl std::fmt::Display for StreamError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for StreamError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::EmptyStream => write!(f, "stream is empty — no genesis event found"),
             Self::MissingGenesis { first_seq } => {
@@ -325,7 +336,7 @@ impl std::fmt::Display for StreamError {
     }
 }
 
-impl std::error::Error for StreamError {}
+impl core::error::Error for StreamError {}
 
 // ---------------------------------------------------------------------------
 // Tests

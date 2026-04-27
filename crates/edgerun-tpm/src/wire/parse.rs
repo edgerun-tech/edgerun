@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use alloc::format;
 use alloc::vec::Vec;
 
@@ -136,6 +137,19 @@ pub fn parse_hash_response(response: &[u8]) -> Result<TpmHashResponse, TpmError>
             digest: ticket_digest,
         },
     })
+}
+
+/// Parse a TPM2_GetRandom response.
+pub fn parse_get_random_response(response: &[u8]) -> Result<Vec<u8>, TpmError> {
+    let _header = ensure_success_response(response)?;
+    let mut cursor = 10usize;
+    let random = read_tpm2b(response, &mut cursor, "random_bytes")?;
+    if cursor != response.len() {
+        return Err(TpmError::Protocol(
+            "trailing bytes in get_random response".into(),
+        ));
+    }
+    Ok(random)
 }
 
 /// Parse a TPM2_StartAuthSession response.

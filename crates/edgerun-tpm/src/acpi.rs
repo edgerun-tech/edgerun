@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ptr::read_volatile;
@@ -175,13 +176,22 @@ unsafe fn find_rsdp_physical() -> Option<usize> {
 unsafe fn scan_rsdp_range(start: usize, end: usize) -> Option<usize> {
     let mut address = start;
     while address + RSDP_V1_SIZE <= end {
-        let signature = unsafe { read_physical(address, RSDP_SIGNATURE.len()) };
-        if signature.as_slice() == RSDP_SIGNATURE {
+        if unsafe { physical_starts_with(address, RSDP_SIGNATURE) } {
             return Some(address);
         }
         address = address.saturating_add(16);
     }
     None
+}
+
+unsafe fn physical_starts_with(address: usize, expected: &[u8]) -> bool {
+    for (offset, expected_byte) in expected.iter().enumerate() {
+        let byte = unsafe { read_volatile((address + offset) as *const u8) };
+        if byte != *expected_byte {
+            return false;
+        }
+    }
+    true
 }
 
 unsafe fn read_physical(address: usize, len: usize) -> Vec<u8> {

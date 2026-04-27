@@ -2,6 +2,8 @@
 //!
 //! Gate with `feature = "yubikey"`.
 
+use alloc::vec::Vec;
+
 use edgerun_yubikey::{
     sign_record_with_yubikey_checked, YubiKeyAssuranceLevel, YubiKeySignatureAlgorithm,
     YubiKeySigningKey,
@@ -132,6 +134,7 @@ fn map_hardware_to_yubikey_algorithm(
 mod tests {
     use super::*;
     use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
+    use alloc::vec;
     use edgerun_yubikey::{
         YubiKeyAssuranceLevel, YubiKeyError, YubiKeyKeyInfo, YubiKeyPinPolicy,
         YubiKeySignatureAlgorithm, YubiKeyTouchPolicy,

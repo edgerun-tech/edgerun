@@ -1,5 +1,6 @@
 //! Shared content-addressed storage identifiers.
 
+use crate::prelude::v1::*;
 use edgerun_proto::edgerun::v0::common::ObjectRef;
 
 use crate::error::StorageError;

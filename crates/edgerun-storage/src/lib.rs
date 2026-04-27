@@ -17,6 +17,18 @@
 //! File indexes can be deleted and rebuilt from the event log + encrypted blobs.
 //! Loss of indexes does not invalidate already stored records.
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(target_os = "none")]
+extern crate self as std;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[path = "std.rs"]
+mod std_compat;
+pub use std_compat::*;
+
 pub mod blobs;
 pub mod block;
 pub mod core;
@@ -31,7 +43,9 @@ pub mod store;
 pub use blobs::{blob_file_path, BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig};
 pub use block::BlockStreamStore;
 pub use block::{BlockEventLog, BlockStorage, InMemoryBlockDevice};
-pub use core::{canonical_event_hash, derive_logical_object_id, derive_representation_id};
+pub use core::{
+    canonical_event_hash, derive_logical_object_id, derive_representation_id, DurableStreamWriter,
+};
 pub use credentials::CredentialStore;
 pub use error::StorageError;
 pub use event_loop::{

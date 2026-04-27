@@ -47,25 +47,59 @@ pub mod sha2 {
 }
 
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
-    let mut d = crate::sha::Sha256::new();
-    sha2::Digest::update(&mut d, data);
-    let hash = sha2::Digest::finalize(d);
-    let mut result = alloc::vec::Vec::with_capacity(32);
-    for (i, k) in key.iter().enumerate() {
-        result.push(hash.get(i).copied().unwrap_or(0) ^ k);
-    }
-    result
+    use hmac_crate::{Hmac, Mac};
+
+    let mut mac =
+        <Hmac<crate::sha::Sha256> as Mac>::new_from_slice(key).expect("HMAC accepts any key");
+    mac.update(data);
+    mac.finalize().into_bytes().to_vec()
 }
 
 pub fn hmac_sha384(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
-    let mut d = crate::sha::Sha384::new();
-    sha2::Digest::update(&mut d, data);
-    let hash = sha2::Digest::finalize(d);
-    let mut result = alloc::vec::Vec::with_capacity(48);
-    for (i, k) in key.iter().enumerate() {
-        result.push(hash.get(i).copied().unwrap_or(0) ^ k);
+    use hmac_crate::{Hmac, Mac};
+
+    let mut mac =
+        <Hmac<crate::sha::Sha384> as Mac>::new_from_slice(key).expect("HMAC accepts any key");
+    mac.update(data);
+    mac.finalize().into_bytes().to_vec()
+}
+
+fn hkdf_expand_sha256(prk: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8> {
+    let mut okm = alloc::vec::Vec::with_capacity(len);
+    let mut previous = alloc::vec::Vec::new();
+    let mut counter = 1u8;
+
+    while okm.len() < len {
+        let mut input = alloc::vec::Vec::with_capacity(previous.len() + info.len() + 1);
+        input.extend_from_slice(&previous);
+        input.extend_from_slice(info);
+        input.push(counter);
+        previous = hmac_sha256(prk, &input);
+        okm.extend_from_slice(&previous);
+        counter = counter.wrapping_add(1);
     }
-    result
+
+    okm.truncate(len);
+    okm
+}
+
+fn hkdf_expand_sha384(prk: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8> {
+    let mut okm = alloc::vec::Vec::with_capacity(len);
+    let mut previous = alloc::vec::Vec::new();
+    let mut counter = 1u8;
+
+    while okm.len() < len {
+        let mut input = alloc::vec::Vec::with_capacity(previous.len() + info.len() + 1);
+        input.extend_from_slice(&previous);
+        input.extend_from_slice(info);
+        input.push(counter);
+        previous = hmac_sha384(prk, &input);
+        okm.extend_from_slice(&previous);
+        counter = counter.wrapping_add(1);
+    }
+
+    okm.truncate(len);
+    okm
 }
 
 pub fn hkdf_sha256(
@@ -74,24 +108,14 @@ pub fn hkdf_sha256(
     info: &[u8],
     len: usize,
 ) -> alloc::vec::Vec<u8> {
-    let prk = hmac_sha256(salt.unwrap_or(b""), ikm);
-    let mut okm = alloc::vec::Vec::with_capacity(len);
-    let mut t = alloc::vec::Vec::new();
-    let mut counter = 0u8;
-    while okm.len() < len {
-        counter = counter.wrapping_add(1);
-        if !t.is_empty() {
-            t.extend_from_slice(&okm[okm.len().saturating_sub(32)..]);
-        }
-        t.push(counter);
-        t.extend_from_slice(info);
-        let mut d = crate::sha::Sha256::new();
-        sha2::Digest::update(&mut d, &t);
-        let hash = sha2::Digest::finalize(d);
-        okm.extend_from_slice(&hash);
-    }
-    okm.truncate(len);
-    okm
+    let prk;
+    let prk = if let Some(salt) = salt {
+        prk = hmac_sha256(salt, ikm);
+        prk.as_slice()
+    } else {
+        ikm
+    };
+    hkdf_expand_sha256(prk, info, len)
 }
 
 pub fn hkdf_sha384(
@@ -100,25 +124,14 @@ pub fn hkdf_sha384(
     info: &[u8],
     len: usize,
 ) -> alloc::vec::Vec<u8> {
-    use sha2::Digest;
-    let prk = hmac_sha384(salt.unwrap_or(b""), ikm);
-    let mut okm = alloc::vec::Vec::with_capacity(len);
-    let mut t = alloc::vec::Vec::new();
-    let mut counter = 0u8;
-    while okm.len() < len {
-        counter = counter.wrapping_add(1);
-        if !t.is_empty() {
-            t.extend_from_slice(&okm[okm.len().saturating_sub(48)..]);
-        }
-        t.push(counter);
-        t.extend_from_slice(info);
-        let mut d = Sha384::new();
-        d.update(&t);
-        let hash = d.finalize();
-        okm.extend_from_slice(&hash);
-    }
-    okm.truncate(len);
-    okm
+    let prk;
+    let prk = if let Some(salt) = salt {
+        prk = hmac_sha384(salt, ikm);
+        prk.as_slice()
+    } else {
+        ikm
+    };
+    hkdf_expand_sha384(prk, info, len)
 }
 
 pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {

@@ -31,6 +31,8 @@
 //! store.delete("wifi", "home-network")?;
 //! ```
 
+use crate::prelude::v1::*;
+
 use std::sync::Arc;
 
 use crate::blobs::BlobStore;
@@ -159,6 +161,10 @@ impl CredentialStore {
 
 #[cfg(test)]
 mod tests {
+    use alloc::format;
+    use alloc::string::ToString;
+    use alloc::vec;
+
     use super::CredentialStore;
     use crate::blobs::{BlobKeySource, BlobStore, BlobStoreConfig};
     use crate::file_index::FileIndex;
