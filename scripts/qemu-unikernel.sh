@@ -14,6 +14,7 @@ timeout_seconds="${QEMU_TIMEOUT:-8}"
 qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu.log}"
 expected_marker="${QEMU_EXPECT:-VirtIO found}"
 qemu_net_dump="${QEMU_NET_DUMP:-}"
+qemu_netdev="${QEMU_NETDEV:-user,id=n0}"
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
@@ -41,7 +42,7 @@ timeout "$timeout_seconds" qemu-system-x86_64 \
     -drive "file=$boot_sector,format=raw,if=floppy" \
     -boot a \
     -device "loader,file=$kernel_bin,addr=0x100000,force-raw=on" \
-    -netdev user,id=n0 \
+    -netdev "$qemu_netdev" \
     -device virtio-net-pci,disable-legacy=on,disable-modern=off,netdev=n0 \
     "${qemu_extra_args[@]}" \
     2>&1 | tee "$qemu_log"
