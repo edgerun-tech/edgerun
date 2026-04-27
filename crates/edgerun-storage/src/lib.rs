@@ -39,6 +39,8 @@ pub mod file_index;
 pub mod fs;
 pub mod mem;
 pub mod store;
+#[cfg(test)]
+mod test_support;
 
 pub use blobs::{blob_file_path, BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig};
 pub use block::BlockStreamStore;
