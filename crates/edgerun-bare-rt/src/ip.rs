@@ -219,7 +219,7 @@ pub fn parse_packet(data: &[u8]) -> Option<(EthHeader, IpHeader)> {
     if eth.ethertype != ETH_TYPE_IPV4 {
         return None;
     }
-    let ip = IpHeader::from_slice(data);
+    let ip = IpHeader::from_slice(&data[14..]);
     Some((eth, ip))
 }
 
@@ -431,19 +431,18 @@ impl DhcpStateMachine {
         pkt[2] = 6;
         pkt[3] = 0;
         pkt[4..8].copy_from_slice(&self.xid.to_be_bytes());
+        pkt[10..12].copy_from_slice(&0x8000u16.to_be_bytes());
         pkt[28..34].copy_from_slice(&self.mac);
-        pkt[236] = 53;
-        pkt[237] = 1;
-        pkt[238] = 1;
-        pkt[239] = 55;
-        pkt[240] = 3;
+        pkt[236..240].copy_from_slice(&0x63825363u32.to_be_bytes());
+        pkt[240] = 53;
         pkt[241] = 1;
         pkt[242] = 1;
-        pkt[243] = 3;
-        pkt[244] = 6;
-        pkt[245] = 255;
-        pkt[246..250].copy_from_slice(&0x63825363u32.to_be_bytes());
-        pkt[250] = 255;
+        pkt[243] = 55;
+        pkt[244] = 3;
+        pkt[245] = 1;
+        pkt[246] = 3;
+        pkt[247] = 6;
+        pkt[248] = 255;
         pkt
     }
 
@@ -454,25 +453,27 @@ impl DhcpStateMachine {
         pkt[2] = 6;
         pkt[3] = 0;
         pkt[4..8].copy_from_slice(&self.xid.to_be_bytes());
+        pkt[10..12].copy_from_slice(&0x8000u16.to_be_bytes());
         pkt[28..34].copy_from_slice(&self.mac);
-        pkt[236] = 53;
-        pkt[237] = 1;
-        pkt[238] = 3;
-        pkt[239] = 50;
-        pkt[240] = 4;
-        pkt[241..245].copy_from_slice(self.ip.as_bytes());
-        pkt[245] = 54;
-        pkt[246] = 4;
-        pkt[247..251].copy_from_slice(server.as_bytes());
-        pkt[251] = 255;
+        pkt[236..240].copy_from_slice(&0x63825363u32.to_be_bytes());
+        pkt[240] = 53;
+        pkt[241] = 1;
+        pkt[242] = 3;
+        pkt[243] = 50;
+        pkt[244] = 4;
+        pkt[245..249].copy_from_slice(self.ip.as_bytes());
+        pkt[249] = 54;
+        pkt[250] = 4;
+        pkt[251..255].copy_from_slice(server.as_bytes());
+        pkt[255] = 255;
         pkt
     }
 
     pub fn parse(&mut self, pkt: &[u8]) -> bool {
-        if pkt.len() < 250 {
+        if pkt.len() < 240 {
             return false;
         }
-        let cookie = u32::from_be_bytes([pkt[246], pkt[247], pkt[248], pkt[249]]);
+        let cookie = u32::from_be_bytes([pkt[236], pkt[237], pkt[238], pkt[239]]);
         if cookie != 0x63825363 {
             return false;
         }
@@ -520,20 +521,65 @@ impl<'a> Network<'a> {
         self.send_eth(dst_mac, dst, proto, data)
     }
 
-    pub fn send_eth(&mut self, dst_mac: [u8; 6], dst: IpAddr, proto: u8, data: &[u8]) -> Option<&[u8]> {
-        let ip_len = (20 + data.len()) as u16;
+    pub fn send_udp(&mut self, dst: IpAddr, src_port: u16, dst_port: u16, data: &[u8]) -> Option<&[u8]> {
+        let routed = self.stack.route(dst);
+        let dst_mac = if let Some(mac) = self.stack.arp.lookup(routed) {
+            mac
+        } else {
+            [0xff; 6]
+        };
+        self.send_udp_eth(dst_mac, dst, src_port, dst_port, data)
+    }
+
+    pub fn send_udp_eth(&mut self, dst_mac: [u8; 6], dst: IpAddr, src_port: u16, dst_port: u16, data: &[u8]) -> Option<&[u8]> {
+        let udp_len = 8usize.checked_add(data.len())?;
+        let ip_len = 20usize.checked_add(udp_len)?;
+        let packet_len = 14usize.checked_add(ip_len)?;
+        if packet_len > self.packet.len() || udp_len > u16::MAX as usize || ip_len > u16::MAX as usize {
+            return None;
+        }
+
         self.packet = [0u8; 1514];
         let eth = self.stack.eth_header(dst_mac, ETH_TYPE_IPV4);
         eth.to_slice(&mut self.packet);
-        let ip = self.stack.ip_header(dst, proto, ip_len);
-        ip.to_slice(&mut self.packet[14..]);
+
+        let mut ip = self.stack.ip_header(dst, IP_PROTO_UDP, ip_len as u16);
+        ip.to_slice(&mut self.packet[14..34]);
         self.packet[14 + 10] = 0;
         self.packet[14 + 11] = 0;
-        let payload_start = 34;
-        self.packet_len = payload_start + data.len();
-        if data.len() <= self.packet.len() - payload_start {
-            self.packet[payload_start..payload_start + data.len()].copy_from_slice(data);
+        ip.checksum = ip_checksum(&self.packet[14..34]);
+        self.packet[14 + 10..14 + 12].copy_from_slice(&ip.checksum.to_be_bytes());
+
+        let udp = UdpHeader {
+            src_port,
+            dst_port,
+            len: udp_len as u16,
+            checksum: 0,
+        };
+        udp.to_slice(&mut self.packet[34..42]);
+        self.packet[42..42 + data.len()].copy_from_slice(data);
+        self.packet_len = packet_len;
+        Some(&self.packet[..self.packet_len])
+    }
+
+    pub fn send_eth(&mut self, dst_mac: [u8; 6], dst: IpAddr, proto: u8, data: &[u8]) -> Option<&[u8]> {
+        let ip_len = (20 + data.len()) as u16;
+        let packet_len = 34usize.checked_add(data.len())?;
+        if packet_len > self.packet.len() {
+            return None;
         }
+        self.packet = [0u8; 1514];
+        let eth = self.stack.eth_header(dst_mac, ETH_TYPE_IPV4);
+        eth.to_slice(&mut self.packet);
+        let mut ip = self.stack.ip_header(dst, proto, ip_len);
+        ip.to_slice(&mut self.packet[14..34]);
+        self.packet[14 + 10] = 0;
+        self.packet[14 + 11] = 0;
+        ip.checksum = ip_checksum(&self.packet[14..34]);
+        self.packet[14 + 10..14 + 12].copy_from_slice(&ip.checksum.to_be_bytes());
+        let payload_start = 34;
+        self.packet_len = packet_len;
+        self.packet[payload_start..payload_start + data.len()].copy_from_slice(data);
         Some(&self.packet[..self.packet_len])
     }
 
@@ -553,12 +599,20 @@ impl<'a> Network<'a> {
         if eth.ethertype != ETH_TYPE_IPV4 {
             return None;
         }
-        let ip = IpHeader::from_slice(data);
-        let payload = &data[20 * (ip.ver_ihl & 0x0f) as usize..];
+        if data.len() < 14 + 20 {
+            return None;
+        }
+        let ip = IpHeader::from_slice(&data[14..]);
+        let ip_header_len = 4 * (ip.ver_ihl & 0x0f) as usize;
+        let payload_start = 14 + ip_header_len;
+        if ip_header_len < 20 || data.len() < payload_start {
+            return None;
+        }
+        let payload = &data[payload_start..];
         match ip.proto {
-            IP_PROTO_UDP => Some(ParsedPacket::Udp(UdpHeader::from_slice(payload))),
-            IP_PROTO_TCP => Some(ParsedPacket::Tcp(TcpHeader::from_slice(payload))),
-            IP_PROTO_ICMP => Some(ParsedPacket::Icmp(IcmpHeader::from_slice(payload))),
+            IP_PROTO_UDP if payload.len() >= 8 => Some(ParsedPacket::Udp(UdpHeader::from_slice(payload))),
+            IP_PROTO_TCP if payload.len() >= 20 => Some(ParsedPacket::Tcp(TcpHeader::from_slice(payload))),
+            IP_PROTO_ICMP if payload.len() >= 8 => Some(ParsedPacket::Icmp(IcmpHeader::from_slice(payload))),
             _ => None,
         }
     }

@@ -9,7 +9,7 @@ extern crate edgerun_platform;
 
 use rt::{
     block_on, crc32, runtime::spawn, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
-    RingBuffer, TcpSocket, TftpConfig,
+    RingBuffer, TcpSocket, TftpConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
 };
 
 use core::future::Future;
@@ -109,7 +109,12 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     let mut network = Network::new(&mut stack);
     
     let discover = dhcp.discover();
-    if let Some(pkt) = network.send_ip(IpAddr::new(255, 255, 255, 255), 17, &discover) {
+    if let Some(pkt) = network.send_udp(
+        IpAddr::new(255, 255, 255, 255),
+        DHCP_CLIENT_PORT,
+        DHCP_SERVER_PORT,
+        &discover,
+    ) {
         net.send(pkt);
     }
     
