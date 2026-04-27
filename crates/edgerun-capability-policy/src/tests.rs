@@ -1,6 +1,7 @@
 use super::engine::*;
 use super::helpers::*;
 use super::*;
+use crate::time::{Duration, SystemTime, UNIX_EPOCH};
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec;
@@ -16,7 +17,6 @@ use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::common::{IdentityRef, RateLimit};
 use prost_types::{Duration as ProstDuration, Timestamp};
 use std::collections::{BTreeSet, VecDeque};
-use crate::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // -- Test fixture helpers --
 
@@ -1588,8 +1588,7 @@ fn combined_constraints_all_must_pass() {
 
 #[test]
 fn expired_grant_from_import_is_unusable() {
-    let now = SystemTime::now();
-    let past = now - Duration::from_secs(120);
+    let past = UNIX_EPOCH + Duration::from_secs(120);
     let grant = CapabilityGrant {
         grant_version: 1,
         grant_id: b"expired-grant".to_vec(),
@@ -1623,7 +1622,7 @@ fn expired_grant_from_import_is_unusable() {
     let mut engine = SimplePolicyEngine::default();
     engine.import_grant(grant.clone()).unwrap();
     let ctx = PolicyContext {
-        now,
+        now: UNIX_EPOCH + Duration::from_secs(181),
         ..PolicyContext::default()
     };
     let invocation = make_invocation(&grant.grant_id, CapabilityOperation::Query as i32);

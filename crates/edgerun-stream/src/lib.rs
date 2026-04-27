@@ -176,8 +176,11 @@ pub fn sign_event(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<
 #[must_use]
 pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
     let record = ProtocolRecord::EventEnvelope(event.clone());
-    let canonical = canonical_bytes(&record, false);
-    let hash = edgerun_core::crypto::sha256(&canonical);
+    let canonical = canonical_bytes(&record, true);
+    let hash = edgerun_core::crypto::record_hash(
+        edgerun_core::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
+        &canonical,
+    );
     Digest {
         algorithm: 1, // DIGEST_ALGORITHM_SHA256
         value: hash.to_vec(),

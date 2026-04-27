@@ -1,41 +1,49 @@
 //! Shared HTTP error types
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
+use alloc::format;
+use alloc::string::{String, ToString};
 use core::fmt;
-use edgerun_error::Error;
 
 /// HTTP error type — covers HTTP/1.1, HTTP/2, and HTTP/3 errors
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum Error {
     /// Invalid URI
-    #[error("Invalid URI: {0}")]
     InvalidUri(String),
     /// Invalid header
-    #[error("Invalid header: {0}")]
     InvalidHeader(String),
     /// Network error
-    #[error("Network error: {0}")]
     Network(crate::io::Error),
     /// Invalid HTTP method
-    #[error("Invalid method: {0}")]
     InvalidMethod(String),
     /// Invalid HTTP request
-    #[error("Invalid request: {0}")]
     InvalidRequest(String),
     /// Invalid status code
-    #[error("Invalid status code: {0}")]
     InvalidStatusCode(u16),
     /// Request timeout
-    #[error("Request timeout")]
     Timeout,
     /// HTTP protocol error
-    #[error("Protocol error: {0}")]
     ProtocolError(String),
     /// Invalid response
-    #[error("Invalid response: {0}")]
     InvalidResponse(String),
 }
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::InvalidUri(value) => write!(f, "Invalid URI: {value}"),
+            Error::InvalidHeader(value) => write!(f, "Invalid header: {value}"),
+            Error::Network(value) => write!(f, "Network error: {value}"),
+            Error::InvalidMethod(value) => write!(f, "Invalid method: {value}"),
+            Error::InvalidRequest(value) => write!(f, "Invalid request: {value}"),
+            Error::InvalidStatusCode(value) => write!(f, "Invalid status code: {value}"),
+            Error::Timeout => f.write_str("Request timeout"),
+            Error::ProtocolError(value) => write!(f, "Protocol error: {value}"),
+            Error::InvalidResponse(value) => write!(f, "Invalid response: {value}"),
+        }
+    }
+}
+
+impl core::error::Error for Error {}
 
 impl From<crate::io::Error> for Error {
     fn from(err: crate::io::Error) -> Self {
@@ -54,21 +62,30 @@ impl From<crate::http2::Http2Error> for Error {
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// Unified HTTP error type that wraps HTTP/1.1, HTTP/2, and HTTP/3 errors
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum HttpError {
     /// HTTP/1.1 error
-    #[error("HTTP/1.1 error: {0}")]
     Http1(Error),
     /// HTTP/2 error
-    #[error("HTTP/2 error: {0}")]
     Http2(Http2ErrorInner),
     /// HTTP/3 error
-    #[error("HTTP/3 error: {0}")]
     Http3(Http3ErrorInner),
     /// I/O error
-    #[error("I/O error: {0}")]
     Io(crate::io::Error),
 }
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HttpError::Http1(value) => write!(f, "HTTP/1.1 error: {value}"),
+            HttpError::Http2(value) => write!(f, "HTTP/2 error: {value}"),
+            HttpError::Http3(value) => write!(f, "HTTP/3 error: {value}"),
+            HttpError::Io(value) => write!(f, "I/O error: {value}"),
+        }
+    }
+}
+
+impl core::error::Error for HttpError {}
 
 /// HTTP/2 error details
 #[derive(Debug)]

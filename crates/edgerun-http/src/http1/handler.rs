@@ -36,9 +36,6 @@
 //! });
 //! ```
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;

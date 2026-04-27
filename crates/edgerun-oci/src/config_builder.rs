@@ -23,7 +23,7 @@ use alloc::collections::BTreeMap;
 use std::io;
 
 use crate::json::{OciMount, OciRlimit, OciSpec};
-use crate::process::ns_type_to_flag;
+use crate::validate::{default_process_args, default_process_env};
 
 /// Configuration for a container child process.
 ///
@@ -92,11 +92,7 @@ pub struct ContainerProcessConfig {
 impl ContainerProcessConfig {
     /// Returns the combined namespace flags.
     pub fn namespace_flags(&self) -> i32 {
-        let mut flags: i32 = 0;
-        for ns_type in &self.namespace_types {
-            flags |= ns_type_to_flag(ns_type).unwrap_or(0);
-        }
-        flags
+        crate::namespace_flags_from_types(self.namespace_types.iter().map(String::as_str))
     }
 
     /// Returns true if PID namespace is being created.
@@ -152,11 +148,8 @@ impl ContainerConfigBuilder {
         Self {
             rootfs: rootfs.into(),
             root_readonly: false,
-            args: vec!["/bin/sh".into()],
-            env: crate::process::DEFAULT_ENV
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+            args: default_process_args(),
+            env: default_process_env(),
             cwd: "/".into(),
             hostname: "edgerun".into(),
             uid: 0,
@@ -213,13 +206,8 @@ impl ContainerConfigBuilder {
         Ok(Self {
             rootfs: root.path.clone(),
             root_readonly: root.readonly.unwrap_or(false),
-            args: process.args.unwrap_or_else(|| vec!["/bin/sh".into()]),
-            env: process.env.unwrap_or_else(|| {
-                crate::process::DEFAULT_ENV
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect()
-            }),
+            args: process.args.unwrap_or_else(default_process_args),
+            env: process.env.unwrap_or_else(default_process_env),
             cwd: process.cwd.unwrap_or_else(|| "/".into()),
             hostname: spec.hostname.clone().unwrap_or_else(|| "edgerun".into()),
             uid: user.uid.unwrap_or(0),
@@ -393,17 +381,6 @@ impl ContainerConfigBuilder {
 
     /// Build the configuration.
     pub fn build(self) -> ContainerProcessConfig {
-        // Validate namespace types
-        for ns in &self.namespace_types {
-            match ns.as_str() {
-                "mount" | "cgroup" | "uts" | "ipc" | "user" | "pid" | "network" => {}
-                _ => {
-                    // Unknown namespace type — we'll warn but allow it
-                    // (it will just have no effect on namespace_flags)
-                }
-            }
-        }
-
         ContainerProcessConfig {
             rootfs: self.rootfs,
             root_readonly: self.root_readonly,
@@ -447,7 +424,7 @@ impl ContainerConfigBuilder {
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

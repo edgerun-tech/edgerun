@@ -6,8 +6,8 @@ extern crate std;
 
 mod prelude {
     pub mod v1 {
-        pub use alloc::boxed::Box;
         pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
         pub use alloc::format;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec;
@@ -16,12 +16,12 @@ mod prelude {
     }
 }
 
-use prelude::v1::*;
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
     CapabilityModality, CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 use edgerun_quectel_ec200a::DtaNetwork;
+use prelude::v1::*;
 
 /// Network interface supported by Quectel DTA modem
 pub struct DtaNetworkInterface {

@@ -8,12 +8,12 @@
 //! - The `Content-Encoding` header is present
 //! - The encoding is supported (gzip, deflate, br, identity)
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::HeaderMap;
 #[cfg(feature = "http-compression")]
 use alloc::boxed::Box;
+use alloc::string::String;
+#[cfg(feature = "http-compression")]
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 

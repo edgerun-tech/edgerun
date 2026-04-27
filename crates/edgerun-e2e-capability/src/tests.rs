@@ -546,6 +546,7 @@ fn test_camera_e2e_remote_adapter_session() {
 
 #[test]
 #[ignore = "requires real TPM hardware"]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 fn test_tpm_e2e_open() {
     require_hardware();
 
@@ -565,6 +566,7 @@ fn test_tpm_e2e_open() {
 
 #[test]
 #[ignore = "requires real TPM hardware"]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 fn test_tpm_e2e_get_random() {
     require_hardware();
 

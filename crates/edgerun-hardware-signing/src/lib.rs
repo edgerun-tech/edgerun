@@ -302,7 +302,7 @@ pub trait MeshSigner {
 
     /// Signs a record with domain separation (spec §17.9, §17.11).
     ///
-    /// Computes `SHA-256(canonical_bytes)` to get the record hash, then
+    /// Computes the family hash-domain-separated record hash, then
     /// signs `sig_domain_tag || 0x00 || record_hash`.
     /// This prevents signature replay across different record types.
     ///
@@ -317,7 +317,9 @@ pub trait MeshSigner {
         sig_domain_tag: &str,
         canonical_bytes: &[u8],
     ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
-        let record_hash = edgerun_core::crypto::sha256(canonical_bytes);
+        let hash_domain = edgerun_core::crypto::hash_domain_for_signature_domain(sig_domain_tag)
+            .unwrap_or(sig_domain_tag);
+        let record_hash = edgerun_core::crypto::record_hash(hash_domain, canonical_bytes);
         let sig_input = edgerun_core::crypto::signature_input(sig_domain_tag, &record_hash);
         self.sign_message_var(&sig_input)
     }

@@ -1,7 +1,7 @@
 //! AST-level edit operations. All operations parse → transform → prettyplease → write.
 
-use std::collections::HashSet;
 use std::boxed::Box;
+use std::collections::HashSet;
 use std::format;
 use std::path::{Path, PathBuf};
 use std::string::{String, ToString};

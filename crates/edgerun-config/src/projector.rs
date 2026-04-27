@@ -3,9 +3,9 @@
 //! Config changes are recorded as events in the stream. The projector
 //! replays these events to produce the current `ConfigState`.
 
-use crate::prelude::v1::*;
 use crate::collections::HashMap;
 use crate::parser::ConfigState;
+use crate::prelude::v1::*;
 use crate::types::ConfigResource;
 
 /// A config change event stored in the event stream.

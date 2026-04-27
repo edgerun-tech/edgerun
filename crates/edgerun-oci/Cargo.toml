@@ -22,16 +22,16 @@ serde = { version = "1", default-features = false, features = ["alloc", "derive"
 [features]
 default = []
 json = ["dep:edgerun-json", "dep:edgerun-crypto", "dep:miniz_oxide"]
+registry-client = ["json", "dep:edgerun-http", "dep:edgerun-encoding"]
 serde = ["json", "dep:serde", "edgerun-json/serde"]
 zstd = ["json", "dep:ruzstd"]
 std = [
+    "registry-client",
     "serde",
-    "dep:edgerun-http",
     "dep:edgerun-bare-rt",
     "dep:edgerun-tls",
     "dep:edgerun-secret-service",
     "dep:edgerun-core",
-    "dep:edgerun-encoding",
     "dep:libc",
     "dep:flate2",
     "dep:tar",

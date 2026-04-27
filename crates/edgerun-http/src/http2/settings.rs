@@ -1,9 +1,9 @@
 //! HTTP/2 settings (RFC 7540 Section 6.5)
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use super::{Http2Error, Result};
+use alloc::format;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// HTTP/2 setting identifiers
 pub mod setting_ids {

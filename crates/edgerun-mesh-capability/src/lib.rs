@@ -83,7 +83,9 @@ mod inbox;
 mod server;
 mod transport;
 
+use crate::collections::VecDeque;
 use crate::prelude::v1::*;
+use crate::sync::{Arc, Mutex};
 use edgerun_capabilities::CapabilityError;
 use edgerun_hardware_signing::NodeID;
 use edgerun_mesh_link::MeshLink;
@@ -92,8 +94,6 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
 };
 use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
 use prost::Message;
-use crate::collections::VecDeque;
-use crate::sync::{Arc, Mutex};
 
 pub use client::MeshCapabilityClient;
 pub use dispatcher::MeshEnvelopeDispatcher;

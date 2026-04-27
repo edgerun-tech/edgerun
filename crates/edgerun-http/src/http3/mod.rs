@@ -1,8 +1,7 @@
 //! HTTP/3 protocol (RFC 9114)
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-use edgerun_error::Error;
+use alloc::string::{String, ToString};
+use core::fmt;
 
 pub mod connection;
 pub mod frame;
@@ -25,19 +24,28 @@ pub use stream::Http3Stream;
 pub type Result<T> = core::result::Result<T, Http3Error>;
 
 /// HTTP/3 error
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum Http3Error {
-    #[error("IO: {0}")]
     Io(crate::runtime::io::Error),
-    #[error("QUIC: {0}")]
     QuicError(String),
-    #[error("QPACK: {0}")]
     QpackError(String),
-    #[error("Frame: {0}")]
     FrameUnexpected(String),
-    #[error("Protocol: {0}")]
     ProtocolViolation(String),
 }
+
+impl fmt::Display for Http3Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Http3Error::Io(value) => write!(f, "IO: {value}"),
+            Http3Error::QuicError(value) => write!(f, "QUIC: {value}"),
+            Http3Error::QpackError(value) => write!(f, "QPACK: {value}"),
+            Http3Error::FrameUnexpected(value) => write!(f, "Frame: {value}"),
+            Http3Error::ProtocolViolation(value) => write!(f, "Protocol: {value}"),
+        }
+    }
+}
+
+impl core::error::Error for Http3Error {}
 
 impl From<crate::runtime::io::Error> for Http3Error {
     fn from(e: crate::runtime::io::Error) -> Self {

@@ -7,9 +7,8 @@
 //! - Header block encoding with dynamic table references (Indexed::Dynamic, IndexedWithPostBase)
 //! - Decoder stream feedback via `on_decoder_recv()`
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use edgerun_encoding::buf::Cursor;
 use edgerun_qpack::dynamic::DynamicTable;
 use edgerun_qpack::encoder::Encoder;

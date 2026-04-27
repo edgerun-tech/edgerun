@@ -63,9 +63,6 @@
 //! let resp = client.get("https://api.example.com/data").await?;
 //! ```
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::client::HttpClient;
 use crate::header::HeaderMap;
 use crate::method::Method;
@@ -73,7 +70,9 @@ use crate::runtime::Mutex;
 use crate::{Error, Request, Response, Result};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::any::{Any, TypeId};
 use core::fmt;
 use core::future::Future;

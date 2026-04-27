@@ -284,7 +284,7 @@ pub fn default_sign_scheme_for_algorithm(algorithm: &TpmSignatureAlgorithm) -> T
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
     use crate::constants::{

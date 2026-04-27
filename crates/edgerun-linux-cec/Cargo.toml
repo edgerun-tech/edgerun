@@ -12,5 +12,13 @@ edgerun-linux-gpu = { path = "../edgerun-linux-gpu" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-encoding = { path = "../edgerun-encoding" }
 
+[features]
+std = []
+
+[[bin]]
+name = "linux_cec_tool"
+path = "src/bin/linux-cec-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

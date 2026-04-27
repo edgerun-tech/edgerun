@@ -440,16 +440,16 @@ pub fn dispatch_command(
                     None,
                 )
             } else {
-                // Unknown extension type (>= 1000) — accept but don't execute.
-                // Local policy may allow specific extension types.
+                // Unknown or unsupported extension types are authority-critical.
+                // Local policy can add explicit handlers, but the default is fail-closed.
                 record_and_respond(
                     command,
                     store,
                     stream_id,
                     signer,
                     controllers,
-                    true,
-                    "",
+                    false,
+                    "unsupported_extension_command_type",
                     Vec::new(),
                     None,
                 )
@@ -897,7 +897,10 @@ fn dispatch_execute_workload(
         signable.signature = None;
         let mut canonical = Vec::new();
         if prost::Message::encode(&signable, &mut canonical).is_ok() {
-            let d = edgerun_core::crypto::sha256(&canonical);
+            let d = edgerun_core::crypto::record_hash(
+                edgerun_core::crypto::HASH_DOMAIN_DELEGATION_RECORD,
+                &canonical,
+            );
             let mut h = [0u8; 32];
             h.copy_from_slice(&d);
             h
@@ -2571,7 +2574,10 @@ fn delegation_hash(delegation: &edgerun_proto::edgerun::v0::trust::DelegationRec
     prost::Message::encode(&signable, &mut canonical).expect("prost encode failed for delegation");
     Digest {
         algorithm: 1,
-        value: edgerun_core::crypto::sha256(&canonical).to_vec(),
+        value: edgerun_core::crypto::record_hash(
+            edgerun_core::crypto::HASH_DOMAIN_DELEGATION_RECORD,
+            &canonical,
+        ),
     }
 }
 

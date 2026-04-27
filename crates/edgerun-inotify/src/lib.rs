@@ -147,15 +147,15 @@ use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
 use core::cmp::Ord;
 use core::convert::AsRef;
+use core::fmt;
 use core::fmt::Write;
 use core::ops::Drop;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{Err, Ok};
-use std::os::fd::{FromRawFd, IntoRawFd};
-use std::os::unix::ffi::OsStrExt;
-use core::fmt;
 #[cfg(not(target_os = "none"))]
 use std::io;
+use std::os::fd::{FromRawFd, IntoRawFd};
+use std::os::unix::ffi::OsStrExt;
 
 #[repr(C)]
 struct InotifyEvent {

@@ -351,7 +351,7 @@ fn extract_first_secret(reply: &Msg) -> io::Result<Vec<u8>> {
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

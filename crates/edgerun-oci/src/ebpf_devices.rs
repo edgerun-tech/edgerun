@@ -277,7 +277,7 @@ pub fn teardown_device_cgroup_ebpf(cgroup_path: &Path, prog_fd: i32) -> io::Resu
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

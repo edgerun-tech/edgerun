@@ -20,11 +20,7 @@ use crate::userns::{
     apply_security_hardening, do_setgid, do_setuid, set_capabilities, set_supplementary_gids,
 };
 
-/// Default environment variables when none are specified in the OCI spec.
-pub const DEFAULT_ENV: &[&str] = &[
-    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    "TERM=xterm",
-];
+pub use crate::validate::DEFAULT_ENV;
 
 /// Get the host OS string (e.g., "linux").
 pub fn host_os() -> &'static str {
@@ -627,23 +623,7 @@ fn setup_intel_rdt(rdt: &crate::json::OciLinuxIntelRdt) -> io::Result<()> {
 }
 
 pub(crate) fn join_explicit_namespaces(ns_paths: &str) -> io::Result<()> {
-    if ns_paths.is_empty() {
-        return Ok(());
-    }
-    for entry in ns_paths.split('\n') {
-        if let Some((ns_type, path)) = entry.split_once(':') {
-            if let Some(flag) = ns_type_to_flag(ns_type) {
-                let fd = fs::File::open(path).map_err(|e| {
-                    io::Error::new(
-                        io::ErrorKind::NotFound,
-                        format!("cannot open namespace {}: {}", path, e),
-                    )
-                })?;
-                do_setns(fd.as_raw_fd(), flag)?;
-            }
-        }
-    }
-    Ok(())
+    join_explicit_namespaces_where(ns_paths, |_| true)
 }
 
 fn write_uid_map(content: &str) -> io::Result<()> {
@@ -882,13 +862,19 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
 /// In rootless mode, the user namespace was already created by the parent,
 /// so we skip joining it (and can't join it anyway — setns on user ns is restricted).
 fn join_explicit_namespaces_non_user(ns_paths: &str) -> io::Result<()> {
+    join_explicit_namespaces_where(ns_paths, |ns_type| ns_type != "user")
+}
+
+fn join_explicit_namespaces_where(
+    ns_paths: &str,
+    mut should_join: impl FnMut(&str) -> bool,
+) -> io::Result<()> {
     if ns_paths.is_empty() {
         return Ok(());
     }
     for entry in ns_paths.split('\n') {
         if let Some((ns_type, path)) = entry.split_once(':') {
-            // Skip user namespace — can't join via setns after creation
-            if ns_type == "user" {
+            if !should_join(ns_type) {
                 continue;
             }
             if let Some(flag) = ns_type_to_flag(ns_type) {
@@ -909,7 +895,7 @@ fn join_explicit_namespaces_non_user(ns_paths: &str) -> io::Result<()> {
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::json::{
@@ -1056,7 +1042,7 @@ mod tests {
 
     #[test]
     fn host_os_is_linux() {
-        assert_eq!(host_os(), "linux");
+        assert_eq!(host_os(), crate::validate::host_os());
     }
 
     #[test]
@@ -1072,14 +1058,8 @@ mod tests {
     fn platform_matches_host_linux_amd64() {
         use crate::json::OciPlatform;
         let platform = OciPlatform {
-            os: Some("linux".into()),
-            arch: Some(if cfg!(target_arch = "x86_64") {
-                "amd64".into()
-            } else if cfg!(target_arch = "aarch64") {
-                "arm64".into()
-            } else {
-                "unknown".into()
-            }),
+            os: Some(host_os().into()),
+            arch: Some(host_arch().into()),
             os_version: None,
             os_features: None,
         };

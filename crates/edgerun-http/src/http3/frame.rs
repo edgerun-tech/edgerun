@@ -1,7 +1,8 @@
 //! HTTP/3 frame types (RFC 9114 Section 7.1)
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// HTTP/3 frame types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

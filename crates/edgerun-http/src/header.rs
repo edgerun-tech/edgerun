@@ -1,8 +1,8 @@
 //! HTTP headers
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
 
 /// HTTP header name

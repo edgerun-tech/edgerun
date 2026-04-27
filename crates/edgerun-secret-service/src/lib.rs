@@ -5,7 +5,7 @@
 //!
 //! ## Architecture
 //!
-//! - **Backend** — BlobStore + FileIndex + EventLog for credential CRUD
+//! - **Backend** — BlobStore + FileIndex for credential CRUD
 //! - **Session** — Biometric verification state with idle auto-lock
 //! - **D-Bus server** — Freedesktop Secret Service compatible API over Unix socket
 //!
@@ -78,13 +78,11 @@ pub mod dbus_bus;
 pub mod dbus_server;
 pub mod dbus_types;
 pub mod dbus_wire;
-pub mod event_log;
 pub mod session;
 
 pub use backend::{no_op_event_recorder, Backend, CredentialMeta, SecretEventRecorder};
 #[cfg(not(target_os = "none"))]
 pub use dbus_bus::BusConnection;
-pub use event_log::{EventLog, SecretEvent, SecretEventType, SECRET_STREAM_ID};
 pub use session::{
     BiometricVerifier, NoBiometricVerifier, Session, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
 };

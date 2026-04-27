@@ -1,10 +1,10 @@
 //! Import converters — transform dnsmasq.conf and CoreDNS Corefile into
 //! Kubernetes-compatible YAML config resources.
 
-use crate::prelude::v1::*;
 use crate::collections::HashMap;
 use crate::mem;
 use crate::net::Ipv4Addr;
+use crate::prelude::v1::*;
 use crate::types::*;
 use edgerun_json::JsonValue;
 

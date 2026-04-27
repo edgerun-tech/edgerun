@@ -10,5 +10,13 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-usb = { path = "../edgerun-usb" }
 
+[features]
+std = []
+
+[[bin]]
+name = "linux_usb_tool"
+path = "src/bin/linux-usb-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

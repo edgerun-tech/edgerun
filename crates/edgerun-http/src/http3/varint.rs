@@ -7,8 +7,8 @@
 //! 2. **QPACK integer** (RFC 9204 §5, derived from RFC 7541 §5.1) — configurable
 //!    prefix bits with continuation bytes. Used for header table indices.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 // ─── QUIC varint (RFC 9000 §16) ─────────────────────────────────────────────
 

@@ -464,8 +464,9 @@ pub fn nsec3_hash_owner(name: &str, salt: &[u8], iterations: u16) -> Vec<u8> {
 }
 
 fn sha1_compat(data: &[u8]) -> Vec<u8> {
-    let digest = edgerun_crypto::sha256(data);
-    digest[..20].to_vec()
+    let mut hasher = edgerun_crypto::sha1::Sha1::new();
+    edgerun_crypto::sha1::Digest::update(&mut hasher, data);
+    edgerun_crypto::sha1::Digest::finalize(hasher).to_vec()
 }
 
 /// Encode the hash as a base32hex string for NSEC3 owner name construction.

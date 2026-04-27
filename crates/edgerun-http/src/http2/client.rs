@@ -4,13 +4,12 @@
 //! persistent TCP connection. Multiple requests are multiplexed concurrently
 //! as independent HTTP/2 streams.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::runtime::time::{Duration, Instant};
 use alloc::collections::BTreeMap as HashMap;
+use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::runtime::{
     mpsc, oneshot, select, sleep, spawn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,

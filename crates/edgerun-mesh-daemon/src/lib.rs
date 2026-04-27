@@ -21,32 +21,36 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+#[cfg(target_os = "none")]
+use bare_poll::{c_int, pollfd, POLLIN};
+#[cfg(target_os = "none")]
+use bare_time::Instant;
 use core::marker::Send;
 use core::mem::drop;
 use core::module_path;
-use core::option::Option::{self, None, Some};
 use core::ops::FnMut;
+use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
+use core::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "none")]
+use core::time::Duration;
 use edgerun_hardware_signing::HardwareSigningError;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
-use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRouter};
-use edgerun_mesh_capability::{sync::{Arc, Mutex}, MeshCapabilityServer, MeshEnvelopeDispatcher};
+use edgerun_mesh::router::MeshRouter;
+use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader};
+use edgerun_mesh_capability::{
+    sync::{Arc, Mutex},
+    MeshCapabilityServer, MeshEnvelopeDispatcher,
+};
+#[cfg(target_os = "none")]
+use edgerun_mesh_link::io;
 use edgerun_mesh_link::MeshLink;
 use edgerun_mesh_session::{HandshakeAccept, HandshakeInit, SessionError, SessionManager};
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;
 use edgerun_remote_capability::RemoteCapabilityProvider;
-use prost::Message;
 #[cfg(not(target_os = "none"))]
 use libc::{c_int, pollfd, POLLIN};
-#[cfg(target_os = "none")]
-use bare_poll::{c_int, pollfd, POLLIN};
-#[cfg(target_os = "none")]
-use edgerun_mesh_link::io;
-#[cfg(target_os = "none")]
-use bare_time::Instant;
-use core::sync::atomic::{AtomicBool, Ordering};
-#[cfg(target_os = "none")]
-use core::time::Duration;
+use prost::Message;
 #[cfg(not(target_os = "none"))]
 use std::io;
 #[cfg(not(target_os = "none"))]
@@ -282,35 +286,35 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
         }
         #[cfg(not(target_os = "none"))]
         {
-        let mut opened = Vec::new();
-        let net_dir = std::path::Path::new("/sys/class/net");
-        if !net_dir.exists() {
-            return Ok(opened);
-        }
-        for entry in std::fs::read_dir(net_dir)? {
-            let entry = entry?;
-            let name = entry.file_name().to_string_lossy().to_string();
-            // Skip loopback
-            if name == "lo" {
-                continue;
+            let mut opened = Vec::new();
+            let net_dir = std::path::Path::new("/sys/class/net");
+            if !net_dir.exists() {
+                return Ok(opened);
             }
-            // Check if interface is UP via operstate
-            let state_path = entry.path().join("operstate");
-            let operstate = std::fs::read_to_string(&state_path).unwrap_or_default();
-            if operstate.trim() != "up" {
-                continue;
+            for entry in std::fs::read_dir(net_dir)? {
+                let entry = entry?;
+                let name = entry.file_name().to_string_lossy().to_string();
+                // Skip loopback
+                if name == "lo" {
+                    continue;
+                }
+                // Check if interface is UP via operstate
+                let state_path = entry.path().join("operstate");
+                let operstate = std::fs::read_to_string(&state_path).unwrap_or_default();
+                if operstate.trim() != "up" {
+                    continue;
+                }
+                let ifindex = interface_name_to_ifindex(&name)?;
+                if ifindex <= 0 {
+                    continue;
+                }
+                if let Err(e) = self.link.add_raw_ethernet(ifindex) {
+                    edgerun_log::warn!("failed to open raw socket on {name}: {e}");
+                    continue;
+                }
+                opened.push(name);
             }
-            let ifindex = interface_name_to_ifindex(&name)?;
-            if ifindex <= 0 {
-                continue;
-            }
-            if let Err(e) = self.link.add_raw_ethernet(ifindex) {
-                edgerun_log::warn!("failed to open raw socket on {name}: {e}");
-                continue;
-            }
-            opened.push(name);
-        }
-        Ok(opened)
+            Ok(opened)
         }
     }
 
@@ -739,20 +743,20 @@ fn interface_name_to_ifindex(name: &str) -> Result<c_int, io::Error> {
     }
     #[cfg(not(target_os = "none"))]
     {
-    let c_name = std::ffi::CString::new(name).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "interface name contains null byte",
-        )
-    })?;
-    let ifindex = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
-    if ifindex == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("interface {name} not found"),
-        ));
-    }
-    Ok(ifindex as c_int)
+        let c_name = std::ffi::CString::new(name).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "interface name contains null byte",
+            )
+        })?;
+        let ifindex = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
+        if ifindex == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("interface {name} not found"),
+            ));
+        }
+        Ok(ifindex as c_int)
     }
 }
 

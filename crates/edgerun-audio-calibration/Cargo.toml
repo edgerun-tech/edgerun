@@ -12,5 +12,13 @@ edgerun-microphone = { path = "../edgerun-microphone" }
 edgerun-speaker = { path = "../edgerun-speaker" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 
+[[bin]]
+name = "audio-calibration-tool"
+path = "src/bin/audio-calibration-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true
+
+[features]
+std = []

@@ -1,9 +1,8 @@
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use super::Frame;
 use super::FrameType;
 use super::{Http2Error, Result};
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// WINDOW_UPDATE frame
 #[derive(Debug, Clone)]

@@ -153,7 +153,8 @@ mod tests {
     ) -> IdentityRecord {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         let canonical = canonical_bytes(&ProtocolRecord::IdentityRecord(record.clone()), true);
-        let record_hash = crate::crypto::sha256(&canonical);
+        let record_hash =
+            crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_IDENTITY_RECORD, &canonical);
         let sig_input = crate::crypto::signature_input(SIG_DOMAIN_IDENTITY_RECORD, &record_hash);
         // Sign sig_input directly (per spec §17.11)
         let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&sig_input).unwrap();

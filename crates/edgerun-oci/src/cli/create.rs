@@ -14,24 +14,6 @@ use crate::lifecycle::{
 };
 use crate::process::validate_spec;
 
-fn host_os() -> &'static str {
-    if cfg!(target_os = "linux") {
-        "linux"
-    } else {
-        "unknown"
-    }
-}
-
-fn host_arch() -> &'static str {
-    if cfg!(target_arch = "x86_64") {
-        "amd64"
-    } else if cfg!(target_arch = "aarch64") {
-        "arm64"
-    } else {
-        "unknown"
-    }
-}
-
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
     let id = crate::cli::require_container_id(args)?;
@@ -85,8 +67,8 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
                     "platform mismatch: spec targets {}/{} but host is {}/{}",
                     platform.os.as_deref().unwrap_or("unknown"),
                     platform.arch.as_deref().unwrap_or("unknown"),
-                    host_os(),
-                    host_arch()
+                    crate::host_os(),
+                    crate::host_arch()
                 ),
             ));
         }

@@ -3,9 +3,6 @@
 //! For HTTP/1.1 over HTTPS, performs a TLS 1.3 handshake using
 //! `edgerun_tls::async_tls::AsyncTlsStream`.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::header::HeaderMap;
 use crate::http1::pool::ConnectionPool;
 #[cfg(feature = "tls")]
@@ -16,6 +13,8 @@ use crate::runtime::Mutex;
 use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::{format, string::ToString};
 
 /// HTTP protocol preference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

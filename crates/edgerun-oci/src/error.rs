@@ -226,7 +226,7 @@ impl fmt::Display for FifoError {
 
 impl Error for FifoError {}
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

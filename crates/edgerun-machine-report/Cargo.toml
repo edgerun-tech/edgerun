@@ -17,5 +17,13 @@ edgerun-pci = { path = "../edgerun-pci" }
 edgerun-usb = { path = "../edgerun-usb" }
 edgerun-wifi = { path = "../edgerun-wifi" }
 
+[[bin]]
+name = "edgerun-machine-report"
+path = "src/main.rs"
+required-features = ["std"]
+
+[features]
+std = []
+
 [lints]
 workspace = true

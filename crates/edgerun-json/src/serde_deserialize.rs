@@ -15,12 +15,12 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 
+use crate::io::Read;
 use crate::map::Map;
 use crate::number::JsonNumber;
 use crate::parse::{parse_i64_fast, parse_u64_fast, Parser};
 use crate::serde_error::json_parse_error_to_serde;
 use crate::JsonValue;
-use crate::io::Read;
 use serde_crate::de::{
     value::StringDeserializer, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess,
     Visitor,

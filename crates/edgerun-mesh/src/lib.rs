@@ -8,15 +8,15 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
-extern crate std;
 #[cfg(target_os = "none")]
 extern crate self as std;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 pub mod prelude {
     pub mod v1 {
-        pub use alloc::boxed::Box;
         pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
         pub use alloc::format;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec;
@@ -61,22 +61,13 @@ mod routing;
 #[cfg(test)]
 mod router_tests;
 
+pub use discovery::DiscoveryPacket;
 pub use edgerun_hardware_signing::NodeID;
 pub use frame::{MeshFrame, MeshFrameHeader};
 pub use frame_types::FrameType;
 pub use node::{sign_frame, DiscoveryPayload, LocalNode, MeshPeer};
+pub use router::MeshRouter;
 pub use routing::{MeshRoute, MeshRoutingTable};
 
 #[cfg(test)]
 mod tests;
-
-// ---------------------------------------------------------------------------
-// Re-exports from the router module for backward compatibility with
-// code that previously depended on the `edgerun-mesh-router` crate.
-// ---------------------------------------------------------------------------
-
-pub use discovery::DiscoveryPacket;
-pub use mesh_payload::{
-    DeploymentMetrics, MetricsReportPayload, MigrationCompletePayload, MigrationOrderPayload,
-};
-pub use router::MeshRouter;

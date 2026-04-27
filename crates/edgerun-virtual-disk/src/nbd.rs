@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::default::Default;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
-use core::{write,  };
+use core::write;
 #[cfg(target_os = "none")]
 use edgerun_encoding::io::{Read, Write};
 #[cfg(not(target_os = "none"))]

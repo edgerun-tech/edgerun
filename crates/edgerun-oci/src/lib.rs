@@ -41,7 +41,10 @@ pub mod validate;
 
 mod registry {
     pub mod auth;
-    #[cfg(all(feature = "std", not(target_os = "none")))]
+    #[cfg(any(
+        feature = "registry-client",
+        all(feature = "std", not(target_os = "none"))
+    ))]
     pub(crate) mod client;
     pub mod config;
     #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -52,7 +55,10 @@ mod registry {
     pub mod manifest;
     #[cfg(feature = "json")]
     pub(crate) mod oci_spec;
-    #[cfg(all(feature = "std", not(target_os = "none")))]
+    #[cfg(any(
+        feature = "registry-client",
+        all(feature = "std", not(target_os = "none"))
+    ))]
     pub(crate) mod urlencoding;
 }
 
@@ -172,7 +178,10 @@ pub use userns::drop_capabilities;
 pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
 
 pub use registry::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
-#[cfg(all(feature = "std", not(target_os = "none")))]
+#[cfg(any(
+    feature = "registry-client",
+    all(feature = "std", not(target_os = "none"))
+))]
 pub use registry::client::{ImageRef, RegistryClient};
 #[cfg(feature = "json")]
 pub use registry::config::{

@@ -6,8 +6,8 @@ extern crate std;
 
 mod prelude {
     pub mod v1 {
-        pub use alloc::boxed::Box;
         pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
         pub use alloc::format;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec;
@@ -16,11 +16,11 @@ mod prelude {
     }
 }
 
-use prelude::v1::*;
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
+use prelude::v1::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WifiPowerState {

@@ -1,11 +1,12 @@
 //! Static file serving for HTTP servers.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::runtime::path::{Path, PathBuf};
 
 use crate::{Handler, Request, Response, StatusCode};
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use core::future::Future;
+use core::pin::Pin;
 
 pub struct StaticHandler {
     root: PathBuf,

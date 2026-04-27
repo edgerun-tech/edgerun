@@ -1,37 +1,4 @@
-//! Minimal std-shaped compatibility surface for bare HTTP builds.
-
-pub mod prelude {
-    pub mod v1 {
-        pub use alloc::borrow::ToOwned;
-        pub use alloc::boxed::Box;
-        pub use alloc::string::{String, ToString};
-        pub use alloc::vec::Vec;
-    }
-}
-
-pub mod boxed {
-    pub use alloc::boxed::Box;
-}
-
-pub mod string {
-    pub use alloc::string::{String, ToString};
-}
-
-pub mod vec {
-    pub use alloc::vec::Vec;
-}
-
-pub use alloc::format;
-pub use core::{any, cmp, convert, fmt, future, hash, mem, option, pin, result, str, task};
-
-pub mod borrow {
-    pub use alloc::borrow::{Cow, ToOwned};
-    pub use core::borrow::{Borrow, BorrowMut};
-}
-
-pub mod ops {
-    pub use core::ops::*;
-}
+//! Minimal host-like compatibility surface for bare HTTP builds.
 
 pub mod collections {
     pub use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -66,10 +33,6 @@ pub mod collections {
             }
         }
     }
-}
-
-pub mod error {
-    pub use core::error::Error;
 }
 
 pub mod io {

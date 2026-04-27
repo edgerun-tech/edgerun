@@ -267,10 +267,10 @@ use edgerun_linux_sysfs::read_trimmed;
 use std::fs::{self, File, OpenOptions};
 #[cfg(target_os = "none")]
 use std::fs::{File, OpenOptions};
-#[cfg(not(target_os = "none"))]
-use std::io::{self, Read};
 #[cfg(target_os = "none")]
 use std::io::Read;
+#[cfg(not(target_os = "none"))]
+use std::io::{self, Read};
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};

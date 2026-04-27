@@ -59,13 +59,6 @@ pub async fn tcp_accept_loop_with_shutdown(
     }
 }
 
-/// Legacy TCP accept loop (no rate limiting, no shutdown) — backwards compat.
-pub async fn tcp_accept_loop(listener: Arc<AsyncTcpListener>, state: ServerState) -> ! {
-    let shutdown = Arc::new(crate::compat::RwLock::new(false));
-    let rate_limiter = RateLimiter::new(0);
-    tcp_accept_loop_with_shutdown(listener, state, rate_limiter, shutdown).await
-}
-
 /// Handle a single TCP connection with length-prefixed DNS messages.
 /// Public raw version — used by both TCP and DoT servers.
 pub async fn handle_tcp_connection_raw(

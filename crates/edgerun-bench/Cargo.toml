@@ -17,6 +17,10 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["p256
 [[bin]]
 name = "edgerun-bench"
 path = "src/main.rs"
+required-features = ["std"]
+
+[features]
+std = []
 
 [lints]
 workspace = true

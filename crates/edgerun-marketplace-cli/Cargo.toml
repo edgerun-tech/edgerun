@@ -6,6 +6,7 @@ edition.workspace = true
 [[bin]]
 name = "edgerun-marketplace"
 path = "src/main.rs"
+required-features = ["std"]
 
 [dependencies]
 edgerun-solana = { path = "../edgerun-solana" }
@@ -18,3 +19,6 @@ edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 
 [dev-dependencies]
 mockall = "0.13"
+
+[features]
+std = []

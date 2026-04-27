@@ -1,9 +1,8 @@
 //! HTTP methods (RFC 9110 Section 9)
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::is_tchar;
+use alloc::format;
+use alloc::string::{String, ToString};
 use core::fmt;
 use core::str::FromStr;
 

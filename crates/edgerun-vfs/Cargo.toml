@@ -30,10 +30,12 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bin]]
 name = "mount_ramfs"
 path = "src/bin/mount_ramfs.rs"
+required-features = ["std"]
 
 [[bin]]
 name = "vfs-benchmark"
 path = "src/bin/benchmark.rs"
+required-features = ["std"]
 
 [[bench]]
 name = "vfs_bench"
@@ -41,3 +43,6 @@ harness = false
 
 [lints]
 workspace = true
+
+[features]
+std = []

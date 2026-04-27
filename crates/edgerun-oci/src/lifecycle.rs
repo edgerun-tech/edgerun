@@ -381,13 +381,11 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
     let args = process
         .args
         .clone()
-        .unwrap_or_else(|| vec!["/bin/sh".into()]);
-    let env = process.env.clone().unwrap_or_else(|| {
-        crate::process::DEFAULT_ENV
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-    });
+        .unwrap_or_else(crate::validate::default_process_args);
+    let env = process
+        .env
+        .clone()
+        .unwrap_or_else(crate::validate::default_process_env);
     let cwd = process.cwd.clone().unwrap_or_else(|| "/".into());
 
     // Determine if we're running rootless (user namespace already exists from re-exec)

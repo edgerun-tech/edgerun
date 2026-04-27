@@ -195,6 +195,33 @@ pub fn domain_hash(domain_tag: &str, payload: &[u8]) -> Vec<u8> {
     sha256(&buf)
 }
 
+/// Hash a canonical signable record with the family-specific hash domain.
+///
+/// Spec v0 derives record hashes as:
+/// `SHA-256(hash_domain_tag || 0x00 || protobuf_encode(signable_form))`.
+pub fn record_hash(hash_domain_tag: &str, canonical_signable_bytes: &[u8]) -> Vec<u8> {
+    domain_hash(hash_domain_tag, canonical_signable_bytes)
+}
+
+/// Return the v0 hash domain that pairs with a signature domain.
+pub fn hash_domain_for_signature_domain(sig_domain_tag: &str) -> Option<&'static str> {
+    match sig_domain_tag {
+        SIG_DOMAIN_EVENT_ENVELOPE => Some(HASH_DOMAIN_EVENT_ENVELOPE),
+        SIG_DOMAIN_COMMAND_ENVELOPE => Some(HASH_DOMAIN_COMMAND_ENVELOPE),
+        SIG_DOMAIN_DELEGATION_RECORD => Some(HASH_DOMAIN_DELEGATION_RECORD),
+        SIG_DOMAIN_REVOCATION_RECORD => Some(HASH_DOMAIN_REVOCATION_RECORD),
+        SIG_DOMAIN_SNAPSHOT_DESCRIPTOR => Some(HASH_DOMAIN_SNAPSHOT_DESCRIPTOR),
+        SIG_DOMAIN_QUERY_RESULT_FRAGMENT => Some(HASH_DOMAIN_QUERY_RESULT_FRAGMENT),
+        SIG_DOMAIN_ROUTE_ADVERTISEMENT => Some(HASH_DOMAIN_ROUTE_ADVERTISEMENT),
+        SIG_DOMAIN_SESSION_HELLO => Some(HASH_DOMAIN_SESSION_HELLO),
+        SIG_DOMAIN_SESSION_ACCEPT => Some(HASH_DOMAIN_SESSION_ACCEPT),
+        SIG_DOMAIN_RELAY_ENVELOPE => Some(HASH_DOMAIN_RELAY_ENVELOPE),
+        SIG_DOMAIN_IDENTITY_RECORD => Some(HASH_DOMAIN_IDENTITY_RECORD),
+        SIG_DOMAIN_ASSURANCE_CLAIM => Some(HASH_DOMAIN_ASSURANCE_CLAIM),
+        _ => None,
+    }
+}
+
 /// Verify an ECDSA P-256 signature over a pre-computed SHA-256 digest.
 ///
 /// Takes the raw 64-byte public key (x || y without 0x04 prefix),
@@ -260,13 +287,15 @@ pub fn verify_record(
 
 /// Sign canonical bytes with domain separation.
 ///
-/// Computes `SHA-256(sig_domain_tag || 0x00 || SHA-256(canonical_bytes))` and signs it.
+/// Computes the family record hash with its hash domain, then signs
+/// `sig_domain_tag || 0x00 || record_hash`.
 pub fn sign_canonical_record(
     private_key: &SigningKey,
     sig_domain_tag: &str,
     canonical_bytes: &[u8],
 ) -> Result<Vec<u8>, p256::ecdsa::Error> {
-    let record_hash = sha256(canonical_bytes);
+    let hash_domain = hash_domain_for_signature_domain(sig_domain_tag).unwrap_or(sig_domain_tag);
+    let record_hash = record_hash(hash_domain, canonical_bytes);
     sign_record(private_key, sig_domain_tag, &record_hash)
 }
 
@@ -287,7 +316,8 @@ pub fn verify_canonical_record(
     canonical_bytes: &[u8],
     signature: &[u8],
 ) -> bool {
-    let record_hash = sha256(canonical_bytes);
+    let hash_domain = hash_domain_for_signature_domain(sig_domain_tag).unwrap_or(sig_domain_tag);
+    let record_hash = record_hash(hash_domain, canonical_bytes);
     let sig_input = signature_input(sig_domain_tag, &record_hash);
     let Ok(sig) = Signature::from_slice(signature) else {
         return false;
@@ -308,7 +338,8 @@ pub fn verify_canonical_record_hw(
     canonical_bytes: &[u8],
     signature: &[u8],
 ) -> bool {
-    let record_hash = sha256(canonical_bytes);
+    let hash_domain = hash_domain_for_signature_domain(sig_domain_tag).unwrap_or(sig_domain_tag);
+    let record_hash = record_hash(hash_domain, canonical_bytes);
     let sig_input = signature_input(sig_domain_tag, &record_hash);
     let sig_input_digest = sha256(&sig_input);
     let Ok(sig) = Signature::from_slice(signature) else {

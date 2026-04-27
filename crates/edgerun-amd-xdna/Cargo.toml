@@ -14,5 +14,13 @@ edgerun-log = { path = "../edgerun-log" }
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true
 
+[[bin]]
+name = "amd_xdna_tool"
+path = "src/bin/amd-xdna-tool.rs"
+required-features = ["std"]
+
+[features]
+std = []
+
 [lints]
 workspace = true

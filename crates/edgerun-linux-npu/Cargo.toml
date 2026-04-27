@@ -9,5 +9,13 @@ publish.workspace = true
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-npu = { path = "../edgerun-npu" }
 
+[features]
+std = []
+
+[[bin]]
+name = "linux_npu_tool"
+path = "src/bin/linux-npu-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

@@ -7,6 +7,7 @@ description = "Unified multi-protocol server: HTTP, SMTP, IMAP, LMTP, DNS, DHCP,
 [[bin]]
 name = "http-server"
 path = "src/bin/http-server.rs"
+required-features = ["std"]
 
 [dependencies]
 edgerun-http = { path = "../edgerun-http", default-features = false, features = ["connection-middleware", "http3"] }
@@ -22,6 +23,7 @@ edgerun-log = { path = "../edgerun-log" }
 
 [features]
 default = ["smtp", "imap", "lmtp", "dns", "dhcp", "tftp", "tls"]
+std = []
 smtp = ["dep:edgerun-email", "edgerun-email/tls", "dep:edgerun-email-auth", "edgerun-email/dkim"]
 imap = ["dep:edgerun-email", "edgerun-email/tls"]
 lmtp = ["dep:edgerun-email"]

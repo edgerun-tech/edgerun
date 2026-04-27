@@ -28,11 +28,11 @@ use alloc::string::{String, ToString};
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
-use crate::prelude::*;
 #[cfg(not(feature = "serde"))]
 use crate::error::JsonError;
 use crate::error::JsonParseError;
 use crate::io::{Read, Write};
+use crate::prelude::*;
 use crate::util;
 use crate::JsonValue;
 

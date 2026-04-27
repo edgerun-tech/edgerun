@@ -9,10 +9,10 @@
 //! 3. Server sends `101 Switching Protocols` response
 //! 4. Connection transitions to the new protocol
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::HeaderMap;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
 
 /// A protocol that can be upgraded to

@@ -4,22 +4,22 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
+use aes::cipher::{block_padding::Pkcs7, KeyInit, KeyIvInit};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use aes::cipher::{block_padding::Pkcs7, KeyInit, KeyIvInit};
 use cbc::cipher::{BlockDecryptMut, BlockEncryptMut};
 use core::option::Option::{None, Some};
 use core::result::Result::{Err, Ok};
+#[cfg(target_os = "none")]
+use edgerun_bluetooth_gatt::sync::RwLock;
 use edgerun_bluetooth_gatt::{
     format_gatt_uuid, parse_gatt_uuid, AttProtocol, GattAddressKind, GattCharacteristic,
     GattDescriptor, GattError, GattProperty, GattService, GattUuid, L2capSocket,
 };
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
 use edgerun_crypto::{hkdf_sha256, sha256, OsRng, RngCore};
-#[cfg(target_os = "none")]
-use edgerun_bluetooth_gatt::sync::RwLock;
 #[cfg(not(target_os = "none"))]
 use std::sync::RwLock;
 

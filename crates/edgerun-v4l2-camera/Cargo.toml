@@ -15,5 +15,13 @@ edgerun-proto = { path = "../edgerun-proto" }
 [dev-dependencies]
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 
+[[bin]]
+name = "v4l2_camera_tool"
+path = "src/bin/v4l2-camera-tool.rs"
+required-features = ["std"]
+
+[features]
+std = []
+
 [lints]
 workspace = true

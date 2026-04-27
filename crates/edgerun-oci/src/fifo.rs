@@ -124,7 +124,7 @@ pub fn cleanup_fifo(path: &Path) {
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use std::thread;

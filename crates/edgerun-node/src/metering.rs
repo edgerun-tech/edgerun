@@ -45,29 +45,15 @@ impl Clone for WorkMeter {
             start_monotonic_us: self.start_monotonic_us,
             allocated_cores: self.allocated_cores,
             allocated_memory_bytes: self.allocated_memory_bytes,
-            storage_read_bytes: AtomicU64::new(
-                self.storage_read_bytes
-                    .load(Ordering::Relaxed),
-            ),
+            storage_read_bytes: AtomicU64::new(self.storage_read_bytes.load(Ordering::Relaxed)),
             storage_written_bytes: AtomicU64::new(
-                self.storage_written_bytes
-                    .load(Ordering::Relaxed),
+                self.storage_written_bytes.load(Ordering::Relaxed),
             ),
-            storage_read_ops: AtomicU32::new(
-                self.storage_read_ops
-                    .load(Ordering::Relaxed),
-            ),
-            storage_write_ops: AtomicU32::new(
-                self.storage_write_ops
-                    .load(Ordering::Relaxed),
-            ),
-            network_sent_bytes: AtomicU64::new(
-                self.network_sent_bytes
-                    .load(Ordering::Relaxed),
-            ),
+            storage_read_ops: AtomicU32::new(self.storage_read_ops.load(Ordering::Relaxed)),
+            storage_write_ops: AtomicU32::new(self.storage_write_ops.load(Ordering::Relaxed)),
+            network_sent_bytes: AtomicU64::new(self.network_sent_bytes.load(Ordering::Relaxed)),
             network_received_bytes: AtomicU64::new(
-                self.network_received_bytes
-                    .load(Ordering::Relaxed),
+                self.network_received_bytes.load(Ordering::Relaxed),
             ),
             workload_class: self.workload_class,
             priority: self.priority,

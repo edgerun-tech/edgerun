@@ -159,7 +159,7 @@ pub fn setup_netprio_cgroup_ebpf(
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

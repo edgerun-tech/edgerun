@@ -554,6 +554,8 @@ mod tests {
     use super::*;
     use alloc::format;
     use alloc::string::ToString;
+    use alloc::vec;
+    use alloc::vec::Vec;
     use core::cmp::Ordering;
 
     use crate::{helpers::build_table, static_::StaticTable};

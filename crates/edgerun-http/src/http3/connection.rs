@@ -1,10 +1,11 @@
 //! HTTP/3 connection over QUIC
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::http3::{Http3Error, Result};
 use alloc::collections::{btree_map::Entry, BTreeMap};
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 use core::str::FromStr;
 
 use super::frame::{Http3Frame, Http3FrameType};

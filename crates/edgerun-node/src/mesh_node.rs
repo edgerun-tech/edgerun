@@ -216,6 +216,7 @@ impl MeshNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;

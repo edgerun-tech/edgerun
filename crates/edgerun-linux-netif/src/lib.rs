@@ -50,8 +50,8 @@ pub mod vec {
     pub use alloc::vec::*;
 }
 
-use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
     close_ioctl_fd, fill_ifr_name, ioctl_call, open_ioctl_socket, read_trimmed,
 };

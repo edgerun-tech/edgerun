@@ -316,12 +316,9 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
                 .as_ref()
                 .and_then(|s| s.process.clone())
                 .unwrap_or_default();
-            let mut env = proc.env.unwrap_or_else(|| {
-                crate::process::DEFAULT_ENV
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect()
-            });
+            let mut env = proc
+                .env
+                .unwrap_or_else(crate::validate::default_process_env);
             let cwd = parsed
                 .cwd
                 .clone()

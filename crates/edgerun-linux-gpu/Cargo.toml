@@ -10,5 +10,13 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-gpu.workspace = true
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 
+[features]
+std = []
+
+[[bin]]
+name = "linux_gpu_tool"
+path = "src/bin/linux-gpu-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

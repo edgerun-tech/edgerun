@@ -89,33 +89,13 @@ impl OciPlatform {
     pub fn matches_host(&self) -> bool {
         // OS check
         if let Some(ref os) = self.os {
-            let host_os = if cfg!(target_os = "linux") {
-                "linux"
-            } else if cfg!(target_os = "windows") {
-                "windows"
-            } else if cfg!(target_os = "solaris") {
-                "solaris"
-            } else {
-                "unknown"
-            };
-            if os != host_os {
+            if os != crate::validate::host_os() {
                 return false;
             }
         }
         // Arch check
         if let Some(ref arch) = self.arch {
-            let host_arch = if cfg!(target_arch = "x86_64") {
-                "amd64"
-            } else if cfg!(target_arch = "aarch64") {
-                "arm64"
-            } else if cfg!(target_arch = "riscv64") {
-                "riscv64"
-            } else if cfg!(target_arch = "arm") {
-                "arm"
-            } else {
-                "unknown"
-            };
-            if arch != host_arch {
+            if arch != crate::validate::host_arch() {
                 return false;
             }
         }
@@ -1400,7 +1380,12 @@ fn u64_value(value: &JsonValue, name: &str) -> Result<u64, String> {
 // Tests
 // ===========================================================================
 
-#[cfg(all(test, feature = "json", not(feature = "serde")))]
+#[cfg(all(
+    test,
+    not(target_os = "none"),
+    feature = "json",
+    not(feature = "serde")
+))]
 mod json_feature_tests {
     use super::*;
 
@@ -1478,7 +1463,7 @@ mod json_feature_tests {
     }
 }
 
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, not(target_os = "none"), feature = "serde"))]
 mod tests {
     use super::*;
     use edgerun_json::from_slice;
@@ -1578,17 +1563,10 @@ mod tests {
     #[test]
     fn oci_platform_matches_host_linux_amd64() {
         let platform = OciPlatform {
-            os: Some("linux".into()),
-            arch: Some(if cfg!(target_arch = "x86_64") {
-                "amd64".into()
-            } else {
-                "arm64".into()
-            }),
+            os: Some(crate::validate::host_os().into()),
+            arch: Some(crate::validate::host_arch().into()),
             ..Default::default()
         };
-        #[cfg(target_arch = "x86_64")]
-        assert!(platform.matches_host());
-        #[cfg(target_arch = "aarch64")]
         assert!(platform.matches_host());
     }
 

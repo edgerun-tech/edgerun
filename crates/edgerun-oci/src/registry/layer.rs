@@ -13,7 +13,8 @@ use std::path::{Path, PathBuf};
 
 use super::errors::RegistryError;
 use crate::layer_pipeline::bytes_to_hex;
-use crate::tar_layer::{layer_compression, OciLayerCompression};
+use crate::oci_path::layer_path_safe;
+use crate::tar_layer::{layer_compression, parse_oci_whiteout, OciLayerCompression, OciWhiteout};
 use edgerun_crypto::sha2::Digest;
 
 // ===========================================================================
@@ -22,6 +23,10 @@ use edgerun_crypto::sha2::Digest;
 
 /// Check that a path component list does not escape the root via "..".
 fn path_safe_within_root(path: &std::path::Path) -> bool {
+    if let Some(path) = path.to_str() {
+        return layer_path_safe(path);
+    }
+
     use std::path::Component;
     let mut depth = 0isize;
     for comp in path.components() {
@@ -181,9 +186,10 @@ pub fn verify_blob_digest(blob_path: &Path, expected_digest: &str) -> Result<(),
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
+    use crate::test_support::{tar, tar_entry};
     use std::io::Write;
 
     fn tmp_dir() -> std::path::PathBuf {
@@ -195,30 +201,13 @@ mod tests {
         p
     }
 
-    fn create_test_tar(entries: &[(&str, &str)]) -> Vec<u8> {
-        let mut buf = Vec::new();
-        {
-            let mut builder = tar::Builder::new(&mut buf);
-            for (path, content) in entries {
-                let mut header = tar::Header::new_gnu();
-                header.set_path(std::path::Path::new(path)).unwrap();
-                header.set_size(content.len() as u64);
-                header.set_mode(0o644);
-                header.set_cksum();
-                builder.append(&header, content.as_bytes()).unwrap();
-            }
-            builder.finish().unwrap();
-        }
-        buf
-    }
-
     #[test]
     fn extract_layer_basic() {
         let tmp = tmp_dir();
         let dest = tmp.join("rootfs");
         std::fs::create_dir_all(&dest).unwrap();
 
-        let tar_data = create_test_tar(&[("file.txt", "hello world")]);
+        let tar_data = tar(vec![tar_entry("file.txt", b'0', b"hello world")]);
         let tar_file = tmp.join("layer.tar");
         std::fs::write(&tar_file, &tar_data).unwrap();
 
@@ -237,6 +226,7 @@ mod tests {
 
     #[test]
     fn path_safe_within_root_rejects_absolute_parent_escape() {
+        assert!(!path_safe_within_root(std::path::Path::new("/foo")));
         assert!(!path_safe_within_root(std::path::Path::new("../foo")));
         assert!(!path_safe_within_root(std::path::Path::new("../../../etc")));
     }
@@ -255,7 +245,7 @@ mod tests {
         let mut hasher = edgerun_crypto::sha2::Sha256::new();
         hasher.update(content);
         let hash = hasher.finalize();
-        let expected = format!("sha256:{}", edgerun_core::util::bytes_to_hex(&hash));
+        let expected = format!("sha256:{}", bytes_to_hex(&hash));
 
         let result = verify_blob_digest(&blob_path, &expected);
         assert!(result.is_ok(), "digest mismatch: {:?}", result);
@@ -290,6 +280,10 @@ pub fn apply_whiteouts(layer_dirs: &[PathBuf]) -> Result<(), RegistryError> {
 /// Remove whiteout files from a directory tree.
 /// Handles both OCI-style `.wh.` prefix and overlayfs char device whiteouts (0:0).
 fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
+    remove_whiteout_files_in(dir, dir)
+}
+
+fn remove_whiteout_files_in(root: &Path, dir: &Path) -> Result<(), RegistryError> {
     if !dir.is_dir() {
         return Ok(());
     }
@@ -303,23 +297,25 @@ fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
         let path = entry.path();
         let file_name = entry.file_name();
 
-        if let Some(name) = file_name.to_str() {
-            // Skip the opaque whiteout marker itself
-            if name == ".wh..wh..opq" {
-                continue;
-            }
-            // OCI-style whiteout: .wh.<name> → delete <name>
-            if let Some(rest) = name.strip_prefix(".wh.") {
-                let target = path.parent().unwrap().join(rest);
-                if target.exists() {
-                    if target.is_dir() {
-                        let _ = fs::remove_dir_all(&target);
-                    } else {
-                        let _ = fs::remove_file(&target);
+        if let Some(relative_path) = path.strip_prefix(root).ok().and_then(|path| path.to_str()) {
+            match parse_oci_whiteout(relative_path) {
+                Some(OciWhiteout::RemovePath(target_path)) => {
+                    let target = root.join(target_path);
+                    if target.exists() {
+                        if target.is_dir() {
+                            let _ = fs::remove_dir_all(&target);
+                        } else {
+                            let _ = fs::remove_file(&target);
+                        }
                     }
+                    let _ = fs::remove_file(&path);
+                    continue;
                 }
-                let _ = fs::remove_file(&path);
-                continue;
+                Some(OciWhiteout::OpaqueDirectory(_)) => {
+                    let _ = fs::remove_file(&path);
+                    continue;
+                }
+                None => {}
             }
         }
 
@@ -331,7 +327,7 @@ fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
         }
 
         if path.is_dir() {
-            remove_whiteout_files(&path)?;
+            remove_whiteout_files_in(root, &path)?;
         }
     }
 

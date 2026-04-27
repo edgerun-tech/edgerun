@@ -548,7 +548,8 @@ mod proto_tests {
     ) -> RouteAdvertisement {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
-        let record_hash = crate::crypto::sha256(&canonical);
+        let record_hash =
+            crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_ROUTE_ADVERTISEMENT, &canonical);
         let sig_input =
             crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
         // Sign sig_input directly (per spec §17.11)

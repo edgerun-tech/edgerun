@@ -1,8 +1,5 @@
 //! HTTP/2 connection management
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use super::flow_control::FlowControlManager;
 use super::frame::{
     ContinuationFrame, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame,
@@ -14,7 +11,10 @@ use super::{ErrorCode, Result};
 use super::{Settings, CONNECTION_PREFACE};
 use crate::runtime::io::{self, Read, Write};
 use alloc::collections::BTreeMap as HashMap;
+use alloc::format;
+use alloc::string::ToString;
 use alloc::vec;
+use alloc::vec::Vec;
 
 /// HTTP/2 connection state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

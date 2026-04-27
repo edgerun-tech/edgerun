@@ -1,13 +1,13 @@
 //! Protocol-agnostic HTTP request.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::middleware::Extensions;
 use crate::uri::Uri;
 use crate::Result;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
 
 /// An HTTP request, protocol-agnostic.

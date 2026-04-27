@@ -7,6 +7,7 @@
 //! - Mesh: signed delivery via mesh channels
 
 use alloc::collections::BTreeMap;
+use alloc::format;
 use alloc::string::{String, ToString};
 
 type HashMap<K, V> = BTreeMap<K, V>;

@@ -174,7 +174,7 @@ pub fn bytes_to_hex(bytes: &[u8]) -> String {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use alloc::vec::Vec;

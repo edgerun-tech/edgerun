@@ -165,7 +165,7 @@ pub mod path {
 
     impl fmt::Display for Display<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str(&self.0.0)
+            f.write_str(&self.0 .0)
         }
     }
 }

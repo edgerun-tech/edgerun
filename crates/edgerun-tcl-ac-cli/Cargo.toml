@@ -8,6 +8,7 @@ publish.workspace = true
 [[bin]]
 name = "tcl-ac"
 path = "src/main.rs"
+required-features = ["std"]
 
 [dependencies]
 edgerun-tcl-ac = { path = "../edgerun-tcl-ac" }
@@ -18,6 +19,9 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
+
+[features]
+std = []
 
 [lints]
 workspace = true

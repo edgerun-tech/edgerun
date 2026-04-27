@@ -7,7 +7,6 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::default_namespaces;
 use crate::json::{OciLinux, OciProcess, OciRoot, OciSpec, OciUser};
 
 /// Create a minimal OCI bundle from a rootfs directory and command.
@@ -21,18 +20,8 @@ pub fn create_bundle(
     OciSpec {
         version: "1.0.2".into(),
         platform: Some(crate::json::OciPlatform {
-            os: Some(if cfg!(target_os = "linux") {
-                "linux".into()
-            } else {
-                "unknown".into()
-            }),
-            arch: Some(if cfg!(target_arch = "x86_64") {
-                "amd64".into()
-            } else if cfg!(target_arch = "aarch64") {
-                "arm64".into()
-            } else {
-                "unknown".into()
-            }),
+            os: Some(crate::host_os().into()),
+            arch: Some(crate::host_arch().into()),
             os_version: None,
             os_features: None,
         }),
@@ -57,26 +46,9 @@ pub fn create_bundle(
         hostname: hostname.or_else(|| Some("edgerun".into())),
         domainname: None,
         linux: Some(OciLinux {
-            namespaces: Some(default_namespaces()),
-            masked_paths: Some(vec![
-                "/proc/acpi".into(),
-                "/proc/kcore".into(),
-                "/proc/keys".into(),
-                "/proc/latency_stats".into(),
-                "/proc/timer_list".into(),
-                "/proc/timer_stats".into(),
-                "/proc/sched_debug".into(),
-                "/proc/scsi".into(),
-                "/sys/firmware".into(),
-            ]),
-            readonly_paths: Some(vec![
-                "/proc/asound".into(),
-                "/proc/bus".into(),
-                "/proc/fs".into(),
-                "/proc/irq".into(),
-                "/proc/sys".into(),
-                "/proc/sysrq-trigger".into(),
-            ]),
+            namespaces: Some(crate::default_namespaces()),
+            masked_paths: Some(crate::default_masked_paths()),
+            readonly_paths: Some(crate::default_readonly_paths()),
             ..Default::default()
         }),
         mounts: Some(vec![]),

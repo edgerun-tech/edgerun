@@ -10,5 +10,13 @@ edgerun-bluetooth = { path = "../edgerun-bluetooth" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-encoding = { path = "../edgerun-encoding" }
 
+[features]
+std = []
+
+[[bin]]
+name = "mgmt_bluetooth_tool"
+path = "src/bin/mgmt-bluetooth-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

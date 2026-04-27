@@ -10,5 +10,13 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-nfc = { path = "../edgerun-nfc" }
 
+[[bin]]
+name = "linux-nfc-tool"
+path = "src/bin/linux-nfc-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true
+
+[features]
+std = []

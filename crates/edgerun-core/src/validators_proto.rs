@@ -139,8 +139,8 @@ pub fn validate_stream_append(
 
 fn compute_event_hash(event: &EventEnvelope) -> crate::protocol::Digest {
     let record = ProtocolRecord::EventEnvelope(event.clone());
-    let canonical = canonical_bytes(&record, false);
-    let hash = crate::crypto::sha256(&canonical);
+    let canonical = canonical_bytes(&record, true);
+    let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE, &canonical);
     crate::protocol::Digest {
         algorithm: 1,
         value: hash.to_vec(),
@@ -167,10 +167,11 @@ fn verify_event_signature(event: &EventEnvelope, key: &[u8; 64]) -> bool {
 
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let record_hash = crate::crypto::sha256(&canonical);
+    let record_hash =
+        crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE, &canonical);
 
     let sig_input =
-        crate::crypto::signature_input(crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE, &record_hash);
+        crate::crypto::signature_input(crate::crypto::SIG_DOMAIN_EVENT_ENVELOPE, &record_hash);
 
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
     let Ok(r): Result<[u8; 32], _> = sig.value[..32].try_into() else {
@@ -743,11 +744,12 @@ mod tests {
     ) -> EventEnvelope {
         let record = ProtocolRecord::EventEnvelope(event.clone());
         let canonical = canonical_bytes(&record, true);
-        let record_hash = crate::crypto::sha256(&canonical);
+        let record_hash =
+            crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE, &canonical);
 
         let sig = crate::crypto::sign_record(
             signing_key,
-            crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
+            crate::crypto::SIG_DOMAIN_EVENT_ENVELOPE,
             &record_hash,
         )
         .expect("signing failed");

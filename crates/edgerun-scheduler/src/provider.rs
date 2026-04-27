@@ -1,6 +1,6 @@
+use crate::collections::HashMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use crate::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

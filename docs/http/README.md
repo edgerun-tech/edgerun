@@ -1,6 +1,9 @@
 # edgerun-http
 
-A dependency-free HTTP client and type system built exclusively with Rust's standard library.
+An actively maintained HTTP stack with a dependency-free type system and protocol core.
+
+`edgerun-http` is no_std-compatible on bare targets and supports both HTTP/1.1 and
+modern transport layers through host and bare-metal runtime integration.
 
 ## Features
 

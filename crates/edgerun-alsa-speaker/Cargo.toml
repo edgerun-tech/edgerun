@@ -12,5 +12,13 @@ edgerun-speaker = { path = "../edgerun-speaker" }
 [dev-dependencies]
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 
+[[bin]]
+name = "alsa_speaker_tool"
+path = "src/bin/alsa-speaker-tool.rs"
+required-features = ["std"]
+
+[features]
+std = []
+
 [lints]
 workspace = true

@@ -88,11 +88,7 @@ pub mod net {
             Ok(())
         }
 
-        pub fn send_to<A: IntoSocketAddr>(
-            &self,
-            buf: &[u8],
-            addr: A,
-        ) -> Result<usize, io::Error> {
+        pub fn send_to<A: IntoSocketAddr>(&self, buf: &[u8], addr: A) -> Result<usize, io::Error> {
             self.0
                 .send_to(buf, crate::compat::to_bare_addr(addr.into_socket_addr()?))
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))

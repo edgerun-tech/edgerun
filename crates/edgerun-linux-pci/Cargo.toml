@@ -10,5 +10,13 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-pci = { path = "../edgerun-pci" }
 
+[features]
+std = []
+
+[[bin]]
+name = "linux_pci_tool"
+path = "src/bin/linux-pci-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

@@ -82,7 +82,10 @@ fn path_extension(path: &PathBuf) -> Option<&str> {
 
     #[cfg(target_os = "none")]
     {
-        path.rsplit('/').next()?.rsplit_once('.').map(|(_, ext)| ext)
+        path.rsplit('/')
+            .next()?
+            .rsplit_once('.')
+            .map(|(_, ext)| ext)
     }
 }
 
@@ -522,7 +525,11 @@ impl VirtualFileSystem {
                         self.original_hashes.remove(&path);
                     }
                     Err(e) => {
-                        errors.push(format!("Failed to delete {}: {}", path_buf_display(&path), e));
+                        errors.push(format!(
+                            "Failed to delete {}: {}",
+                            path_buf_display(&path),
+                            e
+                        ));
                     }
                 }
             }

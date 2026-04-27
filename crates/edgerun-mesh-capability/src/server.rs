@@ -1,4 +1,6 @@
+use crate::collections::{HashMap, VecDeque};
 use crate::prelude::v1::*;
+use crate::sync::{Arc, Mutex};
 use edgerun_capabilities::CapabilityError;
 use edgerun_hardware_signing::NodeID;
 #[allow(unused_imports)] // used in tests
@@ -10,8 +12,6 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
 };
 use edgerun_remote_capability::RemoteCapabilityProvider;
 use prost::Message;
-use crate::collections::{HashMap, VecDeque};
-use crate::sync::{Arc, Mutex};
 
 use super::*;
 

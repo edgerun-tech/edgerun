@@ -28,3 +28,16 @@ edgerun-core = { path = "../edgerun-core" }
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "capability_demo_client"
+path = "src/bin/capability-demo-client.rs"
+required-features = ["std"]
+
+[[bin]]
+name = "capability_demo_server"
+path = "src/bin/capability-demo-server.rs"
+required-features = ["std"]
+
+[features]
+std = []

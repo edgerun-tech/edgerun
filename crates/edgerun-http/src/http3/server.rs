@@ -29,9 +29,6 @@
 //! });
 //! ```
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::handler::Handler;
 use crate::header::HeaderMap;
 use crate::method::Method;
@@ -43,7 +40,11 @@ use crate::runtime::AsyncUdpSocket;
 use crate::runtime::CancellationToken;
 use crate::uri::Uri;
 use alloc::collections::BTreeMap as HashMap;
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 use edgerun_tls::certificate_gen::CertificateAndKey;
 
 use super::connection::Http3Connection;

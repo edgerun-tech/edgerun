@@ -17,9 +17,6 @@
 //!   4. Next request to same host reuses the pooled connection
 //! ```
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::runtime::net::{IpAddr, SocketAddr};
 use crate::runtime::time::{Duration, Instant};
 use crate::runtime::{
@@ -27,8 +24,11 @@ use crate::runtime::{
     BufReader, ConnectFuture,
 };
 use alloc::collections::BTreeMap as HashMap;
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
+use alloc::vec::Vec;
 
 #[cfg(feature = "tls")]
 use edgerun_tls::async_tls::AsyncTlsStream;

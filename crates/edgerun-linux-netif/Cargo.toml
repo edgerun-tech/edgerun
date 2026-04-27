@@ -10,5 +10,13 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 
+[[bin]]
+name = "linux-netif-tool"
+path = "src/bin/linux-netif-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true
+
+[features]
+std = []

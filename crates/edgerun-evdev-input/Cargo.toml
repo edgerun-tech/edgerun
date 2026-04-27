@@ -13,5 +13,13 @@ edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true
 
+[features]
+std = []
+
+[[bin]]
+name = "evdev_input_tool"
+path = "src/bin/evdev-input-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

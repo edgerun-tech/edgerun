@@ -1,7 +1,7 @@
+use crate::collections::HashMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::matches;
-use crate::collections::HashMap;
 use edgerun_solana::{solana_types::Pubkey, DeploymentClient, DeploymentStatus};
 
 pub struct DeploymentManager {

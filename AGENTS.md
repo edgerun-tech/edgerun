@@ -1,100 +1,110 @@
-# Edgerun Unikernel Build Instructions
+# Edgerun Core Agent Notes
 
-## Building
+This repository is a large Rust workspace for edge services, bare-metal runtime
+work, mesh networking, hardware capability adapters, protocol crates, and a
+unikernel target.
+
+## Working Directory
 
 ```bash
 cd /home/ken/edgerun_core
-cargo +nightly build --release -p edgerun-unikernel --target x86_64-unknown-none -Zbuild-std=core,alloc
-/usr/bin/objcopy -O binary target/x86_64-unknown-none/release/edgerun-unikernel /tmp/edgerun.bin
 ```
 
-Output: `/tmp/edgerun.bin` (~15KB)
+## Default Hosted Checks
 
-**Note**: Requires nightly Rust with `-Zbuild-std=core,alloc` for no_std alloc support.
-
-## Boot Flow
-
-1. **iPXE** (pre-installed on MSI MEG X570 Unite NIC) chain loads `edgerun.bin` to 0x100000
-2. **`_start`**: Sets up 16KB stack, zeros BSS
-3. **`main()`**: Initialize NIC, DHCP, TFTP, boot kernel
-
-## Hardware
-
-- NIC: Realtek RTL8125 (10ec:8125) on PCIe
-- Boot: iPXE via PXE (Intel I211 used for management)
-
-## no_std Crates
-
-Build tested with `x86_64-unknown-none` + `-Zbuild-std=core,alloc`:
-
-| Crate | Purpose |
-|------|---------|
-| edgerun-bare-rt | Bare-metal async runtime |
-| edgerun-platform | CPU, timer, IRQ, TLS |
-| edgerun-virtio | Virtio-net driver |
-| edgerun-glob | Glob patterns (no_std, zero-dep) |
-| edgerun-regex | Regex (no_std, zero-dep) |
-| edgerun-error | Error derive macro (proc-macro) |
-| edgerun-ipxe | iPXE wrapper |
-| edgerun-tftp | TFTP client |
-| edgerun-log | Minimal logging (no_std, zero-dep) |
-| edgerun-hpack | HPACK header compression (RFC 7541) |
-| edgerun-encoding | Encoding utilities (base64, varint, buf) |
-| edgerun-qpack | QPACK header compression (RFC 9204) |
-| edgerun-json | JSON (alloc feature) |
-
-## Build Test Command
+Use these first when validating normal workspace changes:
 
 ```bash
-# Test all no_std crates for bare target
-for crate in edgerun-glob edgerun-regex edgerun-error edgerun-ipxe edgerun-tftp edgerun-log edgerun-json edgerun-bare-rt edgerun-platform edgerun-virtio edgerun-hpack edgerun-encoding edgerun-qpack; do
-  cargo +nightly build -p "$crate" --release --target x86_64-unknown-none -Zbuild-std=core,alloc
+cargo check --workspace
+cargo test --workspace
+```
+
+Many crates touch Linux hardware APIs or service daemons. If a full workspace
+test fails because the host lacks devices, permissions, or kernel features,
+rerun the relevant crate-specific test and document the limitation.
+
+## Unikernel Build
+
+The unikernel is built for the freestanding x86_64 target and requires nightly
+Rust with `build-std`:
+
+```bash
+cargo +nightly build --release -p edgerun-unikernel \
+  --target x86_64-unknown-none \
+  -Zbuild-std=core,alloc
+```
+
+To produce a flat binary:
+
+```bash
+/usr/bin/objcopy -O binary \
+  target/x86_64-unknown-none/release/edgerun-unikernel \
+  /tmp/edgerun.bin
+```
+
+Local QEMU boot helpers:
+
+```bash
+scripts/qemu-unikernel.sh
+scripts/qemu-unikernel-net-pump.sh
+scripts/qemu-unikernel-swtpm.sh
+```
+
+## Bare-Metal Architecture
+
+- `edgerun-unikernel`: bootable kernel binary and linker/boot glue.
+- `edgerun-platform`: CPU, timer, IRQ, memory, and low-level platform support.
+- `edgerun-bare-rt`: no_std async/runtime primitives, synchronization, timers,
+  and hosted compatibility shims.
+- `edgerun-ipxe`, `edgerun-tftp`, `edgerun-dhcp`: boot/network support.
+- `edgerun-virtio`, `edgerun-rtl8125`: NIC/device support.
+
+Older docs may mention `edgerun-rt`; the current workspace uses
+`edgerun-bare-rt` broadly instead.
+
+## no_std / Bare Target Smoke Test
+
+This list tracks the current bare-oriented crates rather than every crate that
+contains `#![no_std]`:
+
+```bash
+for crate in \
+  edgerun-glob edgerun-regex edgerun-url edgerun-log edgerun-json \
+  edgerun-encoding edgerun-hpack edgerun-qpack edgerun-bare-rt \
+  edgerun-platform edgerun-virtio edgerun-ipxe edgerun-tftp \
+  edgerun-rtl8125 edgerun-http edgerun-tls edgerun-unikernel
+do
+  cargo +nightly build -p "$crate" --release \
+    --target x86_64-unknown-none \
+    -Zbuild-std=core,alloc
 done
 ```
 
-## Blocked Crates
+## Current Workspace Shape
 
-These need work to become no_std:
+- Root `Cargo.toml` has 109 workspace members.
+- `crates/` contains 109 crate directories.
+- Most library crates are `no_std` or `alloc`-first.
+- `proto/edgerun/v0` contains the protocol definitions used by `edgerun-proto`.
 
-- **edgerun-http**: Heavy async rt dependencies (edgerun-rt), TLS, DNS
-- **edgerun-quic**: Depends on http + rt + tls + crypto
-- **edgerun-tls**: Depends on edgerun-rt + libc
-- **edgerun-crypto**: External crates, needs getrandom with rdrand feature
-- **edgerun-dns**: Depends on edgerun-rt
-- **edgerun-net**: Depends on getrandom
+Major crate families:
 
-## Bare Metal RNG
+- Services: `edgerun-server`, `edgerun-net`, `edgerun-dns`, `edgerun-dhcp`,
+  `edgerun-http`, `edgerun-email`, `edgerun-proxy`, `edgerun-oci`.
+- Mesh/node: `edgerun-node`, `edgerun-mesh*`, `edgerun-scheduler`,
+  `edgerun-remote-capability`.
+- Security: `edgerun-crypto`, `edgerun-tls`, `edgerun-tpm`,
+  `edgerun-yubikey`, `edgerun-hardware-signing`, `edgerun-secret-service`.
+- Hardware: `edgerun-linux-*`, `edgerun-alsa-*`, `edgerun-evdev-input`,
+  `edgerun-v4l2-camera`, `edgerun-goodix-fingerprint`,
+  `edgerun-mgmt-bluetooth`.
+- Traits/capabilities: `edgerun-input`, `edgerun-microphone`,
+  `edgerun-speaker`, `edgerun-display`, `edgerun-network-interface`,
+  `edgerun-usb`, `edgerun-pci`, `edgerun-nfc`, `edgerun-npu`,
+  `edgerun-power`, `edgerun-wifi`, `edgerun-bluetooth`.
 
-For x86_64 bare metal, use getrandom with rdrand feature:
+## Documentation Caveat
 
-```toml
-# In your binary crate (not lib)
-getrandom = { version = "0.2", features = ["rdrand"] }
-```
-
-This enables RDRAND instruction for RNG on x86/x86_64 targets.
-
-## Crate Status Notes
-
-### edgerun-encoding (FIXED)
-- Already uses `core::error::Error` ✅
-- Has no_std `Buf`/`BufMut` traits with working `Cursor<T: AsRef<[u8]>>`
-- Removed optional std-only impls (`std::io::Cursor`) - available in std build via standard library
-- `std::time::SystemTime::now()` stubbed for no_std (returns epoch 0)
-
-### edgerun-hpack (FIXED)
-- Replaced `std::collections::VecDeque` → `alloc::collections::VecDeque`
-- Replaced `std::collections::HashMap` → linear table lookup
-- Created custom `Writer` trait (no_std `io::Write`)
-- Uses `edgerun-log` for logging (already no_std)
-- Uses `core::error::Error` (stable in no_std)
-
-### edgerun-http (BLOCKED)
-- Heavily coupled to edgerun-rt (async networking)
-- Would need splitting: protocol parsing core → no_std, server wrapper → rt
-- Protocol parts (frames, HPACK) are separate from I/O
-
-### edgerun-rt vs edgerun-bare-rt
-- **edgerun-rt**: Full async runtime (epoll, sockets, threads) - requires std
-- **edgerun-bare-rt**: Bare-metal async (no std) - different API
-- Network crates use rt; bare-metal crates use bare-rt
+Some docs under `docs/` are historical design material or copied upstream web
+specification references. Prefer the root `Cargo.toml`, crate source, and
+crate-local READMEs when deciding what is currently implemented.

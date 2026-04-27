@@ -172,6 +172,7 @@ impl Default for MetricsReceiver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_metrics_creation() {

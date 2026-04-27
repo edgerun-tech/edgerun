@@ -7,6 +7,8 @@ use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 use core::{debug_assert_eq, fmt, write};
 #[cfg(target_os = "none")]
+use edgerun_bare_rt::Mutex;
+#[cfg(target_os = "none")]
 use edgerun_encoding::io::{self, Read, Write};
 #[cfg(not(target_os = "none"))]
 use std::fs::{self, File, OpenOptions};
@@ -18,8 +20,6 @@ use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::os::unix::net::{UnixListener, UnixStream};
 #[cfg(not(target_os = "none"))]
 use std::path::Path;
-#[cfg(target_os = "none")]
-use edgerun_bare_rt::Mutex;
 #[cfg(not(target_os = "none"))]
 use std::sync::Mutex;
 

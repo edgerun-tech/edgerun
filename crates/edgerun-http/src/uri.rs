@@ -1,8 +1,7 @@
 //! URI parsing
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
+use alloc::format;
+use alloc::string::{String, ToString};
 use core::fmt;
 use core::str::FromStr;
 

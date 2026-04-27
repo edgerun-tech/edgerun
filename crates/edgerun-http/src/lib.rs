@@ -1,5 +1,5 @@
-//! A dependency-free HTTP/1.1, HTTP/2, and HTTP/3 implementation built exclusively with
-//! Rust's standard library.
+//! A dependency-free HTTP/1.1, HTTP/2, and HTTP/3 implementation built with a shared
+//! host/bare-metal compatibility layer (`std` on host, `core`/`alloc` on `target_os = "none"`).
 //!
 //! # Unified API
 //!
@@ -81,8 +81,6 @@ extern crate alloc;
 #[cfg(target_os = "none")]
 #[path = "std.rs"]
 mod std_compat;
-#[cfg(target_os = "none")]
-pub use std_compat::*;
 
 #[cfg(feature = "runtime")]
 pub mod runtime;
@@ -92,13 +90,6 @@ pub use runtime::{collections, fs, io, net, path, sync, time};
 pub use std::{collections, fs, io, net, path, sync, time};
 #[cfg(all(not(feature = "runtime"), target_os = "none"))]
 pub use std_compat::{collections, fs, io, net, path, sync, time};
-
-#[cfg(target_os = "none")]
-macro_rules! format {
-    ($($arg:tt)*) => {
-        alloc::format!($($arg)*)
-    };
-}
 
 // ---------------------------------------------------------------------------
 // Shared HTTP types

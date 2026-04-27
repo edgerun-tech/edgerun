@@ -55,14 +55,12 @@
 //!     .build();
 //! ```
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::lock::SpinMutex;
 use crate::{Handler, Request, Response};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::any::{Any, TypeId};
 use core::fmt;
 use core::future::Future;

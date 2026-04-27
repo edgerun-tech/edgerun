@@ -1,7 +1,8 @@
 //! HTTP/3 stream management
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// HTTP/3 stream types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

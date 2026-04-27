@@ -1062,7 +1062,6 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-dns",
  "edgerun-encoding",
- "edgerun-error",
  "edgerun-hpack",
  "edgerun-json",
  "edgerun-log",

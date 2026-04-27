@@ -449,7 +449,7 @@ fn apply_overrides(entry: &mut TarEntry, global: &TarEntryOverrides, pending: &T
     if let Some(link_name) = pending.link_name.as_ref() {
         entry.link_name = Some(link_name.clone());
     }
-    entry.whiteout = parse_whiteout(&entry.path);
+    entry.whiteout = parse_oci_whiteout(&entry.path);
 }
 
 fn validate_entry_paths(entry: &TarEntry) -> Result<(), TarLayerError> {
@@ -496,7 +496,7 @@ fn parse_header(header: &[u8]) -> Result<TarEntry, TarLayerError> {
     };
 
     Ok(TarEntry {
-        whiteout: parse_whiteout(&path),
+        whiteout: parse_oci_whiteout(&path),
         path,
         kind,
         size: parse_octal(&header[124..136])?,
@@ -527,7 +527,7 @@ fn parse_kind(kind: u8, path: &str) -> Result<TarEntryKind, TarLayerError> {
     }
 }
 
-fn parse_whiteout(path: &str) -> Option<OciWhiteout> {
+pub fn parse_oci_whiteout(path: &str) -> Option<OciWhiteout> {
     let (parent, name) = path.rsplit_once('/').unwrap_or(("", path));
     if name == ".wh..wh..opq" {
         return Some(OciWhiteout::OpaqueDirectory(parent.into()));
@@ -688,7 +688,7 @@ fn round_up_to_block(size: usize) -> usize {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::test_support::{

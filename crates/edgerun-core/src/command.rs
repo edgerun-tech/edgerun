@@ -126,7 +126,7 @@ pub fn validate_command_policy(ctx: &CommandPolicyContext<'_>) -> ValidationResu
 pub fn command_hash(command: &CommandEnvelope) -> Digest {
     let record = ProtocolRecord::CommandEnvelope(command.clone());
     let canonical = canonical_bytes(&record, true);
-    let hash = crate::crypto::sha256(&canonical);
+    let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_COMMAND_ENVELOPE, &canonical);
     Digest {
         algorithm: 1, // SHA256
         value: hash.to_vec(),
@@ -259,11 +259,22 @@ pub fn validate_command(
         );
     };
 
+    let Some(vk) = crate::crypto::node_id_to_verifying_key(&public_key) else {
+        return reject(
+            ReasonCode::CryptoInvalid,
+            Value::String("invalid public key in issuer identity".into()),
+            empty_map(),
+        );
+    };
     let record = ProtocolRecord::CommandEnvelope(command.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = crate::crypto::sha256(&canonical);
 
-    if !verify_ecdsa_p256(&public_key, digest.as_slice(), &sig.value) {
+    if !crate::crypto::verify_canonical_record(
+        &vk,
+        crate::crypto::SIG_DOMAIN_COMMAND_ENVELOPE,
+        &canonical,
+        &sig.value,
+    ) {
         return reject(
             ReasonCode::CryptoInvalid,
             Value::String("signature verification failed".into()),
@@ -964,15 +975,6 @@ fn extract_public_key(identity: &Option<IdentityRef>) -> Option<[u8; 64]> {
     }
 }
 
-fn verify_ecdsa_p256(public_key: &[u8; 64], digest: &[u8], signature: &[u8]) -> bool {
-    if digest.len() != 32 || signature.len() != 64 {
-        return false;
-    }
-    let digest_array: [u8; 32] = digest.try_into().unwrap();
-    let sig_array: [u8; 64] = signature.try_into().unwrap();
-    crate::crypto::verify_ecdsa_p256_raw(public_key, &digest_array, &sig_array)
-}
-
 // ---------------------------------------------------------------------------
 // Signature-only validation (for callers that don't need full context)
 // ---------------------------------------------------------------------------
@@ -1017,11 +1019,22 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
         );
     };
 
+    let Some(vk) = crate::crypto::node_id_to_verifying_key(&public_key) else {
+        return reject(
+            ReasonCode::CryptoInvalid,
+            Value::String("invalid public key in issuer identity".into()),
+            empty_map(),
+        );
+    };
     let record = ProtocolRecord::CommandEnvelope(command.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = crate::crypto::sha256(&canonical);
 
-    if !verify_ecdsa_p256(&public_key, digest.as_slice(), &sig.value) {
+    if !crate::crypto::verify_canonical_record(
+        &vk,
+        crate::crypto::SIG_DOMAIN_COMMAND_ENVELOPE,
+        &canonical,
+        &sig.value,
+    ) {
         return reject(
             ReasonCode::CryptoInvalid,
             Value::String("signature verification failed".into()),
@@ -1049,12 +1062,11 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collections::{HashMap, HashSet};
     use crate::protocol::{
         CapabilityDescriptor, CommandEnvelope, DelegationRecord, IdentityRef, NodeRef,
     };
     use crate::result::Verdict;
-    use edgerun_crypto::p256;
-    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_proto::edgerun::v0::common::Signature as ProtoSignature;
 
@@ -1095,6 +1107,21 @@ mod tests {
         }
     }
 
+    fn sign_command(key: &SigningKey, cmd: &mut CommandEnvelope) {
+        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
+        let canonical = canonical_bytes(&record, true);
+        let sig = crate::crypto::sign_canonical_record(
+            key,
+            crate::crypto::SIG_DOMAIN_COMMAND_ENVELOPE,
+            &canonical,
+        )
+        .unwrap();
+        cmd.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: sig,
+        });
+    }
+
     fn make_signed_command(key: &SigningKey, key_hint: Option<Vec<u8>>) -> CommandEnvelope {
         let mut cmd = make_unsigned_command();
         cmd.issuer = Some(IdentityRef {
@@ -1102,15 +1129,7 @@ mod tests {
             identity_kind: Some(1),
             key_hint,
         });
-        // Sign it
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(key, &mut cmd);
         cmd
     }
 
@@ -1127,14 +1146,7 @@ mod tests {
             identity_kind: Some(1),
             key_hint,
         });
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(key, &mut cmd);
         cmd
     }
 
@@ -1144,11 +1156,10 @@ mod tests {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0,
         ];
-        static EMPTY_CACHE: std::sync::LazyLock<
-            std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
-        > = std::sync::LazyLock::new(std::collections::HashMap::new);
-        static EMPTY_REVOKED: std::sync::LazyLock<std::collections::HashSet<Vec<u8>>> =
-            std::sync::LazyLock::new(std::collections::HashSet::new);
+        static EMPTY_CACHE: std::sync::LazyLock<HashMap<Vec<u8>, (Vec<u8>, i64)>> =
+            std::sync::LazyLock::new(HashMap::new);
+        static EMPTY_REVOKED: std::sync::LazyLock<HashSet<Vec<u8>>> =
+            std::sync::LazyLock::new(HashSet::new);
         static EMPTY_ROOTS: [Vec<u8>; 0] = [];
         CommandValidationContext {
             local_node_id: &LOCAL_NODE_ID,
@@ -1234,7 +1245,7 @@ mod tests {
         let hash = command_hash(&cmd).value;
 
         // Replay cache is now keyed by command_hash, with (command_id, seq) as value
-        let mut cache = std::collections::HashMap::new();
+        let mut cache = HashMap::new();
         cache.insert(hash.clone(), (cmd.command_id.clone(), 1i64));
 
         let mut ctx = default_ctx();
@@ -1265,7 +1276,7 @@ mod tests {
         let hash = command_hash(&cmd).value;
 
         // Put a DIFFERENT command with the same command_id in the cache
-        let mut cache = std::collections::HashMap::new();
+        let mut cache = HashMap::new();
         cache.insert(vec![0xFF; 32], (cmd.command_id.clone(), 1i64));
 
         let mut ctx = default_ctx();
@@ -1296,14 +1307,7 @@ mod tests {
             nanos: 0,
         });
         // Re-sign after modification
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let mut ctx = default_ctx();
         ctx.local_node_id = &TEST_NODE_ID;
@@ -1332,14 +1336,7 @@ mod tests {
             nanos: 0,
         });
         // Re-sign
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let mut ctx = default_ctx();
         ctx.local_node_id = &TEST_NODE_ID;
@@ -1480,14 +1477,7 @@ mod tests {
             key_hint: Some(node_id.to_vec()),
         });
         // Sign the command
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
@@ -1507,7 +1497,7 @@ mod tests {
             bytes
         };
 
-        let mut revoked = std::collections::HashSet::new();
+        let mut revoked = HashSet::new();
         revoked.insert(b"deleg-1".to_vec());
 
         let mut ctx = default_ctx();
@@ -1556,14 +1546,7 @@ mod tests {
             identity_kind: Some(1),
             key_hint: Some(node_id.to_vec()),
         });
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
@@ -1627,14 +1610,7 @@ mod tests {
             assurance_metadata: None,
         });
         // Sign it
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
@@ -1673,14 +1649,7 @@ mod tests {
             max_evidence_age: None,
             assurance_metadata: None,
         });
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
@@ -1720,14 +1689,7 @@ mod tests {
             max_evidence_age: None,
             assurance_metadata: None,
         });
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Accept);
@@ -1797,15 +1759,7 @@ mod tests {
         });
         cmd.delegation_chain = vec![delegation];
         cmd.command_type = 7; // QUERY
-
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
@@ -1885,15 +1839,7 @@ mod tests {
         });
         cmd.delegation_chain = vec![delegation];
         cmd.command_type = 7; // QUERY
-
-        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
-        let digest = crate::crypto::sha256(&canonical);
-        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
-        cmd.signature = Some(ProtoSignature {
-            algorithm: 1,
-            value: sig.to_bytes().to_vec(),
-        });
+        sign_command(&key, &mut cmd);
 
         let result = validate_command(&cmd, &ctx);
         // Root is trusted, and delegation has valid signature, so this should pass

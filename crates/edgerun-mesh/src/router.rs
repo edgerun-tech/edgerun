@@ -1,7 +1,8 @@
+use crate::collections::HashMap;
+use crate::discovery::DiscoveryPacket;
 use crate::{
     FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
 };
-use crate::collections::HashMap;
 use edgerun_hardware_signing::{NodeID, MESH_SIGNATURE_LENGTH};
 
 // ---------------------------------------------------------------------------

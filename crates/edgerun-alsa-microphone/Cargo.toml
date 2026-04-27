@@ -9,5 +9,13 @@ publish.workspace = true
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-microphone = { path = "../edgerun-microphone" }
 
+[[bin]]
+name = "alsa_mic_tool"
+path = "src/bin/alsa-mic-tool.rs"
+required-features = ["std"]
+
+[features]
+std = []
+
 [lints]
 workspace = true

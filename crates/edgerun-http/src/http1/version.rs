@@ -5,6 +5,7 @@
 //! - HTTP/1.1: defaults to `Connection: keep-alive`
 
 use crate::Result;
+use alloc::format;
 use core::fmt;
 
 /// HTTP protocol version

@@ -2,8 +2,8 @@
 
 pub mod prelude {
     pub mod v1 {
-        pub use alloc::boxed::Box;
         pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
         pub use alloc::format;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec;

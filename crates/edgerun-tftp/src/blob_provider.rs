@@ -297,6 +297,7 @@ impl FileProvider for MemFileProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_mem_provider_file_size() {

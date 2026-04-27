@@ -42,8 +42,7 @@ impl fmt::Display for RegistryError {
     }
 }
 
-#[cfg(all(feature = "std", not(target_os = "none")))]
-impl std::error::Error for RegistryError {}
+impl core::error::Error for RegistryError {}
 
 #[cfg(all(feature = "std", not(target_os = "none")))]
 impl From<std::io::Error> for RegistryError {
@@ -52,7 +51,10 @@ impl From<std::io::Error> for RegistryError {
     }
 }
 
-#[cfg(all(feature = "std", not(target_os = "none")))]
+#[cfg(any(
+    feature = "registry-client",
+    all(feature = "std", not(target_os = "none"))
+))]
 impl From<edgerun_http::Error> for RegistryError {
     fn from(e: edgerun_http::Error) -> Self {
         RegistryError::HttpError(e.to_string())

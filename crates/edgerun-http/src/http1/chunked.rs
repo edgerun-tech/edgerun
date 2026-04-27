@@ -3,11 +3,10 @@
 //! Shared between request and response parsing to avoid duplicating
 //! the hex-size-line parsing logic.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::header::HeaderMap;
 use crate::{Error, Result};
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// Parse a chunked transfer-encoded body without trailers (for requests).
 ///

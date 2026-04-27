@@ -7,7 +7,7 @@ publish.workspace = true
 description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 
 [features]
-default = ["std", "client", "server", "http1", "http2", "static-files", "http-compression", "http3", "tls"]
+default = ["client", "server", "http1", "http2", "static-files", "http-compression", "http3", "tls"]
 std = []
 client = ["http1", "http2", "runtime", "dep:edgerun-dns", "dep:edgerun-log"]
 connection-middleware = []
@@ -17,7 +17,7 @@ http2 = ["runtime", "dep:edgerun-hpack", "dep:edgerun-log"]
 http3 = ["client", "server", "tls", "dep:edgerun-crypto", "dep:edgerun-quic", "dep:edgerun-qpack", "dep:edgerun-encoding", "dep:edgerun-log"]
 runtime = ["dep:edgerun-bare-rt"]
 server = ["http1", "http2", "runtime", "dep:edgerun-log"]
-static-files = ["server", "std"]
+static-files = ["server"]
 tls = ["dep:edgerun-tls"]
 
 [dependencies]
@@ -26,7 +26,6 @@ edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optiona
 edgerun-bare-rt = { path = "../edgerun-bare-rt", optional = true }
 edgerun-log = { path = "../edgerun-log", optional = true }
 edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
-edgerun-error.workspace = true
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"], optional = true }
 edgerun-hpack = { path = "../edgerun-hpack", optional = true }
 edgerun-qpack = { path = "../edgerun-qpack", optional = true }

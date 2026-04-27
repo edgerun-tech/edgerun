@@ -175,7 +175,11 @@ impl FloatApprox for f64 {
         for _ in 0..n.unsigned_abs() {
             result *= self;
         }
-        if n < 0 { 1.0 / result } else { result }
+        if n < 0 {
+            1.0 / result
+        } else {
+            result
+        }
     }
 }
 

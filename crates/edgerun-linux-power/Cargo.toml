@@ -10,5 +10,13 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-power = { path = "../edgerun-power" }
 
+[[bin]]
+name = "linux-power-tool"
+path = "src/bin/linux-power-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true
+
+[features]
+std = []

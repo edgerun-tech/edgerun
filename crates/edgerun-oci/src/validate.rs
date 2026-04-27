@@ -9,6 +9,15 @@ pub const DEFAULT_ENV: &[&str] = &[
     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "TERM=xterm",
 ];
+pub const DEFAULT_ARGS: &[&str] = &["/bin/sh"];
+
+pub fn default_process_args() -> Vec<String> {
+    DEFAULT_ARGS.iter().map(|value| (*value).into()).collect()
+}
+
+pub fn default_process_env() -> Vec<String> {
+    DEFAULT_ENV.iter().map(|value| (*value).into()).collect()
+}
 
 /// Get the target OS string (e.g. "linux").
 pub fn host_os() -> &'static str {
@@ -243,7 +252,7 @@ pub(crate) const KNOWN_SECCOMP_ARCHES: &[&str] = &[
     "SCMP_ARCH_RISCV64",
 ];
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::json::{

@@ -164,7 +164,7 @@ pub fn do_setuid(uid: u32) -> io::Result<()> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

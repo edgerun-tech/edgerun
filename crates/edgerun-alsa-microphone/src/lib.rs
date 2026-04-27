@@ -272,10 +272,10 @@ use edgerun_microphone::{
     AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
 };
 use std::ffi::c_long;
-#[cfg(not(target_os = "none"))]
-use std::fs::{self, OpenOptions};
 #[cfg(target_os = "none")]
 use std::fs::OpenOptions;
+#[cfg(not(target_os = "none"))]
+use std::fs::{self, OpenOptions};
 #[cfg(not(target_os = "none"))]
 use std::io;
 use std::os::fd::AsRawFd;

@@ -7,10 +7,8 @@
 //! Use [`Body::reader()`] to get a [`BodyReader`] for async chunk-by-chunk reading,
 //! or [`Body::collect()`] to read the entire body at once.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use alloc::vec;
+use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};

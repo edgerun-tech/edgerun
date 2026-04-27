@@ -24,11 +24,11 @@ pub use error::SchedulerError;
 pub use metrics::{MetricsReceiver, ProviderMetrics};
 pub use provider::{ProviderInfo, ProviderManager};
 
-use edgerun_bare_rt::CancellationToken;
+use crate::collections::HashMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use crate::collections::HashMap;
+use edgerun_bare_rt::CancellationToken;
 
 pub struct Scheduler {
     provider_manager: ProviderManager,
@@ -142,6 +142,8 @@ mod tests {
     use crate::metrics::{MetricsReceiver, ProviderMetrics};
     use crate::provider::ProviderInfo;
     use crate::{DeploymentStatus, Scheduler};
+    use alloc::string::ToString;
+    use alloc::vec;
 
     #[test]
     fn test_scheduler_creation() {

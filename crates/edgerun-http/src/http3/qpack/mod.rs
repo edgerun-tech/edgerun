@@ -5,8 +5,7 @@
 //!
 //! This implementation uses the `qpack` crate for encoding/decoding.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
+use alloc::string::{String, ToString};
 use core::fmt;
 
 pub mod decoder;

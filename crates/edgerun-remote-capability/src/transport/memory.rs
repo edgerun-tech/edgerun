@@ -1,8 +1,8 @@
 //! In-memory channel-pair transport for testing.
 
-use crate::prelude::v1::*;
 use crate::cell::RefCell;
 use crate::collections::VecDeque;
+use crate::prelude::v1::*;
 use crate::rc::Rc;
 
 use edgerun_capabilities::CapabilityError;

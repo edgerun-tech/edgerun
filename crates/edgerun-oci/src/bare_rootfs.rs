@@ -167,7 +167,7 @@ impl TarLayerSink for BareRootfs {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::image_apply::apply_bare_image_layer_blobs;

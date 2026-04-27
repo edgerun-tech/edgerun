@@ -40,7 +40,9 @@ pub mod image {
         Unsupported,
         InvalidArgument(&'static str),
         AlreadyExists(String),
-        CommandMissing { command: &'static str },
+        CommandMissing {
+            command: &'static str,
+        },
         CommandFailed {
             command: &'static str,
             status: i32,
@@ -92,7 +94,11 @@ pub mod image {
         Err(VirtualDiskError::Unsupported)
     }
 
-    pub fn clone(_src: &str, _dst: &str, _dst_format: VirtualDiskFormat) -> Result<VirtualDiskInfo> {
+    pub fn clone(
+        _src: &str,
+        _dst: &str,
+        _dst_format: VirtualDiskFormat,
+    ) -> Result<VirtualDiskInfo> {
         Err(VirtualDiskError::Unsupported)
     }
 

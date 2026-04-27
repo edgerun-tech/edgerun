@@ -55,12 +55,9 @@ pub(crate) mod prelude {
     pub use alloc::vec::Vec;
 }
 
-// This crate requires either std or alloc. All JSON types use Vec and String.
-#[cfg(all(not(feature = "std"), not(feature = "alloc")))]
-compile_error!(
-    "edgerun-json requires either the `std` or `alloc` feature. \
-     Use `--features alloc` for no_std mode, or enable default features for std."
-);
+// This crate relies on `alloc`-backed collections and strings. When built as
+// `no_std`, the caller must provide `-Zbuild-std=core,alloc` (or an equivalent
+// environment) so that these types are available.
 
 #[cfg(feature = "toml")]
 pub mod toml;

@@ -1,8 +1,12 @@
 //! OCI spec generation from image config — produces JSON via edgerun-json.
 
 use crate::prelude::*;
-use crate::validate::DEFAULT_ENV;
-use crate::{default_namespaces, OciLinux, OciMount, OciProcess, OciRoot, OciSpec, OciUser};
+use crate::validate::{default_process_args, default_process_env};
+use crate::{
+    default_masked_paths, default_namespaces, default_readonly_paths, OciLinux, OciMount,
+    OciProcess, OciRoot, OciSpec, OciUser, DEFAULT_MASKED_PATHS, DEFAULT_NAMESPACES,
+    DEFAULT_READONLY_PATHS,
+};
 use edgerun_json::{json, to_string_pretty};
 
 use super::config::ImageConfig;
@@ -13,7 +17,7 @@ pub fn generate_oci_spec_model(image_config: &ImageConfig, rootfs: &str) -> OciS
     let env = process_config
         .and_then(|c| c.env.as_ref())
         .cloned()
-        .unwrap_or_else(|| DEFAULT_ENV.iter().map(|value| (*value).into()).collect());
+        .unwrap_or_else(default_process_env);
     let cwd = process_config
         .and_then(|c| c.working_dir.as_ref())
         .cloned()
@@ -25,7 +29,7 @@ pub fn generate_oci_spec_model(image_config: &ImageConfig, rootfs: &str) -> OciS
         platform: None,
         process: Some(OciProcess {
             args: Some(if args.is_empty() {
-                vec!["/bin/sh".into()]
+                default_process_args()
             } else {
                 args
             }),
@@ -47,8 +51,8 @@ pub fn generate_oci_spec_model(image_config: &ImageConfig, rootfs: &str) -> OciS
         domainname: None,
         linux: Some(OciLinux {
             namespaces: Some(default_namespaces()),
-            masked_paths: Some(masked_paths()),
-            readonly_paths: Some(readonly_paths()),
+            masked_paths: Some(default_masked_paths()),
+            readonly_paths: Some(default_readonly_paths()),
             ..OciLinux::default()
         }),
         mounts: volume_mounts_model(image_config),
@@ -64,9 +68,7 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &str) -> String {
     let env = process_config
         .and_then(|c| c.env.as_ref())
         .cloned()
-        .unwrap_or_else(|| {
-            vec!["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".into()]
-        });
+        .unwrap_or_else(default_process_env);
 
     let cwd = process_config
         .and_then(|c| c.working_dir.as_ref())
@@ -102,6 +104,23 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &str) -> String {
     };
 
     let env_json: Vec<edgerun_json::JsonValue> = env.iter().map(|e| json!(e.as_str())).collect();
+    let namespaces_json: Vec<edgerun_json::JsonValue> = DEFAULT_NAMESPACES
+        .iter()
+        .map(|(ns_type, path)| {
+            json!({
+                "type": *ns_type,
+                "path": path.unwrap_or("")
+            })
+        })
+        .collect();
+    let masked_paths_json: Vec<edgerun_json::JsonValue> = DEFAULT_MASKED_PATHS
+        .iter()
+        .map(|path| json!(*path))
+        .collect();
+    let readonly_paths_json: Vec<edgerun_json::JsonValue> = DEFAULT_READONLY_PATHS
+        .iter()
+        .map(|path| json!(*path))
+        .collect();
 
     let mut spec = json!({
         "ociVersion": "1.0.2",
@@ -120,23 +139,9 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &str) -> String {
         },
         "hostname": "edgerun",
         "linux": {
-            "namespaces": [
-                { "type": "pid", "path": "" },
-                { "type": "network", "path": "" },
-                { "type": "ipc", "path": "" },
-                { "type": "uts", "path": "" },
-                { "type": "mount", "path": "" }
-            ],
-            "maskedPaths": [
-                "/proc/acpi", "/proc/kcore", "/proc/keys",
-                "/proc/latency_stats", "/proc/timer_list",
-                "/proc/timer_stats", "/proc/sched_debug",
-                "/proc/scsi", "/sys/firmware"
-            ],
-            "readonlyPaths": [
-                "/proc/asound", "/proc/bus", "/proc/fs",
-                "/proc/irq", "/proc/sys", "/proc/sysrq-trigger"
-            ]
+            "namespaces": namespaces_json,
+            "maskedPaths": masked_paths_json,
+            "readonlyPaths": readonly_paths_json
         }
     });
 
@@ -200,38 +205,12 @@ fn volume_mounts_model(image_config: &ImageConfig) -> Option<Vec<OciMount>> {
         .filter(|mounts: &Vec<OciMount>| !mounts.is_empty())
 }
 
-fn masked_paths() -> Vec<String> {
-    [
-        "/proc/acpi",
-        "/proc/kcore",
-        "/proc/keys",
-        "/proc/latency_stats",
-        "/proc/timer_list",
-        "/proc/timer_stats",
-        "/proc/sched_debug",
-        "/proc/scsi",
-        "/sys/firmware",
-    ]
-    .iter()
-    .map(|value| (*value).into())
-    .collect()
-}
-
-fn readonly_paths() -> Vec<String> {
-    [
-        "/proc/asound",
-        "/proc/bus",
-        "/proc/fs",
-        "/proc/irq",
-        "/proc/sys",
-        "/proc/sysrq-trigger",
-    ]
-    .iter()
-    .map(|value| (*value).into())
-    .collect()
-}
-
-#[cfg(all(test, feature = "json", not(feature = "serde")))]
+#[cfg(all(
+    test,
+    not(target_os = "none"),
+    feature = "json",
+    not(feature = "serde")
+))]
 mod tests {
     use super::*;
     use crate::validate_spec;

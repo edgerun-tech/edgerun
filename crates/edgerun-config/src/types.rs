@@ -14,8 +14,8 @@
 //!   ...
 //! ```
 
-use crate::prelude::v1::*;
 use crate::collections::HashMap;
+use crate::prelude::v1::*;
 
 // ---------------------------------------------------------------------------
 // K8s-compatible resource envelope

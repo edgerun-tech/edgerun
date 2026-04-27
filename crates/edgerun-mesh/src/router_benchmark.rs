@@ -3,7 +3,7 @@
 /// Measures next-hop routing table lookups with a realistic peer table.
 use std::time::{Duration, Instant};
 
-use crate::{router::MeshRouter, LocalNode, MeshRoute};
+use crate::{discovery::DiscoveryPacket, router::MeshRouter, LocalNode, MeshRoute};
 use edgerun_hardware_signing::NodeID;
 
 // ===========================================================================
@@ -21,7 +21,6 @@ pub fn benchmark_router_lookup() -> u64 {
         peer_ids.push(peer_id);
 
         // Create a discovery packet with this peer's route
-        use crate::DiscoveryPacket;
         let route = MeshRoute {
             destination: peer_id,
             next_hop: None,

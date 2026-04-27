@@ -19,8 +19,8 @@
 #[macro_use]
 extern crate alloc;
 
-pub mod compat;
 pub mod client;
+pub mod compat;
 pub mod duid;
 pub mod lease;
 pub mod message;

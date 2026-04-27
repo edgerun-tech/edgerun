@@ -9,6 +9,7 @@ description = "Unified DNS + DHCP server — one binary to replace dnsmasq + BIN
 [[bin]]
 name = "edgerun-net"
 path = "src/main.rs"
+required-features = ["std"]
 
 [dependencies]
 edgerun-dns = { path = "../edgerun-dns", default-features = false, features = ["dhcp"] }
@@ -23,3 +24,6 @@ edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 
 [lints]
 workspace = true
+
+[features]
+std = []

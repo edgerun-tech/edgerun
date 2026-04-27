@@ -253,13 +253,13 @@ use edgerun_bluetooth::{
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 #[cfg(not(target_os = "none"))]
+use std::fs;
+#[cfg(not(target_os = "none"))]
 use std::io;
 use std::mem::size_of;
 use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-#[cfg(not(target_os = "none"))]
-use std::fs;
 
 const AF_BLUETOOTH: i32 = 31;
 const SOCK_RAW: i32 = 3;

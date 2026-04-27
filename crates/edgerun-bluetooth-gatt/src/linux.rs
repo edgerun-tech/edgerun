@@ -1,5 +1,5 @@
-use crate::prelude::v1::*;
 use crate::error::{GattError, GattResult};
+use crate::prelude::v1::*;
 use std::io;
 use std::mem::size_of;
 use std::os::fd::{AsRawFd, RawFd};
@@ -348,21 +348,21 @@ impl L2capSocket {
         }
         #[cfg(not(target_os = "none"))]
         {
-        let flags = unsafe { libc::fcntl(self.fd, libc::F_GETFL, 0) };
-        if flags < 0 {
-            return Err(GattError::SocketFailed("fcntl F_GETFL failed".to_string()));
-        }
-        let new_flags = if nonblock {
-            flags | libc::O_NONBLOCK
-        } else {
-            flags & !libc::O_NONBLOCK
-        };
-        let rc = unsafe { libc::fcntl(self.fd, libc::F_SETFL, new_flags) };
-        if rc < 0 {
-            Err(GattError::SocketFailed("fcntl F_SETFL failed".to_string()))
-        } else {
-            Ok(())
-        }
+            let flags = unsafe { libc::fcntl(self.fd, libc::F_GETFL, 0) };
+            if flags < 0 {
+                return Err(GattError::SocketFailed("fcntl F_GETFL failed".to_string()));
+            }
+            let new_flags = if nonblock {
+                flags | libc::O_NONBLOCK
+            } else {
+                flags & !libc::O_NONBLOCK
+            };
+            let rc = unsafe { libc::fcntl(self.fd, libc::F_SETFL, new_flags) };
+            if rc < 0 {
+                Err(GattError::SocketFailed("fcntl F_SETFL failed".to_string()))
+            } else {
+                Ok(())
+            }
         }
     }
 }

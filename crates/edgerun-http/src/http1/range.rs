@@ -14,9 +14,9 @@
 //! 1. Check `Content-Range` to know which bytes were received
 //! 2. Request remaining ranges
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Range;
 

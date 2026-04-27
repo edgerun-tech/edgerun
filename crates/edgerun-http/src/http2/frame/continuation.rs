@@ -1,10 +1,9 @@
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use super::flags;
 use super::Frame;
 use super::FrameType;
 use super::{Http2Error, Result};
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// CONTINUATION frame (RFC 7540 Sec6.10)
 #[derive(Debug, Clone)]

@@ -12,10 +12,15 @@ serde = { version = "1.0", default-features = false, features = ["alloc", "deriv
 [[bin]]
 name = "tuya-discover"
 path = "src/bin/tuya-discover.rs"
+required-features = ["std"]
 
 [[bin]]
 name = "tuya-control"
 path = "src/bin/tuya-control.rs"
+required-features = ["std"]
+
+[features]
+std = []
 
 [lints]
 workspace = true

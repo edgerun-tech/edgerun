@@ -67,11 +67,3 @@ pub async fn udp_recv_loop_with_rate_limiting(
         });
     }
 }
-
-/// Legacy UDP loop (no rate limiting, no shutdown) — kept for backwards compat.
-pub async fn udp_recv_loop(socket: Arc<AsyncUdpSocket>, state: ServerState) -> ! {
-    let shutdown = Arc::new(crate::compat::RwLock::new(false));
-    let rate_limiter = RateLimiter::new(0); // unlimited
-    let _ = udp_recv_loop_with_rate_limiting(socket, state, rate_limiter, shutdown).await;
-    unreachable!("UDP loop should never return without shutdown")
-}

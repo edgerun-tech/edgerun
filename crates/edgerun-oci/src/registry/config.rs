@@ -409,7 +409,12 @@ fn parse_json_object_map_any(
     Ok(None)
 }
 
-#[cfg(all(test, feature = "json", not(feature = "serde")))]
+#[cfg(all(
+    test,
+    not(target_os = "none"),
+    feature = "json",
+    not(feature = "serde")
+))]
 mod json_feature_tests {
     use super::*;
 

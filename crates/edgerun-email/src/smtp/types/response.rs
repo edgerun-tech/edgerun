@@ -311,6 +311,7 @@ impl SmtpResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_enhanced_status_format() {

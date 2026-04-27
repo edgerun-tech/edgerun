@@ -22,9 +22,9 @@ use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProv
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "none")]
-use edgerun_bare_rt::io::IoError;
-#[cfg(target_os = "none")]
 use core::net::SocketAddr;
+#[cfg(target_os = "none")]
+use edgerun_bare_rt::io::IoError;
 
 #[cfg(not(target_os = "none"))]
 type IoError = std::io::Error;

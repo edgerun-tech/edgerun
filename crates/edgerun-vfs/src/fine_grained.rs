@@ -388,7 +388,7 @@ mod tests {
     fn test_binary_file_handling() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("text.txt"), "hello world").unwrap();
-        std::fs::write(tmp.path().join("binary.dat"), vec![0u8, 255, 128]).unwrap();
+        std::fs::write(tmp.path().join("binary.dat"), std::vec![0u8, 255, 128]).unwrap();
 
         let vfs = FineGrainedVFS::load(tmp.path()).unwrap();
 

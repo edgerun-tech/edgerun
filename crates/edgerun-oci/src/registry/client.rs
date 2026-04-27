@@ -1,16 +1,22 @@
 //! OCI Registry V2 client — async, using `edgerun_http::HttpClient`.
 
 use crate::prelude::*;
+use crate::BareImagePlan;
+use core::{fmt, str::FromStr};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use std::io;
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use std::path::{Path, PathBuf};
 
-use edgerun_http::{HeaderMap, HttpClient, Request, Response};
+use edgerun_http::{HttpClient, Request, Response};
 
 use super::auth::{parse_bearer_auth, RegistryAuth};
 use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest};
 use super::errors::RegistryError;
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest};
 use super::manifest::{ImageManifest, SingleManifest};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use super::oci_spec::generate_oci_spec;
 use super::urlencoding;
 
@@ -22,7 +28,7 @@ pub struct ImageRef {
     pub tag: String,
 }
 
-impl std::str::FromStr for ImageRef {
+impl FromStr for ImageRef {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -67,8 +73,8 @@ impl std::str::FromStr for ImageRef {
     }
 }
 
-impl std::fmt::Display for ImageRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ImageRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}:{}", self.registry, self.repository, self.tag)
     }
 }
@@ -107,6 +113,7 @@ impl RegistryClient {
     }
 
     /// Read registry config.json for credentials.
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn with_registry_config(path: &Path) -> io::Result<Self> {
         let auth = super::auth::load_registry_auth(path)?;
         Ok(Self {
@@ -117,6 +124,7 @@ impl RegistryClient {
     }
 
     /// Use the edgerun secret service for registry credentials.
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn with_secret_service_auth(
         data_root: &Path,
         namespace: &str,
@@ -323,6 +331,7 @@ impl RegistryClient {
             RegistryAuth::Basic { username, password } => {
                 Some((username.clone(), password.clone()))
             }
+            #[cfg(all(feature = "std", not(target_os = "none")))]
             RegistryAuth::FromSecretService {
                 data_root,
                 namespace,
@@ -495,7 +504,49 @@ impl RegistryClient {
         self.authenticated_get(registry, &url, &[]).await
     }
 
+    /// Fetch manifest/config metadata and build a no_std runtime image plan.
+    ///
+    /// Layer contents are not downloaded here. Call [`Self::fetch_blob`] for
+    /// each digest in `plan.layers`, then apply them through the bare layer
+    /// pipeline.
+    pub async fn fetch_bare_image_plan(
+        &mut self,
+        image: &ImageRef,
+        rootfs: &str,
+    ) -> Result<BareImagePlan, RegistryError> {
+        let manifest = self.resolve_manifest(image).await?;
+        let manifest_data = match manifest {
+            ImageManifest::Single(manifest) => manifest,
+            ImageManifest::Index(index) => {
+                if index.manifests.is_empty() {
+                    return Err(RegistryError::NoManifests);
+                }
+                let selected = crate::select_manifest_for_current_target(&index)
+                    .unwrap_or(&index.manifests[0]);
+                self.fetch_manifest_by_digest(&image.registry, &image.repository, &selected.digest)
+                    .await?
+            }
+        };
+
+        let config_blob = self
+            .fetch_blob(
+                &image.registry,
+                &image.repository,
+                &manifest_data.config_digest,
+            )
+            .await?;
+        let image_config = parse_image_config(&config_blob)
+            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+
+        let plan = BareImagePlan::from_manifest_config(&manifest_data, &image_config, rootfs)
+            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+        plan.validate_descriptors()
+            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+        Ok(plan)
+    }
+
     /// Pull an image to a local bundle directory.
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub async fn pull(
         &mut self,
         image: &ImageRef,
@@ -511,8 +562,8 @@ impl RegistryClient {
                     return Err(RegistryError::NoManifests);
                 }
                 // Select manifest matching current platform (linux/amd64 preferred, fallback to first).
-                let current_arch = std::env::consts::ARCH;
-                let current_os = std::env::consts::OS;
+                let current_arch = crate::host_arch();
+                let current_os = crate::host_os();
                 let best = idx
                     .manifests
                     .iter()
@@ -596,6 +647,7 @@ impl RegistryClient {
     }
 
     /// Download a blob to a local file, tracking bytes.
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     async fn download_blob(
         &mut self,
         registry: &str,
@@ -617,6 +669,7 @@ impl RegistryClient {
     // ------------------------------------------------------------------
 
     /// Push a local bundle to a registry.
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub async fn push(
         &mut self,
         image: &ImageRef,
@@ -755,12 +808,14 @@ impl RegistryClient {
 }
 
 /// Compute SHA-256 hex digest.
+#[cfg(all(feature = "std", not(target_os = "none")))]
 fn hex_digest(data: &[u8]) -> String {
     let hash = edgerun_crypto::sha256(data);
     edgerun_encoding::hex::bytes_to_hex(&hash)
 }
 
 /// Create a gzip-compressed tar from a directory.
+#[cfg(all(feature = "std", not(target_os = "none")))]
 fn create_tar_from_dir(dir: &Path) -> std::io::Result<Vec<u8>> {
     let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     let mut builder = tar::Builder::new(&mut encoder);
@@ -770,7 +825,7 @@ fn create_tar_from_dir(dir: &Path) -> std::io::Result<Vec<u8>> {
     encoder.finish()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std", not(target_os = "none")))]
 mod tests {
     use super::*;
     use std::path::PathBuf;

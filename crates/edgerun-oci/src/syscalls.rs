@@ -851,7 +851,7 @@ pub const R2: u8 = 2;
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

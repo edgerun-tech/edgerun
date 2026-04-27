@@ -1,7 +1,8 @@
 //! HTTP/3 settings (RFC 9114 Section 7.2.4.1)
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// Setting identifiers
 pub mod setting_ids {

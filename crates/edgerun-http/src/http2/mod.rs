@@ -2,8 +2,8 @@
 //!
 //! Provides frame protocol, stream multiplexing, flow control, and SETTINGS negotiation.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
+use alloc::format;
+use alloc::string::{String, ToString};
 use core::fmt;
 
 pub mod client;

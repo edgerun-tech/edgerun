@@ -194,7 +194,7 @@ pub fn is_cgroup_v2_available() -> bool {
     Path::new("/sys/fs/cgroup/cgroup.controllers").exists()
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

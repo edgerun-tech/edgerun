@@ -1,5 +1,5 @@
-use crate::prelude::v1::*;
 use crate::error::{GattError, GattResult};
+use crate::prelude::v1::*;
 use std::io;
 use std::mem::size_of;
 use std::os::fd::RawFd;

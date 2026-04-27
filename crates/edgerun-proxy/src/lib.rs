@@ -22,10 +22,10 @@
 //! ```
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
-extern crate std;
 #[cfg(target_os = "none")]
 extern crate self as std;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 pub mod prelude {
     pub use alloc::format;
@@ -34,8 +34,8 @@ pub mod prelude {
     pub use alloc::vec::Vec;
     pub use core::convert::Into;
     pub use core::module_path;
-    pub use core::prelude::rust_2024::*;
     pub use core::option::Option::{self, None, Some};
+    pub use core::prelude::rust_2024::*;
     pub use core::result::Result::{self, Err, Ok};
 }
 
@@ -89,7 +89,9 @@ pub mod io {
                 edgerun_bare_rt::io::IoError::WriteZero => {
                     Self::new(ErrorKind::Other, "write zero")
                 }
-                edgerun_bare_rt::io::IoError::Other(message) => Self::new(ErrorKind::Other, message),
+                edgerun_bare_rt::io::IoError::Other(message) => {
+                    Self::new(ErrorKind::Other, message)
+                }
             }
         }
     }

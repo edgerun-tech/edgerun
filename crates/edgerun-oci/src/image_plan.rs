@@ -218,7 +218,7 @@ fn validate_digest_field(field: impl Into<String>, digest: &str) -> Result<(), I
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::registry::config::{ImageConfigInner, RootFs};

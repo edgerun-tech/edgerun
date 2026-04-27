@@ -6,10 +6,10 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
-extern crate std;
 #[cfg(target_os = "none")]
 extern crate self as std;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 #[path = "std.rs"]
 mod std_compat;

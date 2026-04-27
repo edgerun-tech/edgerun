@@ -1,10 +1,10 @@
 //! HTTP/2 stream management
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use super::Result;
 use alloc::collections::{BTreeMap, VecDeque};
+use alloc::format;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// Stream states (RFC 7540 Section 5.1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

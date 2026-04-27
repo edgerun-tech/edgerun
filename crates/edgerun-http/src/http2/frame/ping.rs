@@ -1,10 +1,8 @@
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use super::flags;
 use super::Frame;
 use super::FrameType;
 use super::{Http2Error, Result};
+use alloc::string::ToString;
 
 /// PING frame
 #[derive(Debug, Clone)]

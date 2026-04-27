@@ -110,12 +110,6 @@ pub use weak::Weak;
 pub mod error;
 pub use error::Error;
 
-pub mod compat;
-pub use compat::{
-    Barrier, BarrierWaitResult, Dir, File, Latch, RateLimiter, RuntimeMetrics, Span, TaskMap,
-    TaskMetrics, TokenBucket, WaitLatch,
-};
-
 pub mod signal;
 pub use signal::{alarm, ctrl_c, usr1, usr2, CtrlC, Signal, SignalHandler, SignalKind};
 

@@ -2,6 +2,7 @@
 
 use super::{Http2Error, Result};
 use alloc::collections::BTreeMap;
+use alloc::format;
 
 /// Flow controller for connection or stream level
 pub struct FlowController {

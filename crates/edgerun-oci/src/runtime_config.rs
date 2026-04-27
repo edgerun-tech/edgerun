@@ -5,7 +5,9 @@ use crate::json::{
     OciRlimit, OciSpec,
 };
 use crate::prelude::*;
-use crate::validate::{validate_spec, OciValidationError, DEFAULT_ENV};
+use crate::validate::{
+    default_process_args, default_process_env, validate_spec, OciValidationError,
+};
 use alloc::collections::BTreeMap;
 
 /// Flattened OCI configuration for non-host runtimes.
@@ -91,8 +93,8 @@ impl BareRuntimeConfig {
         Ok(Self {
             rootfs: root.path.clone(),
             root_readonly: root.readonly.unwrap_or(false),
-            args: process.args.clone().unwrap_or_else(default_args),
-            env: process.env.clone().unwrap_or_else(default_env),
+            args: process.args.clone().unwrap_or_else(default_process_args),
+            env: process.env.clone().unwrap_or_else(default_process_env),
             cwd: process.cwd.clone().unwrap_or_else(|| "/".into()),
             hostname: spec.hostname.clone().unwrap_or_else(|| "edgerun".into()),
             domainname: spec.domainname.clone(),
@@ -162,15 +164,7 @@ impl From<String> for BareNamespaceKind {
     }
 }
 
-fn default_args() -> Vec<String> {
-    vec!["/bin/sh".into()]
-}
-
-fn default_env() -> Vec<String> {
-    DEFAULT_ENV.iter().map(|value| (*value).into()).collect()
-}
-
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::json::{OciLinux, OciProcess, OciRoot, OciUser};

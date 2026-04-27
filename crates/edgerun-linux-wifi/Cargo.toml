@@ -18,5 +18,13 @@ edgerun-log = { path = "../edgerun-log" }
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true
 
+[features]
+std = []
+
+[[bin]]
+name = "linux_wifi_tool"
+path = "src/bin/linux-wifi-tool.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

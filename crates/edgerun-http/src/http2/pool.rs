@@ -4,14 +4,14 @@
 //! multiplexing all requests as concurrent streams over the
 //! same TCP+TLS connection.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::runtime::net::{IpAddr, SocketAddr};
 use crate::runtime::time::{Duration, Instant};
 use crate::runtime::{timeout as rt_timeout, AsyncTcpStream, ConnectFuture};
 use alloc::collections::BTreeMap as HashMap;
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::runtime::Mutex;
 

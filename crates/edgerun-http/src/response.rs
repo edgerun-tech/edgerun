@@ -1,10 +1,9 @@
 //! Protocol-agnostic HTTP response.
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 use crate::header::HeaderMap;
 use crate::status::StatusCode;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
 
 /// An HTTP response, protocol-agnostic.

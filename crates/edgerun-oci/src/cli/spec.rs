@@ -15,18 +15,8 @@ fn default_spec() -> String {
     let spec = OciSpec {
         version: "1.0.2".into(),
         platform: Some(OciPlatform {
-            os: Some(if cfg!(target_os = "linux") {
-                "linux".into()
-            } else {
-                "unknown".into()
-            }),
-            arch: Some(if cfg!(target_arch = "x86_64") {
-                "amd64".into()
-            } else if cfg!(target_arch = "aarch64") {
-                "arm64".into()
-            } else {
-                "unknown".into()
-            }),
+            os: Some(crate::host_os().into()),
+            arch: Some(crate::host_arch().into()),
             os_version: None,
             os_features: None,
         }),
@@ -39,10 +29,7 @@ fn default_spec() -> String {
                 umask: None,
             }),
             args: Some(vec!["sh".into()]),
-            env: Some(vec![
-                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".into(),
-                "TERM=xterm".into(),
-            ]),
+            env: Some(crate::validate::default_process_env()),
             cwd: Some("/".into()),
             capabilities: Some(OciCapabilities {
                 bounding: Some(vec![]),
@@ -72,25 +59,8 @@ fn default_spec() -> String {
         domainname: None,
         linux: Some(OciLinux {
             namespaces: Some(crate::default_namespaces()),
-            masked_paths: Some(vec![
-                "/proc/acpi".into(),
-                "/proc/kcore".into(),
-                "/proc/keys".into(),
-                "/proc/latency_stats".into(),
-                "/proc/timer_list".into(),
-                "/proc/timer_stats".into(),
-                "/proc/sched_debug".into(),
-                "/proc/scsi".into(),
-                "/sys/firmware".into(),
-            ]),
-            readonly_paths: Some(vec![
-                "/proc/asound".into(),
-                "/proc/bus".into(),
-                "/proc/fs".into(),
-                "/proc/irq".into(),
-                "/proc/sys".into(),
-                "/proc/sysrq-trigger".into(),
-            ]),
+            masked_paths: Some(crate::default_masked_paths()),
+            readonly_paths: Some(crate::default_readonly_paths()),
             rootfs_propagation: Some("private".into()),
             ..Default::default()
         }),

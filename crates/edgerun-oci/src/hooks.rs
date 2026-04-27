@@ -288,7 +288,7 @@ pub fn execute_poststop_hooks(hooks: Option<&[OciHook]>, state: &ContainerState)
     }
 }
 // ===========================================================================
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 

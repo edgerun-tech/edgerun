@@ -1,8 +1,5 @@
 //! HTTP/2 frame protocol implementation (RFC 9113 / RFC 7540 Section 6)
 
-#[cfg(target_os = "none")]
-use crate::prelude::v1::*;
-
 mod continuation;
 mod data;
 mod goaway;
@@ -15,6 +12,9 @@ mod settings;
 mod window_update;
 
 use super::{Http2Error, Result};
+use alloc::format;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 pub use continuation::ContinuationFrame;
 pub use data::DataFrame;

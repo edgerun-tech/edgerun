@@ -143,14 +143,12 @@ mod server;
 mod token_store;
 mod types;
 
-pub use client::{DeviceFlowCallback, OAuthClient as LegacyOAuthClient};
+pub use client::{DeviceFlowCallback, OAuthClient};
 pub use discovery::{Jwk, JwksDocument, OidcDiscoveryDocument};
 pub use edgerun_encoding::base64::{base64url_decode, base64url_encode, base64url_nopad_encode};
 pub use errors::{DeviceError, OAuthError};
 pub use jwt::{verifier_from_jwk, IdToken, JwtHeader, JwtPayload, JwtVerifier};
-pub use oauth_client::{
-    AutoRefreshMiddleware, BearerTokenMiddleware, OAuthClient, OAuthClientBuilder,
-};
+pub use oauth_client::{AutoRefreshMiddleware, BearerTokenMiddleware, OAuthClientBuilder};
 pub use pkce::PkcePair;
 pub use server::{BearerAuthMiddleware, Claims, ClientRegistration, OAuthServer, ServerConfig};
 pub use token_store::{default_token_path, TokenStore};

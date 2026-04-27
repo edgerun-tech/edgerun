@@ -9,11 +9,13 @@ description = "Complete email server: SMTP (RFC 5321), IMAP (RFC 3501), LMTP (RF
 [[bin]]
 name = "edgerun-mailq"
 path = "src/bin/edgerun-mailq.rs"
+required-features = ["std"]
 
 [features]
 default = ["dkim"]
 tls = ["dep:edgerun-tls"]
 dkim = ["dep:edgerun-email-auth"]
+std = []
 
 [lints]
 workspace = true

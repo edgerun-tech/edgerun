@@ -183,7 +183,7 @@ fn validate_diff_id<D: LayerDigest>(
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::tar_layer::{OciWhiteout, TarEntry, TarEntryKind};

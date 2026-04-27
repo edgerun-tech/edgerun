@@ -1,7 +1,7 @@
 //! Config file parser — reads YAML and produces typed config resources.
 
-use crate::prelude::v1::*;
 use crate::collections::HashMap;
+use crate::prelude::v1::*;
 use crate::types::ConfigResource;
 use edgerun_json::yaml::{YamlDeserializer, YamlValue};
 

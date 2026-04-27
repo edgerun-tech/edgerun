@@ -8,8 +8,10 @@ publish.workspace = true
 [[bin]]
 name = "edgerund"
 path = "src/main.rs"
+required-features = ["std"]
 
 [features]
+std = []
 default = ["all-hardware", "oci"]
 oci = [
     "dep:edgerun-oci",
