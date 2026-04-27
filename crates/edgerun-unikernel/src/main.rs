@@ -95,7 +95,12 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     };
     
     rt::log::log(1, "VirtIO found");
-    net.init();
+    if !net.init() {
+        rt::log::log(1, "VirtIO init failed");
+        loop {
+            core::arch::asm!("hlt");
+        }
+    }
     let mac = net.get_mac();
     
     let mut stack = IpStack::new();
@@ -117,15 +122,22 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         DHCP_SERVER_PORT,
         &discover,
     ) {
-        net.send(pkt);
+        if net.send(pkt) {
+            rt::log::log(1, "DHCP discover queued");
+        } else {
+            rt::log::log(1, "DHCP discover send failed");
+        }
     }
     
     let mut rx_buf = [0u8; 1514];
-    if let Some(len) = net.recv(&mut rx_buf) {
-        if let Some(ParsedPacket::Udp { header, payload }) = network.recv(&rx_buf[..len]) {
-            if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
-                if dhcp.parse(payload) {
-                    rt::log::log(1, "DHCP lease accepted");
+    for _ in 0..1000 {
+        if let Some(len) = net.recv(&mut rx_buf) {
+            if let Some(ParsedPacket::Udp { header, payload }) = network.recv(&rx_buf[..len]) {
+                if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
+                    if dhcp.parse(payload) {
+                        rt::log::log(1, "DHCP lease accepted");
+                        break;
+                    }
                 }
             }
         }

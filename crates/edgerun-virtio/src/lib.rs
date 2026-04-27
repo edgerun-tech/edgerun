@@ -3,6 +3,8 @@
 #![no_std]
 #![allow(dead_code)]
 
+use core::sync::atomic::{fence, Ordering};
+
 pub const VIRTIO_VENDOR_ID: u16 = 0x1af4;
 pub const VIRTIO_MODERN_DEVICE_ID_NET: u16 = 0x1041;
 
@@ -25,6 +27,13 @@ const VIRTIO_PCI_CAP_COMMON_CFG: u8 = 1;
 const VIRTIO_PCI_CAP_NOTIFY_CFG: u8 = 2;
 const VIRTIO_PCI_CAP_ISR_CFG: u8 = 3;
 const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
+
+const QUEUE_SIZE: usize = 8;
+const RX_QUEUE: u16 = 0;
+const TX_QUEUE: u16 = 1;
+const NET_HDR_LEN: usize = 10;
+const BUFFER_SIZE: usize = 2048;
+const VIRTQ_DESC_F_WRITE: u16 = 2;
 
 const PCI_CONFIG_ADDRESS: u16 = 0xcf8;
 const PCI_CONFIG_DATA: u16 = 0xcfc;
@@ -57,6 +66,83 @@ struct ModernNetDevice {
     isr: Option<VirtioPciCap>,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct VirtqDesc {
+    addr: u64,
+    len: u32,
+    flags: u16,
+    next: u16,
+}
+
+#[repr(C, align(2))]
+struct VirtqAvail {
+    flags: u16,
+    idx: u16,
+    ring: [u16; QUEUE_SIZE],
+    used_event: u16,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct VirtqUsedElem {
+    id: u32,
+    len: u32,
+}
+
+#[repr(C, align(4))]
+struct VirtqUsed {
+    flags: u16,
+    idx: u16,
+    ring: [VirtqUsedElem; QUEUE_SIZE],
+    avail_event: u16,
+}
+
+#[repr(align(16))]
+struct DescTable([VirtqDesc; QUEUE_SIZE]);
+
+#[repr(align(16))]
+struct PacketBuffers([[u8; BUFFER_SIZE]; QUEUE_SIZE]);
+
+const EMPTY_DESC: VirtqDesc = VirtqDesc {
+    addr: 0,
+    len: 0,
+    flags: 0,
+    next: 0,
+};
+
+const EMPTY_USED_ELEM: VirtqUsedElem = VirtqUsedElem { id: 0, len: 0 };
+
+static mut RX_DESC: DescTable = DescTable([EMPTY_DESC; QUEUE_SIZE]);
+static mut RX_AVAIL: VirtqAvail = VirtqAvail {
+    flags: 0,
+    idx: 0,
+    ring: [0; QUEUE_SIZE],
+    used_event: 0,
+};
+static mut RX_USED: VirtqUsed = VirtqUsed {
+    flags: 0,
+    idx: 0,
+    ring: [EMPTY_USED_ELEM; QUEUE_SIZE],
+    avail_event: 0,
+};
+static mut RX_BUFFERS: PacketBuffers = PacketBuffers([[0; BUFFER_SIZE]; QUEUE_SIZE]);
+
+static mut TX_DESC: DescTable = DescTable([EMPTY_DESC; QUEUE_SIZE]);
+static mut TX_AVAIL: VirtqAvail = VirtqAvail {
+    flags: 0,
+    idx: 0,
+    ring: [0; QUEUE_SIZE],
+    used_event: 0,
+};
+static mut TX_USED: VirtqUsed = VirtqUsed {
+    flags: 0,
+    idx: 0,
+    ring: [EMPTY_USED_ELEM; QUEUE_SIZE],
+    avail_event: 0,
+};
+static mut TX_BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+
 pub struct VirtNet {
     mac: [u8; 6],
     mtu: u16,
@@ -72,7 +158,11 @@ pub struct VirtNet {
     isr_cfg: *mut u8,
     notify_off_multiplier: u32,
     queue_size: u16,
-    queue_notify_off: u16,
+    rx_notify_off: u16,
+    tx_notify_off: u16,
+    rx_last_used_idx: u16,
+    tx_last_used_idx: u16,
+    tx_inflight: bool,
     link_up: bool,
 }
 
@@ -93,7 +183,11 @@ impl VirtNet {
             isr_cfg: core::ptr::null_mut(),
             notify_off_multiplier: 0,
             queue_size: 0,
-            queue_notify_off: 0,
+            rx_notify_off: 0,
+            tx_notify_off: 0,
+            rx_last_used_idx: 0,
+            tx_last_used_idx: 0,
+            tx_inflight: false,
             link_up: false,
         }
     }
@@ -136,14 +230,53 @@ impl VirtNet {
             self.link_up = true;
         }
 
-        self.select_queue(0);
+        self.select_queue(RX_QUEUE);
         self.queue_size = self.read_queue_size();
-        self.queue_notify_off = self.read_queue_notify_off();
+        self.rx_notify_off = self.read_queue_notify_off();
 
-        if self.queue_size == 0 {
+        if self.queue_size < QUEUE_SIZE as u16 {
             self.fail();
             return false;
         }
+
+        self.select_queue(TX_QUEUE);
+        if self.read_queue_size() < QUEUE_SIZE as u16 {
+            self.fail();
+            return false;
+        }
+        self.tx_notify_off = self.read_queue_notify_off();
+
+        let (rx_desc, rx_avail, rx_used) = unsafe {
+            (
+                core::ptr::addr_of_mut!(RX_DESC.0) as u64,
+                core::ptr::addr_of_mut!(RX_AVAIL) as u64,
+                core::ptr::addr_of_mut!(RX_USED) as u64,
+            )
+        };
+        if !self.setup_split_queue(RX_QUEUE, rx_desc, rx_avail, rx_used) {
+            self.fail();
+            return false;
+        }
+
+        let (tx_desc, tx_avail, tx_used) = unsafe {
+            (
+                core::ptr::addr_of_mut!(TX_DESC.0) as u64,
+                core::ptr::addr_of_mut!(TX_AVAIL) as u64,
+                core::ptr::addr_of_mut!(TX_USED) as u64,
+            )
+        };
+        if !self.setup_split_queue(TX_QUEUE, tx_desc, tx_avail, tx_used) {
+            self.fail();
+            return false;
+        }
+
+        unsafe {
+            self.init_rx_queue();
+            self.init_tx_queue();
+        }
+
+        self.write_status(self.read_status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
+        self.notify_queue(RX_QUEUE);
 
         true
     }
@@ -160,12 +293,73 @@ impl VirtNet {
         self.mtu
     }
 
-    pub fn send(&mut self, _data: &[u8]) -> bool {
-        false
+    pub fn send(&mut self, data: &[u8]) -> bool {
+        if data.is_empty() || data.len() + NET_HDR_LEN > BUFFER_SIZE {
+            return false;
+        }
+
+        unsafe {
+            self.reap_tx_used();
+            if self.tx_inflight {
+                return false;
+            }
+
+            let buffer = core::ptr::addr_of_mut!(TX_BUFFER) as *mut u8;
+            core::ptr::write_bytes(buffer, 0, NET_HDR_LEN);
+            core::ptr::copy_nonoverlapping(data.as_ptr(), buffer.add(NET_HDR_LEN), data.len());
+
+            let desc = core::ptr::addr_of_mut!(TX_DESC.0) as *mut VirtqDesc;
+            core::ptr::write(
+                desc,
+                VirtqDesc {
+                    addr: buffer as u64,
+                    len: (data.len() + NET_HDR_LEN) as u32,
+                    flags: 0,
+                    next: 0,
+                },
+            );
+
+            let avail = core::ptr::addr_of_mut!(TX_AVAIL);
+            let idx = read_volatile_u16(core::ptr::addr_of!((*avail).idx));
+            core::ptr::write_volatile((*avail).ring.as_mut_ptr().add((idx as usize) % QUEUE_SIZE), 0);
+            fence(Ordering::SeqCst);
+            write_volatile_u16(core::ptr::addr_of_mut!((*avail).idx), idx.wrapping_add(1));
+            self.tx_inflight = true;
+        }
+
+        self.notify_queue(TX_QUEUE);
+        true
     }
 
-    pub fn recv(&mut self, _buf: &mut [u8]) -> Option<usize> {
-        None
+    pub fn recv(&mut self, buf: &mut [u8]) -> Option<usize> {
+        unsafe {
+            let used = core::ptr::addr_of_mut!(RX_USED);
+            let used_idx = read_volatile_u16(core::ptr::addr_of!((*used).idx));
+            if used_idx == self.rx_last_used_idx {
+                return None;
+            }
+
+            let ring_idx = (self.rx_last_used_idx as usize) % QUEUE_SIZE;
+            let elem = read_volatile_used_elem((*used).ring.as_ptr().add(ring_idx));
+            self.rx_last_used_idx = self.rx_last_used_idx.wrapping_add(1);
+
+            let desc_id = elem.id as usize;
+            if desc_id >= QUEUE_SIZE {
+                return None;
+            }
+
+            let payload_len = (elem.len as usize).saturating_sub(NET_HDR_LEN);
+            let len = core::cmp::min(payload_len, buf.len());
+            if len != 0 {
+                let src = (core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut [u8; BUFFER_SIZE])
+                    .add(desc_id) as *const u8;
+                core::ptr::copy_nonoverlapping(src.add(NET_HDR_LEN), buf.as_mut_ptr(), len);
+            }
+
+            self.post_rx_descriptor(desc_id as u16);
+            self.notify_queue(RX_QUEUE);
+            Some(len)
+        }
     }
 
     fn from_modern_device(device: ModernNetDevice) -> Option<Self> {
@@ -238,6 +432,78 @@ impl VirtNet {
     fn read_queue_notify_off(&self) -> u16 {
         read_u16(unsafe { self.common_cfg.add(30) })
     }
+
+    fn setup_split_queue(&self, queue: u16, desc: u64, driver: u64, device: u64) -> bool {
+        self.select_queue(queue);
+        if self.read_queue_size() < QUEUE_SIZE as u16 {
+            return false;
+        }
+
+        write_u16(unsafe { self.common_cfg.add(24) }, QUEUE_SIZE as u16);
+        write_u64(unsafe { self.common_cfg.add(32) }, desc);
+        write_u64(unsafe { self.common_cfg.add(40) }, driver);
+        write_u64(unsafe { self.common_cfg.add(48) }, device);
+        write_u16(unsafe { self.common_cfg.add(28) }, 1);
+        true
+    }
+
+    unsafe fn init_rx_queue(&mut self) {
+        self.rx_last_used_idx = 0;
+        write_volatile_u16(core::ptr::addr_of_mut!(RX_AVAIL.idx), 0);
+        write_volatile_u16(core::ptr::addr_of_mut!(RX_USED.idx), 0);
+
+        for i in 0..QUEUE_SIZE {
+            let buffer = (core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut [u8; BUFFER_SIZE]).add(i);
+            core::ptr::write(
+                (core::ptr::addr_of_mut!(RX_DESC.0) as *mut VirtqDesc).add(i),
+                VirtqDesc {
+                    addr: buffer as u64,
+                    len: BUFFER_SIZE as u32,
+                    flags: VIRTQ_DESC_F_WRITE,
+                    next: 0,
+                },
+            );
+            self.post_rx_descriptor(i as u16);
+        }
+    }
+
+    unsafe fn init_tx_queue(&mut self) {
+        self.tx_last_used_idx = 0;
+        self.tx_inflight = false;
+        write_volatile_u16(core::ptr::addr_of_mut!(TX_AVAIL.idx), 0);
+        write_volatile_u16(core::ptr::addr_of_mut!(TX_USED.idx), 0);
+        core::ptr::write_bytes(core::ptr::addr_of_mut!(TX_BUFFER) as *mut u8, 0, BUFFER_SIZE);
+    }
+
+    unsafe fn post_rx_descriptor(&self, desc_id: u16) {
+        let avail = core::ptr::addr_of_mut!(RX_AVAIL);
+        let idx = read_volatile_u16(core::ptr::addr_of!((*avail).idx));
+        core::ptr::write_volatile(
+            (*avail).ring.as_mut_ptr().add((idx as usize) % QUEUE_SIZE),
+            desc_id,
+        );
+        fence(Ordering::SeqCst);
+        write_volatile_u16(core::ptr::addr_of_mut!((*avail).idx), idx.wrapping_add(1));
+    }
+
+    unsafe fn reap_tx_used(&mut self) {
+        let used = core::ptr::addr_of!(TX_USED);
+        let used_idx = read_volatile_u16(core::ptr::addr_of!((*used).idx));
+        if used_idx != self.tx_last_used_idx {
+            self.tx_last_used_idx = used_idx;
+            self.tx_inflight = false;
+        }
+    }
+
+    fn notify_queue(&self, queue: u16) {
+        let notify_off = match queue {
+            RX_QUEUE => self.rx_notify_off,
+            TX_QUEUE => self.tx_notify_off,
+            _ => return,
+        };
+        let offset = (notify_off as u32).saturating_mul(self.notify_off_multiplier) as usize;
+        write_u16(unsafe { self.notify_cfg.add(offset) }, queue);
+    }
 }
 
 impl Default for VirtNet {
@@ -263,11 +529,7 @@ pub fn find_virtio_net() -> Option<VirtNet> {
                     let device = pci_read_u16(bus, slot, func, 0x02);
                     if vendor == VIRTIO_VENDOR_ID && device == VIRTIO_MODERN_DEVICE_ID_NET {
                         if let Some(device) = read_modern_net_device(bus, slot, func) {
-                            if let Some(mut net) = VirtNet::from_modern_device(device) {
-                                if net.init() {
-                                    return Some(net);
-                                }
-                            }
+                            return VirtNet::from_modern_device(device);
                         }
                     }
 
@@ -433,6 +695,26 @@ fn write_u16(ptr: *mut u8, value: u16) {
 #[inline]
 fn write_u32(ptr: *mut u8, value: u32) {
     unsafe { core::ptr::write_volatile(ptr as *mut u32, value) }
+}
+
+#[inline]
+fn write_u64(ptr: *mut u8, value: u64) {
+    unsafe { core::ptr::write_volatile(ptr as *mut u64, value) }
+}
+
+#[inline]
+fn read_volatile_u16(ptr: *const u16) -> u16 {
+    unsafe { core::ptr::read_volatile(ptr) }
+}
+
+#[inline]
+fn write_volatile_u16(ptr: *mut u16, value: u16) {
+    unsafe { core::ptr::write_volatile(ptr, value) }
+}
+
+#[inline]
+fn read_volatile_used_elem(ptr: *const VirtqUsedElem) -> VirtqUsedElem {
+    unsafe { core::ptr::read_volatile(ptr) }
 }
 
 #[inline]
