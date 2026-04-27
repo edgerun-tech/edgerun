@@ -1116,6 +1116,28 @@ pub unsafe extern "C" fn kernel_main() -> ! {
 
     rt::log::log(1, "Looking for VirtIO...");
 
+    if let Some(mut block) = edgerun_virtio::find_virtio_blk() {
+        rt::log::log(1, "VirtIO block device found");
+        if block.init() {
+            rt::log::log(1, "VirtIO block init ok");
+            match disk_boot::scan_partition_filesystems(&mut block) {
+                Ok((_, probes)) if !probes.is_empty() => {
+                    rt::log::log(1, "VirtIO block partitions detected");
+                }
+                Ok(_) => {
+                    rt::log::log(1, "VirtIO block has no partitions");
+                }
+                Err(_) => {
+                    rt::log::log(1, "VirtIO block partition scan failed");
+                }
+            }
+        } else {
+            rt::log::log(1, "VirtIO block init failed");
+        }
+    } else {
+        rt::log::log(1, "No VirtIO block device found");
+    }
+
     let mut net = match edgerun_virtio::find_virtio_net() {
         Some(n) => n,
         None => {

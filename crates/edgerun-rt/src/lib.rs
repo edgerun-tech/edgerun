@@ -180,6 +180,7 @@ pub mod mqtt;
 pub mod mqttsn;
 pub mod nfs;
 pub mod redis;
+pub mod sftp;
 pub mod smb;
 pub mod ssh;
 pub mod websocket;
