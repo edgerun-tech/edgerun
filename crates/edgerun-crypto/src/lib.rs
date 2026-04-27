@@ -8,10 +8,22 @@ pub mod aes;
 pub mod sha;
 pub mod rng;
 pub mod aead;
+
+pub use ::aes_gcm;
+pub use ::ecdsa;
+pub use ::elliptic_curve;
+pub use ::p256;
+pub use ::x25519_dalek;
+
+use crate::error::{CryptoError, Result};
+use crate::rng::fill_random;
+use crate::sha::Digest;
+
 pub use aead::{Aes256GcmCipher, CipherU12, CipherU16};
 pub use aes_gcm::AeadCore;
 pub use aes_gcm::aead::{AeadInPlace, KeyInit};
 pub use chacha20poly1305::ChaCha20Poly1305;
+pub use p256::ecdsa::SigningKey;
 
 pub use rand_core::{OsRng, CryptoRng, RngCore};
 pub mod rand_core {
