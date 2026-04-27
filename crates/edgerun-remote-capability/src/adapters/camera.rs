@@ -8,11 +8,12 @@ use edgerun_camera_biometrics::{
     PairedCameraBiometricReader, PairedCameraFrame,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 
+use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{
     accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
 };
@@ -275,25 +276,6 @@ pub fn decode_paired_camera_frame(bytes: &[u8]) -> Result<PairedCameraFrame, Cap
     })
 }
 
-// --- Stream error ---
-fn stream_error(invocation: &CapabilityInvocation, label: &str) -> RemoteInvocationResult {
-    RemoteInvocationResult {
-        result: CapabilityResult {
-            result_version: 1,
-            invocation_id: invocation.invocation_id.clone(),
-            grant_id: invocation.grant_id.clone(),
-            success: false,
-            result_access_class: invocation.requested_access_class,
-            produced_event_kinds: Vec::new(),
-            payload_object: None,
-            error_reason: format!("{label} remote adapter is stream-oriented; use session events"),
-            produced_at: None,
-            signature: None,
-        },
-        inline_payload: Vec::new(),
-    }
-}
-
 // --- CameraRemoteAdapter ---
 
 #[derive(Debug)]
@@ -343,7 +325,7 @@ where
         invocation: &CapabilityInvocation,
         _inline_parameters: Option<&[u8]>,
     ) -> Result<RemoteInvocationResult, CapabilityError> {
-        Ok(stream_error(invocation, "camera"))
+        Ok(stream_oriented_error(invocation, "camera"))
     }
 
     fn next_event(
@@ -416,7 +398,7 @@ where
         invocation: &CapabilityInvocation,
         _inline_parameters: Option<&[u8]>,
     ) -> Result<RemoteInvocationResult, CapabilityError> {
-        Ok(stream_error(invocation, "paired camera"))
+        Ok(stream_oriented_error(invocation, "paired camera"))
     }
 
     fn next_event(

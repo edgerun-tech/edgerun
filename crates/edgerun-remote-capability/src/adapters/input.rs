@@ -3,11 +3,12 @@
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_input::{InputDevice, InputEventKind, InputEventRecord};
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 
+use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{
     accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
 };
@@ -83,25 +84,6 @@ pub fn decode_input_events(bytes: &[u8]) -> Result<Vec<InputEventRecord>, Capabi
     Ok(out)
 }
 
-/// Stream-oriented error for input adapter.
-fn stream_error(invocation: &CapabilityInvocation) -> RemoteInvocationResult {
-    RemoteInvocationResult {
-        result: CapabilityResult {
-            result_version: 1,
-            invocation_id: invocation.invocation_id.clone(),
-            grant_id: invocation.grant_id.clone(),
-            success: false,
-            result_access_class: invocation.requested_access_class,
-            produced_event_kinds: Vec::new(),
-            payload_object: None,
-            error_reason: "input remote adapter is stream-oriented; use session events".into(),
-            produced_at: None,
-            signature: None,
-        },
-        inline_payload: Vec::new(),
-    }
-}
-
 #[derive(Debug)]
 pub struct InputRemoteAdapter<D> {
     pub device: D,
@@ -140,7 +122,7 @@ where
         invocation: &CapabilityInvocation,
         _inline_parameters: Option<&[u8]>,
     ) -> Result<RemoteInvocationResult, CapabilityError> {
-        Ok(stream_error(invocation))
+        Ok(stream_oriented_error(invocation, "input"))
     }
 
     fn next_event(

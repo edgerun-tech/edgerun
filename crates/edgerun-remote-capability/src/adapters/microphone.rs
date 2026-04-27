@@ -5,11 +5,12 @@ use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEven
 use edgerun_microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 
+use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{
     accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
 };
@@ -67,24 +68,6 @@ pub fn decode_microphone_capture(bytes: &[u8]) -> Result<AudioCapture, Capabilit
     })
 }
 
-fn stream_error(invocation: &CapabilityInvocation) -> RemoteInvocationResult {
-    RemoteInvocationResult {
-        result: CapabilityResult {
-            result_version: 1,
-            invocation_id: invocation.invocation_id.clone(),
-            grant_id: invocation.grant_id.clone(),
-            success: false,
-            result_access_class: invocation.requested_access_class,
-            produced_event_kinds: Vec::new(),
-            payload_object: None,
-            error_reason: "microphone remote adapter is stream-oriented; use session events".into(),
-            produced_at: None,
-            signature: None,
-        },
-        inline_payload: Vec::new(),
-    }
-}
-
 #[derive(Debug)]
 pub struct MicrophoneRemoteAdapter<D> {
     pub device: D,
@@ -123,7 +106,7 @@ where
         invocation: &CapabilityInvocation,
         _inline_parameters: Option<&[u8]>,
     ) -> Result<RemoteInvocationResult, CapabilityError> {
-        Ok(stream_error(invocation))
+        Ok(stream_oriented_error(invocation, "microphone"))
     }
 
     fn next_event(

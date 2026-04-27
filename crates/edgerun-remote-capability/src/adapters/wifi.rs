@@ -15,7 +15,7 @@ use edgerun_wifi::{
 
 use crate::adapters::common::{
     decode_optional_string_field, decode_string_field, encode_optional_string_field,
-    encode_string_field,
+    encode_string_field, stream_oriented_error,
 };
 use crate::protocol::{
     accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
@@ -223,25 +223,6 @@ pub fn decode_wifi_interface_info(bytes: &[u8]) -> Result<WifiInterfaceInfo, Cap
     })
 }
 
-// --- Stream error ---
-fn stream_error(invocation: &CapabilityInvocation) -> RemoteInvocationResult {
-    RemoteInvocationResult {
-        result: CapabilityResult {
-            result_version: 1,
-            invocation_id: invocation.invocation_id.clone(),
-            grant_id: invocation.grant_id.clone(),
-            success: false,
-            result_access_class: invocation.requested_access_class,
-            produced_event_kinds: Vec::new(),
-            payload_object: None,
-            error_reason: "wifi remote adapter is stream-oriented; use session events".into(),
-            produced_at: None,
-            signature: None,
-        },
-        inline_payload: Vec::new(),
-    }
-}
-
 // --- WifiRemoteAdapter ---
 
 #[derive(Debug)]
@@ -282,7 +263,7 @@ where
         invocation: &CapabilityInvocation,
         _inline_parameters: Option<&[u8]>,
     ) -> Result<RemoteInvocationResult, CapabilityError> {
-        Ok(stream_error(invocation))
+        Ok(stream_oriented_error(invocation, "wifi"))
     }
 
     fn next_event(
