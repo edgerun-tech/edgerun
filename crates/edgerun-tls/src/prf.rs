@@ -26,14 +26,8 @@ impl Hasher {
     /// HKDF-Extract(salt, ikm) — derive a pseudorandom key from input keying material.
     pub fn extract(&self, salt: &[u8], ikm: &[u8]) -> Vec<u8> {
         match self {
-            Self::Sha256 => {
-                let (prk, _hk) = Hkdf::<Sha256>::extract(Some(salt), ikm);
-                prk.to_vec()
-            }
-            Self::Sha384 => {
-                let (prk, _hk) = Hkdf::<Sha384>::extract(Some(salt), ikm);
-                prk.to_vec()
-            }
+            Self::Sha256 => hmac_sha256(salt, ikm),
+            Self::Sha384 => hmac_sha384(salt, ikm),
         }
     }
 
@@ -62,14 +56,8 @@ impl Hasher {
     fn expand(&self, prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
         let mut okm = vec![0u8; length];
         match self {
-            Hasher::Sha256 => {
-                let hk = Hkdf::<Sha256>::from_prk(prk).expect("valid PRK for HKDF-Expand");
-                hk.expand(info, &mut okm).expect("HKDF-Expand ok");
-            }
-            Hasher::Sha384 => {
-                let hk = Hkdf::<Sha384>::from_prk(prk).expect("valid PRK for HKDF-Expand");
-                hk.expand(info, &mut okm).expect("HKDF-Expand ok");
-            }
+            Hasher::Sha256 => okm = edgerun_crypto::hkdf_sha256(None, prk, info, length),
+            Hasher::Sha384 => okm = edgerun_crypto::hkdf_sha384(None, prk, info, length),
         }
         okm
     }
@@ -362,9 +350,6 @@ pub fn quic_hp_key(secret: &[u8], cipher_key_len: usize, hash: &Hasher) -> Vec<u
 
 // HMAC helpers re-exported from edgerun-crypto (single source of truth)
 pub use edgerun_crypto::{hmac_sha256, hmac_sha384};
-
-// Re-export hkdf::Hkdf for internal use (the crate's extract/expand semantics)
-use edgerun_crypto::hkdf::Hkdf;
 
 #[cfg(test)]
 mod tests {

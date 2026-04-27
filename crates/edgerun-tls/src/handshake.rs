@@ -401,25 +401,3 @@ impl ServerHello {
         })
     }
 }
-
-/// Read exactly n bytes from the stream
-fn read_exact(stream: &mut impl Read, buf: &mut [u8]) -> Result<()> {
-    stream.read_exact(buf).map_err(TlsError::Io)
-}
-
-/// Read a TLS record header
-pub fn read_record_header(stream: &mut impl Read) -> Result<(u8, u16, usize)> {
-    let mut hdr = [0u8; 5];
-    read_exact(stream, &mut hdr)?;
-    let content_type = hdr[0];
-    let version = u16::from_be_bytes([hdr[1], hdr[2]]);
-    let length = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
-    Ok((content_type, version, length))
-}
-
-/// Read a full TLS record fragment
-pub fn read_record_fragment(stream: &mut impl Read, length: usize) -> Result<Vec<u8>> {
-    let mut buf = vec![0u8; length];
-    read_exact(stream, &mut buf)?;
-    Ok(buf)
-}

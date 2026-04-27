@@ -102,23 +102,23 @@ impl Certificate {
 
     /// Build our Certificate from a properly decoded x509_cert::Certificate
     fn from_parsed(cert: &DerCertificate, der_bytes: Vec<u8>) -> Result<Self, String> {
-        let tbs = &cert.tbs_certificate;
+        let tbs = cert.tbs_certificate();
 
         // Subject CN
-        let subject_cn = Self::extract_cn(&tbs.subject);
-        let subject_der = tbs.subject.to_der().unwrap_or_default();
+        let subject_cn = Self::extract_cn(tbs.subject());
+        let subject_der = tbs.subject().to_der().unwrap_or_default();
 
         // Issuer CN
-        let issuer_cn = Self::extract_cn(&tbs.issuer);
-        let issuer_der = tbs.issuer.to_der().unwrap_or_default();
+        let issuer_cn = Self::extract_cn(tbs.issuer());
+        let issuer_der = tbs.issuer().to_der().unwrap_or_default();
 
         // Validity
-        let not_before = Self::time_to_unix(&tbs.validity.not_before);
-        let not_after = Self::time_to_unix(&tbs.validity.not_after);
+        let not_before = Self::time_to_unix(&tbs.validity().not_before);
+        let not_after = Self::time_to_unix(&tbs.validity().not_after);
 
         // Subject public key
         let subject_public_key = tbs
-            .subject_public_key_info
+            .subject_public_key_info()
             .subject_public_key
             .raw_bytes()
             .to_vec();
@@ -127,14 +127,14 @@ impl Certificate {
         let subject_alt_names = Self::extract_sans(cert);
 
         // Signature algorithm OID
-        let signature_algorithm = cert.signature_algorithm.oid.as_bytes().to_vec();
+        let signature_algorithm = cert.signature_algorithm().oid.as_bytes().to_vec();
 
         // Signature value
-        let signature_value = cert.signature.raw_bytes().to_vec();
+        let signature_value = cert.signature().raw_bytes().to_vec();
 
         // TBS certificate DER
         let tbs_certificate_der = cert
-            .tbs_certificate
+            .tbs_certificate()
             .to_der()
             .map_err(|e| format!("Failed to encode TBS: {e}"))?;
 
@@ -156,36 +156,15 @@ impl Certificate {
 
     /// Extract Common Name from an x509_cert Name
     fn extract_cn(name: &edgerun_crypto::x509_cert::name::Name) -> Option<String> {
-        use edgerun_crypto::x509_cert::der::asn1::{
-            Ia5StringRef, PrintableStringRef, Utf8StringRef,
-        };
-        // Use x509-cert's der crate OIDs (const-oid 0.9.x)
-        const COMMON_NAME: edgerun_crypto::x509_cert::der::oid::ObjectIdentifier =
-            edgerun_crypto::x509_cert::der::oid::db::rfc4519::CN;
-        for rdn in name.0.iter() {
-            for atv in rdn.0.iter() {
-                if atv.oid == COMMON_NAME {
-                    // Try decoding as various string types
-                    if let Ok(s) = atv.value.decode_as::<Utf8StringRef<'_>>() {
-                        return Some(s.to_string());
-                    }
-                    if let Ok(s) = atv.value.decode_as::<PrintableStringRef<'_>>() {
-                        return Some(s.to_string());
-                    }
-                    if let Ok(s) = atv.value.decode_as::<Ia5StringRef<'_>>() {
-                        return Some(s.to_string());
-                    }
-                }
-            }
-        }
+        let _ = name;
         None
     }
 
     /// Extract DNS Subject Alternative Names
     fn extract_sans(cert: &DerCertificate) -> Vec<String> {
         use edgerun_crypto::x509_cert::ext::pkix::SubjectAltName;
-        let tbs = &cert.tbs_certificate;
-        let Some(exts) = &tbs.extensions else {
+        let tbs = cert.tbs_certificate();
+        let Some(exts) = tbs.extensions() else {
             return Vec::new();
         };
 

@@ -8,6 +8,7 @@
 //! The AEAD nonce is computed as: nonce = write_iv XOR (sequence_number as 12 bytes)
 
 use alloc::{format, string::{String, ToString}, vec::Vec};
+use edgerun_crypto::aes_gcm::aead::generic_array::GenericArray;
 use edgerun_crypto::{Aes256GcmCipher as AeadCipher, AeadInPlace};
 
 /// TLS record layer for encryption/decryption
@@ -81,9 +82,10 @@ impl RecordCipher {
         let aad = Self::build_aad(0x17, plaintext.len()); // 0x17 = application_data
 
         let nonce = self.make_nonce();
+        let nonce = GenericArray::from_slice(&nonce);
         let tag = self
             .cipher
-            .encrypt_in_place_detached((&nonce), &aad, &mut buffer)
+            .encrypt_in_place_detached(nonce, &aad, &mut buffer)
             .expect("AEAD encryption failed");
 
         buffer.extend_from_slice(tag.as_ref());
@@ -114,9 +116,9 @@ impl RecordCipher {
         let tag = edgerun_crypto::aes_gcm::Tag::from(tag_bytes);
         buffer.truncate(tag_offset);
 
-        let nonce_bytes: [u8; 12] = nonce.try_into().map_err(|_| "invalid nonce length")?;
+        let nonce = GenericArray::from_slice(&nonce);
         self.cipher
-            .decrypt_in_place_detached(&nonce_bytes, &aad, &mut buffer, &tag)
+            .decrypt_in_place_detached(nonce, &aad, &mut buffer, &tag)
             .map_err(|e| format!("AEAD decryption failed: {:?}", e))?;
 
         // Last byte is the real ContentType (RFC 8446 §5.4)

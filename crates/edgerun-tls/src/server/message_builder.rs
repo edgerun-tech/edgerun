@@ -1,5 +1,6 @@
 //! TLS 1.3 server handshake message builders.
 
+use alloc::{vec, vec::Vec};
 use edgerun_crypto::p256::ecdsa::{signature::SignerMut, Signature, SigningKey};
 
 use crate::cipher::NamedGroup;

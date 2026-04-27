@@ -113,10 +113,46 @@ pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
     SigningKey::from_bytes(&bytes.into()).unwrap()
 }
 
-pub struct CipherSuite;
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CipherSuite {
+    TLS_AES_128_GCM_SHA256,
+    TLS_AES_256_GCM_SHA384,
+}
 
 impl CipherSuite {
-    pub fn new(_tls_version: u16, _kx: u16, _cipher: u16, _hash: u16) -> Self { Self }
+    pub fn new(_tls_version: u16, _kx: u16, cipher: u16, hash: u16) -> Self {
+        match (cipher, hash) {
+            (0x1302, _) | (_, 0x0304) => Self::TLS_AES_256_GCM_SHA384,
+            _ => Self::TLS_AES_128_GCM_SHA256,
+        }
+    }
+
+    pub fn client_default() -> alloc::vec::Vec<Self> {
+        alloc::vec![Self::TLS_AES_128_GCM_SHA256, Self::TLS_AES_256_GCM_SHA384]
+    }
+
+    pub fn from_wire(value: u16) -> core::result::Result<Self, CryptoError> {
+        match value {
+            0x1301 => Ok(Self::TLS_AES_128_GCM_SHA256),
+            0x1302 => Ok(Self::TLS_AES_256_GCM_SHA384),
+            _ => Err(CryptoError::UnsupportedAlgorithm),
+        }
+    }
+
+    pub fn to_wire(self) -> u16 {
+        match self {
+            Self::TLS_AES_128_GCM_SHA256 => 0x1301,
+            Self::TLS_AES_256_GCM_SHA384 => 0x1302,
+        }
+    }
+
+    pub fn key_len(self) -> usize {
+        match self {
+            Self::TLS_AES_128_GCM_SHA256 => 16,
+            Self::TLS_AES_256_GCM_SHA384 => 32,
+        }
+    }
 }
 
 pub mod hkdf {
