@@ -98,6 +98,7 @@ impl NvmeController {
         if self.sq0.is_null() || self.cq0.is_null() {
             return false;
         }
+        let sectorsz = SECTOR_SIZE as u32;
         unsafe {
             let cmd = NvmeCommand {
                 opc: NVME_CMD_READ,
@@ -109,8 +110,8 @@ impl NvmeController {
                 prp2: 0,
                 cdw10: lba as u32,
                 cdw11: (lba >> 32) as u32,
-                cdw12: nblocks - 1,
-                cdw13: 0,
+                cdw12: nblocks.saturating_sub(1),
+                cdw13: sectorsz,
                 cdw14: 0,
                 cdw15: 0,
             };
@@ -122,6 +123,7 @@ impl NvmeController {
         if self.sq0.is_null() || self.cq0.is_null() {
             return false;
         }
+        let sectorsz = SECTOR_SIZE as u32;
         unsafe {
             let cmd = NvmeCommand {
                 opc: NVME_CMD_WRITE,
@@ -133,8 +135,8 @@ impl NvmeController {
                 prp2: 0,
                 cdw10: lba as u32,
                 cdw11: (lba >> 32) as u32,
-                cdw12: nblocks - 1,
-                cdw13: 0,
+                cdw12: nblocks.saturating_sub(1),
+                cdw13: sectorsz,
                 cdw14: 0,
                 cdw15: 0,
             };
