@@ -414,14 +414,16 @@ impl ArpCache {
 
 pub struct Network<'a> {
     pub stack: &'a mut IpStack,
+    packet: [u8; 1514],
+    packet_len: usize,
 }
 
 impl<'a> Network<'a> {
     pub const fn new(stack: &'a mut IpStack) -> Self {
-        Self { stack }
+        Self { stack, packet: [0u8; 1514], packet_len: 0 }
     }
 
-    pub fn send_ip(&mut self, dst: IpAddr, proto: u8, data: &[u8]) -> bool {
+    pub fn send_ip(&mut self, dst: IpAddr, proto: u8, data: &[u8]) -> Option<&[u8]> {
         let routed = self.stack.route(dst);
         let dst_mac = if let Some(mac) = self.stack.arp.lookup(routed) {
             mac
@@ -431,19 +433,157 @@ impl<'a> Network<'a> {
         self.send_eth(dst_mac, dst, proto, data)
     }
 
-    pub fn send_eth(&mut self, dst_mac: [u8; 6], dst: IpAddr, proto: u8, data: &[u8]) -> bool {
+    pub fn send_eth(&mut self, dst_mac: [u8; 6], dst: IpAddr, proto: u8, data: &[u8]) -> Option<&[u8]> {
         let ip_len = (20 + data.len()) as u16;
-        let mut packet = [0u8; 1514];
+        self.packet = [0u8; 1514];
         let eth = self.stack.eth_header(dst_mac, ETH_TYPE_IPV4);
-        eth.to_slice(&mut packet);
+        eth.to_slice(&mut self.packet);
         let mut ip = self.stack.ip_header(dst, proto, ip_len);
-        ip.to_slice(&mut packet[14..]);
-        packet[14 + 10] = 0;
-        packet[14 + 11] = 0;
+        ip.to_slice(&mut self.packet[14..]);
+        self.packet[14 + 10] = 0;
+        self.packet[14 + 11] = 0;
         let payload_start = 34;
-        if data.len() <= packet.len() - payload_start {
-            packet[payload_start..payload_start + data.len()].copy_from_slice(data);
+        self.packet_len = payload_start + data.len();
+        if data.len() <= self.packet.len() - payload_start {
+            self.packet[payload_start..payload_start + data.len()].copy_from_slice(data);
         }
-        true
+        Some(&self.packet[..self.packet_len])
+    }
+
+    pub fn packet(&self) -> &[u8] {
+        &self.packet[..self.packet_len]
+    }
+
+    pub fn len(&self) -> usize {
+        self.packet_len
+    }
+
+    pub fn recv(&mut self, data: &[u8]) -> Option<ParsedPacket> {
+        if data.len() < 34 {
+            return None;
+        }
+        let eth = EthHeader::from_slice(data);
+        if eth.ethertype != ETH_TYPE_IPV4 {
+            return None;
+        }
+        let ip = IpHeader::from_slice(data);
+        let payload = &data[20 * (ip.ver_ihl & 0x0f) as usize..];
+        match ip.proto {
+            IP_PROTO_UDP => Some(ParsedPacket::Udp(UdpHeader::from_slice(payload))),
+            IP_PROTO_TCP => Some(ParsedPacket::Tcp(TcpHeader::from_slice(payload))),
+            IP_PROTO_ICMP => Some(ParsedPacket::Icmp(IcmpHeader::from_slice(payload))),
+            _ => None,
+        }
+    }
+}
+
+pub enum ParsedPacket {
+    Udp(UdpHeader),
+    Tcp(TcpHeader),
+    Icmp(IcmpHeader),
+}
+
+pub const DHCP_SERVER_PORT: u16 = 67;
+pub const DHCP_CLIENT_PORT: u16 = 68;
+
+impl IpStack {
+    pub fn dhcp_discover(&mut self, mac: [u8; 6], xid: u32) -> [u8; 300] {
+        let mut pkt = [0u8; 300];
+        pkt[0] = 1;
+        pkt[1] = 1;
+        pkt[2] = 6;
+        pkt[3] = 0;
+        pkt[4..8].copy_from_slice(&xid.to_be_bytes());
+        pkt[8..10].copy_from_slice(&0u16.to_be_bytes());
+        pkt[10..12].copy_from_slice(&0x8000u16.to_be_bytes());
+        pkt[28..34].copy_from_slice(&mac);
+        
+        pkt[236] = 53;
+        pkt[237] = 1;
+        pkt[238] = 1;
+        pkt[239] = 55;
+        pkt[240] = 3;
+        pkt[241] = 1;
+        pkt[242] = 1;
+        pkt[243] = 3;
+        pkt[244] = 6;
+        pkt[245] = 255;
+        pkt[246..250].copy_from_slice(&0x63825363u32.to_be_bytes());
+        pkt[250] = 255;
+        
+        pkt
+    }
+
+    pub fn dhcp_request(&mut self, mac: [u8; 6], xid: u32, server_ip: IpAddr, requested: IpAddr) -> [u8; 300] {
+        let mut pkt = [0u8; 300];
+        pkt[0] = 1;
+        pkt[1] = 1;
+        pkt[2] = 6;
+        pkt[3] = 0;
+        pkt[4..8].copy_from_slice(&xid.to_be_bytes());
+        pkt[8..10].copy_from_slice(&0u16.to_be_bytes());
+        pkt[10..12].copy_from_slice(&0x8000u16.to_be_bytes());
+        pkt[28..34].copy_from_slice(&mac);
+        
+        pkt[236] = 53;
+        pkt[237] = 1;
+        pkt[238] = 3;
+        pkt[239] = 50;
+        pkt[240] = 4;
+        pkt[241..245].copy_from_slice(requested.as_bytes());
+        pkt[245] = 54;
+        pkt[246] = 4;
+        pkt[247..251].copy_from_slice(server_ip.as_bytes());
+        pkt[251] = 55;
+        pkt[252] = 3;
+        pkt[253] = 1;
+        pkt[254] = 1;
+        pkt[255] = 3;
+        pkt[256] = 6;
+        pkt[257] = 255;
+        pkt[258..262].copy_from_slice(&0x63825363u32.to_be_bytes());
+        pkt[262] = 255;
+        
+        pkt
+    }
+
+    pub fn dhcp_parse(&self, pkt: &[u8]) -> Option<(IpAddr, IpAddr, IpAddr)> {
+        if pkt.len() < 250 {
+            return None;
+        }
+        let cookie = u32::from_be_bytes([pkt[246], pkt[247], pkt[248], pkt[249]]);
+        if cookie != 0x63825363 {
+            return None;
+        }
+        
+        let mut yiaddr = IpAddr::zero();
+        let mut subnet = IpAddr::new(255, 255, 255, 0);
+        let mut gateway = IpAddr::zero();
+        
+        let mut i = 240;
+        while i < pkt.len() - 2 {
+            let code = pkt[i];
+            if code == 255 {
+                break;
+            }
+            if code == 1 {
+                subnet = IpAddr::from_slice(&pkt[i+2..i+6]);
+            } else if code == 3 {
+                gateway = IpAddr::from_slice(&pkt[i+2..i+6]);
+            } else if code == 53 {
+                if pkt[i+2] != 5 {
+                    return None;
+                }
+            }
+            i += 2 + pkt[i+1] as usize;
+        }
+        
+        yiaddr = IpAddr::from_slice(&pkt[16..20]);
+        
+        if yiaddr != IpAddr::zero() {
+            Some((yiaddr, subnet, gateway))
+        } else {
+            None
+        }
     }
 }

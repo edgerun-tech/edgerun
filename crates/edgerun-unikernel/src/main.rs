@@ -7,8 +7,7 @@ extern crate edgerun_bare_rt as rt;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
-use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn, Rng, crc32, RingBuffer};
-use rt::Ipv4Addr;
+use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn, Rng, crc32, RingBuffer, IpStack, Network, IpAddr};
 
 use core::future::Future;
 use core::pin::Pin;
@@ -56,6 +55,17 @@ pub unsafe extern "C" fn main() {
     
     net.init();
     let mac = net.get_mac();
+    
+    let mut stack = IpStack::new();
+    stack.configure(
+        IpAddr::new(192, 168, 1, 12),
+        IpAddr::new(255, 255, 255, 0),
+        IpAddr::new(192, 168, 1, 1),
+        mac,
+    );
+    
+    let mut network = Network::new(&mut stack);
+    
     let _dhcp = DhcpClient::new(mac);
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
     let mut tcp = TcpSocket::new();

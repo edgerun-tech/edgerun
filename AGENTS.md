@@ -59,9 +59,20 @@ These need work to become no_std:
 - **edgerun-http**: Heavy async rt dependencies (edgerun-rt), TLS, DNS
 - **edgerun-quic**: Depends on http + rt + tls + crypto
 - **edgerun-tls**: Depends on edgerun-rt + libc
-- **edgerun-crypto**: External crates without no_std support (getrandom)
+- **edgerun-crypto**: External crates, needs getrandom with rdrand feature
 - **edgerun-dns**: Depends on edgerun-rt
 - **edgerun-net**: Depends on getrandom
+
+## Bare Metal RNG
+
+For x86_64 bare metal, use getrandom with rdrand feature:
+
+```toml
+# In your binary crate (not lib)
+getrandom = { version = "0.2", features = ["rdrand"] }
+```
+
+This enables RDRAND instruction for RNG on x86/x86_64 targets.
 
 ## Crate Status Notes
 
