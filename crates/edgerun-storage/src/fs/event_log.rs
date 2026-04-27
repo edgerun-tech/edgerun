@@ -150,10 +150,18 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
             let mut event_bytes = vec![0u8; len as usize];
             file.read_exact(&mut event_bytes)?;
 
-            let event = match proto_stream::EventEnvelope::decode(&event_bytes[..]) {
-                Ok(event) => event,
-                Err(_) => continue,
-            };
+            let event = proto_stream::EventEnvelope::decode(&event_bytes[..]).map_err(|e| {
+                StorageError::Decode(format!(
+                    "event protobuf decode failed at offset {record_start}: {e}"
+                ))
+            })?;
+            if event.stream_id != stream_id {
+                return Err(StorageError::Decode(format!(
+                    "event stream mismatch at offset {record_start}: expected {}, got {}",
+                    stream_id_hex,
+                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                )));
+            }
             let event_hash = canonical_event_hash(&event).value;
             scanned.push(ScannedEvent {
                 location: EventLocation {
@@ -205,4 +213,69 @@ fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
 #[cfg(not(target_os = "none"))]
 fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
     StorageError::Io(err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_events_dir() -> PathBuf {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("fs_event_log_test_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn event(stream_id: &[u8], seq: u64) -> EventEnvelope {
+        EventEnvelope {
+            envelope_version: 1,
+            stream_id: stream_id.to_vec(),
+            seq,
+            prev_event_hash: None,
+            event_type: 1,
+            event_version: 1,
+            recorded_at: None,
+            effective_at: None,
+            payload_object: None,
+            related_events: vec![],
+            related_commands: vec![],
+            related_objects: vec![],
+            related_delegations: vec![],
+            related_revocations: vec![],
+            event_metadata: None,
+            signature: None,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn scan_rejects_malformed_event_frame() {
+        let events_dir = tmp_events_dir();
+        let log_path = events_dir.join("aa.log");
+        std::fs::write(&log_path, [3u8, 0xff, 0xff, 0xff]).unwrap();
+
+        let result = scan_event_logs(&events_dir);
+        assert!(matches!(result, Err(StorageError::Decode(_))));
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn scan_rejects_event_in_wrong_stream_file() {
+        let events_dir = tmp_events_dir();
+        let event = event(&[0xbb], 0);
+        let (len_prefix, event_bytes) = encode_event_frame(&event).unwrap();
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&len_prefix);
+        frame.extend_from_slice(&event_bytes);
+        std::fs::write(events_dir.join("aa.log"), frame).unwrap();
+
+        let result = scan_event_logs(&events_dir);
+        assert!(matches!(result, Err(StorageError::Decode(_))));
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
 }
