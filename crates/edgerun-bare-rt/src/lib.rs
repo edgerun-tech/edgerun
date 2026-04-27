@@ -83,6 +83,7 @@ pub mod nvme;
 pub mod ata;
 pub mod ahci;
 pub mod fat;
+pub mod pci;
 
 pub mod log;
 pub use log::Level;
