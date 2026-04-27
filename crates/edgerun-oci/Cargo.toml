@@ -50,5 +50,10 @@ name = "ert"
 path = "src/bin/ert.rs"
 required-features = ["std"]
 
+[[test]]
+name = "registry_integration"
+path = "tests/registry_integration.rs"
+required-features = ["std"]
+
 [lints]
 workspace = true

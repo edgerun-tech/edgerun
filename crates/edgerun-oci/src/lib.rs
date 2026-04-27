@@ -35,7 +35,7 @@ pub mod oci_path;
 pub mod runtime_config;
 #[cfg(feature = "json")]
 pub mod tar_layer;
-#[cfg(all(test, feature = "json"))]
+#[cfg(all(test, feature = "json", not(target_os = "none")))]
 pub(crate) mod test_support;
 pub mod validate;
 
@@ -163,9 +163,9 @@ pub use syscalls::*;
 pub use tar_layer::{
     apply_uncompressed_tar_layer, apply_validated_tar_layer, apply_validated_tar_layer_sha256,
     apply_validated_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer,
-    layer_compression, validate_and_decode_tar_layer, validate_and_decode_tar_layer_sha256,
-    DecodedTarLayer, OciLayerCompression, OciWhiteout, TarEntry, TarEntryKind, TarLayerApplyError,
-    TarLayerApplyReport, TarLayerError, TarLayerSink,
+    layer_compression, parse_oci_whiteout, validate_and_decode_tar_layer,
+    validate_and_decode_tar_layer_sha256, DecodedTarLayer, OciLayerCompression, OciWhiteout,
+    TarEntry, TarEntryKind, TarLayerApplyError, TarLayerApplyReport, TarLayerError, TarLayerSink,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use userns::drop_capabilities;
@@ -202,6 +202,25 @@ pub const DEFAULT_NAMESPACES: &[(&str, Option<&str>)] = &[
     ("uts", None),
     ("cgroup", None),
 ];
+pub const DEFAULT_MASKED_PATHS: &[&str] = &[
+    "/proc/acpi",
+    "/proc/kcore",
+    "/proc/keys",
+    "/proc/latency_stats",
+    "/proc/timer_list",
+    "/proc/timer_stats",
+    "/proc/sched_debug",
+    "/proc/scsi",
+    "/sys/firmware",
+];
+pub const DEFAULT_READONLY_PATHS: &[&str] = &[
+    "/proc/asound",
+    "/proc/bus",
+    "/proc/fs",
+    "/proc/irq",
+    "/proc/sys",
+    "/proc/sysrq-trigger",
+];
 
 pub fn default_namespaces() -> alloc::vec::Vec<OciNamespace> {
     use alloc::string::{String, ToString};
@@ -215,18 +234,42 @@ pub fn default_namespaces() -> alloc::vec::Vec<OciNamespace> {
         .collect()
 }
 
-pub fn namespace_flags(namespaces: &[OciNamespace]) -> i32 {
-    let mut flags = 0;
-    for ns in namespaces {
-        #[cfg(all(feature = "std", not(target_os = "none")))]
-        if let Some(flag) = process::ns_type_to_flag(&ns.ns_type) {
-            flags |= flag;
-        }
+pub fn default_masked_paths() -> alloc::vec::Vec<alloc::string::String> {
+    DEFAULT_MASKED_PATHS
+        .iter()
+        .map(|path| (*path).into())
+        .collect()
+}
 
-        #[cfg(any(not(feature = "std"), target_os = "none"))]
-        {
-            let _ = ns;
+pub fn default_readonly_paths() -> alloc::vec::Vec<alloc::string::String> {
+    DEFAULT_READONLY_PATHS
+        .iter()
+        .map(|path| (*path).into())
+        .collect()
+}
+
+pub fn namespace_flags(namespaces: &[OciNamespace]) -> i32 {
+    namespace_flags_from_types(namespaces.iter().map(|ns| ns.ns_type.as_str()))
+}
+
+pub(crate) fn namespace_flags_from_types<'a>(
+    namespace_types: impl IntoIterator<Item = &'a str>,
+) -> i32 {
+    let mut flags = 0;
+
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    {
+        for ns_type in namespace_types {
+            if let Some(flag) = process::ns_type_to_flag(ns_type) {
+                flags |= flag;
+            }
         }
     }
+
+    #[cfg(any(not(feature = "std"), target_os = "none"))]
+    {
+        let _ = namespace_types;
+    }
+
     flags
 }
