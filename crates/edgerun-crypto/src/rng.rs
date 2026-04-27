@@ -1,7 +1,5 @@
 //! Random number generation using hardware RDRAND (x86_64) or software fallback.
 
-use crate::error::Result;
-
 #[cfg(target_arch = "x86_64")]
 pub mod rdrand {
     use core::arch::x86_64::_rdrand32_step;
@@ -32,23 +30,26 @@ pub mod rdrand {
     }
 
     pub fn fill_bytes(buf: &mut [u8]) -> bool {
-        let mut i = 0usize;
-        while i < buf.len() {
-            let chunk = &mut buf[i..core::cmp::min(i + 4, buf.len())];
-            if chunk.len() == 4 {
-                if let Some(v) = u32() {
-                    chunk.copy_from_slice(&v.to_le_bytes());
+        let len = buf.len();
+        let mut i = 0;
+        while i < len {
+            if let Some(v) = u32() {
+                let remaining = len - i;
+                if remaining >= 4 {
+                    buf[i] = v as u8;
+                    buf[i + 1] = (v >> 8) as u8;
+                    buf[i + 2] = (v >> 16) as u8;
+                    buf[i + 3] = (v >> 24) as u8;
                     i += 4;
                 } else {
-                    return false;
+                    let bytes = v.to_le_bytes();
+                    for j in 0..remaining {
+                        buf[i + j] = bytes[j];
+                    }
+                    i += remaining;
                 }
-            } else if chunk.len() > 0 {
-                if let Some(v) = u32() {
-                    chunk.copy_from_slice(&v.to_le_bytes()[..chunk.len()]);
-                    i += chunk.len();
-                } else {
-                    return false;
-                }
+            } else {
+                return false;
             }
         }
         true
@@ -57,8 +58,6 @@ pub mod rdrand {
 
 #[cfg(not(target_arch = "x86_64"))]
 pub mod rdrand {
-    use crate::error::CryptoError;
-
     static mut STATE: u64 = 0x1234567890ABCDEF;
 
     #[inline(always)]
@@ -89,7 +88,10 @@ pub mod rdrand {
     pub fn fill_bytes(buf: &mut [u8]) -> bool {
         for chunk in buf.chunks_mut(4) {
             if let Some(v) = u32() {
-                chunk.copy_from_slice(&v.to_le_bytes()[..chunk.len()]);
+                let bytes = v.to_le_bytes();
+                for (i, b) in bytes.iter().enumerate().take(chunk.len()) {
+                    chunk[i] = *b;
+                }
             } else {
                 return false;
             }
@@ -97,6 +99,8 @@ pub mod rdrand {
         true
     }
 }
+
+use crate::error::{CryptoError, Result};
 
 pub fn random_bytes(len: usize) -> Result<alloc::vec::Vec<u8>> {
     let mut buf = alloc::vec::Vec::with_capacity(len);

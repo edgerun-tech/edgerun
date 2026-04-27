@@ -1,5 +1,3 @@
-use alloc::string::String;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CryptoError {
     InvalidKey,
@@ -14,6 +12,13 @@ pub enum CryptoError {
     InvalidPoint,
     InvalidSignature,
     CpuFeatureUnavailable,
+    InternalError,
+}
+
+impl CryptoError {
+    pub fn new() -> Self {
+        Self::InternalError
+    }
 }
 
 impl core::fmt::Display for CryptoError {
@@ -31,6 +36,7 @@ impl core::fmt::Display for CryptoError {
             CryptoError::InvalidPoint => write!(f, "invalid elliptic curve point"),
             CryptoError::InvalidSignature => write!(f, "invalid signature format"),
             CryptoError::CpuFeatureUnavailable => write!(f, "required CPU feature not available"),
+            CryptoError::InternalError => write!(f, "internal error"),
         }
     }
 }
@@ -38,10 +44,3 @@ impl core::fmt::Display for CryptoError {
 impl core::error::Error for CryptoError {}
 
 pub type Result<T> = core::result::Result<T, CryptoError>;
-
-#[cfg(feature = "std")]
-impl From<CryptoError> for std::io::Error {
-    fn from(e: CryptoError) -> Self {
-        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-    }
-}

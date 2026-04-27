@@ -1,0 +1,3 @@
+--container-daemon-socket=unix:///tmp/podman.sock/podman.sock
+--platform=linux/amd64
+--no-skip-checkout
