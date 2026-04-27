@@ -917,7 +917,7 @@ impl VirtBlk {
         core::ptr::write_bytes(
             core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
             0,
-            BLK_DATA.0.len(),
+            edgerun_rt::storage::SECTOR_SIZE,
         );
         BLK_STATUS = 0xff;
     }
