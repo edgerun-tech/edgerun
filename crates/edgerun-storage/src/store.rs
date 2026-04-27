@@ -1504,7 +1504,44 @@ mod tests {
     use super::*;
     use crate::block::InMemoryBlockDevice;
     use edgerun_core::protocol::Digest;
+    use edgerun_hardware_signing::{HardwareSigningError, NodeID};
     use std::path::PathBuf;
+
+    #[derive(Clone)]
+    struct TestSigner {
+        node_id: NodeID,
+        key: edgerun_crypto::p256::ecdsa::SigningKey,
+    }
+
+    impl TestSigner {
+        fn new() -> Self {
+            let key = edgerun_crypto::random_p256_signing_key();
+            let vk = key.verifying_key();
+            let encoded = vk.to_encoded_point(false);
+            let mut node_bytes = [0u8; 64];
+            node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            Self {
+                node_id: NodeID(node_bytes),
+                key,
+            }
+        }
+    }
+
+    impl MeshSigner for TestSigner {
+        fn node_id(&self) -> NodeID {
+            self.node_id
+        }
+
+        fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], HardwareSigningError> {
+            use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
+                self.key.sign_prehash(digest).unwrap();
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&sig.to_bytes());
+            Ok(bytes)
+        }
+    }
 
     fn tmp_data_root() -> PathBuf {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -1605,6 +1642,24 @@ mod tests {
         let from_log = store.get_event(b"stream", 1).unwrap().unwrap();
         assert_eq!(from_log.seq, 1);
         assert_eq!(from_log.stream_id, b"stream".to_vec());
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn append_signed_event_signs_persists_and_updates_head() {
+        let data_root = tmp_data_root();
+        let (store, _device) = make_block_store(data_root.clone());
+        let signer = TestSigner::new();
+        let stream_id = b"signed-stream";
+
+        let event = event(stream_id, 0, None);
+        let _offset = store.append_signed_event_blocking(event, &signer).unwrap();
+
+        let stored = store.get_event(stream_id, 0).unwrap().unwrap();
+        assert!(stored.signature.is_some());
+        assert!(edgerun_stream::verify_event(&stored, &signer.node_id()).is_ok());
+        assert_eq!(store.get_head(stream_id).unwrap().unwrap().0, 0);
 
         let _ = std::fs::remove_dir_all(data_root);
     }
