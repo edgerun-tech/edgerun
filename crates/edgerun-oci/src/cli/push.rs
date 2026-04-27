@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use crate::cli::GlobalOpts;
 use crate::cli::resolve_registry_auth;
+use crate::cli::GlobalOpts;
 use crate::ImageRef;
 use crate::RegistryClient;
 

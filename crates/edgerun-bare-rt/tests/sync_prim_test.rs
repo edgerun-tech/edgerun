@@ -1,4 +1,4 @@
-use edgerun_bare_rt::{SyncMutex, Condvar};
+use edgerun_bare_rt::{Condvar, SyncMutex};
 
 #[test]
 fn condvar_new() {

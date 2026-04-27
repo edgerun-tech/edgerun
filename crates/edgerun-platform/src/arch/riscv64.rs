@@ -1,5 +1,5 @@
 //! RISC-V (rv64) CLINT implementation
-//! 
+//!
 //! CLINT = Core-Local Interruptor (provides software interrupts and timer)
 
 #![allow(unsafe_op_in_unsafe_fn)]
@@ -8,9 +8,9 @@
 const CLINT_BASE: usize = 0x24000000;
 
 /// CLINT registers (MTIME is at CLINT_BASE)
-const CLINT_MSIP: usize = 0x0000;     // per-hart MSIP (write 1 to signal)
-const CLINT_MTIMECMP: usize = 0x4000;    // per-hart time compare (4 bytes per hart)
-const CLINT_MTIME: usize = 0xBFF8;    // time register (shared, 8 bytes)
+const CLINT_MSIP: usize = 0x0000; // per-hart MSIP (write 1 to signal)
+const CLINT_MTIMECMP: usize = 0x4000; // per-hart time compare (4 bytes per hart)
+const CLINT_MTIME: usize = 0xBFF8; // time register (shared, 8 bytes)
 
 /// CLINT_MSIP offset per hart
 const CLINT_MSIP_HART: usize = 0x4;

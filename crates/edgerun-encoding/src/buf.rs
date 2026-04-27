@@ -365,8 +365,6 @@ impl<T: AsRef<[u8]>> Buf for Cursor<T> {
     }
 }
 
-
-
 impl Buf for &mut Vec<u8> {
     #[inline]
     fn remaining(&self) -> usize {

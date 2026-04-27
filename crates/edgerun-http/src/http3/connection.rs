@@ -4,14 +4,14 @@ use crate::http3::{Http3Error, Result};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::http3::error_codes;
 use super::frame::{Http3Frame, Http3FrameType};
+use super::qpack::{QpackDecoder, QpackEncoder};
+use super::quic::QuicConnection as QuicConn;
 use super::settings::Http3Settings;
 use super::stream::{Http3Stream, Http3StreamType};
 use super::stream_types;
-use super::qpack::{QpackDecoder, QpackEncoder};
-use super::quic::QuicConnection as QuicConn;
 use crate::header::HeaderMap;
+use crate::http3::error_codes;
 use crate::method::Method;
 use crate::status::StatusCode;
 use crate::uri::Uri;

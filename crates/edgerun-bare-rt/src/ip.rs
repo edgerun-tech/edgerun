@@ -150,7 +150,11 @@ impl EthHeader {
         let mut src = [0u8; 6];
         dst.copy_from_slice(&data[0..6]);
         src.copy_from_slice(&data[6..12]);
-        Self { dst, src, ethertype: u16::from_be_bytes([data[12], data[13]]) }
+        Self {
+            dst,
+            src,
+            ethertype: u16::from_be_bytes([data[12], data[13]]),
+        }
     }
 
     pub fn to_slice(&self, data: &mut [u8]) {
@@ -244,7 +248,10 @@ impl ArpHeader {
         tpa.copy_from_slice(&data[24..28]);
         Self {
             oper: u16::from_be_bytes([data[6], data[7]]),
-            sha, spa, tha, tpa,
+            sha,
+            spa,
+            tha,
+            tpa,
         }
     }
 
@@ -308,11 +315,16 @@ impl IpAddr {
     }
 
     pub fn as_u32(&self) -> u32 {
-        (self.0[0] as u32) << 24 | (self.0[1] as u32) << 16 | (self.0[2] as u32) << 8 | (self.0[3] as u32)
+        (self.0[0] as u32) << 24
+            | (self.0[1] as u32) << 16
+            | (self.0[2] as u32) << 8
+            | (self.0[3] as u32)
     }
 
     pub fn is_private(&self) -> bool {
-        self.0[0] == 10 || (self.0[0] == 172 && self.0[1] >= 16 && self.0[1] < 32) || (self.0[0] == 192 && self.0[1] == 168)
+        self.0[0] == 10
+            || (self.0[0] == 172 && self.0[1] >= 16 && self.0[1] < 32)
+            || (self.0[0] == 192 && self.0[1] == 168)
     }
 
     pub fn as_bytes(&self) -> &[u8; 4] {
@@ -330,7 +342,13 @@ pub struct IpStack {
 
 impl IpStack {
     pub const fn new() -> Self {
-        Self { ip: IpAddr::zero(), netmask: IpAddr::new(255, 255, 255, 0), gateway: IpAddr::zero(), mac: [0; 6], arp: ArpCache::new() }
+        Self {
+            ip: IpAddr::zero(),
+            netmask: IpAddr::new(255, 255, 255, 0),
+            gateway: IpAddr::zero(),
+            mac: [0; 6],
+            arp: ArpCache::new(),
+        }
     }
 
     pub fn configure(&mut self, ip: IpAddr, netmask: IpAddr, gateway: IpAddr, mac: [u8; 6]) {
@@ -350,7 +368,11 @@ impl IpStack {
     }
 
     pub fn eth_header(&self, dst_mac: [u8; 6], proto: u16) -> EthHeader {
-        EthHeader { dst: dst_mac, src: self.mac, ethertype: proto }
+        EthHeader {
+            dst: dst_mac,
+            src: self.mac,
+            ethertype: proto,
+        }
     }
 
     pub fn ip_header(&self, dst: IpAddr, proto: u8, len: u16) -> IpHeader {
@@ -384,7 +406,10 @@ pub struct ArpCache {
 
 impl ArpCache {
     pub const fn new() -> Self {
-        Self { entries: [(IpAddr::zero(), [0; 6]); 8], count: 0 }
+        Self {
+            entries: [(IpAddr::zero(), [0; 6]); 8],
+            count: 0,
+        }
     }
 
     pub fn insert(&mut self, ip: IpAddr, mac: [u8; 6]) {
@@ -412,7 +437,11 @@ pub struct Network<'a> {
 
 impl<'a> Network<'a> {
     pub const fn new(stack: &'a mut IpStack) -> Self {
-        Self { stack, packet: [0u8; 1514], packet_len: 0 }
+        Self {
+            stack,
+            packet: [0u8; 1514],
+            packet_len: 0,
+        }
     }
 
     pub fn send_ip(&mut self, dst: IpAddr, proto: u8, data: &[u8]) -> Option<&[u8]> {
@@ -425,7 +454,13 @@ impl<'a> Network<'a> {
         self.send_eth(dst_mac, dst, proto, data)
     }
 
-    pub fn send_udp(&mut self, dst: IpAddr, src_port: u16, dst_port: u16, data: &[u8]) -> Option<&[u8]> {
+    pub fn send_udp(
+        &mut self,
+        dst: IpAddr,
+        src_port: u16,
+        dst_port: u16,
+        data: &[u8],
+    ) -> Option<&[u8]> {
         let routed = self.stack.route(dst);
         let dst_mac = if let Some(mac) = self.stack.arp.lookup(routed) {
             mac
@@ -435,11 +470,21 @@ impl<'a> Network<'a> {
         self.send_udp_eth(dst_mac, dst, src_port, dst_port, data)
     }
 
-    pub fn send_udp_eth(&mut self, dst_mac: [u8; 6], dst: IpAddr, src_port: u16, dst_port: u16, data: &[u8]) -> Option<&[u8]> {
+    pub fn send_udp_eth(
+        &mut self,
+        dst_mac: [u8; 6],
+        dst: IpAddr,
+        src_port: u16,
+        dst_port: u16,
+        data: &[u8],
+    ) -> Option<&[u8]> {
         let udp_len = 8usize.checked_add(data.len())?;
         let ip_len = 20usize.checked_add(udp_len)?;
         let packet_len = 14usize.checked_add(ip_len)?;
-        if packet_len > self.packet.len() || udp_len > u16::MAX as usize || ip_len > u16::MAX as usize {
+        if packet_len > self.packet.len()
+            || udp_len > u16::MAX as usize
+            || ip_len > u16::MAX as usize
+        {
             return None;
         }
 
@@ -466,7 +511,13 @@ impl<'a> Network<'a> {
         Some(&self.packet[..self.packet_len])
     }
 
-    pub fn send_eth(&mut self, dst_mac: [u8; 6], dst: IpAddr, proto: u8, data: &[u8]) -> Option<&[u8]> {
+    pub fn send_eth(
+        &mut self,
+        dst_mac: [u8; 6],
+        dst: IpAddr,
+        proto: u8,
+        data: &[u8],
+    ) -> Option<&[u8]> {
         let ip_len = (20 + data.len()) as u16;
         let packet_len = 34usize.checked_add(data.len())?;
         if packet_len > self.packet.len() {
@@ -603,21 +654,39 @@ impl<'a> Network<'a> {
 }
 
 pub enum ParsedPacket<'a> {
-    Arp { eth: EthHeader, header: ArpHeader },
-    Udp { eth: EthHeader, ip: IpHeader, header: UdpHeader, payload: &'a [u8] },
-    Tcp { eth: EthHeader, ip: IpHeader, header: TcpHeader, payload: &'a [u8] },
-    Icmp { eth: EthHeader, ip: IpHeader, header: IcmpHeader, payload: &'a [u8] },
+    Arp {
+        eth: EthHeader,
+        header: ArpHeader,
+    },
+    Udp {
+        eth: EthHeader,
+        ip: IpHeader,
+        header: UdpHeader,
+        payload: &'a [u8],
+    },
+    Tcp {
+        eth: EthHeader,
+        ip: IpHeader,
+        header: TcpHeader,
+        payload: &'a [u8],
+    },
+    Icmp {
+        eth: EthHeader,
+        ip: IpHeader,
+        header: IcmpHeader,
+        payload: &'a [u8],
+    },
 }
 
 impl<'a> ParsedPacket<'a> {
     pub fn is_udp(&self) -> bool {
         matches!(self, ParsedPacket::Udp { .. })
     }
-    
+
     pub fn is_tcp(&self) -> bool {
         matches!(self, ParsedPacket::Tcp { .. })
     }
-    
+
     pub fn is_icmp(&self) -> bool {
         matches!(self, ParsedPacket::Icmp { .. })
     }
@@ -647,7 +716,12 @@ mod tests {
         let mut network = Network::new(&mut stack);
         let payload = [1, 2, 3, 4];
         let packet_src = network
-            .send_udp(IpAddr::new(255, 255, 255, 255), DHCP_CLIENT_PORT, DHCP_SERVER_PORT, &payload)
+            .send_udp(
+                IpAddr::new(255, 255, 255, 255),
+                DHCP_CLIENT_PORT,
+                DHCP_SERVER_PORT,
+                &payload,
+            )
             .unwrap();
         let mut packet = [0u8; 1514];
         let packet_len = packet_src.len();
@@ -655,7 +729,9 @@ mod tests {
 
         let parsed = network.recv(&packet[..packet_len]).unwrap();
         match parsed {
-            ParsedPacket::Udp { header, payload, .. } => {
+            ParsedPacket::Udp {
+                header, payload, ..
+            } => {
                 assert_eq!(header.src_port, DHCP_CLIENT_PORT);
                 assert_eq!(header.dst_port, DHCP_SERVER_PORT);
                 assert_eq!(header.len, 12);

@@ -10,7 +10,10 @@ pub struct LazyStatic<T> {
 
 impl<T> LazyStatic<T> {
     pub const fn new() -> Self {
-        Self { data: UnsafeCell::new(None), done: AtomicBool::new(false) }
+        Self {
+            data: UnsafeCell::new(None),
+            done: AtomicBool::new(false),
+        }
     }
 
     pub fn get(&self, init: impl FnOnce() -> T) -> &T {
@@ -35,7 +38,9 @@ pub struct OnceCell<T> {
 
 impl<T> OnceCell<T> {
     pub const fn new() -> Self {
-        Self { data: UnsafeCell::new(None) }
+        Self {
+            data: UnsafeCell::new(None),
+        }
     }
 
     pub fn get(&self) -> Option<&T> {

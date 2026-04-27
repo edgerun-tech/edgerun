@@ -1,7 +1,7 @@
 #![allow(clippy::all)]
 
-use aes_gcm::{AeadInPlace, KeyInit, Aes256Gcm, Key};
 use aes_gcm::aead::generic_array::GenericArray;
+use aes_gcm::{AeadInPlace, Aes256Gcm, Key, KeyInit};
 use typenum::U12;
 use typenum::U16;
 
@@ -16,7 +16,9 @@ impl Aes256GcmCipher {
             return Err(aes_gcm::aead::Error);
         }
         let key = Key::<Aes256Gcm>::from_slice(key);
-        Ok(Self { inner: Aes256Gcm::new(key) })
+        Ok(Self {
+            inner: Aes256Gcm::new(key),
+        })
     }
 
     pub fn new_from_key(key: &[u8]) -> Result<Self, aes_gcm::aead::Error> {
@@ -39,7 +41,8 @@ impl Aes256GcmCipher {
         buffer: &mut [u8],
         tag: &GenericArray<u8, U16>,
     ) -> Result<(), aes_gcm::aead::Error> {
-        self.inner.decrypt_in_place_detached(nonce, aad, buffer, tag)
+        self.inner
+            .decrypt_in_place_detached(nonce, aad, buffer, tag)
     }
 }
 

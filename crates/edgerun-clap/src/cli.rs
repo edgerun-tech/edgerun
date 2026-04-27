@@ -119,7 +119,7 @@ impl Command {
                         Some(Action::StoreFalse) => {
                             matches.map.insert(a.name.clone(), Value::Bool(false));
                         }
-Some(Action::Count) => {
+                        Some(Action::Count) => {
                             let current = matches
                                 .map
                                 .get(&a.name)
@@ -128,26 +128,36 @@ Some(Action::Count) => {
                                     _ => None,
                                 })
                                 .unwrap_or(0);
-                            matches.map.insert(a.name.clone(), Value::Number(JsonNumber::I64(current + 1)));
+                            matches.map.insert(
+                                a.name.clone(),
+                                Value::Number(JsonNumber::I64(current + 1)),
+                            );
                         }
                         _ => {
                             i += 1;
                             if let Some(delimiter) = a.value_delimiter {
-                                let values: Vec<_> = if i < args.len() && !args[i].starts_with('-') {
+                                let values: Vec<_> = if i < args.len() && !args[i].starts_with('-')
+                                {
                                     args[i].split(delimiter).map(String::from).collect()
                                 } else {
                                     Vec::new()
                                 };
                                 if values.len() == 1 {
-                                    matches.map.insert(a.name.clone(), Value::String(values[0].clone()));
+                                    matches
+                                        .map
+                                        .insert(a.name.clone(), Value::String(values[0].clone()));
                                 } else {
                                     matches.map.insert(
                                         a.name.clone(),
-                                        Value::Array(values.into_iter().map(Value::String).collect()),
+                                        Value::Array(
+                                            values.into_iter().map(Value::String).collect(),
+                                        ),
                                     );
                                 }
                             } else if i < args.len() && !args[i].starts_with('-') {
-                                matches.map.insert(a.name.clone(), Value::String(args[i].clone()));
+                                matches
+                                    .map
+                                    .insert(a.name.clone(), Value::String(args[i].clone()));
                             } else if a.num_args.is_none() {
                                 matches.map.insert(a.name.clone(), Value::Bool(true));
                             } else {
@@ -161,11 +171,15 @@ Some(Action::Count) => {
                                 if values.is_empty() {
                                     matches.map.insert(a.name.clone(), Value::Bool(true));
                                 } else if values.len() == 1 {
-                                    matches.map.insert(a.name.clone(), Value::String(values[0].clone()));
+                                    matches
+                                        .map
+                                        .insert(a.name.clone(), Value::String(values[0].clone()));
                                 } else {
                                     matches.map.insert(
                                         a.name.clone(),
-                                        Value::Array(values.into_iter().map(Value::String).collect()),
+                                        Value::Array(
+                                            values.into_iter().map(Value::String).collect(),
+                                        ),
                                     );
                                 }
                             }
@@ -206,7 +220,10 @@ Some(Action::Count) => {
                         flags.push_str("--");
                         flags.push_str(long);
 
-                        let is_store_bool = matches!(arg.action, Some(Action::StoreTrue) | Some(Action::StoreFalse));
+                        let is_store_bool = matches!(
+                            arg.action,
+                            Some(Action::StoreTrue) | Some(Action::StoreFalse)
+                        );
                         if let Some(default) = &arg.default_value {
                             eprintln!("  {} (default: {})", flags, default);
                         } else if is_store_bool {
@@ -415,11 +432,14 @@ impl ArgMatches {
     }
 
     pub fn get_flag(&self, name: &str) -> bool {
-        self.map.get(name).and_then(|v| match v {
-            Value::Bool(b) => Some(*b),
-            Value::Number(n) => n.as_i64().map(|n| n != 0),
-            _ => None,
-        }).unwrap_or(false)
+        self.map
+            .get(name)
+            .and_then(|v| match v {
+                Value::Bool(b) => Some(*b),
+                Value::Number(n) => n.as_i64().map(|n| n != 0),
+                _ => None,
+            })
+            .unwrap_or(false)
     }
 }
 

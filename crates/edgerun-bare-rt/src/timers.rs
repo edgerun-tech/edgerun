@@ -3,9 +3,9 @@
 use crate::Instant;
 use core::future::Future;
 use core::pin::Pin;
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll};
 use core::time::Duration;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Sleep {
     deadline: Instant,
@@ -99,19 +99,19 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        
+
         if Instant::now() >= this.deadline {
             this.elapsed.store(true, Ordering::Release);
             return Poll::Ready(Err(Elapsed));
         }
-        
+
         if let Some(ref mut inner) = this.inner {
             return match unsafe { Pin::new_unchecked(inner) }.poll(cx) {
                 Poll::Ready(v) => Poll::Ready(Ok(v)),
                 Poll::Pending => Poll::Pending,
             };
         }
-        
+
         Poll::Pending
     }
 }

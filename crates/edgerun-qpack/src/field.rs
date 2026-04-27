@@ -1,10 +1,10 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::fmt::{Display, Formatter};
 use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use alloc::fmt::{Display, Formatter};
 
 /**
  * https://tools.ietf.org/html/rfc7541

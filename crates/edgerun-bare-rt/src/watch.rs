@@ -15,7 +15,12 @@ pub fn watch<T: Clone>(value: T) -> (Sender<T>, Receiver<T>) {
         version: AtomicUsize::new(0),
         closed: AtomicUsize::new(0),
     });
-    (Sender { inner: inner.clone() }, Receiver { inner })
+    (
+        Sender {
+            inner: inner.clone(),
+        },
+        Receiver { inner },
+    )
 }
 
 struct Inner<T> {

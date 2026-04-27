@@ -1,7 +1,7 @@
-use edgerun_bare_rt::Notify;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use edgerun_bare_rt::Notify;
 
 fn noop_waker() -> Waker {
     unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
@@ -25,14 +25,14 @@ fn notify_notify_wakes() {
     let notify = Notify::new();
     let waker = noop_waker();
     let cx = &mut Context::from_waker(&waker);
-    
+
     let mut notified = notify.notified();
     let poll = Pin::new(&mut notified).poll(cx);
     // First poll is pending since notify not called
     assert!(matches!(poll, Poll::Pending));
-    
+
     notify.notify_one();
-    
+
     let mut notified = notify.notified();
     let poll = Pin::new(&mut notified).poll(cx);
     // After notify, should be ready

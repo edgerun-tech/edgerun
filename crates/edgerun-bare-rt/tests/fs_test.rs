@@ -1,4 +1,4 @@
-use edgerun_bare_rt::{File, Dir, Error as FsError};
+use edgerun_bare_rt::{Dir, Error as FsError, File};
 
 #[test]
 fn file_new() {

@@ -249,7 +249,8 @@ impl VirtNet {
         self.write_status(VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER);
 
         self.host_features = self.read_device_features();
-        self.features = self.host_features & (VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS);
+        self.features =
+            self.host_features & (VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS);
         if self.features & VIRTIO_F_VERSION_1 == 0 {
             self.fail();
             return false;
@@ -720,7 +721,11 @@ fn pci_bar_addr(bus: u8, slot: u8, func: u8, bar: u8) -> Option<u64> {
         (raw & !0xf) as u64
     };
 
-    if base == 0 { None } else { Some(base) }
+    if base == 0 {
+        None
+    } else {
+        Some(base)
+    }
 }
 
 fn is_multifunction(bus: u8, slot: u8) -> bool {
@@ -754,7 +759,13 @@ fn pci_write_u16(bus: u8, slot: u8, func: u8, offset: u8, value: u16) {
     let shift = ((offset & 0x2) * 8) as u32;
     let mask = !(0xffffu32 << shift);
     let current = pci_read_u32(bus, slot, func, offset);
-    pci_write_u32(bus, slot, func, offset, (current & mask) | ((value as u32) << shift));
+    pci_write_u32(
+        bus,
+        slot,
+        func,
+        offset,
+        (current & mask) | ((value as u32) << shift),
+    );
 }
 
 fn pci_read_u8(bus: u8, slot: u8, func: u8, offset: u8) -> u8 {

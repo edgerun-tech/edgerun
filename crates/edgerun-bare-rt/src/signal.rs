@@ -8,17 +8,19 @@ pub struct Signal {
 
 impl Signal {
     pub const fn new() -> Self {
-        Self { raised: AtomicBool::new(false) }
+        Self {
+            raised: AtomicBool::new(false),
+        }
     }
-    
+
     pub fn raised(&self) -> bool {
         self.raised.load(Ordering::Acquire)
     }
-    
+
     pub fn raise(&self) {
         self.raised.store(true, Ordering::Release);
     }
-    
+
     pub fn clear(&self) {
         self.raised.store(false, Ordering::Release);
     }
@@ -33,8 +35,11 @@ impl<F> SignalHandler<F> {
     pub fn new(signal: Signal, handler: F) -> Self {
         Self { signal, handler }
     }
-    
-    pub fn poll(&mut self) where F: FnMut() {
+
+    pub fn poll(&mut self)
+    where
+        F: FnMut(),
+    {
         if self.signal.raised() {
             (self.handler)();
             self.signal.clear();
@@ -42,10 +47,18 @@ impl<F> SignalHandler<F> {
     }
 }
 
-pub fn ctrl_c() -> Signal { Signal::new() }
-pub fn alarm() -> Signal { Signal::new() }
-pub fn usr1() -> Signal { Signal::new() }
-pub fn usr2() -> Signal { Signal::new() }
+pub fn ctrl_c() -> Signal {
+    Signal::new()
+}
+pub fn alarm() -> Signal {
+    Signal::new()
+}
+pub fn usr1() -> Signal {
+    Signal::new()
+}
+pub fn usr2() -> Signal {
+    Signal::new()
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SignalKind {

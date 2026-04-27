@@ -4,10 +4,14 @@
 //! all relevant extensions: SNI, key_share, supported_versions,
 //! supported_groups, and signature_algorithms.
 
-use alloc::{format, string::{String, ToString}, vec::Vec};
-use core::str;
 use crate::cipher::NamedGroup;
 use crate::{Result, TlsError};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
+use core::str;
 use edgerun_crypto::CipherSuite;
 
 /// Parsed ClientHello from the wire format (RFC 8446 §4.1.2).

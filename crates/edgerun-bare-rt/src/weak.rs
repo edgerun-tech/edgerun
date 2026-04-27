@@ -13,7 +13,10 @@ pub struct Weak<T> {
 
 impl<T> Weak<T> {
     pub fn new() -> Self {
-        Self { ptr: AtomicUsize::new(0), _marker: PhantomData }
+        Self {
+            ptr: AtomicUsize::new(0),
+            _marker: PhantomData,
+        }
     }
 
     pub fn upgrade(&self) -> Option<Arc<T>> {
@@ -28,7 +31,10 @@ impl<T> Weak<T> {
 
 impl<T> Clone for Weak<T> {
     fn clone(&self) -> Self {
-        Self { ptr: AtomicUsize::new(self.ptr.load(Ordering::Acquire)), _marker: PhantomData }
+        Self {
+            ptr: AtomicUsize::new(self.ptr.load(Ordering::Acquire)),
+            _marker: PhantomData,
+        }
     }
 }
 

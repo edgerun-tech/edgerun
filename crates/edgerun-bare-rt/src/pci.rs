@@ -53,7 +53,8 @@ pub struct PciDevice {
 impl PciDevice {
     pub fn is_storage(&self) -> bool {
         self.class == PCI_CLASS_STORAGE
-            && (self.subclass == PCI_SUBCLASS_STORAGE_SATA || self.subclass == PCI_SUBCLASS_STORAGE_NVME)
+            && (self.subclass == PCI_SUBCLASS_STORAGE_SATA
+                || self.subclass == PCI_SUBCLASS_STORAGE_NVME)
     }
 
     pub fn is_nvme(&self) -> bool {
@@ -94,7 +95,7 @@ impl PciBus {
             | ((func as u32) << 8)
             | ((reg as u32) & 0xFC)
             | 0x80000000u32;
-        
+
         unsafe {
             core::ptr::write_volatile(PCI_CONFIG_ADDRESS as *mut u32, addr);
             core::ptr::read_volatile(PCI_CONFIG_DATA as *const u32)
@@ -107,7 +108,7 @@ impl PciBus {
             | ((func as u32) << 8)
             | ((reg as u32) & 0xFC)
             | 0x80000000u32;
-        
+
         unsafe {
             core::ptr::write_volatile(PCI_CONFIG_ADDRESS as *mut u32, addr);
             core::ptr::write_volatile(PCI_CONFIG_DATA as *mut u32, val);

@@ -1,6 +1,6 @@
 #![allow(clippy::all)]
 
-pub use sha2::{Sha256, Sha384, Sha512, Digest};
+pub use sha2::{Digest, Sha256, Sha384, Sha512};
 
 pub const SHA256_DIGEST_SIZE: usize = 32;
 pub const SHA384_DIGEST_SIZE: usize = 48;

@@ -1,8 +1,8 @@
 //! Error types for the OCI runtime.
 
+use std::error::Error;
 use std::fmt;
 use std::io;
-use std::error::Error;
 
 #[derive(Debug)]
 pub enum OciError {

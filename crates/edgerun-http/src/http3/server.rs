@@ -42,7 +42,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use super::connection::Http3Connection;
-use crate::http3::settings::Http3Settings;
 use super::qpack::{QpackDecoder, QpackEncoder};
 use super::quic::crypto::PacketProtection;
 use super::quic::frame::QuicFrame;
@@ -51,6 +50,7 @@ use super::quic::ConnectionId;
 use super::quic::QuicConnection;
 use super::quic::QuicTlsServerHandshaker;
 use super::Http3Error;
+use crate::http3::settings::Http3Settings;
 use std::collections::HashMap;
 use std::sync::Mutex;
 

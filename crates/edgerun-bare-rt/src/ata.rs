@@ -64,9 +64,12 @@ impl AtaDevice {
             self.write_reg(ATA_LBA_LOW, lba as u8);
             self.write_reg(ATA_LBA_MID, (lba >> 8) as u8);
             self.write_reg(ATA_LBA_HIGH, (lba >> 16) as u8);
-            self.write_reg(ATA_DRIVE, if self.slave { 0xB0 } else { 0xA0 } | ((lba >> 24) as u8 & 0x0F));
+            self.write_reg(
+                ATA_DRIVE,
+                if self.slave { 0xB0 } else { 0xA0 } | ((lba >> 24) as u8 & 0x0F),
+            );
             self.write_reg(ATA_CMD, ATA_CMD_READ);
-            
+
             let mut timeout = 0;
             while timeout < 100000 {
                 let status = self.read_reg(ATA_STATUS);
@@ -78,7 +81,7 @@ impl AtaDevice {
                 }
                 timeout += 1;
             }
-            
+
             let data = self.base as *mut u16;
             let len = (count as usize * SECTOR_SIZE) / 2;
             for i in 0..len {
@@ -97,9 +100,12 @@ impl AtaDevice {
             self.write_reg(ATA_LBA_LOW, lba as u8);
             self.write_reg(ATA_LBA_MID, (lba >> 8) as u8);
             self.write_reg(ATA_LBA_HIGH, (lba >> 16) as u8);
-            self.write_reg(ATA_DRIVE, if self.slave { 0xB0 } else { 0xA0 } | ((lba >> 24) as u8 & 0x0F));
+            self.write_reg(
+                ATA_DRIVE,
+                if self.slave { 0xB0 } else { 0xA0 } | ((lba >> 24) as u8 & 0x0F),
+            );
             self.write_reg(ATA_CMD, ATA_CMD_WRITE);
-            
+
             let mut timeout = 0;
             while timeout < 100000 {
                 let status = self.read_reg(ATA_STATUS);
@@ -111,7 +117,7 @@ impl AtaDevice {
                 }
                 timeout += 1;
             }
-            
+
             let data = self.base as *mut u16;
             let len = (count as usize * SECTOR_SIZE) / 2;
             for i in 0..len {

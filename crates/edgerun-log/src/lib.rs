@@ -47,17 +47,20 @@ struct LogWriter {
 
 impl LogWriter {
     fn new() -> Self {
-        Self { buf: [0; 256], pos: 0 }
+        Self {
+            buf: [0; 256],
+            pos: 0,
+        }
     }
-    
+
     fn write(&mut self, s: &str) {
         let len = s.len();
         if self.pos + len < 256 {
-            self.buf[self.pos..self.pos+len].copy_from_slice(s.as_bytes());
+            self.buf[self.pos..self.pos + len].copy_from_slice(s.as_bytes());
             self.pos += len;
         }
     }
-    
+
     fn finish(&mut self) -> &str {
         self.buf[self.pos..].fill(0);
         self.pos = 0;
@@ -99,7 +102,7 @@ pub fn write(level: Level, module: &str, f: impl fmt::Display) -> &str {
 #[macro_export]
 macro_rules! trace {
     ($msg:expr) => { $crate::log($crate::Level::Trace, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => { 
+    ($fmt:literal, $($a:expr),*) => {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Trace, module_path!(), _msg)
     };
@@ -107,7 +110,7 @@ macro_rules! trace {
 #[macro_export]
 macro_rules! debug {
     ($msg:expr) => { $crate::log($crate::Level::Debug, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => { 
+    ($fmt:literal, $($a:expr),*) => {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Debug, module_path!(), _msg)
     };
@@ -115,7 +118,7 @@ macro_rules! debug {
 #[macro_export]
 macro_rules! info {
     ($msg:expr) => { $crate::log($crate::Level::Info, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => { 
+    ($fmt:literal, $($a:expr),*) => {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Info, module_path!(), _msg)
     };
@@ -123,7 +126,7 @@ macro_rules! info {
 #[macro_export]
 macro_rules! warn {
     ($msg:expr) => { $crate::log($crate::Level::Warn, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => { 
+    ($fmt:literal, $($a:expr),*) => {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Warn, module_path!(), _msg)
     };
@@ -131,7 +134,7 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($msg:expr) => { $crate::log($crate::Level::Error, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => { 
+    ($fmt:literal, $($a:expr),*) => {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Error, module_path!(), _msg)
     };

@@ -47,26 +47,32 @@ impl VirtioNet {
 
     pub fn init(&mut self) -> bool {
         unsafe {
-            self.base.add(PCI_STATUS).write(VIRTIO_CONFIG_STATUS_DRIVER as u32);
-            
+            self.base
+                .add(PCI_STATUS)
+                .write(VIRTIO_CONFIG_STATUS_DRIVER as u32);
+
             let features = self.base.add(0).read();
-            self.base.add(0).write(features | VIRTIO_NET_F_MAC | VIRTIO_F_VERSION_1);
-            
+            self.base
+                .add(0)
+                .write(features | VIRTIO_NET_F_MAC | VIRTIO_F_VERSION_1);
+
             let status = self.base.add(PCI_STATUS).read() as u8;
             if status & 4 == 0 {
                 return false;
             }
-            
-            self.base.add(PCI_STATUS).write((status | VIRTIO_CONFIG_STATUS_DRIVER_OK as u8) as u32);
-            
+
+            self.base
+                .add(PCI_STATUS)
+                .write((status | VIRTIO_CONFIG_STATUS_DRIVER_OK as u8) as u32);
+
             let cfg = self.base.add(PCI_CONFIG);
             self.status = cfg.read() as u16;
             self.link_up = (self.status & VIRTIO_NET_S_LINK_UP) != 0;
-            
+
             for i in 0..6 {
                 self.mac[i] = (cfg.add(6 + i).read() & 0xFF) as u8;
             }
-            
+
             true
         }
     }
@@ -75,7 +81,7 @@ impl VirtioNet {
         if data.is_empty() || data.len() > SECTOR_SIZE {
             return false;
         }
-        
+
         unsafe {
             if !self.notify.is_null() {
                 self.notify.write(0);

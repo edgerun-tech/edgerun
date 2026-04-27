@@ -79,7 +79,9 @@ impl NvmeController {
     pub fn init(&mut self) -> bool {
         unsafe {
             self.ptr.offset(NVME_CC as isize / 4).write(0);
-            self.ptr.offset(NVME_CC as isize / 4).write(NVME_CC_EN | NVME_CC_CSS);
+            self.ptr
+                .offset(NVME_CC as isize / 4)
+                .write(NVME_CC_EN | NVME_CC_CSS);
             let mut timeout = 0;
             while timeout < 100000 {
                 let csts = self.ptr.offset(NVME_CSTS as isize / 4).read();

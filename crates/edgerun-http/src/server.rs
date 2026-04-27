@@ -11,7 +11,6 @@
 
 use crate::handler::Handler;
 use crate::header::HeaderMap;
-use edgerun_rt::BufReader;
 use crate::http2::frame::{flags, Frame, FrameType};
 use crate::http2::headers::{validate_header_name_case, validate_request_headers};
 use crate::http2::hpack::{Decoder, Encoder};
@@ -20,6 +19,7 @@ use crate::http2::ErrorCode;
 use crate::method::Method;
 use crate::uri::Uri;
 use crate::{Request, Response, StatusCode};
+use edgerun_rt::BufReader;
 use edgerun_rt::{
     sleep, spawn, timeout, AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncWrite, AsyncWriteExt,
     CancellationToken,

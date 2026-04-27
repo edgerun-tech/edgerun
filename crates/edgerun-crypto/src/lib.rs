@@ -3,11 +3,11 @@
 
 extern crate alloc;
 
-pub mod error;
-pub mod aes;
-pub mod sha;
-pub mod rng;
 pub mod aead;
+pub mod aes;
+pub mod error;
+pub mod rng;
+pub mod sha;
 
 pub use ::aes_gcm;
 pub use ::ecdsa;
@@ -20,25 +20,25 @@ use crate::rng::fill_random;
 use crate::sha::Digest;
 
 pub use aead::{Aes256GcmCipher, CipherU12, CipherU16};
-pub use aes_gcm::AeadCore;
 pub use aes_gcm::aead::{AeadInPlace, KeyInit};
+pub use aes_gcm::AeadCore;
 pub use chacha20poly1305::ChaCha20Poly1305;
 pub use p256::ecdsa::SigningKey;
 
-pub use rand_core::{OsRng, CryptoRng, RngCore};
+pub use rand_core::{CryptoRng, OsRng, RngCore};
 pub mod rand_core {
-    pub use rand_core::{OsRng, CryptoRng, RngCore};
+    pub use rand_core::{CryptoRng, OsRng, RngCore};
 }
 
 pub mod digest {
     pub use sha2::Digest;
 }
 
-pub use sha::{Sha256, Sha384, Sha512, sha256, sha384, sha512};
+pub use sha::{sha256, sha384, sha512, Sha256, Sha384, Sha512};
 
 pub mod sha2 {
-    pub use sha2::Digest;
     pub use crate::sha::{Sha256, Sha384, Sha512};
+    pub use sha2::Digest;
 }
 
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
@@ -63,7 +63,12 @@ pub fn hmac_sha384(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
     result
 }
 
-pub fn hkdf_sha256(salt: Option<&[u8]>, ikm: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8> {
+pub fn hkdf_sha256(
+    salt: Option<&[u8]>,
+    ikm: &[u8],
+    info: &[u8],
+    len: usize,
+) -> alloc::vec::Vec<u8> {
     let prk = hmac_sha256(salt.unwrap_or(b""), ikm);
     let mut okm = alloc::vec::Vec::with_capacity(len);
     let mut t = alloc::vec::Vec::new();
@@ -84,7 +89,12 @@ pub fn hkdf_sha256(salt: Option<&[u8]>, ikm: &[u8], info: &[u8], len: usize) -> 
     okm
 }
 
-pub fn hkdf_sha384(salt: Option<&[u8]>, ikm: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8> {
+pub fn hkdf_sha384(
+    salt: Option<&[u8]>,
+    ikm: &[u8],
+    info: &[u8],
+    len: usize,
+) -> alloc::vec::Vec<u8> {
     use sha2::Digest;
     let prk = hmac_sha384(salt.unwrap_or(b""), ikm);
     let mut okm = alloc::vec::Vec::with_capacity(len);
@@ -156,24 +166,33 @@ impl CipherSuite {
 }
 
 pub mod hkdf {
-    use alloc::vec::Vec;
     use crate::sha::Sha256;
-    
+    use alloc::vec::Vec;
+
     pub struct Hkdf<H> {
         skm: Vec<u8>,
         _phantom: core::marker::PhantomData<H>,
     }
-    
+
     impl Hkdf<crate::Sha256> {
         pub fn new(_salt: &[u8]) -> Self {
-            Self { skm: Vec::new(), _phantom: core::marker::PhantomData }
+            Self {
+                skm: Vec::new(),
+                _phantom: core::marker::PhantomData,
+            }
         }
-        
+
         pub fn extract(salt: Option<&[u8]>, ikm: &[u8]) -> (Vec<u8>, Self) {
             let prk = crate::hmac_sha256(salt.unwrap_or(b""), ikm);
-            (prk.clone(), Self { skm: prk, _phantom: core::marker::PhantomData })
+            (
+                prk.clone(),
+                Self {
+                    skm: prk,
+                    _phantom: core::marker::PhantomData,
+                },
+            )
         }
-        
+
         pub fn expand(&self, info: &[u8], okm: &mut Vec<u8>) -> Result<Vec<u8>, ()> {
             let len = okm.len();
             let result = crate::hkdf_sha256(None, &self.skm, info, len);
@@ -183,10 +202,10 @@ pub mod hkdf {
     }
 }
 
-pub use x509_cert::{Certificate, name::Name};
-pub use x509_cert::der::{Decode, DecodePem, Encode, asn1};
 pub use x509_cert::der::oid::db::rfc4519::CN;
 pub use x509_cert::der::oid::db::rfc5280::ID_CE_SUBJECT_ALT_NAME;
+pub use x509_cert::der::{asn1, Decode, DecodePem, Encode};
+pub use x509_cert::{name::Name, Certificate};
 pub mod x509_cert {
     pub use x509_cert::*;
     pub mod ext {
@@ -210,7 +229,10 @@ pub mod hmac {
     pub use crate::hmac_sha256 as HMAC;
 }
 
-pub fn load_cert_and_key_from_pem(_cert_pem: &str, _key_pem: &str) -> Result<(alloc::vec::Vec<u8>, alloc::vec::Vec<u8>)> {
+pub fn load_cert_and_key_from_pem(
+    _cert_pem: &str,
+    _key_pem: &str,
+) -> Result<(alloc::vec::Vec<u8>, alloc::vec::Vec<u8>)> {
     Err(CryptoError::InvalidKey)
 }
 
@@ -222,11 +244,21 @@ pub fn generate_self_signed_pem(_key: &SigningKey, _cn: &str) -> alloc::string::
     alloc::string::String::new()
 }
 
-pub fn p256_signing_key_from_pem(_pem: &str) -> Option<SigningKey> { None }
-pub fn p256_signing_key_from_der(_der: &[u8]) -> Option<SigningKey> { None }
-pub fn p256_signing_key_to_pem(_key: &SigningKey) -> alloc::string::String { alloc::string::String::new() }
-pub fn pem_encode(_data: &[u8]) -> alloc::string::String { alloc::string::String::new() }
-pub fn x509_cert_from_pem(_pem: &str) -> Option<alloc::vec::Vec<u8>> { None }
+pub fn p256_signing_key_from_pem(_pem: &str) -> Option<SigningKey> {
+    None
+}
+pub fn p256_signing_key_from_der(_der: &[u8]) -> Option<SigningKey> {
+    None
+}
+pub fn p256_signing_key_to_pem(_key: &SigningKey) -> alloc::string::String {
+    alloc::string::String::new()
+}
+pub fn pem_encode(_data: &[u8]) -> alloc::string::String {
+    alloc::string::String::new()
+}
+pub fn x509_cert_from_pem(_pem: &str) -> Option<alloc::vec::Vec<u8>> {
+    None
+}
 
 pub mod signature {
     pub use p256::ecdsa::signature::{Signer, SignerMut, Verifier};

@@ -30,6 +30,7 @@ use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_crypto::sha2::Digest;
 use edgerun_hardware_signing::{MeshSigner, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
@@ -38,7 +39,6 @@ use edgerun_proto::edgerun::v0::{
     network::{SessionAccept, SessionHello},
     stream::{CommandEnvelope, CommandType},
 };
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use prost::Message;
 
 // ===========================================================================
@@ -53,7 +53,9 @@ fn allocate_port() -> u16 {
         if TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], port)),
             Duration::from_millis(10),
-        ).is_err() {
+        )
+        .is_err()
+        {
             return port;
         }
     }
@@ -78,12 +80,18 @@ impl TestSigner {
 
     fn from_seed(seed: [u8; 32]) -> Self {
         let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&seed.into())
-            .unwrap_or_else(|_| edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[1u8; 32].into()).unwrap());
+            .unwrap_or_else(|_| {
+                edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[1u8; 32].into()).unwrap()
+            });
         let vk = signing_key.verifying_key();
         let encoded = vk.to_encoded_point(false);
         let mut node_id = [0u8; MESH_PUBLIC_KEY_LENGTH];
         node_id.copy_from_slice(&encoded.as_bytes()[1..65]);
-        Self { node_id, signing_key, seed }
+        Self {
+            node_id,
+            signing_key,
+            seed,
+        }
     }
 
     fn node_id(&self) -> [u8; MESH_PUBLIC_KEY_LENGTH] {
@@ -91,7 +99,9 @@ impl TestSigner {
     }
 
     fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], String> {
-        let sig: edgerun_crypto::p256::ecdsa::Signature = self.signing_key.sign_prehash(digest)
+        let sig: edgerun_crypto::p256::ecdsa::Signature = self
+            .signing_key
+            .sign_prehash(digest)
             .map_err(|e| format!("sign failed: {e}"))?;
         let (r, s) = sig.split_bytes();
         let mut out = [0u8; MESH_SIGNATURE_LENGTH];
@@ -131,7 +141,12 @@ impl EdgerundNode {
 
     fn with_signer(name: &str, listen_port: u16, health_port: u16, signer: &TestSigner) -> Self {
         let temp_dir = std::env::temp_dir();
-        let data_dir = format!("{}/edgerun-e2e-{}-{}", temp_dir.display(), name, std::process::id());
+        let data_dir = format!(
+            "{}/edgerun-e2e-{}-{}",
+            temp_dir.display(),
+            name,
+            std::process::id()
+        );
         let _ = fs::remove_dir_all(&data_dir);
         fs::create_dir_all(&data_dir).unwrap();
 
@@ -151,13 +166,15 @@ signer:
   private_key_hex: "0x{}"
   public_key_hex: "0x{}"
 "#,
-            stream_id, name, signer.private_key_hex(), signer.public_key_hex()
+            stream_id,
+            name,
+            signer.private_key_hex(),
+            signer.public_key_hex()
         );
         fs::write(&config_path, config).unwrap();
 
         let binary = edgerund_binary_path();
         let mut process = Command::new(&binary)
-
             .arg("run")
             .arg("--config")
             .arg(&config_path)
@@ -177,14 +194,19 @@ signer:
             if TcpStream::connect_timeout(
                 &SocketAddr::from(([127, 0, 0, 1], health_port)),
                 Duration::from_millis(100),
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 break;
             }
             retries += 1;
         }
         if retries >= 100 {
             let _ = process.kill();
-            panic!("edgerund '{}' failed to start on health port {}", name, health_port);
+            panic!(
+                "edgerund '{}' failed to start on health port {}",
+                name, health_port
+            );
         }
 
         Self {
@@ -242,8 +264,10 @@ fn encode_frame(msg: &[u8]) -> Vec<u8> {
 }
 
 fn read_frame(stream: &mut TcpStream, timeout_secs: u64) -> Option<Vec<u8>> {
-    stream.set_read_timeout(Some(Duration::from_secs(timeout_secs))).ok();
-    
+    stream
+        .set_read_timeout(Some(Duration::from_secs(timeout_secs)))
+        .ok();
+
     // Read 8-byte length prefix (u64 BE)
     let mut header = [0u8; 8];
     let mut pos = 0;
@@ -274,7 +298,11 @@ fn encode_varint(mut v: u64) -> Vec<u8> {
     edgerun_core::varint::encode_varint(v)
 }
 
-fn session_handshake(stream: &mut TcpStream, signer: &TestSigner, target_node: Option<[u8; MESH_PUBLIC_KEY_LENGTH]>) -> Result<[u8; MESH_PUBLIC_KEY_LENGTH], String> {
+fn session_handshake(
+    stream: &mut TcpStream,
+    signer: &TestSigner,
+    target_node: Option<[u8; MESH_PUBLIC_KEY_LENGTH]>,
+) -> Result<[u8; MESH_PUBLIC_KEY_LENGTH], String> {
     let mut nonce = vec![0u8; 32];
     edgerun_crypto::getrandom::fill(&mut nonce).expect("getrandom failed");
 
@@ -285,7 +313,9 @@ fn session_handshake(stream: &mut TcpStream, signer: &TestSigner, target_node: O
             identity_kind: Some(IdentityKind::Node as i32),
             key_hint: Some(signer.node_id().to_vec()),
         }),
-        target_node: target_node.map(|n| NodeRef { node_id: n.to_vec() }),
+        target_node: target_node.map(|n| NodeRef {
+            node_id: n.to_vec(),
+        }),
         supported_transport_features: vec!["proto".to_string()],
         supported_protocol_versions: vec![1],
         session_nonce: nonce.clone(),
@@ -304,7 +334,9 @@ fn session_handshake(stream: &mut TcpStream, signer: &TestSigner, target_node: O
     let digest = edgerun_crypto::sha256(&sig_input);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&digest);
-    let sig = signer.sign_digest(&digest_bytes).map_err(|e| e.to_string())?;
+    let sig = signer
+        .sign_digest(&digest_bytes)
+        .map_err(|e| e.to_string())?;
     let mut signed_hello = hello;
     signed_hello.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
         algorithm: 1,
@@ -366,7 +398,9 @@ fn http_get(url: &str) -> Result<u16, String> {
     };
 
     let mut stream = TcpStream::connect_timeout(
-        &host_port.parse().map_err(|e| format!("Bad address: {}", e))?,
+        &host_port
+            .parse()
+            .map_err(|e| format!("Bad address: {}", e))?,
         Duration::from_secs(5),
     )
     .map_err(|e| e.to_string())?;
@@ -374,12 +408,18 @@ fn http_get(url: &str) -> Result<u16, String> {
         .set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
 
-    write!(stream, "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", path, host_port)
-        .map_err(|e| e.to_string())?;
+    write!(
+        stream,
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        path, host_port
+    )
+    .map_err(|e| e.to_string())?;
 
     let mut reader = BufReader::new(stream);
     let mut status_line = String::new();
-    reader.read_line(&mut status_line).map_err(|e| e.to_string())?;
+    reader
+        .read_line(&mut status_line)
+        .map_err(|e| e.to_string())?;
 
     let parts: Vec<&str> = status_line.split_whitespace().collect();
     if parts.len() >= 2 {
@@ -399,7 +439,8 @@ mod tests_node_lifecycle {
         let health_port = allocate_port();
         let _node = EdgerundNode::new("health-test", listen_port, health_port);
 
-        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port)).expect("health request failed");
+        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port))
+            .expect("health request failed");
         assert_eq!(status, 200);
         // health endpoint returned status 200
         // node_id present in response
@@ -413,7 +454,8 @@ mod tests_node_lifecycle {
         let node = EdgerundNode::new("init-test", listen_port, health_port);
 
         // Health should return the stream_id we configured
-        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port)).expect("health request failed");
+        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port))
+            .expect("health request failed");
         // stream_id configured correctly
     }
 
@@ -424,7 +466,8 @@ mod tests_node_lifecycle {
         let mut node = EdgerundNode::new("stop-test", listen_port, health_port);
 
         // Verify it's running
-        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port)).expect("health request failed");
+        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port))
+            .expect("health request failed");
         assert_eq!(status, 200);
 
         // Stop it
@@ -450,8 +493,9 @@ mod tests_node_lifecycle {
 
         // All should respond to health checks
         for port in &[health1, health2, health3] {
-            let status = http_get(&format!("http://127.0.0.1:{}/health", port)).expect("health request failed");
-        assert_eq!(status, 200);
+            let status = http_get(&format!("http://127.0.0.1:{}/health", port))
+                .expect("health request failed");
+            assert_eq!(status, 200);
         }
     }
 }
@@ -473,9 +517,14 @@ mod tests_session {
         let mut stream = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], listen_port)),
             Duration::from_secs(5),
-        ).expect("failed to connect to node");
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect to node");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let client_signer = TestSigner::new();
         let peer_id = session_handshake(&mut stream, &client_signer, Some(node.node_id))
@@ -493,9 +542,14 @@ mod tests_session {
         let mut stream = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], listen_port)),
             Duration::from_secs(5),
-        ).expect("failed to connect");
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let client_signer = TestSigner::new();
         // Target a different node ID
@@ -513,9 +567,14 @@ mod tests_session {
         let mut stream = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], listen_port)),
             Duration::from_secs(5),
-        ).expect("failed to connect");
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let client_signer = TestSigner::new();
         let mut nonce = vec![0u8; 32];
@@ -529,7 +588,9 @@ mod tests_session {
                 identity_kind: Some(IdentityKind::Node as i32),
                 key_hint: Some(client_signer.node_id().to_vec()),
             }),
-            target_node: Some(NodeRef { node_id: node.node_id.to_vec() }),
+            target_node: Some(NodeRef {
+                node_id: node.node_id.to_vec(),
+            }),
             supported_transport_features: vec![],
             supported_protocol_versions: vec![1],
             session_nonce: nonce.clone(),
@@ -549,8 +610,10 @@ mod tests_session {
         let resp = read_frame(&mut stream, 10);
         if let Some(data) = resp {
             if let Ok(accept) = SessionAccept::decode(&data[..]) {
-                assert!(accept.echoed_session_nonce != nonce || accept.selected_protocol_version == 0,
-                    "should reject or not accept with our nonce");
+                assert!(
+                    accept.echoed_session_nonce != nonce || accept.selected_protocol_version == 0,
+                    "should reject or not accept with our nonce"
+                );
             }
         }
     }
@@ -573,9 +636,14 @@ mod tests_command_dispatch {
         let mut stream = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], listen_port)),
             Duration::from_secs(5),
-        ).expect("failed to connect");
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let client_signer = TestSigner::new();
         session_handshake(&mut stream, &client_signer, Some(node.node_id))
@@ -584,7 +652,9 @@ mod tests_command_dispatch {
         let command = CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3, 4],
-            target_node: Some(NodeRef { node_id: node.node_id.to_vec() }),
+            target_node: Some(NodeRef {
+                node_id: node.node_id.to_vec(),
+            }),
             issuer: Some(IdentityRef {
                 identity_id: client_signer.node_id().to_vec(),
                 identity_kind: Some(IdentityKind::Node as i32),
@@ -603,8 +673,7 @@ mod tests_command_dispatch {
             signature: None,
         };
 
-        let resp = send_command(&mut stream, &command)
-            .expect("failed to send command");
+        let resp = send_command(&mut stream, &command).expect("failed to send command");
 
         assert!(!resp.is_empty(), "expected non-empty response");
     }
@@ -618,9 +687,14 @@ mod tests_command_dispatch {
         let mut stream = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], listen_port)),
             Duration::from_secs(5),
-        ).expect("failed to connect");
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let client_signer = TestSigner::new();
         session_handshake(&mut stream, &client_signer, Some(node.node_id))
@@ -629,7 +703,9 @@ mod tests_command_dispatch {
         let command = CommandEnvelope {
             envelope_version: 1,
             command_id: vec![5, 6, 7, 8],
-            target_node: Some(NodeRef { node_id: node.node_id.to_vec() }),
+            target_node: Some(NodeRef {
+                node_id: node.node_id.to_vec(),
+            }),
             issuer: Some(IdentityRef {
                 identity_id: client_signer.node_id().to_vec(),
                 identity_kind: Some(IdentityKind::Node as i32),
@@ -648,8 +724,7 @@ mod tests_command_dispatch {
             signature: None, // No signature!
         };
 
-        let resp = send_command(&mut stream, &command)
-            .expect("failed to send command");
+        let resp = send_command(&mut stream, &command).expect("failed to send command");
 
         assert!(!resp.is_empty(), "expected rejection response");
     }
@@ -663,9 +738,14 @@ mod tests_command_dispatch {
         let mut stream = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], listen_port)),
             Duration::from_secs(5),
-        ).expect("failed to connect");
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let client_signer = TestSigner::new();
         session_handshake(&mut stream, &client_signer, Some(node.node_id))
@@ -675,7 +755,9 @@ mod tests_command_dispatch {
         let command = CommandEnvelope {
             envelope_version: 1,
             command_id: vec![9, 10, 11, 12],
-            target_node: Some(NodeRef { node_id: wrong_target.to_vec() }),
+            target_node: Some(NodeRef {
+                node_id: wrong_target.to_vec(),
+            }),
             issuer: Some(IdentityRef {
                 identity_id: client_signer.node_id().to_vec(),
                 identity_kind: Some(IdentityKind::Node as i32),
@@ -694,8 +776,7 @@ mod tests_command_dispatch {
             signature: None,
         };
 
-        let resp = send_command(&mut stream, &command)
-            .expect("failed to send command");
+        let resp = send_command(&mut stream, &command).expect("failed to send command");
 
         assert!(!resp.is_empty(), "expected rejection for wrong target");
     }
@@ -716,7 +797,8 @@ mod tests_storage {
         let node = EdgerundNode::new("genesis-test", listen_port, health_port);
 
         // Verify stream_id is reported in health
-        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port)).expect("health request failed");
+        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port))
+            .expect("health request failed");
         // stream_id reported correctly
     }
 
@@ -745,7 +827,9 @@ signer:
   private_key_hex: "0x{}"
   public_key_hex: "0x{}"
 "#,
-            stream_id, signer.private_key_hex(), signer.public_key_hex()
+            stream_id,
+            signer.private_key_hex(),
+            signer.public_key_hex()
         );
         fs::write(&config_path, config.clone()).unwrap();
 
@@ -770,7 +854,9 @@ signer:
             if TcpStream::connect_timeout(
                 &SocketAddr::from(([127, 0, 0, 1], health_port)),
                 Duration::from_millis(100),
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 break;
             }
             retries += 1;
@@ -804,7 +890,9 @@ signer:
             if TcpStream::connect_timeout(
                 &SocketAddr::from(([127, 0, 0, 1], health_port2)),
                 Duration::from_millis(100),
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 break;
             }
             retries += 1;
@@ -815,7 +903,10 @@ signer:
         let _ = process2.wait();
         let _ = fs::remove_dir_all(&data_dir);
 
-        assert!(retries < 100, "second instance should start with persisted data");
+        assert!(
+            retries < 100,
+            "second instance should start with persisted data"
+        );
     }
 }
 
@@ -835,9 +926,10 @@ mod tests_capability_local {
 
         // Node should start Unix socket capability server
         // Verify it's running via health
-        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port)).expect("health request failed");
+        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port))
+            .expect("health request failed");
         assert_eq!(status, 200);
-        
+
         // Data directory should have capabilities socket
         let capabilities_sock = format!("{}/capabilities.sock", node.data_dir);
         // Socket may not exist if no capabilities are configured — that's OK for now
@@ -871,7 +963,10 @@ mod tests_ingress {
         }
 
         // Some connections should succeed, but not all
-        assert!(streams.len() > 0, "at least some connections should succeed");
+        assert!(
+            streams.len() > 0,
+            "at least some connections should succeed"
+        );
         println!("Opened {} connections before rate limiting", streams.len());
     }
 }
@@ -925,10 +1020,7 @@ mod tests_mesh_software {
     #[test]
     fn e2e_discovery_packet_encoding() {
         let sequence: u32 = 42;
-        let routes = vec![
-            ([0xAAu8; 64], 1u8),
-            ([0xBBu8; 64], 2u8),
-        ];
+        let routes = vec![([0xAAu8; 64], 1u8), ([0xBBu8; 64], 2u8)];
 
         let mut buf = Vec::new();
         buf.extend_from_slice(&sequence.to_le_bytes());
@@ -960,12 +1052,19 @@ mod tests_mesh_software {
     fn e2e_nodeid_from_ecdsa_key() {
         let signer = TestSigner::new();
         let node_id = signer.node_id();
-        
-        assert_eq!(node_id.len(), MESH_PUBLIC_KEY_LENGTH, "node_id length should be 64 bytes");
-        
+
+        assert_eq!(
+            node_id.len(),
+            MESH_PUBLIC_KEY_LENGTH,
+            "node_id length should be 64 bytes"
+        );
+
         // NodeID should not be all zeros
-        assert!(node_id.iter().any(|&b| b != 0), "node_id should not be all zeros");
-        
+        assert!(
+            node_id.iter().any(|&b| b != 0),
+            "node_id should not be all zeros"
+        );
+
         // SEC1 encoding: 0x04 || x || y (65 bytes)
         let mut sec1 = [0u8; 65];
         sec1[0] = 0x04;
@@ -986,7 +1085,7 @@ mod tests_protocol_conformance {
 
     #[test]
     fn e2e_protobuf_roundtrip() {
-        use edgerun_proto::edgerun::v0::common::{IdentityRef, IdentityKind};
+        use edgerun_proto::edgerun::v0::common::{IdentityKind, IdentityRef};
 
         let original = IdentityRef {
             identity_id: vec![1, 2, 3, 4, 5],
@@ -997,9 +1096,8 @@ mod tests_protocol_conformance {
         let encoded = IdentityRef::encode_to_vec(&original);
         assert!(!encoded.is_empty(), "encoded should not be empty");
 
-        let decoded = IdentityRef::decode(&encoded[..])
-            .expect("decode should succeed");
-        
+        let decoded = IdentityRef::decode(&encoded[..]).expect("decode should succeed");
+
         assert_eq!(decoded.identity_id, original.identity_id);
         assert_eq!(decoded.identity_kind, original.identity_kind);
         assert_eq!(decoded.key_hint, original.key_hint);
@@ -1009,13 +1107,19 @@ mod tests_protocol_conformance {
     fn e2e_sha256_hashing() {
         let data = b"hello world";
         let digest = sha256(data);
-        
+
         // SHA-256 of "hello world" is well-known
-        let expected = edgerun_core::util::hex_to_bytes("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
-            .unwrap();
-        
+        let expected = edgerun_core::util::hex_to_bytes(
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+        )
+        .unwrap();
+
         assert_eq!(digest.len(), 32, "SHA-256 should be 32 bytes");
-        assert_eq!(digest.to_vec(), expected, "SHA-256 should match known value");
+        assert_eq!(
+            digest.to_vec(),
+            expected,
+            "SHA-256 should match known value"
+        );
     }
 
     #[test]
@@ -1026,12 +1130,20 @@ mod tests_protocol_conformance {
         let mut digest_bytes = [0u8; 32];
         digest_bytes.copy_from_slice(&digest);
 
-        let sig = signer.sign_digest(&digest_bytes)
+        let sig = signer
+            .sign_digest(&digest_bytes)
             .expect("signing should succeed");
 
-        assert_eq!(sig.len(), MESH_SIGNATURE_LENGTH, "signature should be 64 bytes");
+        assert_eq!(
+            sig.len(),
+            MESH_SIGNATURE_LENGTH,
+            "signature should be 64 bytes"
+        );
         // Signature should be (r, s) each 32 bytes
-        assert!(sig.iter().any(|&b| b != 0), "signature should not be all zeros");
+        assert!(
+            sig.iter().any(|&b| b != 0),
+            "signature should not be all zeros"
+        );
     }
 }
 
@@ -1050,7 +1162,8 @@ mod tests_full_integration {
         let node = EdgerundNode::new("full-integration", listen_port, health_port);
 
         // 1. Health check
-        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port)).expect("health request failed");
+        let status = http_get(&format!("http://127.0.0.1:{}/health", health_port))
+            .expect("health request failed");
         assert_eq!(status, 200);
         // health endpoint returned status 200
 
@@ -1058,9 +1171,14 @@ mod tests_full_integration {
         let mut stream = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], listen_port)),
             Duration::from_secs(5),
-        ).expect("failed to connect");
-        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let client_signer = TestSigner::new();
         let peer_id = session_handshake(&mut stream, &client_signer, Some(node.node_id))
@@ -1071,7 +1189,9 @@ mod tests_full_integration {
         let command = CommandEnvelope {
             envelope_version: 1,
             command_id: vec![100, 101, 102],
-            target_node: Some(NodeRef { node_id: node.node_id.to_vec() }),
+            target_node: Some(NodeRef {
+                node_id: node.node_id.to_vec(),
+            }),
             issuer: Some(IdentityRef {
                 identity_id: client_signer.node_id().to_vec(),
                 identity_kind: Some(IdentityKind::Node as i32),
@@ -1090,8 +1210,7 @@ mod tests_full_integration {
             signature: None,
         };
 
-        let resp = send_command(&mut stream, &command)
-            .expect("command should get response");
+        let resp = send_command(&mut stream, &command).expect("command should get response");
         assert!(!resp.is_empty(), "should get non-empty response");
 
         println!("Full integration test passed: health + session + command");
@@ -1108,8 +1227,10 @@ mod tests_full_integration {
         let node2 = EdgerundNode::new("node-b", port2, health2);
 
         // Both should be healthy
-        let status1 = http_get(&format!("http://127.0.0.1:{}/health", health1)).expect("health1 failed");
-        let status2 = http_get(&format!("http://127.0.0.1:{}/health", health2)).expect("health2 failed");
+        let status1 =
+            http_get(&format!("http://127.0.0.1:{}/health", health1)).expect("health1 failed");
+        let status2 =
+            http_get(&format!("http://127.0.0.1:{}/health", health2)).expect("health2 failed");
         assert_eq!(status1, 200);
         assert_eq!(status2, 200);
 
@@ -1117,9 +1238,14 @@ mod tests_full_integration {
         let mut stream1to2 = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], port2)),
             Duration::from_secs(5),
-        ).expect("failed to connect node1->node2");
-        stream1to2.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream1to2.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect node1->node2");
+        stream1to2
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream1to2
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let signer1 = TestSigner::new();
         let peer_id_1to2 = session_handshake(&mut stream1to2, &signer1, Some(node2.node_id))
@@ -1130,9 +1256,14 @@ mod tests_full_integration {
         let mut stream2to1 = TcpStream::connect_timeout(
             &SocketAddr::from(([127, 0, 0, 1], port1)),
             Duration::from_secs(5),
-        ).expect("failed to connect node2->node1");
-        stream2to1.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
-        stream2to1.set_write_timeout(Some(Duration::from_secs(10))).unwrap();
+        )
+        .expect("failed to connect node2->node1");
+        stream2to1
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        stream2to1
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
 
         let signer2 = TestSigner::new();
         let peer_id_2to1 = session_handshake(&mut stream2to1, &signer2, Some(node1.node_id))

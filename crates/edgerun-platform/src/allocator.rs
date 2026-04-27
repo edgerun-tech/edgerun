@@ -19,21 +19,22 @@ unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let size = layout.size();
         let align = layout.align();
-        
+
         if size == 0 {
             return core::ptr::null_mut();
         }
-        
+
         let mut current = HEAP_FREE.load(Ordering::Acquire);
         loop {
             let aligned = (current + align - 1) & !(align - 1);
             let end = aligned + size;
-            
+
             if end > HEAP_END_ADDR.load(Ordering::Acquire) {
                 return core::ptr::null_mut();
             }
-            
-            let result = HEAP_FREE.compare_exchange(current, end, Ordering::Release, Ordering::Acquire);
+
+            let result =
+                HEAP_FREE.compare_exchange(current, end, Ordering::Release, Ordering::Acquire);
             match result {
                 Ok(_) => return aligned as *mut u8,
                 Err(new) => current = new,

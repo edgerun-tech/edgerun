@@ -3,9 +3,9 @@
 //! This module provides drop-in replacements for serde_yaml functionality.
 
 #[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
-#[cfg(not(feature = "std"))]
 use alloc::borrow::ToOwned;
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::string::ToString;
 #[cfg(all(feature = "alloc", not(feature = "std")))]

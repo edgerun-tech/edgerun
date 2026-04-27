@@ -8,7 +8,9 @@ pub struct TaskLocal<T: 'static> {
 
 impl<T: 'static> TaskLocal<T> {
     pub const fn new() -> Self {
-        Self { ptr: UnsafeCell::new(None) }
+        Self {
+            ptr: UnsafeCell::new(None),
+        }
     }
 
     pub fn get(&self) -> Option<&T> {

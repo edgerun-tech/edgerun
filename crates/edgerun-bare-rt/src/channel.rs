@@ -4,8 +4,8 @@ extern crate alloc;
 
 use alloc::sync::Arc;
 use core::cell::UnsafeCell;
-use core::pin::Pin;
 use core::future::Future;
+use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll};
 
@@ -14,7 +14,12 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
         data: UnsafeCell::new(None),
         sent: AtomicBool::new(false),
     });
-    (Sender { inner: inner.clone() }, Receiver { inner })
+    (
+        Sender {
+            inner: inner.clone(),
+        },
+        Receiver { inner },
+    )
 }
 
 struct Inner<T> {

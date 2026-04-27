@@ -11,25 +11,27 @@ use syn::*;
 #[proc_macro_derive(Error, attributes(error))]
 pub fn error_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    
+
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = &input.generics.split_for_impl();
-    
+
     let variants = match &input.data {
         Data::Enum(e) => &e.variants,
         _ => panic!("Error derive only works on enums"),
     };
-    
+
     let mut match_arms = Vec::new();
-    
+
     for variant in variants.iter() {
         let variant_ident = &variant.ident;
-        let discriminant = variant.discriminant.as_ref()
+        let discriminant = variant
+            .discriminant
+            .as_ref()
             .map(|(Eq, d)| quote!(#d))
             .unwrap_or_else(|| quote!());
-        
+
         let mut format_string = None;
-        
+
         for attr in &variant.attrs {
             if attr.path().is_ident("error") {
                 if let Meta::NameValue(meta) = &attr.meta {
@@ -41,11 +43,9 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
                 }
             }
         }
-        
-        let format_str = format_string.unwrap_or_else(|| {
-            variant_ident.to_string()
-        });
-        
+
+        let format_str = format_string.unwrap_or_else(|| variant_ident.to_string());
+
         match &variant.fields {
             Fields::Unit => {
                 match_arms.push(quote! {
@@ -62,7 +62,7 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
             }
         }
     }
-    
+
     let expanded = quote! {
         impl #impl_generics ::core::fmt::Display for #ident #ty_generics #where_clause {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -71,13 +71,13 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
                 }
             }
         }
-        
+
         impl #impl_generics ::core::error::Error for #ident #ty_generics #where_clause {
             fn source(&self) -> Option<&(dyn ::core::error::Error + 'static)> {
                 None
             }
         }
     };
-    
+
     expanded.into()
 }

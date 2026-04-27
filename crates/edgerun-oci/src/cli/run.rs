@@ -9,8 +9,8 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::cli::GlobalOpts;
 use crate::cli::resolve_registry_auth;
+use crate::cli::GlobalOpts;
 use crate::json::{parse_oci_spec, OciSpec};
 use crate::lifecycle::{
     fork_container_child, run_create_runtime_hooks, run_poststart_hooks, run_prestart_hooks,

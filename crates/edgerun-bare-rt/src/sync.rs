@@ -87,7 +87,11 @@ impl<T> Mutex<T> {
         if self.locked.load(Ordering::Acquire) {
             return None;
         }
-        if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire).is_ok() {
+        if self
+            .locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire)
+            .is_ok()
+        {
             return Some(MutexGuard { mutex: self });
         }
         None
@@ -141,7 +145,11 @@ impl Semaphore {
         if n == 0 {
             return Err(SemaphoreTryAcquireError::NoPermits);
         }
-        if self.permits.compare_exchange(n, n - 1, Ordering::Acquire, Ordering::Acquire).is_ok() {
+        if self
+            .permits
+            .compare_exchange(n, n - 1, Ordering::Acquire, Ordering::Acquire)
+            .is_ok()
+        {
             return Ok(SemaphoreGuard(&self.permits));
         }
         Err(SemaphoreTryAcquireError::NoPermits)
@@ -187,7 +195,9 @@ impl<'a> Future for SemaphoreAcquire<'a> {
 pub struct Condvar;
 
 impl Condvar {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
     pub fn notify_one(&self) {}
     pub fn notify_all(&self) {}
 }

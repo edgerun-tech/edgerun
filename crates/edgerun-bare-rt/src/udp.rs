@@ -1,10 +1,6 @@
 //! UDP socket for bare-metal networking
 
-
-
 extern crate alloc;
-
-
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SocketAddr(pub u32, pub u16);
@@ -16,20 +12,31 @@ impl SocketAddr {
 
     pub const fn from_array(addr: [u8; 4], port: u16) -> Self {
         Self(
-            (addr[0] as u32) << 24 | (addr[1] as u32) << 16 | (addr[2] as u32) << 8 | (addr[3] as u32),
+            (addr[0] as u32) << 24
+                | (addr[1] as u32) << 16
+                | (addr[2] as u32) << 8
+                | (addr[3] as u32),
             port,
         )
     }
 
     pub fn from_bytes4(ip: [u8; 4], port: u16) -> Self {
         Self(
-            ((ip[0] as u32) << 24) | ((ip[1] as u32) << 16) | ((ip[2] as u32) << 8) | (ip[3] as u32),
+            ((ip[0] as u32) << 24)
+                | ((ip[1] as u32) << 16)
+                | ((ip[2] as u32) << 8)
+                | (ip[3] as u32),
             port,
         )
     }
 
     pub fn ip_bytes(&self) -> [u8; 4] {
-        [(self.0 >> 24) as u8, (self.0 >> 16) as u8, (self.0 >> 8) as u8, self.0 as u8]
+        [
+            (self.0 >> 24) as u8,
+            (self.0 >> 16) as u8,
+            (self.0 >> 8) as u8,
+            self.0 as u8,
+        ]
     }
 
     pub fn port(&self) -> u16 {
@@ -78,11 +85,19 @@ impl UdpSocket {
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        if self.bound { Some(self.local) } else { None }
+        if self.bound {
+            Some(self.local)
+        } else {
+            None
+        }
     }
 
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        if self.remote.1 != 0 { Some(self.remote) } else { None }
+        if self.remote.1 != 0 {
+            Some(self.remote)
+        } else {
+            None
+        }
     }
 
     pub fn set_nonblocking(&self, _nonblocking: bool) {}

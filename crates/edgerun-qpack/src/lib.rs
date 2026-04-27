@@ -22,9 +22,9 @@ pub mod vas;
 pub mod decoder;
 pub mod encoder;
 
+pub mod helpers;
 pub mod prefix_int;
 pub mod prefix_string;
-pub mod helpers;
 
 #[cfg(test)]
 mod tests;

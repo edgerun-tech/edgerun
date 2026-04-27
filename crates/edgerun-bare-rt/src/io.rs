@@ -24,7 +24,8 @@ impl core::fmt::Display for IoError {
 pub type Result<T> = core::result::Result<T, IoError>;
 
 pub trait AsyncRead {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize>>;
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8])
+        -> Poll<Result<usize>>;
 }
 
 pub trait AsyncWrite {
@@ -45,7 +46,7 @@ impl<T> Cursor<T> {
     pub const fn new(data: T) -> Self {
         Self { data, pos: 0 }
     }
-    
+
     pub fn position(&self) -> usize {
         self.pos
     }
@@ -70,7 +71,7 @@ impl AsyncWrite for Cursor<alloc::vec::Vec<u8>> {
         this.data.extend_from_slice(buf);
         Poll::Ready(Ok(buf.len()))
     }
-    
+
     fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
@@ -93,7 +94,7 @@ impl<R: AsyncRead + Unpin> Unpin for ReadToEnd<R> {}
 
 impl<R: AsyncRead + Unpin> Future for ReadToEnd<R> {
     type Output = Result<alloc::vec::Vec<u8>>;
-    
+
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.as_mut().get_mut();
         let mut chunk = [0u8; 1024];
@@ -114,7 +115,10 @@ pub fn read_to_end<R>(reader: R) -> ReadToEnd<R>
 where
     R: AsyncRead + Unpin,
 {
-    ReadToEnd { reader, buf: alloc::vec::Vec::new() }
+    ReadToEnd {
+        reader,
+        buf: alloc::vec::Vec::new(),
+    }
 }
 
 pub struct WriteAll<W> {
@@ -127,7 +131,7 @@ impl<W: AsyncWrite + Unpin> Unpin for WriteAll<W> {}
 
 impl<W: AsyncWrite + Unpin> Future for WriteAll<W> {
     type Output = Result<()>;
-    
+
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.as_mut().get_mut();
         while this.written < this.buf.len() {
@@ -145,7 +149,11 @@ pub fn write_all<W>(writer: W, data: &[u8]) -> WriteAll<W>
 where
     W: AsyncWrite + Unpin,
 {
-    WriteAll { writer, buf: data.to_vec(), written: 0 }
+    WriteAll {
+        writer,
+        buf: data.to_vec(),
+        written: 0,
+    }
 }
 
 pub struct ReadExact<R> {
@@ -158,7 +166,7 @@ impl<R: AsyncRead + Unpin> Unpin for ReadExact<R> {}
 
 impl<R: AsyncRead + Unpin> Future for ReadExact<R> {
     type Output = Result<alloc::vec::Vec<u8>>;
-    
+
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.as_mut().get_mut();
         if this.remaining == 0 {
@@ -179,7 +187,11 @@ impl<R: AsyncRead + Unpin> Future for ReadExact<R> {
 }
 
 pub fn read_exact<R>(reader: R, n: usize) -> ReadExact<R> {
-    ReadExact { reader, buf: alloc::vec::Vec::new(), remaining: n }
+    ReadExact {
+        reader,
+        buf: alloc::vec::Vec::new(),
+        remaining: n,
+    }
 }
 
 pub struct Lines<B> {
@@ -191,7 +203,7 @@ impl<B: AsyncBufRead + Unpin> Unpin for Lines<B> {}
 
 impl<B: AsyncBufRead + Unpin> Future for Lines<B> {
     type Output = Result<Option<alloc::string::String>>;
-    
+
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.as_mut().get_mut();
         let mut buf = [0u8; 1024];
@@ -199,7 +211,9 @@ impl<B: AsyncBufRead + Unpin> Future for Lines<B> {
             match Pin::new(&mut this.buf).poll_fill_buf(cx) {
                 Poll::Ready(Ok(s)) => {
                     if let Some(i) = s.iter().position(|&b| b == b'\n') {
-                        return Poll::Ready(Ok(Some(alloc::string::String::from_utf8_lossy(&s[..i]).into())));
+                        return Poll::Ready(Ok(Some(
+                            alloc::string::String::from_utf8_lossy(&s[..i]).into(),
+                        )));
                     } else {
                         this.line.extend_from_slice(s);
                         this.line.push(b'\n');
@@ -216,5 +230,8 @@ pub fn lines<B>(buf: B) -> Lines<B>
 where
     B: AsyncBufRead + Unpin,
 {
-    Lines { buf, line: alloc::vec::Vec::new() }
+    Lines {
+        buf,
+        line: alloc::vec::Vec::new(),
+    }
 }

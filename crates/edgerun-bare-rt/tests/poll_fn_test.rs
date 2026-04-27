@@ -8,13 +8,15 @@ fn poll_fn_closure() {
     let mut done = false;
     let waker = Waker::noop();
     let mut cx = Context::from_waker(&waker);
-    
+
     let mut future = poll_fn(|_| {
-        if done { return Poll::Ready(42) }
+        if done {
+            return Poll::Ready(42);
+        }
         done = true;
         Poll::Pending
     });
-    
+
     let result = Pin::new(&mut future).poll(&mut cx);
     assert!(matches!(result, Poll::Pending));
 }

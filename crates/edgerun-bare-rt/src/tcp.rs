@@ -1,13 +1,11 @@
 //! TCP socket for bare-metal networking
 
-
-
 extern crate alloc;
 
-
-
+use super::ip::{
+    IpAddr, IpStack, TcpHeader, ETH_TYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_PSH,
+};
 use super::udp::SocketAddr;
-use super::ip::{TcpHeader, IpAddr, IpStack, ETH_TYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_PSH};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum TcpState {
@@ -71,7 +69,13 @@ impl TcpSocket {
         Ok(())
     }
 
-    pub fn send(&mut self, data: &[u8], stack: &IpStack, dst_ip: IpAddr, dst_mac: [u8; 6]) -> Result<usize, TcpError> {
+    pub fn send(
+        &mut self,
+        data: &[u8],
+        stack: &IpStack,
+        dst_ip: IpAddr,
+        dst_mac: [u8; 6],
+    ) -> Result<usize, TcpError> {
         if self.state != TcpState::Established && self.state != TcpState::SynReceived {
             return Err(TcpError);
         }
@@ -114,7 +118,11 @@ impl TcpSocket {
     }
 
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        if self.remote.1 != 0 { Some(self.remote) } else { None }
+        if self.remote.1 != 0 {
+            Some(self.remote)
+        } else {
+            None
+        }
     }
 
     pub fn state(&self) -> TcpState {

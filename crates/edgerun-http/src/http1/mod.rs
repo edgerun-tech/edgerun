@@ -28,7 +28,7 @@ pub use range::{
     range_not_satisfiable_response, resolve_byte_range, ByteRange, ContentRange, RangeSpecifier,
 };
 pub use upgrade::{
-    build_upgrade_response, build_websocket_accept_headers, is_websocket_upgrade,
-    UpgradeHandler, UpgradeProtocol,
+    build_upgrade_response, build_websocket_accept_headers, is_websocket_upgrade, UpgradeHandler,
+    UpgradeProtocol,
 };
 pub use version::HttpVersion;

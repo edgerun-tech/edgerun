@@ -32,8 +32,12 @@ pub enum DirectoryUrl {
 impl DirectoryUrl {
     pub fn url(&self) -> Url {
         match self {
-            DirectoryUrl::LetsEncrypt => Url::parse("https://acme-v02.api.letsencrypt.org/directory").unwrap(),
-            DirectoryUrl::LetsEncryptStaging => Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory").unwrap(),
+            DirectoryUrl::LetsEncrypt => {
+                Url::parse("https://acme-v02.api.letsencrypt.org/directory").unwrap()
+            }
+            DirectoryUrl::LetsEncryptStaging => {
+                Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory").unwrap()
+            }
             DirectoryUrl::Custom(u) => u.clone(),
         }
     }
@@ -66,7 +70,7 @@ pub enum Jwk {
 
 impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let jwk_json = serde_json::to_string(self).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());
@@ -280,5 +284,7 @@ pub fn base64url_encode(data: &[u8]) -> String {
 
 pub fn base64url_decode(data: &str) -> Result<Vec<u8>, &'static str> {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.decode(data).map_err(|_| "invalid base64url")
+    URL_SAFE_NO_PAD
+        .decode(data)
+        .map_err(|_| "invalid base64url")
 }

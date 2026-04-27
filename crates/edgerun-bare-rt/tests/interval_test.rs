@@ -1,5 +1,5 @@
-use edgerun_bare_rt::interval;
 use core::time::Duration;
+use edgerun_bare_rt::interval;
 
 #[test]
 fn interval_creates() {

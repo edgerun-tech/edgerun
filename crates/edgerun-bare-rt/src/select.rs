@@ -11,13 +11,23 @@ pub enum Either<L, R> {
 
 impl<L, R> Either<L, R> {
     pub fn into_left(self) -> core::option::Option<L> {
-        match self { Either::Left(l) => Some(l), Either::Right(_) => None }
+        match self {
+            Either::Left(l) => Some(l),
+            Either::Right(_) => None,
+        }
     }
     pub fn into_right(self) -> core::option::Option<R> {
-        match self { Either::Left(_) => None, Either::Right(r) => Some(r) }
+        match self {
+            Either::Left(_) => None,
+            Either::Right(r) => Some(r),
+        }
     }
-    pub fn is_left(&self) -> bool { matches!(self, Either::Left(_)) }
-    pub fn is_right(&self) -> bool { matches!(self, Either::Right(_)) }
+    pub fn is_left(&self) -> bool {
+        matches!(self, Either::Left(_))
+    }
+    pub fn is_right(&self) -> bool {
+        matches!(self, Either::Right(_))
+    }
 
     fn as_pin_mut(self: Pin<&mut Self>) -> Either<Pin<&mut L>, Pin<&mut R>> {
         unsafe {
@@ -49,7 +59,10 @@ impl<F1, F2> Unpin for Select<F1, F2> {}
 
 impl<F1, F2> Select<F1, F2> {
     pub fn new(f1: F1, f2: F2) -> Self {
-        Self { fut1: Some(f1), fut2: Some(f2) }
+        Self {
+            fut1: Some(f1),
+            fut2: Some(f2),
+        }
     }
 }
 

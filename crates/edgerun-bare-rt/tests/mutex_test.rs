@@ -1,7 +1,7 @@
-use edgerun_bare_rt::AsyncMutex;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use edgerun_bare_rt::AsyncMutex;
 
 fn noop_waker() -> Waker {
     unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
