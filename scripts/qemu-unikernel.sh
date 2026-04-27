@@ -11,6 +11,8 @@ boot_obj="${BOOT_OBJ:-/tmp/edgerun-qemu-boot.o}"
 boot_bin="${BOOT_BIN:-/tmp/edgerun-qemu-boot.bin}"
 boot_sector="${BOOT_SECTOR:-/tmp/edgerun-qemu-boot-512.bin}"
 timeout_seconds="${QEMU_TIMEOUT:-8}"
+qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu.log}"
+expected_marker="${QEMU_EXPECT:-VirtIO found}"
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
@@ -33,13 +35,21 @@ timeout "$timeout_seconds" qemu-system-x86_64 \
     -boot a \
     -device "loader,file=$kernel_bin,addr=0x100000,force-raw=on" \
     -netdev user,id=n0 \
-    -device virtio-net-pci,netdev=n0
-qemu_status=$?
+    -device virtio-net-pci,netdev=n0 \
+    2>&1 | tee "$qemu_log"
+qemu_status=${PIPESTATUS[0]}
 set -e
 
 if [[ "$qemu_status" -eq 124 ]]; then
     echo "QEMU timeout reached after ${timeout_seconds}s"
-    exit 0
+elif [[ "$qemu_status" -ne 0 ]]; then
+    exit "$qemu_status"
 fi
 
-exit "$qemu_status"
+if grep -q "$expected_marker" "$qemu_log"; then
+    echo "QEMU smoke test reached marker: $expected_marker"
+else
+    echo "QEMU smoke test did not reach marker: $expected_marker" >&2
+    echo "Serial log: $qemu_log" >&2
+    exit 1
+fi
