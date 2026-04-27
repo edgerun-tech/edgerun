@@ -85,6 +85,7 @@ pub mod ahci;
 pub mod fat;
 pub mod pci;
 pub mod virtio_net;
+pub mod ip;
 
 pub mod log;
 pub use log::Level;
