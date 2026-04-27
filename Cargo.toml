@@ -208,3 +208,6 @@ libc = "0.2"
 prost = { version = "0.14", default-features = false, features = ["derive"] }
 prost-types = "0.14"
 der = { version = "0.8", features = ["heapless"] }
+
+[patch.crates-io]
+const-oid = { path = "crates/edgerun-crypto/vendor/const-oid-0.9" }

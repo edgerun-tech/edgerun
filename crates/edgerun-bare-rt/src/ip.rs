@@ -63,7 +63,7 @@ pub fn ping(mac: [u8; 6], ip: IpAddr, id: u16, seq: u16) -> [u8; 64] {
     packet
 }
 
-pub fn icmp_checksum(data: &[u8]) -> u16 {
+pub fn checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     for i in (0..data.len()).step_by(2) {
         let word = if i + 1 < data.len() {
@@ -205,19 +205,7 @@ impl IpHeader {
 }
 
 pub fn ip_checksum(data: &[u8]) -> u16 {
-    let mut sum: u32 = 0;
-    for i in (0..data.len()).step_by(2) {
-        let word = if i + 1 < data.len() {
-            ((data[i] as u32) << 8) | (data[i + 1] as u32)
-        } else {
-            ((data[i] as u32) << 8)
-        };
-        sum += word;
-    }
-    while sum >> 16 != 0 {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-    !(sum as u16)
+    checksum(data)
 }
 
 pub fn parse_packet(data: &[u8]) -> Option<(EthHeader, IpHeader)> {
@@ -412,6 +400,102 @@ impl ArpCache {
     }
 }
 
+pub struct DhcpStateMachine {
+    pub xid: u32,
+    pub mac: [u8; 6],
+    pub ip: IpAddr,
+    pub netmask: IpAddr,
+    pub gateway: IpAddr,
+    pub retries: u8,
+}
+
+impl DhcpStateMachine {
+    pub const fn new(mac: [u8; 6]) -> Self {
+        Self {
+            xid: 0x12345678,
+            mac,
+            ip: IpAddr::zero(),
+            netmask: IpAddr::new(255, 255, 255, 0),
+            gateway: IpAddr::zero(),
+            retries: 0,
+        }
+    }
+
+    pub fn discover(&self) -> [u8; 300] {
+        let mut pkt = [0u8; 300];
+        pkt[0] = 1;
+        pkt[1] = 1;
+        pkt[2] = 6;
+        pkt[3] = 0;
+        pkt[4..8].copy_from_slice(&self.xid.to_be_bytes());
+        pkt[28..34].copy_from_slice(&self.mac);
+        pkt[236] = 53;
+        pkt[237] = 1;
+        pkt[238] = 1;
+        pkt[239] = 55;
+        pkt[240] = 3;
+        pkt[241] = 1;
+        pkt[242] = 1;
+        pkt[243] = 3;
+        pkt[244] = 6;
+        pkt[245] = 255;
+        pkt[246..250].copy_from_slice(&0x63825363u32.to_be_bytes());
+        pkt[250] = 255;
+        pkt
+    }
+
+    pub fn request(&self, server: IpAddr) -> [u8; 300] {
+        let mut pkt = [0u8; 300];
+        pkt[0] = 1;
+        pkt[1] = 1;
+        pkt[2] = 6;
+        pkt[3] = 0;
+        pkt[4..8].copy_from_slice(&self.xid.to_be_bytes());
+        pkt[28..34].copy_from_slice(&self.mac);
+        pkt[236] = 53;
+        pkt[237] = 1;
+        pkt[238] = 3;
+        pkt[239] = 50;
+        pkt[240] = 4;
+        pkt[241..245].copy_from_slice(self.ip.as_bytes());
+        pkt[245] = 54;
+        pkt[246] = 4;
+        pkt[247..251].copy_from_slice(server.as_bytes());
+        pkt[251] = 255;
+        pkt
+    }
+
+    pub fn parse(&mut self, pkt: &[u8]) -> bool {
+        if pkt.len() < 250 {
+            return false;
+        }
+        let cookie = u32::from_be_bytes([pkt[246], pkt[247], pkt[248], pkt[249]]);
+        if cookie != 0x63825363 {
+            return false;
+        }
+        
+        let mut i = 240;
+        while i < pkt.len() - 2 && i < 540 {
+            let code = pkt[i];
+            if code == 255 {
+                break;
+            }
+            if code == 53 && pkt[i+2] == 5 {
+                break;
+            }
+            if code == 1 {
+                self.netmask = IpAddr::from_slice(&pkt[i+2..i+6]);
+            } else if code == 3 {
+                self.gateway = IpAddr::from_slice(&pkt[i+2..i+6]);
+            }
+            i += 2 + pkt[i+1] as usize;
+        }
+        
+        self.ip = IpAddr::from_slice(&pkt[16..20]);
+        self.ip != IpAddr::zero()
+    }
+}
+
 pub struct Network<'a> {
     pub stack: &'a mut IpStack,
     packet: [u8; 1514],
@@ -481,6 +565,20 @@ pub enum ParsedPacket {
     Udp(UdpHeader),
     Tcp(TcpHeader),
     Icmp(IcmpHeader),
+}
+
+impl ParsedPacket {
+    pub fn is_udp(&self) -> bool {
+        matches!(self, ParsedPacket::Udp(_))
+    }
+    
+    pub fn is_tcp(&self) -> bool {
+        matches!(self, ParsedPacket::Tcp(_))
+    }
+    
+    pub fn is_icmp(&self) -> bool {
+        matches!(self, ParsedPacket::Icmp(_))
+    }
 }
 
 pub const DHCP_SERVER_PORT: u16 = 67;

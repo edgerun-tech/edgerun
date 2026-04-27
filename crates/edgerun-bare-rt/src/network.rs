@@ -26,17 +26,7 @@ pub enum SocketKind {
     Raw,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct SocketAddr {
-    pub addr: [u8; 4],
-    pub port: u16,
-}
-
-impl SocketAddr {
-    pub fn new(addr: [u8; 4], port: u16) -> Self {
-        Self { addr, port }
-    }
-}
+use crate::udp::SocketAddr;
 
 pub struct TcpListener;
 

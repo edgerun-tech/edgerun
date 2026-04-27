@@ -1,70 +1,47 @@
-//! Crypto error types.
+use alloc::string::String;
 
-use std::fmt;
-
-/// All error types for edgerun-crypto operations.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CryptoError {
-    /// Invalid key length for the requested cipher.
-    InvalidKeyLength { expected: usize, actual: usize },
-    /// Invalid key bytes.
     InvalidKey,
-    /// Encryption failed.
     EncryptionFailed,
-    /// Decryption failed.
     DecryptionFailed,
-    /// Invalid PEM format.
-    InvalidPem(String),
-    /// Invalid DER encoding.
-    InvalidDer(String),
-    /// Unsupported algorithm.
-    UnsupportedAlgorithm(String),
-    /// Certificate error.
-    CertificateError(String),
-    /// Key parsing error.
-    KeyParseError(String),
-    /// I/O error.
-    Io(std::io::Error),
-    /// Cipher suite error.
-    CipherSuiteError(String),
-    /// Signature verification failed.
     SignatureVerificationFailed,
+    SigningError,
+    RandomGenerationFailed,
+    DigestMismatch,
+    TpmUnavailable,
+    UnsupportedAlgorithm,
+    InvalidPoint,
+    InvalidSignature,
+    CpuFeatureUnavailable,
 }
 
-impl fmt::Display for CryptoError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for CryptoError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            CryptoError::InvalidKeyLength { expected, actual } => {
-                write!(f, "invalid key length: expected {expected}, got {actual}")
-            }
-            CryptoError::InvalidKey => write!(f, "invalid key"),
+            CryptoError::InvalidKey => write!(f, "invalid cryptographic key"),
             CryptoError::EncryptionFailed => write!(f, "encryption failed"),
             CryptoError::DecryptionFailed => write!(f, "decryption failed"),
-            CryptoError::InvalidPem(msg) => write!(f, "invalid PEM: {msg}"),
-            CryptoError::InvalidDer(msg) => write!(f, "invalid DER: {msg}"),
-            CryptoError::UnsupportedAlgorithm(alg) => {
-                write!(f, "unsupported algorithm: {alg}")
-            }
-            CryptoError::CertificateError(msg) => write!(f, "certificate error: {msg}"),
-            CryptoError::KeyParseError(msg) => write!(f, "key parse error: {msg}"),
-            CryptoError::Io(e) => write!(f, "I/O error: {e}"),
-            CryptoError::CipherSuiteError(msg) => write!(f, "cipher suite error: {msg}"),
             CryptoError::SignatureVerificationFailed => write!(f, "signature verification failed"),
+            CryptoError::SigningError => write!(f, "signing operation failed"),
+            CryptoError::RandomGenerationFailed => write!(f, "random number generation failed"),
+            CryptoError::DigestMismatch => write!(f, "digest mismatch"),
+            CryptoError::TpmUnavailable => write!(f, "TPM is not available"),
+            CryptoError::UnsupportedAlgorithm => write!(f, "unsupported algorithm"),
+            CryptoError::InvalidPoint => write!(f, "invalid elliptic curve point"),
+            CryptoError::InvalidSignature => write!(f, "invalid signature format"),
+            CryptoError::CpuFeatureUnavailable => write!(f, "required CPU feature not available"),
         }
     }
 }
 
-impl std::error::Error for CryptoError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            CryptoError::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
+impl core::error::Error for CryptoError {}
 
-impl From<std::io::Error> for CryptoError {
-    fn from(e: std::io::Error) -> Self {
-        CryptoError::Io(e)
+pub type Result<T> = core::result::Result<T, CryptoError>;
+
+#[cfg(feature = "std")]
+impl From<CryptoError> for std::io::Error {
+    fn from(e: CryptoError) -> Self {
+        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
     }
 }

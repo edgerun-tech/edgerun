@@ -1,6 +1,6 @@
-use url::Url;
+use edgerun_url::Url;
 
-use crate::types::{ChallengeType, ChallengeStatus};
+use crate::types::{ChallengeStatus, ChallengeType};
 
 #[derive(Debug, Clone)]
 pub struct Challenge {

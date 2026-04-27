@@ -14,9 +14,18 @@ impl SocketAddr {
         Self(ip, port)
     }
 
+    pub const fn from_array(addr: [u8; 4], port: u16) -> Self {
+        Self(
+            (addr[0] as u32) << 24 | (addr[1] as u32) << 16 | (addr[2] as u32) << 8 | (addr[3] as u32),
+            port,
+        )
+    }
+
     pub fn from_bytes4(ip: [u8; 4], port: u16) -> Self {
-        let ip = ((ip[0] as u32) << 24) | ((ip[1] as u32) << 16) | ((ip[2] as u32) << 8) | (ip[3] as u32);
-        Self(ip, port)
+        Self(
+            ((ip[0] as u32) << 24) | ((ip[1] as u32) << 16) | ((ip[2] as u32) << 8) | (ip[3] as u32),
+            port,
+        )
     }
 
     pub fn ip_bytes(&self) -> [u8; 4] {
@@ -25,6 +34,10 @@ impl SocketAddr {
 
     pub fn port(&self) -> u16 {
         self.1
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        self.0
     }
 }
 

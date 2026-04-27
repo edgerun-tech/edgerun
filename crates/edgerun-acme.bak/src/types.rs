@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
+use edgerun_url::Url;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Directory {
@@ -32,8 +30,12 @@ pub enum DirectoryUrl {
 impl DirectoryUrl {
     pub fn url(&self) -> Url {
         match self {
-            DirectoryUrl::LetsEncrypt => Url::parse("https://acme-v02.api.letsencrypt.org/directory").unwrap(),
-            DirectoryUrl::LetsEncryptStaging => Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory").unwrap(),
+            DirectoryUrl::LetsEncrypt => {
+                Url::parse("https://acme-v02.api.letsencrypt.org/directory").unwrap()
+            }
+            DirectoryUrl::LetsEncryptStaging => {
+                Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory").unwrap()
+            }
             DirectoryUrl::Custom(u) => u.clone(),
         }
     }
@@ -66,8 +68,8 @@ pub enum Jwk {
 
 impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
-        use sha2::{Sha256, Digest};
-        let jwk_json = serde_json::to_string(self).unwrap_or_default();
+        use edgerun_crypto::{Digest, Sha256};
+        let jwk_json = edgerun_json::to_string(self).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());
         hasher.finalize().to_vec()
@@ -274,11 +276,9 @@ pub struct JwsHeader {
 }
 
 pub fn base64url_encode(data: &[u8]) -> String {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.encode(data)
+    edgerun_encoding::base64url_nopad_encode(data)
 }
 
 pub fn base64url_decode(data: &str) -> Result<Vec<u8>, &'static str> {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.decode(data).map_err(|_| "invalid base64url")
+    edgerun_encoding::base64url_decode(data).map_err(|_| "invalid base64url")
 }

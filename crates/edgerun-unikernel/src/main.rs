@@ -7,7 +7,7 @@ extern crate edgerun_bare_rt as rt;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
-use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn, Rng, crc32, RingBuffer, IpStack, Network, IpAddr};
+use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn, Rng, crc32, RingBuffer, IpStack, Network, IpAddr, DhcpStateMachine};
 
 use core::future::Future;
 use core::pin::Pin;
@@ -58,13 +58,48 @@ pub unsafe extern "C" fn main() {
     
     let mut stack = IpStack::new();
     stack.configure(
-        IpAddr::new(192, 168, 1, 12),
+        IpAddr::new(0, 0, 0, 0),
         IpAddr::new(255, 255, 255, 0),
-        IpAddr::new(192, 168, 1, 1),
+        IpAddr::zero(),
         mac,
     );
     
+    let mut dhcp = DhcpStateMachine::new(mac);
     let mut network = Network::new(&mut stack);
+    
+    let discover = dhcp.discover();
+    if let Some(pkt) = network.send_ip(IpAddr::new(255, 255, 255, 255), 17, &discover) {
+        net.send(pkt);
+    }
+    
+    drop(network);
+    
+    let mut rx_buf = [0u8; 1514];
+    let len = net.recv(&mut rx_buf);
+    if len.is_some() {
+        let _ = dhcp.parse(&rx_buf);
+    }
+    
+    if dhcp.ip != IpAddr::zero() {
+        stack.ip = dhcp.ip;
+        stack.netmask = dhcp.netmask;
+        stack.gateway = dhcp.gateway;
+    } else {
+        stack.ip = IpAddr::new(192, 168, 1, 12);
+    }
+    
+    let mut network = Network::new(&mut stack);
+    
+    for _ in 0..100 {
+        let mut rx_buf = [0u8; 1514];
+        if let Some(len) = net.recv(&mut rx_buf) {
+            if let Some(pkt) = network.recv(&rx_buf[..len]) {
+                if pkt.is_icmp() {
+                    break;
+                }
+            }
+        }
+    }
     
     let _dhcp = DhcpClient::new(mac);
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
@@ -78,10 +113,9 @@ pub unsafe extern "C" fn main() {
     spawn(NetworkTask);
     
     if net.is_link_up() {
-        rt::log::log(3, "VirtIO Net: OK");
-        rt::log::log(3, "IP: 192.168.1.12");
-        rt::log::log(3, "TCP 8080");
     }
+    
+    let (ip, _, _) = (stack.ip, stack.netmask, stack.gateway);
     
     block_on(NetworkTask);
 }

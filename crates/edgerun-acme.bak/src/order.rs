@@ -1,4 +1,4 @@
-use url::Url;
+use edgerun_url::Url;
 
 use crate::types::OrderStatus;
 
@@ -53,7 +53,9 @@ impl Order {
     }
 
     pub fn domains(&self) -> Vec<String> {
-        self.inner.identifiers.as_ref()
+        self.inner
+            .identifiers
+            .as_ref()
             .map(|ids| ids.iter().map(|i| i.value.clone()).collect())
             .unwrap_or_default()
     }
