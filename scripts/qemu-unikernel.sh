@@ -17,6 +17,12 @@ qemu_net_dump="${QEMU_NET_DUMP:-}"
 qemu_netdev="${QEMU_NETDEV:-user,id=n0}"
 qemu_tpm_socket="${QEMU_TPM_SOCKET:-}"
 qemu_tpm_device="${QEMU_TPM_DEVICE:-tpm-crb}"
+qemu_virtio_rng="${QEMU_VIRTIO_RNG:-1}"
+qemu_virtio_console="${QEMU_VIRTIO_CONSOLE:-1}"
+qemu_virtio_blk="${QEMU_VIRTIO_BLK:-1}"
+qemu_console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-console.log}"
+qemu_disk_img="${QEMU_DISK_IMG:-/tmp/edgerun-qemu-virtio-blk.img}"
+qemu_disk_size="${QEMU_DISK_SIZE:-64M}"
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
@@ -35,6 +41,32 @@ if [[ -n "$qemu_tpm_socket" ]]; then
         -chardev "socket,id=chrtpm,path=$qemu_tpm_socket"
         -tpmdev "emulator,id=tpm0,chardev=chrtpm"
         -device "$qemu_tpm_device,tpmdev=tpm0"
+    )
+fi
+
+if [[ "$qemu_virtio_rng" != "0" ]]; then
+    qemu_extra_args+=(
+        -object "rng-random,id=edgerun-rng,filename=/dev/urandom"
+        -device "virtio-rng-pci,disable-legacy=on,disable-modern=off,rng=edgerun-rng"
+    )
+fi
+
+if [[ "$qemu_virtio_console" != "0" ]]; then
+    rm -f "$qemu_console_log"
+    qemu_extra_args+=(
+        -device "virtio-serial-pci,disable-legacy=on,disable-modern=off"
+        -chardev "file,id=edgerun-console,path=$qemu_console_log"
+        -device "virtconsole,chardev=edgerun-console"
+    )
+fi
+
+if [[ "$qemu_virtio_blk" != "0" ]]; then
+    if [[ ! -e "$qemu_disk_img" ]]; then
+        truncate -s "$qemu_disk_size" "$qemu_disk_img"
+    fi
+    qemu_extra_args+=(
+        -drive "if=none,id=edgerun-blk,file=$qemu_disk_img,format=raw"
+        -device "virtio-blk-pci,disable-legacy=on,disable-modern=off,drive=edgerun-blk"
     )
 fi
 

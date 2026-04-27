@@ -20,6 +20,11 @@ pub fn validate_query_case(
         if snapshots.is_empty() {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
+        for snapshot in snapshots.iter().filter_map(Value::as_map) {
+            if string_value(snapshot, "snapshot_id", "").is_empty() {
+                return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+            }
+        }
         if let Some(available) = local_state
             .get("available_snapshots")
             .and_then(Value::as_map)
@@ -51,6 +56,11 @@ pub fn validate_query_case(
         if events.is_empty() {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
+        for event in events.iter().filter_map(Value::as_map) {
+            if !event_ref_is_valid(event) {
+                return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+            }
+        }
         if let Some(available) = local_state.get("available_events").and_then(Value::as_map) {
             for event in events.iter().filter_map(Value::as_map) {
                 let key = format!(
@@ -69,6 +79,9 @@ pub fn validate_query_case(
         ) {
             for obj in related.iter().filter_map(Value::as_map) {
                 let object_id = string_value(obj, "object_id", "");
+                if object_id.is_empty() {
+                    return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                }
                 if !object_id.is_empty() && !available.contains_key(&object_id) {
                     return defer(ReasonCode::MissingDependency, empty_map());
                 }
@@ -94,6 +107,9 @@ pub fn validate_query_case(
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         };
         let object_id = string_value(object_ref, "object_id", "");
+        if object_id.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         let exists = proof.get("exists").and_then(Value::as_bool);
         if let Some(available) = local_state.get("available_objects").and_then(Value::as_map) {
             let present = !object_id.is_empty() && available.contains_key(&object_id);
@@ -105,6 +121,9 @@ pub fn validate_query_case(
             }
             if let Some(bundled) = get_map(proof, "bundled_result_object") {
                 let bundled_id = string_value(bundled, "object_id", "");
+                if bundled_id.is_empty() {
+                    return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                }
                 if !bundled_id.is_empty() && !available.contains_key(&bundled_id) {
                     return defer(ReasonCode::MissingDependency, empty_map());
                 }
@@ -134,6 +153,14 @@ pub fn validate_query_case(
             .map(|m| string_value(m, "identity_id", ""))
             .filter(|s| !s.is_empty())
             .collect();
+        if included
+            .iter()
+            .chain(excluded.iter())
+            .filter_map(Value::as_map)
+            .any(|m| string_value(m, "identity_id", "").is_empty())
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         for excluded_id in excluded
             .iter()
             .filter_map(Value::as_map)
@@ -151,6 +178,9 @@ pub fn validate_query_case(
             get_map(proof, "trust_policy_object"),
         ) {
             let object_id = string_value(policy, "object_id", "");
+            if object_id.is_empty() {
+                return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+            }
             if !object_id.is_empty() && !available.contains_key(&object_id) {
                 return defer(ReasonCode::MissingDependency, empty_map());
             }
@@ -178,6 +208,9 @@ pub fn validate_query_case(
             for key in ["policy_object", "assignments_object"] {
                 if let Some(obj) = get_map(proof, key) {
                     let object_id = string_value(obj, "object_id", "");
+                    if object_id.is_empty() {
+                        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                    }
                     if !object_id.is_empty() && !available.contains_key(&object_id) {
                         return defer(ReasonCode::MissingDependency, empty_map());
                     }
@@ -222,6 +255,36 @@ pub fn validate_query_case(
         .any(|k| fragment.contains_key(*k));
         if !has_backing {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if let Some(snapshot_refs) = get_seq(fragment, "snapshot_refs") {
+            for snapshot in snapshot_refs.iter().filter_map(Value::as_map) {
+                if string_value(snapshot, "snapshot_id", "").is_empty() {
+                    return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                }
+            }
+        }
+        if let Some(event_refs) = get_seq(fragment, "event_refs") {
+            for event in event_refs.iter().filter_map(Value::as_map) {
+                if !event_ref_is_valid(event) {
+                    return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                }
+            }
+        }
+        for key in ["object_refs", "proof_objects"] {
+            if let Some(objects) = get_seq(fragment, key) {
+                for object in objects.iter().filter_map(Value::as_map) {
+                    if string_value(object, "object_id", "").is_empty() {
+                        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                    }
+                }
+            }
+        }
+        for key in ["bundled_result_object", "result_metadata"] {
+            if let Some(object) = get_map(fragment, key) {
+                if string_value(object, "object_id", "").is_empty() {
+                    return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                }
+            }
         }
         return accept(
             mapping([
@@ -279,6 +342,9 @@ pub fn validate_query_case(
         let Some(payload_object) = get_map(bundle, "payload_object") else {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         };
+        if string_value(payload_object, "object_id", "").is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         let allowed = set_from_list(local_state.get("allowed_proof_payload_types"));
         let payload_type = string_value(bundle, "payload_type", "");
         if !allowed.is_empty() && !allowed.contains(&payload_type) {
@@ -442,4 +508,12 @@ pub fn validate_query_case(
         ]),
         empty_map(),
     )
+}
+
+fn event_ref_is_valid(event: &BTreeMap<String, Value>) -> bool {
+    !string_value(event, "stream_id", "").is_empty()
+        && (event.contains_key("event_hash")
+            || event.contains_key("event_hash_hex")
+            || event.contains_key("hash_hex")
+            || event.contains_key("hash_fixture"))
 }

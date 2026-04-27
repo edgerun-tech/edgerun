@@ -3,3 +3,4 @@ event_set_proof:
   events:
   - stream_id: stream_a
     seq: 7
+    event_hash_hex: '0x2323232323232323232323232323232323232323232323232323232323232323'

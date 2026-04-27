@@ -11,11 +11,57 @@ pub fn validate_command_case(
     let Some(command) = get_map(semantic_input, "command") else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     };
-    if string_value(command, "target_node", "") != string_value(local_state, "local_node", "") {
+    let command_id = string_value(command, "command_id", "");
+    if command_id.is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    let issuer = string_value(command, "issuer", "");
+    if issuer.is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    let target_node = string_value(command, "target_node", "");
+    if target_node.is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    let command_type = string_value(command, "command_type", "");
+    if command_type.is_empty()
+        || command_type == "UNSPECIFIED"
+        || command_type == "COMMAND_TYPE_UNSPECIFIED"
+    {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    if !matches!(
+        command_type.as_str(),
+        "ADD_CONTROLLER"
+            | "REMOVE_CONTROLLER"
+            | "TRANSFER_CONTROL"
+            | "PUBLISH_SNAPSHOT"
+            | "STORE_OBJECT"
+            | "FETCH_OBJECT"
+            | "QUERY"
+            | "EXECUTE_WORKLOAD"
+            | "TERMINATE_WORKLOAD"
+            | "CREATE_DELEGATION"
+            | "CREATE_REVOCATION"
+            | "STORE_AND_FORWARD"
+    ) {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    if target_node != string_value(local_state, "local_node", "") {
         return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
     }
     let now = parse_ts(&string_value(local_state, "now", "1970-01-01T00:00:00Z"))
         .unwrap_or(crate::util::DateTimeUtc::epoch());
+    if !command.contains_key("issued_at") {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    if command
+        .get("issued_at")
+        .and_then(Value::as_str)
+        .is_some_and(|s| parse_ts(s).is_err())
+    {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
     if let Some(s) = command.get("not_before").and_then(Value::as_str) {
         if parse_ts(s).is_ok_and(|t| t > now) {
             return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
@@ -26,7 +72,23 @@ pub fn validate_command_case(
             return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
         }
     }
-    let command_id = string_value(command, "command_id", "");
+    if let (Some(not_before), Some(expires_at)) = (
+        command.get("not_before").and_then(Value::as_str),
+        command.get("expires_at").and_then(Value::as_str),
+    ) {
+        if parse_ts(not_before)
+            .and_then(|nb| parse_ts(expires_at).map(|exp| nb > exp))
+            .unwrap_or(true)
+        {
+            return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
+        }
+    }
+    if !matches!(command.get("signature"), Some(Value::Map(_))) {
+        return reject(ReasonCode::CryptoInvalid, empty_map(), empty_map());
+    }
+    if let Some(result) = validate_command_nested_refs(command) {
+        return result;
+    }
     let command_hash = string_value(
         command,
         "command_hash_fixture",
@@ -45,7 +107,6 @@ pub fn validate_command_case(
             );
         }
     }
-    let issuer = string_value(command, "issuer", "");
     let expected = command
         .get("signature_fixture")
         .and_then(Value::as_str)
@@ -131,4 +192,81 @@ pub fn validate_command_case(
             ]),
         )]),
     )
+}
+
+fn validate_object_ref(object: &BTreeMap<String, Value>) -> Option<ValidationResult> {
+    if string_value(object, "object_id", "").is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            empty_map(),
+            empty_map(),
+        ));
+    }
+    None
+}
+
+fn validate_command_nested_refs(command: &BTreeMap<String, Value>) -> Option<ValidationResult> {
+    if let Some(payload_object) = get_map(command, "payload_object") {
+        if let Some(result) = validate_object_ref(payload_object) {
+            return Some(result);
+        }
+    }
+    if command
+        .get("inline_payload")
+        .and_then(Value::as_str)
+        .is_some_and(str::is_empty)
+    {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            empty_map(),
+            empty_map(),
+        ));
+    }
+    if let Some(metadata) = get_map(command, "command_metadata") {
+        if let Some(result) = validate_object_ref(metadata) {
+            return Some(result);
+        }
+    }
+    if let Some(assurance) = get_map(command, "requested_assurance") {
+        if let Some(attesters) = get_seq(assurance, "acceptable_attesters") {
+            for attester in attesters {
+                match attester {
+                    Value::String(value) if value.is_empty() => {
+                        return Some(reject(
+                            ReasonCode::StructuralInvalid,
+                            empty_map(),
+                            empty_map(),
+                        ));
+                    }
+                    Value::Map(identity)
+                        if string_value(identity, "identity_id", "").is_empty() =>
+                    {
+                        return Some(reject(
+                            ReasonCode::StructuralInvalid,
+                            empty_map(),
+                            empty_map(),
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if assurance
+            .get("max_evidence_age")
+            .and_then(Value::as_i64)
+            .is_some_and(|age| age < 0)
+        {
+            return Some(reject(
+                ReasonCode::StructuralInvalid,
+                empty_map(),
+                empty_map(),
+            ));
+        }
+        if let Some(metadata) = get_map(assurance, "assurance_metadata") {
+            if let Some(result) = validate_object_ref(metadata) {
+                return Some(result);
+            }
+        }
+    }
+    None
 }

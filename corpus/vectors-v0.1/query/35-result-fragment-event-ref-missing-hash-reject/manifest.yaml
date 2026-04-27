@@ -1,0 +1,10 @@
+id: query/35-result-fragment-event-ref-missing-hash-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: result fragments reject event refs without hashes
+tags:
+- query
+- fragment
+- structural

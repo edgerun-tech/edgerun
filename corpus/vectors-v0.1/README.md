@@ -2,15 +2,19 @@
 
 This corpus is the first conformance seed set.
 
-It contains 48 mandatory cases:
+It contains 166 mandatory cases:
 
 - canonical: 7
-- stream: 7
-- delegation: 7
-- command: 9
-- control: 6
-- snapshot: 7
-- object: 5
+- command: 20
+- control: 8
+- crypto: 2
+- delegation: 9
+- network: 26
+- object: 17
+- query: 35
+- snapshot: 9
+- stream: 16
+- trust: 17
 
 Each case contains:
 
@@ -30,6 +34,10 @@ The canonical suite includes committed `canonical_signable.hex`, `canonical_full
 - `control/`
 - `snapshot/`
 - `object/`
+- `query/`
+- `network/`
+- `trust/`
+- `crypto/`
 
 ## Fixture identities
 

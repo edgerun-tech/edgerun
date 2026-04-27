@@ -1,0 +1,10 @@
+id: command/13-unspecified-command-type-reject
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: unspecified command_type is structurally invalid
+tags:
+- command
+- structural
+- validate_command

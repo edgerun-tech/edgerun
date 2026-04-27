@@ -71,7 +71,6 @@ members = [
   "crates/edgerun-mesh-session",
   "crates/edgerun-mgmt-bluetooth",
   "crates/edgerun-microphone",
-  "crates/edgerun-net",
   "crates/edgerun-network-interface",
   "crates/edgerun-nfc",
   "crates/edgerun-node",

@@ -1,0 +1,10 @@
+id: command/15-inverted-validity-window-reject
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: not_before after expires_at is time invalid
+tags:
+- command
+- time
+- validate_command

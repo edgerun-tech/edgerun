@@ -524,6 +524,8 @@ fn command_non_controller_without_delegation_is_rejected() {
             ("target_node", ystr("node-a")),
             ("command_type", ystr("QUERY")),
             ("command_id", ystr("cmd-1")),
+            ("issued_at", ystr("2030-01-01T00:00:00Z")),
+            ("signature", Value::Map(BTreeMap::new())),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -551,6 +553,8 @@ fn command_replay_same_hash_is_duplicate() {
             ("command_type", ystr("QUERY")),
             ("command_id", ystr("cmd-1")),
             ("command_hash_hex", ystr("hash-1")),
+            ("issued_at", ystr("2030-01-01T00:00:00Z")),
+            ("signature", Value::Map(BTreeMap::new())),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -581,6 +585,8 @@ fn command_different_hash_same_id_is_accepted() {
             ("command_type", ystr("QUERY")),
             ("command_id", ystr("cmd-1")),
             ("command_hash_hex", ystr("hash-2")),
+            ("issued_at", ystr("2030-01-01T00:00:00Z")),
+            ("signature", Value::Map(BTreeMap::new())),
         ]),
     )]) {
         Value::Map(m) => m,

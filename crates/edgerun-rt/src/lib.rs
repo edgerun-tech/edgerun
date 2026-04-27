@@ -157,9 +157,6 @@ pub use ip::{
     IpStack, Network, TcpHeader, UdpHeader, checksum, echo_reply, ip_checksum, parse_packet,
 };
 
-pub mod dns;
-pub use dns::{DNS_MAX_NAME, DnsClient, DnsQuery, DnsRecord, DnsResponse, DnsResultCode, DnsType};
-
 pub mod tftp;
 pub use tftp::{TftpClient, TftpConfig, TftpState};
 
@@ -169,16 +166,21 @@ pub use log::Level;
 pub mod bacnet;
 pub mod ble;
 pub mod can;
+pub mod cassandra;
 pub mod coap;
 pub mod ftp;
 pub mod grpc;
+pub mod influxdb;
+pub mod ipfs;
 pub mod lorawan;
 pub mod lwm2m;
 pub mod memcached;
 pub mod modbus;
 pub mod mqtt;
 pub mod mqttsn;
+pub mod mysql;
 pub mod nfs;
+pub mod postgres;
 pub mod redis;
 pub mod sftp;
 pub mod smb;

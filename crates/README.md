@@ -60,8 +60,8 @@ capabilities/delegation, query access, and local trust policy.
 - `edgerun-tls`: async TLS 1.3 building block for HTTP/service stacks.
 - `edgerun-quic`: QUIC transport structures, packet protection, handshakes, and
   transport state.
-- `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`, `edgerun-net`: DNS, DHCP,
-  DHCPv6, PXE/TFTP integration, and a unified network-service daemon.
+- `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`: DNS, DHCP, DHCPv6, and
+  PXE/TFTP integration.
 - `edgerun-server`: feature-gated multi-protocol server builder.
 - `edgerun-email`: SMTP/IMAP/LMTP server/client pieces.
 - `edgerun-proxy`: HTTP CONNECT/forward proxy.

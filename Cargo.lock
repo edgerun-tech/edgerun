@@ -955,19 +955,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-net"
-version = "0.1.1"
-dependencies = [
- "edgerun-clap",
- "edgerun-config",
- "edgerun-dhcpv6",
- "edgerun-dns",
- "edgerun-inotify",
- "edgerun-log",
- "edgerun-rt",
-]
-
-[[package]]
 name = "edgerun-network-interface"
 version = "0.1.1"
 dependencies = [

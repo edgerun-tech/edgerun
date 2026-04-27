@@ -519,7 +519,7 @@ mod disk_boot {
     use edgerun_storage::{
         detect_partitions, probe_filesystem, BlockStorage, FatError, FatReadOnly, FileSystemKind,
         FileSystemProbe, FileSystemProbeError, PartitionBlockDevice, PartitionEntry,
-        PartitionError, PartitionTable,
+        PartitionError, PartitionTable, StorageError,
     };
 
     pub const DEFAULT_BOOT_CONFIG_PATHS: &[&str] =
@@ -605,6 +605,72 @@ mod disk_boot {
     pub enum OpenedEdgeFs<S: BlockStorage> {
         Partition(EdgeFs<PartitionBlockDevice<S>>),
         WholeDisk(EdgeFs<S>),
+    }
+
+    pub struct RtBlockDeviceStorage<T> {
+        device: T,
+    }
+
+    impl<T> RtBlockDeviceStorage<T> {
+        pub fn new(device: T) -> Self {
+            Self { device }
+        }
+
+        pub fn into_inner(self) -> T {
+            self.device
+        }
+    }
+
+    impl<T: edgerun_rt::storage::BlockDevice + Send> BlockStorage for RtBlockDeviceStorage<T> {
+        fn sector_size(&self) -> usize {
+            edgerun_rt::storage::SECTOR_SIZE
+        }
+
+        fn sectors(&self) -> u64 {
+            self.device.sectors()
+        }
+
+        fn read_sector(
+            &mut self,
+            sector: u64,
+            buf: &mut [u8],
+        ) -> core::result::Result<(), StorageError> {
+            if buf.len() != self.sector_size() {
+                return Err(StorageError::Io(edgerun_storage::io::Error::new(
+                    edgerun_storage::io::ErrorKind::InvalidInput,
+                    "sector buffer size mismatch",
+                )));
+            }
+            if self.device.read_sector(sector, buf) {
+                Ok(())
+            } else {
+                Err(StorageError::Io(edgerun_storage::io::Error::new(
+                    edgerun_storage::io::ErrorKind::Other,
+                    "bare block read failed",
+                )))
+            }
+        }
+
+        fn write_sector(
+            &mut self,
+            sector: u64,
+            buf: &[u8],
+        ) -> core::result::Result<(), StorageError> {
+            if buf.len() != self.sector_size() {
+                return Err(StorageError::Io(edgerun_storage::io::Error::new(
+                    edgerun_storage::io::ErrorKind::InvalidInput,
+                    "sector buffer size mismatch",
+                )));
+            }
+            if self.device.write_sector(sector, buf) {
+                Ok(())
+            } else {
+                Err(StorageError::Io(edgerun_storage::io::Error::new(
+                    edgerun_storage::io::ErrorKind::Other,
+                    "bare block write failed",
+                )))
+            }
+        }
     }
 
     pub fn scan_partition_filesystems<S: BlockStorage>(
@@ -949,6 +1015,21 @@ unsafe fn probe_tpm2() -> Option<[u8; 32]> {
 }
 
 #[cfg(target_os = "none")]
+fn fill_bare_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> {
+    if out.is_empty() {
+        return Ok(());
+    }
+
+    if let Some(mut rng) = edgerun_virtio::find_virtio_rng() {
+        if rng.init() && rng.fill_bytes(out) {
+            return Ok(());
+        }
+    }
+
+    fill_tpm2_random_source(out)
+}
+
+#[cfg(target_os = "none")]
 fn fill_tpm2_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> {
     if out.is_empty() {
         return Ok(());
@@ -1099,9 +1180,26 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
 
-    edgerun_crypto::rng::register_random_source(fill_tpm2_random_source);
+    edgerun_crypto::rng::register_random_source(fill_bare_random_source);
 
     let mut rng = Rng::new_from_entropy();
+    if let Some(mut virtio_rng) = edgerun_virtio::find_virtio_rng() {
+        if virtio_rng.init() {
+            let mut virtio_entropy = [0u8; 32];
+            if virtio_rng.fill_bytes(&mut virtio_entropy) {
+                rng.mix_entropy(&virtio_entropy);
+                edgerun_crypto::rng::mix_entropy(&virtio_entropy);
+                rt::log::log(1, "RNG mixed VirtIO entropy");
+            } else {
+                rt::log::log(1, "VirtIO RNG read failed");
+            }
+        } else {
+            rt::log::log(1, "VirtIO RNG init failed");
+        }
+    } else {
+        rt::log::log(1, "No VirtIO RNG found");
+    }
+
     if let Some(tpm_entropy) = unsafe { probe_tpm2() } {
         rng.mix_entropy(&tpm_entropy);
         rt::log::log(1, "RNG mixed TPM entropy");
@@ -1116,19 +1214,51 @@ pub unsafe extern "C" fn kernel_main() -> ! {
 
     rt::log::log(1, "Looking for VirtIO...");
 
+    if let Some(mut console) = edgerun_virtio::find_virtio_console() {
+        if console.init() {
+            let _ = console.write_all(b"edgerun: virtio-console online\n");
+            rt::log::log(1, "VirtIO console init ok");
+        } else {
+            rt::log::log(1, "VirtIO console init failed");
+        }
+    } else {
+        rt::log::log(1, "No VirtIO console found");
+    }
+
     if let Some(mut block) = edgerun_virtio::find_virtio_blk() {
         rt::log::log(1, "VirtIO block device found");
         if block.init() {
             rt::log::log(1, "VirtIO block init ok");
-            match disk_boot::scan_partition_filesystems(&mut block) {
-                Ok((_, probes)) if !probes.is_empty() => {
-                    rt::log::log(1, "VirtIO block partitions detected");
-                }
-                Ok(_) => {
-                    rt::log::log(1, "VirtIO block has no partitions");
-                }
-                Err(_) => {
-                    rt::log::log(1, "VirtIO block partition scan failed");
+            let mut first_sector = [0u8; 512];
+            if block.read_sector(0, &mut first_sector) {
+                rt::log::log(1, "VirtIO block first sector read ok");
+            } else {
+                rt::log::log(1, "VirtIO block first sector read failed");
+            }
+            if block.read_sector(0, &mut first_sector) {
+                rt::log::log(1, "VirtIO block second sector read ok");
+            } else {
+                rt::log::log(1, "VirtIO block second sector read failed");
+            }
+            rt::log::log(1, "VirtIO block scanning partitions");
+            let mut storage = disk_boot::RtBlockDeviceStorage::new(block);
+            match edgerun_storage::BlockStorage::read_sector(&mut storage, 0, &mut first_sector) {
+                Ok(()) => rt::log::log(1, "VirtIO storage adapter read ok"),
+                Err(_) => rt::log::log(1, "VirtIO storage adapter read failed"),
+            }
+            if first_sector[510] != 0x55 || first_sector[511] != 0xaa {
+                rt::log::log(1, "VirtIO block has no partitions");
+            } else {
+                match disk_boot::scan_partition_filesystems(&mut storage) {
+                    Ok((_, probes)) if !probes.is_empty() => {
+                        rt::log::log(1, "VirtIO block partitions detected");
+                    }
+                    Ok(_) => {
+                        rt::log::log(1, "VirtIO block has no partitions");
+                    }
+                    Err(_) => {
+                        rt::log::log(1, "VirtIO block partition scan failed");
+                    }
                 }
             }
         } else {
