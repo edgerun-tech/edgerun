@@ -6,8 +6,3 @@ license = "MIT"
 
 [dependencies]
 edgerun-platform = { path = "../edgerun-platform" }
-
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
