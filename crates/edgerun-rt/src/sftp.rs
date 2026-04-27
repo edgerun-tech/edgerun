@@ -135,7 +135,11 @@ impl SftpClient {
 
     pub fn read(&self, handle: &[u8], offset: u64, len: usize) -> SftpReadFuture {
         let state = self.state.borrow();
-        let result = if !state.handles.iter().any(|stored| stored.as_slice() == handle) {
+        let result = if !state
+            .handles
+            .iter()
+            .any(|stored| stored.as_slice() == handle)
+        {
             Err(())
         } else {
             find_file(&state.files, handle)
@@ -153,7 +157,11 @@ impl SftpClient {
 
     pub fn write(&self, handle: &[u8], offset: u64, data: &[u8]) -> SftpWriteFuture {
         let mut state = self.state.borrow_mut();
-        let result = if !state.handles.iter().any(|stored| stored.as_slice() == handle) {
+        let result = if !state
+            .handles
+            .iter()
+            .any(|stored| stored.as_slice() == handle)
+        {
             Err(())
         } else {
             find_file_mut(&mut state.files, handle)
@@ -251,6 +259,10 @@ impl SftpClient {
             .iter()
             .any(|file| parent_path(&file.path) == path)
             || state
+                .symlinks
+                .iter()
+                .any(|link| parent_path(&link.link) == path)
+            || state
                 .dirs
                 .iter()
                 .any(|dir| parent_path(dir) == path && dir != &path);
@@ -288,8 +300,8 @@ impl SftpClient {
         let old = normalize_path(old);
         let new = normalize_path(new);
         let mut state = self.state.borrow_mut();
-        let result = if let Some(file) = find_file_mut(&mut state.files, &old) {
-            file.path = new.clone();
+        let result = if let Some(index) = state.files.iter().position(|file| file.path == old) {
+            state.files[index].path = new.clone();
             for handle in &mut state.handles {
                 if handle == &old {
                     *handle = new.clone();
@@ -321,7 +333,11 @@ impl SftpClient {
 
     pub fn fstat(&self, handle: &[u8]) -> SftpStatFuture {
         let state = self.state.borrow();
-        let result = if state.handles.iter().any(|stored| stored.as_slice() == handle) {
+        let result = if state
+            .handles
+            .iter()
+            .any(|stored| stored.as_slice() == handle)
+        {
             find_file(&state.files, handle)
                 .map(|file| file.attr.clone())
                 .ok_or(())
@@ -397,11 +413,17 @@ impl SftpClient {
         if state.dirs.iter().any(|dir| dir == &path) {
             return Ok(default_attr(SftpFileType::Directory, 0));
         }
-        if let Some(link) = state.symlinks.iter().find(|link| link.link == path) {
+        let target = state
+            .symlinks
+            .iter()
+            .find(|link| link.link == path)
+            .map(|link| link.target.clone());
+        drop(state);
+        if let Some(target) = target {
             if follow_symlink {
-                return self.stat_path(&link.target, false);
+                return self.stat_path(&target, false);
             }
-            return Ok(default_attr(SftpFileType::Symlink, link.target.len() as u64));
+            return Ok(default_attr(SftpFileType::Symlink, target.len() as u64));
         }
         Err(())
     }
@@ -510,8 +532,14 @@ mod tests {
         assert_eq!(entries[0].name, b"readme.txt");
 
         block_on(client.symlink(b"/docs/readme.txt", b"/docs/current")).unwrap();
-        assert_eq!(block_on(client.readlink(b"/docs/current")).unwrap(), b"/docs/readme.txt");
-        assert_eq!(block_on(client.lstat(b"/docs/current")).unwrap().ftype, SftpFileType::Symlink);
+        assert_eq!(
+            block_on(client.readlink(b"/docs/current")).unwrap(),
+            b"/docs/readme.txt"
+        );
+        assert_eq!(
+            block_on(client.lstat(b"/docs/current")).unwrap().ftype,
+            SftpFileType::Symlink
+        );
 
         block_on(client.rename(b"/docs/readme.txt", b"/docs/notes.txt")).unwrap();
         assert_eq!(block_on(client.stat(b"/docs/notes.txt")).unwrap().size, 5);
