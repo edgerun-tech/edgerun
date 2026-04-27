@@ -1,3 +1,4 @@
+use crate::prelude::*;
 use edgerun_bare_rt::{
     spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt,
     CancellationToken, ConnectFuture,
@@ -435,6 +436,13 @@ async fn handle_socks5(
             Ok(())
         }
         Ok(Err(e)) => {
+            #[cfg(target_os = "none")]
+            let rep = match e {
+                edgerun_bare_rt::io::IoError::Other(_) => SOCKS5_REP_GENERAL_FAILURE,
+                edgerun_bare_rt::io::IoError::UnexpectedEof => SOCKS5_REP_GENERAL_FAILURE,
+                edgerun_bare_rt::io::IoError::WriteZero => SOCKS5_REP_GENERAL_FAILURE,
+            };
+            #[cfg(not(target_os = "none"))]
             let rep = match e.kind() {
                 std::io::ErrorKind::ConnectionRefused => SOCKS5_REP_CONN_REFUSED,
                 std::io::ErrorKind::TimedOut => SOCKS5_REP_TTL_EXPIRED,

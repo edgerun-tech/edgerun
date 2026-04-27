@@ -68,12 +68,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "android_log-sys"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84521a3cf562bc62942e294181d9eef17eb38ceb8c68677bc49f144e4c3d4f8d"
-
-[[package]]
 name = "anes"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -663,6 +657,7 @@ name = "edgerun-amd-xdna"
 version = "0.1.1"
 dependencies = [
  "edgerun-linux-npu",
+ "edgerun-linux-sysfs",
  "edgerun-log",
  "edgerun-npu",
  "libc",
@@ -672,17 +667,11 @@ dependencies = [
 name = "edgerun-android-hardware"
 version = "0.1.1"
 dependencies = [
- "android_log-sys",
  "edgerun-android-keystore",
  "edgerun-biometrics",
  "edgerun-capabilities",
- "edgerun-core",
  "edgerun-input",
- "edgerun-proto",
- "jni",
  "libc",
- "ndk-context",
- "ndk-sys",
  "once_cell",
 ]
 
@@ -754,6 +743,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-encoding",
+ "edgerun-linux-sysfs",
  "libc",
 ]
 
@@ -795,7 +785,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-clap-derive",
  "edgerun-json",
- "serde",
 ]
 
 [[package]]
@@ -838,12 +827,9 @@ version = "0.1.1"
 dependencies = [
  "aes-gcm",
  "chacha20poly1305",
- "der 0.7.10",
- "digest",
  "ecdsa",
  "ed25519-dalek",
  "elliptic-curve",
- "getrandom 0.2.17",
  "hmac",
  "p256",
  "pbkdf2",
@@ -997,7 +983,6 @@ dependencies = [
 name = "edgerun-error"
 version = "0.1.1"
 dependencies = [
- "proc-macro2",
  "quote",
  "syn",
 ]
@@ -1093,6 +1078,7 @@ dependencies = [
 name = "edgerun-inotify"
 version = "0.1.1"
 dependencies = [
+ "edgerun-linux-sysfs",
  "libc",
 ]
 
@@ -1187,7 +1173,6 @@ name = "edgerun-linux-sysfs"
 version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
- "libc",
 ]
 
 [[package]]
@@ -1566,15 +1551,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-rt"
-version = "0.1.1"
-dependencies = [
- "edgerun-log",
- "libc",
- "loom",
-]
-
-[[package]]
 name = "edgerun-rtl8125"
 version = "0.1.0"
 dependencies = [
@@ -1633,6 +1609,7 @@ dependencies = [
  "edgerun-error",
  "edgerun-http",
  "edgerun-json",
+ "getrandom 0.2.17",
  "mockall",
  "serde",
 ]
@@ -1734,12 +1711,12 @@ name = "edgerun-unikernel"
 version = "0.1.0"
 dependencies = [
  "edgerun-bare-rt",
+ "edgerun-crypto",
  "edgerun-dhcp",
  "edgerun-platform",
  "edgerun-tftp",
  "edgerun-tpm",
  "edgerun-virtio",
- "getrandom 0.2.17",
 ]
 
 [[package]]
@@ -1796,6 +1773,7 @@ dependencies = [
 name = "edgerun-virtual-disk"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-encoding",
 ]
 
@@ -1812,6 +1790,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-encoding",
+ "edgerun-linux-sysfs",
  "libc",
 ]
 
@@ -2019,21 +1998,6 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "slab",
-]
-
-[[package]]
-name = "generator"
-version = "0.8.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52f04ae4152da20c76fe800fa48659201d5cf627c5149ca0b707b69d7eef6cf9"
-dependencies = [
- "cc",
- "cfg-if",
- "libc",
- "log",
- "rustversion",
- "windows-link",
- "windows-result",
 ]
 
 [[package]]
@@ -2276,7 +2240,7 @@ dependencies = [
  "cfg-if",
  "combine",
  "jni-macros",
- "jni-sys 0.4.1",
+ "jni-sys",
  "log",
  "simd_cesu8",
  "thiserror",
@@ -2295,15 +2259,6 @@ dependencies = [
  "rustc_version",
  "simd_cesu8",
  "syn",
-]
-
-[[package]]
-name = "jni-sys"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41a652e1f9b6e0275df1f15b32661cf0d4b78d4d87ddec5e0c3c20f097433258"
-dependencies = [
- "jni-sys 0.4.1",
 ]
 
 [[package]]
@@ -2406,28 +2361,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
-name = "loom"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "419e0dc8046cb947daa77eb95ae174acfbddb7673b4151f56d1eed8e93fbfaca"
-dependencies = [
- "cfg-if",
- "generator",
- "scoped-tls",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "matchers"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
-dependencies = [
- "regex-automata",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2474,24 +2407,6 @@ name = "ndk-context"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
-
-[[package]]
-name = "ndk-sys"
-version = "0.6.0+11769913"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
-dependencies = [
- "jni-sys 0.3.1",
-]
-
-[[package]]
-name = "nu-ansi-term"
-version = "0.50.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
-dependencies = [
- "windows-sys",
-]
 
 [[package]]
 name = "num-bigint-dig"
@@ -2896,9 +2811,6 @@ name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
-dependencies = [
- "getrandom 0.2.17",
-]
 
 [[package]]
 name = "rand_core"
@@ -3072,12 +2984,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scoped-tls"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
-
-[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3175,15 +3081,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
-]
-
-[[package]]
-name = "sharded-slab"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
-dependencies = [
- "lazy_static",
 ]
 
 [[package]]
@@ -3330,15 +3227,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "thread_local"
-version = "1.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "tinytemplate"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3362,55 +3250,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "tracing"
-version = "0.1.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
-dependencies = [
- "pin-project-lite",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-core"
-version = "0.1.36"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
-dependencies = [
- "once_cell",
- "valuable",
-]
-
-[[package]]
-name = "tracing-log"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
-dependencies = [
- "log",
- "once_cell",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-subscriber"
-version = "0.3.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
-dependencies = [
- "matchers",
- "nu-ansi-term",
- "once_cell",
- "regex-automata",
- "sharded-slab",
- "smallvec",
- "thread_local",
- "tracing",
- "tracing-core",
- "tracing-log",
-]
 
 [[package]]
 name = "typenum"
@@ -3445,12 +3284,6 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
-
-[[package]]
-name = "valuable"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "version_check"
@@ -3626,15 +3459,6 @@ name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
-
-[[package]]
-name = "windows-result"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
-dependencies = [
- "windows-link",
-]
 
 [[package]]
 name = "windows-sys"

@@ -1,6 +1,22 @@
-use std::fmt::Write as _;
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt::Write as _;
+use core::option::Option::{self, None, Some};
+use core::result::Result::{Err, Ok};
+use core::writeln;
+#[cfg(target_os = "none")]
+use edgerun_linux_pci::path::PathBuf;
+#[cfg(not(target_os = "none"))]
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use edgerun_json::JsonValue;
 use edgerun_linux_netif::{discover_network_interfaces, LinuxNetifBackend};
@@ -47,10 +63,7 @@ pub struct MachineReport {
 }
 
 pub fn gather_machine_report() -> MachineReport {
-    let generated_at_unix_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or(0);
+    let generated_at_unix_ms = current_unix_ms();
 
     let pci_devices = {
         let backend = LinuxPciBackend {
@@ -116,6 +129,19 @@ pub fn gather_machine_report() -> MachineReport {
         network_interfaces,
         wifi_interfaces,
     }
+}
+
+#[cfg(not(target_os = "none"))]
+fn current_unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+#[cfg(target_os = "none")]
+fn current_unix_ms() -> i64 {
+    0
 }
 
 fn gather_wifi_section() -> ReportSection<Vec<WifiInterfaceReport>> {
@@ -423,7 +449,7 @@ fn section_to_json<T>(
 ) -> JsonValue {
     JsonValue::object(vec![
         ("count", items.len().into()),
-        ("error", error.map(str::to_owned).into()),
+        ("error", error.map(str::to_string).into()),
         (
             "items",
             JsonValue::array(items.iter().map(&mut item_to_json).collect()),

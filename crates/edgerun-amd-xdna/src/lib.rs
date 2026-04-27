@@ -1,3 +1,178 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::BTreeSet as HashSet;
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    use crate::io;
+
+    #[derive(Debug)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub const fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        pub fn open<P>(self, _path: P) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
+
+    pub fn read<P>(_path: P) -> io::Result<alloc::vec::Vec<u8>> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub type RawFd = i32;
+
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> RawFd;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> RawFd {
+                -1
+            }
+        }
+    }
+
+    pub mod raw {
+        #[allow(non_camel_case_types)]
+        pub type c_int = i32;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod ptr {
+    pub use core::ptr::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    #[derive(Clone, Copy, Debug)]
+    pub struct Instant;
+
+    impl Instant {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn elapsed(&self) -> Duration {
+            Duration
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Duration;
+
+    impl Duration {
+        #[must_use]
+        pub const fn as_millis(&self) -> u128 {
+            0
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod libc {
+    #[allow(non_camel_case_types)]
+    pub type c_void = core::ffi::c_void;
+    #[allow(non_camel_case_types)]
+    pub type off_t = i64;
+
+    pub const PROT_READ: i32 = 1;
+    pub const PROT_WRITE: i32 = 2;
+    pub const MAP_SHARED: i32 = 1;
+    pub const MAP_FAILED: *mut c_void = usize::MAX as *mut c_void;
+
+    pub unsafe fn ioctl<A>(_fd: i32, _request: u64, _arg: A) -> i32 {
+        -1
+    }
+
+    pub unsafe fn mmap(
+        _addr: *mut c_void,
+        _len: usize,
+        _prot: i32,
+        _flags: i32,
+        _fd: i32,
+        _offset: off_t,
+    ) -> *mut c_void {
+        MAP_FAILED
+    }
+
+    pub unsafe fn munmap(_addr: *mut c_void, _len: usize) -> i32 {
+        0
+    }
+}
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::Ord;
+use core::convert::{From, Into, TryInto};
+use core::default::Default;
+use core::iter::{IntoIterator, Iterator};
+use core::module_path;
+use core::ops::Drop;
+use core::option::Option::{self, None, Some};
+use core::result::Result::{self, Err, Ok};
+
 use edgerun_linux_npu::{discover_linux_npus_in, read_trimmed, LinuxNpuInfo};
 use edgerun_npu::{
     default_npu_descriptor, validate_npu_workload_request, CapabilityDescriptor, CapabilityError,
@@ -447,7 +622,11 @@ fn wait_cmd(fd: RawFd, syncobj_handle: u32, timeout_ms: u32) -> Result<(), Capab
         pad: [0; 8],
     };
 
-    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &mut wait) };
+    #[cfg(target_os = "none")]
+    let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT as u64;
+    #[cfg(not(target_os = "none"))]
+    let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT;
+    let ret = unsafe { libc::ioctl(fd, wait_ioctl, &mut wait) };
 
     if ret < 0 {
         let err = std::io::Error::last_os_error();

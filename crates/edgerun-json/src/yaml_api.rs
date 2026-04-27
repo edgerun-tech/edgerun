@@ -355,6 +355,19 @@ fn parse_yaml_simple(s: &str) -> Result<YamlValue, YamlError> {
         return Ok(YamlValue::Bool(false));
     }
 
+    if s.starts_with('[') && s.ends_with(']') {
+        let inner = &s[1..s.len() - 1];
+        if inner.trim().is_empty() {
+            return Ok(YamlValue::Array(Vec::new()));
+        }
+
+        let mut values = Vec::new();
+        for item in inner.split(',') {
+            values.push(parse_yaml_simple(item.trim())?);
+        }
+        return Ok(YamlValue::Array(values));
+    }
+
     if let Ok(i) = s.parse::<i64>() {
         return Ok(YamlValue::Number(Number::I64(i)));
     }

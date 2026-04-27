@@ -1,10 +1,26 @@
 use crate::remote::{checked_len_bytes, BlockBackend, BlockDeviceInfo, BlockError};
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::default::Default;
+use core::option::Option::{self, None, Some};
+use core::result::Result::{self, Err, Ok};
+use core::{write,  };
+#[cfg(target_os = "none")]
+use edgerun_encoding::io::{Read, Write};
+#[cfg(not(target_os = "none"))]
 use std::fs::File;
+#[cfg(not(target_os = "none"))]
 use std::io::{Read, Write};
+#[cfg(not(target_os = "none"))]
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+#[cfg(not(target_os = "none"))]
 use std::os::fd::AsRawFd;
+#[cfg(not(target_os = "none"))]
 use std::path::Path;
-use std::sync::Arc;
+#[cfg(not(target_os = "none"))]
 use std::thread;
 
 const NBD_MAGIC: u64 = 0x4e42444d41474943;
@@ -62,8 +78,8 @@ pub struct NbdExportEntry {
     pub backend: Arc<dyn BlockBackend>,
 }
 
-impl std::fmt::Debug for NbdExportEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for NbdExportEntry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("NbdExportEntry")
             .field("export", &self.export)
             .finish_non_exhaustive()
@@ -280,12 +296,14 @@ fn serve_selected_export<T: Read + Write>(
     }
 }
 
+#[cfg(not(target_os = "none"))]
 pub struct TcpNbdServer<B> {
     listener: TcpListener,
     backend: Arc<B>,
     export: NbdExport,
 }
 
+#[cfg(not(target_os = "none"))]
 impl<B: BlockBackend> TcpNbdServer<B> {
     pub fn bind(
         addr: impl ToSocketAddrs,
@@ -324,11 +342,13 @@ impl<B: BlockBackend> TcpNbdServer<B> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 pub struct MultiExportTcpNbdServer {
     listener: TcpListener,
     exports: Vec<NbdExportEntry>,
 }
 
+#[cfg(not(target_os = "none"))]
 impl MultiExportTcpNbdServer {
     pub fn bind(
         addr: impl ToSocketAddrs,
@@ -354,6 +374,33 @@ impl MultiExportTcpNbdServer {
     }
 }
 
+#[cfg(target_os = "none")]
+pub struct TcpNbdServer<B> {
+    _backend: core::marker::PhantomData<B>,
+}
+
+#[cfg(target_os = "none")]
+pub struct MultiExportTcpNbdServer;
+
+#[cfg(target_os = "none")]
+pub fn attach_nbd(_spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
+    Err(BlockError::Unsupported)
+}
+
+#[cfg(target_os = "none")]
+pub fn detach_nbd<P>(_device: P) -> Result<(), BlockError> {
+    Err(BlockError::Unsupported)
+}
+
+#[cfg(target_os = "none")]
+pub fn negotiate_nbd_export<T: Read + Write>(
+    _stream: &mut T,
+    _export_name: &str,
+) -> Result<LinuxNbdNegotiatedExport, BlockError> {
+    Err(BlockError::Unsupported)
+}
+
+#[cfg(not(target_os = "none"))]
 pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
     let mut stream =
         TcpStream::connect((spec.host.as_str(), spec.port)).map_err(BlockError::from)?;
@@ -398,6 +445,7 @@ pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 pub fn detach_nbd(device: impl AsRef<Path>) -> Result<(), BlockError> {
     let device = File::options()
         .read(true)
@@ -411,6 +459,7 @@ pub fn detach_nbd(device: impl AsRef<Path>) -> Result<(), BlockError> {
     Ok(())
 }
 
+#[cfg(not(target_os = "none"))]
 pub fn negotiate_nbd_export(
     stream: &mut TcpStream,
     export_name: &str,
@@ -461,10 +510,12 @@ fn map_nbd_error(error: &BlockError) -> u32 {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 unsafe extern "C" {
     fn ioctl(fd: i32, request: u64, ...) -> i32;
 }
 
+#[cfg(not(target_os = "none"))]
 fn ioctl_noarg(fd: i32, request: u64) -> Result<(), BlockError> {
     let rc = unsafe { ioctl(fd, request) };
     if rc < 0 {
@@ -474,6 +525,7 @@ fn ioctl_noarg(fd: i32, request: u64) -> Result<(), BlockError> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 fn ioctl_with_value(fd: i32, request: u64, value: u64) -> Result<(), BlockError> {
     let rc = unsafe { ioctl(fd, request, value) };
     if rc < 0 {

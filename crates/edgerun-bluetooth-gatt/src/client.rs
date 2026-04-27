@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use crate::error::{GattError, GattResult};
 use crate::{
     format_gatt_uuid, parse_gatt_uuid, AttProtocol, GattAddressKind, GattCharacteristic,

@@ -23,6 +23,13 @@
 //! cargo test -p edgerun-e2e e2e_node_lifecycle -- --ignored
 //! ```
 
+#![no_std]
+
+#[cfg(any(test, feature = "std"))]
+extern crate std;
+
+#[cfg(any(test, feature = "std"))]
+mod suite {
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -1272,4 +1279,5 @@ mod tests_full_integration {
 
         println!("Two-node session handshake succeeded");
     }
+}
 }

@@ -1,6 +1,8 @@
 //! Android Location capability.
 //! Reads GPS data from sysfs (available on all Android devices via Linux kernel).
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityModality, CapabilityOperation,
     CapabilityProvider, CapabilityRole,
@@ -37,7 +39,7 @@ mod real {
         }
 
         pub fn get_location(&mut self) -> Option<Location> {
-            if let (Ok(lat_str), Ok(lon_str)) = (
+            if let (Some(lat_str), Some(lon_str)) = (
                 read_sysfs_prop("/sys/class/gps/latitude"),
                 read_sysfs_prop("/sys/class/gps/longitude"),
             ) {

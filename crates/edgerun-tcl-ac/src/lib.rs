@@ -1,12 +1,27 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 use aes::cipher::{block_padding::Pkcs7, KeyInit, KeyIvInit};
 use cbc::cipher::{BlockDecryptMut, BlockEncryptMut};
+use core::option::Option::{None, Some};
+use core::result::Result::{Err, Ok};
 use edgerun_bluetooth_gatt::{
     format_gatt_uuid, parse_gatt_uuid, AttProtocol, GattAddressKind, GattCharacteristic,
     GattDescriptor, GattError, GattProperty, GattService, GattUuid, L2capSocket,
 };
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
 use edgerun_crypto::{hkdf_sha256, sha256, OsRng, RngCore};
-use std::sync::{Mutex, RwLock};
+#[cfg(target_os = "none")]
+use edgerun_bluetooth_gatt::sync::RwLock;
+#[cfg(not(target_os = "none"))]
+use std::sync::RwLock;
 
 pub const TCL_SERVICE_UUID: &str = "0000f100-0000-1000-8000-00805f9b34fb";
 pub const TCL_WRITE_CHAR_UUID: &str = "0000ff01-0000-1000-8000-00805f9b34fb";
@@ -23,6 +38,14 @@ const CMD_SEND_WIFI_INFO: u8 = 18;
 const CMD_STATUS_REPORT_RESPONSE: u8 = 21;
 const CMD_GET_DEVICE_INFO: u8 = 22;
 const CMD_GET_DEVICE_INFO_RESPONSE: u8 = 23;
+
+#[cfg(not(target_os = "none"))]
+fn sleep_ms(ms: u64) {
+    std::thread::sleep(std::time::Duration::from_millis(ms));
+}
+
+#[cfg(target_os = "none")]
+fn sleep_ms(_ms: u64) {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AcMode {
@@ -290,7 +313,7 @@ impl TclAcClient {
         let mut proto = self.create_protocol()?;
         proto.write_cmd(write_handle, &send_data)?;
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        sleep_ms(500);
 
         let response = proto.read_value(write_handle).map_err(|e| {
             CapabilityError::Provider(format!("failed to read key exchange response: {}", e))
@@ -454,7 +477,7 @@ impl TclAcClient {
 
         self.send_encrypted_command(CMD_GET_DEVICE_INFO, b"")?;
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        sleep_ms(500);
 
         let mut proto = self.create_protocol()?;
         let response = proto

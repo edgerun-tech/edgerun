@@ -1,8 +1,161 @@
 //! Simple inotify wrapper using raw syscalls.
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod cmp {
+    pub use core::cmp::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod ffi {
+    use alloc::vec::Vec;
+
+    #[derive(Clone, Debug)]
+    pub struct OsString;
+
+    pub struct OsStr;
+
+    impl OsStr {
+        pub fn from_bytes(_bytes: &[u8]) -> &'static Self {
+            static OS_STR: OsStr = OsStr;
+            &OS_STR
+        }
+
+        #[must_use]
+        pub fn as_bytes(&self) -> &[u8] {
+            &[]
+        }
+
+        #[must_use]
+        pub fn to_owned(&self) -> OsString {
+            OsString
+        }
+    }
+
+    pub struct CString(Vec<u8>);
+
+    impl CString {
+        pub unsafe fn from_vec_unchecked(bytes: Vec<u8>) -> Self {
+            Self(bytes)
+        }
+
+        #[must_use]
+        pub fn as_ptr(&self) -> *const i8 {
+            self.0.as_ptr().cast()
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub trait IntoRawFd {
+            fn into_raw_fd(self) -> i32;
+        }
+
+        pub trait FromRawFd {
+            unsafe fn from_raw_fd(fd: i32) -> Self;
+        }
+    }
+
+    pub mod unix {
+        pub mod ffi {
+            pub trait OsStrExt {
+                fn as_bytes(&self) -> &[u8];
+            }
+
+            impl OsStrExt for crate::ffi::OsStr {
+                fn as_bytes(&self) -> &[u8] {
+                    self.as_bytes()
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub struct Path;
+
+    impl Path {
+        #[must_use]
+        pub fn as_os_str(&self) -> &crate::ffi::OsStr {
+            crate::ffi::OsStr::from_bytes(&[])
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod slice {
+    pub use core::slice::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod libc {
+    #[allow(non_camel_case_types)]
+    pub type c_char = i8;
+    #[allow(non_camel_case_types)]
+    pub type c_void = core::ffi::c_void;
+
+    pub unsafe fn inotify_init1(_flags: i32) -> i32 {
+        -1
+    }
+
+    pub unsafe fn read(_fd: i32, _buf: *mut c_void, _len: usize) -> isize {
+        -1
+    }
+
+    pub unsafe fn close(_fd: i32) -> i32 {
+        0
+    }
+
+    pub unsafe fn inotify_add_watch(_fd: i32, _path: *const i8, _mask: u32) -> i32 {
+        -1
+    }
+}
+
+use alloc::borrow::ToOwned;
+use alloc::vec::Vec;
+use core::cmp::Ord;
+use core::convert::AsRef;
+use core::fmt::Write;
+use core::ops::Drop;
+use core::option::Option::{self, None, Some};
+use core::result::Result::{Err, Ok};
 use std::os::fd::{FromRawFd, IntoRawFd};
 use std::os::unix::ffi::OsStrExt;
-use std::{fmt, io};
+use core::fmt;
+#[cfg(not(target_os = "none"))]
+use std::io;
 
 #[repr(C)]
 struct InotifyEvent {

@@ -1,10 +1,64 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    pub use edgerun_linux_sysfs::fs::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
     is_pci_address, parse_hex_u16, parse_hex_u32, parse_hex_u8, parse_i32, parse_u32, read_trimmed,
 };
 use edgerun_pci::{default_pci_descriptor, PciDeviceInfo, PciInventory};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+#[cfg(not(target_os = "none"))]
 use std::fs;
+#[cfg(not(target_os = "none"))]
+use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -151,6 +205,7 @@ impl PciInventory for LinuxPciBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
     use edgerun_linux_sysfs::temp_root;
 
     #[test]

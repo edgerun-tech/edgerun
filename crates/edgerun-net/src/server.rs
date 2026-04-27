@@ -394,10 +394,16 @@ impl NetServer {
 
                                     match server.tick() {
                                         Ok(()) => {}
-                                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                                        Err(e)
+                                            if e.kind()
+                                                == edgerun_dhcpv6::std::io::ErrorKind::WouldBlock =>
+                                        {
                                             continue
                                         }
-                                        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                                        Err(e)
+                                            if e.kind()
+                                                == edgerun_dhcpv6::std::io::ErrorKind::TimedOut =>
+                                        {
                                             continue
                                         }
                                         Err(e) => {
@@ -455,6 +461,10 @@ fn build_scopes_from_config(
     config: &ConfigState,
     server_idx: usize,
 ) -> Result<Vec<DhcpScope>, Box<dyn std::error::Error>> {
+    let Some(server) = config.dhcp_servers.get(server_idx) else {
+        return Err(format!("dhcp server index {} does not exist", server_idx).into());
+    };
+
     let scopes_map = config
         .build_dhcp_scopes(server_idx)
         .map_err(|e| format!("config error: {}", e))?;
@@ -474,9 +484,37 @@ fn build_scopes_from_config(
             .parse()
             .map_err(|e| format!("invalid subnet_mask: {}", e))?;
 
-        let router: std::net::Ipv4Addr = pool.subnet_mask.parse().unwrap_or(start);
+        let router: std::net::Ipv4Addr = server
+            .router
+            .as_deref()
+            .unwrap_or(&pool.range_start)
+            .parse()
+            .map_err(|e| format!("invalid router: {}", e))?;
+        let dns_servers = server
+            .dns_servers
+            .as_deref()
+            .map(|servers| {
+                servers
+                    .iter()
+                    .map(|server| {
+                        server
+                            .parse()
+                            .map_err(|e| format!("invalid dns server: {}", e))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?
+            .unwrap_or_else(|| vec![router]);
 
-        let scope = DhcpScope::new(&pool.name, start, end, mask, router, vec![router], 3600);
+        let scope = DhcpScope::new(
+            &pool.name,
+            start,
+            end,
+            mask,
+            router,
+            dns_servers,
+            server.default_lease_time,
+        );
         scopes.push(scope);
     }
     Ok(scopes)

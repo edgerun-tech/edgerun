@@ -1,5 +1,8 @@
 //! Android display capability via `ANativeWindow` (NDK `libnative_window.so`).
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityModality, CapabilityOperation,
     CapabilityProvider, CapabilityRole,

@@ -43,6 +43,8 @@
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+#[cfg(all(test, not(feature = "std")))]
+extern crate std;
 
 // This crate requires either std or alloc. All JSON types use Vec and String.
 #[cfg(all(not(feature = "std"), not(feature = "alloc")))]
@@ -123,13 +125,11 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(not(feature = "std"))]
-    use alloc::borrow::ToOwned;
-    #[cfg(not(feature = "std"))]
-    use alloc::string::ToString;
-    #[cfg(not(feature = "std"))]
+    use alloc::borrow::{Cow, ToOwned};
+    use alloc::format;
+    use alloc::string::{String, ToString};
     use alloc::vec;
-    use std::borrow::Cow;
+    use alloc::vec::Vec;
 
     #[test]
     fn escapes_control_characters_and_quotes() {
@@ -379,10 +379,7 @@ mod tests {
     #[test]
     #[cfg(not(feature = "serde"))]
     fn reader_writer_and_collection_helpers_work() {
-        let value = from_reader(std::io::Cursor::new(
-            br#"{"a":1,"b":[true,false]}"# as &[u8],
-        ))
-        .unwrap();
+        let value = from_reader(br#"{"a":1,"b":[true,false]}"# as &[u8]).unwrap();
         assert_eq!(value["a"].as_u64(), Some(1));
         assert_eq!(value["b"].len(), 2);
         assert_eq!(
@@ -406,10 +403,7 @@ mod tests {
     #[test]
     #[cfg(feature = "serde")]
     fn reader_writer_and_collection_helpers_work() {
-        let value: JsonValue = from_reader(std::io::Cursor::new(
-            br#"{"a":1,"b":[true,false]}"# as &[u8],
-        ))
-        .unwrap();
+        let value: JsonValue = from_reader(br#"{"a":1,"b":[true,false]}"# as &[u8]).unwrap();
         assert_eq!(value["a"].as_u64(), Some(1));
         assert_eq!(value["b"].len(), 2);
         assert_eq!(

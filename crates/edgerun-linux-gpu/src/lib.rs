@@ -1,13 +1,75 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::BTreeMap;
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    pub use edgerun_linux_sysfs::fs::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_gpu::{
     default_gpu_descriptor, infer_gpu_vendor, GpuConnectorInfo, GpuDisplayMode, GpuInfo,
     GpuInventory, GpuVendor,
 };
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
     is_pci_address, link_name, parse_bool_flag, parse_hex_u16, parse_hex_u32, parse_hex_u8,
     parse_i32, parse_u32, parse_uevent_map, read_trimmed,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap as HashMap;
+#[cfg(not(target_os = "none"))]
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -290,12 +352,19 @@ fn build_drm_map(root: &Path) -> Result<DrmNodeMap, CapabilityError> {
 }
 
 fn infer_pci_address_from_drm_device_path(path: &Path) -> Option<String> {
+    #[cfg(target_os = "none")]
+    {
+        let _ = path;
+        return None;
+    }
+    #[cfg(not(target_os = "none"))]
     for component in path.components().rev() {
         let value = component.as_os_str().to_string_lossy();
         if is_pci_address(&value) {
             return Some(value.to_string());
         }
     }
+    #[cfg(not(target_os = "none"))]
     None
 }
 
@@ -413,6 +482,7 @@ pub fn attach_cec_adapters_to_gpus_with_lookup(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
     use edgerun_linux_sysfs::temp_root;
 
     #[test]

@@ -4,13 +4,14 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-bs58 = "0.5"
+bs58 = { version = "0.5", default-features = false, features = ["alloc"] }
 edgerun-error.workspace = true
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-crypto = { path = "../edgerun-crypto" }
+getrandom = { version = "0.2", features = ["rdrand"] }
 
 [dev-dependencies]
 mockall = "0.13"

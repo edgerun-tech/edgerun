@@ -95,6 +95,11 @@ pub mod io {
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ErrorKind {
         NotFound,
+        TimedOut,
+        ConnectionRefused,
+        ConnectionReset,
+        HostUnreachable,
+        PermissionDenied,
         Other,
     }
 
@@ -117,6 +122,11 @@ pub mod io {
         }
 
         #[must_use]
+        pub const fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+
+        #[must_use]
         pub const fn from_raw_os_error(_code: i32) -> Self {
             Self {
                 kind: ErrorKind::Other,
@@ -133,6 +143,11 @@ pub mod io {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self.kind {
                 ErrorKind::NotFound => f.write_str("not found"),
+                ErrorKind::TimedOut => f.write_str("timed out"),
+                ErrorKind::ConnectionRefused => f.write_str("connection refused"),
+                ErrorKind::ConnectionReset => f.write_str("connection reset"),
+                ErrorKind::HostUnreachable => f.write_str("host unreachable"),
+                ErrorKind::PermissionDenied => f.write_str("permission denied"),
                 ErrorKind::Other => f.write_str("I/O error"),
             }
         }
@@ -177,6 +192,11 @@ pub mod path {
         }
 
         #[must_use]
+        pub fn parent(&self) -> Option<&Self> {
+            None
+        }
+
+        #[must_use]
         pub fn join<P>(&self, _path: P) -> PathBuf {
             PathBuf::from("")
         }
@@ -184,6 +204,21 @@ pub mod path {
         #[must_use]
         pub fn exists(&self) -> bool {
             false
+        }
+
+        #[must_use]
+        pub fn is_dir(&self) -> bool {
+            false
+        }
+
+        #[must_use]
+        pub fn display(&self) -> PathDisplay {
+            PathDisplay
+        }
+
+        #[must_use]
+        pub fn to_string_lossy(&self) -> String {
+            String::new()
         }
     }
 
@@ -207,6 +242,11 @@ pub mod path {
         }
 
         #[must_use]
+        pub fn is_file(&self) -> bool {
+            false
+        }
+
+        #[must_use]
         pub fn file_name(&self) -> Option<PathBuf> {
             None
         }
@@ -224,6 +264,11 @@ pub mod path {
         #[must_use]
         pub fn display(&self) -> Display<'_> {
             Display(self)
+        }
+
+        #[must_use]
+        pub fn as_path(&self) -> &Path {
+            self
         }
     }
 
@@ -245,6 +290,12 @@ pub mod path {
         }
     }
 
+    impl From<&Path> for PathBuf {
+        fn from(_value: &Path) -> Self {
+            Self(String::new())
+        }
+    }
+
     impl core::ops::Deref for PathBuf {
         type Target = Path;
 
@@ -258,6 +309,14 @@ pub mod path {
     impl core::fmt::Display for Display<'_> {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             f.write_str(&self.0.0)
+        }
+    }
+
+    pub struct PathDisplay;
+
+    impl core::fmt::Display for PathDisplay {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str("")
         }
     }
 }

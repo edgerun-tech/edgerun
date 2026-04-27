@@ -30,9 +30,11 @@ pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
 pub use p256::ecdsa::SigningKey;
 pub use signature::Signer;
 
-pub use rand_core::{CryptoRng, OsRng, RngCore};
+pub use crate::rng::OsRng;
+pub use rand_core::{CryptoRng, RngCore};
 pub mod rand_core {
-    pub use rand_core::{CryptoRng, OsRng, RngCore};
+    pub use crate::rng::OsRng;
+    pub use rand_core::{CryptoRng, RngCore};
 }
 
 pub mod digest {
@@ -136,9 +138,13 @@ pub fn hkdf_sha384(
 
 pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
     use p256::ecdsa::SigningKey;
-    let mut bytes = [0u8; 32];
-    let _ = fill_random(&mut bytes);
-    SigningKey::from_bytes(&bytes.into()).unwrap()
+    loop {
+        let mut bytes = [0u8; 32];
+        fill_random(&mut bytes).expect("edgerun RNG should always provide fallback bytes");
+        if let Ok(key) = SigningKey::from_bytes(&bytes.into()) {
+            return key;
+        }
+    }
 }
 
 const ENCRYPTED_P256_KEY_MAGIC: &[u8] = b"EDGERUN-P256-GCM1";

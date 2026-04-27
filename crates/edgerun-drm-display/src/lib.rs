@@ -38,11 +38,11 @@ pub mod vec {
     pub use alloc::vec::*;
 }
 
-use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_display::{
     default_display_descriptor, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
 };
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::read_trimmed;
 #[cfg(not(target_os = "none"))]
 use std::fs;
@@ -167,6 +167,7 @@ impl DisplayDevice for DrmDisplayBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
     use edgerun_linux_sysfs::temp_root;
 
     #[test]

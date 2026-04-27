@@ -18,6 +18,20 @@
 //! When XCLBIN overlay models are loaded on the NPU, the integral image
 //! computation can be offloaded, reducing to ~5-15ms.
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(test)]
+extern crate std;
+
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::{Ord, Ordering};
+use core::debug_assert;
+use core::iter::Iterator;
+use core::option::Option::{self, None, Some};
+
 use edgerun_camera_biometrics::{CameraCaptureQuality, CameraFrame, CameraPixelFormat, FaceBounds};
 
 pub type RawDetection = (i32, i32, i32, i32, f32);
@@ -888,7 +902,7 @@ impl FaceDetector {
             detections[b]
                 .4
                 .partial_cmp(&detections[a].4)
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .unwrap_or(Ordering::Equal)
         });
 
         let mut suppressed = vec![false; detections.len()];
@@ -1190,7 +1204,7 @@ pub fn estimate_head_pose(
     // Roll: angle between eye line and horizontal
     let dx = norm[1].0 - norm[0].0;
     let dy = norm[1].1 - norm[0].1;
-    let roll = dy.atan2(dx).to_degrees() as f32;
+    let roll = (atan2_approx(dy, dx) * (180.0 / core::f64::consts::PI)) as f32;
 
     // Pitch: nose position relative to eye center and mouth center
     let eye_center_y = (norm[0].1 + norm[1].1) / 2.0;
@@ -1206,6 +1220,29 @@ pub fn estimate_head_pose(
     let yaw = ((nose_x - eye_center_x) / eye_dist * 45.0).clamp(-60.0, 60.0) as f32;
 
     Some(HeadPose { yaw, pitch, roll })
+}
+
+fn atan2_approx(y: f64, x: f64) -> f64 {
+    if x == 0.0 {
+        return if y > 0.0 {
+            core::f64::consts::FRAC_PI_2
+        } else if y < 0.0 {
+            -core::f64::consts::FRAC_PI_2
+        } else {
+            0.0
+        };
+    }
+
+    // Rajan et al. style low-cost atan approximation, adequate for head-pose roll.
+    let z = y / x;
+    let atan = z / (1.0 + 0.28 * z * z);
+    if x > 0.0 {
+        atan
+    } else if y >= 0.0 {
+        atan + core::f64::consts::PI
+    } else {
+        atan - core::f64::consts::PI
+    }
 }
 
 // ===========================================================================

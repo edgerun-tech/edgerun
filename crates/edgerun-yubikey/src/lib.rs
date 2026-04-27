@@ -1,5 +1,140 @@
+#![no_std]
 #![allow(non_upper_case_globals)]
 
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod error {
+    pub use core::error::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    use crate::io;
+
+    #[derive(Clone, Debug)]
+    pub struct File;
+
+    impl File {
+        pub fn open<P>(_path: P) -> io::Result<Self> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub const fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub const fn custom_flags(self, _flags: i32) -> Self {
+            self
+        }
+
+        pub fn open<P>(self, _path: P) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
+
+    pub use edgerun_linux_sysfs::fs::read_dir;
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+
+    pub trait Read {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+    }
+
+    pub trait Write {
+        fn write_all(&mut self, buf: &[u8]) -> Result<()>;
+    }
+
+    impl Read for crate::fs::File {
+        fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
+            Err(Error::new(ErrorKind::NotFound))
+        }
+    }
+
+    impl Write for crate::fs::File {
+        fn write_all(&mut self, _buf: &[u8]) -> Result<()> {
+            Err(Error::new(ErrorKind::NotFound))
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod unix {
+        pub mod fs {
+            pub trait OpenOptionsExt {
+                fn custom_flags(self, flags: i32) -> Self;
+            }
+
+            impl OpenOptionsExt for crate::fs::OpenOptions {
+                fn custom_flags(self, flags: i32) -> Self {
+                    self.custom_flags(flags)
+                }
+            }
+        }
+
+        pub mod io {
+            pub trait AsRawFd {
+                fn as_raw_fd(&self) -> i32;
+            }
+
+            impl AsRawFd for crate::fs::File {
+                fn as_raw_fd(&self) -> i32 {
+                    -1
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod libc {
+    pub const O_NONBLOCK: i32 = 0x800;
+
+    pub unsafe fn ioctl<A>(_fd: i32, _request: u32, _arg: A) -> i32 {
+        -1
+    }
+}
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::{AsRef, Into};
+use core::fmt::Write as _;
+use core::iter::{IntoIterator, Iterator};
+use core::option::Option::{self, None, Some};
+use core::result::Result::{self, Err, Ok};
 use edgerun_core::crypto::signature_input;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -111,7 +246,7 @@ impl core::fmt::Display for YubiKeyError {
     }
 }
 
-impl std::error::Error for YubiKeyError {}
+impl core::error::Error for YubiKeyError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct YubiKeyReaderInfo {
@@ -335,7 +470,7 @@ impl LinuxUsbYubiKey {
 
         // Reset the device to ensure clean state
         unsafe {
-            let rc = libc::ioctl(raw_fd, USBDEVFS_RESET as _);
+            let rc = libc::ioctl(raw_fd, USBDEVFS_RESET as _, 0);
             if rc < 0 {
                 // Reset may fail if device is busy; continue anyway
             }
@@ -1051,6 +1186,7 @@ pub fn sign_record_with_yubikey_checked(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::boxed::Box;
 
     struct FakeYubiKey {
         algorithm: YubiKeySignatureAlgorithm,

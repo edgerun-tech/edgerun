@@ -1,6 +1,10 @@
 use super::engine::*;
 use super::helpers::*;
 use super::*;
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 use edgerun_capabilities::{
     capability_descriptor, constraint, constraint_with_scope, CapabilityAccessClass,
     CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor, CapabilityError,

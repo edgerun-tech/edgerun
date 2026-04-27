@@ -1,8 +1,11 @@
 //! OAuth token storage using edgerun-secret-service (encrypted blob store).
 
+use crate::prelude::*;
 use crate::types::Credentials;
 use edgerun_json::{from_str, to_string, JsonValue, Map};
 use edgerun_secret_service::Backend;
+#[cfg(not(target_os = "none"))]
+use std::eprintln;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -60,6 +63,7 @@ impl TokenStore {
                 match credentials_from_json(&text) {
                     Ok(creds) => Ok(Some(creds)),
                     Err(e) => {
+                        #[cfg(not(target_os = "none"))]
                         eprintln!("Warning: Failed to parse credentials from secret store: {e}");
                         Ok(None)
                     }

@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use crate::error::{GattError, GattResult};
 use std::io;
 use std::mem::size_of;
@@ -340,6 +341,13 @@ impl L2capSocket {
     }
 
     pub fn set_nonblocking(&self, nonblock: bool) -> GattResult<()> {
+        #[cfg(target_os = "none")]
+        {
+            let _ = nonblock;
+            return Ok(());
+        }
+        #[cfg(not(target_os = "none"))]
+        {
         let flags = unsafe { libc::fcntl(self.fd, libc::F_GETFL, 0) };
         if flags < 0 {
             return Err(GattError::SocketFailed("fcntl F_GETFL failed".to_string()));
@@ -354,6 +362,7 @@ impl L2capSocket {
             Err(GattError::SocketFailed("fcntl F_SETFL failed".to_string()))
         } else {
             Ok(())
+        }
         }
     }
 }

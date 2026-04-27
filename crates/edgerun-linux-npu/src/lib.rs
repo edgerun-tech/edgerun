@@ -43,8 +43,8 @@ pub mod vec {
     pub use alloc::vec::*;
 }
 
-use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::parse_hex_u32_from_str;
+use edgerun_linux_sysfs::prelude::v1::*;
 // Re-export sysfs helpers that downstream NPU backends need.
 pub use edgerun_linux_sysfs::{read_trimmed, temp_root};
 use edgerun_npu::{
@@ -254,6 +254,7 @@ impl NpuDevice for LinuxNpuBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
     use edgerun_linux_sysfs::temp_root;
 
     #[test]

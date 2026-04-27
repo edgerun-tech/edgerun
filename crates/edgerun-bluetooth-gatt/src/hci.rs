@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use crate::{GattError, GattResult};
 use std::collections::HashMap;
 use std::io;

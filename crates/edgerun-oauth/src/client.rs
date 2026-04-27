@@ -1,5 +1,6 @@
 //! OAuth 2.0 client — device flow, authorization code flow, token refresh.
 
+use crate::prelude::*;
 use crate::discovery::OidcDiscoveryDocument;
 use crate::errors::{DeviceError, OAuthError, OAuthResult};
 use crate::jwt::IdToken;

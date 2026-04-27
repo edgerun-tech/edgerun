@@ -6,6 +6,10 @@
 use crate::require_hardware;
 use crate::session_harness;
 use crate::test_policy::TestGrantedProvider;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation, CapabilityProvider};
 use edgerun_proto::edgerun::v0::capability::{
     CapabilityInvocation, CapabilityOperation as ProtoOp,
@@ -21,6 +25,7 @@ use edgerun_remote_capability::{
 };
 use prost::Message;
 use std::os::unix::net::UnixStream;
+use std::println;
 use std::thread;
 use std::time::Duration;
 

@@ -1,5 +1,6 @@
 //! Solana client errors
 
+use crate::prelude::*;
 use edgerun_error::Error;
 
 #[derive(Error, Debug)]

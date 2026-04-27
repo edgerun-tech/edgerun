@@ -1,5 +1,6 @@
 //! Server-side state for pending device authorization grants.
 
+use crate::prelude::*;
 use edgerun_crypto::getrandom;
 use edgerun_crypto::sha256;
 use edgerun_encoding::base64::base64url_nopad_encode;
@@ -8,9 +9,19 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant};
 
 fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    #[cfg(target_os = "none")]
+    {
+        lock.read().unwrap()
+    }
+    #[cfg(not(target_os = "none"))]
     lock.read().unwrap_or_else(|e| e.into_inner())
 }
 fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    #[cfg(target_os = "none")]
+    {
+        lock.write().unwrap()
+    }
+    #[cfg(not(target_os = "none"))]
     lock.write().unwrap_or_else(|e| e.into_inner())
 }
 

@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use crate::error::{GattError, GattResult};
 use std::io;
 use std::mem::size_of;

@@ -7,16 +7,21 @@ license.workspace = true
 [[bin]]
 name = "edgerun-edit"
 path = "src/main.rs"
+required-features = ["std"]
 
 [dependencies]
 edgerun-http = { path = "../edgerun-http" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
-syn = { version = "2", features = ["full", "parsing", "extra-traits", "printing"] }
-proc-macro2 = "1"
-quote = "1"
-prettyplease = "0.2"
+syn = { version = "2", features = ["full", "parsing", "extra-traits", "printing"], optional = true }
+proc-macro2 = { version = "1", optional = true }
+quote = { version = "1", optional = true }
+prettyplease = { version = "0.2", optional = true }
 edgerun-clap = { path = "../edgerun-clap" }
 edgerun-json = { workspace = true }
+
+[features]
+default = []
+std = ["dep:syn", "dep:proc-macro2", "dep:quote", "dep:prettyplease"]
 
 [lints]
 workspace = true

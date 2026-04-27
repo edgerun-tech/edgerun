@@ -229,6 +229,7 @@ fn extract_organizational_domain(domain: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_parse_dmarc_record() {

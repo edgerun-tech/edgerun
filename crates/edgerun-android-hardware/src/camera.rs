@@ -1,5 +1,8 @@
 //! Android Camera capability via Camera2 NDK (`libcamera2_ndk.so`).
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole,
@@ -19,49 +22,51 @@ mod real {
 
     mod camera2 {
         use super::*;
-        pub type ACameraManager_create = unsafe extern "C" fn() -> ACameraManager;
-        pub type ACameraManager_delete = unsafe extern "C" fn(ACameraManager);
-        pub type ACameraManager_getCameraIdList =
+        pub type ACameraManagerCreate = unsafe extern "C" fn() -> ACameraManager;
+        pub type ACameraManagerDelete = unsafe extern "C" fn(ACameraManager);
+        pub type ACameraManagerGetCameraIdList =
             unsafe extern "C" fn(ACameraManager, *mut *mut ACameraIdList) -> i32;
-        pub type ACameraManager_deleteCameraIdList = unsafe extern "C" fn(*mut ACameraIdList);
-        pub type ACameraIdList_getNumCameras = unsafe extern "C" fn(*const ACameraIdList) -> i32;
-        pub type ACameraIdList_getCameraId =
+        pub type ACameraManagerDeleteCameraIdList = unsafe extern "C" fn(*mut ACameraIdList);
+        pub type ACameraIdListGetNumCameras = unsafe extern "C" fn(*const ACameraIdList) -> i32;
+        pub type ACameraIdListGetCameraId =
             unsafe extern "C" fn(*const ACameraIdList, i32) -> *const i8;
 
         pub struct Camera2Fns {
-            pub create: ACameraManager_create,
-            pub delete: ACameraManager_delete,
-            pub get_camera_id_list: ACameraManager_getCameraIdList,
-            pub delete_camera_id_list: ACameraManager_deleteCameraIdList,
-            pub get_num_cameras: ACameraIdList_getNumCameras,
-            pub get_camera_id: ACameraIdList_getCameraId,
+            pub create: ACameraManagerCreate,
+            pub delete: ACameraManagerDelete,
+            pub get_camera_id_list: ACameraManagerGetCameraIdList,
+            pub delete_camera_id_list: ACameraManagerDeleteCameraIdList,
+            pub get_num_cameras: ACameraIdListGetNumCameras,
+            pub get_camera_id: ACameraIdListGetCameraId,
         }
 
-        pub fn load() -> Result<Self, CapabilityError> {
-            unsafe {
-                let name = std::ffi::CString::new("libcamera2_ndk.so").unwrap();
-                let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
-                if handle.is_null() {
-                    return Err(CapabilityError::Provider(
-                        "libcamera2_ndk.so not found (requires Android 9.0+)".into(),
-                    ));
-                }
-                fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
-                    let c_name = std::ffi::CString::new(name).unwrap();
-                    let ptr = libc::dlsym(handle, c_name.as_ptr());
-                    if ptr.is_null() {
-                        return Err(CapabilityError::Provider(format!("{name} not found")));
+        impl Camera2Fns {
+            pub fn load() -> Result<Self, CapabilityError> {
+                unsafe {
+                    let name = std::ffi::CString::new("libcamera2_ndk.so").unwrap();
+                    let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
+                    if handle.is_null() {
+                        return Err(CapabilityError::Provider(
+                            "libcamera2_ndk.so not found (requires Android 9.0+)".into(),
+                        ));
                     }
-                    Ok(std::mem::transmute(ptr))
+                    fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
+                        let c_name = std::ffi::CString::new(name).unwrap();
+                        let ptr = unsafe { libc::dlsym(handle, c_name.as_ptr()) };
+                        if ptr.is_null() {
+                            return Err(CapabilityError::Provider(format!("{name} not found")));
+                        }
+                        Ok(unsafe { std::mem::transmute_copy(&ptr) })
+                    }
+                    Ok(Self {
+                        create: sym(handle, "ACameraManager_create")?,
+                        delete: sym(handle, "ACameraManager_delete")?,
+                        get_camera_id_list: sym(handle, "ACameraManager_getCameraIdList")?,
+                        delete_camera_id_list: sym(handle, "ACameraManager_deleteCameraIdList")?,
+                        get_num_cameras: sym(handle, "ACameraIdList_getNumCameras")?,
+                        get_camera_id: sym(handle, "ACameraIdList_getCameraId")?,
+                    })
                 }
-                Ok(Self {
-                    create: sym(handle, "ACameraManager_create")?,
-                    delete: sym(handle, "ACameraManager_delete")?,
-                    get_camera_id_list: sym(handle, "ACameraManager_getCameraIdList")?,
-                    delete_camera_id_list: sym(handle, "ACameraManager_deleteCameraIdList")?,
-                    get_num_cameras: sym(handle, "ACameraIdList_getNumCameras")?,
-                    get_camera_id: sym(handle, "ACameraIdList_getCameraId")?,
-                })
             }
         }
     }

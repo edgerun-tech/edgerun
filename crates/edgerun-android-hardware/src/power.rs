@@ -1,5 +1,8 @@
 //! Android Power/Battery capability via sysfs.
 
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole,

@@ -1,5 +1,7 @@
 //! Android audio capability via AAudio (NDK `libaaudio.so`).
 
+use alloc::format;
+use alloc::vec::Vec;
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole,
@@ -52,36 +54,38 @@ mod real {
             pub close: Close,
         }
 
-        pub fn load() -> Result<Self, CapabilityError> {
-            unsafe {
-                let name = std::ffi::CString::new("libaaudio.so").unwrap();
-                let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
-                if handle.is_null() {
-                    return Err(CapabilityError::Provider(
-                        "libaaudio.so not found (requires Android 8.0+)".into(),
-                    ));
-                }
-                fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
-                    let c_name = std::ffi::CString::new(name).unwrap();
-                    let ptr = libc::dlsym(handle, c_name.as_ptr());
-                    if ptr.is_null() {
-                        return Err(CapabilityError::Provider(format!("{name} not found")));
+        impl AaudioFns {
+            pub fn load() -> Result<Self, CapabilityError> {
+                unsafe {
+                    let name = std::ffi::CString::new("libaaudio.so").unwrap();
+                    let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
+                    if handle.is_null() {
+                        return Err(CapabilityError::Provider(
+                            "libaaudio.so not found (requires Android 8.0+)".into(),
+                        ));
                     }
-                    Ok(std::mem::transmute(ptr))
+                    fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
+                        let c_name = std::ffi::CString::new(name).unwrap();
+                        let ptr = unsafe { libc::dlsym(handle, c_name.as_ptr()) };
+                        if ptr.is_null() {
+                            return Err(CapabilityError::Provider(format!("{name} not found")));
+                        }
+                        Ok(unsafe { std::mem::transmute_copy(&ptr) })
+                    }
+                    Ok(Self {
+                        create_builder: sym(handle, "AAudio_createStreamBuilder")?,
+                        set_direction: sym(handle, "AAudioStreamBuilder_setDirection")?,
+                        set_format: sym(handle, "AAudioStreamBuilder_setFormat")?,
+                        set_sample_rate: sym(handle, "AAudioStreamBuilder_setSampleRate")?,
+                        set_channel_count: sym(handle, "AAudioStreamBuilder_setChannelCount")?,
+                        set_performance: sym(handle, "AAudioStreamBuilder_setPerformanceMode")?,
+                        open_stream: sym(handle, "AAudioStreamBuilder_openStream")?,
+                        delete_builder: sym(handle, "AAudioStreamBuilder_delete")?,
+                        read: sym(handle, "AAudioStream_read")?,
+                        write: sym(handle, "AAudioStream_write")?,
+                        close: sym(handle, "AAudioStream_close")?,
+                    })
                 }
-                Ok(Self {
-                    create_builder: sym(handle, "AAudio_createStreamBuilder")?,
-                    set_direction: sym(handle, "AAudioStreamBuilder_setDirection")?,
-                    set_format: sym(handle, "AAudioStreamBuilder_setFormat")?,
-                    set_sample_rate: sym(handle, "AAudioStreamBuilder_setSampleRate")?,
-                    set_channel_count: sym(handle, "AAudioStreamBuilder_setChannelCount")?,
-                    set_performance: sym(handle, "AAudioStreamBuilder_setPerformanceMode")?,
-                    open_stream: sym(handle, "AAudioStreamBuilder_openStream")?,
-                    delete_builder: sym(handle, "AAudioStreamBuilder_delete")?,
-                    read: sym(handle, "AAudioStream_read")?,
-                    write: sym(handle, "AAudioStream_write")?,
-                    close: sym(handle, "AAudioStream_close")?,
-                })
             }
         }
     }

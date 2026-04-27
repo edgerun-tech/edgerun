@@ -2,11 +2,12 @@
 //!
 //! Minimal JSON-RPC client using edgerun-http and edgerun-json.
 
+use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::HttpClient;
 use edgerun_json::{json, JsonValue};
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 
 use crate::error::SolanaError;
 use crate::provider_registry_program_id;
@@ -55,15 +56,9 @@ impl ProviderClient {
         let rpc_url = self.rpc_url.clone();
         let http = self.http.clone();
 
-        let (tx, rx) = mpsc::channel();
-        self.runtime.spawn(async move {
-            let body = http.post_json(&rpc_url, &json_str).await;
-            let _ = tx.send(body);
-        });
-
-        let resp = rx
-            .recv()
-            .map_err(|e| SolanaError::Rpc(e.to_string()))?
+        let resp = self
+            .runtime
+            .block_on(async move { http.post_json(&rpc_url, &json_str).await })
             .map_err(|e| SolanaError::Rpc(e.to_string()))?;
         let body =
             String::from_utf8(resp.body().to_vec()).map_err(|e| SolanaError::Rpc(e.to_string()))?;
@@ -295,6 +290,13 @@ impl HttpRuntime {
         F::Output: Send + 'static,
     {
         self.rt.spawn(f);
+    }
+
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: std::future::Future,
+    {
+        self.rt.block_on(f)
     }
 }
 

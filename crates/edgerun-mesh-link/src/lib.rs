@@ -48,6 +48,7 @@ pub mod io {
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ErrorKind {
         WouldBlock,
+        Interrupted,
         Other,
     }
 
@@ -79,6 +80,7 @@ pub mod io {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self.kind {
                 ErrorKind::WouldBlock => f.write_str("operation would block"),
+                ErrorKind::Interrupted => f.write_str("operation interrupted"),
                 ErrorKind::Other => f.write_str("I/O error"),
             }
         }

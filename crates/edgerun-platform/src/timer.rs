@@ -22,11 +22,51 @@ pub trait Timer {
     fn wait_for_irq();
 }
 
+#[cfg(not(target_os = "none"))]
 pub fn timer_freq() -> u64 {
-    10_000_000
+    1_000_000
+}
+
+#[cfg(target_os = "none")]
+pub fn timer_freq() -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        10_000_000
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        10_000_000
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        10_000_000
+    }
+
+    #[cfg(target_arch = "xtensa")]
+    {
+        10_000_000
+    }
 }
 
 #[inline]
+#[cfg(not(target_os = "none"))]
+pub fn timer_ticks() -> u64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+
+    static START: OnceLock<Instant> = OnceLock::new();
+    START
+        .get_or_init(Instant::now)
+        .elapsed()
+        .as_micros()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
+#[inline]
+#[cfg(target_os = "none")]
 pub fn timer_ticks() -> u64 {
     #[cfg(target_arch = "x86_64")]
     {

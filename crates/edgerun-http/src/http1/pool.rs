@@ -629,7 +629,7 @@ impl ConnectionPool {
         if is_https {
             let stream =
                 Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port).await?;
-            let tls = AsyncTlsStream::client(stream, host, &[b"http/1.1"], Some(session_cache))
+            let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache))
                 .await
                 .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
             let reader = BufReader::new(tls);

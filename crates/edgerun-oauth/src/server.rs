@@ -11,6 +11,7 @@
 //! `OAuthServer` implements `edgerun_http::Handler` so it can be mounted
 //! directly on any `HttpServer`.
 
+use crate::prelude::*;
 use crate::device_state::{DeviceGrantStore, PendingDeviceGrant};
 use crate::discovery::{Jwk, JwksDocument};
 use crate::errors::{DeviceError, OAuthError, OAuthResult};
@@ -37,9 +38,19 @@ use std::time::{Duration, Instant};
 // ===========================================================================
 
 fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    #[cfg(target_os = "none")]
+    {
+        lock.read().unwrap()
+    }
+    #[cfg(not(target_os = "none"))]
     lock.read().unwrap_or_else(|e| e.into_inner())
 }
 fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    #[cfg(target_os = "none")]
+    {
+        lock.write().unwrap()
+    }
+    #[cfg(not(target_os = "none"))]
     lock.write().unwrap_or_else(|e| e.into_inner())
 }
 

@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use core::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,7 +108,7 @@ impl fmt::Display for GattError {
     }
 }
 
-impl std::error::Error for GattError {}
+impl core::error::Error for GattError {}
 
 impl GattError {
     pub fn att_error_code(code: u8) -> Self {

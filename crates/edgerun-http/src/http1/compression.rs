@@ -56,7 +56,7 @@ impl ContentEncoding {
 
 /// Build Accept-Encoding header value
 pub fn accept_encoding_value() -> &'static str {
-    "gzip, deflate"
+    "identity"
 }
 
 /// Decompress response body based on Content-Encoding header

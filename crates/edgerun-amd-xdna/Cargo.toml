@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-linux-npu = { path = "../edgerun-linux-npu" }
+edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-npu = { path = "../edgerun-npu" }
 libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }

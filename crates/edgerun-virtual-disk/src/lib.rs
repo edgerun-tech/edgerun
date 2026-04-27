@@ -1,4 +1,127 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(not(target_os = "none"))]
 pub mod image;
+#[cfg(target_os = "none")]
+pub mod image {
+    use alloc::string::{String, ToString};
+    use core::{fmt, write};
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct VirtualDiskSpec {
+        pub path: String,
+        pub size_bytes: u64,
+        pub format: VirtualDiskFormat,
+        pub sparse: bool,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct VirtualDiskInfo {
+        pub path: String,
+        pub size_bytes: u64,
+        pub format: VirtualDiskFormat,
+        pub created: bool,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum VirtualDiskFormat {
+        Raw,
+        Qcow2,
+        Vhd,
+        Vhdx,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum VirtualDiskError {
+        Unsupported,
+        InvalidArgument(&'static str),
+        AlreadyExists(String),
+        CommandMissing { command: &'static str },
+        CommandFailed {
+            command: &'static str,
+            status: i32,
+            stdout: String,
+            stderr: String,
+        },
+    }
+
+    impl fmt::Display for VirtualDiskFormat {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::Raw => f.write_str("raw"),
+                Self::Qcow2 => f.write_str("qcow2"),
+                Self::Vhd => f.write_str("vpc"),
+                Self::Vhdx => f.write_str("vhdx"),
+            }
+        }
+    }
+
+    impl fmt::Display for VirtualDiskError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::Unsupported => f.write_str("virtual disk image operations require host I/O"),
+                Self::InvalidArgument(msg) => write!(f, "invalid argument: {msg}"),
+                Self::AlreadyExists(path) => write!(f, "virtual disk already exists: {path}"),
+                Self::CommandMissing { command } => write!(f, "required command missing: {command}"),
+                Self::CommandFailed {
+                    command,
+                    status,
+                    stdout,
+                    stderr,
+                } => write!(
+                    f,
+                    "command `{command}` failed with status {status}: stdout={stdout:?}, stderr={stderr:?}"
+                ),
+            }
+        }
+    }
+
+    impl core::error::Error for VirtualDiskError {}
+
+    pub type Result<T> = core::result::Result<T, VirtualDiskError>;
+
+    pub fn create(_spec: &VirtualDiskSpec) -> Result<VirtualDiskInfo> {
+        Err(VirtualDiskError::Unsupported)
+    }
+
+    pub fn resize(_path: &str, _format: VirtualDiskFormat, _size_bytes: u64) -> Result<()> {
+        Err(VirtualDiskError::Unsupported)
+    }
+
+    pub fn clone(_src: &str, _dst: &str, _dst_format: VirtualDiskFormat) -> Result<VirtualDiskInfo> {
+        Err(VirtualDiskError::Unsupported)
+    }
+
+    pub fn info(path: &str) -> Result<VirtualDiskInfo> {
+        Ok(VirtualDiskInfo {
+            path: path.to_string(),
+            size_bytes: 0,
+            format: detect_format(path)?,
+            created: false,
+        })
+    }
+
+    pub fn remove(_path: &str) -> Result<()> {
+        Err(VirtualDiskError::Unsupported)
+    }
+
+    pub fn detect_format(path: &str) -> Result<VirtualDiskFormat> {
+        let format = if path.ends_with(".qcow2") {
+            VirtualDiskFormat::Qcow2
+        } else if path.ends_with(".vhd") {
+            VirtualDiskFormat::Vhd
+        } else if path.ends_with(".vhdx") {
+            VirtualDiskFormat::Vhdx
+        } else {
+            VirtualDiskFormat::Raw
+        };
+        Ok(format)
+    }
+}
 pub mod nbd;
 pub mod remote;
 

@@ -31,6 +31,98 @@
 //! - **Latency check**: Measures response time (live speech has natural latency)
 //! - **Spectral analysis**: Checks for playback artifacts (flat frequency response, etc.)
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod f64 {
+    pub mod consts {
+        pub use core::f64::consts::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod thread {
+    pub fn sleep(_duration: crate::time::Duration) {}
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Duration {
+        millis: u128,
+    }
+
+    impl Duration {
+        #[must_use]
+        pub const fn from_millis(millis: u64) -> Self {
+            Self {
+                millis: millis as u128,
+            }
+        }
+
+        #[must_use]
+        pub const fn as_millis(&self) -> u128 {
+            self.millis
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Instant;
+
+    impl Instant {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn elapsed(&self) -> Duration {
+            Duration { millis: 0 }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct SystemTime;
+
+    pub const UNIX_EPOCH: SystemTime = SystemTime;
+
+    impl SystemTime {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self
+        }
+
+        pub const fn duration_since(&self, _earlier: SystemTime) -> Result<Duration, ()> {
+            Ok(Duration { millis: 0 })
+        }
+    }
+}
+
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::{Ord, PartialOrd};
+use core::convert::{From, Into};
+use core::default::Default;
+use core::iter::{FromIterator, IntoIterator, Iterator};
+use core::option::Option::{self, None, Some};
+use core::result::Result::{self, Ok};
+
 use edgerun_biometrics::{BiometricModality, BiometricState};
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
@@ -39,6 +131,132 @@ use edgerun_capabilities::{
 use edgerun_microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
 use edgerun_speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
 use std::time::{Duration, Instant, UNIX_EPOCH};
+
+trait FloatApprox {
+    fn sin(self) -> Self;
+    fn cos(self) -> Self;
+    fn exp(self) -> Self;
+    fn sqrt(self) -> Self;
+    fn ln(self) -> Self;
+    fn log10(self) -> Self;
+    fn powi(self, n: i32) -> Self;
+}
+
+impl FloatApprox for f64 {
+    fn sin(self) -> Self {
+        sin_f64(self)
+    }
+
+    fn cos(self) -> Self {
+        sin_f64(self + core::f64::consts::FRAC_PI_2)
+    }
+
+    fn exp(self) -> Self {
+        exp_f64(self)
+    }
+
+    fn sqrt(self) -> Self {
+        sqrt_f64(self)
+    }
+
+    fn ln(self) -> Self {
+        ln_f64(self)
+    }
+
+    fn log10(self) -> Self {
+        ln_f64(self) / core::f64::consts::LN_10
+    }
+
+    fn powi(self, n: i32) -> Self {
+        if n == 0 {
+            return 1.0;
+        }
+        let mut result = 1.0;
+        for _ in 0..n.unsigned_abs() {
+            result *= self;
+        }
+        if n < 0 { 1.0 / result } else { result }
+    }
+}
+
+impl FloatApprox for f32 {
+    fn sin(self) -> Self {
+        sin_f64(self as f64) as f32
+    }
+
+    fn cos(self) -> Self {
+        sin_f64(self as f64 + core::f64::consts::FRAC_PI_2) as f32
+    }
+
+    fn exp(self) -> Self {
+        exp_f64(self as f64) as f32
+    }
+
+    fn sqrt(self) -> Self {
+        sqrt_f64(self as f64) as f32
+    }
+
+    fn ln(self) -> Self {
+        ln_f64(self as f64) as f32
+    }
+
+    fn log10(self) -> Self {
+        (ln_f64(self as f64) / core::f64::consts::LN_10) as f32
+    }
+
+    fn powi(self, n: i32) -> Self {
+        FloatApprox::powi(self as f64, n) as f32
+    }
+}
+
+fn sin_f64(mut x: f64) -> f64 {
+    const TAU: f64 = core::f64::consts::TAU;
+    const PI: f64 = core::f64::consts::PI;
+    x %= TAU;
+    if x > PI {
+        x -= TAU;
+    } else if x < -PI {
+        x += TAU;
+    }
+    let x2 = x * x;
+    x * (1.0 - x2 / 6.0 + x2 * x2 / 120.0 - x2 * x2 * x2 / 5040.0)
+}
+
+fn exp_f64(x: f64) -> f64 {
+    let mut term = 1.0;
+    let mut sum = 1.0;
+    for n in 1..24 {
+        term *= x / n as f64;
+        sum += term;
+    }
+    sum
+}
+
+fn sqrt_f64(value: f64) -> f64 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+    let mut x = value;
+    for _ in 0..12 {
+        x = 0.5 * (x + value / x);
+    }
+    x
+}
+
+fn ln_f64(value: f64) -> f64 {
+    if value <= 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    let bits = value.to_bits();
+    let exponent = ((bits >> 52) & 0x7ff) as i32 - 1023;
+    let mantissa_bits = (bits & 0x000f_ffff_ffff_ffff) | 0x0010_0000_0000_0000;
+    let mantissa = mantissa_bits as f64 / 0x0010_0000_0000_0000u64 as f64;
+    let f = mantissa - 1.0;
+    let f2 = f * f;
+    let f3 = f2 * f;
+    let f4 = f3 * f;
+    exponent as f64 * core::f64::consts::LN_2 + f - f2 * 0.5 + f3 / 3.0 - f4 * 0.25
+}
 
 // ===========================================================================
 // Audio Challenge Types

@@ -9,6 +9,24 @@
 //! 5. Forwards transit frames to the correct next-hop
 //! 6. Shuts down cleanly on SIGINT/SIGTERM
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+use alloc::boxed::Box;
+use alloc::collections::{BTreeMap as HashMap, VecDeque};
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::marker::Send;
+use core::mem::drop;
+use core::module_path;
+use core::option::Option::{self, None, Some};
+use core::ops::FnMut;
+use core::result::Result::{self, Err, Ok};
 use edgerun_hardware_signing::HardwareSigningError;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRouter};
@@ -17,13 +35,83 @@ use edgerun_mesh_link::MeshLink;
 use edgerun_mesh_session::{HandshakeAccept, HandshakeInit, SessionError, SessionManager};
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;
 use edgerun_remote_capability::RemoteCapabilityProvider;
-use libc::{c_int, pollfd, POLLIN};
 use prost::Message;
-use std::collections::{HashMap, VecDeque};
+#[cfg(not(target_os = "none"))]
+use libc::{c_int, pollfd, POLLIN};
+#[cfg(target_os = "none")]
+use bare_poll::{c_int, pollfd, POLLIN};
+#[cfg(target_os = "none")]
+use edgerun_mesh_capability::sync::{Arc, Mutex};
+#[cfg(target_os = "none")]
+use edgerun_mesh_link::io;
+#[cfg(target_os = "none")]
+use bare_time::Instant;
+#[cfg(target_os = "none")]
+use core::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "none")]
+use core::time::Duration;
+#[cfg(not(target_os = "none"))]
 use std::io;
+#[cfg(not(target_os = "none"))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(target_os = "none"))]
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_os = "none"))]
 use std::time::{Duration, Instant};
+
+#[cfg(target_os = "none")]
+mod bare_poll {
+    #[allow(non_camel_case_types)]
+    pub type c_int = i32;
+
+    #[allow(non_camel_case_types)]
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct pollfd {
+        pub fd: c_int,
+        pub events: i16,
+        pub revents: i16,
+    }
+
+    pub const POLLIN: i16 = 0x0001;
+
+    pub unsafe fn poll(_fds: *mut pollfd, _nfds: usize, _timeout_ms: i32) -> c_int {
+        0
+    }
+}
+
+#[cfg(target_os = "none")]
+mod bare_time {
+    use core::ops::Sub;
+    use core::time::Duration;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+    pub struct Instant;
+
+    impl Instant {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn elapsed(&self) -> Duration {
+            Duration::from_secs(0)
+        }
+
+        #[must_use]
+        pub const fn duration_since(&self, _earlier: Instant) -> Duration {
+            Duration::from_secs(0)
+        }
+    }
+
+    impl Sub<Duration> for Instant {
+        type Output = Instant;
+
+        fn sub(self, _rhs: Duration) -> Self::Output {
+            self
+        }
+    }
+}
 
 // Re-export types needed by integrators
 pub use edgerun_mesh_capability::OutboundQueue;
@@ -195,6 +283,12 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     /// This enumerates interfaces from `/sys/class/net/` and opens
     /// a raw socket on each one that is UP (administratively).
     pub fn discover_and_open_interfaces(&mut self) -> Result<Vec<String>, io::Error> {
+        #[cfg(target_os = "none")]
+        {
+            return Ok(Vec::new());
+        }
+        #[cfg(not(target_os = "none"))]
+        {
         let mut opened = Vec::new();
         let net_dir = std::path::Path::new("/sys/class/net");
         if !net_dir.exists() {
@@ -224,6 +318,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             opened.push(name);
         }
         Ok(opened)
+        }
     }
 
     /// Opens multicast discovery sockets on interfaces with configured IPv4 addresses.
@@ -362,7 +457,10 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             .collect();
 
         let timeout_ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+        #[cfg(not(target_os = "none"))]
         let nfds = unsafe { libc::poll(poll_fds.as_mut_ptr(), poll_fds.len() as _, timeout_ms) };
+        #[cfg(target_os = "none")]
+        let nfds = unsafe { bare_poll::poll(poll_fds.as_mut_ptr(), poll_fds.len(), timeout_ms) };
 
         if nfds < 0 {
             let err = io::Error::last_os_error();
@@ -641,6 +739,13 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
 // -----------------------------------------------------------------------
 
 fn interface_name_to_ifindex(name: &str) -> Result<c_int, io::Error> {
+    #[cfg(target_os = "none")]
+    {
+        let _ = name;
+        return Err(io::Error::new(io::ErrorKind::Other));
+    }
+    #[cfg(not(target_os = "none"))]
+    {
     let c_name = std::ffi::CString::new(name).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -655,6 +760,7 @@ fn interface_name_to_ifindex(name: &str) -> Result<c_int, io::Error> {
         ));
     }
     Ok(ifindex as c_int)
+    }
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-encoding = { path = "../edgerun-encoding" }
+edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 libc.workspace = true
 
 [lints]

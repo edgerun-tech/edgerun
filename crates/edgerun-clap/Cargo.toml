@@ -7,14 +7,13 @@ publish.workspace = true
 description = "Zero-dependency drop-in replacement for clap crate"
 
 [features]
-default = ["std"]
+default = ["alloc"]
 std = ["edgerun-json/std"]
 alloc = []
 
 [dependencies]
 edgerun-json = { path = "../edgerun-json", features = ["alloc", "serde"] }
 edgerun-clap-derive = { path = "../edgerun-clap-derive" }
-serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [lints]
 workspace = true

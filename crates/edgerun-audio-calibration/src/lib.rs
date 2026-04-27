@@ -1,9 +1,27 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::cmp::Ord;
+use core::convert::{From, Into};
+use core::iter::IntoIterator;
+use core::option::Option::{self, Some};
+use core::result::Result::{self, Err, Ok};
+
 use edgerun_alsa_microphone::{discover_alsa_pcms, AlsaMicrophoneBackend};
 use edgerun_alsa_speaker::discover_speakers;
 use edgerun_capabilities::CapabilityError;
 use edgerun_microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
 use edgerun_speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
+#[cfg(not(target_os = "none"))]
 use std::thread;
+#[cfg(not(target_os = "none"))]
 use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,7 +56,7 @@ pub fn synth_tone(duration_ms: u32, sample_rate_hz: u32, channels: u16, hz: f32)
     let mut out = Vec::with_capacity(frames * usize::from(channels) * 2);
     for i in 0..frames {
         let t = i as f32 / sample_rate_hz as f32;
-        let sample = (t * hz * std::f32::consts::TAU).sin();
+        let sample = sin_approx(t * hz * core::f32::consts::TAU);
         let value = (sample * 0.25 * i16::MAX as f32) as i16;
         for _ in 0..channels {
             out.extend_from_slice(&value.to_le_bytes());
@@ -66,21 +84,59 @@ pub fn analyze_s16le_monoish(bytes: &[u8]) -> (f32, f32, usize, usize) {
     if total == 0 {
         return (f32::NEG_INFINITY, f32::NEG_INFINITY, 0, 0);
     }
-    let rms = (sum_sq / total as f64).sqrt() as f32;
+    let rms = sqrt_approx(sum_sq / total as f64) as f32;
     let peak_norm = peak as f32 / i16::MAX as f32;
     let rms_dbfs = if rms > 0.0 {
-        20.0 * rms.log10()
+        20.0 * log10_approx(rms)
     } else {
         f32::NEG_INFINITY
     };
     let peak_dbfs = if peak_norm > 0.0 {
-        20.0 * peak_norm.log10()
+        20.0 * log10_approx(peak_norm)
     } else {
         f32::NEG_INFINITY
     };
     (rms_dbfs, peak_dbfs, clipped, total)
 }
 
+fn sin_approx(mut x: f32) -> f32 {
+    const TAU: f32 = core::f32::consts::TAU;
+    const PI: f32 = core::f32::consts::PI;
+    x %= TAU;
+    if x > PI {
+        x -= TAU;
+    } else if x < -PI {
+        x += TAU;
+    }
+    let x2 = x * x;
+    x * (1.0 - x2 / 6.0 + (x2 * x2) / 120.0 - (x2 * x2 * x2) / 5040.0)
+}
+
+fn sqrt_approx(value: f64) -> f64 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+    let mut x = value;
+    for _ in 0..12 {
+        x = 0.5 * (x + value / x);
+    }
+    x
+}
+
+fn log10_approx(value: f32) -> f32 {
+    if value <= 0.0 {
+        return f32::NEG_INFINITY;
+    }
+    let bits = value.to_bits();
+    let exponent = ((bits >> 23) & 0xff) as i32 - 127;
+    let mantissa_bits = (bits & 0x7f_ffff) | 0x80_0000;
+    let mantissa = mantissa_bits as f32 / 0x80_0000 as f32;
+    let f = mantissa - 1.0;
+    let ln_mantissa = f - f * f * 0.5 + f * f * f / 3.0;
+    (exponent as f32 + ln_mantissa / core::f32::consts::LN_2) * core::f32::consts::LOG10_2
+}
+
+#[cfg(not(target_os = "none"))]
 pub fn run_speaker_mic_sweep(
     config: &AudioSweepConfig,
 ) -> Result<Vec<AudioSweepStepResult>, CapabilityError> {
@@ -162,6 +218,16 @@ pub fn run_speaker_mic_sweep(
         level = next.min(config.end_level_percent);
     }
     Ok(out)
+}
+
+#[cfg(target_os = "none")]
+pub fn run_speaker_mic_sweep(
+    config: &AudioSweepConfig,
+) -> Result<Vec<AudioSweepStepResult>, CapabilityError> {
+    let _ = config;
+    Err(CapabilityError::Unsupported(
+        "audio sweep requires host ALSA playback/capture",
+    ))
 }
 
 #[cfg(test)]

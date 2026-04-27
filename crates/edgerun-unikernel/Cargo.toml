@@ -16,4 +16,4 @@ edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-dhcp = { path = "../edgerun-dhcp" }
 edgerun-tftp = { path = "../edgerun-tftp" }
 edgerun-tpm = { path = "../edgerun-tpm", default-features = false }
-getrandom = { version = "0.2", features = ["rdrand"] }
+edgerun-crypto = { path = "../edgerun-crypto" }

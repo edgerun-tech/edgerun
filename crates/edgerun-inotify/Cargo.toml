@@ -7,6 +7,7 @@ publish.workspace = true
 description = "Simple inotify wrapper using raw syscalls"
 
 [dependencies]
+edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 libc.workspace = true
 
 [lints]

@@ -1,10 +1,27 @@
-use std::fmt;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::option::Option::{self, None, Some};
+use core::result::Result::{self, Err, Ok};
+use core::{debug_assert_eq, fmt, write};
+#[cfg(target_os = "none")]
+use edgerun_encoding::io::{self, Read, Write};
+#[cfg(not(target_os = "none"))]
 use std::fs::{self, File, OpenOptions};
+#[cfg(not(target_os = "none"))]
 use std::io::{self, Read, Seek, SeekFrom, Write};
+#[cfg(not(target_os = "none"))]
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+#[cfg(not(target_os = "none"))]
 use std::os::unix::net::{UnixListener, UnixStream};
+#[cfg(not(target_os = "none"))]
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+#[cfg(target_os = "none")]
+use edgerun_bare_rt::Mutex;
+#[cfg(not(target_os = "none"))]
+use std::sync::Mutex;
 
 pub const BLOCK_PROTOCOL_VERSION: u16 = 1;
 const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
@@ -54,7 +71,7 @@ impl fmt::Display for BlockError {
     }
 }
 
-impl std::error::Error for BlockError {}
+impl core::error::Error for BlockError {}
 
 impl From<io::Error> for BlockError {
     fn from(value: io::Error) -> Self {
@@ -103,10 +120,17 @@ pub trait BlockBackend: Send + Sync + 'static {
     }
 }
 
-#[derive(Debug)]
 pub struct MemoryBlockBackend {
     info: BlockDeviceInfo,
     data: Mutex<Vec<u8>>,
+}
+
+impl fmt::Debug for MemoryBlockBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MemoryBlockBackend")
+            .field("info", &self.info)
+            .finish_non_exhaustive()
+    }
 }
 
 impl MemoryBlockBackend {
@@ -141,10 +165,13 @@ impl BlockBackend for MemoryBlockBackend {
     fn read_blocks(&self, lba: u64, blocks: u32, out: &mut [u8]) -> Result<(), BlockError> {
         validate_transfer(&self.info, lba, blocks, out.len())?;
         let range = byte_range(&self.info, lba, blocks)?;
+        #[cfg(not(target_os = "none"))]
         let data = self
             .data
             .lock()
             .map_err(|_| BlockError::BackendFailure("memory backend lock poisoned".into()))?;
+        #[cfg(target_os = "none")]
+        let data = self.data.lock();
         out.copy_from_slice(&data[range]);
         Ok(())
     }
@@ -155,10 +182,13 @@ impl BlockBackend for MemoryBlockBackend {
         }
         validate_transfer(&self.info, lba, blocks, input.len())?;
         let range = byte_range(&self.info, lba, blocks)?;
+        #[cfg(not(target_os = "none"))]
         let mut data = self
             .data
             .lock()
             .map_err(|_| BlockError::BackendFailure("memory backend lock poisoned".into()))?;
+        #[cfg(target_os = "none")]
+        let mut data = self.data.lock();
         data[range].copy_from_slice(input);
         Ok(())
     }
@@ -173,10 +203,13 @@ impl BlockBackend for MemoryBlockBackend {
         }
         let len = checked_len_bytes(&self.info, blocks)?;
         let range = byte_range(&self.info, lba, blocks)?;
+        #[cfg(not(target_os = "none"))]
         let mut data = self
             .data
             .lock()
             .map_err(|_| BlockError::BackendFailure("memory backend lock poisoned".into()))?;
+        #[cfg(target_os = "none")]
+        let mut data = self.data.lock();
         data[range].fill(0);
         debug_assert_eq!(len, checked_len_bytes(&self.info, blocks).unwrap_or(0));
         Ok(())
@@ -187,12 +220,14 @@ impl BlockBackend for MemoryBlockBackend {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 #[derive(Debug)]
 pub struct FileBlockBackend {
     info: BlockDeviceInfo,
     file: Mutex<File>,
 }
 
+#[cfg(not(target_os = "none"))]
 impl FileBlockBackend {
     pub fn open(
         path: impl AsRef<Path>,
@@ -232,6 +267,7 @@ impl FileBlockBackend {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 impl BlockBackend for FileBlockBackend {
     fn info(&self) -> BlockDeviceInfo {
         self.info.clone()
@@ -608,6 +644,7 @@ impl<T: Read + Write> BlockClient<T> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 impl BlockClient<UnixStream> {
     pub fn connect_unix(path: impl AsRef<Path>) -> Result<Self, BlockError> {
         let stream = UnixStream::connect(path).map_err(BlockError::from)?;
@@ -615,6 +652,7 @@ impl BlockClient<UnixStream> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 impl BlockClient<TcpStream> {
     pub fn connect_tcp(addr: impl ToSocketAddrs) -> Result<Self, BlockError> {
         let stream = TcpStream::connect(addr).map_err(BlockError::from)?;
@@ -654,11 +692,13 @@ impl<T: Read + Write, B: BlockBackend> BlockServer<T, B> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 pub struct UnixBlockServer<B> {
     listener: UnixListener,
     backend: Arc<B>,
 }
 
+#[cfg(not(target_os = "none"))]
 impl<B: BlockBackend> UnixBlockServer<B> {
     pub fn bind(path: impl AsRef<Path>, backend: B) -> Result<Self, BlockError> {
         Self::bind_shared(path, Arc::new(backend))
@@ -690,6 +730,7 @@ impl<B: BlockBackend> UnixBlockServer<B> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 impl<B> Drop for UnixBlockServer<B> {
     fn drop(&mut self) {
         if let Ok(addr) = self.listener.local_addr() {
@@ -700,11 +741,13 @@ impl<B> Drop for UnixBlockServer<B> {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 pub struct TcpBlockServer<B> {
     listener: TcpListener,
     backend: Arc<B>,
 }
 
+#[cfg(not(target_os = "none"))]
 impl<B: BlockBackend> TcpBlockServer<B> {
     pub fn bind(addr: impl ToSocketAddrs, backend: B) -> Result<Self, BlockError> {
         Self::bind_shared(addr, Arc::new(backend))
@@ -730,6 +773,27 @@ impl<B: BlockBackend> TcpBlockServer<B> {
             self.accept_once()?;
         }
     }
+}
+
+#[cfg(target_os = "none")]
+#[derive(Debug)]
+pub struct FileBlockBackend;
+
+#[cfg(target_os = "none")]
+impl FileBlockBackend {
+    pub fn open<P>(_path: P, _block_size: u32, _readonly: bool) -> Result<Self, BlockError> {
+        Err(BlockError::Unsupported)
+    }
+}
+
+#[cfg(target_os = "none")]
+pub struct UnixBlockServer<B> {
+    _backend: core::marker::PhantomData<B>,
+}
+
+#[cfg(target_os = "none")]
+pub struct TcpBlockServer<B> {
+    _backend: core::marker::PhantomData<B>,
 }
 
 pub fn send_request<W: Write>(writer: &mut W, request: &BlockRequest) -> Result<(), BlockError> {
@@ -813,7 +877,7 @@ fn byte_range(
     info: &BlockDeviceInfo,
     lba: u64,
     blocks: u32,
-) -> Result<std::ops::Range<usize>, BlockError> {
+) -> Result<core::ops::Range<usize>, BlockError> {
     validate_range(info, lba, blocks)?;
     let start = byte_offset(info, lba)?;
     let len = checked_len_bytes(info, blocks)?;

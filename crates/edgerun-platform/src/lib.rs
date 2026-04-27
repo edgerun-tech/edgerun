@@ -2,6 +2,9 @@
 
 #![no_std]
 
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
 pub mod arch;
 pub mod cpu;
 pub mod irq;

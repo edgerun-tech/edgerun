@@ -8,6 +8,17 @@
 //! On non-Android targets (or without the feature), only the trait definitions
 //! and test fakes are available.
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(test)]
+extern crate std;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt::Write;
+use core::result::Result::{self, Err};
 use edgerun_core::crypto::signature_input;
 
 // ===========================================================================
@@ -62,7 +73,7 @@ impl core::fmt::Display for AndroidKeystoreError {
     }
 }
 
-impl std::error::Error for AndroidKeystoreError {}
+impl core::error::Error for AndroidKeystoreError {}
 
 /// Trait for Android Keystore-backed signing keys.
 ///
@@ -115,6 +126,7 @@ pub fn sign_record_with_keystore_checked(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     struct FakeKeystoreKey {
         algorithm: AndroidKeystoreSignatureAlgorithm,

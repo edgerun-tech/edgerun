@@ -1,3 +1,111 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    pub use edgerun_linux_sysfs::fs::*;
+
+    #[derive(Debug)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub const fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        pub fn open<P>(self, _path: P) -> crate::io::Result<File> {
+            Err(crate::io::Error::new(crate::io::ErrorKind::NotFound))
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> i32;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> i32 {
+                -1
+            }
+        }
+    }
+
+    pub mod raw {
+        #[allow(non_camel_case_types)]
+        pub type c_int = i32;
+        #[allow(non_camel_case_types)]
+        pub type c_ulong = usize;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_cec::{
     active_source, default_cec_descriptor, image_view_on, set_stream_path, standby, wake_sequence,
@@ -5,10 +113,17 @@ use edgerun_cec::{
     CecMessage,
 };
 use edgerun_linux_gpu::discover_gpus;
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{link_name, parse_uevent_map, read_trimmed};
+#[cfg(not(target_os = "none"))]
 use std::fs::{self, File, OpenOptions};
 use std::os::raw::{c_int, c_ulong};
 use std::path::{Path, PathBuf};
+
+#[cfg(target_os = "none")]
+use std::fs::{File, OpenOptions};
+#[cfg(target_os = "none")]
+use std::os::fd::AsRawFd;
 
 unsafe extern "C" {
     fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
@@ -466,6 +581,7 @@ pub fn wake_gpu_connector(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
     use edgerun_linux_sysfs::temp_root;
 
     #[test]

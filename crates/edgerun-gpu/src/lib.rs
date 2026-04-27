@@ -1,3 +1,17 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::option::Option::{self, Some};
+use core::result::Result;
 use edgerun_capabilities::{
     capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
     CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,

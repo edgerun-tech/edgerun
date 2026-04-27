@@ -113,6 +113,9 @@ pub use wire::{
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
+    use alloc::vec;
+    use alloc::vec::Vec;
 
     // -----------------------------------------------------------------------
     // Wire round-trip: command builders produce correct sizes

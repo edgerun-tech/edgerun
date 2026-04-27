@@ -56,6 +56,82 @@
 //! # });
 //! ```
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub use alloc::boxed::Box;
+    pub use alloc::format;
+    pub use alloc::string::{String, ToString};
+    pub use alloc::vec;
+    pub use alloc::vec::Vec;
+    pub use core::prelude::rust_2024::*;
+    pub use core::result::Result::{self, Err, Ok};
+    pub use core::option::Option::{self, None, Some};
+    pub use core::write;
+}
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+}
+
+#[cfg(target_os = "none")]
+pub mod future {
+    pub use core::future::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod pin {
+    pub use core::pin::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_secret_service::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_secret_service::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod env {
+    use alloc::string::String;
+    use crate::io;
+
+    pub fn var(_key: &str) -> io::Result<String> {
+        Err(io::Error::other("environment is unavailable"))
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod sync {
+    pub use edgerun_bare_rt::{RwLockReadGuard, RwLockWriteGuard};
+    pub use edgerun_secret_service::sync::{Arc, Mutex, RwLock};
+}
+
+#[cfg(target_os = "none")]
+pub mod error {
+    pub use core::error::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    pub use edgerun_http::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+}
+
 mod client;
 mod device_state;
 mod discovery;

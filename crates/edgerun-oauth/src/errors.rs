@@ -1,6 +1,7 @@
 //! OAuth 2.0 / OIDC error types.
 
-use std::fmt;
+use crate::prelude::*;
+use core::fmt;
 
 pub type OAuthResult<T> = Result<T, OAuthError>;
 
@@ -54,7 +55,7 @@ impl fmt::Display for OAuthError {
     }
 }
 
-impl std::error::Error for OAuthError {}
+impl core::error::Error for OAuthError {}
 
 impl From<std::io::Error> for OAuthError {
     fn from(e: std::io::Error) -> Self {
@@ -98,4 +99,4 @@ impl fmt::Display for DeviceError {
     }
 }
 
-impl std::error::Error for DeviceError {}
+impl core::error::Error for DeviceError {}

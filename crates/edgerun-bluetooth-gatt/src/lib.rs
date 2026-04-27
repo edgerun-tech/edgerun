@@ -1,3 +1,204 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod cmp {
+    pub use core::cmp::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::BTreeMap as HashMap;
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub type RawFd = i32;
+
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> RawFd;
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod slice {
+    pub use core::slice::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod sync {
+    pub use alloc::sync::Arc;
+    pub mod atomic {
+        pub use core::sync::atomic::*;
+    }
+
+    use core::cell::UnsafeCell;
+    use core::ops::{Deref, DerefMut};
+
+    pub struct Mutex<T>(UnsafeCell<T>);
+    pub struct RwLock<T>(UnsafeCell<T>);
+
+    unsafe impl<T: Send> Send for Mutex<T> {}
+    unsafe impl<T: Send> Sync for Mutex<T> {}
+    unsafe impl<T: Send + Sync> Send for RwLock<T> {}
+    unsafe impl<T: Send + Sync> Sync for RwLock<T> {}
+
+    pub struct MutexGuard<'a, T>(&'a mut T);
+    pub struct RwLockReadGuard<'a, T>(&'a T);
+    pub struct RwLockWriteGuard<'a, T>(&'a mut T);
+
+    impl<T> Mutex<T> {
+        pub const fn new(value: T) -> Self {
+            Self(UnsafeCell::new(value))
+        }
+
+        pub fn lock(&self) -> Result<MutexGuard<'_, T>, ()> {
+            Ok(MutexGuard(unsafe { &mut *self.0.get() }))
+        }
+    }
+
+    impl<T> RwLock<T> {
+        pub const fn new(value: T) -> Self {
+            Self(UnsafeCell::new(value))
+        }
+
+        pub fn read(&self) -> Result<RwLockReadGuard<'_, T>, ()> {
+            Ok(RwLockReadGuard(unsafe { &*self.0.get() }))
+        }
+
+        pub fn write(&self) -> Result<RwLockWriteGuard<'_, T>, ()> {
+            Ok(RwLockWriteGuard(unsafe { &mut *self.0.get() }))
+        }
+    }
+
+    impl<T> Deref for MutexGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            self.0
+        }
+    }
+
+    impl<T> DerefMut for MutexGuard<'_, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            self.0
+        }
+    }
+
+    impl<T> Deref for RwLockReadGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            self.0
+        }
+    }
+
+    impl<T> Deref for RwLockWriteGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            self.0
+        }
+    }
+
+    impl<T> DerefMut for RwLockWriteGuard<'_, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            self.0
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod thread {
+    pub fn spawn<F, T>(_f: F) -> JoinHandle<T>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
+        JoinHandle(core::marker::PhantomData)
+    }
+
+    pub struct JoinHandle<T>(core::marker::PhantomData<T>);
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Duration {
+        millis: u128,
+    }
+
+    impl Duration {
+        #[must_use]
+        pub const fn from_millis(millis: u64) -> Self {
+            Self {
+                millis: millis as u128,
+            }
+        }
+
+        #[must_use]
+        pub const fn as_millis(&self) -> u128 {
+            self.millis
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Instant;
+
+    impl Instant {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn elapsed(&self) -> Duration {
+            Duration { millis: 0 }
+        }
+    }
+}
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::cmp::Ord;
+        pub use core::convert::{From, Into};
+        pub use core::fmt::Write;
+        pub use core::iter::{FromIterator, IntoIterator, Iterator};
+        pub use core::marker::{Send, Sync};
+        pub use core::matches;
+        pub use core::ops::Fn;
+        pub use core::option::Option::{self, None, Some};
+        pub use core::prelude::rust_2024::*;
+        pub use core::result::Result::{self, Err, Ok};
+    }
+}
+
+use crate::prelude::v1::*;
+
 pub mod async_ext;
 pub mod client;
 pub mod error;

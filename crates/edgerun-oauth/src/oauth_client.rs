@@ -23,6 +23,7 @@
 //! # });
 //! ```
 
+use crate::prelude::*;
 use crate::client::DeviceFlowCallback;
 use crate::errors::OAuthError;
 use crate::pkce::PkcePair;

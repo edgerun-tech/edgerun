@@ -7,19 +7,10 @@ publish.workspace = true
 description = "Android NDK hardware capability providers for edgerun nodes"
 
 [dependencies]
-edgerun-core = { path = "../edgerun-core" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-proto = { path = "../edgerun-proto" }
 edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-input = { path = "../edgerun-input" }
 
-# Android logging via logcat (android_logger writes to __android_log_print)
-android_log-sys = { version = "0.3", optional = true }
-
-# NDK bindings (FFI to Android native libraries)
-ndk-sys = { version = "0.6", optional = true }
-jni = { version = "0.22", optional = true }
-ndk-context = { version = "0.1", optional = true }
 once_cell = { version = "1", optional = true }
 libc.workspace = true
 
@@ -30,11 +21,7 @@ edgerun-android-keystore = { path = "../edgerun-android-keystore" }
 default = []
 # Enable all NDK-backed providers + logcat logging
 android-real = [
-    "dep:ndk-sys",
-    "dep:jni",
-    "dep:ndk-context",
     "dep:once_cell",
-    "dep:android_log-sys",
 ]
 
 [lints]

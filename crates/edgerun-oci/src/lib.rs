@@ -17,6 +17,13 @@
 //! - `SecretClient` — biometric-gated credential storage via edgerun secret service
 //! - Docker Hub, GHCR, GCR, GitLab, Quay, and any private registry
 
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(feature = "std")]
+mod host {
 use std::collections::HashMap;
 
 // Runtime modules
@@ -130,3 +137,7 @@ pub fn namespace_flags(namespaces: &[OciNamespace]) -> i32 {
     }
     flags
 }
+}
+
+#[cfg(feature = "std")]
+pub use host::*;

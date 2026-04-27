@@ -1,9 +1,12 @@
 //! Android Input capability via NDK `libinput.so`.
 
+use alloc::format;
+use alloc::vec::Vec;
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole,
+    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
+use edgerun_input::InputEventRecord;
 
 #[cfg(feature = "android-real")]
 mod real {
@@ -31,46 +34,48 @@ mod real {
         use super::*;
         use std::ffi::c_void;
 
-        pub type AInputQueue_getEvent = unsafe extern "C" fn(*mut AInputQueue) -> *mut AInputEvent;
-        pub type AInputQueue_finishEvent =
+        pub type AInputQueueGetEvent = unsafe extern "C" fn(*mut AInputQueue) -> *mut AInputEvent;
+        pub type AInputQueueFinishEvent =
             unsafe extern "C" fn(*mut AInputQueue, *mut AInputEvent, c_int);
-        pub type AInputEvent_getType = unsafe extern "C" fn(*const AInputEvent) -> c_int;
-        pub type AInputEvent_getDeviceId = unsafe extern "C" fn(*const AInputEvent) -> c_int;
-        pub type AKeyEvent_getKeyCode = unsafe extern "C" fn(*const AInputEvent) -> c_int;
-        pub type AKeyEvent_getAction = unsafe extern "C" fn(*const AInputEvent) -> c_int;
+        pub type AInputEventGetType = unsafe extern "C" fn(*const AInputEvent) -> c_int;
+        pub type AInputEventGetDeviceId = unsafe extern "C" fn(*const AInputEvent) -> c_int;
+        pub type AKeyEventGetKeyCode = unsafe extern "C" fn(*const AInputEvent) -> c_int;
+        pub type AKeyEventGetAction = unsafe extern "C" fn(*const AInputEvent) -> c_int;
 
         pub struct LibInputFns {
-            pub get_event: AInputQueue_getEvent,
-            pub finish_event: AInputQueue_finishEvent,
-            pub get_type: AInputEvent_getType,
-            pub get_device_id: AInputEvent_getDeviceId,
-            pub get_keycode: AKeyEvent_getKeyCode,
-            pub get_action: AKeyEvent_getAction,
+            pub get_event: AInputQueueGetEvent,
+            pub finish_event: AInputQueueFinishEvent,
+            pub get_type: AInputEventGetType,
+            pub get_device_id: AInputEventGetDeviceId,
+            pub get_keycode: AKeyEventGetKeyCode,
+            pub get_action: AKeyEventGetAction,
         }
 
-        pub fn load() -> Result<Self, CapabilityError> {
-            unsafe {
-                let name = std::ffi::CString::new("libinput.so").unwrap();
-                let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
-                if handle.is_null() {
-                    return Err(CapabilityError::Provider("libinput.so not found".into()));
-                }
-                fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
-                    let c_name = std::ffi::CString::new(name).unwrap();
-                    let ptr = libc::dlsym(handle, c_name.as_ptr());
-                    if ptr.is_null() {
-                        return Err(CapabilityError::Provider(format!("{name} not found")));
+        impl LibInputFns {
+            pub fn load() -> Result<Self, CapabilityError> {
+                unsafe {
+                    let name = std::ffi::CString::new("libinput.so").unwrap();
+                    let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
+                    if handle.is_null() {
+                        return Err(CapabilityError::Provider("libinput.so not found".into()));
                     }
-                    Ok(std::mem::transmute(ptr))
+                    fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
+                        let c_name = std::ffi::CString::new(name).unwrap();
+                        let ptr = unsafe { libc::dlsym(handle, c_name.as_ptr()) };
+                        if ptr.is_null() {
+                            return Err(CapabilityError::Provider(format!("{name} not found")));
+                        }
+                        Ok(unsafe { std::mem::transmute_copy(&ptr) })
+                    }
+                    Ok(Self {
+                        get_event: sym(handle, "AInputQueue_getEvent")?,
+                        finish_event: sym(handle, "AInputQueue_finishEvent")?,
+                        get_type: sym(handle, "AInputEvent_getType")?,
+                        get_device_id: sym(handle, "AInputEvent_getDeviceId")?,
+                        get_keycode: sym(handle, "AKeyEvent_getKeyCode")?,
+                        get_action: sym(handle, "AKeyEvent_getAction")?,
+                    })
                 }
-                Ok(Self {
-                    get_event: sym(handle, "AInputQueue_getEvent")?,
-                    finish_event: sym(handle, "AInputQueue_finishEvent")?,
-                    get_type: sym(handle, "AInputEvent_getType")?,
-                    get_device_id: sym(handle, "AInputEvent_getDeviceId")?,
-                    get_keycode: sym(handle, "AKeyEvent_getKeyCode")?,
-                    get_action: sym(handle, "AKeyEvent_getAction")?,
-                })
             }
         }
     }

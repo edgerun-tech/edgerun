@@ -1,6 +1,6 @@
 //! Async DNS client — sends queries and parses responses over UDP.
 //!
-//! Uses the edgerun-rt async runtime for non-blocking I/O.
+//! Uses the edgerun-bare-rt async runtime for non-blocking I/O.
 
 use crate::std::io;
 use crate::std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};

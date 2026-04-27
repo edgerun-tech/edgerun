@@ -1,8 +1,11 @@
 //! Android sensors via `libsensor.so` (NDK `ASensorManager`).
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole,
+    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 
 #[cfg(feature = "android-real")]
@@ -41,28 +44,30 @@ mod real {
             pub get_resolution: GetResolution,
         }
 
-        pub fn load() -> Result<Self, CapabilityError> {
-            unsafe {
-                let name = std::ffi::CString::new("libsensor.so").unwrap();
-                let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
-                if handle.is_null() {
-                    return Err(CapabilityError::Provider("libsensor.so not found".into()));
-                }
-                fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
-                    let c_name = std::ffi::CString::new(name).unwrap();
-                    let ptr = libc::dlsym(handle, c_name.as_ptr());
-                    if ptr.is_null() {
-                        return Err(CapabilityError::Provider(format!("{name} not found")));
+        impl SensorFns {
+            pub fn load() -> Result<Self, CapabilityError> {
+                unsafe {
+                    let name = std::ffi::CString::new("libsensor.so").unwrap();
+                    let handle = libc::dlopen(name.as_ptr(), libc::RTLD_LAZY);
+                    if handle.is_null() {
+                        return Err(CapabilityError::Provider("libsensor.so not found".into()));
                     }
-                    Ok(std::mem::transmute(ptr))
+                    fn sym<T>(handle: *mut c_void, name: &str) -> Result<T, CapabilityError> {
+                        let c_name = std::ffi::CString::new(name).unwrap();
+                        let ptr = unsafe { libc::dlsym(handle, c_name.as_ptr()) };
+                        if ptr.is_null() {
+                            return Err(CapabilityError::Provider(format!("{name} not found")));
+                        }
+                        Ok(unsafe { std::mem::transmute_copy(&ptr) })
+                    }
+                    Ok(Self {
+                        get_instance: sym(handle, "ASensorManager_getInstance")?,
+                        get_default_sensor: sym(handle, "ASensorManager_getDefaultSensor")?,
+                        get_name: sym(handle, "ASensor_getName")?,
+                        get_vendor: sym(handle, "ASensor_getVendor")?,
+                        get_resolution: sym(handle, "ASensor_getResolution")?,
+                    })
                 }
-                Ok(Self {
-                    get_instance: sym(handle, "ASensorManager_getInstance")?,
-                    get_default_sensor: sym(handle, "ASensorManager_getDefaultSensor")?,
-                    get_name: sym(handle, "ASensor_getName")?,
-                    get_vendor: sym(handle, "ASensor_getVendor")?,
-                    get_resolution: sym(handle, "ASensor_getResolution")?,
-                })
             }
         }
     }

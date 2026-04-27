@@ -162,6 +162,7 @@ where
     let random_len = device.get_random_into(&mut tpm_random);
     let entropy = if random_len != 0 {
         rt::log::log(1, "TPM2 random ok");
+        edgerun_crypto::rng::mix_entropy(&tpm_random[..random_len]);
         Some(tpm_random)
     } else {
         rt::log::log(1, "TPM2 random failed");

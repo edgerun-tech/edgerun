@@ -419,23 +419,8 @@ pub mod sync {
             Self(edgerun_bare_rt::Mutex::new(value))
         }
 
-        pub fn lock(&self) -> LockResult<'_, T> {
-            LockResult(Some(self.0.lock()))
-        }
-    }
-
-    pub struct LockResult<'a, T>(Option<edgerun_bare_rt::MutexGuard<'a, T>>);
-
-    impl<'a, T> LockResult<'a, T> {
-        pub fn unwrap(mut self) -> edgerun_bare_rt::MutexGuard<'a, T> {
-            self.0.take().expect("lock result consumed")
-        }
-
-        pub fn map_err<F, E>(mut self, _op: F) -> Result<edgerun_bare_rt::MutexGuard<'a, T>, E>
-        where
-            F: FnOnce(io::Error) -> E,
-        {
-            Ok(self.0.take().expect("lock result consumed"))
+        pub fn lock(&self) -> Result<edgerun_bare_rt::MutexGuard<'_, T>, io::Error> {
+            Ok(self.0.lock())
         }
     }
 
