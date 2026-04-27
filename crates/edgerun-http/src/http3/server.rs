@@ -48,10 +48,11 @@ use super::connection::Http3Connection;
 use super::qpack::{QpackDecoder, QpackEncoder};
 use super::quic::crypto::PacketProtection;
 use super::quic::frame::QuicFrame;
-use super::quic::packet::{PacketType, QuicPacket};
+use super::quic::packet::{PacketType, QuicPacket, QuicPacketHeader};
 use super::quic::ConnectionId;
 use super::quic::QuicConnection;
 use super::quic::QuicTlsServerHandshaker;
+use super::quic::QUIC_VERSION_V1;
 use super::Http3Error;
 use crate::http3::settings::Http3Settings;
 use std::collections::HashMap;
@@ -213,67 +214,29 @@ impl Http3Server {
             return Err("Packet too short".to_string());
         }
 
-        let first_byte = data[0];
-        eprintln!(
-            "DEBUG: first={:02x} data[:20]={:02x?}",
-            first_byte,
-            &data[..20]
-        );
-
         // Parse packet to get header_to_bytes_aad()
         let (pkt, _) =
             QuicPacket::from_bytes(data).map_err(|e| format!("Parse packet failed: {}", e))?;
 
         // Use header_to_bytes_aad() - same method as client
         let aad = pkt.header_to_bytes_aad();
-        let encrypted_payload = data[aad.len()..].to_vec();
 
-        eprintln!(
-            "DEBUG: aad_len={}, encrypted_len={}",
-            aad.len(),
-            encrypted_payload.len()
-        );
-
-        // Extract CIDs from AAD
-        let dst_cid_len = aad[5] as usize;
-        let dst_cid = aad[6..6 + dst_cid_len].to_vec();
-        let src_cid = if 6 + dst_cid_len + 1 < aad.len() {
-            let src_offset = 6 + dst_cid_len + 1;
-            let src_cid_len = aad[src_offset - 1] as usize;
-            if src_offset + src_cid_len <= aad.len() {
-                aad[src_offset..src_offset + src_cid_len].to_vec()
-            } else {
-                vec![]
-            }
-        } else {
-            vec![]
-        };
-
-        eprintln!("DEBUG: parsed dst_cid={:?} src_cid={:?}", dst_cid, src_cid);
+        let dst_cid = pkt.header.dst_cid.clone();
+        let src_cid = pkt.header.src_cid.clone();
 
         let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
         let initial_keys = handshaker.initial_keys(&dst_cid);
         let mut initial_protection = PacketProtection::new(&initial_keys);
 
         let plaintext = initial_protection
-            .unprotect(&aad, 0, &encrypted_payload)
+            .unprotect(&aad, pkt.header.packet_number, &pkt.payload)
             .map_err(|e| format!("Decrypt failed: {}", e))?;
-
-        eprintln!(
-            "DEBUG: plaintext[:30]={:02x?}",
-            &plaintext[..plaintext.len().min(30)]
-        );
-        eprintln!(
-            "DEBUG: frame_type=0x{:02x}",
-            plaintext.first().copied().unwrap_or(0)
-        );
 
         // Try parsing as QUIC CRYPTO frame first (0x06)
         let mut crypto_data = Self::parse_crypto_frame(&plaintext).map(|(d, _)| d);
 
         // If no QUIC CRYPTO frame, try treating raw TLS handshake data
         if crypto_data.is_none() && !plaintext.is_empty() {
-            eprintln!("DEBUG: trying raw TLS data");
             // Raw TLS handshake data starts with 0x01 (ClientHello) or 0x02 (ServerHello)
             // TLS over QUIC uses 0x01 prefix for Handshake message type
             if plaintext.starts_with(&[0x01]) || plaintext.starts_with(&[0x16]) {
@@ -459,36 +422,21 @@ impl Http3Server {
         let initial_keys = handshaker.initial_keys(client_dcid);
         let mut protection = PacketProtection::new(&initial_keys);
 
-        // Build long header for Initial
-        let mut header = Vec::new();
-        header.push(0x0C); // Long header, Initial type (0x00), fixed bits
-        header.extend_from_slice(&0x00000001u32.to_be_bytes()); // Version
-        header.push(client_dcid.len() as u8);
-        header.extend_from_slice(client_dcid);
-        header.push(client_scid.len() as u8);
-        header.extend_from_slice(client_scid);
-        // Token length = 0 (varint, 1 byte)
-        header.push(0x00);
-        // Payload length placeholder (2 bytes, will fill after)
-        let payload_len_pos = header.len();
-        header.extend_from_slice(&[0u8; 2]);
-        // Packet number (2 bytes)
-        header.extend_from_slice(&0u64.to_be_bytes()[6..]);
-
-        let header_len = header.len();
-        header.extend_from_slice(&payload);
+        let packet = QuicPacket::initial(
+            QUIC_VERSION_V1,
+            client_scid.to_vec(),
+            client_dcid.to_vec(),
+            Vec::new(),
+            0,
+            payload,
+        );
+        let aad = packet.header_to_bytes_aad_with_payload_len(packet.payload.len() + 16);
 
         let encrypted = protection
-            .protect(&header, &header[header_len..])
+            .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
             .map_err(|e| format!("Initial encrypt failed: {}", e))?;
 
-        // Fill in payload length
-        let total_payload = encrypted.len();
-        header[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
-        header[payload_len_pos + 1] = total_payload as u8;
-
-        // Rebuild: header + encrypted payload
-        let mut packet = header[..header_len].to_vec();
+        let mut packet = aad;
         packet.extend_from_slice(&encrypted);
 
         Ok(packet)
@@ -508,34 +456,26 @@ impl Http3Server {
             .map_err(|e| format!("Failed to derive handshake keys: {}", e))?;
         let mut protection = PacketProtection::new(&hs_keys);
 
-        // Build long header for Handshake
-        let mut header = Vec::new();
-        header.push(0x0C | 0x20); // Long header, Handshake type (0x20), fixed bits
-        header.extend_from_slice(&0x00000001u32.to_be_bytes()); // Version
-        header.push(client_dcid.len() as u8);
-        header.extend_from_slice(client_dcid);
-        header.push(client_scid.len() as u8);
-        header.extend_from_slice(client_scid);
-        // Token length = 0
-        header.push(0x00);
-        // Payload length placeholder
-        let payload_len_pos = header.len();
-        header.extend_from_slice(&[0u8; 2]);
-        // Packet number
-        header.extend_from_slice(&0u64.to_be_bytes()[6..]);
-
-        let header_len = header.len();
-        header.extend_from_slice(&payload);
+        let packet = QuicPacket {
+            header: QuicPacketHeader {
+                packet_type: PacketType::Handshake,
+                version: QUIC_VERSION_V1,
+                dst_cid: client_scid.to_vec(),
+                src_cid: client_dcid.to_vec(),
+                token: Vec::new(),
+                pn_length: 4,
+                packet_number: 0,
+                payload_length: payload.len(),
+            },
+            payload,
+        };
+        let aad = packet.header_to_bytes_aad_with_payload_len(packet.payload.len() + 16);
 
         let encrypted = protection
-            .protect(&header, &header[header_len..])
+            .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
             .map_err(|e| format!("Handshake encrypt failed: {}", e))?;
 
-        let total_payload = encrypted.len();
-        header[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
-        header[payload_len_pos + 1] = total_payload as u8;
-
-        let mut packet = header[..header_len].to_vec();
+        let mut packet = aad;
         packet.extend_from_slice(&encrypted);
 
         Ok(packet)
@@ -576,8 +516,9 @@ impl Http3Server {
             }
 
             // Decrypt
+            let aad = pkt.header_to_bytes_aad();
             let plaintext = hs_protection
-                .unprotect(&[], pkt.header.packet_number, &pkt.payload)
+                .unprotect(&aad, pkt.header.packet_number, &pkt.payload)
                 .map_err(|e| format!("Handshake decrypt failed: {}", e))?;
 
             // Parse CRYPTO frame
@@ -731,6 +672,164 @@ impl Http3Server {
             {
                 return Err(format!("send_response: {:?}", e));
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::quic::QuicTlsHandshaker;
+    use super::*;
+    use edgerun_tls::certificate_gen::generate_self_signed;
+
+    fn test_server(cert_and_key: CertificateAndKey) -> Http3Server {
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind test socket");
+        Http3Server {
+            socket: Arc::new(AsyncUdpSocket::from_std(socket).expect("wrap test socket")),
+            cert_and_key,
+            pending: Mutex::new(Vec::new()),
+            validation_state: Mutex::new(HashMap::new()),
+        }
+    }
+
+    #[test]
+    fn initial_response_uses_parseable_protected_long_header() {
+        let cert = generate_self_signed(&["localhost"]).expect("generate cert");
+        let server = test_server(cert.clone());
+        let mut server_hs = QuicTlsServerHandshaker::new(cert);
+        let client_hs = QuicTlsHandshaker::new("localhost");
+
+        let client_dcid = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let client_scid = vec![9, 10, 11, 12];
+        let frame = QuicFrame::Crypto {
+            offset: 0,
+            data: b"server hello".to_vec(),
+        };
+
+        let packet_bytes = server
+            .build_initial_response(&client_dcid, &client_scid, &frame, &server_hs)
+            .expect("build initial response");
+        let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
+
+        assert_eq!(consumed, packet_bytes.len());
+        assert_eq!(packet.header.packet_type, PacketType::Initial);
+        assert_eq!(packet.header.dst_cid, client_scid);
+        assert_eq!(packet.header.src_cid, client_dcid);
+
+        let mut protection = PacketProtection::new(&client_hs.initial_keys(&packet.header.src_cid));
+        let plaintext = protection
+            .unprotect(
+                &packet.header_to_bytes_aad(),
+                packet.header.packet_number,
+                &packet.payload,
+            )
+            .expect("decrypt initial response");
+        let (decoded, consumed) = QuicFrame::from_bytes(&plaintext).expect("parse crypto frame");
+        assert_eq!(consumed, plaintext.len());
+        match decoded {
+            QuicFrame::Crypto { data, .. } => assert_eq!(data, b"server hello"),
+            _ => panic!("expected CRYPTO frame"),
+        }
+    }
+
+    #[test]
+    fn server_initial_decrypt_uses_parsed_packet_number() {
+        let cert = generate_self_signed(&["localhost"]).expect("generate cert");
+        let client_hs = QuicTlsHandshaker::new("localhost");
+        let server_hs = QuicTlsServerHandshaker::new(cert);
+        let client_dcid = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let client_scid = vec![9, 10, 11, 12];
+        let frame = QuicFrame::Crypto {
+            offset: 0,
+            data: client_hs.initial_crypto_data().to_vec(),
+        };
+        let packet = QuicPacket::initial(
+            QUIC_VERSION_V1,
+            client_dcid.clone(),
+            client_scid,
+            Vec::new(),
+            5,
+            frame.to_bytes(),
+        );
+        let aad = packet.header_to_bytes_aad_with_payload_len(packet.payload.len() + 16);
+        let client_keys = client_hs.initial_keys(&client_dcid);
+        let mut client_protection = PacketProtection::new(&client_keys);
+        let encrypted = client_protection
+            .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
+            .expect("encrypt initial");
+        let mut packet_bytes = aad;
+        packet_bytes.extend_from_slice(&encrypted);
+
+        let (parsed, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
+        assert_eq!(consumed, packet_bytes.len());
+        assert_eq!(parsed.header.packet_number, 5);
+
+        let server_keys = server_hs.initial_keys(&client_dcid);
+        let mut wrong_server_protection = PacketProtection::new(&server_keys);
+        assert!(wrong_server_protection
+            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+            .is_err());
+
+        let mut server_protection = PacketProtection::new(&server_keys);
+        let plaintext = server_protection
+            .unprotect(
+                &parsed.header_to_bytes_aad(),
+                parsed.header.packet_number,
+                &parsed.payload,
+            )
+            .expect("decrypt initial");
+        let (decoded, consumed) = QuicFrame::from_bytes(&plaintext).expect("parse crypto frame");
+        assert_eq!(consumed, plaintext.len());
+        match decoded {
+            QuicFrame::Crypto { data, .. } => assert_eq!(data, client_hs.initial_crypto_data()),
+            _ => panic!("expected CRYPTO frame"),
+        }
+    }
+
+    #[test]
+    fn handshake_response_uses_parseable_protected_long_header() {
+        let cert = generate_self_signed(&["localhost"]).expect("generate cert");
+        let server = test_server(cert.clone());
+        let mut client_hs = QuicTlsHandshaker::new("localhost");
+        let mut server_hs = QuicTlsServerHandshaker::new(cert);
+
+        let client_dcid = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let client_scid = vec![9, 10, 11, 12];
+        let server_hello = server_hs
+            .process_client_hello(client_hs.initial_crypto_data())
+            .expect("server processes client hello");
+        client_hs
+            .process_initial_crypto(&server_hello)
+            .expect("client processes server hello");
+
+        let frame = QuicFrame::Crypto {
+            offset: 0,
+            data: b"encrypted extensions".to_vec(),
+        };
+        let packet_bytes = server
+            .build_handshake_response(&client_dcid, &client_scid, &frame, &server_hs)
+            .expect("build handshake response");
+        let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
+
+        assert_eq!(consumed, packet_bytes.len());
+        assert_eq!(packet.header.packet_type, PacketType::Handshake);
+        assert_eq!(packet.header.dst_cid, client_scid);
+        assert_eq!(packet.header.src_cid, client_dcid);
+
+        let mut protection =
+            PacketProtection::new(&client_hs.handshake_keys().expect("client handshake keys"));
+        let plaintext = protection
+            .unprotect(
+                &packet.header_to_bytes_aad(),
+                packet.header.packet_number,
+                &packet.payload,
+            )
+            .expect("decrypt handshake response");
+        let (decoded, consumed) = QuicFrame::from_bytes(&plaintext).expect("parse crypto frame");
+        assert_eq!(consumed, plaintext.len());
+        match decoded {
+            QuicFrame::Crypto { data, .. } => assert_eq!(data, b"encrypted extensions"),
+            _ => panic!("expected CRYPTO frame"),
         }
     }
 }

@@ -168,8 +168,33 @@ impl PacketProtection {
     pub fn protect(&mut self, header: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
         let pn = self.packet_number;
         self.packet_number += 1;
+        self.protect_with_nonce_packet_number(pn, header, plaintext)
+    }
 
-        let nonce = self.make_nonce(&self.write_iv, pn);
+    /// Protect a packet payload using an explicit packet number.
+    ///
+    /// Packet number is already serialized in the QUIC header. Callers that
+    /// allocate packet numbers outside this type must use the same value for
+    /// nonce construction or the peer will be unable to decrypt the packet.
+    pub fn protect_with_packet_number(
+        &mut self,
+        packet_number: u64,
+        header: &[u8],
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        if packet_number >= self.packet_number {
+            self.packet_number = packet_number + 1;
+        }
+        self.protect_with_nonce_packet_number(packet_number, header, plaintext)
+    }
+
+    fn protect_with_nonce_packet_number(
+        &self,
+        packet_number: u64,
+        header: &[u8],
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        let nonce = self.make_nonce(&self.write_iv, packet_number);
 
         let mut buffer = plaintext.to_vec();
 
@@ -410,6 +435,26 @@ mod tests {
             .unprotect(header, 0, &ciphertext)
             .expect("decrypt failed");
         assert_eq!(decrypted.as_slice(), plaintext.as_slice());
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_with_explicit_packet_number() {
+        let keys = ProtectionKeys::test_keys();
+        let mut encryptor = PacketProtection::new(&keys);
+        let mut decryptor = PacketProtection::new(&keys);
+
+        let header = b"header with packet number 7";
+        let plaintext = b"payload";
+        let ciphertext = encryptor
+            .protect_with_packet_number(7, header, plaintext)
+            .expect("encrypt failed");
+
+        assert!(decryptor.unprotect(header, 6, &ciphertext).is_err());
+        let decrypted = decryptor
+            .unprotect(header, 7, &ciphertext)
+            .expect("decrypt failed");
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
+        assert_eq!(encryptor.packet_number(), 8);
     }
 
     #[test]

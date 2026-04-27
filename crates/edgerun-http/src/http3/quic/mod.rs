@@ -40,6 +40,9 @@ pub use edgerun_quic::{
     TransportParameters, QUIC_VERSION_V1,
 };
 
+use alloc::borrow::ToOwned;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 
 use edgerun_bare_rt::AsyncUdpSocket;
@@ -303,18 +306,10 @@ impl QuicConnection {
     /// Send a CRYPTO frame in an Initial packet (unprotected header + encrypted payload).
     async fn send_initial_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
-        eprintln!(
-            "DEBUG CLIENT: CRYPTO frame payload[:20]={:02x?}",
-            &payload[..payload.len().min(20)]
-        );
-        eprintln!(
-            "DEBUG CLIENT: frame_type=0x{:02x}",
-            payload.first().copied().unwrap_or(0)
-        );
 
         let pn = self
             .transport
-            .next_packet_number(PacketNumberSpace::ApplicationData);
+            .next_packet_number(PacketNumberSpace::Initial);
 
         let pkt = QuicPacket::initial(
             QUIC_VERSION_V1,
@@ -329,29 +324,14 @@ impl QuicConnection {
         let aad = pkt.header_to_bytes_aad_with_payload_len(encrypted.len() + 16);
 
         let send_bytes = if let Some(ref mut prot) = self.initial_protection {
-            prot.protect(&aad, &encrypted)
+            prot.protect_with_packet_number(pkt.header.packet_number, &aad, &encrypted)
                 .map_err(|e| format!("Initial encrypt failed: {}", e))?
         } else {
             return Err("No Initial protection keys".into());
         };
 
-        eprintln!("DEBUG CLIENT: aad[:20]={:02x?}", &aad[..aad.len().min(20)]);
-        eprintln!(
-            "DEBUG CLIENT: encrypted[:20]={:02x?}",
-            &encrypted[..encrypted.len().min(20)]
-        );
-        eprintln!(
-            "DEBUG CLIENT: send_bytes[:20]={:02x?}",
-            &send_bytes[..send_bytes.len().min(20)]
-        );
-
         let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
-
-        eprintln!(
-            "DEBUG CLIENT: full[:30]={:02x?}",
-            &full_packet[..full_packet.len().min(30)]
-        );
 
         let addr: SocketAddr = self
             .server_addr
@@ -391,7 +371,7 @@ impl QuicConnection {
         let aad = pkt.header_to_bytes_aad_with_payload_len(pkt.payload.len() + 16);
 
         let send_bytes = if let Some(ref mut prot) = self.hs_protection {
-            prot.protect(&aad, &pkt.payload)
+            prot.protect_with_packet_number(pkt.header.packet_number, &aad, &pkt.payload)
                 .map_err(|e| format!("Handshake encrypt failed: {}", e))?
         } else {
             return Err("No Handshake protection keys".into());
@@ -710,9 +690,8 @@ impl QuicConnection {
             .next_packet_number(PacketNumberSpace::ApplicationData);
         let payload = frame.to_bytes();
 
-        let packet_bytes = if self.established {
+        let packet = if self.established {
             QuicPacket::one_rtt(self.transport.remote_cid.as_bytes().to_vec(), pn, payload)
-                .to_bytes()
         } else {
             QuicPacket::initial(
                 QUIC_VERSION_V1,
@@ -722,18 +701,18 @@ impl QuicConnection {
                 pn,
                 payload,
             )
-            .to_bytes()
         };
 
         let send_bytes = if let Some(ref mut prot) = self.protection {
-            let header_len = if self.established { 10 } else { 9 };
-            prot.protect(
-                &packet_bytes[..header_len.min(packet_bytes.len())],
-                &packet_bytes[header_len.min(packet_bytes.len())..],
-            )
-            .map_err(|e| format!("Packet protection failed: {}", e))?
-        } else {
+            let aad = packet.header_to_bytes_aad();
+            let encrypted = prot
+                .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
+                .map_err(|e| format!("Packet protection failed: {}", e))?;
+            let mut packet_bytes = aad;
+            packet_bytes.extend_from_slice(&encrypted);
             packet_bytes
+        } else {
+            packet.to_bytes()
         };
 
         self.sent_packets_buffer.push(send_bytes.clone());
@@ -928,41 +907,40 @@ impl QuicConnection {
             .transport
             .next_packet_number(PacketNumberSpace::ApplicationData);
 
-        let mut output = Vec::new();
-        output.push(0xD0);
-        output.extend_from_slice(&QUIC_VERSION_V1.to_be_bytes());
-        output.push(self.transport.remote_cid.len() as u8);
-        output.extend_from_slice(self.transport.remote_cid.as_bytes());
-        output.push(self.transport.local_cid.len() as u8);
-        output.extend_from_slice(self.transport.local_cid.as_bytes());
-
-        let payload_len_pos = output.len();
-        output.extend_from_slice(&[0u8; 2]);
-        let pn_bytes = pn.to_be_bytes();
-        output.extend_from_slice(&pn_bytes[6..]);
-
-        let header_len = output.len();
-        output.extend_from_slice(&frame.to_bytes());
+        let payload = frame.to_bytes();
+        let packet = QuicPacket {
+            header: packet::QuicPacketHeader {
+                packet_type: PacketType::ZeroRtt,
+                version: QUIC_VERSION_V1,
+                dst_cid: self.transport.remote_cid.as_bytes().to_vec(),
+                src_cid: self.transport.local_cid.as_bytes().to_vec(),
+                token: Vec::new(),
+                pn_length: 4,
+                packet_number: pn,
+                payload_length: payload.len(),
+            },
+            payload,
+        };
+        let aad = packet.header_to_bytes_aad_with_payload_len(packet.payload.len() + 16);
 
         if let Some(ref mut prot) = self.early_data_protection {
             let encrypted = prot
-                .protect(&output[..header_len], &output[header_len..])
+                .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
                 .map_err(|e| format!("0-RTT encrypt failed: {}", e))?;
 
-            let total_payload = encrypted.len();
-            output[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
-            output[payload_len_pos + 1] = total_payload as u8;
+            let mut packet_bytes = aad;
+            packet_bytes.extend_from_slice(&encrypted);
 
-            let mut packet = output[..header_len].to_vec();
-            packet.extend_from_slice(&encrypted);
-
-            let addr: SocketAddr = format!("{}:443", self.server_addr)
-                .parse()
-                .map_err(|e| format!("Invalid server address: {}", e))?;
+            let addr: SocketAddr = self.server_addr.parse().unwrap_or_else(|_| {
+                format!("{}:443", self.server_addr)
+                    .parse()
+                    .expect("server_addr must be parseable as SocketAddr")
+            });
             self.socket
-                .send_to(&packet, addr)
+                .send_to(&packet_bytes, addr)
                 .await
                 .map_err(|e| format!("UDP send failed: {}", e))?;
+            self.sent_packets_buffer.push(packet_bytes);
         }
 
         self.early_data_sent = true;
@@ -1202,8 +1180,6 @@ mod tests {
             };
             let payload = frame.to_bytes();
 
-            eprintln!("TIMEOUT TEST: Sending Initial with CRYPTO frame...");
-
             let mut conn = QuicConnection {
                 socket: client,
                 server_addr: server_addr.to_string(),
@@ -1231,7 +1207,7 @@ mod tests {
 
             let pn = conn
                 .transport
-                .next_packet_number(PacketNumberSpace::ApplicationData);
+                .next_packet_number(PacketNumberSpace::Initial);
             let pkt = QuicPacket::initial(
                 QUIC_VERSION_V1,
                 conn.transport.remote_cid.as_bytes().to_vec(),
@@ -1240,25 +1216,21 @@ mod tests {
                 pn,
                 payload.clone(),
             );
-            let packet_bytes = pkt.to_bytes();
-
-            let payload_offset =
-                packet::get_long_header_payload_offset(&packet_bytes).map_err(|e| e.to_string())?;
-            let aad = packet_bytes[..payload_offset].to_vec();
-            let encrypted = packet_bytes[payload_offset..].to_vec();
+            let aad = pkt.header_to_bytes_aad_with_payload_len(pkt.payload.len() + 16);
 
             let send_bytes = conn
                 .initial_protection
                 .as_mut()
                 .expect("prot")
-                .protect(&aad, &encrypted)
+                .protect_with_packet_number(pkt.header.packet_number, &aad, &pkt.payload)
                 .map_err(|e| e.to_string())?;
+            let mut packet_bytes = aad;
+            packet_bytes.extend_from_slice(&send_bytes);
 
             conn.socket
-                .send_to(&send_bytes, server_addr)
+                .send_to(&packet_bytes, server_addr)
                 .await
                 .expect("send");
-            eprintln!("TIMEOUT TEST: Sent {} bytes", send_bytes.len());
 
             // Try to receive with timeout
             let result = edgerun_bare_rt::timeout(
@@ -1269,13 +1241,13 @@ mod tests {
 
             match result {
                 Ok(Ok((n, _))) => {
-                    eprintln!("TIMEOUT TEST: Received {} bytes", n);
+                    assert!(n > 0, "server should receive Initial packet bytes");
                 }
                 Ok(Err(e)) => {
-                    eprintln!("TIMEOUT TEST: Recv error: {}", e);
+                    panic!("server receive failed: {}", e);
                 }
                 Err(_) => {
-                    eprintln!("TIMEOUT TEST: TIMEOUT - server did not receive within 100ms");
+                    panic!("server did not receive Initial packet within timeout");
                 }
             }
 
@@ -1619,6 +1591,88 @@ mod tests {
             packet.header.packet_type,
             crate::http3::quic::packet::PacketType::OneRtt
         );
+    }
+
+    #[test]
+    fn test_protected_send_frame_preserves_parseable_header() {
+        let sender = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
+        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+        let recv_addr = receiver.local_addr().expect("get receiver addr");
+        sender.connect(recv_addr).expect("connect sender");
+
+        let keys = crypto::ProtectionKeys::test_keys();
+        let mut quic = QuicConnection::from_established_test(sender, recv_addr);
+        quic.set_protection_keys(&keys);
+        quic.transport
+            .next_packet_number(PacketNumberSpace::ApplicationData);
+
+        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async { quic.send_frame(QuicFrame::Ping).await })
+            .expect("send_frame failed");
+
+        let mut buf = [0u8; 65536];
+        let n = receiver.recv(&mut buf).expect("receive failed");
+        let (packet, consumed) = QuicPacket::from_bytes(&buf[..n]).expect("parse protected packet");
+        assert_eq!(consumed, n);
+        assert_eq!(packet.header.packet_type, PacketType::OneRtt);
+        assert_eq!(packet.header.packet_number, 1);
+
+        let mut protection = crypto::PacketProtection::new(&keys);
+        let plaintext = protection
+            .unprotect(
+                &packet.header_to_bytes_aad(),
+                packet.header.packet_number,
+                &packet.payload,
+            )
+            .expect("decrypt packet");
+        assert_eq!(plaintext, QuicFrame::Ping.to_bytes());
+    }
+
+    #[test]
+    fn test_early_data_uses_parseable_zero_rtt_packet() {
+        let sender = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
+        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+        let recv_addr = receiver.local_addr().expect("get receiver addr");
+        sender.connect(recv_addr).expect("connect sender");
+
+        let keys = crypto::ProtectionKeys::test_keys();
+        let mut quic = QuicConnection::from_established_test(sender, recv_addr);
+        quic.established = false;
+        quic.enable_early_data(keys.clone());
+
+        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async { quic.send_early_data(0, b"GET /", true).await })
+            .expect("send_early_data failed");
+
+        let mut buf = [0u8; 65536];
+        let n = receiver.recv(&mut buf).expect("receive failed");
+        let (packet, consumed) = QuicPacket::from_bytes(&buf[..n]).expect("parse 0-RTT packet");
+        assert_eq!(consumed, n);
+        assert_eq!(packet.header.packet_type, PacketType::ZeroRtt);
+
+        let mut protection = crypto::PacketProtection::new(&keys);
+        let plaintext = protection
+            .unprotect(
+                &packet.header_to_bytes_aad(),
+                packet.header.packet_number,
+                &packet.payload,
+            )
+            .expect("decrypt 0-RTT packet");
+        let (frame, consumed) = QuicFrame::from_bytes(&plaintext).expect("parse STREAM frame");
+        assert_eq!(consumed, plaintext.len());
+        match frame {
+            QuicFrame::Stream { data, fin, .. } => {
+                assert_eq!(data, b"GET /");
+                assert!(fin);
+            }
+            _ => panic!("expected STREAM frame"),
+        }
     }
 
     #[test]

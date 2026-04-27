@@ -463,6 +463,8 @@ fn decode_varint_public(data: &[u8]) -> Option<(u64, usize)> {
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::{PacketProtection, ProtectionKeys};
+
     use super::*;
 
     #[test]
@@ -596,5 +598,118 @@ mod tests {
         assert_eq!(parsed.header.pn_length, 2);
         assert_eq!(parsed.header.packet_number, 0x1234);
         assert_eq!(parsed.payload, pkt.payload);
+    }
+
+    fn protected_long_header_roundtrip(packet: QuicPacket) {
+        let keys = ProtectionKeys::test_keys();
+        let mut encryptor = PacketProtection::new(&keys);
+        let aad = packet.header_to_bytes_aad_with_payload_len(packet.payload.len() + 16);
+        let encrypted = encryptor
+            .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
+            .expect("encrypt packet");
+        let mut packet_bytes = aad.clone();
+        packet_bytes.extend_from_slice(&encrypted);
+
+        let (parsed, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
+        assert_eq!(consumed, packet_bytes.len());
+        assert_eq!(parsed.header.packet_type, packet.header.packet_type);
+        assert_eq!(parsed.header.packet_number, packet.header.packet_number);
+        assert_eq!(parsed.header_to_bytes_aad(), aad);
+        assert_eq!(parsed.payload, encrypted);
+
+        let mut wrong_decryptor = PacketProtection::new(&keys);
+        assert!(wrong_decryptor
+            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+            .is_err());
+
+        let mut decryptor = PacketProtection::new(&keys);
+        let plaintext = decryptor
+            .unprotect(
+                &parsed.header_to_bytes_aad(),
+                parsed.header.packet_number,
+                &parsed.payload,
+            )
+            .expect("decrypt packet");
+        assert_eq!(plaintext, packet.payload);
+    }
+
+    #[test]
+    fn test_protected_initial_packet_roundtrip() {
+        protected_long_header_roundtrip(QuicPacket::initial(
+            1,
+            vec![1, 2, 3, 4, 5, 6, 7, 8],
+            vec![9, 10, 11, 12],
+            vec![0xaa, 0xbb],
+            7,
+            vec![0x06, 0x00, 0x04, 1, 2, 3, 4],
+        ));
+    }
+
+    #[test]
+    fn test_protected_handshake_packet_roundtrip() {
+        protected_long_header_roundtrip(QuicPacket {
+            header: QuicPacketHeader {
+                packet_type: PacketType::Handshake,
+                version: 1,
+                dst_cid: vec![1, 2, 3, 4],
+                src_cid: vec![5, 6, 7, 8],
+                token: Vec::new(),
+                pn_length: 2,
+                packet_number: 7,
+                payload_length: 3,
+            },
+            payload: vec![0xaa, 0xbb, 0xcc],
+        });
+    }
+
+    #[test]
+    fn test_protected_zero_rtt_packet_roundtrip() {
+        protected_long_header_roundtrip(QuicPacket {
+            header: QuicPacketHeader {
+                packet_type: PacketType::ZeroRtt,
+                version: 1,
+                dst_cid: vec![1, 2, 3, 4],
+                src_cid: vec![5, 6, 7, 8],
+                token: Vec::new(),
+                pn_length: 4,
+                packet_number: 7,
+                payload_length: 3,
+            },
+            payload: vec![0x08, 0xaa, 0xbb],
+        });
+    }
+
+    #[test]
+    fn test_protected_one_rtt_packet_roundtrip() {
+        let packet = QuicPacket::one_rtt(vec![1, 2, 3, 4, 5, 6, 7, 8], 7, vec![0x01]);
+        let keys = ProtectionKeys::test_keys();
+        let mut encryptor = PacketProtection::new(&keys);
+        let aad = packet.header_to_bytes_aad();
+        let encrypted = encryptor
+            .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
+            .expect("encrypt packet");
+        let mut packet_bytes = aad.clone();
+        packet_bytes.extend_from_slice(&encrypted);
+
+        let (parsed, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
+        assert_eq!(consumed, packet_bytes.len());
+        assert_eq!(parsed.header.packet_type, PacketType::OneRtt);
+        assert_eq!(parsed.header.packet_number, 7);
+        assert_eq!(parsed.header_to_bytes_aad(), aad);
+
+        let mut wrong_decryptor = PacketProtection::new(&keys);
+        assert!(wrong_decryptor
+            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+            .is_err());
+
+        let mut decryptor = PacketProtection::new(&keys);
+        let plaintext = decryptor
+            .unprotect(
+                &parsed.header_to_bytes_aad(),
+                parsed.header.packet_number,
+                &parsed.payload,
+            )
+            .expect("decrypt packet");
+        assert_eq!(plaintext, packet.payload);
     }
 }
