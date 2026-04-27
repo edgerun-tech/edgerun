@@ -1350,14 +1350,16 @@ impl NodeStore {
         &self,
         mut scanned: Vec<ScannedEvent>,
     ) -> Result<usize, StorageError> {
-        self.index.clear()?;
-
         scanned.sort_by(|left, right| {
             left.location
                 .stream_id
                 .cmp(&right.location.stream_id)
                 .then(left.location.seq.cmp(&right.location.seq))
         });
+
+        validate_scanned_event_chains(&scanned)?;
+
+        self.index.clear()?;
 
         let total_events = scanned.len();
         for scanned_event in scanned {
@@ -1547,6 +1549,88 @@ impl NodeStore {
     }
 }
 
+fn validate_scanned_event_chains(scanned: &[ScannedEvent]) -> Result<(), StorageError> {
+    let mut current_stream: Option<&[u8]> = None;
+    let mut expected_seq = 0u64;
+    let mut prev_hash: Option<Vec<u8>> = None;
+
+    for scanned_event in scanned {
+        let event = &scanned_event.event;
+        let location = &scanned_event.location;
+
+        if location.stream_id != event.stream_id {
+            return Err(StorageError::Decode(format!(
+                "scanned event stream mismatch at offset {}: location has {}, envelope has {}",
+                location.file_offset,
+                edgerun_core::util::bytes_to_hex(&location.stream_id),
+                edgerun_core::util::bytes_to_hex(&event.stream_id)
+            )));
+        }
+
+        if location.seq != event.seq {
+            return Err(StorageError::Decode(format!(
+                "scanned event seq mismatch at offset {}: location has {}, envelope has {}",
+                location.file_offset, location.seq, event.seq
+            )));
+        }
+
+        let event_hash = crate::core::canonical_event_hash(event).value;
+        if location.event_hash != event_hash {
+            return Err(StorageError::Decode(format!(
+                "scanned event hash mismatch at offset {}: location has {}, envelope has {}",
+                location.file_offset,
+                edgerun_core::util::bytes_to_hex(&location.event_hash),
+                edgerun_core::util::bytes_to_hex(&event_hash)
+            )));
+        }
+
+        if current_stream != Some(location.stream_id.as_slice()) {
+            current_stream = Some(&location.stream_id);
+            expected_seq = 0;
+            prev_hash = None;
+        }
+
+        if location.seq != expected_seq {
+            return Err(StorageError::Decode(format!(
+                "stream {} has non-contiguous seq: expected {}, got {}",
+                edgerun_core::util::bytes_to_hex(&location.stream_id),
+                expected_seq,
+                location.seq
+            )));
+        }
+
+        if location.seq == 0 {
+            if event.prev_event_hash.is_some() {
+                return Err(StorageError::Decode(format!(
+                    "stream {} genesis event has prev_event_hash",
+                    edgerun_core::util::bytes_to_hex(&location.stream_id)
+                )));
+            }
+        } else {
+            let expected_prev = prev_hash.as_ref().ok_or_else(|| {
+                StorageError::Decode(format!(
+                    "stream {} missing previous hash for seq {}",
+                    edgerun_core::util::bytes_to_hex(&location.stream_id),
+                    location.seq
+                ))
+            })?;
+            let actual_prev = event.prev_event_hash.as_ref().map(|d| &d.value);
+            if actual_prev != Some(expected_prev) {
+                return Err(StorageError::Decode(format!(
+                    "stream {} prev_hash mismatch at seq {}",
+                    edgerun_core::util::bytes_to_hex(&location.stream_id),
+                    location.seq
+                )));
+            }
+        }
+
+        prev_hash = Some(event_hash);
+        expected_seq = expected_seq.saturating_add(1);
+    }
+
+    Ok(())
+}
+
 /// Result of checking a command against the replay cache.
 pub enum CommandReplayResult {
     /// First time seeing this command — safe to process.
@@ -1659,6 +1743,20 @@ mod tests {
         }
     }
 
+    fn scanned(event: EventEnvelope, file_offset: u64) -> ScannedEvent {
+        let event_hash = crate::core::canonical_event_hash(&event).value;
+        ScannedEvent {
+            location: EventLocation {
+                stream_id: event.stream_id.clone(),
+                seq: event.seq,
+                event_hash,
+                file_offset,
+                envelope_version: event.envelope_version,
+            },
+            event,
+        }
+    }
+
     #[test]
     fn put_object_can_be_retrieved_by_logical_object_ref() {
         let data_root = tmp_data_root();
@@ -1762,6 +1860,25 @@ mod tests {
             .validate_stream_chain_with_writer(stream_id, &wrong_signer.node_id())
             .unwrap_err();
         assert!(matches!(err, StorageError::Stream(_)));
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn rebuild_indexes_rejects_broken_scanned_chain_before_clearing_index() {
+        let data_root = tmp_data_root();
+        let store = make_store(data_root.clone());
+
+        materialize_event_to_index(&store.index, &event(b"existing-stream", 0, None), 0).unwrap();
+        assert!(store.get_head(b"existing-stream").unwrap().is_some());
+
+        let genesis = event(b"broken-stream", 0, None);
+        let second = event(b"broken-stream", 1, Some(vec![0xaa; 32]));
+        let result = store
+            .rebuild_indexes_from_scanned_events(vec![scanned(genesis, 0), scanned(second, 128)]);
+
+        assert!(result.is_err());
+        assert!(store.get_head(b"existing-stream").unwrap().is_some());
 
         let _ = std::fs::remove_dir_all(data_root);
     }
