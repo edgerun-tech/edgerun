@@ -1,3 +1,10 @@
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole,
@@ -125,6 +132,8 @@ pub fn validate_audio_playback_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
+    use alloc::vec;
     use edgerun_capabilities::CapabilityError;
 
     #[test]

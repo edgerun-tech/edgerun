@@ -1,11 +1,10 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 #[cfg(feature = "std")]
 extern crate std;
 
 extern crate alloc;
 
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use edgerun_json::{JsonNumber, Value};
 
@@ -77,6 +76,7 @@ impl Command {
         self
     }
 
+    #[cfg(feature = "std")]
     pub fn get_matches(&self) -> ArgMatches {
         self.get_matches_from(std::env::args().skip(1).collect())
     }
@@ -182,6 +182,7 @@ Some(Action::Count) => {
         matches
     }
 
+    #[cfg(feature = "std")]
     pub fn print_help(&self) {
         eprintln!("Usage: {} [OPTIONS] [SUBCOMMAND]", self.name);
 
@@ -439,6 +440,7 @@ impl ArgGroup {
 
 pub trait Parser: Sized {
     fn command() -> Command;
+    #[cfg(feature = "std")]
     fn parse() -> Self {
         let matches = Self::command().get_matches();
         Self::from(&matches)

@@ -171,8 +171,8 @@ pub struct SecretPutPayload {
     #[prost(string, tag = "4")]
     pub label: ::prost::alloc::string::String,
     /// Key-value attribute pairs for search
-    #[prost(map = "string, string", tag = "5")]
-    pub attributes: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    #[prost(btree_map = "string, string", tag = "5")]
+    pub attributes: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     /// The blob_id where the encrypted secret is stored (not the secret itself)
     #[prost(string, tag = "6")]
     pub secret_blob_id: ::prost::alloc::string::String,

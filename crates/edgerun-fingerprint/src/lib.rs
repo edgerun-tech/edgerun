@@ -1,3 +1,10 @@
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use edgerun_biometrics::{BiometricModality, BiometricState};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,7 +107,7 @@ impl core::fmt::Display for FingerprintError {
     }
 }
 
-impl std::error::Error for FingerprintError {}
+impl core::error::Error for FingerprintError {}
 
 pub trait FingerprintReader {
     fn reader_info(&self) -> Result<FingerprintReaderInfo, FingerprintError>;
@@ -161,6 +168,9 @@ pub fn validate_enroll_request(request: &FingerprintEnrollRequest) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
+    use alloc::string::ToString;
+    use alloc::vec;
     use edgerun_biometrics::BiometricAssuranceStrength;
 
     #[test]

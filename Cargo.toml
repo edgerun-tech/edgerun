@@ -208,7 +208,7 @@ brotli = "8"
 sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
 prost = { version = "0.14", default-features = false, features = ["derive"] }
-prost-types = "0.14"
+prost-types = { version = "0.14", default-features = false }
 der = { version = "0.8", features = ["heapless"] }
 
 [patch.crates-io]
