@@ -76,5 +76,8 @@ pub use crc32::{Crc32, crc32};
 pub mod ring;
 pub use ring::RingBuffer;
 
+pub mod storage;
+pub use storage::{BlockDevice, SECTOR_SIZE};
+
 pub mod log;
 pub use log::Level;
