@@ -18,6 +18,12 @@
 //! [1-RTT packets with HTTP/3 data]      ↔     [1-RTT packets]
 //! ```
 
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 use edgerun_crypto::getrandom;
 use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
 use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;

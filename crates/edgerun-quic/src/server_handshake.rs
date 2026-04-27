@@ -17,9 +17,15 @@
 //! [1-RTT packets with HTTP/3 data]      ↔     [1-RTT packets]
 //! ```
 
+use alloc::{
+    format,
+    string::{String, ToString},
+    sync::Arc,
+    vec,
+    vec::Vec,
+};
 use edgerun_crypto::getrandom;
 use edgerun_crypto::CipherSuite;
-use edgerun_tls::certificate_gen::CertificateAndKey;
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use edgerun_tls::prf::{
@@ -34,6 +40,30 @@ use edgerun_tls::server::message_builder::{
 
 use super::crypto::ProtectionKeys;
 use crate::ConnectionId;
+
+#[derive(Clone)]
+pub struct CertificateAndKey {
+    pub cert_der: Vec<u8>,
+    pub signing_key: Arc<edgerun_crypto::p256::ecdsa::SigningKey>,
+}
+
+impl CertificateAndKey {
+    pub fn from_der(cert_der: Vec<u8>, signing_key: edgerun_crypto::p256::ecdsa::SigningKey) -> Self {
+        Self {
+            cert_der,
+            signing_key: Arc::new(signing_key),
+        }
+    }
+}
+
+impl From<edgerun_tls::CertificateAndKey> for CertificateAndKey {
+    fn from(value: edgerun_tls::CertificateAndKey) -> Self {
+        Self {
+            cert_der: value.cert_der,
+            signing_key: value.signing_key,
+        }
+    }
+}
 
 /// 0-RTT early data state (RFC 9001 §4.6).
 #[derive(Debug, Clone)]
@@ -131,12 +161,13 @@ pub struct QuicTlsServerHandshaker {
 
 impl QuicTlsServerHandshaker {
     /// Create a new server handshaker with the given certificate.
-    pub fn new(cert_and_key: CertificateAndKey) -> Self {
+    pub fn new(cert_and_key: impl Into<CertificateAndKey>) -> Self {
         let mut server_random = [0u8; 32];
         getrandom(&mut server_random).expect("CSPRNG failure");
 
         let key_pair =
             EcdhKeyPair::generate(KeyExchangeGroup::X25519).expect("X25519 key generation failed");
+        let cert_and_key = cert_and_key.into();
 
         QuicTlsServerHandshaker {
             key_schedule: None,

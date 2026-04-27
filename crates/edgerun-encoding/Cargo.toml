@@ -7,8 +7,8 @@ publish.workspace = true
 description = "Consolidated encoding utilities for the edgerun workspace"
 
 [features]
-default = ["std"]
-std = []
+default = ["alloc"]
+std = ["alloc"]
 alloc = []
 
 [dependencies]

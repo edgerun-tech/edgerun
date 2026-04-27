@@ -1,5 +1,8 @@
 //! QUIC types shared across modules
 
+use alloc::vec::Vec;
+use edgerun_crypto::getrandom;
+
 /// QUIC version
 pub const QUIC_VERSION_V1: u32 = 0x00000001;
 
@@ -14,8 +17,6 @@ pub const INITIAL_SALT_V1: &[u8] = &[
 pub struct ConnectionId {
     data: Vec<u8>,
 }
-
-use edgerun_crypto::getrandom;
 
 impl ConnectionId {
     pub fn new(data: Vec<u8>) -> Self {

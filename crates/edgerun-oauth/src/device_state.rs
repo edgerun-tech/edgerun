@@ -152,7 +152,7 @@ impl DeviceGrantStore {
 
 fn generate_random_token(len: usize) -> std::io::Result<String> {
     let mut bytes = vec![0u8; len];
-    getrandom::fill(&mut bytes)
+    edgerun_crypto::getrandom(&mut bytes)
         .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
     Ok(base64url_nopad_encode(&bytes))
 }
@@ -160,7 +160,7 @@ fn generate_random_token(len: usize) -> std::io::Result<String> {
 fn generate_user_code() -> std::io::Result<String> {
     const CHARSET: &[u8] = b"BCDFGHJKLMNPQRSTVWXYZ";
     let mut bytes = [0u8; 8];
-    getrandom::fill(&mut bytes)
+    edgerun_crypto::getrandom(&mut bytes)
         .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
 
     // Use rejection sampling to ensure valid chars
@@ -168,7 +168,7 @@ fn generate_user_code() -> std::io::Result<String> {
     let mut byte_idx = 0;
     for i in 0..8 {
         if byte_idx >= bytes.len() {
-            getrandom::fill(&mut bytes)
+            edgerun_crypto::getrandom(&mut bytes)
                 .map_err(|e| std::io::Error::other(format!("random generation failed: {e}")))?;
             byte_idx = 0;
         }

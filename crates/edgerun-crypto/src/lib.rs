@@ -11,6 +11,7 @@ pub mod sha;
 
 pub use ::aes_gcm;
 pub use ::ecdsa;
+pub use ::ed25519_dalek;
 pub use ::elliptic_curve;
 pub use ::p256;
 pub use ::x25519_dalek;
@@ -20,10 +21,14 @@ use crate::rng::fill_random;
 use crate::sha::Digest;
 
 pub use aead::{Aes256GcmCipher, CipherU12, CipherU16};
-pub use aes_gcm::aead::{AeadInPlace, KeyInit};
+pub use aes_gcm::Aes256Gcm as AesGcmCipher;
+pub use aes_gcm::Nonce;
+pub use aes_gcm::aead::{Aead, AeadInPlace, KeyInit};
 pub use aes_gcm::AeadCore;
 pub use chacha20poly1305::ChaCha20Poly1305;
 pub use p256::ecdsa::SigningKey;
+pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
+pub use signature::Signer;
 
 pub use rand_core::{CryptoRng, OsRng, RngCore};
 pub mod rand_core {
@@ -121,6 +126,89 @@ pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
     let mut bytes = [0u8; 32];
     let _ = fill_random(&mut bytes);
     SigningKey::from_bytes(&bytes.into()).unwrap()
+}
+
+const ENCRYPTED_P256_KEY_MAGIC: &[u8] = b"EDGERUN-P256-GCM1";
+const ENCRYPTED_P256_SALT_LEN: usize = 16;
+const ENCRYPTED_P256_NONCE_LEN: usize = 12;
+const ENCRYPTED_P256_PBKDF2_ITERATIONS: u32 = 100_000;
+const P256_PRIVATE_KEY_LEN: usize = 32;
+
+fn derive_p256_encryption_key(passphrase: &str, salt: &[u8]) -> [u8; 32] {
+    pbkdf2_crate::pbkdf2_hmac_array::<sha::Sha256, 32>(
+        passphrase.as_bytes(),
+        salt,
+        ENCRYPTED_P256_PBKDF2_ITERATIONS,
+    )
+}
+
+pub fn encrypt_signing_key(
+    signing_key: &p256::ecdsa::SigningKey,
+    passphrase: &str,
+) -> alloc::vec::Vec<u8> {
+    let mut salt = [0u8; ENCRYPTED_P256_SALT_LEN];
+    let _ = fill_random(&mut salt);
+    let mut nonce_bytes = [0u8; ENCRYPTED_P256_NONCE_LEN];
+    let _ = fill_random(&mut nonce_bytes);
+
+    let encryption_key = derive_p256_encryption_key(passphrase, &salt);
+    let cipher = aes_gcm::Aes256Gcm::new(aes_gcm::Key::<aes_gcm::Aes256Gcm>::from_slice(
+        &encryption_key,
+    ));
+    let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
+    let key_bytes = signing_key.to_bytes();
+    let ciphertext = cipher
+        .encrypt(nonce, key_bytes.as_slice())
+        .expect("AES-GCM encryption failed");
+
+    let mut out = alloc::vec::Vec::with_capacity(
+        ENCRYPTED_P256_KEY_MAGIC.len()
+            + ENCRYPTED_P256_SALT_LEN
+            + ENCRYPTED_P256_NONCE_LEN
+            + ciphertext.len(),
+    );
+    out.extend_from_slice(ENCRYPTED_P256_KEY_MAGIC);
+    out.extend_from_slice(&salt);
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&ciphertext);
+    out
+}
+
+pub fn decrypt_signing_key(
+    encrypted_data: &[u8],
+    passphrase: &str,
+) -> Result<p256::ecdsa::SigningKey> {
+    let header_len = ENCRYPTED_P256_KEY_MAGIC.len();
+    let min_len = header_len + ENCRYPTED_P256_SALT_LEN + ENCRYPTED_P256_NONCE_LEN;
+    if encrypted_data.len() <= min_len
+        || !encrypted_data
+            .get(..header_len)
+            .is_some_and(|header| header == ENCRYPTED_P256_KEY_MAGIC)
+    {
+        return Err(CryptoError::InvalidKey);
+    }
+
+    let salt_start = header_len;
+    let nonce_start = salt_start + ENCRYPTED_P256_SALT_LEN;
+    let ciphertext_start = nonce_start + ENCRYPTED_P256_NONCE_LEN;
+    let salt = &encrypted_data[salt_start..nonce_start];
+    let nonce = aes_gcm::Nonce::from_slice(&encrypted_data[nonce_start..ciphertext_start]);
+    let ciphertext = &encrypted_data[ciphertext_start..];
+
+    let encryption_key = derive_p256_encryption_key(passphrase, salt);
+    let cipher = aes_gcm::Aes256Gcm::new(aes_gcm::Key::<aes_gcm::Aes256Gcm>::from_slice(
+        &encryption_key,
+    ));
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| CryptoError::DecryptionFailed)?;
+    if plaintext.len() != P256_PRIVATE_KEY_LEN {
+        return Err(CryptoError::InvalidKey);
+    }
+
+    let mut key_bytes = [0u8; P256_PRIVATE_KEY_LEN];
+    key_bytes.copy_from_slice(&plaintext);
+    p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).map_err(|_| CryptoError::InvalidKey)
 }
 
 #[allow(non_camel_case_types)]
@@ -227,6 +315,16 @@ pub mod x509_cert {
 
 pub mod hmac {
     pub use crate::hmac_sha256 as HMAC;
+    pub use hmac_crate::{Hmac, Mac};
+}
+
+pub mod pbkdf2 {
+    pub use pbkdf2_crate::{pbkdf2, pbkdf2_hmac_array};
+}
+
+pub mod sha1 {
+    pub use sha1_crate::Digest;
+    pub use sha1_crate::Sha1;
 }
 
 pub fn load_cert_and_key_from_pem(

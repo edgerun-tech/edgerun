@@ -1495,7 +1495,7 @@ mod tests {
     #[test]
     fn test_server_accept_and_decode_request() {
         use crate::http3::connection::Http3Connection;
-        use crate::http3::http3::frame::Http3Frame;
+        use crate::http3::frame::Http3Frame;
         use crate::http3::qpack::{QpackDecoder, QpackEncoder};
         use crate::method::Method;
 
@@ -1665,7 +1665,7 @@ mod tests {
     /// without errors.
     #[test]
     fn test_server_sends_1rtt_response() {
-        use crate::http3::http3::frame::Http3Frame;
+        use crate::http3::frame::Http3Frame;
         use crate::http3::qpack::QpackEncoder;
 
         let mut encoder = QpackEncoder::new();
@@ -1755,7 +1755,7 @@ mod tests {
     #[test]
     fn test_integration_full_http3_flow() {
         use crate::http3::connection::Http3Connection;
-        use crate::http3::http3::frame::Http3Frame;
+        use crate::http3::frame::Http3Frame;
         use crate::http3::qpack::{QpackDecoder, QpackEncoder};
         use crate::method::Method;
         use crate::uri::Uri;
@@ -1897,7 +1897,7 @@ mod tests {
     #[test]
     fn test_integration_push_flow() {
         use crate::http3::connection::Http3Connection;
-        use crate::http3::http3::frame::Http3Frame;
+        use crate::http3::frame::Http3Frame;
 
         let mut client = Http3Connection::from_mock(QuicConnection::dummy());
         let mut server = Http3Connection::from_mock(QuicConnection::dummy());

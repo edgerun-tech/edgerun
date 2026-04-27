@@ -15,6 +15,7 @@
 //! [1-RTT packets with HTTP/3 data]          <->     [1-RTT packets]
 //! ```
 
+use alloc::{string::String, vec, vec::Vec};
 use edgerun_crypto::CipherSuite;
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};

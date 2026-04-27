@@ -10,6 +10,7 @@
 use edgerun_qpack::dynamic::DynamicTable;
 use edgerun_qpack::encoder::Encoder;
 use edgerun_qpack::{encode_stateless, EncoderError, HeaderField};
+use edgerun_encoding::buf::Cursor;
 
 /// QPACK encoder with full dynamic table support.
 ///
@@ -123,7 +124,7 @@ impl QpackEncoder {
     /// Call this when receiving data on the QPACK decoder stream.
     pub fn on_decoder_recv(&mut self, data: &[u8]) -> Result<(), EncoderError> {
         if let Some(encoder) = &mut self.encoder {
-            let mut cursor = std::io::Cursor::new(data);
+            let mut cursor = Cursor::new(data);
             encoder.on_decoder_recv(&mut cursor)?;
         }
         Ok(())

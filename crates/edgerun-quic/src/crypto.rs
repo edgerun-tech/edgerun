@@ -9,14 +9,19 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
+use alloc::{
+    collections::BTreeMap as HashMap,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 use edgerun_crypto::aes_gcm::{self, Aes128Gcm, Aes256Gcm};
 use edgerun_crypto::aes_gcm::aead::{AeadInPlace, KeyInit};
 use edgerun_crypto::CipherSuite;
 
-use std::collections::HashMap;
-
 /// Crypto phase / encryption level
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CryptoPhase {
     /// Initial keys (derived from initial salt + destination CID)
     Initial,

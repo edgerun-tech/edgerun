@@ -131,7 +131,7 @@ fn bench_read_arc_vs_str(c: &mut Criterion) {
         b.iter(|| {
             for path in &paths {
                 if let Some(content) = vfs.read(path) {
-                    black_box(content.as_str().len());
+                    black_box(content.len());
                 }
             }
         })

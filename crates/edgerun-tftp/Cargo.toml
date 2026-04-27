@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "TFTP client for kernel loading"
+
+[features]
+default = []
+# Compatibility only: server support is always no_std now.
+server = []
+
+[dependencies]
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-log = { path = "../edgerun-log" }

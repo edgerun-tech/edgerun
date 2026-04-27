@@ -1138,7 +1138,7 @@ impl edgerun_http::Middleware for BearerAuthMiddleware {
 
 fn generate_token(len: usize) -> String {
     let mut bytes = vec![0u8; len];
-    getrandom::fill(&mut bytes).expect("random generation failed");
+    edgerun_crypto::getrandom(&mut bytes).expect("random generation failed");
     base64url_nopad_encode(&bytes)
 }
 

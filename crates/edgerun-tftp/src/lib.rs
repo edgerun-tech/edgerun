@@ -4,7 +4,13 @@
 
 extern crate alloc;
 
+pub mod compat;
 pub mod message;
+pub mod server;
+pub mod std;
+
+pub use compat::CancellationToken;
+pub use server::TftpServer;
 
 pub const TFTP_PORT: u16 = 69;
 pub const TFTP_BLOCK_SIZE: usize = 512;

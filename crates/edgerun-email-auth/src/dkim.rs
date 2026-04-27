@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::io;
 
 use crate::DnsQuery;
-use edgerun_crypto::rsa;
 use edgerun_crypto::sha2::{Digest, Sha256};
 use edgerun_encoding::base64;
 
@@ -220,7 +219,7 @@ pub async fn verify_signature<D: DnsQuery>(
         )
     })?;
 
-    let verifying_key = edgerun_crypto::rsa::Pkcs1v15Sign::new::<Sha256>();
+    let verifying_key = rsa::Pkcs1v15Sign::new::<Sha256>();
     rsa_key
         .verify(verifying_key, &hash, &sig.signature)
         .map_err(|e| {

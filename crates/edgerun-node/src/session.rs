@@ -41,7 +41,7 @@ pub struct SessionState {
 /// Generate a random nonce for session handshake.
 pub fn generate_nonce() -> Vec<u8> {
     let mut nonce = vec![0u8; NONCE_SIZE];
-    edgerun_crypto::getrandom::fill(&mut nonce).expect("getrandom failed");
+    edgerun_crypto::getrandom(&mut nonce).expect("getrandom failed");
     nonce
 }
 

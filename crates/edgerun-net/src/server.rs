@@ -289,8 +289,12 @@ impl NetServer {
                     }
                     match server.tick() {
                         Ok(()) => {}
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => continue,
+                        Err(e) if e.kind() == edgerun_dns::std::io::ErrorKind::WouldBlock => {
+                            continue;
+                        }
+                        Err(e) if e.kind() == edgerun_dns::std::io::ErrorKind::TimedOut => {
+                            continue;
+                        }
                         Err(e) => {
                             edgerun_log::warn!(
                                 "edgerun-net: DHCPv4 server[{}] error: {}",

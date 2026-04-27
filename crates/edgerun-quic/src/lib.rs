@@ -1,5 +1,63 @@
 //! QUIC transport protocol (RFC 9000)
 
+#![no_std]
+
+#[macro_use]
+extern crate alloc;
+
+pub mod compat {
+    pub use edgerun_bare_rt::{sleep, spawn, timeout, Duration, Instant};
+}
+
+pub mod std {
+    pub mod collections {
+        pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+    }
+
+    pub mod time {
+        pub use edgerun_bare_rt::{Duration, Instant};
+    }
+
+    pub mod io {
+        use alloc::{format, string::String};
+        use core::fmt;
+
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum ErrorKind {
+            UnexpectedEof,
+            InvalidData,
+            Other,
+        }
+
+        #[derive(Clone, Debug, PartialEq, Eq)]
+        pub struct Error {
+            kind: ErrorKind,
+            message: String,
+        }
+
+        impl Error {
+            pub fn new(kind: ErrorKind, message: impl fmt::Display) -> Self {
+                Self {
+                    kind,
+                    message: format!("{message}"),
+                }
+            }
+
+            pub fn kind(&self) -> ErrorKind {
+                self.kind
+            }
+        }
+
+        impl fmt::Display for Error {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.message)
+            }
+        }
+
+        impl core::error::Error for Error {}
+    }
+}
+
 pub mod crypto;
 pub mod frame;
 pub mod handshake;

@@ -1788,7 +1788,7 @@ mod tests {
     fn test_validate_control_stream_frame_data_rejected() {
         // DATA frames are NOT allowed on control stream
         let result = Http3Connection::validate_control_stream_frame(
-            crate::http3::http3::frame::Http3FrameType::Data,
+            crate::http3::frame::Http3FrameType::Data,
         );
         assert!(result.is_err());
     }
@@ -1797,7 +1797,7 @@ mod tests {
     fn test_validate_control_stream_frame_settings_allowed() {
         // SETTINGS is the first frame on control stream
         let result = Http3Connection::validate_control_stream_frame(
-            crate::http3::http3::frame::Http3FrameType::Settings,
+            crate::http3::frame::Http3FrameType::Settings,
         );
         assert!(result.is_ok());
     }
@@ -1806,7 +1806,7 @@ mod tests {
     fn test_validate_control_stream_frame_goaway_allowed() {
         // GOAWAY is allowed on control stream
         let result = Http3Connection::validate_control_stream_frame(
-            crate::http3::http3::frame::Http3FrameType::Goaway,
+            crate::http3::frame::Http3FrameType::Goaway,
         );
         assert!(result.is_ok());
     }
@@ -1850,12 +1850,12 @@ mod tests {
         // After send_push_promise creates a push stream at ID 7
         // We can't easily test full flow without QUIC, but we can check the map logic
         conn.known_uni_stream_types
-            .insert(7, super::super::http3::stream_types::PUSH);
+            .insert(7, crate::http3::stream_types::PUSH);
         assert!(conn.is_push_stream(7));
 
         // Non-push uni streams
         conn.known_uni_stream_types
-            .insert(6, super::super::http3::stream_types::CONTROL);
+            .insert(6, crate::http3::stream_types::CONTROL);
         assert!(!conn.is_push_stream(6));
     }
 

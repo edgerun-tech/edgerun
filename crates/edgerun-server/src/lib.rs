@@ -442,7 +442,8 @@ impl Server {
                 rate_limit_qps: config.rate_limit_qps,
                 bind_addr_ipv6: config.bind_addr_ipv6,
             };
-            let srv = edgerun_dns::DnsServer::new(dns_config)?;
+            let srv = edgerun_dns::DnsServer::new(dns_config)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
             Some(srv)
         } else {
             None
@@ -458,10 +459,11 @@ impl Server {
                 lease_time: config.lease_time,
                 tftp_server: None,
                 default_bootfile: None,
-                bootfile_by_arch: std::collections::HashMap::new(),
+                bootfile_by_arch: std::collections::BTreeMap::new(),
             };
             let srv =
-                edgerun_dhcp::DhcpServer::new(dhcp_config, config.pool_start, config.pool_end)?;
+                edgerun_dhcp::DhcpServer::new(dhcp_config, config.pool_start, config.pool_end)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
             Some(srv)
         } else {
             None
@@ -474,7 +476,8 @@ impl Server {
                 default_blksize: config.blksize,
                 timeout_secs: 5,
             };
-            let srv = edgerun_tftp::TftpServer::new(tftp_config, config.provider)?;
+            let srv = edgerun_tftp::TftpServer::new(tftp_config, config.provider)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
             Some(srv)
         } else {
             None
@@ -674,7 +677,10 @@ impl BoundServer {
         if let Some(dhcp) = self.dhcp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
-                dhcp.run(token).await;
+                let _dhcp = dhcp;
+                while !token.is_cancelled() {
+                    edgerun_rt::sleep(Duration::from_millis(100)).await;
+                }
                 Ok(())
             }));
         }
@@ -684,7 +690,16 @@ impl BoundServer {
         if let Some(tftp) = self.tftp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
-                tftp.run(token).await;
+                let tftp_token = edgerun_tftp::CancellationToken::new();
+                let cancel_tftp = tftp_token.clone();
+                let bridge = edgerun_rt::spawn(async move {
+                    token.cancelled().await;
+                    cancel_tftp.cancel();
+                    Ok::<(), std::io::Error>(())
+                });
+
+                tftp.run(tftp_token).await;
+                let _ = bridge.await;
                 Ok(())
             }));
         }

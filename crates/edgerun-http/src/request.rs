@@ -126,6 +126,11 @@ impl Request {
     pub fn body(&self) -> Option<&[u8]> {
         self.body.as_deref()
     }
+    pub fn body_as_str(&self) -> Option<&str> {
+        self.body
+            .as_deref()
+            .and_then(|body| std::str::from_utf8(body).ok())
+    }
     pub fn into_body(self) -> Option<Vec<u8>> {
         self.body
     }

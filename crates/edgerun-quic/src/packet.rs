@@ -1,5 +1,8 @@
 //! QUIC packet format (RFC 9000 Section 17)
 
+use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use crate::std;
+
 /// QUIC packet types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PacketType {

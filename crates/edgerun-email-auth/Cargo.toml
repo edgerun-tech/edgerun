@@ -13,5 +13,5 @@ edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-crypto = { path = "../edgerun-crypto" }
 # RSA/SHA2 are only used for DKIM email auth - transitively via edgerun-crypto
-rsa = { version = "0.9", default-features = false, features = ["sha2"] }
+rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"] }
 signature = "2"

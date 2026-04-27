@@ -74,7 +74,7 @@ struct TestSigner {
 impl TestSigner {
     fn new() -> Self {
         let mut seed = [0u8; 32];
-        edgerun_crypto::getrandom::fill(&mut seed).expect("getrandom failed");
+        edgerun_crypto::getrandom(&mut seed).expect("getrandom failed");
         Self::from_seed(seed)
     }
 
@@ -304,7 +304,7 @@ fn session_handshake(
     target_node: Option<[u8; MESH_PUBLIC_KEY_LENGTH]>,
 ) -> Result<[u8; MESH_PUBLIC_KEY_LENGTH], String> {
     let mut nonce = vec![0u8; 32];
-    edgerun_crypto::getrandom::fill(&mut nonce).expect("getrandom failed");
+    edgerun_crypto::getrandom(&mut nonce).expect("getrandom failed");
 
     let hello = SessionHello {
         message_version: 1,
@@ -578,7 +578,7 @@ mod tests_session {
 
         let client_signer = TestSigner::new();
         let mut nonce = vec![0u8; 32];
-        edgerun_crypto::getrandom::fill(&mut nonce).expect("getrandom failed");
+        edgerun_crypto::getrandom(&mut nonce).expect("getrandom failed");
 
         // Send hello with forged signature
         let hello = SessionHello {

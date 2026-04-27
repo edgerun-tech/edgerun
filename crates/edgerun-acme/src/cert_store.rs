@@ -130,5 +130,5 @@ pub fn parse_pem_cert(pem: &str) -> Result<CertInfo, AcmeError> {
 pub fn generate_key() -> String {
     use edgerun_crypto::p256_signing_key_to_pem;
     let key = random_p256_signing_key();
-    p256_signing_key_to_pem(&key).unwrap()
+    p256_signing_key_to_pem(&key)
 }

@@ -11,7 +11,7 @@ name = "edgerun-mailq"
 path = "src/bin/edgerun-mailq.rs"
 
 [features]
-default = []
+default = ["dkim"]
 tls = ["dep:edgerun-tls"]
 dkim = ["dep:edgerun-email-auth"]
 

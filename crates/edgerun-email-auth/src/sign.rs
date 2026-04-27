@@ -5,11 +5,13 @@ use std::path::Path;
 use std::sync::Arc;
 
 use edgerun_crypto::sha2::Sha256;
-use edgerun_crypto::{Digest as CryptoDigest, OsRng};
+use edgerun_crypto::OsRng;
 use edgerun_encoding::base64;
 use rsa::{
-    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding, RsaPrivateKey,
+    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding,
+    RsaPrivateKey,
 };
+use rsa::sha2::Digest;
 
 pub struct DkimSigner {
     selector: String,

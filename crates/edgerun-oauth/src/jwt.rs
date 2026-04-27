@@ -323,11 +323,11 @@ impl IdToken {
                     ));
                 };
                 use edgerun_crypto::digest::Digest;
-                use edgerun_crypto::rsa::pkcs1v15::Pkcs1v15Sign;
                 use edgerun_crypto::sha2::Sha256;
+                use rsa::pkcs1v15::Pkcs1v15Sign;
 
                 let mut hasher = Sha256::new();
-                edgerun_crypto::digest::Update::update(&mut hasher, signing_input.as_bytes());
+                hasher.update(signing_input.as_bytes());
                 let digest = hasher.finalize();
 
                 verifying_key
@@ -359,7 +359,7 @@ pub enum JwtVerifier {
     },
     /// RSA PKCS#1 v1.5 SHA-256 verification (RS256).
     Rs256 {
-        verifying_key: edgerun_crypto::RsaPublicKey,
+        verifying_key: rsa::RsaPublicKey,
     },
 }
 
@@ -410,8 +410,8 @@ impl JwtVerifier {
 
     /// Create an RS256 verifier from a PEM-encoded RSA public key.
     pub fn rs256_from_pem(pem: &str) -> OAuthResult<Self> {
-        use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
-        use edgerun_crypto::rsa::RsaPublicKey;
+        use rsa::pkcs8::DecodePublicKey;
+        use rsa::RsaPublicKey;
 
         let verifying_key = RsaPublicKey::from_public_key_pem(pem)
             .map_err(|e| OAuthError::JwtError(format!("RS256 PEM parse: {e}")))?;
@@ -421,8 +421,8 @@ impl JwtVerifier {
 
     /// Create an RS256 verifier from DER-encoded RSA public key (PKCS#1 or PKCS#8).
     pub fn rs256_from_der(der: &[u8]) -> OAuthResult<Self> {
-        use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
-        use edgerun_crypto::rsa::RsaPublicKey;
+        use rsa::pkcs8::DecodePublicKey;
+        use rsa::RsaPublicKey;
 
         let verifying_key = RsaPublicKey::from_public_key_der(der)
             .map_err(|e| OAuthError::JwtError(format!("RS256 DER parse: {e}")))?;

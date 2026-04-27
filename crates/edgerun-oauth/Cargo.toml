@@ -12,6 +12,7 @@ edgerun-json = { path = "../edgerun-json" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
 edgerun-encoding = { path = "../edgerun-encoding" }
+rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"] }
 
 [lints]
 workspace = true

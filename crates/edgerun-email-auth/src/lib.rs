@@ -217,6 +217,8 @@ pub trait DnsQuery {
 
 impl DnsQuery for edgerun_dns::client::DnsClient {
     async fn query_txt(&mut self, name: &str) -> io::Result<Vec<String>> {
-        self.query_txt(name).await
+        self.query_txt(name)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
 }

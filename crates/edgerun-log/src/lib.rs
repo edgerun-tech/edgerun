@@ -32,6 +32,8 @@ pub fn set_level(level: Level) {
     LOG_LEVEL.store(level as usize, Ordering::Relaxed);
 }
 
+pub fn init_from_env() {}
+
 type LogFn = Option<fn(Level, &str, &str)>;
 
 static LOGGER_FN: AtomicUsize = AtomicUsize::new(0);
@@ -102,40 +104,50 @@ pub fn write(level: Level, module: &str, f: impl fmt::Display) -> &str {
 #[macro_export]
 macro_rules! trace {
     ($msg:expr) => { $crate::log($crate::Level::Trace, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => {
+    ($fmt:literal, $($a:expr),* $(,)?) => {
+        {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Trace, module_path!(), _msg)
+        }
     };
 }
 #[macro_export]
 macro_rules! debug {
     ($msg:expr) => { $crate::log($crate::Level::Debug, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => {
+    ($fmt:literal, $($a:expr),* $(,)?) => {
+        {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Debug, module_path!(), _msg)
+        }
     };
 }
 #[macro_export]
 macro_rules! info {
     ($msg:expr) => { $crate::log($crate::Level::Info, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => {
+    ($fmt:literal, $($a:expr),* $(,)?) => {
+        {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Info, module_path!(), _msg)
+        }
     };
 }
 #[macro_export]
 macro_rules! warn {
     ($msg:expr) => { $crate::log($crate::Level::Warn, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => {
+    ($fmt:literal, $($a:expr),* $(,)?) => {
+        {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Warn, module_path!(), _msg)
+        }
     };
 }
 #[macro_export]
 macro_rules! error {
     ($msg:expr) => { $crate::log($crate::Level::Error, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),*) => {
+    ($fmt:literal, $($a:expr),* $(,)?) => {
+        {
         let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
         $crate::log($crate::Level::Error, module_path!(), _msg)
+        }
     };
 }

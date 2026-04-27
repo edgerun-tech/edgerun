@@ -7,7 +7,7 @@
 use edgerun_qpack::decoder::Decoder as QpackInnerDecoder;
 use edgerun_qpack::dynamic::DynamicTable;
 use edgerun_qpack::{decode_stateless, DecoderError, HeaderField};
-use std::io::Cursor;
+use edgerun_encoding::buf::Cursor;
 
 /// QPACK decoder with dynamic table support.
 pub struct QpackDecoder {

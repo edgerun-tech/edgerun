@@ -1,5 +1,7 @@
 //! QUIC frame types (RFC 9000 Section 19)
 
+use alloc::{string::String, vec::Vec};
+
 mod decode;
 mod encode;
 #[cfg(test)]

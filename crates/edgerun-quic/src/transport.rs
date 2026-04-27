@@ -1,6 +1,9 @@
 //! QUIC transport layer (loss recovery, congestion control, flow control)
 
+use alloc::vec::Vec;
+
 use super::frame::QuicFrame;
+use crate::std;
 use crate::{ConnectionId, PacketNumberSpace, TransportParameters};
 
 /// Packet number state for a single packet number space (RFC 9000 §12.3).
@@ -270,7 +273,7 @@ impl QuicTransport {
         let ack_delay = sorted
             .iter()
             .find(|&&(pn, _)| pn == largest_acknowledged)
-            .map(|&(_, t)| now.duration_since(t))
+            .map(|&(_, t)| now - t)
             .unwrap_or(std::time::Duration::ZERO);
 
         let ack_delay_us = ack_delay.as_micros() as u64;
@@ -522,7 +525,7 @@ impl QuicTransport {
                         && other.packet_number < pn_max
                 });
 
-                let time_expired = now.duration_since(pkt.time_sent) > time_threshold;
+                let time_expired = now - pkt.time_sent > time_threshold;
 
                 if larger_acked || time_expired {
                     Some(pkt.packet_number)

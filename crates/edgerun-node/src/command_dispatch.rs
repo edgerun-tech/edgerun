@@ -2684,7 +2684,7 @@ mod tests {
 
     fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
-        edgerun_crypto::getrandom::fill(&mut bytes).expect("getrandom failed");
+        edgerun_crypto::getrandom(&mut bytes).expect("getrandom failed");
         edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 

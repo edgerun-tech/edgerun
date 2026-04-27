@@ -1,12 +1,17 @@
 //! TFTP server — RFC 1350 with RFC 2347/2348 option negotiation.
 
-use std::collections::HashMap;
-use std::io;
-use std::net::{SocketAddr, UdpSocket};
-use std::sync::Arc;
-use std::time::Duration;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap as HashMap;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
-use edgerun_rt::{AsyncUdpSocket, Mutex};
+use crate::compat::{self, AsyncUdpSocket};
+use crate::std::io;
+use crate::std::net::SocketAddr;
+use crate::std::sync::Mutex;
+use crate::std::time::Duration;
 
 use super::message::{TftpError, TftpMessage, TftpOptions};
 
@@ -16,10 +21,28 @@ use super::message::{TftpError, TftpMessage, TftpOptions};
 
 /// Trait for a TFTP file backend.
 pub trait FileProvider: Send + Sync {
+    /// Read a complete file. Existing simple providers can implement only this method.
+    fn read_file(&self, path: &str) -> io::Result<Vec<u8>> {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("read_file not implemented for {path}"),
+        ))
+    }
+
     /// Get the total size of a file (for tsize option).
-    fn file_size(&self, filename: &str) -> Option<u64>;
+    fn file_size(&self, filename: &str) -> Option<u64> {
+        self.read_file(filename).ok().map(|data| data.len() as u64)
+    }
+
     /// Read a block of data from a file at the given offset.
-    fn read_block(&self, filename: &str, offset: usize, max_size: usize) -> Option<Vec<u8>>;
+    fn read_block(&self, filename: &str, offset: usize, max_size: usize) -> Option<Vec<u8>> {
+        let data = self.read_file(filename).ok()?;
+        if offset > data.len() {
+            return None;
+        }
+        let end = offset.saturating_add(max_size).min(data.len());
+        Some(data[offset..end].to_vec())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -29,7 +52,7 @@ pub trait FileProvider: Send + Sync {
 /// State of an active TFTP transfer.
 struct TftpTransfer {
     filename: String,
-    client_addr: SocketAddr,
+    _client_addr: SocketAddr,
     blksize: u16,
     total_size: u64,
     current_block: u16,
@@ -62,16 +85,14 @@ impl Default for TftpServerConfig {
 }
 
 /// TFTP server — serves files via the TFTP protocol.
-///
-/// Now fully async using `edgerun_rt::AsyncUdpSocket`.
 pub struct TftpServer {
     socket: Arc<AsyncUdpSocket>,
     provider: Box<dyn FileProvider>,
-    timeout: Duration,
+    _timeout: Duration,
     /// Active transfers, keyed by (client_addr, filename).
     transfers: Mutex<HashMap<(SocketAddr, String), TftpTransfer>>,
     /// Next ephemeral port for new transfers.
-    next_port: Mutex<u16>,
+    _next_port: Mutex<u16>,
 }
 
 impl TftpServer {
@@ -80,22 +101,21 @@ impl TftpServer {
         config: TftpServerConfig,
         provider: impl FileProvider + 'static,
     ) -> Result<Self, io::Error> {
-        let std_socket = UdpSocket::bind(&config.bind_addr)?;
-        let socket = Arc::new(AsyncUdpSocket::from_std(std_socket)?);
+        let socket = Arc::new(AsyncUdpSocket::bind(&config.bind_addr)?);
 
         let timeout = Duration::from_secs(config.timeout_secs as u64);
 
         Ok(Self {
             socket,
             provider: Box::new(provider),
-            timeout,
+            _timeout: timeout,
             transfers: Mutex::new(HashMap::new()),
-            next_port: Mutex::new(10000),
+            _next_port: Mutex::new(10000),
         })
     }
 
     /// Run the server event loop until shutdown is requested.
-    pub async fn run(&self, shutdown: edgerun_rt::CancellationToken) {
+    pub async fn run(&self, shutdown: compat::CancellationToken) {
         edgerun_log::info!(
             "edgerun-tftp: server listening on {}",
             self.socket.local_addr().unwrap()
@@ -105,8 +125,9 @@ impl TftpServer {
             match self.tick().await {
                 Ok(()) => {}
                 Err(e) => {
+                    let _ = &e;
                     edgerun_log::warn!("edgerun-tftp: server error: {}", e);
-                    edgerun_rt::sleep(Duration::from_millis(100)).await;
+                    compat::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
@@ -125,6 +146,7 @@ impl TftpServer {
         let msg = match TftpMessage::from_wire(&buf[..n]) {
             Ok(m) => m,
             Err(e) => {
+                let _ = &e;
                 edgerun_log::warn!("edgerun-tftp: parse error from {}: {}", src, e);
                 return Ok(());
             }
@@ -166,6 +188,7 @@ impl TftpServer {
             }
 
             TftpMessage::ERROR { code, message } => {
+                let _ = (&code, &message);
                 edgerun_log::warn!("edgerun-tftp: ERROR from {}: {:?} - {}", src, code, message);
                 self.transfers
                     .lock()
@@ -221,7 +244,7 @@ impl TftpServer {
             key,
             TftpTransfer {
                 filename,
-                client_addr,
+                _client_addr: client_addr,
                 blksize: negotiated.blksize,
                 total_size,
                 current_block: 0,
@@ -361,7 +384,11 @@ impl TftpServer {
 }
 
 // Blanket impl: Arc<dyn FileProvider> is itself a FileProvider
-impl FileProvider for std::sync::Arc<dyn FileProvider> {
+impl FileProvider for Arc<dyn FileProvider> {
+    fn read_file(&self, path: &str) -> io::Result<Vec<u8>> {
+        (**self).read_file(path)
+    }
+
     fn file_size(&self, filename: &str) -> Option<u64> {
         (**self).file_size(filename)
     }
@@ -372,6 +399,10 @@ impl FileProvider for std::sync::Arc<dyn FileProvider> {
 
 // Blanket impl: Box<dyn FileProvider> is itself a FileProvider
 impl FileProvider for Box<dyn FileProvider> {
+    fn read_file(&self, path: &str) -> io::Result<Vec<u8>> {
+        (**self).read_file(path)
+    }
+
     fn file_size(&self, filename: &str) -> Option<u64> {
         (**self).file_size(filename)
     }
