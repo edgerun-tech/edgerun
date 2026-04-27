@@ -1,0 +1,9 @@
+id: network/27-route-missing-target-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: route advertisement with empty target node is structurally invalid
+tags:
+- network
+- validate_network

@@ -1,0 +1,6 @@
+now: '2030-01-01T00:00:00Z'
+stream_heads:
+  node_stream:
+    seq: 0
+    event_hash_hex: '0x0000000000000000000000000000000000000000000000000000000000000000'
+policy_profile: default-v0

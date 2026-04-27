@@ -1,0 +1,9 @@
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  seq: 1
+  stream_id: node_stream
+  prev_ref:
+    event_hash_hex: '0x0000000000000000000000000000000000000000000000000000000000000000'
+  event_metadata:
+    object_id: ''
+  event_hash_hex: '0x2020202020202020202020202020202020202020202020202020202020202020'

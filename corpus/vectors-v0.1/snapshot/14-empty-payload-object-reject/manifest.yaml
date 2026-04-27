@@ -1,0 +1,9 @@
+id: snapshot/14-empty-payload-object-reject
+suite: snapshot
+validator: validate_snapshot
+version: 1
+priority: mandatory
+description: snapshot with empty payload object reference is structurally invalid
+tags:
+- snapshot
+- validate_snapshot

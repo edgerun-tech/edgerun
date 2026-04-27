@@ -1,0 +1,7 @@
+route_advertisement:
+  target_node: node_server
+  advertiser: node_phone
+  next_hop_node: user_alice
+  route_metadata:
+    object_id: ''
+  expires_at: '2099-01-01T00:00:00Z'

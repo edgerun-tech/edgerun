@@ -1,0 +1,19 @@
+descriptor:
+  object_id: obj_a
+header:
+  representation_id: rep_1
+  object:
+    object_id: ''
+  chunking_mode: CHUNKING_MODE_MANIFEST
+  stored_size: 10
+chunk_manifest:
+  object:
+    object_id: obj_a
+  representation:
+    representation_id: rep_1
+  chunk_count: 1
+  total_stored_size: 10
+  entries:
+  - representation_id: rep_1
+    offset: 0
+    length: 10

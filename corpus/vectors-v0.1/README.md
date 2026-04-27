@@ -2,18 +2,18 @@
 
 This corpus is the first conformance seed set.
 
-It contains 166 mandatory cases:
+It contains 187 mandatory cases:
 
 - canonical: 7
 - command: 20
 - control: 8
 - crypto: 2
 - delegation: 9
-- network: 26
-- object: 17
+- network: 32
+- object: 22
 - query: 35
-- snapshot: 9
-- stream: 16
+- snapshot: 14
+- stream: 21
 - trust: 17
 
 Each case contains:

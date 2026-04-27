@@ -208,9 +208,21 @@ pub fn validate_network_case(
         );
     }
     if let Some(hello) = get_map(semantic_input, "session_hello") {
+        if string_value(hello, "initiator", "").is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         let target = string_value(hello, "target_node", "");
+        if target.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         if !target.is_empty() && target != string_value(local_state, "local_node", "") {
             return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
+        }
+        if !network_object_ref_is_valid(hello.get("hello_metadata")) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if has_empty_string_item(get_seq(hello, "transport_features")) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         let nonce = hello
             .get("session_nonce")
@@ -264,6 +276,15 @@ pub fn validate_network_case(
         );
     }
     if let Some(accept_msg) = get_map(semantic_input, "session_accept") {
+        if string_value(accept_msg, "responder", "").is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if !network_object_ref_is_valid(accept_msg.get("accept_metadata")) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if has_empty_string_item(get_seq(accept_msg, "transport_features")) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         let expected_nonce = local_state
             .get("expected_session_nonce")
             .and_then(nonce_bytes);
@@ -315,6 +336,17 @@ pub fn validate_network_case(
         );
     }
     if let Some(route) = get_map(semantic_input, "route_advertisement") {
+        if string_value(route, "target_node", "").is_empty()
+            || string_value(route, "advertiser", "").is_empty()
+            || string_value(route, "next_hop_node", "").is_empty()
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if !network_object_ref_is_valid(route.get("route_metadata"))
+            || !network_object_ref_is_valid(route.get("metric_hint_object"))
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         if let Some(at) = route.get("advertised_at").and_then(Value::as_str) {
             if let Some(exp) = route.get("expires_at").and_then(Value::as_str) {
                 if parse_ts(exp)
@@ -364,13 +396,33 @@ pub fn validate_network_case(
         );
     }
     if let Some(relay) = get_map(semantic_input, "relay_envelope") {
+        if string_value(relay, "original_sender", "").is_empty()
+            || string_value(relay, "relay_message_id", "").is_empty()
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         let target = string_value(relay, "intended_recipient_node", "");
+        if target.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         if !target.is_empty() && target != string_value(local_state, "local_node", "") {
             return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
         }
         let has_payload_object = relay.contains_key("payload_object");
         let has_inline_payload = relay.contains_key("inline_payload");
         if has_payload_object == has_inline_payload {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if !network_object_ref_is_valid(relay.get("relay_metadata"))
+            || !network_object_ref_is_valid(relay.get("payload_object"))
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if relay
+            .get("inline_payload")
+            .and_then(Value::as_str)
+            .is_some_and(|payload| payload.is_empty())
+        {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if let (Some(now), Some(until)) = (now, relay.get("store_until").and_then(Value::as_str)) {
@@ -401,6 +453,25 @@ pub fn validate_network_case(
         );
     }
     reject(ReasonCode::StructuralInvalid, empty_map(), empty_map())
+}
+
+fn network_object_ref_is_valid(value: Option<&Value>) -> bool {
+    match value {
+        None | Some(Value::Null) => true,
+        Some(Value::String(object_id)) => !object_id.is_empty(),
+        Some(Value::Map(map)) => map
+            .get("object_id")
+            .and_then(Value::as_str)
+            .is_some_and(|object_id| !object_id.is_empty()),
+        Some(_) => false,
+    }
+}
+
+fn has_empty_string_item(items: Option<&[Value]>) -> bool {
+    items
+        .unwrap_or(&[])
+        .iter()
+        .any(|item| matches!(item, Value::String(value) if value.is_empty()))
 }
 
 // ===================================================================

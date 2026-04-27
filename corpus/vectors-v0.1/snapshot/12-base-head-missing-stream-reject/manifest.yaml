@@ -1,0 +1,9 @@
+id: snapshot/12-base-head-missing-stream-reject
+suite: snapshot
+validator: validate_snapshot
+version: 1
+priority: mandatory
+description: snapshot base head without stream id is structurally invalid
+tags:
+- snapshot
+- validate_snapshot

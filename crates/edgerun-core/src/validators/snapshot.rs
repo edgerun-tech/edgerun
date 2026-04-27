@@ -10,7 +10,32 @@ pub fn validate_snapshot_case(
     let Some(snap) = get_map(semantic_input, "snapshot") else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     };
+    if let Some(Value::String(snapshot_id)) = snap.get("snapshot_id") {
+        if snapshot_id.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+    }
     let producer = string_value(snap, "producer", "");
+    if producer.is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    if !snapshot_refs_are_valid(snap) {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    let base_heads = get_seq(snap, "base_heads")
+        .map(|v| v.to_vec())
+        .unwrap_or_default();
+    if base_heads.is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    for base in &base_heads {
+        let Some(base) = base.as_map() else {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        };
+        if !base_head_is_valid(base) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+    }
     if !set_from_list(local_state.get("trusted_snapshot_producers")).contains(&producer) {
         return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
     }
@@ -21,12 +46,6 @@ pub fn validate_snapshot_case(
         .to_string();
     if matches!(verifier.verify_signed_fixture(snap, &expected), Some(false)) {
         return reject(ReasonCode::CryptoInvalid, empty_map(), empty_map());
-    }
-    let base_heads = get_seq(snap, "base_heads")
-        .map(|v| v.to_vec())
-        .unwrap_or_default();
-    if base_heads.is_empty() {
-        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     }
     let Some(base) = base_heads[0].as_map() else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
@@ -94,4 +113,59 @@ pub fn validate_snapshot_case(
         );
     }
     reject(ReasonCode::SnapshotBaseConflict, empty_map(), empty_map())
+}
+
+fn snapshot_refs_are_valid(snap: &BTreeMap<String, Value>) -> bool {
+    object_ref_is_valid(snap.get("payload_object"))
+        && object_ref_is_valid(snap.get("snapshot_metadata"))
+        && supersedes_are_valid(snap.get("supersedes"))
+}
+
+fn object_ref_is_valid(value: Option<&Value>) -> bool {
+    match value {
+        None | Some(Value::Null) => true,
+        Some(Value::String(id)) => !id.is_empty(),
+        Some(Value::Map(map)) => map
+            .get("object_id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.is_empty()),
+        Some(_) => false,
+    }
+}
+
+fn supersedes_are_valid(value: Option<&Value>) -> bool {
+    match value {
+        None | Some(Value::Null) => true,
+        Some(Value::Seq(items)) => items.iter().all(|item| match item {
+            Value::String(snapshot_id) => !snapshot_id.is_empty(),
+            Value::Map(map) => map
+                .get("snapshot_id")
+                .and_then(Value::as_str)
+                .is_some_and(|snapshot_id| !snapshot_id.is_empty()),
+            _ => false,
+        }),
+        Some(_) => false,
+    }
+}
+
+fn base_head_is_valid(base: &BTreeMap<String, Value>) -> bool {
+    !string_value(base, "stream_id", "").is_empty()
+        && number_value(base, "seq", -1) >= 0
+        && !base_head_hash(base).is_empty()
+}
+
+fn base_head_hash(base: &BTreeMap<String, Value>) -> String {
+    for key in [
+        "event_hash_hex",
+        "event_hash_fixture",
+        "event_hash",
+        "hash_hex",
+        "hash_fixture",
+    ] {
+        let value = string_value(base, key, "");
+        if !value.is_empty() {
+            return value;
+        }
+    }
+    String::new()
 }

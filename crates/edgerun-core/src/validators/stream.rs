@@ -11,8 +11,25 @@ pub fn validate_stream_append_case(
     let Some(event) = get_map(semantic_input, "candidate_event") else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     };
+    if string_value(event, "event_type", "").is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    let stream_id = string_value(event, "stream_id", "");
+    if stream_id.is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    if !event_refs_are_valid(event) {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
     let seq_no = number_value(event, "seq", -1);
     if seq_no < 0 {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    if seq_no == 0 {
+        if event.contains_key("prev_ref") {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+    } else if get_map(event, "prev_ref").is_none_or(|prev| event_ref_hash(prev).is_empty()) {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     }
     let writer = string_value(local_state, "stream_writer_identity", "");
@@ -69,7 +86,6 @@ pub fn validate_stream_append_case(
             }
         }
     }
-    let stream_id = string_value(event, "stream_id", "");
     let stream_heads = local_state.get("stream_heads").and_then(|v| v.as_map());
     let head = stream_heads.and_then(|m| m.get(&stream_id).and_then(|hv| hv.as_map()));
     if head.is_none() {
@@ -141,4 +157,54 @@ pub fn validate_stream_append_case(
         mapping([("event_hash", ystr(candidate_hash))]),
         empty_map(),
     )
+}
+
+fn event_refs_are_valid(event: &BTreeMap<String, Value>) -> bool {
+    object_ref_is_valid(event.get("payload_object"))
+        && object_ref_is_valid(event.get("event_metadata"))
+        && ref_list_is_valid(get_seq(event, "related_objects"), object_ref_value_is_valid)
+        && ref_list_is_valid(get_seq(event, "related_events"), event_ref_value_is_valid)
+}
+
+fn object_ref_is_valid(value: Option<&Value>) -> bool {
+    value.is_none_or(object_ref_value_is_valid)
+}
+
+fn object_ref_value_is_valid(value: &Value) -> bool {
+    match value {
+        Value::Null => true,
+        Value::String(object_id) => !object_id.is_empty(),
+        Value::Map(map) => map
+            .get("object_id")
+            .and_then(Value::as_str)
+            .is_some_and(|object_id| !object_id.is_empty()),
+        _ => false,
+    }
+}
+
+fn event_ref_value_is_valid(value: &Value) -> bool {
+    let Value::Map(map) = value else {
+        return false;
+    };
+    !string_value(map, "stream_id", "").is_empty() && !event_ref_hash(map).is_empty()
+}
+
+fn ref_list_is_valid(items: Option<&[Value]>, item_valid: fn(&Value) -> bool) -> bool {
+    items.unwrap_or(&[]).iter().all(|item| item_valid(item))
+}
+
+fn event_ref_hash(map: &BTreeMap<String, Value>) -> String {
+    for key in [
+        "event_hash_hex",
+        "event_hash_fixture",
+        "event_hash",
+        "hash_hex",
+        "hash_fixture",
+    ] {
+        let value = string_value(map, key, "");
+        if !value.is_empty() {
+            return value;
+        }
+    }
+    String::new()
 }

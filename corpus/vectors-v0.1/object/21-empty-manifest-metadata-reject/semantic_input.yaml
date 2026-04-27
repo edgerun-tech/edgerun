@@ -1,0 +1,13 @@
+descriptor:
+  object_id: obj_a
+chunk_manifest:
+  object:
+    object_id: obj_a
+  manifest_metadata:
+    object_id: ''
+  chunk_count: 1
+  total_stored_size: 10
+  entries:
+  - representation_id: rep_1
+    offset: 0
+    length: 10

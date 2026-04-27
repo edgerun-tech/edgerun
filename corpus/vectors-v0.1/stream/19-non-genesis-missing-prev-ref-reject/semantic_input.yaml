@@ -1,0 +1,5 @@
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  seq: 1
+  stream_id: node_stream
+  event_hash_hex: '0x1919191919191919191919191919191919191919191919191919191919191919'
