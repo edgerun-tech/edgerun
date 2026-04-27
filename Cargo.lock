@@ -1953,6 +1953,7 @@ dependencies = [
  "edgerun-bare-rt",
  "edgerun-platform",
  "edgerun-virtio",
+ "getrandom 0.2.17",
 ]
 
 [[package]]
