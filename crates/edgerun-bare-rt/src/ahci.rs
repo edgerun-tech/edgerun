@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use crate::storage::{BlockDevice, SECTOR_SIZE};
+use crate::storage::BlockDevice;
 
 pub const AHCI_BASE: usize = 0x00;
 pub const AHCI_GHC: usize = 0x00;
@@ -27,12 +27,17 @@ pub const AHCI_TFD_BSY: u16 = 1 << 7;
 pub const SATA_CMD_READ_FIS: u8 = 0x25;
 pub const SATA_CMD_WRITE_FIS: u8 = 0x35;
 pub const SATA_CMD_IDENTIFY: u8 = 0xEC;
+pub const SATA_CMD_NCQ_READ: u8 = 0x60;
+pub const SATA_CMD_NCQ_WRITE: u8 = 0x61;
 
 pub const FIS_TYPE_REG_H2D: u8 = 0x27;
 pub const FIS_TYPE_REG_D2H: u8 = 0x34;
 pub const FIS_TYPE_SETUP: u8 = 0x90;
 pub const FIS_TYPE_PIO: u8 = 0x5F;
 pub const FIS_TYPE_DMA: u8 = 0x41;
+pub const FIS_TYPE_NCQ: u8 = 0x63;
+
+pub const SATA_FIS_NCQ: u8 = 0x63;
 
 #[repr(C, packed)]
 pub struct FisRegH2D {
@@ -48,6 +53,26 @@ pub struct FisRegH2D {
     sectors: u8,
     control: u8,
     reserved: [u8; 6],
+}
+
+#[repr(C, packed)]
+pub struct FisNcq {
+    fis_type: u8,
+    flags: u8,
+    cmd: u8,
+    rsv1: u8,
+    tag: u8,
+    rsv2: u8,
+    q: u8,
+    sector_count: u8,
+    rsv3: [u8; 2],
+    lba0: u32,
+    lba1: u16,
+    device: u8,
+    lba2: u8,
+    rsv4: [u8; 7],
+    aux: u32,
+    rsv5: [u8; 4],
 }
 
 #[repr(C, packed)]
@@ -133,22 +158,24 @@ impl AhciController {
             if tfd & (AHCI_TFD_ERR as u32) != 0 {
                 return false;
             }
-            let mut fis = FisRegH2D {
-                fis_type: FIS_TYPE_REG_H2D,
-                flags: 0x80,
-                cmd: SATA_CMD_READ_FIS,
-                feature_low: 0,
+            let mut fis = FisNcq {
+                fis_type: FIS_TYPE_NCQ,
+                flags: 0,
+                cmd: SATA_CMD_NCQ_READ,
+                rsv1: 0,
+                tag: 0,
+                rsv2: 0,
+                q: 0,
+                sector_count: 1,
+                rsv3: [0; 2],
                 lba0: lba as u32,
                 lba1: (lba >> 32) as u16,
                 device: 0x40,
                 lba2: 0,
-                feature_high: 0,
-                sectors: 1,
-                control: 0,
-                reserved: [0; 6],
+                rsv4: [0; 7],
+                aux: 0,
+                rsv5: [0; 4],
             };
-            let prdt = buf.as_mut_ptr() as u32;
-            let prdtl = (buf.len() / SECTOR_SIZE) as u16;
             core::ptr::write_volatile(p as *mut AhciPort as *mut u64, 0);
             p.cmd |= AHCI_CMD_START;
             true
@@ -168,19 +195,23 @@ impl AhciController {
             if tfd & (AHCI_TFD_ERR as u32) != 0 {
                 return false;
             }
-            let mut fis = FisRegH2D {
-                fis_type: FIS_TYPE_REG_H2D,
-                flags: 0x80,
-                cmd: SATA_CMD_WRITE_FIS,
-                feature_low: 0,
+            let mut fis = FisNcq {
+                fis_type: FIS_TYPE_NCQ,
+                flags: 0,
+                cmd: SATA_CMD_NCQ_WRITE,
+                rsv1: 0,
+                tag: 0,
+                rsv2: 0,
+                q: 0,
+                sector_count: 1,
+                rsv3: [0; 2],
                 lba0: lba as u32,
                 lba1: (lba >> 32) as u16,
                 device: 0x40,
                 lba2: 0,
-                feature_high: 0,
-                sectors: 1,
-                control: 0,
-                reserved: [0; 6],
+                rsv4: [0; 7],
+                aux: 0,
+                rsv5: [0; 4],
             };
             core::ptr::write_volatile(p as *mut AhciPort as *mut u64, 0);
             p.cmd |= AHCI_CMD_START;
