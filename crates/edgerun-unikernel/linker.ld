@@ -8,30 +8,27 @@ SECTIONS
 {
     . = 0x100000;
 
-    .multiboot : {
-        *(.multiboot)
-    } :text
-
     .text : {
-        *(.text.entry)
-        *(.text)
+        KEEP(*(.text.entry))
+        KEEP(*(.multiboot))
+        *(.text .text.*)
     } :text
 
     .rodata : {
-        *(.rodata)
+        *(.rodata .rodata.*)
     } :rodata
 
     .data : {
-        *(.data)
+        *(.data .data.*)
     } :data
 
+    . = ALIGN(16);
+    _bss_start = .;
     .bss : {
-        *(.bss)
+        *(.bss .bss.*)
         *(COMMON)
     } :bss
-
-    _bss_start = ADDR(.bss);
-    _bss_end = ADDR(.bss) + SIZEOF(.bss);
+    _bss_end = .;
 
     . = ALIGN(16);
     _stack_end = .;
@@ -39,4 +36,11 @@ SECTIONS
     _stack = .;
 
     _end = .;
+
+    /DISCARD/ : {
+        *(.comment)
+        *(.eh_frame .eh_frame.*)
+        *(.eh_frame_hdr)
+        *(.note .note.*)
+    }
 }

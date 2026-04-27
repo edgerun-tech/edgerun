@@ -7,11 +7,36 @@ extern crate edgerun_bare_rt as rt;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
-use rt::{DhcpClient, TftpConfig, TcpSocket, block_on, runtime::spawn, Rng, crc32, RingBuffer, IpStack, Network, IpAddr, DhcpStateMachine};
+use rt::{
+    block_on, crc32, runtime::spawn, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
+    RingBuffer, TcpSocket, TftpConfig,
+};
 
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+
+core::arch::global_asm!(
+    r#"
+    .section .text.entry,"ax"
+    .global _start
+_start:
+    lea rsp, [rip + _stack]
+    xor rbp, rbp
+
+    lea rdi, [rip + _bss_start]
+    lea rcx, [rip + _bss_end]
+    sub rcx, rdi
+    xor eax, eax
+    rep stosb
+
+    call kernel_main
+
+1:
+    hlt
+    jmp 1b
+"#
+);
 
 struct NetworkTask;
 
@@ -25,9 +50,12 @@ impl Future for NetworkTask {
 
 #[panic_handler]
 unsafe fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop { core::arch::asm!("hlt", options(noreturn)); }
+    loop {
+        core::arch::asm!("hlt");
+    }
 }
 
+#[used]
 #[link_section = ".multiboot"]
 static MULTIBOOT_HEADER: [u32; 8] = [
     0x1BADB002,
@@ -41,13 +69,7 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 ];
 
 #[no_mangle]
-pub unsafe extern "C" fn _start() -> ! {
-    main();
-    loop { core::arch::asm!("hlt", options(noreturn)); }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn main() {
+pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
     
@@ -65,7 +87,9 @@ pub unsafe extern "C" fn main() {
         Some(n) => n,
         None => {
             rt::log::log(1, "No VirtIO found");
-            loop { core::arch::asm!("hlt") }
+            loop {
+                core::arch::asm!("hlt");
+            }
         }
     };
     
@@ -135,4 +159,8 @@ pub unsafe extern "C" fn main() {
     let (_ip, _, _) = (stack.ip, stack.netmask, stack.gateway);
     
     block_on(NetworkTask);
+
+    loop {
+        core::arch::asm!("hlt");
+    }
 }
