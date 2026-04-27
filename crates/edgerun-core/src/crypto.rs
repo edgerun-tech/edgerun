@@ -8,6 +8,8 @@
 //! the protocol-specific layer: domain tags, sign/verify helpers, and
 //! identity derivation functions.
 
+use crate::prelude::v1::*;
+
 // ---------------------------------------------------------------------------
 // Protocol algorithm constants (matching protobuf enum wire values)
 // ---------------------------------------------------------------------------

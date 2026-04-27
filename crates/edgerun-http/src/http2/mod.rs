@@ -2,6 +2,9 @@
 //!
 //! Provides frame protocol, stream multiplexing, flow control, and SETTINGS negotiation.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 pub mod client;
 pub mod connection;
 pub mod flow_control;
@@ -88,8 +91,8 @@ impl std::fmt::Display for Http2Error {
     }
 }
 
-impl std::error::Error for Http2Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for Http2Error {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Http2Error::Io(err) => Some(err),
             _ => None,

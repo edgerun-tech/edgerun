@@ -1,3 +1,22 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::borrow::ToOwned;
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2021::*;
+    }
+}
+
+use prelude::v1::*;
 // Re-export types that downstream NPU backends need to implement traits.
 pub use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 

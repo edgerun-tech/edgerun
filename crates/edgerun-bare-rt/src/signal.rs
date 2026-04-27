@@ -1,6 +1,8 @@
 //! Signal/interrupt handling for bare-metal
 
+use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::task::{Context, Poll};
 
 pub struct Signal {
     raised: AtomicBool,
@@ -23,6 +25,19 @@ impl Signal {
 
     pub fn clear(&self) {
         self.raised.store(false, Ordering::Release);
+    }
+}
+
+impl core::future::Future for Signal {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.raised() {
+            Poll::Ready(())
+        } else {
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
     }
 }
 

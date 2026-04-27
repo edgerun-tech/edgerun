@@ -7,7 +7,7 @@ edition.workspace = true
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 [[bin]]
 name = "tuya-discover"

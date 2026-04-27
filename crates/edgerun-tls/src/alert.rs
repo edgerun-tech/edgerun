@@ -31,6 +31,8 @@ impl AlertLevel {
 /// TLS alert description
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Alert {
+    /// close_notify
+    CloseNotify = 0,
     /// handshake_failure
     HandshakeFailure = 40,
     /// bad_certificate
@@ -83,6 +85,7 @@ impl Alert {
     /// Parse from wire format
     pub fn from_wire(value: u8) -> Result<Self, String> {
         match value {
+            0 => Ok(Alert::CloseNotify),
             40 => Ok(Alert::HandshakeFailure),
             42 => Ok(Alert::BadCertificate),
             43 => Ok(Alert::UnsupportedCertificate),
@@ -113,6 +116,7 @@ impl Alert {
     /// Get alert description as string
     pub fn description(&self) -> &'static str {
         match self {
+            Alert::CloseNotify => "close_notify",
             Alert::HandshakeFailure => "handshake_failure",
             Alert::BadCertificate => "bad_certificate",
             Alert::UnsupportedCertificate => "unsupported_certificate",

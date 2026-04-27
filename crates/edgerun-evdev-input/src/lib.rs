@@ -1,11 +1,276 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    use crate::{io, path::PathBuf};
+    use alloc::string::String;
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        pub fn open<P>(self, _path: P) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
+
+    pub struct ReadDir;
+    pub struct DirEntry;
+
+    impl Iterator for ReadDir {
+        type Item = io::Result<DirEntry>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            None
+        }
+    }
+
+    impl DirEntry {
+        #[must_use]
+        pub fn file_name(&self) -> PathBuf {
+            PathBuf::from("")
+        }
+
+        #[must_use]
+        pub fn path(&self) -> PathBuf {
+            PathBuf::from("")
+        }
+    }
+
+    pub fn read_to_string<P>(_path: P) -> io::Result<String> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+
+    pub fn read_dir<P>(_path: P) -> io::Result<ReadDir> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+
+    pub fn canonicalize(path: PathBuf) -> io::Result<PathBuf> {
+        Ok(path)
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ErrorKind {
+        Interrupted,
+        NotFound,
+        WouldBlock,
+        Other,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+    }
+
+    impl Error {
+        #[must_use]
+        pub const fn new(kind: ErrorKind) -> Self {
+            Self { kind }
+        }
+
+        #[must_use]
+        pub const fn last_os_error() -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+
+        #[must_use]
+        pub const fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self.kind {
+                ErrorKind::Interrupted => f.write_str("interrupted"),
+                ErrorKind::NotFound => f.write_str("not found"),
+                ErrorKind::WouldBlock => f.write_str("operation would block"),
+                ErrorKind::Other => f.write_str("I/O error"),
+            }
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    pub type Result<T> = core::result::Result<T, Error>;
+
+    pub trait Read {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+    }
+
+    impl Read for crate::fs::File {
+        fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
+            Err(Error::new(ErrorKind::WouldBlock))
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub type RawFd = i32;
+
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> RawFd;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> RawFd {
+                -1
+            }
+        }
+    }
+
+    pub mod raw {
+        #[allow(non_camel_case_types)]
+        pub type c_int = i32;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    pub use core::time::Duration;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+    pub struct Instant(Duration);
+
+    impl Instant {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self(Duration::from_secs(0))
+        }
+    }
+
+    impl core::ops::Add<Duration> for Instant {
+        type Output = Self;
+
+        fn add(self, rhs: Duration) -> Self::Output {
+            Self(self.0.saturating_add(rhs))
+        }
+    }
+
+    impl core::ops::Sub for Instant {
+        type Output = Duration;
+
+        fn sub(self, rhs: Self) -> Self::Output {
+            self.0.saturating_sub(rhs.0)
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod str {
+    pub use core::str::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod libc {
+    pub const F_GETFL: i32 = 3;
+    pub const F_SETFL: i32 = 4;
+    pub const O_NONBLOCK: i32 = 0x800;
+
+    #[repr(C)]
+    pub struct pollfd {
+        pub fd: i32,
+        pub events: i16,
+        pub revents: i16,
+    }
+
+    pub unsafe fn ioctl<T>(_fd: i32, _request: usize, _arg: T) -> i32 {
+        -1
+    }
+
+    pub unsafe fn fcntl(_fd: i32, _cmd: i32, _arg: i32) -> i32 {
+        -1
+    }
+
+    pub unsafe fn poll(_fds: *mut pollfd, _nfds: usize, _timeout: i32) -> i32 {
+        0
+    }
+}
+
+use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_input::{
     default_input_descriptor, validate_event_read_request, InputDevice, InputDeviceInfo,
     InputDeviceKind, InputEventKind, InputEventRecord,
 };
 use edgerun_linux_sysfs::read_trimmed;
+#[cfg(not(target_os = "none"))]
 use std::fs::{self, File, OpenOptions};
+#[cfg(target_os = "none")]
+use std::fs::{File, OpenOptions};
+#[cfg(not(target_os = "none"))]
 use std::io::{self, Read};
+#[cfg(target_os = "none")]
+use std::io::Read;
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};

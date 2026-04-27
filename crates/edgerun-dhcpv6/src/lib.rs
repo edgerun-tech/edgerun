@@ -14,12 +14,19 @@
 //! - Multicast: ff02::1:2 (All_DHCP_Relay_Agents_and_Servers)
 //! - Multicast: ff05::1:3 (All_DHCP_Servers, site-local)
 
+#![no_std]
+
+#[macro_use]
+extern crate alloc;
+
+pub mod compat;
 pub mod client;
 pub mod duid;
 pub mod lease;
 pub mod message;
 pub mod options;
 pub mod server;
+pub mod std;
 
 pub use client::Dhcpv6Client;
 pub use duid::{Duid, DuidType};

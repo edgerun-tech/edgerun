@@ -2,9 +2,11 @@
 //!
 //! Consolidated encoding utilities.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 extern crate alloc;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+extern crate std;
 
 pub mod base32hex;
 pub mod base64;

@@ -1,5 +1,7 @@
 //! Conformance test harness — loads corpus/vectors-v0.1 and runs validators.
 
+use crate::prelude::v1::*;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

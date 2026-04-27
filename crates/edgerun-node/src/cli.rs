@@ -295,7 +295,7 @@ pub fn main() {
                 crate::init::init_setup();
             }
 
-            let rt = edgerun_rt::Builder::new_multi_thread()
+            let rt = edgerun_bare_rt::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .unwrap_or_else(|e| {

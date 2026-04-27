@@ -8,8 +8,11 @@
 //! - The `Content-Encoding` header is present
 //! - The encoding is supported (gzip, deflate, br, identity)
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::HeaderMap;
-use alloc::{boxed::Box, vec, vec::Vec};
+use alloc::{boxed::Box, vec::Vec};
 use core::fmt;
 
 /// Supported content encodings
@@ -53,7 +56,7 @@ impl ContentEncoding {
 
 /// Build Accept-Encoding header value
 pub fn accept_encoding_value() -> &'static str {
-    "br, gzip, deflate"
+    "gzip, deflate"
 }
 
 /// Decompress response body based on Content-Encoding header

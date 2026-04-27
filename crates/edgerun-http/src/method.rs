@@ -1,5 +1,8 @@
 //! HTTP methods (RFC 9110 Section 9)
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::is_tchar;
 use std::fmt;
 use std::str::FromStr;

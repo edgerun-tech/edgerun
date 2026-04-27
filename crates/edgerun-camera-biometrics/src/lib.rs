@@ -1,3 +1,22 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::borrow::ToOwned;
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2021::*;
+    }
+}
+
+use prelude::v1::*;
 use edgerun_biometrics::{BiometricModality, BiometricState};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -195,7 +214,7 @@ impl core::fmt::Display for CameraBiometricError {
     }
 }
 
-impl std::error::Error for CameraBiometricError {}
+impl core::error::Error for CameraBiometricError {}
 
 pub trait CameraBiometricReader {
     fn reader_info(&self) -> Result<CameraReaderInfo, CameraBiometricError>;

@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_crypto::p256::PublicKey;
@@ -36,4 +37,4 @@ impl core::fmt::Display for SessionError {
     }
 }
 
-impl std::error::Error for SessionError {}
+impl core::error::Error for SessionError {}

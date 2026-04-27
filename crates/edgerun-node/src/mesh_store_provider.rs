@@ -25,16 +25,16 @@ use crate::types::{StoreRequest, StoreResponse};
 /// Fix #6: Mesh commands are fire-and-forget — no oneshot reply channel
 /// is allocated, avoiding wasted Arc + store task computation for nobody.
 ///
-/// The handler uses `edgerun_rt::spawn` to bridge from the blocking daemon
+/// The handler uses `edgerun_bare_rt::spawn` to bridge from the blocking daemon
 /// thread to the async channel, since `store_tx.send()` is async.
 pub fn make_mesh_command_handler(
-    store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    store_tx: edgerun_bare_rt::mpsc::Sender<StoreRequest>,
 ) -> impl FnMut(NodeID, Vec<u8>) + Send + 'static {
     move |peer_id, decrypted| {
         let tx = store_tx.clone();
         let peer_id_bytes = peer_id.0.to_vec();
 
-        edgerun_rt::spawn(async move {
+        edgerun_bare_rt::spawn(async move {
             let raw = decrypted.clone();
             if let Ok(command) =
                 edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&decrypted[..])

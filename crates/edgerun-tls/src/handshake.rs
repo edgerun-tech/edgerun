@@ -39,7 +39,7 @@ impl ClientHelloBuilder {
     pub fn new(random: [u8; 32], server_name: &str) -> Self {
         ClientHelloBuilder {
             random,
-            session_id: vec![0u8; 32], // TLS 1.3 compat: still include for middleboxes
+            session_id: random.to_vec(), // TLS 1.3 compat: non-empty, unpredictable session id
             cipher_suites: CipherSuite::client_default(),
             server_name: server_name.to_string(),
             supported_groups: NamedGroup::client_default(),
@@ -122,7 +122,7 @@ impl ClientHelloBuilder {
 
         // 1. supported_versions (ext 43)
         {
-            let data = vec![0x04, 0x03, 0x04]; // TLS 1.3 only
+            let data = vec![0x02, 0x03, 0x04]; // TLS 1.3 only
             msg.extend_from_slice(&43u16.to_be_bytes());
             msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
             msg.extend_from_slice(&data);
@@ -404,5 +404,54 @@ impl ServerHello {
             server_key_share,
             supported_version,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn extension<'a>(client_hello: &'a [u8], extension_type: u16) -> Option<&'a [u8]> {
+        let body_len =
+            u32::from_be_bytes([0, client_hello[1], client_hello[2], client_hello[3]]) as usize;
+        let body = &client_hello[4..4 + body_len];
+        let mut pos = 2 + 32;
+        let session_id_len = body[pos] as usize;
+        pos += 1 + session_id_len;
+        let cipher_suites_len = u16::from_be_bytes([body[pos], body[pos + 1]]) as usize;
+        pos += 2 + cipher_suites_len;
+        let compression_methods_len = body[pos] as usize;
+        pos += 1 + compression_methods_len;
+        let extensions_len = u16::from_be_bytes([body[pos], body[pos + 1]]) as usize;
+        pos += 2;
+        let extensions_end = pos + extensions_len;
+
+        while pos + 4 <= extensions_end {
+            let current_type = u16::from_be_bytes([body[pos], body[pos + 1]]);
+            let len = u16::from_be_bytes([body[pos + 2], body[pos + 3]]) as usize;
+            pos += 4;
+            let data = &body[pos..pos + len];
+            pos += len;
+            if current_type == extension_type {
+                return Some(data);
+            }
+        }
+
+        None
+    }
+
+    #[test]
+    fn client_hello_supported_versions_vector_matches_payload() {
+        let random = [7u8; 32];
+        let key_share = [9u8; 32];
+        let client_hello = ClientHelloBuilder::new(random, "example.com")
+            .key_share(&key_share, NamedGroup::X25519)
+            .build()
+            .expect("build client hello");
+
+        let supported_versions =
+            extension(&client_hello, 43).expect("supported_versions extension");
+
+        assert_eq!(supported_versions, &[0x02, 0x03, 0x04]);
     }
 }

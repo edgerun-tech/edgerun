@@ -1,11 +1,300 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    use crate::{io, path::PathBuf};
+    use alloc::string::String;
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        pub fn open(self, _path: &PathBuf) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
+
+    pub struct ReadDir;
+
+    impl Iterator for ReadDir {
+        type Item = io::Result<DirEntry>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            None
+        }
+    }
+
+    pub struct DirEntry;
+
+    impl DirEntry {
+        #[must_use]
+        pub fn path(&self) -> PathBuf {
+            PathBuf::new()
+        }
+
+        #[must_use]
+        pub fn file_name(&self) -> PathBuf {
+            PathBuf::new()
+        }
+    }
+
+    pub fn read_dir<P>(_path: P) -> io::Result<ReadDir> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+
+    pub fn read_to_string<P>(_path: P) -> io::Result<String> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ErrorKind {
+        NotFound,
+        Other,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+    }
+
+    impl Error {
+        #[must_use]
+        pub const fn new(kind: ErrorKind) -> Self {
+            Self { kind }
+        }
+
+        #[must_use]
+        pub const fn last_os_error() -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+
+        #[must_use]
+        pub const fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self.kind {
+                ErrorKind::NotFound => f.write_str("not found"),
+                ErrorKind::Other => f.write_str("I/O error"),
+            }
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    pub type Result<T> = core::result::Result<T, Error>;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> i32;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> i32 {
+                -1
+            }
+        }
+    }
+
+    pub mod raw {
+        #[allow(non_camel_case_types)]
+        pub type c_int = i32;
+        #[allow(non_camel_case_types)]
+        pub type c_ulong = usize;
+        #[allow(non_camel_case_types)]
+        pub type c_void = core::ffi::c_void;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    use alloc::string::{String, ToString};
+    use core::fmt;
+    use core::ops::Deref;
+
+    #[derive(Debug)]
+    pub struct Path;
+
+    impl Path {
+        #[must_use]
+        pub fn new(_path: &str) -> &'static Self {
+            static PATH: Path = Path;
+            &PATH
+        }
+
+        #[must_use]
+        pub fn exists(&self) -> bool {
+            false
+        }
+
+        #[must_use]
+        pub fn is_dir(&self) -> bool {
+            false
+        }
+
+        #[must_use]
+        pub fn join<P>(&self, _path: P) -> PathBuf {
+            PathBuf::new()
+        }
+
+        #[must_use]
+        pub fn parent(&self) -> Option<&Self> {
+            None
+        }
+
+        #[must_use]
+        pub fn file_name(&self) -> Option<PathBuf> {
+            None
+        }
+    }
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct PathBuf(String);
+
+    impl PathBuf {
+        #[must_use]
+        pub fn new() -> Self {
+            Self(String::new())
+        }
+
+        #[must_use]
+        pub fn join<P>(&self, _path: P) -> Self {
+            Self::new()
+        }
+
+        #[must_use]
+        pub fn is_dir(&self) -> bool {
+            false
+        }
+
+        #[must_use]
+        pub fn parent(&self) -> Option<&Path> {
+            None
+        }
+
+        #[must_use]
+        pub fn file_name(&self) -> Option<PathBuf> {
+            None
+        }
+
+        #[must_use]
+        pub fn to_string_lossy(&self) -> String {
+            self.0.clone()
+        }
+
+        #[must_use]
+        pub fn display(&self) -> Display<'_> {
+            Display(self)
+        }
+    }
+
+    impl From<&str> for PathBuf {
+        fn from(value: &str) -> Self {
+            Self(value.to_string())
+        }
+    }
+
+    impl Deref for PathBuf {
+        type Target = Path;
+
+        fn deref(&self) -> &Self::Target {
+            Path::new("")
+        }
+    }
+
+    pub struct Display<'a>(&'a PathBuf);
+
+    impl fmt::Display for Display<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(&self.0.0)
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod error {
+    pub use core::error::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+use crate::prelude::v1::*;
 use edgerun_fingerprint::{
     validate_enroll_request, FingerprintCapture, FingerprintCapturePurpose,
     FingerprintEnrollProgress, FingerprintEnrollRequest, FingerprintEnrollmentSession,
     FingerprintError, FingerprintReader, FingerprintReaderInfo, FingerprintTemplateRecord,
     FingerprintVerification, FingerprintVerifyRequest,
 };
+#[cfg(not(target_os = "none"))]
 use std::fs;
 use std::fs::File;
+#[cfg(not(target_os = "none"))]
 use std::io;
 use std::os::fd::AsRawFd;
 use std::os::raw::{c_int, c_ulong, c_void};

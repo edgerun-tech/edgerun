@@ -6,7 +6,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-rt = { path = "../edgerun-rt" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }

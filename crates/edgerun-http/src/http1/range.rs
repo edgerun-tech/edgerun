@@ -14,6 +14,9 @@
 //! 1. Check `Content-Range` to know which bytes were received
 //! 2. Request remaining ranges
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::fmt;
 use std::ops::Range;
 

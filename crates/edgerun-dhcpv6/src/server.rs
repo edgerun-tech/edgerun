@@ -1,8 +1,9 @@
 //! DHCPv6 server — RFC 8415.
 
-use std::io;
-use std::net::{Ipv6Addr, SocketAddr, UdpSocket};
-use std::time::Duration;
+use crate::std::io;
+use crate::std::net::{Ipv6Addr, SocketAddr, UdpSocket};
+use crate::std::prelude::v1::*;
+use crate::std::time::Duration;
 
 use super::duid::{default_server_duid, Duid};
 use super::lease::{LeasePool, LeaseState};
@@ -572,7 +573,7 @@ impl Dhcpv6Server {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv6Addr;
+    use crate::std::net::Ipv6Addr;
 
     #[test]
     fn test_server_config_default() {

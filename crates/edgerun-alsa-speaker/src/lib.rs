@@ -1,10 +1,210 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod ffi {
+    #[allow(non_camel_case_types)]
+    pub type c_long = i64;
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    use crate::{io, path::PathBuf};
+    use alloc::string::String;
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        pub fn open(self, _path: &PathBuf) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
+
+    pub fn read_to_string<P>(_path: P) -> io::Result<String> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ErrorKind {
+        NotFound,
+        Other,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+    }
+
+    impl Error {
+        #[must_use]
+        pub const fn new(kind: ErrorKind) -> Self {
+            Self { kind }
+        }
+
+        #[must_use]
+        pub const fn last_os_error() -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self.kind {
+                ErrorKind::NotFound => f.write_str("not found"),
+                ErrorKind::Other => f.write_str("I/O error"),
+            }
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    pub type Result<T> = core::result::Result<T, Error>;
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> i32;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> i32 {
+                -1
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    use alloc::string::{String, ToString};
+    use core::fmt;
+
+    #[derive(Debug)]
+    pub struct Path;
+
+    impl Path {
+        #[must_use]
+        pub fn new(_path: &str) -> &'static Self {
+            static PATH: Path = Path;
+            &PATH
+        }
+    }
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct PathBuf(String);
+
+    impl PathBuf {
+        #[must_use]
+        pub fn display(&self) -> Display<'_> {
+            Display(self)
+        }
+    }
+
+    impl From<&str> for PathBuf {
+        fn from(value: &str) -> Self {
+            Self(value.to_string())
+        }
+    }
+
+    impl From<String> for PathBuf {
+        fn from(value: String) -> Self {
+            Self(value)
+        }
+    }
+
+    pub struct Display<'a>(&'a PathBuf);
+
+    impl fmt::Display for Display<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(&self.0.0)
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod ptr {
+    pub use core::ptr::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_speaker::{
     default_speaker_descriptor, validate_audio_playback_request, AudioPlaybackRequest,
     AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel, SpeakerSampleFormat,
 };
 use std::ffi::c_long;
+#[cfg(not(target_os = "none"))]
 use std::fs;
+#[cfg(not(target_os = "none"))]
 use std::io;
 use std::mem::size_of;
 use std::os::fd::AsRawFd;

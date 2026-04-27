@@ -16,7 +16,7 @@ fn tmp_dir() -> PathBuf {
 
 #[test]
 fn ping_docker_hub() {
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
@@ -31,7 +31,7 @@ fn ping_docker_hub() {
 
 #[test]
 fn ping_ghcr() {
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
@@ -46,7 +46,7 @@ fn ping_ghcr() {
 
 #[test]
 fn resolve_alpine_manifest() {
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
@@ -76,7 +76,7 @@ fn resolve_alpine_manifest() {
 
 #[test]
 fn resolve_busybox_manifest() {
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();

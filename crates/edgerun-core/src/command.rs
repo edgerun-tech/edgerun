@@ -21,6 +21,8 @@
 //! - Is the issuer a recognized controller or does it present a valid delegation?
 //! - Is this command type allowed under local policy?
 
+use crate::prelude::v1::*;
+
 use crate::protocol::{
     canonical_bytes, CapabilityDescriptor, CommandEnvelope, DelegationRecord, Digest, IdentityRef,
     ProtocolRecord,

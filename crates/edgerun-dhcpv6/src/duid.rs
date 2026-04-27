@@ -1,8 +1,9 @@
 //! DHCPv6 Unique Identifiers (DUIDs) — RFC 8415 §11.
 
-use std::fmt;
-use std::net::Ipv6Addr;
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::std::fmt;
+use crate::std::net::Ipv6Addr;
+use crate::std::prelude::v1::*;
+use crate::std::time::{SystemTime, UNIX_EPOCH};
 
 /// DHCPv6 Unique Identifier.
 ///

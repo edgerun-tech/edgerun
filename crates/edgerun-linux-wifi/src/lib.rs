@@ -1,4 +1,199 @@
 #![allow(unused_must_use)]
+#![no_std]
+
+#[macro_use]
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    pub use edgerun_linux_sysfs::fs::*;
+
+    pub fn write<P, C>(_path: P, _contents: C) -> crate::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod raw {
+        pub use edgerun_linux_sysfs::os::raw::{c_char, c_ulong};
+    }
+
+    pub mod unix {
+        pub mod io {
+            pub type RawFd = i32;
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod ptr {
+    pub use core::ptr::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod slice {
+    pub use core::slice::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod str {
+    pub use core::str::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod thread {
+    use crate::time::Duration;
+
+    pub fn sleep(_duration: Duration) {}
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    pub use core::time::Duration;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct SystemTime(Duration);
+
+    pub const UNIX_EPOCH: SystemTime = SystemTime(Duration::from_secs(0));
+
+    impl SystemTime {
+        #[must_use]
+        pub const fn now() -> Self {
+            UNIX_EPOCH
+        }
+
+        pub fn duration_since(
+            &self,
+            earlier: SystemTime,
+        ) -> core::result::Result<Duration, Duration> {
+            self.0.checked_sub(earlier.0).ok_or(earlier.0)
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod ffi {
+    use alloc::vec::Vec;
+    use core::fmt;
+
+    pub struct CString(Vec<u8>);
+    #[derive(Debug)]
+    pub struct NulError;
+
+    impl fmt::Display for NulError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("interior NUL byte")
+        }
+    }
+
+    impl CString {
+        pub fn new(value: &str) -> core::result::Result<Self, NulError> {
+            let mut bytes = value.as_bytes().to_vec();
+            bytes.push(0);
+            Ok(Self(bytes))
+        }
+
+        #[must_use]
+        pub fn as_ptr(&self) -> *const i8 {
+            self.0.as_ptr().cast()
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod libc {
+    pub const AF_NETLINK: i32 = 16;
+    pub const SOCK_RAW: i32 = 3;
+    pub const NLMSG_ERROR: i32 = 2;
+    pub const NLMSG_DONE: i32 = 3;
+    pub const NLM_F_MULTI: i32 = 2;
+
+    pub unsafe fn socket(_domain: i32, _ty: i32, _protocol: i32) -> i32 {
+        -1
+    }
+
+    pub unsafe fn getpid() -> i32 {
+        0
+    }
+
+    pub unsafe fn bind<T>(_fd: i32, _addr: *const T, _len: u32) -> i32 {
+        -1
+    }
+
+    pub unsafe fn close(_fd: i32) -> i32 {
+        0
+    }
+
+    pub unsafe fn sendto<T, U>(
+        _fd: i32,
+        _buf: *const T,
+        _len: usize,
+        _flags: i32,
+        _addr: *const U,
+        _addrlen: u32,
+    ) -> isize {
+        -1
+    }
+
+    pub unsafe fn recvfrom<T, U>(
+        _fd: i32,
+        _buf: *mut T,
+        _len: usize,
+        _flags: i32,
+        _addr: *mut U,
+        _addrlen: *mut u32,
+    ) -> isize {
+        -1
+    }
+
+    pub unsafe fn if_nametoindex(_name: *const i8) -> u32 {
+        0
+    }
+}
+
+use edgerun_linux_sysfs::prelude::v1::*;
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_linux_netif::{
@@ -15,8 +210,11 @@ use edgerun_wifi::{
     WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
     WifiInterfaceMode, WifiNetworkObservation, WifiPowerState, WifiScanResult, WifiScanner,
 };
+#[cfg(not(target_os = "none"))]
 use std::fs;
+#[cfg(not(target_os = "none"))]
 use std::io;
+#[cfg(not(target_os = "none"))]
 use std::mem;
 use std::os::raw::{c_char, c_ulong};
 use std::os::unix::io::RawFd;
@@ -1673,11 +1871,36 @@ fn query_frequency_mhz(name: &str) -> Result<Option<u32>, CapabilityError> {
         )));
     }
     let freq = unsafe { req.u.freq };
-    let hz = (freq.m as f64) * 10f64.powi(freq.e as i32);
+    let hz = (freq.m as f64) * pow10_f64(freq.e as i32);
     if hz <= 0.0 {
         return Ok(None);
     }
-    Ok(Some((hz / 1_000_000.0).round() as u32))
+    Ok(Some(round_f64(hz / 1_000_000.0) as u32))
+}
+
+fn pow10_f64(exp: i32) -> f64 {
+    if exp == 0 {
+        return 1.0;
+    }
+    let mut out = 1.0;
+    if exp > 0 {
+        for _ in 0..exp {
+            out *= 10.0;
+        }
+    } else {
+        for _ in 0..(-exp) {
+            out /= 10.0;
+        }
+    }
+    out
+}
+
+fn round_f64(value: f64) -> f64 {
+    if value.is_sign_negative() {
+        (value - 0.5) as i64 as f64
+    } else {
+        (value + 0.5) as i64 as f64
+    }
 }
 
 fn set_frequency_mhz(name: &str, frequency_mhz: u32) -> Result<(), CapabilityError> {
@@ -1769,7 +1992,7 @@ fn read_wireless_quality(interface_name: &str) -> Option<i16> {
         let _link = parts.next()?;
         let level = parts.next()?.trim_end_matches('.');
         if let Ok(v) = level.parse::<f32>() {
-            return Some(v.round() as i16);
+            return Some(round_f64(v as f64) as i16);
         }
     }
     None

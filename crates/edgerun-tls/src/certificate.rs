@@ -197,7 +197,9 @@ impl Certificate {
 
     /// Check if the certificate is currently valid
     pub fn is_valid_now(&self) -> bool {
-        let now = edgerun_bare_rt::now() / 1_000_000;
+        let Some(now) = unix_now_secs() else {
+            return true;
+        };
         now >= self.not_before && now <= self.not_after
     }
 
@@ -309,12 +311,27 @@ impl Certificate {
         // Wildcard: *.example.com matches anything.example.com
         if cert_name.starts_with("*.") && hostname.len() > cert_name.len() - 1 {
             let wildcard_suffix = &cert_name[1..];
-            if hostname.ends_with(wildcard_suffix)
-                && !hostname[..hostname.len() - wildcard_suffix.len() + 1].contains('.')
-            {
+            let left_label_len = hostname.len().saturating_sub(wildcard_suffix.len());
+            if hostname.ends_with(wildcard_suffix) && !hostname[..left_label_len].contains('.') {
                 return true;
             }
         }
         false
+    }
+}
+
+fn unix_now_secs() -> Option<u64> {
+    #[cfg(not(target_os = "none"))]
+    {
+        return crate::host_std::time::SystemTime::now()
+            .duration_since(crate::host_std::time::UNIX_EPOCH)
+            .ok()
+            .map(|duration| duration.as_secs());
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        let now = edgerun_bare_rt::now() / 10_000_000;
+        (now != 0).then_some(now)
     }
 }

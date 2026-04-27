@@ -1,7 +1,8 @@
 //! DHCPv6 message types — RFC 8415 §7.
 
-use std::fmt;
-use std::io;
+use crate::std::fmt;
+use crate::std::io;
+use crate::std::prelude::v1::*;
 
 // ---------------------------------------------------------------------------
 // Constants

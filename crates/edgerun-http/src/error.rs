@@ -1,9 +1,7 @@
 //! Shared HTTP error types
 
 #[cfg(target_os = "none")]
-use crate::std_compat as std;
-#[cfg(target_os = "none")]
-use crate::std_compat::prelude::v1::*;
+use crate::prelude::v1::*;
 use edgerun_error::Error;
 use std::fmt;
 

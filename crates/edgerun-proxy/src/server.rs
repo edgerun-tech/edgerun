@@ -1,8 +1,8 @@
-use edgerun_log::{debug, info, warn};
-use edgerun_rt::{
+use edgerun_bare_rt::{
     spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt,
-    CancellationToken, TcpSocket,
+    CancellationToken, ConnectFuture,
 };
+use edgerun_log::{debug, info, warn};
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -94,17 +94,16 @@ impl ProxyServer {
                             active.fetch_add(1, Ordering::Relaxed);
                             let config = config.clone();
                             let active = active.clone();
-                            let _graceful = graceful.clone();
                             spawn(async move {
                                 let result = handle_http_proxy(socket, addr, config).await;
                                 active.fetch_sub(1, Ordering::Relaxed);
-                                if let Err(e) = result {
-                                    debug!("HTTP proxy error from {}: {}", addr, e);
+                                if result.is_err() {
+                                    debug!("HTTP proxy error from {}", addr);
                                 }
                             });
                         }
-                        Err(e) => {
-                            warn!("HTTP accept error: {}", e);
+                        Err(_) => {
+                            warn!("HTTP accept error");
                         }
                     }
                 }
@@ -136,13 +135,13 @@ impl ProxyServer {
                             spawn(async move {
                                 let result = handle_socks5(socket, addr, config).await;
                                 active.fetch_sub(1, Ordering::Relaxed);
-                                if let Err(e) = result {
-                                    debug!("SOCKS5 error from {}: {}", addr, e);
+                                if result.is_err() {
+                                    debug!("SOCKS5 error from {}", addr);
                                 }
                             });
                         }
-                        Err(e) => {
-                            warn!("SOCKS5 accept error: {}", e);
+                        Err(_) => {
+                            warn!("SOCKS5 accept error");
                         }
                     }
                 }
@@ -155,7 +154,7 @@ impl ProxyServer {
 
         self.graceful_shutdown.store(true, Ordering::Relaxed);
         while self.active_connections.load(Ordering::Relaxed) > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            edgerun_bare_rt::sleep(std::time::Duration::from_millis(100)).await;
         }
 
         let _ = http_handle.await;
@@ -226,14 +225,7 @@ async fn handle_connect_tunnel(
 
     let addr: SocketAddr = format!("{}:{}", host, port).parse().unwrap();
 
-    let is_ipv6 = host.starts_with('[') || host.contains(':');
-    let sock = if is_ipv6 {
-        TcpSocket::new_v6()?
-    } else {
-        TcpSocket::new_v4()?
-    };
-
-    let connect_result = timeout(config.connect_timeout, sock.connect(addr)).await;
+    let connect_result = timeout(config.connect_timeout, ConnectFuture::new(addr)).await;
 
     match connect_result {
         Ok(Ok(upstream)) => {
@@ -256,7 +248,7 @@ async fn handle_connect_tunnel(
 }
 
 async fn tunnel_bidirectional(a: Arc<AsyncTcpStream>, b: Arc<AsyncTcpStream>) {
-    use edgerun_rt::copy_bidirectional;
+    use edgerun_bare_rt::copy_bidirectional;
 
     let mut a = a;
     let mut b = b;
@@ -292,8 +284,8 @@ async fn handle_http_forward(
         .parse()
         .unwrap();
 
-    let sock = TcpSocket::new_v4()?;
-    let upstream = match timeout(std::time::Duration::from_secs(30), sock.connect(addr)).await {
+    let upstream = match timeout(std::time::Duration::from_secs(30), ConnectFuture::new(addr)).await
+    {
         Ok(Ok(s)) => s,
         _ => return write_response(&mut socket, 502, "Upstream unreachable").await,
     };
@@ -434,8 +426,7 @@ async fn handle_socks5(
     };
 
     let addr: SocketAddr = format!("{}:{}", host, port).parse().unwrap();
-    let socket2 = TcpSocket::new_v4()?;
-    let connect_result = timeout(config.connect_timeout, socket2.connect(addr)).await;
+    let connect_result = timeout(config.connect_timeout, ConnectFuture::new(addr)).await;
 
     match connect_result {
         Ok(Ok(upstream)) => {
@@ -526,7 +517,7 @@ async fn send_socks_reply(
         }
         _ => {}
     }
-    socket.write_all(&reply).await
+    socket.write_all(&reply).await.map_err(Into::into)
 }
 
 async fn write_response(
@@ -548,5 +539,8 @@ async fn write_response(
         body.len(),
         body
     );
-    socket.write_all(response.as_bytes()).await
+    socket
+        .write_all(response.as_bytes())
+        .await
+        .map_err(Into::into)
 }

@@ -29,8 +29,52 @@
 //! # }
 //! ```
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::borrow::ToOwned;
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2021::*;
+    }
+}
+
+pub mod boxed {
+    pub use alloc::boxed::Box;
+}
+
+pub mod string {
+    pub use alloc::string::{String, ToString};
+}
+
+pub mod vec {
+    pub use alloc::vec::Vec;
+}
+
+pub mod iter {
+    pub use core::iter::*;
+}
+
+#[cfg(target_os = "none")]
+pub use edgerun_storage::{
+    cmp, collections, convert, env, error, ffi, fmt, format, fs, io, mem, option, os, path,
+    process, result, slice, str, sync, time,
+};
+
 pub mod backend;
+#[cfg(not(target_os = "none"))]
 pub mod dbus_bus;
+#[cfg(not(target_os = "none"))]
 pub mod dbus_server;
 pub mod dbus_types;
 pub mod dbus_wire;
@@ -38,6 +82,7 @@ pub mod event_log;
 pub mod session;
 
 pub use backend::{no_op_event_recorder, Backend, CredentialMeta, SecretEventRecorder};
+#[cfg(not(target_os = "none"))]
 pub use dbus_bus::BusConnection;
 pub use event_log::{EventLog, SecretEvent, SecretEventType, SECRET_STREAM_ID};
 pub use session::{

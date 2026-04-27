@@ -140,14 +140,14 @@ impl<W: Write + ?Sized> Write for &mut W {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl<T: std::io::Read + ?Sized> Read for T {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         std::io::Read::read(self, buf).map_err(Error::from)
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl<T: std::io::Write + ?Sized> Write for T {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         std::io::Write::write(self, buf).map_err(Error::from)
@@ -158,7 +158,7 @@ impl<T: std::io::Write + ?Sized> Write for T {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl From<std::io::Error> for Error {
     fn from(error: std::io::Error) -> Self {
         let kind = match error.kind() {

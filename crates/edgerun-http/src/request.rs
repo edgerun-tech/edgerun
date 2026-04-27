@@ -1,5 +1,8 @@
 //! Protocol-agnostic HTTP request.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::middleware::Extensions;
@@ -165,8 +168,6 @@ impl Request {
             buf.extend_from_slice(b"Content-Length: ");
             buf.extend_from_slice(cl.as_bytes());
             buf.extend_from_slice(b"\r\n");
-        } else {
-            buf.extend_from_slice(b"Content-Length: 0\r\n");
         }
 
         buf.extend_from_slice(b"\r\n");
@@ -261,6 +262,21 @@ impl RequestBuilder {
         let uri = Uri::parse(&uri_str).map_err(crate::Error::InvalidUri)?;
 
         let mut headers = self.headers;
+        if !headers.contains_key("Host") {
+            if let Some(host) = uri.host() {
+                let host_header = match uri.port() {
+                    Some(port) => format!("{host}:{port}"),
+                    None => host.to_string(),
+                };
+                let _ = headers.insert("Host", &host_header);
+            }
+        }
+        if !headers.contains_key("Connection") {
+            let _ = headers.insert("Connection", "close");
+        }
+        if !headers.contains_key("User-Agent") {
+            let _ = headers.insert("User-Agent", "edgerun-browser/0.1");
+        }
         if let Some(ref body) = self.body {
             let _ = headers.insert("Content-Length", &body.len().to_string());
         }

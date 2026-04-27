@@ -86,7 +86,7 @@ edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-crypto.workspace = true
 prost.workspace = true
 prost-types.workspace = true
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 
 edgerun-log = { path = "../edgerun-log" }
 libc.workspace = true

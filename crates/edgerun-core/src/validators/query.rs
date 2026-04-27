@@ -1,3 +1,5 @@
+use crate::prelude::v1::*;
+
 use super::delegation::validate_delegation_case;
 use super::helpers::*;
 pub fn validate_query_case(

@@ -211,6 +211,16 @@ impl<T> Receiver<T> {
         }
     }
 
+    pub fn blocking_recv(&self) -> Option<T> {
+        loop {
+            match self.try_recv() {
+                Ok(value) => return Some(value),
+                Err(TryRecvError::Disconnected) => return None,
+                Err(TryRecvError::Empty) => core::hint::spin_loop(),
+            }
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.queue.data.borrow().len()
     }

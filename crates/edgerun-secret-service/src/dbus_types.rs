@@ -1,5 +1,6 @@
 //! D-Bus types and constants. No I/O here.
 
+use crate::prelude::v1::*;
 use std::collections::HashMap;
 
 pub const BYTE_ORDER: u8 = b'l';

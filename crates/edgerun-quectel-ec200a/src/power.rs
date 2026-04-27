@@ -100,3 +100,4 @@ impl Default for PowerConfig {
         Self::new()
     }
 }
+use crate::prelude::v1::*;

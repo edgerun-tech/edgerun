@@ -17,6 +17,9 @@
 //!   4. Next request to same host reuses the pooled connection
 //! ```
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -51,7 +54,7 @@ fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
 // Pool key
 // ===========================================================================
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct PoolKey {
     host: String,
     port: u16,
@@ -132,6 +135,8 @@ pub struct ConnectionPool {
     idle_timeout: Duration,
     /// Connect timeout.
     connect_timeout: Duration,
+    /// Read timeout.
+    read_timeout: Duration,
     /// DNS timeout.
     dns_timeout: Duration,
     /// Whether to follow redirects.
@@ -152,6 +157,7 @@ impl ConnectionPool {
             max_per_host: 6,
             idle_timeout: Duration::from_secs(30),
             connect_timeout: Duration::from_secs(10),
+            read_timeout: Duration::from_secs(30),
             dns_timeout: Duration::from_secs(5),
             follow_redirects: true,
             max_redirects: 10,
@@ -182,6 +188,12 @@ impl ConnectionPool {
     /// Set connect timeout.
     pub fn with_connect_timeout(mut self, t: Duration) -> Self {
         self.connect_timeout = t;
+        self
+    }
+
+    /// Set read timeout.
+    pub fn with_read_timeout(mut self, t: Duration) -> Self {
+        self.read_timeout = t;
         self
     }
 
@@ -216,6 +228,16 @@ impl ConnectionPool {
         self.follow_redirects = v;
     }
 
+    /// Set connect_timeout (for runtime configuration).
+    pub fn set_connect_timeout(&mut self, t: Duration) {
+        self.connect_timeout = t;
+    }
+
+    /// Set read_timeout (for runtime configuration).
+    pub fn set_read_timeout(&mut self, t: Duration) {
+        self.read_timeout = t;
+    }
+
     /// Set max_redirects (for runtime configuration).
     pub fn set_max_redirects(&mut self, max: u8) {
         self.max_redirects = max;
@@ -239,12 +261,16 @@ impl ConnectionPool {
         let mut remaining = self.max_redirects;
 
         loop {
-            let req = Request::builder()
+            let mut headers = request.headers().clone();
+            headers.remove("Host");
+            let mut req = Request::builder()
                 .method(current_method.clone())
                 .uri(&current_uri)
-                .body(request.body().map(|b| b.to_vec()).unwrap_or_default())
-                .with_headers(request.headers().clone())
-                .build()?;
+                .with_headers(headers);
+            if let Some(body) = request.body() {
+                req = req.body(body.to_vec());
+            }
+            let req = req.build()?;
 
             let uri = req.uri();
             let is_head = req.method() == &Method::HEAD;
@@ -313,11 +339,16 @@ impl ConnectionPool {
         }
 
         loop {
-            let req = Request::builder()
+            let mut headers = request.headers().clone();
+            headers.remove("Host");
+            let mut req = Request::builder()
                 .method(current_method.clone())
                 .uri(&current_uri)
-                .body(request.body().map(|b| b.to_vec()).unwrap_or_default())
-                .build()?;
+                .with_headers(headers);
+            if let Some(body) = request.body() {
+                req = req.body(body.to_vec());
+            }
+            let req = req.build()?;
 
             let uri = req.uri();
             let is_head = req.method() == &Method::HEAD;
@@ -387,8 +418,14 @@ impl ConnectionPool {
         // Try to reuse an existing connection — we need to extract from pool,
         // use it, then put it back. Can't hold mutable borrow across await.
         let conns = self.connections.remove(&key).unwrap_or_default();
-        let (result, leftover_conns) =
-            Self::try_pooled_requests(conns, request, is_head, &self.auto_decompress).await;
+        let (result, leftover_conns) = Self::try_pooled_requests(
+            conns,
+            request,
+            is_head,
+            &self.auto_decompress,
+            self.read_timeout,
+        )
+        .await;
 
         // Put leftover connections back
         if !leftover_conns.is_empty() {
@@ -428,9 +465,9 @@ impl ConnectionPool {
             port,
             is_tls: is_https,
         };
-        let auto_decompress = {
+        let (auto_decompress, read_timeout) = {
             let p = pool.lock();
-            p.auto_decompress
+            (p.auto_decompress, p.read_timeout)
         };
 
         // Prune idle (under brief lock)
@@ -447,7 +484,8 @@ impl ConnectionPool {
 
         // Try pooled (no lock)
         let (result, leftover_conns) =
-            Self::try_pooled_requests(conns, request, is_head, &auto_decompress).await;
+            Self::try_pooled_requests(conns, request, is_head, &auto_decompress, read_timeout)
+                .await;
 
         // Return leftovers (brief lock)
         if !leftover_conns.is_empty() {
@@ -465,13 +503,18 @@ impl ConnectionPool {
         }
 
         // Create new connection (no lock)
-        let (ct, dt, sc) = {
+        let (ct, dt, rt, sc) = {
             let p = pool.lock();
-            (p.connect_timeout, p.dns_timeout, p.session_cache.clone())
+            (
+                p.connect_timeout,
+                p.dns_timeout,
+                p.read_timeout,
+                p.session_cache.clone(),
+            )
         };
         let pooled = Self::create_connection_static(ct, dt, host, port, is_https, &sc).await?;
         let (response, conn) =
-            Self::try_request_on_conn_static(pooled, request, is_head, auto_decompress).await?;
+            Self::try_request_on_conn_static(pooled, request, is_head, auto_decompress, rt).await?;
 
         // Return to pool (brief lock)
         {
@@ -491,9 +534,17 @@ impl ConnectionPool {
         request: &Request,
         is_head: bool,
         auto_decompress: &bool,
+        read_timeout: Duration,
     ) -> (Result<(Response, PooledConn)>, Vec<(PooledConn, Instant)>) {
         while let Some((pooled, _last_used)) = conns.pop() {
-            match Self::try_request_on_conn_static(pooled, request, is_head, *auto_decompress).await
+            match Self::try_request_on_conn_static(
+                pooled,
+                request,
+                is_head,
+                *auto_decompress,
+                read_timeout,
+            )
+            .await
             {
                 Ok(result) => return (Ok(result), conns),
                 Err(_) => {
@@ -517,6 +568,7 @@ impl ConnectionPool {
         request: &Request,
         is_head: bool,
         auto_decompress: bool,
+        read_timeout: Duration,
     ) -> Result<(Response, PooledConn)> {
         // Build request bytes
         let mut request_bytes = request.to_http_bytes();
@@ -535,14 +587,13 @@ impl ConnectionPool {
                 request_bytes = new_bytes;
             }
         }
-
         // Write request
         conn.write_request(&request_bytes)
             .await
             .map_err(Error::Network)?;
 
         // Read response
-        let response = Self::read_response(&mut conn, is_head).await?;
+        let response = Self::read_response(&mut conn, is_head, read_timeout).await?;
 
         // Connection is still alive
         Ok((response, conn))
@@ -556,7 +607,14 @@ impl ConnectionPool {
         request: &Request,
         is_head: bool,
     ) -> Result<(Response, PooledConn)> {
-        Self::try_request_on_conn_static(conn, request, is_head, self.auto_decompress).await
+        Self::try_request_on_conn_static(
+            conn,
+            request,
+            is_head,
+            self.auto_decompress,
+            self.read_timeout,
+        )
+        .await
     }
 
     /// Create a new connection (TCP + optional TLS) — static version for async use.
@@ -571,7 +629,7 @@ impl ConnectionPool {
         if is_https {
             let stream =
                 Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port).await?;
-            let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache))
+            let tls = AsyncTlsStream::client(stream, host, &[b"http/1.1"], Some(session_cache))
                 .await
                 .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
             let reader = BufReader::new(tls);
@@ -613,7 +671,7 @@ impl ConnectionPool {
             dns_timeout,
             edgerun_bare_rt::spawn_blocking(move || {
                 use std::net::ToSocketAddrs;
-                format!("{}:443", host_owned).to_socket_addrs()
+                format!("{}:{}", host_owned, port).to_socket_addrs()
             }),
         )
         .await;
@@ -622,12 +680,12 @@ impl ConnectionPool {
             let addr_list: Vec<SocketAddr> = addrs.into_iter().collect();
             for addr in addr_list.iter() {
                 match addr.ip() {
-                    IpAddr::V6(_) => return Self::connect_sock_static(connect_timeout, addr).await,
-                    IpAddr::V4(_) => continue,
+                    IpAddr::V4(_) => return Self::connect_sock_static(connect_timeout, addr).await,
+                    IpAddr::V6(_) => continue,
                 }
             }
             for addr in addr_list.into_iter() {
-                if let IpAddr::V4(_) = addr.ip() {
+                if let IpAddr::V6(_) = addr.ip() {
                     return Self::connect_sock_static(connect_timeout, &addr).await;
                 }
             }
@@ -635,23 +693,23 @@ impl ConnectionPool {
 
         if let Some(mut client) = edgerun_dns::DnsClient::system() {
             client.set_timeout(dns_timeout);
-            if let Ok(ips) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
-                if let Ok(ips) = ips {
-                    if let Some(ip) = ips.first() {
-                        return Self::connect_sock_static(
-                            connect_timeout,
-                            &SocketAddr::new(IpAddr::V6(*ip), port),
-                        )
-                        .await;
-                    }
-                }
-            }
             if let Ok(ips) = rt_timeout(dns_timeout, client.query_a(host)).await {
                 if let Ok(ips) = ips {
                     if let Some(ip) = ips.first() {
                         return Self::connect_sock_static(
                             connect_timeout,
                             &SocketAddr::new(IpAddr::V4(*ip), port),
+                        )
+                        .await;
+                    }
+                }
+            }
+            if let Ok(ips) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
+                if let Ok(ips) = ips {
+                    if let Some(ip) = ips.first() {
+                        return Self::connect_sock_static(
+                            connect_timeout,
+                            &SocketAddr::new(IpAddr::V6(*ip), port),
                         )
                         .await;
                     }
@@ -671,7 +729,7 @@ impl ConnectionPool {
         let fut = ConnectFuture::new(addr.to_string());
         match rt_timeout(connect_timeout, fut).await {
             Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(e)) => Err(Error::Network(e)),
+            Ok(Err(e)) => Err(Error::Network(e.into())),
             Err(_) => Err(Error::Timeout),
         }
     }
@@ -696,12 +754,35 @@ impl ConnectionPool {
         }
     }
 
-    /// Read an HTTP/1.1 response from a pooled connection.
-    async fn read_response(conn: &mut PooledConn, is_head: bool) -> Result<Response> {
-        let status_line = conn
-            .read_line()
+    async fn read_line_with_timeout(
+        conn: &mut PooledConn,
+        read_timeout: Duration,
+    ) -> Result<Option<String>> {
+        rt_timeout(read_timeout, conn.read_line())
             .await
-            .map_err(Error::Network)?
+            .map_err(|_| Error::Timeout)?
+            .map_err(Error::Network)
+    }
+
+    async fn read_with_timeout(
+        conn: &mut PooledConn,
+        buf: &mut [u8],
+        read_timeout: Duration,
+    ) -> Result<usize> {
+        rt_timeout(read_timeout, conn.read(buf))
+            .await
+            .map_err(|_| Error::Timeout)?
+            .map_err(Error::Network)
+    }
+
+    /// Read an HTTP/1.1 response from a pooled connection.
+    async fn read_response(
+        conn: &mut PooledConn,
+        is_head: bool,
+        read_timeout: Duration,
+    ) -> Result<Response> {
+        let status_line = Self::read_line_with_timeout(conn, read_timeout)
+            .await?
             .ok_or_else(|| {
                 Error::InvalidResponse("Unexpected EOF reading status line".to_string())
             })?;
@@ -717,10 +798,8 @@ impl ConnectionPool {
 
         let mut headers = HeaderMap::new();
         loop {
-            let line = conn
-                .read_line()
-                .await
-                .map_err(Error::Network)?
+            let line = Self::read_line_with_timeout(conn, read_timeout)
+                .await?
                 .ok_or_else(|| {
                     Error::InvalidResponse("Unexpected EOF reading headers".to_string())
                 })?;
@@ -751,13 +830,17 @@ impl ConnectionPool {
             .get("content-length")
             .and_then(|v| v.as_str().parse::<usize>().ok());
 
+        if (300..400).contains(&status_code_val) && !is_chunked && content_length.is_none() {
+            return Ok(Response::from_parts(status, headers, Vec::new()));
+        }
+
         let body = if is_chunked {
-            Self::read_chunked_body(conn).await?
+            Self::read_chunked_body(conn, read_timeout).await?
         } else if let Some(len) = content_length {
             let mut buf = vec![0u8; len];
             let mut total = 0;
             while total < len {
-                let n = conn.read(&mut buf[total..]).await.map_err(Error::Network)?;
+                let n = Self::read_with_timeout(conn, &mut buf[total..], read_timeout).await?;
                 if n == 0 {
                     break;
                 }
@@ -766,14 +849,27 @@ impl ConnectionPool {
             buf.truncate(total);
             buf
         } else {
-            Vec::new()
+            let mut body = Vec::new();
+            let mut buf = [0u8; 8192];
+            loop {
+                let n = match Self::read_with_timeout(conn, &mut buf, read_timeout).await {
+                    Ok(n) => n,
+                    Err(Error::Timeout) if !body.is_empty() => break,
+                    Err(e) => return Err(e),
+                };
+                if n == 0 {
+                    break;
+                }
+                body.extend_from_slice(&buf[..n]);
+            }
+            body
         };
 
         Ok(Response::from_parts(status, headers, body))
     }
 
     /// Read a chunked transfer-encoded body.
-    async fn read_chunked_body(conn: &mut PooledConn) -> Result<Vec<u8>> {
+    async fn read_chunked_body(conn: &mut PooledConn, read_timeout: Duration) -> Result<Vec<u8>> {
         let mut body = Vec::new();
         let mut line_buf = Vec::with_capacity(32);
 
@@ -782,7 +878,7 @@ impl ConnectionPool {
             line_buf.clear();
             loop {
                 let mut byte = [0u8; 1];
-                let n = conn.read(&mut byte).await.map_err(Error::Network)?;
+                let n = Self::read_with_timeout(conn, &mut byte, read_timeout).await?;
                 if n == 0 {
                     return Err(Error::InvalidResponse(
                         "unexpected EOF reading chunk size".into(),
@@ -806,7 +902,7 @@ impl ConnectionPool {
             if chunk_size == 0 {
                 // Drain trailer headers until blank line
                 loop {
-                    let line = conn.read_line().await.map_err(Error::Network)?;
+                    let line = Self::read_line_with_timeout(conn, read_timeout).await?;
                     if line.is_none_or(|l| l.is_empty()) {
                         break;
                     }
@@ -819,10 +915,7 @@ impl ConnectionPool {
             let mut buf = [0u8; 8192];
             while remaining > 0 {
                 let to_read = remaining.min(buf.len());
-                let n = conn
-                    .read(&mut buf[..to_read])
-                    .await
-                    .map_err(Error::Network)?;
+                let n = Self::read_with_timeout(conn, &mut buf[..to_read], read_timeout).await?;
                 if n == 0 {
                     break;
                 }
@@ -832,7 +925,7 @@ impl ConnectionPool {
 
             // Skip trailing \r\n
             let mut crlf = [0u8; 2];
-            let _ = conn.read(&mut crlf).await;
+            let _ = Self::read_with_timeout(conn, &mut crlf, read_timeout).await;
         }
 
         Ok(body)

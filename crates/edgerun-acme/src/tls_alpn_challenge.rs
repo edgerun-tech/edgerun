@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use sha2::{Digest, Sha256};
 
 use edgerun_encoding::base64url_nopad_encode;

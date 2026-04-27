@@ -1,17 +1,16 @@
+use crate::prelude::v1::*;
 use std::sync::Arc;
 
 use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;
-use edgerun_http::{HttpClient, Method, Request, Response, StatusCode};
-use sha2::{Digest, Sha256};
-use url::Url;
+use edgerun_http::{HttpClient, Method};
+use edgerun_url::Url;
 
 use crate::account::AccountKey;
 use crate::challenge::Challenge;
 use crate::dns_challenge::DnsChallengeManager;
 use crate::http_challenge::HttpChallengeHandler;
 use crate::order::Order;
-use crate::tls_alpn_challenge::TlsAlpnManager;
 use crate::types::{
     AcmeErrorDetail, CSRRequest, CertificateResponse, Directory, DirectoryUrl, Identifier,
     JwsHeader, NewAccountRequestWithNonce, NewOrderRequest, RevokeCertRequest, SignedJws,
@@ -72,7 +71,7 @@ impl AcmeClient {
 
         let body = res.body();
         let dir: Directory =
-            serde_json::from_slice(body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(body).map_err(|e| AcmeError::Parse(e.to_string()))?;
         Ok(dir)
     }
 
@@ -123,7 +122,7 @@ impl AcmeClient {
         };
 
         let protected_b64 = base64url_nopad_encode(
-            &serde_json::to_vec(&protected).map_err(|e| AcmeError::Parse(e.to_string()))?,
+            &edgerun_json::to_vec(&protected).map_err(|e| AcmeError::Parse(e.to_string()))?,
         );
 
         let payload_b64 = match payload {
@@ -142,7 +141,7 @@ impl AcmeClient {
             signature: signature_b64,
         };
 
-        let jws_bytes = serde_json::to_vec(&jws).map_err(|e| AcmeError::Parse(e.to_string()))?;
+        let jws_bytes = edgerun_json::to_vec(&jws).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         let res = self
             .http_client
@@ -166,7 +165,7 @@ impl AcmeClient {
         if status == 200 || status == 201 {
             Ok((status, body))
         } else {
-            let error_detail: Option<AcmeErrorDetail> = serde_json::from_slice(&body).ok();
+            let error_detail: Option<AcmeErrorDetail> = edgerun_json::from_slice(&body).ok();
             Err(AcmeError::Server(status, error_detail))
         }
     }
@@ -195,12 +194,12 @@ impl AcmeClient {
         };
 
         let payload_bytes =
-            serde_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         let (_, body) = self.post(&new_account_url, Some(&payload_bytes)).await?;
 
         let account: crate::types::AccountResponse =
-            serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         let id = account.id;
         *self.account_id.write() = Some(id.clone());
@@ -231,12 +230,12 @@ impl AcmeClient {
         };
 
         let payload_bytes =
-            serde_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         let (_, body) = self.post(&new_order_url, Some(&payload_bytes)).await?;
 
         let order: crate::types::Order =
-            serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         Ok(Order::from_acme(order))
     }
@@ -248,7 +247,7 @@ impl AcmeClient {
         let (_, body) = self.post(url, None).await?;
 
         let authz: crate::types::Authorization =
-            serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         Ok(authz)
     }
@@ -257,7 +256,7 @@ impl AcmeClient {
         let (_, body) = self.post(url, None).await?;
 
         let challenge: crate::types::Challenge =
-            serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         Ok(Challenge::from_acme(challenge))
     }
@@ -266,7 +265,7 @@ impl AcmeClient {
         let (_, body) = self.post(url, Some(b"{}")).await?;
 
         let challenge: crate::types::Challenge =
-            serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         Ok(Challenge::from_acme(challenge))
     }
@@ -276,12 +275,12 @@ impl AcmeClient {
 
         let payload = CSRRequest { csr: csr_b64 };
         let payload_bytes =
-            serde_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         let (_, body) = self.post(url, Some(&payload_bytes)).await?;
 
         let order: crate::types::Order =
-            serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         Ok(Order::from_acme(order))
     }
@@ -290,7 +289,7 @@ impl AcmeClient {
         let (_, body) = self.post(url, None).await?;
 
         let cert: CertificateResponse =
-            serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         Ok(cert.certificate)
     }
@@ -315,7 +314,7 @@ impl AcmeClient {
         };
 
         let payload_bytes =
-            serde_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            edgerun_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         self.post(&revoke_cert_url, Some(&payload_bytes)).await?;
 

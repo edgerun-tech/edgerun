@@ -1,4 +1,5 @@
-use url::Url;
+use crate::prelude::v1::*;
+use edgerun_url::Url;
 
 use crate::types::{ChallengeStatus, ChallengeType};
 

@@ -1,10 +1,7 @@
 use crate::error::{GattError, GattResult};
 use std::io;
 use std::mem::size_of;
-use std::os::fd::{AsRawFd, RawFd};
-use std::time::Duration;
-
-use edgerun_rt::{timeout, AsyncFd, ReadyFuture};
+use std::os::fd::RawFd;
 
 const AF_BLUETOOTH: i32 = 31;
 const SOCK_SEQPACKET: i32 = 5;
@@ -76,29 +73,6 @@ pub struct AsyncL2capSocket {
     state: L2capChannelState,
     mtu: u16,
     remote_mtu: u16,
-    async_fd: Option<AsyncFd<OwnedFd>>,
-}
-
-struct OwnedFd(RawFd);
-
-impl OwnedFd {
-    unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        OwnedFd(fd)
-    }
-}
-
-impl AsRawFd for OwnedFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.0
-    }
-}
-
-impl Drop for OwnedFd {
-    fn drop(&mut self) {
-        if self.0 >= 0 {
-            unsafe { close(self.0) };
-        }
-    }
 }
 
 impl AsyncL2capSocket {
@@ -116,7 +90,6 @@ impl AsyncL2capSocket {
             state: L2capChannelState::Closed,
             mtu: DEFAULT_MTU,
             remote_mtu: DEFAULT_MTU,
-            async_fd: None,
         })
     }
 

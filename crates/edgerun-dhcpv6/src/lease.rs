@@ -1,7 +1,8 @@
 //! DHCPv6 lease management — addresses, prefixes, and state tracking.
 
-use std::net::Ipv6Addr;
-use std::time::{Duration, Instant};
+use crate::std::net::Ipv6Addr;
+use crate::std::prelude::v1::*;
+use crate::std::time::{Duration, Instant};
 
 /// DHCPv6 lease states per RFC 8415 §18.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -274,7 +275,7 @@ impl Default for LeasePool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv6Addr;
+    use crate::std::net::Ipv6Addr;
 
     #[test]
     fn test_lease_lifetimes() {

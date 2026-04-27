@@ -5,6 +5,8 @@
 //! This is a bootstrap trust primitive: the record's own public key
 //! verifies its signature (self-signed).
 
+use crate::prelude::v1::*;
+
 use super::helpers::*;
 use crate::crypto::{
     verify_canonical_record, ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,

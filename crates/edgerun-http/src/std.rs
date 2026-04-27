@@ -2,16 +2,36 @@
 
 pub mod prelude {
     pub mod v1 {
+        pub use alloc::borrow::ToOwned;
         pub use alloc::boxed::Box;
-        pub use alloc::format;
         pub use alloc::string::{String, ToString};
-        pub use alloc::vec;
         pub use alloc::vec::Vec;
-        pub use core::prelude::rust_2021::*;
     }
 }
 
-pub use core::{any, borrow, cmp, convert, fmt, future, hash, mem, option, pin, result, str, task};
+pub mod boxed {
+    pub use alloc::boxed::Box;
+}
+
+pub mod string {
+    pub use alloc::string::{String, ToString};
+}
+
+pub mod vec {
+    pub use alloc::vec::Vec;
+}
+
+pub use alloc::format;
+pub use core::{any, cmp, convert, fmt, future, hash, mem, option, pin, result, str, task};
+
+pub mod borrow {
+    pub use alloc::borrow::{Cow, ToOwned};
+    pub use core::borrow::{Borrow, BorrowMut};
+}
+
+pub mod ops {
+    pub use core::ops::*;
+}
 
 pub mod collections {
     pub use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -20,7 +40,31 @@ pub mod collections {
     pub type HashSet<T> = alloc::collections::BTreeSet<T>;
 
     pub mod hash_map {
+        use core::hash::Hasher;
+
         pub use alloc::collections::btree_map::Entry;
+
+        #[derive(Default)]
+        pub struct DefaultHasher(u64);
+
+        impl DefaultHasher {
+            pub fn new() -> Self {
+                Self(0xcbf29ce484222325)
+            }
+        }
+
+        impl Hasher for DefaultHasher {
+            fn finish(&self) -> u64 {
+                self.0
+            }
+
+            fn write(&mut self, bytes: &[u8]) {
+                for byte in bytes {
+                    self.0 ^= u64::from(*byte);
+                    self.0 = self.0.wrapping_mul(0x100000001b3);
+                }
+            }
+        }
     }
 }
 
@@ -93,6 +137,41 @@ pub mod io {
     }
 
     pub type Result<T> = core::result::Result<T, Error>;
+
+    pub trait Read {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+
+        fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
+            while !buf.is_empty() {
+                match self.read(buf)? {
+                    0 => return Err(Error::new(ErrorKind::UnexpectedEof, "unexpected EOF")),
+                    n => {
+                        let tmp = buf;
+                        buf = &mut tmp[n..];
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+
+    pub trait Write {
+        fn write(&mut self, buf: &[u8]) -> Result<usize>;
+
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
+            while !buf.is_empty() {
+                match self.write(buf)? {
+                    0 => return Err(Error::new(ErrorKind::WriteZero, "failed to write buffer")),
+                    n => buf = &buf[n..],
+                }
+            }
+            Ok(())
+        }
+    }
 }
 
 pub mod net {
@@ -171,8 +250,50 @@ pub mod net {
 }
 
 pub mod path {
-    pub struct Path;
-    pub struct PathBuf;
+    use alloc::string::String;
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct PathBuf(String);
+
+    pub type Path = PathBuf;
+
+    pub struct OsStr;
+
+    impl OsStr {
+        pub fn to_str(&self) -> Option<&str> {
+            None
+        }
+    }
+
+    impl PathBuf {
+        pub fn join(&self, _path: impl AsRef<str>) -> Self {
+            self.clone()
+        }
+
+        pub fn is_file(&self) -> bool {
+            false
+        }
+
+        pub fn is_dir(&self) -> bool {
+            false
+        }
+
+        pub fn extension(&self) -> Option<&OsStr> {
+            None
+        }
+    }
+
+    impl From<&str> for PathBuf {
+        fn from(value: &str) -> Self {
+            Self(String::from(value))
+        }
+    }
+
+    impl From<String> for PathBuf {
+        fn from(value: String) -> Self {
+            Self(value)
+        }
+    }
 }
 
 pub mod fs {
@@ -189,9 +310,79 @@ pub mod fs {
 
 pub mod sync {
     pub use alloc::sync::Arc;
-    pub use edgerun_bare_rt::{Mutex, MutexGuard};
+    pub use edgerun_bare_rt::MutexGuard;
+
+    pub struct Mutex<T>(edgerun_bare_rt::Mutex<T>);
+
+    impl<T> Mutex<T> {
+        pub fn new(value: T) -> Self {
+            Self(edgerun_bare_rt::Mutex::new(value))
+        }
+
+        pub fn lock(&self) -> core::result::Result<MutexGuard<'_, T>, ()> {
+            Ok(self.0.lock())
+        }
+    }
 }
 
 pub mod time {
-    pub use edgerun_bare_rt::{Duration, Instant};
+    use core::ops::{Add, Sub};
+
+    pub use edgerun_bare_rt::Duration;
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
+    pub struct Instant(edgerun_bare_rt::Instant);
+
+    impl Instant {
+        pub fn now() -> Self {
+            Self(edgerun_bare_rt::Instant::now())
+        }
+
+        pub fn duration_since(self, earlier: Instant) -> Duration {
+            self.0 - earlier.0
+        }
+
+        pub fn elapsed(self) -> Duration {
+            self.0.elapsed()
+        }
+    }
+
+    impl Add<Duration> for Instant {
+        type Output = Instant;
+
+        fn add(self, rhs: Duration) -> Self::Output {
+            Instant(self.0 + rhs)
+        }
+    }
+
+    impl Sub<Duration> for Instant {
+        type Output = Instant;
+
+        fn sub(self, rhs: Duration) -> Self::Output {
+            Instant(self.0 - rhs)
+        }
+    }
+
+    impl Sub<Instant> for Instant {
+        type Output = Duration;
+
+        fn sub(self, rhs: Instant) -> Self::Output {
+            self.0 - rhs.0
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct SystemTime(Duration);
+
+    pub const UNIX_EPOCH: SystemTime = SystemTime(Duration::from_secs(0));
+
+    impl SystemTime {
+        pub fn now() -> Self {
+            Self(Duration::from_secs(0))
+        }
+
+        pub fn duration_since(self, earlier: SystemTime) -> Result<Duration, ()> {
+            self.0.checked_sub(earlier.0).ok_or(())
+        }
+    }
 }

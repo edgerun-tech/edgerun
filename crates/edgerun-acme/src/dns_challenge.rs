@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use std::sync::Arc;
 
 use edgerun_dns::record::DnsRecordType;

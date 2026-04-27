@@ -8,7 +8,7 @@
 
 use crate::prelude::v1::*;
 
-use edgerun_core::protocol::{Digest, EventEnvelope};
+use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use prost::Message;
 use std::collections::HashMap;
 use std::fs;
@@ -247,6 +247,34 @@ impl NodeStore {
         }
     }
 
+    /// Signs an event envelope with the node signer.
+    pub fn sign_event_envelope(
+        &self,
+        event: &mut EventEnvelope,
+        signer: &dyn MeshSigner,
+    ) -> Result<(), StorageError> {
+        let record = ProtocolRecord::EventEnvelope(event.clone());
+        let canonical = canonical_bytes(&record, true);
+        let signature = signer
+            .sign_record(edgerun_core::crypto::SIG_DOMAIN_EVENT_ENVELOPE, &canonical)
+            .map_err(|e| StorageError::Encode(format!("event signing failed: {e}")))?;
+        event.signature = Some(edgerun_core::protocol::Signature {
+            algorithm: 1,
+            value: signature.to_vec(),
+        });
+        Ok(())
+    }
+
+    /// Signs and appends an event as one storage operation.
+    pub async fn append_signed_event(
+        &self,
+        mut event: EventEnvelope,
+        signer: &dyn MeshSigner,
+    ) -> Result<u64, StorageError> {
+        self.sign_event_envelope(&mut event, signer)?;
+        self.append_event(event).await
+    }
+
     /// Synchronous version of `append_event` — for use from blocking threads.
     /// Blocks the current thread until the write completes.
     pub fn append_event_blocking(&self, event: EventEnvelope) -> Result<u64, StorageError> {
@@ -259,6 +287,16 @@ impl NodeStore {
                 self.append_event_blocking_to_block_store(event, store, true)
             }
         }
+    }
+
+    /// Synchronous version of `append_signed_event` for blocking store-task paths.
+    pub fn append_signed_event_blocking(
+        &self,
+        mut event: EventEnvelope,
+        signer: &dyn MeshSigner,
+    ) -> Result<u64, StorageError> {
+        self.sign_event_envelope(&mut event, signer)?;
+        self.append_event_blocking(event)
     }
 
     /// Retrieves an event from the event log by stream ID and sequence number.

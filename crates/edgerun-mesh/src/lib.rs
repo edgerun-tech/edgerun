@@ -5,10 +5,52 @@
 //! sender's secure hardware and verified against the sender's NodeID
 //! embedded in the frame header.
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::borrow::ToOwned;
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2021::*;
+    }
+}
+
+pub mod collections {
+    pub type HashMap<K, V> = alloc::collections::BTreeMap<K, V>;
+    pub type HashSet<T> = alloc::collections::BTreeSet<T>;
+}
+
+pub mod vec {
+    pub use alloc::vec::Vec;
+}
+
+pub mod string {
+    pub use alloc::string::{String, ToString};
+}
+
+pub mod option {
+    pub use core::option::Option;
+}
+
+pub use alloc::format;
+pub use core::{iter, result};
+
+#[cfg(not(target_os = "none"))]
 pub mod benchmark;
 pub mod discovery;
 pub mod mesh_payload;
 pub mod router;
+#[cfg(not(target_os = "none"))]
 pub mod router_benchmark;
 
 mod frame;

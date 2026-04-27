@@ -2,6 +2,9 @@
 //!
 //! Works across HTTP/1.1, HTTP/2, and HTTP/3.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::{Request, Response};
 use std::future::Future;
 use std::pin::Pin;

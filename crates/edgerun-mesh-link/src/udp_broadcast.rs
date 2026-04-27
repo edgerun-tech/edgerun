@@ -12,6 +12,7 @@
 //! attaches the sender's MAC to incoming raw Ethernet frames so the
 //! router can learn peer identities from Ethernet source addresses.
 
+use crate::prelude::v1::*;
 use super::*;
 use crate::multicast::SockaddrIn;
 use edgerun_hardware_signing::NodeID;
@@ -83,7 +84,8 @@ impl UdpBroadcastSocket {
             return Err(err);
         }
 
-        // Set non-blocking so pump() can return quickly
+        // Set non-blocking so pump() can return quickly on host socket builds.
+        #[cfg(not(target_os = "none"))]
         unsafe {
             libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
         }

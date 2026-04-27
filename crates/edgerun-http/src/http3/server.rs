@@ -29,6 +29,9 @@
 //! });
 //! ```
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::handler::Handler;
 use crate::header::HeaderMap;
 use crate::method::Method;
@@ -142,7 +145,7 @@ impl Http3Server {
 
     /// Local address of the server.
     pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        self.socket.local_addr()
+        Ok(self.socket.local_addr()?)
     }
 
     /// Accept the next incoming HTTP/3 connection.

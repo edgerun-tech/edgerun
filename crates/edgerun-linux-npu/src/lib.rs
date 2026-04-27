@@ -1,3 +1,49 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    pub use edgerun_linux_sysfs::fs::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::parse_hex_u32_from_str;
 // Re-export sysfs helpers that downstream NPU backends need.
 pub use edgerun_linux_sysfs::{read_trimmed, temp_root};
@@ -6,6 +52,7 @@ use edgerun_npu::{
     CapabilityProvider, NpuDevice, NpuInfo, NpuWorkloadRequest, NpuWorkloadResult,
 };
 use std::collections::BTreeSet;
+#[cfg(not(target_os = "none"))]
 use std::fs;
 use std::path::{Path, PathBuf};
 

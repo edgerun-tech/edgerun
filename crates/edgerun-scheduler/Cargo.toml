@@ -10,4 +10,4 @@ edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-error.workspace = true
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }

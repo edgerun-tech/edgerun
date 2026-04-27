@@ -225,3 +225,4 @@ pub const PINS: &[PinConfig] = &[
         "Main antenna connection",
     ),
 ];
+use crate::prelude::v1::*;

@@ -7,6 +7,9 @@
 //! Use [`Body::reader()`] to get a [`BodyReader`] for async chunk-by-chunk reading,
 //! or [`Body::collect()`] to read the entire body at once.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};

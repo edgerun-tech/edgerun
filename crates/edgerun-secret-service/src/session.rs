@@ -4,6 +4,7 @@
 //! when the session has an active biometric verification. After an idle
 //! timeout, the session auto-locks and requires re-verification.
 
+use crate::prelude::v1::*;
 use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
 use std::collections::HashMap;
 

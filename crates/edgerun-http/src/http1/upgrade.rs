@@ -9,6 +9,9 @@
 //! 3. Server sends `101 Switching Protocols` response
 //! 4. Connection transitions to the new protocol
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::HeaderMap;
 use std::fmt;
 

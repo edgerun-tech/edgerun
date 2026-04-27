@@ -1,6 +1,8 @@
 //! D-Bus session bus client — connects to the system bus, authenticates,
 //! and registers `org.freedesktop.secrets` so desktop apps find us.
 
+use crate::prelude::v1::*;
+use std::eprintln;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;

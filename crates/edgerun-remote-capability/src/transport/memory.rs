@@ -1,5 +1,6 @@
 //! In-memory channel-pair transport for testing.
 
+use crate::prelude::v1::*;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;

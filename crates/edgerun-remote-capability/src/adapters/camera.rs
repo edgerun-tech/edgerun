@@ -1,5 +1,6 @@
 //! Camera biometric reader remote adapters (single-stream and paired RGB+IR+Depth).
 
+use crate::prelude::v1::*;
 use edgerun_biometrics::BiometricModality;
 use edgerun_camera_biometrics::{
     CameraBiometricError, CameraBiometricPurpose, CameraBiometricReader, CameraCapture,

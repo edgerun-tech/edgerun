@@ -55,6 +55,9 @@
 //!     .build();
 //! ```
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::{Handler, Request, Response};
 use edgerun_bare_rt::sync::Mutex;
 use std::any::{Any, TypeId};

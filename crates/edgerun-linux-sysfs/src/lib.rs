@@ -1,16 +1,325 @@
 //! Shared sysfs utilities for Linux backend crates.
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+}
+
+#[cfg(target_os = "none")]
+pub mod env {
+    use crate::path::PathBuf;
+
+    #[must_use]
+    pub fn temp_dir() -> PathBuf {
+        PathBuf::from("/tmp")
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod ffi {
+    pub use core::ffi::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    use crate::{io, path::PathBuf};
+    use alloc::string::String;
+
+    pub struct ReadDir;
+    pub struct DirEntry;
+
+    impl Iterator for ReadDir {
+        type Item = io::Result<DirEntry>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            None
+        }
+    }
+
+    impl DirEntry {
+        #[must_use]
+        pub fn file_name(&self) -> PathBuf {
+            PathBuf::from("")
+        }
+
+        #[must_use]
+        pub fn path(&self) -> PathBuf {
+            PathBuf::from("")
+        }
+    }
+
+    pub fn read_to_string<P>(_path: P) -> io::Result<String> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+
+    pub fn read_dir<P>(_path: P) -> io::Result<ReadDir> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+
+    pub fn read_link<P>(_path: P) -> io::Result<PathBuf> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+
+    pub fn canonicalize<P: Into<PathBuf>>(path: P) -> io::Result<PathBuf> {
+        Ok(path.into())
+    }
+
+    pub fn create_dir_all<P>(_path: P) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ErrorKind {
+        NotFound,
+        Other,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+    }
+
+    impl Error {
+        #[must_use]
+        pub const fn new(kind: ErrorKind) -> Self {
+            Self { kind }
+        }
+
+        #[must_use]
+        pub const fn last_os_error() -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+
+        #[must_use]
+        pub const fn from_raw_os_error(_code: i32) -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+
+        #[must_use]
+        pub const fn raw_os_error(&self) -> Option<i32> {
+            None
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self.kind {
+                ErrorKind::NotFound => f.write_str("not found"),
+                ErrorKind::Other => f.write_str("I/O error"),
+            }
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    pub type Result<T> = core::result::Result<T, Error>;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod raw {
+        #[allow(non_camel_case_types)]
+        pub type c_char = i8;
+        #[allow(non_camel_case_types)]
+        pub type c_int = i32;
+        #[allow(non_camel_case_types)]
+        pub type c_short = i16;
+        #[allow(non_camel_case_types)]
+        pub type c_ulong = usize;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    use alloc::string::{String, ToString};
+
+    #[derive(Debug)]
+    pub struct Path;
+
+    impl Path {
+        #[must_use]
+        pub fn new(_path: &str) -> &'static Self {
+            static PATH: Path = Path;
+            &PATH
+        }
+
+        #[must_use]
+        pub fn file_name(&self) -> Option<PathBuf> {
+            None
+        }
+
+        #[must_use]
+        pub fn join<P>(&self, _path: P) -> PathBuf {
+            PathBuf::from("")
+        }
+
+        #[must_use]
+        pub fn exists(&self) -> bool {
+            false
+        }
+    }
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct PathBuf(String);
+
+    impl PathBuf {
+        #[must_use]
+        pub fn join<P>(&self, _path: P) -> Self {
+            Self(String::new())
+        }
+
+        #[must_use]
+        pub fn exists(&self) -> bool {
+            false
+        }
+
+        #[must_use]
+        pub fn is_dir(&self) -> bool {
+            false
+        }
+
+        #[must_use]
+        pub fn file_name(&self) -> Option<PathBuf> {
+            None
+        }
+
+        #[must_use]
+        pub fn to_string_lossy(&self) -> String {
+            self.0.clone()
+        }
+
+        #[must_use]
+        pub fn to_str(&self) -> Option<&str> {
+            Some(&self.0)
+        }
+
+        #[must_use]
+        pub fn display(&self) -> Display<'_> {
+            Display(self)
+        }
+    }
+
+    impl From<&str> for PathBuf {
+        fn from(value: &str) -> Self {
+            Self(value.to_string())
+        }
+    }
+
+    impl From<String> for PathBuf {
+        fn from(value: String) -> Self {
+            Self(value)
+        }
+    }
+
+    impl From<&PathBuf> for PathBuf {
+        fn from(value: &PathBuf) -> Self {
+            value.clone()
+        }
+    }
+
+    impl core::ops::Deref for PathBuf {
+        type Target = Path;
+
+        fn deref(&self) -> &Self::Target {
+            Path::new("")
+        }
+    }
+
+    pub struct Display<'a>(&'a PathBuf);
+
+    impl core::fmt::Display for Display<'_> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str(&self.0.0)
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    pub use core::time::Duration;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct SystemTime(Duration);
+
+    pub const UNIX_EPOCH: SystemTime = SystemTime(Duration::from_secs(0));
+
+    impl SystemTime {
+        #[must_use]
+        pub const fn now() -> Self {
+            UNIX_EPOCH
+        }
+
+        pub fn duration_since(
+            &self,
+            earlier: SystemTime,
+        ) -> core::result::Result<Duration, Duration> {
+            self.0.checked_sub(earlier.0).ok_or(earlier.0)
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+use crate::prelude::v1::*;
 use std::collections::HashMap;
+#[cfg(not(target_os = "none"))]
 use std::fs;
+#[cfg(not(target_os = "none"))]
 use std::io;
-use std::os::raw::{c_char, c_int};
+use std::os::raw::{c_char, c_int, c_ulong};
 use std::path::{Path, PathBuf};
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 unsafe extern "C" {
     fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int;
-    fn ioctl(fd: c_int, request: libc::c_ulong, ...) -> c_int;
+    fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
     fn close(fd: c_int) -> c_int;
 }
 
@@ -145,7 +454,7 @@ pub unsafe fn close_ioctl_fd(fd: c_int) {
 /// # Safety
 /// `fd` must be a valid file descriptor, and `request`/`...` must match
 /// the expected ioctl signature for the given fd.
-pub unsafe fn ioctl_call(fd: c_int, request: libc::c_ulong, arg: *mut std::ffi::c_void) -> c_int {
+pub unsafe fn ioctl_call(fd: c_int, request: c_ulong, arg: *mut std::ffi::c_void) -> c_int {
     ioctl(fd, request, arg)
 }
 

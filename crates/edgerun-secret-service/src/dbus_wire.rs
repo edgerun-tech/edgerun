@@ -1,5 +1,6 @@
 //! D-Bus wire protocol — read/write values, encode/decode messages.
 
+use crate::prelude::v1::*;
 use crate::dbus_types::*;
 use std::collections::HashMap;
 use std::io;

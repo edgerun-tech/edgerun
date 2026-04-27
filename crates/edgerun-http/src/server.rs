@@ -9,6 +9,9 @@
 //!
 //! HTTP/3 (QUIC) runs on UDP with built-in TLS 1.3 — enabled via `.with_http3()`.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::handler::Handler;
 use crate::header::HeaderMap;
 use crate::http2::frame::{flags, Frame, FrameType};

@@ -57,6 +57,10 @@ impl AsyncTcpStream {
     pub fn peer_addr(&self) -> std::io::Result<SocketAddr> {
         self.inner.peer_addr()
     }
+
+    pub fn split(self: Arc<Self>) -> (Arc<Self>, Arc<Self>) {
+        (self.clone(), self)
+    }
 }
 
 impl AsyncRead for AsyncTcpStream {

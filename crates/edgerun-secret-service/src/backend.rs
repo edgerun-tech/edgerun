@@ -3,6 +3,7 @@
 //! (NOT a separate log). This ensures all secret mutations are part of the
 //! cryptographically linked, prev_hash-chained event log.
 
+use crate::prelude::v1::*;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -476,6 +477,12 @@ fn now_us() -> u64 {
 
 /// Derive a deterministic 32-byte key from the data_root path via SHA-256.
 fn derive_key_from_path(path: &Path) -> [u8; 32] {
+    #[cfg(target_os = "none")]
+    let bytes = {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes()
+    };
+    #[cfg(not(target_os = "none"))]
     let bytes = path.as_os_str().as_encoded_bytes();
     let hash = edgerun_core::crypto::sha256(bytes);
     let mut key = [0u8; 32];

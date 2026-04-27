@@ -4,6 +4,9 @@
 //! persistent TCP connection. Multiple requests are multiplexed concurrently
 //! as independent HTTP/2 streams.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -755,7 +758,7 @@ async fn connection_task<S>(
 
     // Close all pending stream callbacks
     let mut s = state.lock().unwrap();
-    for (_, cb) in s.stream_callbacks.drain() {
+    for (_, cb) in core::mem::take(&mut s.stream_callbacks) {
         if let Some(tx) = cb.response_tx {
             let _ = tx.send(Err(Http2Error::Io(std::io::Error::new(
                 std::io::ErrorKind::ConnectionReset,

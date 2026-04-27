@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use edgerun_bare_rt::CancellationToken;
 use edgerun_core::util::system_time_to_prost;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh_daemon::MeshDaemon;
-use edgerun_rt::CancellationToken;
 use edgerun_storage::{BlobKeySource, FetchEntry, NodeStore, NodeStoreConfig};
 use prost::Message;
 
@@ -34,7 +34,7 @@ use crate::workload_policy;
 async fn run_fetch_queue_consumer(
     peers: Vec<BootstrapPeer>,
     local_node_id: NodeID,
-    store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    store_tx: edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     cancel: CancellationToken,
 ) {
     use edgerun_proto::edgerun::v0::access::{QueryClass, QueryRequest};
@@ -46,8 +46,8 @@ async fn run_fetch_queue_consumer(
         return;
     }
 
-    let mut interval = edgerun_rt::interval(std::time::Duration::from_secs(30));
-    interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
+    let mut interval = edgerun_bare_rt::interval(std::time::Duration::from_secs(30));
+    interval.set_missed_tick_behavior(edgerun_bare_rt::MissedTickBehavior::Skip);
 
     loop {
         if cancel.is_cancelled() {
@@ -57,7 +57,7 @@ async fn run_fetch_queue_consumer(
         interval.tick().await;
 
         // Dequeue one pending fetch via the store task (no direct FileIndex access)
-        let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+        let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
         if store_tx
             .send(StoreRequest::FetchDequeue { reply_tx })
             .await
@@ -190,7 +190,7 @@ async fn run_fetch_queue_consumer(
                     }
 
                     // Mark as done via store task
-                    let (done_tx, done_rx) = edgerun_rt::oneshot::channel();
+                    let (done_tx, done_rx) = edgerun_bare_rt::oneshot::channel();
                     let _ = store_tx
                         .send(StoreRequest::FetchMarkDone {
                             fetch_id: fetch_entry.id,
@@ -208,7 +208,7 @@ async fn run_fetch_queue_consumer(
 
         if !fetched {
             // Re-enqueue with lower priority for retry via store task
-            let (requeue_tx, requeue_rx) = edgerun_rt::oneshot::channel();
+            let (requeue_tx, requeue_rx) = edgerun_bare_rt::oneshot::channel();
             let _ = store_tx
                 .send(StoreRequest::FetchRequeue {
                     target_type: fetch_type,
@@ -270,20 +270,21 @@ pub async fn send_command_to_peer_async(
     peer_addr: &str,
     command: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+    use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt};
 
-    let mut stream = edgerun_rt::timeout(
+    let mut stream = edgerun_bare_rt::timeout(
         std::time::Duration::from_secs(10),
-        edgerun_rt::ConnectFuture::new(peer_addr),
+        edgerun_bare_rt::ConnectFuture::new(peer_addr),
     )
     .await??;
 
     let cmd_bytes = prost::Message::encode_to_vec(command);
     let frame = encode_tcp_frame(&cmd_bytes);
-    edgerun_rt::timeout(std::time::Duration::from_secs(10), stream.write_all(&frame)).await??;
+    edgerun_bare_rt::timeout(std::time::Duration::from_secs(10), stream.write_all(&frame))
+        .await??;
 
     let mut header = [0u8; 8];
-    edgerun_rt::timeout(
+    edgerun_bare_rt::timeout(
         std::time::Duration::from_secs(10),
         stream.read_exact(&mut header),
     )
@@ -291,7 +292,7 @@ pub async fn send_command_to_peer_async(
 
     let payload_len = u64::from_be_bytes(header) as usize;
     let mut payload = vec![0u8; payload_len];
-    edgerun_rt::timeout(
+    edgerun_bare_rt::timeout(
         std::time::Duration::from_secs(30),
         stream.read_exact(&mut payload),
     )
@@ -305,21 +306,22 @@ pub async fn send_query_to_peer(
     peer_addr: &str,
     query: &edgerun_proto::edgerun::v0::access::QueryRequest,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
-    let mut stream = edgerun_rt::timeout(
+    use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = edgerun_bare_rt::timeout(
         std::time::Duration::from_secs(10),
-        edgerun_rt::ConnectFuture::new(peer_addr),
+        edgerun_bare_rt::ConnectFuture::new(peer_addr),
     )
     .await??;
 
     let query_bytes = prost::Message::encode_to_vec(query);
     let frame = encode_tcp_frame(&query_bytes);
 
-    edgerun_rt::timeout(std::time::Duration::from_secs(10), stream.write_all(&frame)).await??;
+    edgerun_bare_rt::timeout(std::time::Duration::from_secs(10), stream.write_all(&frame))
+        .await??;
 
     // Read response (8-byte length prefix + payload)
     let mut header = [0u8; 8];
-    edgerun_rt::timeout(
+    edgerun_bare_rt::timeout(
         std::time::Duration::from_secs(10),
         stream.read_exact(&mut header),
     )
@@ -327,7 +329,7 @@ pub async fn send_query_to_peer(
 
     let payload_len = u64::from_be_bytes(header) as usize;
     let mut payload = vec![0u8; payload_len];
-    edgerun_rt::timeout(
+    edgerun_bare_rt::timeout(
         std::time::Duration::from_secs(30),
         stream.read_exact(&mut payload),
     )
@@ -391,7 +393,7 @@ pub async fn cmd_run(
             stream_id: config.stream_id.clone(),
             started_at: std::time::Instant::now(),
         };
-        edgerun_rt::spawn(run_health_server(hp, health_state));
+        edgerun_bare_rt::spawn(run_health_server(hp, health_state));
     }
 
     let data_root = path
@@ -489,12 +491,8 @@ pub async fn cmd_run(
             event_metadata: None,
             signature: None,
         };
-        command_dispatch::sign_event_envelope(&mut genesis, &*signer).unwrap_or_else(|e| {
-            edgerun_log::error!("failed to sign genesis event: {}", e);
-            std::process::exit(1);
-        });
-        if let Err(e) = store.append_event(genesis).await {
-            edgerun_log::error!("failed to write genesis event: {}", e);
+        if let Err(e) = command_dispatch::sign_and_append_event(&store, genesis, &*signer).await {
+            edgerun_log::error!("failed to sign and write genesis event: {}", e);
             std::process::exit(1);
         }
         edgerun_log::info!("genesis event created (seq=0)");
@@ -545,7 +543,7 @@ pub async fn cmd_run(
         if cap_count > 0 {
             let multi_arc = Arc::new(std::sync::Mutex::new(multi));
             let socket_path_clone = socket_path.clone();
-            edgerun_rt::spawn_blocking(move || {
+            edgerun_bare_rt::spawn_blocking(move || {
                 if let Err(e) = capabilities::serve_capabilities_unix(multi_arc, &socket_path_clone)
                 {
                     edgerun_log::error!("capability server error: {}", e);
@@ -556,7 +554,7 @@ pub async fn cmd_run(
     }
 
     // --- Store task (owns NodeStore + ingress state, not Send) ---
-    let (store_tx, store_rx) = edgerun_rt::mpsc::channel::<StoreRequest>(256);
+    let (store_tx, store_rx) = edgerun_bare_rt::mpsc::channel::<StoreRequest>(256);
 
     let stream_id_vec = stream_id_bytes.to_vec();
     let store_signer: Arc<dyn MeshSigner + Send + Sync> = Arc::clone(&signer);
@@ -592,7 +590,7 @@ pub async fn cmd_run(
     // Shared stop signal so we can cleanly stop the mesh daemon from the async side
     let mesh_stop_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-    let store_handle = edgerun_rt::spawn_blocking(move || {
+    let store_handle = edgerun_bare_rt::spawn_blocking(move || {
         run_store_task(
             store,
             &stream_id_vec,
@@ -611,7 +609,7 @@ pub async fn cmd_run(
     // Create the MeshDaemon on a separate blocking thread
     let mesh_daemon_node_id = node_id;
     let mesh_stop = mesh_stop_signal.clone();
-    let mesh_handle = edgerun_rt::spawn_blocking(move || {
+    let mesh_handle = edgerun_bare_rt::spawn_blocking(move || {
         use edgerun_capabilities::capability_descriptor;
         use edgerun_capabilities::{CapabilityModality, CapabilityOperation, CapabilityRole};
         use edgerun_remote_capability::RemoteCapabilityProvider;
@@ -714,7 +712,7 @@ pub async fn cmd_run(
         let tcp_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> =
             Arc::clone(&signer);
         let tcp_cancel = cancel.child_token();
-        let _tcp_handle = edgerun_rt::spawn(run_tcp_listener(
+        let _tcp_handle = edgerun_bare_rt::spawn(run_tcp_listener(
             addr,
             node_id,
             store_tx.clone(),
@@ -732,7 +730,7 @@ pub async fn cmd_run(
             && signer_cfg.state.as_ref() == Some(&config::SignerState::Provisioning)
         {
             let provision_cancel = cancel.child_token();
-            let _provision_handle = edgerun_rt::spawn(run_provisioning_listener(
+            let _provision_handle = edgerun_bare_rt::spawn(run_provisioning_listener(
                 node_id,
                 signer_cfg.public_key_hex.clone(),
                 signer_cfg.pairing_pin.clone(),
@@ -755,8 +753,8 @@ pub async fn cmd_run(
                 node_id: bootstrap_node_id,
                 signer: Arc::clone(&bootstrap_signer),
             };
-            edgerun_rt::spawn(async move {
-                match edgerun_rt::ConnectFuture::new(&peer_addr).await {
+            edgerun_bare_rt::spawn(async move {
+                match edgerun_bare_rt::ConnectFuture::new(&peer_addr).await {
                     Ok(stream) => {
                         edgerun_log::info!("connected to bootstrap peer");
                         let nonce = session::generate_nonce();
@@ -777,7 +775,7 @@ pub async fn cmd_run(
     let fetch_node_id = node_id;
     let fetch_store_tx = store_tx.clone();
     let fetch_cancel = cancel.child_token();
-    let _fetch_handle = edgerun_rt::spawn(async move {
+    let _fetch_handle = edgerun_bare_rt::spawn(async move {
         run_fetch_queue_consumer(fetch_peers, fetch_node_id, fetch_store_tx, fetch_cancel).await;
     });
 
@@ -788,7 +786,7 @@ pub async fn cmd_run(
     let recon_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> =
         Arc::clone(&signer);
     let recon_node_id = node_id;
-    edgerun_rt::spawn(async move {
+    edgerun_bare_rt::spawn(async move {
         run_peer_reconnection(
             recon_peers,
             recon_store_tx,
@@ -805,9 +803,9 @@ pub async fn cmd_run(
     // during quiet periods with no inbound requests.
     let maint_store_tx = store_tx.clone();
     let maint_cancel = cancel.child_token();
-    edgerun_rt::spawn(async move {
-        let mut interval = edgerun_rt::interval(std::time::Duration::from_secs(60));
-        interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
+    edgerun_bare_rt::spawn(async move {
+        let mut interval = edgerun_bare_rt::interval(std::time::Duration::from_secs(60));
+        interval.set_missed_tick_behavior(edgerun_bare_rt::MissedTickBehavior::Skip);
         loop {
             if maint_cancel.is_cancelled() {
                 edgerun_log::info!("maintenance timer shutting down");
@@ -819,40 +817,16 @@ pub async fn cmd_run(
     });
 
     // --- Shutdown waiter: wait for signal (init mode) or ctrl_c (normal mode) ---
-    let shutdown = edgerun_rt::spawn(async move {
+    let shutdown = edgerun_bare_rt::spawn(async move {
         if is_init {
-            // Init mode: use async signal handling via signalfd
-            use edgerun_rt::{Signal, SignalKind};
-
-            let mut sigterm = Signal::new(SignalKind::terminate()).ok();
-            let mut sigint = Signal::new(SignalKind::interrupt()).ok();
-            let mut sighup = Signal::new(SignalKind::hangup()).ok();
-            let mut sigchld = Signal::new(SignalKind::child()).ok();
-
+            // Bare runtime does not have hosted signalfd semantics yet. Keep init
+            // mode alive and continue zombie reaping until real signal support lands.
             loop {
-                // Wait for SIGTERM or SIGINT (whichever is available)
-                let shutdown_fut = async {
-                    if let Some(ref mut s) = sigterm {
-                        return s.recv().await;
-                    }
-                    if let Some(ref mut s) = sigint {
-                        return s.recv().await;
-                    }
-                    std::future::pending::<Result<Option<i32>, std::io::Error>>().await
-                };
-                if shutdown_fut.await.is_ok() {
-                    edgerun_log::info!("shutdown signal received, shutting down");
-                    break;
-                }
-
-                // Non-blocking checks for SIGHUP and SIGCHLD
-                // Since Signal doesn't have try_recv, we just skip these in this loop iteration
-                // and rely on the shutdown future to catch them on next iteration.
-                // SIGCHLD: reap any pending zombies
                 crate::init::reap_zombies();
+                edgerun_bare_rt::sleep(std::time::Duration::from_millis(250)).await;
             }
         } else {
-            let _ = edgerun_rt::ctrl_c().await;
+            let _ = edgerun_bare_rt::ctrl_c().await;
             edgerun_log::info!("shutdown requested (normal mode)");
         }
     });

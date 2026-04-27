@@ -1037,7 +1037,7 @@ fn dispatch_execute_workload(
 
     edgerun_log::info!("pulling: {}", image_str);
     let meter_for_pull = meter.clone();
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string());
@@ -2259,13 +2259,9 @@ pub(crate) fn append_signed_event(
         signature: None,
     };
 
-    if let Err(e) = sign_event_envelope(&mut event, signer) {
-        edgerun_log::warn!("failed to sign event: {}", e);
-        return None;
-    }
     let seq = event.seq;
-    if let Err(e) = store.append_event_blocking(event) {
-        edgerun_log::warn!("failed to append event: {}", e);
+    if let Err(e) = sign_and_append_event_blocking(store, event, signer) {
+        edgerun_log::warn!("failed to sign and append event: {}", e);
         return None;
     }
     Some(seq)
@@ -2543,6 +2539,29 @@ pub(crate) fn sign_event_envelope(
         value: sig.to_vec(),
     });
     Ok(())
+}
+
+/// Signs an event and appends it to the authoritative store in one operation.
+pub(crate) async fn sign_and_append_event(
+    store: &NodeStore,
+    event: EventEnvelope,
+    signer: &dyn MeshSigner,
+) -> Result<u64, String> {
+    store
+        .append_signed_event(event, signer)
+        .await
+        .map_err(|e| format!("append failed: {e}"))
+}
+
+/// Blocking form of `sign_and_append_event` for the store task.
+pub(crate) fn sign_and_append_event_blocking(
+    store: &NodeStore,
+    event: EventEnvelope,
+    signer: &dyn MeshSigner,
+) -> Result<u64, String> {
+    store
+        .append_signed_event_blocking(event, signer)
+        .map_err(|e| format!("append failed: {e}"))
 }
 
 fn delegation_hash(delegation: &edgerun_proto::edgerun::v0::trust::DelegationRecord) -> Digest {

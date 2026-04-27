@@ -24,6 +24,15 @@
 //! - CoreDNS `Corefile` → `DnsServer` + `ForwardingRule` YAML
 //! - BIND zone files → `DnsZone` YAML
 
+#![no_std]
+
+extern crate alloc;
+extern crate self as std;
+
+#[path = "std.rs"]
+mod std_compat;
+pub use std_compat::*;
+
 mod importers;
 mod parser;
 mod projector;

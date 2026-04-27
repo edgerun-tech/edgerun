@@ -9,11 +9,31 @@
 //! HARDWARE_E2E=1 cargo test -p edgerun-e2e-capability -- --ignored
 //! ```
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /// Panics if `HARDWARE_E2E=1` is not set.
+#[cfg(not(target_os = "none"))]
 fn require_hardware() {
     if std::env::var("HARDWARE_E2E").as_deref() != Ok("1") {
         panic!("skipping: set HARDWARE_E2E=1 to run hardware e2e tests");
@@ -24,6 +44,7 @@ fn require_hardware() {
 /// This wraps any `RemoteCapabilityProvider` and bypasses the grant-request
 /// cycle so sessions always succeed.
 pub(crate) mod test_policy {
+    use crate::prelude::v1::*;
     use edgerun_capabilities::{CapabilityError, CapabilityInvocation};
     use edgerun_proto::edgerun::v0::capability_runtime::{
         CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
@@ -85,7 +106,9 @@ pub(crate) mod test_policy {
 
 /// Session harness: opens a session with a provider over an in-process
 /// Unix socket pair (server thread + client transport).
+#[cfg(not(target_os = "none"))]
 pub(crate) mod session_harness {
+    use crate::prelude::v1::*;
     use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation};
     use edgerun_proto::edgerun::v0::capability_runtime::{
         capability_remote_envelope, CapabilityRemoteEnvelope, CapabilitySessionMode,

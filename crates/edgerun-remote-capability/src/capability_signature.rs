@@ -21,6 +21,7 @@
 //! 4. SHA-256 hash the bytes
 //! 5. Verify ECDSA P-256 signature using sender's NodeID as public key
 
+use crate::prelude::v1::*;
 use edgerun_crypto::p256::ecdsa::VerifyingKey;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_proto::edgerun::v0::capability::{

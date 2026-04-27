@@ -1,5 +1,8 @@
 //! HTTP headers
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::fmt;
 
 /// HTTP header name
@@ -151,6 +154,12 @@ impl HeaderMap {
         self.headers
             .iter()
             .any(|(n, _)| n.as_str().eq_ignore_ascii_case(name))
+    }
+
+    /// Remove all values for a header name (case-insensitive).
+    pub fn remove(&mut self, name: &str) {
+        self.headers
+            .retain(|(n, _)| !n.as_str().eq_ignore_ascii_case(name));
     }
 
     /// Get all headers

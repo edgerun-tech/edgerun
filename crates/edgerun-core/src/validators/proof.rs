@@ -11,6 +11,8 @@
 //! - AggregateSummaryProof with overlapping included/excluded responders → structurally invalid
 //! - TrustPolicyProof MUST carry at least one of policy_object or assignments_object
 
+use crate::prelude::v1::*;
+
 use edgerun_proto::edgerun::v0::access::{
     AggregateSummaryProof, EventSetProof, ObjectAssertionProof, SnapshotSetProof, TrustPolicyProof,
 };

@@ -34,6 +34,27 @@ impl Interval {
             false
         }
     }
+
+    pub fn set_missed_tick_behavior(&mut self, behavior: MissedTickBehavior) {
+        self.missed_tick_behavior = behavior;
+    }
+
+    pub fn tick(&mut self) -> Tick<'_> {
+        Tick { interval: self }
+    }
+}
+
+pub struct Tick<'a> {
+    interval: &'a mut Interval,
+}
+
+impl Future for Tick<'_> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        Pin::new(&mut *this.interval).poll(cx)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

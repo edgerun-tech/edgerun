@@ -1,3 +1,5 @@
+use crate::prelude::v1::*;
+
 /// Fast deterministic benchmarks for producing PerformanceCertificates.
 ///
 /// Each benchmark runs for a fixed wall-clock duration and

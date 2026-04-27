@@ -5,7 +5,7 @@ edition.workspace = true
 description = "HTTP proxy server with CONNECT support for HTTPS tunneling"
 
 [dependencies]
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-log = { path = "../edgerun-log" }
 
 [features]

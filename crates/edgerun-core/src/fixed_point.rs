@@ -1,3 +1,5 @@
+use crate::prelude::v1::*;
+
 /// 16.16 fixed-point number for hardware performance multipliers.
 ///
 /// Range: 0.00001525 to 65535.99998

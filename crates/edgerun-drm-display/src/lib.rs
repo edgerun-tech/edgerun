@@ -1,8 +1,50 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    pub use edgerun_linux_sysfs::fs::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_display::{
     default_display_descriptor, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
 };
 use edgerun_linux_sysfs::read_trimmed;
+#[cfg(not(target_os = "none"))]
 use std::fs;
 use std::path::{Path, PathBuf};
 

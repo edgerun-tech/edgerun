@@ -12,6 +12,7 @@
 //! attaches the sender's MAC to incoming raw Ethernet frames so the
 //! router can learn peer identities from Ethernet source addresses.
 
+use crate::prelude::v1::*;
 use super::*;
 use edgerun_hardware_signing::NodeID;
 use edgerun_mesh::{DiscoveryPacket, FrameType, MeshFrame, MeshRouter};

@@ -1,19 +1,44 @@
 //! QUIC transport protocol (RFC 9000)
 
-pub mod crypto;
-pub mod frame;
-pub mod handshake;
-pub mod handshake_unified;
-pub mod packet;
-pub mod server_handshake;
-pub mod transport;
+pub mod crypto {
+    pub use edgerun_quic::crypto::*;
+}
 
-pub use crypto::{PacketProtection, ProtectionKeys, QuicCrypto};
-pub use frame::QuicFrame;
-pub use handshake::{HandshakeResult, QuicTlsHandshaker};
-pub use packet::{get_long_header_payload_offset, PacketType, QuicPacket};
-pub use server_handshake::{QuicTlsServerHandshaker, ServerHandshakeResult};
-pub use transport::QuicTransport;
+pub mod frame {
+    pub use edgerun_quic::frame::*;
+}
+
+pub mod handshake {
+    pub use edgerun_quic::handshake::*;
+}
+
+pub mod handshake_unified {
+    pub use edgerun_quic::handshake_unified::*;
+}
+
+pub mod packet {
+    pub use edgerun_quic::packet::*;
+}
+
+pub mod server_handshake {
+    pub use edgerun_quic::server_handshake::*;
+}
+
+pub mod transport {
+    pub use edgerun_quic::transport::*;
+}
+
+pub mod types {
+    pub use edgerun_quic::types::*;
+}
+
+pub use edgerun_quic::types::INITIAL_SALT_V1;
+pub use edgerun_quic::{
+    get_long_header_payload_offset, ConnectionId, HandshakeResult, PacketNumberSpace,
+    PacketProtection, PacketType, ProtectionKeys, QuicCrypto, QuicFrame, QuicPacket,
+    QuicTlsHandshaker, QuicTlsServerHandshaker, QuicTransport, ServerHandshakeResult,
+    TransportParameters, QUIC_VERSION_V1,
+};
 
 use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 
@@ -300,9 +325,8 @@ impl QuicConnection {
             payload,
         );
 
-        // Use header_to_bytes_aad() directly - single source of truth for AAD
-        let aad = pkt.header_to_bytes_aad();
         let encrypted = pkt.payload.clone();
+        let aad = pkt.header_to_bytes_aad_with_payload_len(encrypted.len() + 16);
 
         let send_bytes = if let Some(ref mut prot) = self.initial_protection {
             prot.protect(&aad, &encrypted)
@@ -348,36 +372,32 @@ impl QuicConnection {
         let payload = frame.to_bytes();
         let pn = self
             .transport
-            .next_packet_number(PacketNumberSpace::ApplicationData);
+            .next_packet_number(PacketNumberSpace::Handshake);
 
-        let mut output = Vec::new();
-        output.push(0x2C);
-        output.extend_from_slice(&QUIC_VERSION_V1.to_be_bytes());
-        output.push(self.transport.remote_cid.len() as u8);
-        output.extend_from_slice(self.transport.remote_cid.as_bytes());
-        output.push(self.transport.local_cid.len() as u8);
-        output.extend_from_slice(self.transport.local_cid.as_bytes());
-        output.extend_from_slice(&0u64.to_be_bytes());
-        let payload_len_pos = output.len();
-        output.extend_from_slice(&[0u8; 2]);
-        let pn_bytes = pn.to_be_bytes();
-        output.extend_from_slice(&pn_bytes[6..]);
+        let pkt = QuicPacket {
+            header: packet::QuicPacketHeader {
+                packet_type: PacketType::Handshake,
+                version: QUIC_VERSION_V1,
+                dst_cid: self.transport.remote_cid.as_bytes().to_vec(),
+                src_cid: self.transport.local_cid.as_bytes().to_vec(),
+                token: Vec::new(),
+                pn_length: 4,
+                packet_number: pn,
+                payload_length: payload.len(),
+            },
+            payload,
+        };
 
-        let header_len = output.len();
-        output.extend_from_slice(&payload);
+        let aad = pkt.header_to_bytes_aad_with_payload_len(pkt.payload.len() + 16);
 
         let send_bytes = if let Some(ref mut prot) = self.hs_protection {
-            prot.protect(&output[..header_len], &output[header_len..])
+            prot.protect(&aad, &pkt.payload)
                 .map_err(|e| format!("Handshake encrypt failed: {}", e))?
         } else {
             return Err("No Handshake protection keys".into());
         };
 
-        let total_payload = send_bytes.len();
-        output[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
-        output[payload_len_pos + 1] = total_payload as u8;
-
-        let mut full_packet = output[..header_len].to_vec();
+        let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
 
         let addr: SocketAddr = self
@@ -1127,118 +1147,6 @@ impl QuicConnection {
     }
 }
 
-/// QUIC version
-pub const QUIC_VERSION_V1: u32 = 0x00000001;
-
-/// Initial salt for QUIC v1 (RFC 9001)
-pub const INITIAL_SALT_V1: &[u8] = &[
-    0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad,
-    0xcc, 0xbb, 0x7f, 0x0e,
-];
-
-/// QUIC connection ID
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ConnectionId {
-    data: Vec<u8>,
-}
-
-impl ConnectionId {
-    /// Create new connection ID
-    pub fn new(data: Vec<u8>) -> Self {
-        assert!(data.len() <= 20);
-        ConnectionId { data }
-    }
-
-    /// Generate random connection ID using CSPRNG
-    pub fn random() -> Self {
-        let mut data = [0u8; 8];
-        edgerun_crypto::getrandom(&mut data).expect("CSPRNG failure");
-        ConnectionId {
-            data: data.to_vec(),
-        }
-    }
-
-    /// Get raw bytes
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.data
-    }
-
-    /// Get length
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    /// Check if empty
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
-}
-
-/// QUIC packet number space
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PacketNumberSpace {
-    Initial,
-    Handshake,
-    ApplicationData,
-}
-
-/// QUIC transport parameters
-#[derive(Debug, Clone)]
-pub struct TransportParameters {
-    /// Original destination connection ID
-    pub original_destination_connection_id: Option<ConnectionId>,
-    /// Max idle timeout (ms)
-    pub max_idle_timeout: u64,
-    /// Stateless reset token
-    pub stateless_reset_token: Option<[u8; 16]>,
-    /// Max UDP payload size
-    pub max_udp_payload_size: u64,
-    /// Initial max data (connection level)
-    pub initial_max_data: u64,
-    /// Initial max stream data (bidirectional)
-    pub initial_max_stream_data_bidi_local: u64,
-    /// Initial max stream data (bidirectional, remote)
-    pub initial_max_stream_data_bidi_remote: u64,
-    /// Initial max stream data (unidirectional)
-    pub initial_max_stream_data_uni: u64,
-    /// Initial max bidirectional streams
-    pub initial_max_streams_bidi: u64,
-    /// Initial max unidirectional streams
-    pub initial_max_streams_uni: u64,
-    /// Ack delay exponent
-    pub ack_delay_exponent: u64,
-    /// Max ack delay (ms)
-    pub max_ack_delay: u64,
-    /// Disable active migration
-    pub disable_active_migration: bool,
-    /// Active connection ID limit
-    pub active_connection_id_limit: u64,
-    /// Max TLS data size
-    pub max_tls_data_size: u64,
-}
-
-impl Default for TransportParameters {
-    fn default() -> Self {
-        TransportParameters {
-            original_destination_connection_id: None,
-            max_idle_timeout: 30000,
-            stateless_reset_token: None,
-            max_udp_payload_size: 1200,
-            initial_max_data: 65535,
-            initial_max_stream_data_bidi_local: 65535,
-            initial_max_stream_data_bidi_remote: 65535,
-            initial_max_stream_data_uni: 65535,
-            initial_max_streams_bidi: 100,
-            initial_max_streams_uni: 100,
-            ack_delay_exponent: 3,
-            max_ack_delay: 25,
-            disable_active_migration: false,
-            active_connection_id_limit: 2,
-            max_tls_data_size: 0,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1379,8 +1287,8 @@ mod tests {
     #[test]
     fn test_transport_parameters_default() {
         let params = TransportParameters::default();
-        assert_eq!(params.max_idle_timeout, 30000);
-        assert_eq!(params.initial_max_streams_bidi, 100);
+        assert_eq!(params.max_idle_timeout, 0);
+        assert_eq!(params.active_connection_id_limit, 0);
     }
 
     /// Full end-to-end HTTP/3 integration test.

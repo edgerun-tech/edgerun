@@ -7,6 +7,8 @@
 //! Each validator takes and returns protobuf-native types with the unified
 //! ACCEPT / REJECT / DEFER / DUPLICATE outcome model.
 
+use crate::prelude::v1::*;
+
 use crate::protocol::{
     canonical_bytes, DelegationRecord, EventEnvelope, ProtocolRecord, SnapshotDescriptor,
 };

@@ -4,6 +4,9 @@
 //! multiplexing all requests as concurrent streams over the
 //! same TCP+TLS connection.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -19,7 +22,7 @@ use crate::http2::client::{AsyncClient, HttpResponse};
 use crate::{Error, Method, Result};
 
 /// Key for HTTP/2 connections: host + port.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct PoolKey {
     host: String,
     port: u16,
@@ -386,7 +389,7 @@ impl Http2Pool {
         let fut = ConnectFuture::new(addr.to_string());
         match rt_timeout(connect_timeout, fut).await {
             Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(e)) => Err(Error::Network(e)),
+            Ok(Err(e)) => Err(Error::Network(e.into())),
             Err(_) => Err(Error::Timeout),
         }
     }

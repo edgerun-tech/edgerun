@@ -12,10 +12,134 @@
 //! attaches the sender's MAC to incoming raw Ethernet frames so the
 //! router can learn peer identities from Ethernet source addresses.
 
-use edgerun_hardware_signing::NodeID;
-use edgerun_mesh::{DiscoveryPacket, FrameType, MeshFrame, MeshRouter};
-use std::collections::{HashMap, VecDeque};
-use std::io;
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::clone::Clone;
+        pub use core::cmp::{Eq, Ord, PartialEq, PartialOrd};
+        pub use core::convert::{AsMut, AsRef, From, Into, TryFrom, TryInto};
+        pub use core::default::Default;
+        pub use core::marker::{Copy, Send, Sized, Sync};
+        pub use core::mem::drop;
+        pub use core::option::Option::{self, None, Some};
+        pub use core::result::Result::{self, Err, Ok};
+    }
+}
+
+pub mod collections {
+    pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet, VecDeque};
+}
+
+pub mod io {
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ErrorKind {
+        WouldBlock,
+        Other,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+    }
+
+    impl Error {
+        #[must_use]
+        pub const fn new(kind: ErrorKind) -> Self {
+            Self { kind }
+        }
+
+        #[must_use]
+        pub const fn last_os_error() -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+
+        #[must_use]
+        pub const fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self.kind {
+                ErrorKind::WouldBlock => f.write_str("operation would block"),
+                ErrorKind::Other => f.write_str("I/O error"),
+            }
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    pub type Result<T> = core::result::Result<T, Error>;
+}
+
+pub mod os {
+    pub mod raw {
+        #[allow(non_camel_case_types)]
+        pub type c_int = i32;
+        #[allow(non_camel_case_types)]
+        pub type c_void = core::ffi::c_void;
+    }
+}
+
+pub mod time {
+    pub use core::time::Duration;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+    pub struct SystemTime(Duration);
+
+    pub const UNIX_EPOCH: SystemTime = SystemTime(Duration::from_secs(0));
+
+    impl SystemTime {
+        #[must_use]
+        pub const fn now() -> Self {
+            UNIX_EPOCH
+        }
+
+        pub fn duration_since(
+            &self,
+            earlier: SystemTime,
+        ) -> core::result::Result<Duration, Duration> {
+            self.0.checked_sub(earlier.0).ok_or(earlier.0)
+        }
+    }
+}
+
+pub mod option {
+    pub use core::option::*;
+}
+
+pub mod result {
+    pub use core::result::*;
+}
+
+pub mod string {
+    pub use alloc::string::*;
+}
+
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+pub use alloc::format;
+pub use core::{mem, ptr};
+
 use std::os::raw::{c_int, c_void};
 
 /// EtherType for edgerun mesh frames (unassigned, in the experiment range).

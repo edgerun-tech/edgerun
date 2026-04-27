@@ -12,10 +12,10 @@ pub struct HealthState {
 ///
 /// GET /health -> { "status": "ok", "uptime_secs": N, "node_id": "...", "stream_id": "..." }
 pub async fn run_health_server(port: u16, state: HealthState) {
-    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+    use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt};
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = match edgerun_rt::AsyncTcpListener::bind(addr) {
+    let listener = match edgerun_bare_rt::AsyncTcpListener::bind(addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind health endpoint on {}: {}", addr, e);
@@ -28,7 +28,7 @@ pub async fn run_health_server(port: u16, state: HealthState) {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let state = state.clone();
-                edgerun_rt::spawn(async move {
+                edgerun_bare_rt::spawn(async move {
                     let mut buf = [0u8; 1024];
                     let _ = stream.read(&mut buf).await;
                     let uptime = state.started_at.elapsed().as_secs();

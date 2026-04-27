@@ -1,5 +1,8 @@
 //! Protocol-agnostic HTTP response.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::header::HeaderMap;
 use crate::status::StatusCode;
 use std::fmt;

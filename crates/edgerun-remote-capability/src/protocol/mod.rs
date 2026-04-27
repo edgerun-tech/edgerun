@@ -1,5 +1,7 @@
 //! Core protocol traits and session lifecycle helpers.
 
+use crate::prelude::v1::*;
+
 mod serve;
 mod session;
 

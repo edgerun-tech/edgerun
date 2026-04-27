@@ -79,6 +79,9 @@
 extern crate alloc;
 
 #[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
 #[path = "std.rs"]
 mod std_compat;
 #[cfg(target_os = "none")]

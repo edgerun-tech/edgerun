@@ -1,5 +1,6 @@
 //! Policy-wrapping decorator for capability providers.
 
+use crate::prelude::v1::*;
 use std::collections::HashMap;
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};

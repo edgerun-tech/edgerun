@@ -1,3 +1,4 @@
+use crate::prelude::v1::*;
 use edgerun_capabilities::CapabilityError;
 use edgerun_hardware_signing::NodeID;
 #[allow(unused_imports)] // used in tests

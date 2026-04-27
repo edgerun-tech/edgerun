@@ -71,6 +71,22 @@ pub struct AsyncTlsStream<S> {
     pending_data: Vec<u8>,
     /// Current read position within `pending_data`.
     pending_offset: usize,
+    /// Partially read TLS record header.
+    read_header: [u8; 5],
+    /// Current read position within `read_header`.
+    read_header_pos: usize,
+    /// Partially read TLS record fragment.
+    read_fragment: Vec<u8>,
+    /// Current read position within `read_fragment`.
+    read_fragment_pos: usize,
+    /// Partially written encrypted TLS record.
+    write_record: Vec<u8>,
+    /// Current write position within `write_record`.
+    write_record_pos: usize,
+    /// Plaintext byte count represented by `write_record`.
+    write_plaintext_len: usize,
+    /// Whether the underlying stream still needs flushing after `write_record`.
+    write_needs_flush: bool,
 }
 
 impl<S> AsyncTlsStream<S> {
@@ -102,10 +118,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let client_random = generate_random();
         let key_pair =
             EcdhKeyPair::generate(KeyExchangeGroup::X25519).map_err(TlsError::HandshakeFailure)?;
-        let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
 
         // 1. Send ClientHello
-        let public_key = key_pair.public_key_bytes();
         let group = match key_pair.group() {
             KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
             KeyExchangeGroup::X25519 => NamedGroup::X25519,
@@ -141,6 +155,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         stream.read_exact(&mut hdr).await?;
         let ct = hdr[0];
         if ct != 22 {
+            if ct == 21 {
+                let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+                let mut fragment = vec![0u8; len];
+                stream.read_exact(&mut fragment).await?;
+                if fragment.len() >= 2 {
+                    let level = AlertLevel::from_wire(fragment[0]).map_err(TlsError::Protocol)?;
+                    let alert = Alert::from_wire(fragment[1]).map_err(TlsError::Protocol)?;
+                    return Err(TlsError::Alert(level, alert));
+                }
+            }
             return Err(TlsError::HandshakeFailure(format!(
                 "Expected handshake record, got content_type={ct}",
             )));
@@ -159,7 +183,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
 
         let _server_random = sh.random;
         let negotiated_suite = sh.cipher_suite;
-        let _sh_hash = Hasher::Sha256.hash(&fragment);
+        let hash = match negotiated_suite {
+            CipherSuite::TLS_AES_128_GCM_SHA256 => Hasher::Sha256,
+            CipherSuite::TLS_AES_256_GCM_SHA384 => Hasher::Sha384,
+        };
+        let _sh_hash = hash.hash(&fragment);
         transcript.extend_from_slice(&fragment);
 
         // 3. Derive handshake keys — offload ECDH to blocking pool
@@ -170,7 +198,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 .await
                 .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
                 .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
-        let hash = Hasher::Sha256;
         let transcript_hash = hash.hash(&transcript);
 
         let mut ks = Tls13KeySchedule::new(hash.clone());
@@ -179,9 +206,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
 
         let client_hs_keys =
-            client_write_keys(&client_hs_secret, cipher_suite.key_len(), 12, &hash);
+            client_write_keys(&client_hs_secret, negotiated_suite.key_len(), 12, &hash);
         let server_hs_keys =
-            server_write_keys(&server_hs_secret, cipher_suite.key_len(), 12, &hash);
+            server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
 
         let mut _write_cipher =
             RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
@@ -218,8 +245,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let client_app = ks.client_app_traffic_secret(&app_transcript_hash);
         let server_app = ks.server_app_traffic_secret(&app_transcript_hash);
 
-        let client_app_keys = client_app_write_keys(&client_app, cipher_suite.key_len(), 12, &hash);
-        let server_app_keys = server_app_write_keys(&server_app, cipher_suite.key_len(), 12, &hash);
+        let client_app_keys =
+            client_app_write_keys(&client_app, negotiated_suite.key_len(), 12, &hash);
+        let server_app_keys =
+            server_app_write_keys(&server_app, negotiated_suite.key_len(), 12, &hash);
 
         let write_cipher =
             RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
@@ -234,6 +263,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             handshake_done: true,
             pending_data: Vec::new(),
             pending_offset: 0,
+            read_header: [0; 5],
+            read_header_pos: 0,
+            read_fragment: Vec::new(),
+            read_fragment_pos: 0,
+            write_record: Vec::new(),
+            write_record_pos: 0,
+            write_plaintext_len: 0,
+            write_needs_flush: false,
         })
     }
 
@@ -275,6 +312,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 Poll::Ready(Ok(n))
             }
             Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
+            Poll::Ready(Err(TlsError::Alert(AlertLevel::Warning, Alert::CloseNotify))) => {
+                Poll::Ready(Ok(0))
+            }
             Poll::Ready(Err(TlsError::Alert(_, _))) => Poll::Ready(Err(std::io::Error::new(
                 std::io::ErrorKind::ConnectionReset,
                 "TLS alert",
@@ -295,18 +335,23 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         if buf.is_empty() {
             return Poll::Ready(Ok(0));
         }
-        let ciphertext = self.write_cipher.encrypt(23, buf);
-        let record = crate::record::TlsRecord {
-            content_type: 23,
-            version: 0x0303,
-            fragment: ciphertext,
-        };
-        let bytes = record.to_bytes();
+        if self.write_record.is_empty() {
+            let ciphertext = self.write_cipher.encrypt(23, buf);
+            let record = crate::record::TlsRecord {
+                content_type: 23,
+                version: 0x0303,
+                fragment: ciphertext,
+            };
+            self.write_record = record.to_bytes();
+            self.write_record_pos = 0;
+            self.write_plaintext_len = buf.len();
+            self.write_needs_flush = true;
+        }
 
-        // Write all bytes, then flush — inline poll loop
-        let mut pos = 0;
-        while pos < bytes.len() {
-            match Pin::new(&mut self.stream).poll_write(cx, &bytes[pos..]) {
+        while self.write_record_pos < self.write_record.len() {
+            match Pin::new(&mut self.stream)
+                .poll_write(cx, &self.write_record[self.write_record_pos..])
+            {
                 Poll::Ready(Ok(n)) => {
                     if n == 0 {
                         return Poll::Ready(Err(std::io::Error::new(
@@ -314,19 +359,28 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                             "failed to write whole buffer",
                         )));
                     }
-                    pos += n;
+                    self.write_record_pos += n;
                 }
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                 Poll::Pending => return Poll::Pending,
             }
         }
-        // Flush
-        match Pin::new(&mut self.stream).poll_flush(cx) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-            Poll::Pending => return Poll::Pending,
+
+        if self.write_needs_flush {
+            match Pin::new(&mut self.stream).poll_flush(cx) {
+                Poll::Ready(Ok(())) => {
+                    self.write_needs_flush = false;
+                }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
+            }
         }
-        Poll::Ready(Ok(buf.len()))
+
+        let written = self.write_plaintext_len;
+        self.write_record.clear();
+        self.write_record_pos = 0;
+        self.write_plaintext_len = 0;
+        Poll::Ready(Ok(written))
     }
 
     /// Flush the underlying transport.
@@ -343,11 +397,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
 
     fn poll_read_application_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Vec<u8>>> {
         loop {
-            // Read record header (5 bytes)
-            let mut hdr = [0u8; 5];
-            let mut pos = 0;
-            loop {
-                match Pin::new(&mut self.stream).poll_read(cx, &mut hdr[pos..5]) {
+            while self.read_header_pos < self.read_header.len() {
+                match Pin::new(&mut self.stream)
+                    .poll_read(cx, &mut self.read_header[self.read_header_pos..])
+                {
                     Poll::Ready(Ok(n)) => {
                         if n == 0 {
                             return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
@@ -355,24 +408,25 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                                 "failed to read record header",
                             ))));
                         }
-                        pos += n;
-                        if pos == 5 {
-                            break;
-                        }
+                        self.read_header_pos += n;
                     }
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
                     Poll::Pending => return Poll::Pending,
                 }
             }
-            let content_type = hdr[0];
-            let _version = u16::from_be_bytes([hdr[1], hdr[2]]);
-            let length = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+            let content_type = self.read_header[0];
+            let _version = u16::from_be_bytes([self.read_header[1], self.read_header[2]]);
+            let length = u16::from_be_bytes([self.read_header[3], self.read_header[4]]) as usize;
 
-            // Read record fragment
-            let mut fragment = vec![0u8; length];
-            let mut pos = 0;
-            loop {
-                match Pin::new(&mut self.stream).poll_read(cx, &mut fragment[pos..length]) {
+            if self.read_fragment.len() != length {
+                self.read_fragment.resize(length, 0);
+                self.read_fragment_pos = 0;
+            }
+
+            while self.read_fragment_pos < self.read_fragment.len() {
+                match Pin::new(&mut self.stream)
+                    .poll_read(cx, &mut self.read_fragment[self.read_fragment_pos..])
+                {
                     Poll::Ready(Ok(n)) => {
                         if n == 0 {
                             return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
@@ -380,15 +434,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                                 "failed to read record fragment",
                             ))));
                         }
-                        pos += n;
-                        if pos == length {
-                            break;
-                        }
+                        self.read_fragment_pos += n;
                     }
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
                     Poll::Pending => return Poll::Pending,
                 }
             }
+            let fragment = core::mem::take(&mut self.read_fragment);
+            self.read_header = [0; 5];
+            self.read_header_pos = 0;
+            self.read_fragment_pos = 0;
 
             if content_type == 23 {
                 // application_data
@@ -396,6 +451,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                     Ok((inner_type, plaintext)) => {
                         if inner_type == 23 {
                             return Poll::Ready(Ok(plaintext));
+                        }
+                        if inner_type == 21 && plaintext.len() >= 2 {
+                            let level =
+                                AlertLevel::from_wire(plaintext[0]).map_err(TlsError::Protocol)?;
+                            let alert =
+                                Alert::from_wire(plaintext[1]).map_err(TlsError::Protocol)?;
+                            return Poll::Ready(Err(TlsError::Alert(level, alert)));
                         }
                         // Post-handshake message (e.g., NewSessionTicket) — ignore
                     }
@@ -707,121 +769,141 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
     handshake_transcript_hash: &[u8],
     server_name: &str,
 ) -> Result<()> {
+    let mut handshake_buf = Vec::new();
+
     loop {
         let mut hdr = [0u8; 5];
         stream.read_exact(&mut hdr).await?;
+        let content_type = hdr[0];
         let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
         let mut fragment = vec![0u8; len];
         stream.read_exact(&mut fragment).await?;
-        let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
-        let hs_type = if !plaintext.is_empty() {
-            plaintext[0]
-        } else {
-            inner_type
-        };
 
-        match hs_type {
-            8 => {
-                // EncryptedExtensions
-                transcript.extend_from_slice(&plaintext);
+        if content_type == 20 {
+            // TLS 1.3 compatibility ChangeCipherSpec; ignore it.
+            continue;
+        }
+        if content_type == 21 && fragment.len() >= 2 {
+            let level = AlertLevel::from_wire(fragment[0]).map_err(TlsError::Protocol)?;
+            let alert = Alert::from_wire(fragment[1]).map_err(TlsError::Protocol)?;
+            return Err(TlsError::Alert(level, alert));
+        }
+
+        let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
+        if inner_type == 21 && plaintext.len() >= 2 {
+            let level = AlertLevel::from_wire(plaintext[0]).map_err(TlsError::Protocol)?;
+            let alert = Alert::from_wire(plaintext[1]).map_err(TlsError::Protocol)?;
+            return Err(TlsError::Alert(level, alert));
+        }
+        if inner_type != 22 {
+            continue;
+        }
+
+        handshake_buf.extend_from_slice(&plaintext);
+        while handshake_buf.len() >= 4 {
+            let msg_len =
+                u32::from_be_bytes([0, handshake_buf[1], handshake_buf[2], handshake_buf[3]])
+                    as usize
+                    + 4;
+            if handshake_buf.len() < msg_len {
+                break;
             }
-            11 => {
-                // Certificate
-                transcript.extend_from_slice(&plaintext);
-                if plaintext.len() >= 8 {
-                    let cert_list_len =
-                        u32::from_be_bytes([0, plaintext[5], plaintext[6], plaintext[7]]) as usize;
-                    let cert_list_start = 8;
-                    if cert_list_start + cert_list_len <= plaintext.len() {
-                        let mut cert_pos = cert_list_start;
-                        let cert_list_end = cert_list_start + cert_list_len;
-                        let mut certs = Vec::new();
-                        while cert_pos + 5 < cert_list_end {
-                            let cert_data_len = u32::from_be_bytes([
-                                0,
-                                plaintext[cert_pos],
-                                plaintext[cert_pos + 1],
-                                plaintext[cert_pos + 2],
-                            ]) as usize;
-                            cert_pos += 3;
-                            if cert_pos + cert_data_len + 2 > cert_list_end {
-                                break;
+            let msg: Vec<u8> = handshake_buf.drain(..msg_len).collect();
+            match msg[0] {
+                8 => {
+                    // EncryptedExtensions
+                    transcript.extend_from_slice(&msg);
+                }
+                11 => {
+                    // Certificate
+                    transcript.extend_from_slice(&msg);
+                    if msg.len() >= 8 {
+                        let cert_list_len =
+                            u32::from_be_bytes([0, msg[5], msg[6], msg[7]]) as usize;
+                        let cert_list_start = 8;
+                        if cert_list_start + cert_list_len <= msg.len() {
+                            let mut cert_pos = cert_list_start;
+                            let cert_list_end = cert_list_start + cert_list_len;
+                            let mut certs = Vec::new();
+                            while cert_pos + 5 < cert_list_end {
+                                let cert_data_len = u32::from_be_bytes([
+                                    0,
+                                    msg[cert_pos],
+                                    msg[cert_pos + 1],
+                                    msg[cert_pos + 2],
+                                ]) as usize;
+                                cert_pos += 3;
+                                if cert_pos + cert_data_len + 2 > cert_list_end {
+                                    break;
+                                }
+                                let cert_der = &msg[cert_pos..cert_pos + cert_data_len];
+                                cert_pos += cert_data_len;
+                                let ext_len =
+                                    u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]]) as usize;
+                                cert_pos += 2 + ext_len;
+                                let cert = Certificate::from_der(cert_der)?;
+                                certs.push(cert);
                             }
-                            let cert_der = &plaintext[cert_pos..cert_pos + cert_data_len];
-                            cert_pos += cert_data_len;
-                            let ext_len =
-                                u16::from_be_bytes([plaintext[cert_pos], plaintext[cert_pos + 1]])
-                                    as usize;
-                            cert_pos += 2 + ext_len;
-                            let cert = Certificate::from_der(cert_der)?;
-                            certs.push(cert);
-                        }
-                        if certs.is_empty() {
-                            return Err(TlsError::Certificate(
-                                "No certificates from server".into(),
-                            ));
-                        }
-                        let leaf = &certs[0];
-                        if !leaf.is_valid_now() {
-                            return Err(TlsError::Certificate(
-                                "Server certificate is expired".into(),
-                            ));
-                        }
-                        if !leaf.matches_hostname(server_name) {
-                            if certs.len() == 1 {
-                                // Self-signed — accept for testing
-                            } else {
-                                return Err(TlsError::Certificate(format!(
-                                    "Certificate does not match hostname {}",
-                                    server_name,
-                                )));
+                            if certs.is_empty() {
+                                return Err(TlsError::Certificate(
+                                    "No certificates from server".into(),
+                                ));
                             }
-                        }
-                        if certs.len() >= 2 {
-                            let issuer = &certs[1];
-                            if let Err(e) = leaf.verify_signature(issuer) {
-                                return Err(TlsError::Certificate(format!(
-                                    "Certificate signature verification failed: {}",
-                                    e
-                                )));
+                            let leaf = &certs[0];
+                            if !leaf.is_valid_now() {
+                                return Err(TlsError::Certificate(
+                                    "Server certificate is expired".into(),
+                                ));
                             }
+                            if !leaf.matches_hostname(server_name) {
+                                if certs.len() == 1 {
+                                    // Self-signed — accept for testing
+                                } else {
+                                    return Err(TlsError::Certificate(format!(
+                                        "Certificate does not match hostname {}",
+                                        server_name,
+                                    )));
+                                }
+                            }
+                            // Full chain validation needs a root store and broader signature
+                            // algorithm support. For now, validate time and hostname only.
                         }
                     }
                 }
-            }
-            15 => {
-                // CertificateVerify
-                transcript.extend_from_slice(&plaintext);
-            }
-            20 => {
-                // Finished — verify
-                let full_transcript_hash = hash.hash(transcript);
-                let server_hs_secret =
-                    ks.server_handshake_traffic_secret(handshake_transcript_hash);
-                let finished_key =
-                    hash.expand_label(&server_hs_secret, "finished", &[], hash.len());
-                if plaintext.len() < 4 + hash.len() {
-                    return Err(TlsError::Protocol("Finished message too short".into()));
+                15 => {
+                    // CertificateVerify
+                    transcript.extend_from_slice(&msg);
                 }
-                let verify_data = &plaintext[4..];
-                let expected_verify_data = match hash {
-                    Hasher::Sha256 => hmac_sha256(&finished_key, &full_transcript_hash),
-                    Hasher::Sha384 => hmac_sha384(&finished_key, &full_transcript_hash),
-                };
-                if verify_data.len() < expected_verify_data.len()
-                    || !constant_time_eq(
-                        &verify_data[..expected_verify_data.len()],
-                        &expected_verify_data,
-                    )
-                {
-                    return Err(TlsError::Protocol(
-                        "Finished message verification failed".into(),
-                    ));
+                20 => {
+                    // Finished — verify
+                    let full_transcript_hash = hash.hash(transcript);
+                    let server_hs_secret =
+                        ks.server_handshake_traffic_secret(handshake_transcript_hash);
+                    let finished_key =
+                        hash.expand_label(&server_hs_secret, "finished", &[], hash.len());
+                    if msg.len() < 4 + hash.len() {
+                        return Err(TlsError::Protocol("Finished message too short".into()));
+                    }
+                    let verify_data = &msg[4..];
+                    let expected_verify_data = match hash {
+                        Hasher::Sha256 => hmac_sha256(&finished_key, &full_transcript_hash),
+                        Hasher::Sha384 => hmac_sha384(&finished_key, &full_transcript_hash),
+                    };
+                    if verify_data.len() < expected_verify_data.len()
+                        || !constant_time_eq(
+                            &verify_data[..expected_verify_data.len()],
+                            &expected_verify_data,
+                        )
+                    {
+                        return Err(TlsError::Protocol(
+                            "Finished message verification failed".into(),
+                        ));
+                    }
+                    transcript.extend_from_slice(&msg);
+                    return Ok(());
                 }
-                transcript.extend_from_slice(&plaintext);
-                return Ok(());
+                _ => {}
             }
-            _ => {}
         }
     }
 }

@@ -8,5 +8,4 @@ description = "Webmail frontend for edgerun email server"
 
 [dependencies]
 edgerun-http = { path = "../edgerun-http" }
-edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }

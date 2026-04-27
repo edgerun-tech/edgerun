@@ -27,6 +27,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std as host_std;
 
 use alloc::string::String;
 use core::fmt;
@@ -116,6 +118,7 @@ mod tests {
     use crate::cipher::NamedGroup;
     use crate::handshake::ClientHelloBuilder;
     use crate::server::ClientHello;
+    use alloc::string::ToString;
     use edgerun_crypto::CipherSuite;
 
     #[test]

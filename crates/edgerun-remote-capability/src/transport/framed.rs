@@ -1,5 +1,6 @@
 //! Length-prefixed framed transport over any `Read + Write` stream.
 
+use crate::prelude::v1::*;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::os::unix::net::{UnixListener, UnixStream};

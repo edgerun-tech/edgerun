@@ -98,7 +98,7 @@ impl QuicPacket {
                 dst_cid,
                 src_cid,
                 token,
-                pn_length: 0,
+                pn_length: 4,
                 packet_number,
                 payload_length: payload.len(),
             },
@@ -163,7 +163,7 @@ impl QuicPacket {
 
     /// Serialize packet to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut output = self.header_to_bytes_aad();
+        let mut output = self.header_to_bytes_aad_with_payload_len(self.payload.len());
         // Append payload
         output.extend_from_slice(&self.payload);
         output
@@ -175,11 +175,22 @@ impl QuicPacket {
     /// encrypted payload. For long-header packets, this includes the
     /// packet number (since we don't implement header protection yet).
     pub fn header_to_bytes_aad(&self) -> Vec<u8> {
+        self.header_to_bytes_aad_with_payload_len(self.payload.len())
+    }
+
+    /// Serialize packet header using an explicit payload length.
+    ///
+    /// For protected long-header packets, callers know the encrypted payload
+    /// length before encryption because AEAD adds a fixed 16-byte tag. This
+    /// helper lets AAD encode the wire length while the packet still holds
+    /// plaintext.
+    pub fn header_to_bytes_aad_with_payload_len(&self, payload_len: usize) -> Vec<u8> {
         let mut output = Vec::new();
 
         match self.header.packet_type {
             PacketType::Initial | PacketType::ZeroRtt | PacketType::Handshake => {
-                let first_byte = self.header.packet_type.to_byte() | 0x0C;
+                let pn_length = self.long_header_packet_number_length();
+                let first_byte = self.header.packet_type.to_byte() | 0x0C | (pn_length as u8 - 1);
                 output.push(first_byte);
                 output.extend_from_slice(&self.header.version.to_be_bytes());
                 output.push(self.header.dst_cid.len() as u8);
@@ -193,12 +204,11 @@ impl QuicPacket {
                     output.extend_from_slice(&self.header.token);
                 }
 
-                // Payload length as varint
-                self.encode_varint(self.header.payload_length as u64, &mut output);
+                // QUIC long-header length includes packet number bytes.
+                self.encode_varint((pn_length + payload_len) as u64, &mut output);
 
-                // Packet number (2 bytes, truncated)
                 let pn_bytes = self.header.packet_number.to_be_bytes();
-                output.extend_from_slice(&pn_bytes[6..]);
+                output.extend_from_slice(&pn_bytes[8 - pn_length..]);
             }
             PacketType::OneRtt => {
                 let first_byte = 0x40 | (self.header.pn_length as u8 - 1);
@@ -219,6 +229,10 @@ impl QuicPacket {
         }
 
         output
+    }
+
+    fn long_header_packet_number_length(&self) -> usize {
+        self.header.pn_length.clamp(1, 4)
     }
 
     /// Parse packet from bytes
@@ -272,15 +286,10 @@ impl QuicPacket {
         // Token (Initial only)
         let mut token = Vec::new();
         if packet_type == PacketType::Initial {
-            if pos + 8 > data.len() {
-                return Err("Token length missing".to_string());
-            }
-            let token_len = u64::from_be_bytes(
-                data[pos..pos + 8]
-                    .try_into()
-                    .map_err(|_| "Token len parse error")?,
-            ) as usize;
-            pos += 8;
+            let (token_len, bytes_read) =
+                Self::decode_varint(&data[pos..]).map_err(|e| e.to_string())?;
+            let token_len = token_len as usize;
+            pos += bytes_read;
             if pos + token_len > data.len() {
                 return Err("Token too long".to_string());
             }
@@ -293,29 +302,28 @@ impl QuicPacket {
             Self::decode_varint(&data[pos..]).map_err(|e| e.to_string())?;
         pos += bytes_read;
 
-        // Packet number (4 bytes)
-        if pos + 4 > data.len() {
+        let pn_length = get_packet_number_length(data[0]);
+        if payload_len < pn_length as u64 {
+            return Err("Payload length shorter than packet number".to_string());
+        }
+
+        if pos + pn_length > data.len() {
             return Err("Packet number missing".to_string());
         }
-        let packet_number = u64::from_be_bytes([
-            0,
-            0,
-            0,
-            0,
-            data[pos],
-            data[pos + 1],
-            data[pos + 2],
-            data[pos + 3],
-        ]);
-        pos += 4;
+        let mut pn_bytes = [0u8; 8];
+        pn_bytes[8 - pn_length..].copy_from_slice(&data[pos..pos + pn_length]);
+        let packet_number = u64::from_be_bytes(pn_bytes);
+        pos += pn_length;
+
+        let payload_len = payload_len as usize - pn_length;
 
         // Payload
-        if pos + payload_len as usize > data.len() {
+        if pos + payload_len > data.len() {
             return Err("Payload incomplete".to_string());
         }
-        let payload = data[pos..pos + payload_len as usize].to_vec();
+        let payload = data[pos..pos + payload_len].to_vec();
 
-        let total_len = pos + payload_len as usize;
+        let total_len = pos + payload_len;
 
         Ok((
             QuicPacket {
@@ -325,9 +333,9 @@ impl QuicPacket {
                     dst_cid,
                     src_cid,
                     token,
-                    pn_length: 4,
+                    pn_length,
                     packet_number,
-                    payload_length: payload_len as usize,
+                    payload_length: payload_len,
                 },
                 payload,
             },
@@ -345,6 +353,9 @@ impl QuicPacket {
         let mut pos = 1;
 
         // Assume 8-byte CID for simplicity
+        if pos + 8 > data.len() {
+            return Err("Short header CID missing".to_string());
+        }
         let dst_cid = data[pos..pos + 8].to_vec();
         pos += 8;
 
@@ -389,13 +400,9 @@ impl QuicPacket {
     }
 }
 
-/// Get packet number length from first byte (RFC 9000 bits 0-1, 0 means 4)
+/// Get packet number length from first byte (RFC 9000 bits 0-1 encode length - 1).
 pub fn get_packet_number_length(first_byte: u8) -> usize {
-    if first_byte & 0x03 == 0 {
-        4
-    } else {
-        (first_byte & 0x03) as usize
-    }
+    ((first_byte & 0x03) + 1) as usize
 }
 
 /// Get AAD for AEAD - use this instead of manual parsing
@@ -412,14 +419,24 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     let first_byte = data[0];
     let packet_type = PacketType::from_byte(first_byte).ok_or("Invalid packet type")?;
 
-    // Start after first byte (version is at data[1..5])
-    let mut pos = 1;
+    // Start after first byte and version.
+    let mut pos = 5;
 
+    if pos >= data.len() {
+        return Err("DCID length missing".to_string());
+    }
     let dst_cid_len = data[pos] as usize;
     pos += 1 + dst_cid_len;
 
+    if pos >= data.len() {
+        return Err("SCID length missing".to_string());
+    }
     let src_cid_len = data[pos] as usize;
     pos += 1 + src_cid_len;
+
+    if pos > data.len() {
+        return Err("Connection ID exceeds packet length".to_string());
+    }
 
     if packet_type == PacketType::Initial {
         let (token_len, consumed) =
@@ -432,6 +449,10 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
 
     let pn_length = get_packet_number_length(first_byte);
     pos += pn_length;
+
+    if pos > data.len() {
+        return Err("Packet number exceeds packet length".to_string());
+    }
 
     Ok(pos)
 }
@@ -495,21 +516,23 @@ mod tests {
 
     #[test]
     fn test_get_packet_number_length() {
-        assert_eq!(get_packet_number_length(0xC0), 4);
-        assert_eq!(get_packet_number_length(0xC1), 1);
-        assert_eq!(get_packet_number_length(0xC2), 2);
-        assert_eq!(get_packet_number_length(0xC3), 3);
+        assert_eq!(get_packet_number_length(0xC0), 1);
+        assert_eq!(get_packet_number_length(0xC1), 2);
+        assert_eq!(get_packet_number_length(0xC2), 3);
+        assert_eq!(get_packet_number_length(0xC3), 4);
+        assert_eq!(get_packet_number_length(0xCF), 4);
     }
 
     #[test]
     fn test_get_long_header_payload_offset() {
         let packet = vec![
-            0xC0, 0x00, 0x00, 0x00, 0x01, // first_byte + version
+            0xCF, 0x00, 0x00, 0x00, 0x01, // first_byte + version
             8, 1, 2, 3, 4, 5, 6, 7, 8, // dst_cid
             8, 9, 10, 11, 12, 13, 14, 15, 16, // src_cid
             0,  // token_len = 0
-            4,  // payload length
+            7,  // length = packet number + payload
             0, 0, 0, 0, // packet number
+            1, 2, 3, // payload
         ];
 
         let offset = get_long_header_payload_offset(&packet).unwrap();
@@ -517,5 +540,61 @@ mod tests {
         // Just verify offset is valid (within packet bounds)
         assert!(offset >= 5, "Offset should be >= 5");
         assert!(offset < packet.len(), "Offset should be < packet len");
+    }
+
+    #[test]
+    fn test_initial_packet_roundtrip_with_token() {
+        let payload = vec![0x06, 0x00, 0x04, 1, 2, 3, 4];
+        let pkt = QuicPacket::initial(
+            1,
+            vec![1, 2, 3, 4, 5, 6, 7, 8],
+            vec![9, 10, 11, 12],
+            vec![0xaa, 0xbb, 0xcc],
+            0x0102_0304,
+            payload.clone(),
+        );
+
+        let bytes = pkt.to_bytes();
+        let offset = get_long_header_payload_offset(&bytes).unwrap();
+        assert_eq!(offset, bytes.len() - payload.len());
+
+        let (parsed, consumed) = QuicPacket::from_bytes(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(parsed.header.packet_type, PacketType::Initial);
+        assert_eq!(parsed.header.version, 1);
+        assert_eq!(parsed.header.dst_cid, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(parsed.header.src_cid, vec![9, 10, 11, 12]);
+        assert_eq!(parsed.header.token, vec![0xaa, 0xbb, 0xcc]);
+        assert_eq!(parsed.header.pn_length, 4);
+        assert_eq!(parsed.header.packet_number, 0x0102_0304);
+        assert_eq!(parsed.payload, payload);
+    }
+
+    #[test]
+    fn test_handshake_packet_roundtrip() {
+        let pkt = QuicPacket {
+            header: QuicPacketHeader {
+                packet_type: PacketType::Handshake,
+                version: 1,
+                dst_cid: vec![1, 2, 3, 4],
+                src_cid: vec![5, 6, 7, 8],
+                token: Vec::new(),
+                pn_length: 2,
+                packet_number: 0x1234,
+                payload_length: 3,
+            },
+            payload: vec![0xaa, 0xbb, 0xcc],
+        };
+
+        let bytes = pkt.to_bytes();
+        let offset = get_long_header_payload_offset(&bytes).unwrap();
+        assert_eq!(offset, bytes.len() - pkt.payload.len());
+
+        let (parsed, consumed) = QuicPacket::from_bytes(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(parsed.header.packet_type, PacketType::Handshake);
+        assert_eq!(parsed.header.pn_length, 2);
+        assert_eq!(parsed.header.packet_number, 0x1234);
+        assert_eq!(parsed.payload, pkt.payload);
     }
 }

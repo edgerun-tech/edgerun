@@ -34,6 +34,9 @@
 //! - [RFC 9113 §8.1](https://www.rfc-editor.org/rfc/rfc9113.html#name-http-fields) — HTTP Fields
 //! - [RFC 9113 §8.2](https://www.rfc-editor.org/rfc/rfc9113.html#name-http-field-validity) — HTTP Field Validity
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::http2::ErrorCode;
 
 /// Result of header validation.

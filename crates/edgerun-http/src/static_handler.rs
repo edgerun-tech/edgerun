@@ -1,5 +1,8 @@
 //! Static file serving for HTTP servers.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::path::{Path, PathBuf};
 
 use crate::{Handler, Request, Response, StatusCode};

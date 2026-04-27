@@ -1,7 +1,8 @@
 //! DHCPv6 options — RFC 8415 §21.
 
-use std::io;
-use std::net::Ipv6Addr;
+use crate::std::io;
+use crate::std::net::Ipv6Addr;
+use crate::std::prelude::v1::*;
 
 // ---------------------------------------------------------------------------
 // Option codes
@@ -400,7 +401,7 @@ pub type IaPdOption = Dhcpv6Option;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv6Addr;
+    use crate::std::net::Ipv6Addr;
 
     #[test]
     fn test_ia_na_roundtrip() {

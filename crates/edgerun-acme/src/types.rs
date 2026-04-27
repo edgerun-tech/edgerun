@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-
+use crate::prelude::v1::*;
+use edgerun_encoding::{base64url_decode as decode_base64url, base64url_nopad_encode};
+use edgerun_url::Url;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Directory {
@@ -71,7 +71,7 @@ pub enum Jwk {
 impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
         use sha2::{Digest, Sha256};
-        let jwk_json = serde_json::to_string(self).unwrap_or_default();
+        let jwk_json = edgerun_json::to_string(self).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());
         hasher.finalize().to_vec()
@@ -278,13 +278,9 @@ pub struct JwsHeader {
 }
 
 pub fn base64url_encode(data: &[u8]) -> String {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.encode(data)
+    base64url_nopad_encode(data)
 }
 
 pub fn base64url_decode(data: &str) -> Result<Vec<u8>, &'static str> {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD
-        .decode(data)
-        .map_err(|_| "invalid base64url")
+    decode_base64url(data)
 }

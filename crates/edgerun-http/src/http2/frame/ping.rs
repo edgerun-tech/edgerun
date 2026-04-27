@@ -1,3 +1,6 @@
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use super::flags;
 use super::Frame;
 use super::FrameType;

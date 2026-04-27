@@ -3,6 +3,9 @@
 //! For HTTP/1.1 over HTTPS, performs a TLS 1.3 handshake using
 //! `edgerun_tls::async_tls::AsyncTlsStream`.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::header::HeaderMap;
 use crate::http1::pool::ConnectionPool;
 use crate::http2::pool::Http2Pool;
@@ -192,11 +195,11 @@ impl HttpClient {
         uri: &str,
         body: Option<Vec<u8>>,
     ) -> Result<Response> {
-        let request = Request::builder()
-            .method(method)
-            .uri(uri)
-            .body(body.unwrap_or_default())
-            .build()?;
+        let mut request = Request::builder().method(method).uri(uri);
+        if let Some(body) = body {
+            request = request.body(body);
+        }
+        let request = request.build()?;
         self.execute(&request).await
     }
 
@@ -245,6 +248,15 @@ impl HttpClient {
         }
 
         let h1_req = h1_req.build()?;
+
+        {
+            let mut pool = self.inner.pool.lock();
+            pool.set_connect_timeout(self.inner.connect_timeout);
+            pool.set_read_timeout(self.inner.read_timeout);
+            pool.set_max_redirects(self.inner.max_redirects);
+            pool.set_follow_redirects(self.inner.follow_redirects);
+            pool.set_auto_decompress(self.inner.auto_decompress);
+        }
 
         let h1_resp = ConnectionPool::execute_async(&self.inner.pool, &h1_req).await?;
 

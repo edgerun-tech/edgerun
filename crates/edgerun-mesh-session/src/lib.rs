@@ -1,4 +1,58 @@
 //! Mesh session management — ECDH handshakes, session encryption, and replay protection.
+
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
+pub mod collections {
+    pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+}
+
+pub mod time {
+    pub use core::time::Duration;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+    pub struct Instant(Duration);
+
+    impl Instant {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self(Duration::from_secs(0))
+        }
+
+        #[must_use]
+        pub fn elapsed(&self) -> Duration {
+            Self::now().0.saturating_sub(self.0)
+        }
+    }
+}
+
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+pub mod option {
+    pub use core::option::*;
+}
+
+pub mod result {
+    pub use core::result::*;
+}
+
 use std::time::Duration;
 
 mod error;

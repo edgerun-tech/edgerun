@@ -1,5 +1,8 @@
 //! HTTP/2 connection management
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use super::flow_control::FlowControlManager;
 use super::frame::{
     ContinuationFrame, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame,

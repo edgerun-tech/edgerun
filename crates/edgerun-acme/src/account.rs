@@ -1,11 +1,10 @@
-use std::sync::Arc;
-
+use crate::prelude::v1::*;
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use edgerun_crypto::p256::ecdsa::Signature;
 use edgerun_crypto::{
     p256_signing_key_from_pem, p256_signing_key_to_pem, random_p256_signing_key, SigningKey,
 };
-use edgerun_encoding::base64::{base64url_nopad_encode, standard_encode};
+use edgerun_encoding::base64::base64url_nopad_encode;
 
 use crate::types::Jwk;
 use crate::AcmeError;
@@ -47,7 +46,7 @@ impl AccountKey {
     }
 
     pub fn thumbprint_b64(&self) -> String {
-        let jwk_json = serde_json::to_string(&self.jwk()).unwrap_or_default();
+        let jwk_json = edgerun_json::to_string(&self.jwk()).unwrap_or_default();
         use edgerun_crypto::digest::Digest;
         use edgerun_crypto::Sha256;
         let mut hasher = <Sha256 as Digest>::new();

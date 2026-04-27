@@ -26,6 +26,17 @@ impl core::fmt::Display for IoError {
 
 impl core::error::Error for IoError {}
 
+#[cfg(not(target_os = "none"))]
+impl From<IoError> for std::io::Error {
+    fn from(error: IoError) -> Self {
+        match error {
+            IoError::UnexpectedEof => std::io::ErrorKind::UnexpectedEof.into(),
+            IoError::WriteZero => std::io::ErrorKind::WriteZero.into(),
+            IoError::Other(message) => std::io::Error::other(message),
+        }
+    }
+}
+
 pub type Result<T> = core::result::Result<T, IoError>;
 
 pub trait AsyncRead {
@@ -112,6 +123,59 @@ pub trait AsyncWriteExt: AsyncWrite + Unpin {
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWriteExt for W {}
+
+pub async fn copy<R, W>(reader: &mut R, writer: &mut W) -> Result<u64>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let mut total = 0;
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = reader.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        writer.write_all(&buf[..n]).await?;
+        total += n as u64;
+    }
+    Ok(total)
+}
+
+pub async fn copy_bidirectional<A, B>(a: &mut A, b: &mut B) -> Result<(u64, u64)>
+where
+    A: AsyncRead + AsyncWrite + Unpin,
+    B: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut buf_a = [0u8; 8192];
+    let mut buf_b = [0u8; 8192];
+    let mut a_to_b = 0;
+    let mut b_to_a = 0;
+
+    loop {
+        let n = match a.read(&mut buf_a).await {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(_) => break,
+        };
+        if b.write_all(&buf_a[..n]).await.is_err() {
+            break;
+        }
+        a_to_b += n as u64;
+
+        let n = match b.read(&mut buf_b).await {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(_) => break,
+        };
+        if a.write_all(&buf_b[..n]).await.is_err() {
+            break;
+        }
+        b_to_a += n as u64;
+    }
+
+    Ok((a_to_b, b_to_a))
+}
 
 impl<R: AsyncRead + Unpin> AsyncRead for &mut R {
     fn poll_read(

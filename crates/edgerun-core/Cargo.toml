@@ -8,13 +8,13 @@ publish.workspace = true
 [dependencies]
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-crypto.workspace = true
-edgerun-encoding = { path = "../edgerun-encoding" }
-edgerun-json = { path = "../edgerun-json", features = ["std", "yaml", "serde"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "yaml", "serde"] }
 prost.workspace = true
 prost-types.workspace = true
 
 [dev-dependencies]
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 
 [lints]
 workspace = true

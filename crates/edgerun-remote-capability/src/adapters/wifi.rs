@@ -1,5 +1,6 @@
 //! WiFi scanner and controller remote adapters.
 
+use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };

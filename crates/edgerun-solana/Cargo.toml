@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 bs58 = "0.5"
 edgerun-error.workspace = true
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }

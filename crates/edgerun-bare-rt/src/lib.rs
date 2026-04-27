@@ -50,7 +50,8 @@ pub use cancellation::{CancellationToken, Cancelled};
 
 pub mod io;
 pub use io::{
-    AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, Cursor, IoError,
+    copy, copy_bidirectional, AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
+    BufReader, Cursor, IoError,
 };
 
 pub mod poll_fn;
@@ -129,6 +130,10 @@ pub use tcp::{TcpError, TcpListener, TcpSocket, TcpState};
 pub mod async_net;
 #[cfg(not(target_os = "none"))]
 pub use async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
+#[cfg(target_os = "none")]
+pub mod bare_async_net;
+#[cfg(target_os = "none")]
+pub use bare_async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
 
 pub mod ipv4;
 pub use ipv4::{Ipv4Addr, Ipv4Header, IP_DEFAULT_TTL, IP_VERSION};

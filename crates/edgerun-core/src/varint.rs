@@ -2,6 +2,8 @@
 //!
 //! Delegates to `edgerun_encoding::varint`.
 
+use crate::prelude::v1::*;
+
 pub use edgerun_encoding::varint::{decode_varint_slice, encode_varint, VarintError};
 
 /// Decodes a varint from a `Read` source (backward-compatible wrapper).

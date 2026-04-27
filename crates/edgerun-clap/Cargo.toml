@@ -14,7 +14,7 @@ alloc = []
 [dependencies]
 edgerun-json = { path = "../edgerun-json", features = ["alloc", "serde"] }
 edgerun-clap-derive = { path = "../edgerun-clap-derive" }
-serde = { version = "1", features = ["derive"], optional = true }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [lints]
 workspace = true

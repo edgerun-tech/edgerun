@@ -1,5 +1,8 @@
 //! HTTP/2 settings (RFC 7540 Section 6.5)
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use super::{Http2Error, Result};
 
 /// HTTP/2 setting identifiers

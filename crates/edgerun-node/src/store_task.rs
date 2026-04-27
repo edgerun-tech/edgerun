@@ -16,7 +16,7 @@ pub fn run_store_task(
     mut store: NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    mut rx: edgerun_rt::mpsc::Receiver<StoreRequest>,
+    mut rx: edgerun_bare_rt::mpsc::Receiver<StoreRequest>,
     mut global_rate_limiter: ingress::TokenBucket,
     mut message_hash_cache: ingress::RecentHashCache,
     mut allowed_peers: Vec<Vec<u8>>,

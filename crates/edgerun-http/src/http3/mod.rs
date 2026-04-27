@@ -1,9 +1,7 @@
 //! HTTP/3 protocol (RFC 9114)
 
 #[cfg(target_os = "none")]
-use crate::std_compat as std;
-#[cfg(target_os = "none")]
-use crate::std_compat::prelude::v1::*;
+use crate::prelude::v1::*;
 use edgerun_error::Error;
 
 pub mod connection;

@@ -7,6 +7,7 @@
 //!
 //! This module is kept for backward compatibility with existing deployments.
 
+use crate::prelude::v1::*;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};

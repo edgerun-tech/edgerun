@@ -7,6 +7,57 @@
 //! use edgerun_remote_capability::MemoryRemoteTransport;
 //! ```
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::borrow::ToOwned;
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2021::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod cell {
+    pub use core::cell::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod rc {
+    pub use alloc::rc::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
+    pub type HashMap<K, V> = alloc::collections::BTreeMap<K, V>;
+}
+
+pub mod boxed {
+    pub use alloc::boxed::Box;
+}
+
+pub mod string {
+    pub use alloc::string::{String, ToString};
+}
+
+pub mod vec {
+    pub use alloc::vec::Vec;
+}
+
+pub use alloc::format;
+pub use core::{cmp, convert, fmt, option, result, slice, str};
+
 pub mod adapters;
 pub mod capability_signature;
 pub mod policy;
@@ -32,7 +83,9 @@ pub use protocol::{
     CapabilitySessionMode, CapabilitySessionOpen, RemoteCapabilityProvider,
     RemoteCapabilityTransport, RemoteInvocationResult,
 };
-pub use transport::{accept_tcp, accept_unix, FramedRemoteTransport, MemoryRemoteTransport};
+#[cfg(not(target_os = "none"))]
+pub use transport::{accept_tcp, accept_unix, FramedRemoteTransport};
+pub use transport::MemoryRemoteTransport;
 
 #[cfg(test)]
 mod tests;

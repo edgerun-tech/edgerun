@@ -1,5 +1,6 @@
 //! Protocol dispatch loop: serve_one() and pump_one_event().
 
+use crate::prelude::v1::*;
 use edgerun_capabilities::CapabilityError;
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_proto::edgerun::v0::capability_runtime::{

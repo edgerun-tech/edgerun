@@ -1,5 +1,6 @@
 //! Bluetooth scanner and connection lister remote adapters.
 
+use crate::prelude::v1::*;
 use edgerun_bluetooth::{
     BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
     BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,

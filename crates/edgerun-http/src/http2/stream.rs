@@ -1,5 +1,8 @@
 //! HTTP/2 stream management
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use super::Result;
 use std::collections::VecDeque;
 

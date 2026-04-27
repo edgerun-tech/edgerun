@@ -194,9 +194,9 @@ edgerun-bare-rt = { path = "crates/edgerun-bare-rt" }
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json
-edgerun-json = { path = "crates/edgerun-json", features = ["serde"] }
+edgerun-json = { path = "crates/edgerun-json", default-features = false, features = ["alloc", "serde"] }
 edgerun-error = { path = "crates/edgerun-error" }
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 # Browser deps
 edgerun-display = { path = "crates/edgerun-display" }
 edgerun-gpu = { path = "crates/edgerun-gpu" }

@@ -1,3 +1,297 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+}
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    use crate::{io, path::PathBuf};
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        pub fn open(self, _path: &PathBuf) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
+
+    pub struct ReadDir;
+    pub struct DirEntry;
+
+    impl Iterator for ReadDir {
+        type Item = io::Result<DirEntry>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            None
+        }
+    }
+
+    impl DirEntry {
+        #[must_use]
+        pub fn path(&self) -> PathBuf {
+            PathBuf::new()
+        }
+
+        #[must_use]
+        pub fn file_name(&self) -> PathBuf {
+            PathBuf::new()
+        }
+    }
+
+    pub fn read_dir<P>(_path: P) -> io::Result<ReadDir> {
+        Err(io::Error::new(io::ErrorKind::NotFound))
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ErrorKind {
+        NotFound,
+        Other,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+    }
+
+    impl Error {
+        #[must_use]
+        pub const fn new(kind: ErrorKind) -> Self {
+            Self { kind }
+        }
+
+        #[must_use]
+        pub const fn last_os_error() -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+
+        #[must_use]
+        pub const fn raw_os_error(&self) -> Option<i32> {
+            None
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self.kind {
+                ErrorKind::NotFound => f.write_str("not found"),
+                ErrorKind::Other => f.write_str("I/O error"),
+            }
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    pub type Result<T> = core::result::Result<T, Error>;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod fd {
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> i32;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> i32 {
+                -1
+            }
+        }
+    }
+
+    pub mod raw {
+        #[allow(non_camel_case_types)]
+        pub type c_int = i32;
+        #[allow(non_camel_case_types)]
+        pub type c_ulong = usize;
+        #[allow(non_camel_case_types)]
+        pub type c_void = core::ffi::c_void;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    use alloc::string::{String, ToString};
+    use core::fmt;
+
+    #[derive(Debug)]
+    pub struct Path;
+
+    impl Path {
+        #[must_use]
+        pub fn new(_path: &str) -> &'static Self {
+            static PATH: Path = Path;
+            &PATH
+        }
+
+        #[must_use]
+        pub fn exists(&self) -> bool {
+            false
+        }
+    }
+
+    #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct PathBuf(String);
+
+    impl PathBuf {
+        #[must_use]
+        pub fn new() -> Self {
+            Self(String::new())
+        }
+
+        #[must_use]
+        pub fn file_name(&self) -> Option<&str> {
+            None
+        }
+
+        #[must_use]
+        pub fn to_string_lossy(&self) -> String {
+            self.0.clone()
+        }
+    }
+
+    impl From<&str> for PathBuf {
+        fn from(value: &str) -> Self {
+            Self(value.to_string())
+        }
+    }
+
+    impl fmt::Display for PathBuf {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(&self.0)
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod thread {
+    use crate::time::Duration;
+
+    pub fn sleep(_duration: Duration) {}
+}
+
+#[cfg(target_os = "none")]
+pub mod time {
+    pub use core::time::Duration;
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct SystemTimeError;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct SystemTime(Duration);
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+    pub struct Instant(Duration);
+
+    pub const UNIX_EPOCH: SystemTime = SystemTime(Duration::from_secs(0));
+
+    impl SystemTime {
+        #[must_use]
+        pub const fn now() -> Self {
+            UNIX_EPOCH
+        }
+
+        pub fn duration_since(
+            &self,
+            earlier: SystemTime,
+        ) -> core::result::Result<Duration, SystemTimeError> {
+            self.0.checked_sub(earlier.0).ok_or(SystemTimeError)
+        }
+    }
+
+    impl Instant {
+        #[must_use]
+        pub const fn now() -> Self {
+            Self(Duration::from_secs(0))
+        }
+
+        #[must_use]
+        pub fn elapsed(&self) -> Duration {
+            Self::now().0.saturating_sub(self.0)
+        }
+    }
+
+    impl core::ops::Add<Duration> for Instant {
+        type Output = Self;
+
+        fn add(self, rhs: Duration) -> Self::Output {
+            Self(self.0.saturating_add(rhs))
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod error {
+    pub use core::error::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+pub use core::{ptr, slice};
+
+use crate::prelude::v1::*;
 use edgerun_camera_biometrics::{
     default_face_biometric_state, validate_liveness_challenge, CameraBiometricError,
     CameraBiometricPurpose, CameraBiometricReader, CameraCapture, CameraCaptureQuality,
@@ -7,14 +301,15 @@ use edgerun_camera_biometrics::{
     CameraVerification, CameraVerifyRequest, PairedCameraBiometricReader, PairedCameraFrame,
 };
 use std::collections::HashMap;
+#[cfg(not(target_os = "none"))]
 use std::fs;
 use std::fs::File;
+#[cfg(not(target_os = "none"))]
 use std::io;
 use std::os::fd::AsRawFd;
 use std::os::raw::{c_int, c_ulong, c_void};
 use std::path::{Path, PathBuf};
-use std::ptr;
-use std::slice;
+#[cfg(not(target_os = "none"))]
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -1149,7 +1444,7 @@ fn convert_to_grayscale(frame: &CameraFrame) -> Vec<u8> {
                 let r = chunk[0] as f64;
                 let g = chunk[1] as f64;
                 let b = chunk[2] as f64;
-                let y = (0.299 * r + 0.587 * g + 0.114 * b).round() as u8;
+                let y = round_f64(0.299 * r + 0.587 * g + 0.114 * b) as u8;
                 gray.push(y);
             }
             gray
@@ -1201,6 +1496,25 @@ fn average_face_templates(samples: &[Vec<u8>]) -> Vec<u8> {
 
 /// Compute normalized cross-correlation between two face templates.
 /// Returns a value between 0.0 (no match) and 1.0 (perfect match).
+fn round_f64(value: f64) -> f64 {
+    if value.is_sign_negative() {
+        (value - 0.5) as i64 as f64
+    } else {
+        (value + 0.5) as i64 as f64
+    }
+}
+
+fn sqrt_f64(value: f64) -> f64 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+    let mut x = value;
+    for _ in 0..12 {
+        x = 0.5 * (x + value / x);
+    }
+    x
+}
+
 fn normalized_cross_correlation(a: &[u8], b: &[u8]) -> f64 {
     let len = a.len().min(b.len()).min(FACE_TEMPLATE_SIZE);
     if len == 0 {
@@ -1225,7 +1539,7 @@ fn normalized_cross_correlation(a: &[u8], b: &[u8]) -> f64 {
 
     let n = len as f64;
     let numerator = n * sum_ab - sum_a * sum_b;
-    let denominator = (n * sum_aa - sum_a * sum_a).sqrt() * (n * sum_bb - sum_b * sum_b).sqrt();
+    let denominator = sqrt_f64(n * sum_aa - sum_a * sum_a) * sqrt_f64(n * sum_bb - sum_b * sum_b);
 
     if denominator == 0.0 {
         return 0.0;

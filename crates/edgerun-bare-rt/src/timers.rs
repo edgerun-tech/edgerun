@@ -61,6 +61,8 @@ impl core::fmt::Display for Elapsed {
     }
 }
 
+impl core::error::Error for Elapsed {}
+
 pub struct Timeout<F> {
     inner: Option<F>,
     deadline: Instant,

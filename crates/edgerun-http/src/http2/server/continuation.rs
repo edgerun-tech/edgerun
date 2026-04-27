@@ -1,5 +1,8 @@
 //! Continuation tracking state for HEADERS + CONTINUATION frame sequences.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 /// Tracks whether we are expecting CONTINUATION frames after a partial HEADERS frame.
 #[derive(Debug, Default)]
 pub struct ContinuationState {

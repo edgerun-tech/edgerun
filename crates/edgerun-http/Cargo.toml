@@ -20,11 +20,12 @@ edgerun-error.workspace = true
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 edgerun-hpack = { path = "../edgerun-hpack" }
 edgerun-qpack = { path = "../edgerun-qpack" }
+edgerun-quic = { path = "../edgerun-quic" }
 miniz_oxide.workspace = true
 brotli.workspace = true
 
 [dev-dependencies]
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 edgerun-json = { workspace = true }
 futures = "0.3"
 

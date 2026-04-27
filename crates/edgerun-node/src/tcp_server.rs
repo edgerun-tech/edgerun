@@ -20,11 +20,11 @@ pub struct SessionContext {
 pub async fn run_tcp_listener(
     listen_addr: SocketAddr,
     node_id: NodeID,
-    store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    store_tx: edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     signer: Arc<dyn MeshSigner + Send + Sync>,
-    cancel: edgerun_rt::CancellationToken,
+    cancel: edgerun_bare_rt::CancellationToken,
 ) {
-    let listener = match edgerun_rt::AsyncTcpListener::bind(listen_addr) {
+    let listener = match edgerun_bare_rt::AsyncTcpListener::bind(listen_addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind TCP on {}: {}", listen_addr, e);
@@ -44,7 +44,7 @@ pub async fn run_tcp_listener(
             Ok((stream, _peer_addr)) => {
                 let conn_store_tx = store_tx.clone();
                 let ctx = ctx.clone();
-                edgerun_rt::spawn(async move {
+                edgerun_bare_rt::spawn(async move {
                     edgerun_log::debug!("TCP connection accepted");
                     handle_tcp_connection(stream, conn_store_tx, &ctx, None).await;
                 });
@@ -60,12 +60,12 @@ pub async fn run_tcp_listener(
 /// If `outbound_nonce` is provided, this side initiates the handshake by
 /// sending SessionHello first. Otherwise, it waits for the peer's hello.
 pub async fn handle_tcp_connection(
-    stream: Arc<edgerun_rt::AsyncTcpStream>,
-    store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    stream: Arc<edgerun_bare_rt::AsyncTcpStream>,
+    store_tx: edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     ctx: &SessionContext,
     outbound_nonce: Option<Vec<u8>>,
 ) {
-    use edgerun_rt::AsyncReadExt;
+    use edgerun_bare_rt::AsyncReadExt;
     let (mut reader, mut writer) = stream.split();
     let mut read_buf = Vec::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
@@ -128,10 +128,10 @@ pub async fn perform_session_handshake_as_initiator<R, W>(
     nonce: &[u8],
 ) -> Option<session::SessionState>
 where
-    R: edgerun_rt::AsyncRead + Unpin,
-    W: edgerun_rt::AsyncWrite + Unpin,
+    R: edgerun_bare_rt::AsyncRead + Unpin,
+    W: edgerun_bare_rt::AsyncWrite + Unpin,
 {
-    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+    use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt};
 
     // Build and send SessionHello
     let hello = match session::build_session_hello(
@@ -226,10 +226,10 @@ async fn perform_session_handshake_as_responder<R, W>(
     ctx: &SessionContext,
 ) -> Option<session::SessionState>
 where
-    R: edgerun_rt::AsyncRead + Unpin,
-    W: edgerun_rt::AsyncWrite + Unpin,
+    R: edgerun_bare_rt::AsyncRead + Unpin,
+    W: edgerun_bare_rt::AsyncWrite + Unpin,
 {
-    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+    use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt};
 
     // Read the first frame (should be SessionHello)
     while read_buf.len() < 8 {
@@ -326,13 +326,13 @@ async fn handle_tcp_stream_common_with_session<R, W>(
     writer: &mut W,
     read_buf: &mut Vec<u8>,
     conn_rate_limiter: &mut ingress::TokenBucket,
-    store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
+    store_tx: &edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     _session: &session::SessionState,
 ) where
-    R: edgerun_rt::AsyncRead + Unpin,
-    W: edgerun_rt::AsyncWrite + Unpin,
+    R: edgerun_bare_rt::AsyncRead + Unpin,
+    W: edgerun_bare_rt::AsyncWrite + Unpin,
 {
-    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+    use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt};
 
     loop {
         // Read 8-byte length prefix
@@ -414,7 +414,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             // Check if this is a snapshot publish command
             use edgerun_proto::edgerun::v0::stream::CommandType;
             if command.command_type == CommandType::PublishSnapshot as i32 {
-                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+                let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
                 if store_tx
                     .send(StoreRequest::ProduceSnapshot {
                         view_type: "stream_heads".to_string(),
@@ -493,7 +493,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                     continue;
                 }
 
-                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+                let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
                 if store_tx
                     .send(StoreRequest::FetchObject {
                         object_ref,
@@ -520,7 +520,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                 continue;
             }
 
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+            let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
             if store_tx
                 .send(StoreRequest::Command {
                     raw_bytes: raw,
@@ -552,7 +552,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         // Try QueryRequest
         if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..]) {
             let raw = payload.clone();
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+            let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
             if store_tx
                 .send(StoreRequest::Query {
                     raw_bytes: raw,

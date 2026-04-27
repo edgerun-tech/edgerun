@@ -1,5 +1,8 @@
 //! HTTP/3 stream management
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 /// HTTP/3 stream types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Http3StreamType {

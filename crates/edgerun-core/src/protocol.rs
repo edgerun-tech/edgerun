@@ -4,6 +4,8 @@
 //! Canonical encoding = `prost::Message::encode()` directly.
 //! No intermediate encoding layer, no conversion, no CBOR.
 
+use crate::prelude::v1::*;
+
 // Timestamp / Duration from prost-types (protobuf standard)
 pub use prost_types::{Duration, Timestamp};
 

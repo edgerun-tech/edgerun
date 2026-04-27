@@ -63,6 +63,9 @@
 //! let resp = client.get("https://api.example.com/data").await?;
 //! ```
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::client::HttpClient;
 use crate::header::HeaderMap;
 use crate::method::Method;

@@ -1,5 +1,6 @@
 //! Session lifecycle helpers: open, accept, reject, and request construction.
 
+use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
 use edgerun_proto::edgerun::v0::capability::CapabilityGrant;
 use edgerun_proto::edgerun::v0::capability_runtime::{

@@ -5,6 +5,9 @@
 //!
 //! This implementation uses the `qpack` crate for encoding/decoding.
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 pub mod decoder;
 pub mod encoder;
 pub mod huffman;

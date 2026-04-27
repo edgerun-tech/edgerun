@@ -1,3 +1,40 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(not(target_os = "none"))]
+macro_rules! println {
+    ($($arg:tt)*) => {
+        std::println!($($arg)*)
+    };
+}
+
+#[cfg(not(target_os = "none"))]
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        std::eprintln!($($arg)*)
+    };
+}
+
+#[cfg(target_os = "none")]
+macro_rules! println {
+    ($($arg:tt)*) => {};
+}
+
+#[cfg(target_os = "none")]
+macro_rules! eprintln {
+    ($($arg:tt)*) => {};
+}
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[path = "std.rs"]
+mod std_compat;
+pub use std_compat::*;
+
 pub mod accounting;
 pub mod benchmark;
 pub mod command;

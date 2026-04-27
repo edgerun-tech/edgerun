@@ -15,6 +15,9 @@
 //! }
 //! ```
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::collections::HashMap;
 
 /// A parsed multipart form field
@@ -163,7 +166,7 @@ impl std::fmt::Display for MultipartError {
     }
 }
 
-impl std::error::Error for MultipartError {}
+impl core::error::Error for MultipartError {}
 
 fn skip_to_boundary(body: &[u8], delimiter: &[u8], start: usize) -> Result<usize, MultipartError> {
     for i in start..body.len().saturating_sub(delimiter.len() - 1) {

@@ -1,3 +1,56 @@
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+#[cfg(target_os = "none")]
+pub mod fs {
+    pub use edgerun_linux_sysfs::fs::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod io {
+    pub use edgerun_linux_sysfs::io::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod os {
+    pub mod raw {
+        pub use edgerun_linux_sysfs::os::raw::*;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_linux_sysfs::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod option {
+    pub use core::option::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod result {
+    pub use core::result::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod string {
+    pub use alloc::string::*;
+}
+
+#[cfg(target_os = "none")]
+pub mod vec {
+    pub use alloc::vec::*;
+}
+
+use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_linux_sysfs::{
     close_ioctl_fd, fill_ifr_name, ioctl_call, open_ioctl_socket, read_trimmed,
@@ -6,7 +59,9 @@ use edgerun_network_interface::{
     default_network_interface_descriptor, NetworkAdminState, NetworkInterfaceController,
     NetworkInterfaceInfo, NetworkInterfaceKind, NetworkLinkState,
 };
+#[cfg(not(target_os = "none"))]
 use std::fs;
+#[cfg(not(target_os = "none"))]
 use std::io;
 use std::os::raw::{c_char, c_short, c_ulong};
 use std::path::{Path, PathBuf};
@@ -132,7 +187,7 @@ fn kind_from_sysfs(path: &Path) -> NetworkInterfaceKind {
         Some(ARPHRD_ETHER) => {
             let name = path
                 .file_name()
-                .and_then(|v| v.to_str())
+                .map(|v| v.to_string_lossy().to_string())
                 .unwrap_or_default();
             if name.starts_with("br") {
                 NetworkInterfaceKind::Bridge

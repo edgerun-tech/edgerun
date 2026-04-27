@@ -7,6 +7,52 @@
 //! - Automatic certificate provisioning and renewal
 //! - Encrypted storage of private keys via edgerun-secret-service
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
+#[cfg(target_os = "none")]
+extern crate self as std;
+
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::boxed::Box;
+        pub use alloc::borrow::ToOwned;
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2021::*;
+    }
+}
+
+pub mod boxed {
+    pub use alloc::boxed::Box;
+}
+
+pub mod string {
+    pub use alloc::string::{String, ToString};
+}
+
+pub mod vec {
+    pub use alloc::vec::Vec;
+}
+
+pub mod future {
+    pub use core::future::*;
+}
+
+pub mod pin {
+    pub use core::pin::*;
+}
+
+#[cfg(target_os = "none")]
+pub use edgerun_secret_service::{
+    cmp, collections, convert, env, ffi, fmt, format, fs, io, mem, option, os, path,
+    process, result, slice, str, sync, time,
+};
+
 mod account;
 mod cert_store;
 mod challenge;

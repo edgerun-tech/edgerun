@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt, CancellationToken};
 use edgerun_hardware_signing::{MeshSigner, NodeID};
-use edgerun_rt::{AsyncReadExt, AsyncWriteExt, CancellationToken};
 use prost::Message;
 
 use crate::session::{self, SessionState};
@@ -16,7 +16,7 @@ use crate::types::StoreRequest;
 /// handshake and message loop. Updates peer status in the store.
 pub async fn run_peer_reconnection(
     initial_unreachable: Vec<(String, String)>,
-    store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    store_tx: edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     cancel: CancellationToken,
     signer: Arc<dyn MeshSigner + Send + Sync>,
     node_id: NodeID,
@@ -37,8 +37,8 @@ pub async fn run_peer_reconnection(
             .await;
     }
 
-    let mut interval = edgerun_rt::interval(std::time::Duration::from_secs(10));
-    interval.set_missed_tick_behavior(edgerun_rt::MissedTickBehavior::Skip);
+    let mut interval = edgerun_bare_rt::interval(std::time::Duration::from_secs(10));
+    interval.set_missed_tick_behavior(edgerun_bare_rt::MissedTickBehavior::Skip);
 
     loop {
         if cancel.is_cancelled() {
@@ -74,7 +74,7 @@ pub async fn run_peer_reconnection(
                 );
 
                 // Attempt TCP connection
-                match edgerun_rt::ConnectFuture::new(&peer_addr).await {
+                match edgerun_bare_rt::ConnectFuture::new(&peer_addr).await {
                     Ok(stream) => {
                         edgerun_log::info!("connected to peer {}", node_id_hex);
 
@@ -145,12 +145,12 @@ pub async fn run_peer_reconnection(
 
 /// Look up a peer's address from the store.
 async fn get_peer_addr(
-    store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
+    store_tx: &edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     node_id_hex: &str,
 ) -> Option<String> {
     use crate::types::StoreResponse;
 
-    let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+    let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
     store_tx
         .send(StoreRequest::PeerLookup {
             node_id_hex: node_id_hex.to_string(),
@@ -166,8 +166,8 @@ async fn get_peer_addr(
 
 /// Run a full session with a peer: handshake then message loop.
 async fn run_peer_session(
-    stream: Arc<edgerun_rt::AsyncTcpStream>,
-    store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
+    stream: Arc<edgerun_bare_rt::AsyncTcpStream>,
+    store_tx: &edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     ctx: &SessionContext,
     nonce: &[u8],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -200,10 +200,10 @@ async fn perform_peer_handshake<R, W>(
     nonce: &[u8],
 ) -> Result<SessionState, Box<dyn std::error::Error + Send + Sync>>
 where
-    R: edgerun_rt::AsyncRead + Unpin,
-    W: edgerun_rt::AsyncWrite + Unpin,
+    R: edgerun_bare_rt::AsyncRead + Unpin,
+    W: edgerun_bare_rt::AsyncWrite + Unpin,
 {
-    use edgerun_rt::AsyncWriteExt;
+    use edgerun_bare_rt::AsyncWriteExt;
 
     // Build and send SessionHello
     let hello = session::build_session_hello(&ctx.node_id, None, nonce, &*ctx.signer)?;
@@ -260,13 +260,13 @@ async fn handle_peer_messages<R, W>(
     writer: &mut W,
     read_buf: &mut Vec<u8>,
     rate_limiter: &mut crate::ingress::TokenBucket,
-    store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
+    store_tx: &edgerun_bare_rt::mpsc::Sender<StoreRequest>,
     session: &SessionState,
 ) where
-    R: edgerun_rt::AsyncRead + Unpin,
-    W: edgerun_rt::AsyncWrite + Unpin,
+    R: edgerun_bare_rt::AsyncRead + Unpin,
+    W: edgerun_bare_rt::AsyncWrite + Unpin,
 {
-    use edgerun_rt::AsyncReadExt;
+    use edgerun_bare_rt::AsyncReadExt;
 
     loop {
         // Read 8-byte length prefix
@@ -338,7 +338,7 @@ async fn handle_peer_messages<R, W>(
         {
             let raw = payload.clone();
 
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+            let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
             if store_tx
                 .send(StoreRequest::Command {
                     raw_bytes: raw,
@@ -370,7 +370,7 @@ async fn handle_peer_messages<R, W>(
         // Try QueryRequest
         if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..]) {
             let raw = payload.clone();
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
+            let (reply_tx, reply_rx) = edgerun_bare_rt::oneshot::channel();
             if store_tx
                 .send(StoreRequest::Query {
                     raw_bytes: raw,

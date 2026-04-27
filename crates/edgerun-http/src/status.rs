@@ -1,5 +1,8 @@
 //! HTTP status codes
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::fmt;
 
 /// HTTP status code

@@ -2,6 +2,7 @@
 //! Kubernetes-compatible YAML config resources.
 
 use crate::types::*;
+use crate::prelude::v1::*;
 use edgerun_json::JsonValue;
 use std::collections::HashMap;
 

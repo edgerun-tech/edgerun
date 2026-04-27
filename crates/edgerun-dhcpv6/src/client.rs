@@ -1,8 +1,9 @@
 //! DHCPv6 client — RFC 8415.
 
-use std::io;
-use std::net::{Ipv6Addr, SocketAddr, UdpSocket};
-use std::time::{Duration, Instant};
+use crate::std::io;
+use crate::std::net::{IpAddr, Ipv6Addr, SocketAddr, UdpSocket};
+use crate::std::prelude::v1::*;
+use crate::std::time::{Duration, Instant};
 
 use super::duid::Duid;
 use super::lease::Dhcpv6Lease;
@@ -187,7 +188,7 @@ impl Dhcpv6Client {
         let ip: Ipv6Addr = ALL_DHCP_RELAY_AND_SERVERS
             .parse()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-        let dest = SocketAddr::new(std::net::IpAddr::V6(ip), DHCPV6_SERVER_PORT);
+        let dest = SocketAddr::new(IpAddr::V6(ip), DHCPV6_SERVER_PORT);
         self.socket.send_to(&wire, dest)?;
         Ok(())
     }
@@ -281,7 +282,7 @@ impl Dhcpv6Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv6Addr;
+    use crate::std::net::Ipv6Addr;
 
     #[test]
     fn test_client_creation() {

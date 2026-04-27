@@ -1,5 +1,8 @@
 //! HTTP/3 connection over QUIC
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use crate::http3::{Http3Error, Result};
 use std::collections::HashMap;
 use std::str::FromStr;

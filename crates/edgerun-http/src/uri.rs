@@ -1,5 +1,8 @@
 //! URI parsing
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::fmt;
 use std::str::FromStr;
 
@@ -207,10 +210,15 @@ impl Uri {
 
     /// Get the request target (path + query)
     pub fn request_target(&self) -> String {
-        if let Some(query) = &self.query {
-            format!("{}?{}", self.path, query)
+        let path = if self.path.is_empty() {
+            "/"
         } else {
-            self.path.clone()
+            self.path.as_str()
+        };
+        if let Some(query) = &self.query {
+            format!("{}?{}", path, query)
+        } else {
+            path.to_string()
         }
     }
 }

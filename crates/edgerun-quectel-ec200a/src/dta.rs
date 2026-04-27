@@ -1,8 +1,8 @@
 //! DTA (Direct Terminal Access) network support for Quectel EC200A
 
+use crate::prelude::v1::*;
 use crate::{DtaNetwork, Model};
 use std::process::Command;
-use std::time::Duration;
 
 /// DTA network configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

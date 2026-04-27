@@ -36,6 +36,9 @@
 //! });
 //! ```
 
+#[cfg(target_os = "none")]
+use crate::prelude::v1::*;
+
 use std::future::Future;
 use std::pin::Pin;
 
