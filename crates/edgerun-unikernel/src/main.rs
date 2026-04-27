@@ -3,7 +3,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+extern crate alloc;
 extern crate edgerun_dhcp;
+extern crate edgerun_oci;
 extern crate edgerun_platform;
 extern crate edgerun_rt as rt;
 extern crate edgerun_tftp;
@@ -19,6 +21,818 @@ use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
+#[allow(dead_code)]
+mod oci_syscall {
+    use super::rt;
+    use edgerun_oci::prelude::String;
+    use edgerun_oci::rootfs_access::OciRootfs;
+    use edgerun_oci::{
+        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
+        OciElfError, OciElfLoadBias, OciElfUnsafeIdentityMapper, OciPreparedLaunchState,
+        OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink, OciX86_64SyscallFrame,
+    };
+    use edgerun_platform::arch::x86_64::{
+        self, SyscallFrame, KERNEL_CODE_SELECTOR, USER_COMPAT_CODE_SELECTOR,
+    };
+
+    struct DirectMemory;
+
+    impl OciSyscallMemory for DirectMemory {
+        fn read_bytes(&self, addr: u64, len: usize, out: &mut [u8]) -> Result<(), OciSyscallError> {
+            let ptr = usize::try_from(addr).map_err(|_| OciSyscallError::BadAddress)? as *const u8;
+            let Some(out) = out.get_mut(..len) else {
+                return Err(OciSyscallError::BadAddress);
+            };
+            unsafe {
+                core::ptr::copy_nonoverlapping(ptr, out.as_mut_ptr(), len);
+            }
+            Ok(())
+        }
+    }
+
+    struct LogSink;
+
+    impl OciSyscallSink for LogSink {
+        fn write_fd(&mut self, fd: u64, bytes: &[u8]) -> Result<usize, OciSyscallError> {
+            if fd == 1 || fd == 2 {
+                if let Ok(text) = core::str::from_utf8(bytes) {
+                    rt::log::log(1, text.trim_end_matches('\n'));
+                } else {
+                    rt::log::log(1, "container wrote non-UTF8 bytes");
+                }
+            }
+            Ok(bytes.len())
+        }
+    }
+
+    pub unsafe fn install(kernel_code_selector: u16, user_code_selector: u16) {
+        x86_64::set_syscall_handler(handle_syscall);
+        unsafe {
+            x86_64::enable_syscall_entry(kernel_code_selector, user_code_selector);
+        }
+    }
+
+    pub unsafe fn install_flat_gdt() {
+        unsafe {
+            x86_64::load_flat_gdt();
+            install(KERNEL_CODE_SELECTOR, USER_COMPAT_CODE_SELECTOR);
+        }
+    }
+
+    pub unsafe fn enter_launch_state(launch: &OciPreparedLaunchState) -> ! {
+        unsafe {
+            install_flat_gdt();
+            x86_64::enter_user64(launch.entry_point, launch.stack_pointer);
+        }
+    }
+
+    pub unsafe fn launch_rootfs<R: OciRootfs>(
+        rootfs: &R,
+        args: &[String],
+        env: &[String],
+        cwd: &str,
+        scratch: &mut [u8],
+        stack_base: u64,
+        stack_top: u64,
+        stack: &mut [u8],
+        load_bias: OciElfLoadBias,
+    ) -> Result<core::convert::Infallible, OciElfError> {
+        let mut mapper = OciElfUnsafeIdentityMapper::new();
+        let Some(launch) = prepare_and_load_oci_elf_program_with_load_bias(
+            rootfs,
+            args,
+            env,
+            cwd,
+            &mut mapper,
+            scratch,
+            stack_base,
+            stack_top,
+            stack,
+            load_bias,
+        )?
+        else {
+            return Err(OciElfError::NotFound(
+                args.first().cloned().unwrap_or_default(),
+            ));
+        };
+
+        unsafe {
+            enter_launch_state(&launch);
+        }
+    }
+
+    extern "C" fn handle_syscall(frame: &mut SyscallFrame) {
+        let mut oci_frame = OciX86_64SyscallFrame {
+            rax: frame.rax,
+            rdi: frame.rdi,
+            rsi: frame.rsi,
+            rdx: frame.rdx,
+            r10: frame.r10,
+            r8: frame.r8,
+            r9: frame.r9,
+        };
+        let memory = DirectMemory;
+        let mut sink = LogSink;
+        let mut scratch = [0u8; 256];
+
+        match dispatch_x86_64_linux_syscall_frame(&memory, &mut sink, &mut scratch, &mut oci_frame)
+        {
+            Ok(OciSyscallAction::Return(_)) => {
+                frame.rax = oci_frame.rax;
+            }
+            Ok(OciSyscallAction::Exit(code)) => {
+                let _ = code;
+                rt::log::log(1, "container exited");
+                loop {
+                    unsafe {
+                        core::arch::asm!("hlt");
+                    }
+                }
+            }
+            Err(OciSyscallError::Unsupported(_)) => {
+                frame.rax = (-38i64) as u64;
+            }
+            Err(OciSyscallError::BadAddress) => {
+                frame.rax = (-14i64) as u64;
+            }
+        }
+    }
+}
+
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
+#[allow(dead_code)]
+mod oci_image_boot {
+    use super::boot_config::BootConfig;
+    use super::disk_boot::{self, DiskBootError, OpenedEdgeFs};
+    use super::oci_syscall;
+    use edgerun_edgefs::EdgeFs;
+    use edgerun_oci::prelude::String;
+    use edgerun_oci::{
+        EdgeFsImagePullReport, ImageRef, OciElfError, OciElfLoadBias, RegistryClient, RegistryError,
+    };
+    use edgerun_storage::{BlockStorage, PartitionBlockDevice};
+
+    #[derive(Debug)]
+    pub enum OciImageBootError {
+        InvalidImageRef(String),
+        Registry(RegistryError),
+        Elf(OciElfError),
+    }
+
+    #[derive(Debug)]
+    pub enum OciDiskImageBootError {
+        Disk(DiskBootError),
+        Image(OciImageBootError),
+    }
+
+    pub enum PulledConfiguredEdgeFs<S: BlockStorage> {
+        Partition {
+            fs: EdgeFs<PartitionBlockDevice<S>>,
+            report: EdgeFsImagePullReport,
+            config: BootConfig,
+        },
+        WholeDisk {
+            fs: EdgeFs<S>,
+            report: EdgeFsImagePullReport,
+            config: BootConfig,
+        },
+    }
+
+    impl From<RegistryError> for OciImageBootError {
+        fn from(error: RegistryError) -> Self {
+            Self::Registry(error)
+        }
+    }
+
+    impl From<OciElfError> for OciImageBootError {
+        fn from(error: OciElfError) -> Self {
+            Self::Elf(error)
+        }
+    }
+
+    impl From<DiskBootError> for OciDiskImageBootError {
+        fn from(error: DiskBootError) -> Self {
+            Self::Disk(error)
+        }
+    }
+
+    impl From<OciImageBootError> for OciDiskImageBootError {
+        fn from(error: OciImageBootError) -> Self {
+            Self::Image(error)
+        }
+    }
+
+    pub async unsafe fn pull_image_into_edgefs<S: BlockStorage>(
+        fs: &mut EdgeFs<S>,
+        image_ref: &str,
+        rootfs_path: &str,
+    ) -> Result<edgerun_oci::EdgeFsImagePullReport, OciImageBootError> {
+        let image: ImageRef = image_ref
+            .parse()
+            .map_err(OciImageBootError::InvalidImageRef)?;
+        let mut client = RegistryClient::new();
+        client
+            .pull_into_edgefs(&image, rootfs_path, fs)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async unsafe fn pull_configured_image_into_edgefs<S: BlockStorage>(
+        fs: &mut EdgeFs<S>,
+        config: &BootConfig,
+    ) -> Result<edgerun_oci::EdgeFsImagePullReport, OciImageBootError> {
+        unsafe { pull_image_into_edgefs(fs, &config.image, &config.rootfs_path).await }
+    }
+
+    pub async unsafe fn pull_configured_disk_image<S: BlockStorage>(
+        device: S,
+        key: [u8; 32],
+        fs_id: [u8; 16],
+    ) -> Result<PulledConfiguredEdgeFs<S>, OciDiskImageBootError> {
+        let mut device = device;
+        let config = disk_boot::read_default_fat_boot_config_mut(&mut device)?;
+        let opened = disk_boot::open_configured_edgefs(device, &config, key, fs_id)?;
+
+        match opened {
+            OpenedEdgeFs::Partition(mut fs) => {
+                let report = unsafe { pull_configured_image_into_edgefs(&mut fs, &config).await? };
+                Ok(PulledConfiguredEdgeFs::Partition { fs, report, config })
+            }
+            OpenedEdgeFs::WholeDisk(mut fs) => {
+                let report = unsafe { pull_configured_image_into_edgefs(&mut fs, &config).await? };
+                Ok(PulledConfiguredEdgeFs::WholeDisk { fs, report, config })
+            }
+        }
+    }
+
+    pub unsafe fn launch_pulled_edgefs<S: BlockStorage>(
+        fs: &mut EdgeFs<S>,
+        report: &EdgeFsImagePullReport,
+        scratch: &mut [u8],
+        stack_base: u64,
+        stack_top: u64,
+        stack: &mut [u8],
+        load_bias: OciElfLoadBias,
+    ) -> Result<core::convert::Infallible, OciImageBootError> {
+        let runtime = &report.plan.runtime;
+        unsafe {
+            oci_syscall::launch_rootfs(
+                fs,
+                &runtime.args,
+                &runtime.env,
+                runtime.cwd.as_str(),
+                scratch,
+                stack_base,
+                stack_top,
+                stack,
+                load_bias,
+            )
+            .map_err(Into::into)
+        }
+    }
+
+    pub async unsafe fn pull_and_launch_edgefs<S: BlockStorage>(
+        fs: &mut EdgeFs<S>,
+        image_ref: &str,
+        rootfs_path: &str,
+        scratch: &mut [u8],
+        stack_base: u64,
+        stack_top: u64,
+        stack: &mut [u8],
+        load_bias: OciElfLoadBias,
+    ) -> Result<core::convert::Infallible, OciImageBootError> {
+        let report = unsafe { pull_image_into_edgefs(fs, image_ref, rootfs_path).await? };
+        unsafe {
+            launch_pulled_edgefs(
+                fs, &report, scratch, stack_base, stack_top, stack, load_bias,
+            )
+        }
+    }
+
+    pub async unsafe fn pull_and_launch_configured_edgefs<S: BlockStorage>(
+        fs: &mut EdgeFs<S>,
+        config: &BootConfig,
+        scratch: &mut [u8],
+        stack_base: u64,
+        stack_top: u64,
+        stack: &mut [u8],
+        load_bias: OciElfLoadBias,
+    ) -> Result<core::convert::Infallible, OciImageBootError> {
+        unsafe {
+            pull_and_launch_edgefs(
+                fs,
+                &config.image,
+                &config.rootfs_path,
+                scratch,
+                stack_base,
+                stack_top,
+                stack,
+                load_bias,
+            )
+            .await
+        }
+    }
+
+    pub async unsafe fn pull_and_launch_configured_disk_image<S: BlockStorage>(
+        device: S,
+        key: [u8; 32],
+        fs_id: [u8; 16],
+        scratch: &mut [u8],
+        stack_base: u64,
+        stack_top: u64,
+        stack: &mut [u8],
+        load_bias: OciElfLoadBias,
+    ) -> Result<core::convert::Infallible, OciDiskImageBootError> {
+        let pulled = unsafe { pull_configured_disk_image(device, key, fs_id).await? };
+        match pulled {
+            PulledConfiguredEdgeFs::Partition { mut fs, report, .. } => unsafe {
+                launch_pulled_edgefs(
+                    &mut fs, &report, scratch, stack_base, stack_top, stack, load_bias,
+                )
+                .map_err(Into::into)
+            },
+            PulledConfiguredEdgeFs::WholeDisk { mut fs, report, .. } => unsafe {
+                launch_pulled_edgefs(
+                    &mut fs, &report, scratch, stack_base, stack_top, stack, load_bias,
+                )
+                .map_err(Into::into)
+            },
+        }
+    }
+}
+
+#[cfg(any(target_os = "none", test))]
+#[allow(dead_code)]
+mod boot_config {
+    use alloc::string::{String, ToString};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum EdgeFsBootTarget {
+        ExistingPartition,
+        FormatFirstPartition,
+        FormatWholeDisk,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct BootConfig {
+        pub image: String,
+        pub edgefs: EdgeFsBootTarget,
+        pub rootfs_path: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum BootConfigError {
+        InvalidUtf8,
+        InvalidLine(usize),
+        UnknownKey(String),
+        InvalidEdgeFsTarget(String),
+        InvalidRootfsPath(String),
+        MissingImage,
+    }
+
+    impl core::fmt::Display for BootConfigError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            match self {
+                Self::InvalidUtf8 => f.write_str("boot config is not valid UTF-8"),
+                Self::InvalidLine(line) => write!(f, "invalid boot config line {line}"),
+                Self::UnknownKey(key) => write!(f, "unknown boot config key: {key}"),
+                Self::InvalidEdgeFsTarget(target) => {
+                    write!(f, "invalid edgefs boot target: {target}")
+                }
+                Self::InvalidRootfsPath(path) => write!(f, "invalid rootfs path: {path}"),
+                Self::MissingImage => f.write_str("boot config is missing image"),
+            }
+        }
+    }
+
+    impl core::error::Error for BootConfigError {}
+
+    impl BootConfig {
+        pub fn parse(bytes: &[u8]) -> Result<Self, BootConfigError> {
+            let text = core::str::from_utf8(bytes).map_err(|_| BootConfigError::InvalidUtf8)?;
+            let mut image = None;
+            let mut edgefs = EdgeFsBootTarget::ExistingPartition;
+            let mut rootfs_path = "/".to_string();
+
+            for (index, raw_line) in text.lines().enumerate() {
+                let line_no = index + 1;
+                let line = raw_line
+                    .split_once('#')
+                    .map_or(raw_line, |(line, _)| line)
+                    .trim();
+                if line.is_empty() {
+                    continue;
+                }
+
+                let Some((key, value)) = line.split_once('=') else {
+                    return Err(BootConfigError::InvalidLine(line_no));
+                };
+                let key = key.trim();
+                let value = value.trim();
+                if value.is_empty() {
+                    return Err(BootConfigError::InvalidLine(line_no));
+                }
+
+                match key {
+                    "image" | "oci_image" | "ref" => image = Some(value.to_string()),
+                    "edgefs" => edgefs = parse_edgefs_target(value)?,
+                    "rootfs" | "rootfs_path" => rootfs_path = parse_rootfs_path(value)?,
+                    other => return Err(BootConfigError::UnknownKey(other.to_string())),
+                }
+            }
+
+            let image = image.ok_or(BootConfigError::MissingImage)?;
+            Ok(Self {
+                image,
+                edgefs,
+                rootfs_path,
+            })
+        }
+    }
+
+    fn parse_edgefs_target(value: &str) -> Result<EdgeFsBootTarget, BootConfigError> {
+        match value {
+            "partition" | "existing-partition" | "existing_partition" => {
+                Ok(EdgeFsBootTarget::ExistingPartition)
+            }
+            "format-partition" | "format_partition" | "first-partition" | "first_partition" => {
+                Ok(EdgeFsBootTarget::FormatFirstPartition)
+            }
+            "whole-disk" | "whole_disk" | "format-whole-disk" | "format_whole_disk" => {
+                Ok(EdgeFsBootTarget::FormatWholeDisk)
+            }
+            other => Err(BootConfigError::InvalidEdgeFsTarget(other.to_string())),
+        }
+    }
+
+    fn parse_rootfs_path(value: &str) -> Result<String, BootConfigError> {
+        if !value.starts_with('/') || value.as_bytes().contains(&0) {
+            return Err(BootConfigError::InvalidRootfsPath(value.to_string()));
+        }
+
+        let without_root = &value[1..];
+        if without_root.is_empty() {
+            return Ok(value.to_string());
+        }
+
+        for component in without_root.split('/') {
+            if component.is_empty() || component == "." || component == ".." {
+                return Err(BootConfigError::InvalidRootfsPath(value.to_string()));
+            }
+        }
+
+        Ok(value.to_string())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{BootConfig, EdgeFsBootTarget};
+
+        #[test]
+        fn parses_required_image_and_defaults() {
+            let config = BootConfig::parse(b"# edgeOS\nimage=registry.local/app:latest\n").unwrap();
+            assert_eq!(config.image, "registry.local/app:latest");
+            assert_eq!(config.edgefs, EdgeFsBootTarget::ExistingPartition);
+            assert_eq!(config.rootfs_path, "/");
+        }
+
+        #[test]
+        fn parses_edgefs_and_rootfs_options() {
+            let config = BootConfig::parse(
+                b"oci_image = example.com/ns/app:v1\nedgefs = whole-disk\nrootfs_path = /apps/app\n",
+            )
+            .unwrap();
+            assert_eq!(config.image, "example.com/ns/app:v1");
+            assert_eq!(config.edgefs, EdgeFsBootTarget::FormatWholeDisk);
+            assert_eq!(config.rootfs_path, "/apps/app");
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+#[allow(dead_code)]
+mod disk_boot {
+    use super::boot_config::{BootConfig, BootConfigError, EdgeFsBootTarget};
+    use edgerun_edgefs::{EdgeFs, EdgeFsError, EdgeFsInfo};
+    use edgerun_storage::{
+        detect_partitions, probe_filesystem, BlockStorage, FatError, FatReadOnly, FileSystemKind,
+        FileSystemProbe, FileSystemProbeError, PartitionBlockDevice, PartitionEntry,
+        PartitionError, PartitionTable,
+    };
+
+    pub const DEFAULT_BOOT_CONFIG_PATHS: &[&str] =
+        &["/edgerun/boot.cfg", "/EDGERUN/BOOT.CFG", "/boot.cfg"];
+
+    #[derive(Debug)]
+    pub enum DiskBootError {
+        Partition(PartitionError),
+        Probe(FileSystemProbeError),
+        Fat(FatError),
+        BootConfig(BootConfigError),
+        EdgeFs(EdgeFsError),
+        NoEdgeFsPartition,
+        NoFatPartition,
+        NoBootConfig,
+        NoPartition,
+    }
+
+    impl From<PartitionError> for DiskBootError {
+        fn from(error: PartitionError) -> Self {
+            Self::Partition(error)
+        }
+    }
+
+    impl From<EdgeFsError> for DiskBootError {
+        fn from(error: EdgeFsError) -> Self {
+            Self::EdgeFs(error)
+        }
+    }
+
+    impl From<FileSystemProbeError> for DiskBootError {
+        fn from(error: FileSystemProbeError) -> Self {
+            Self::Probe(error)
+        }
+    }
+
+    impl From<FatError> for DiskBootError {
+        fn from(error: FatError) -> Self {
+            Self::Fat(error)
+        }
+    }
+
+    impl From<BootConfigError> for DiskBootError {
+        fn from(error: BootConfigError) -> Self {
+            Self::BootConfig(error)
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct DiskPartitionProbe {
+        pub partition: PartitionEntry,
+        pub filesystem: FileSystemProbe,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct EdgeFsPartition {
+        pub partition: PartitionEntry,
+        pub info: EdgeFsInfo,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum MountPlanKind {
+        EdgeFsReadWrite,
+        ForeignReadOnly,
+        FutureNative,
+        Unknown,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct MountPlanEntry {
+        pub partition: PartitionEntry,
+        pub filesystem: FileSystemProbe,
+        pub edgefs: Option<EdgeFsInfo>,
+        pub kind: MountPlanKind,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct DiskMountPlan {
+        pub table: PartitionTable,
+        pub entries: alloc::vec::Vec<MountPlanEntry>,
+    }
+
+    pub enum OpenedEdgeFs<S: BlockStorage> {
+        Partition(EdgeFs<PartitionBlockDevice<S>>),
+        WholeDisk(EdgeFs<S>),
+    }
+
+    pub fn scan_partition_filesystems<S: BlockStorage>(
+        device: &mut S,
+    ) -> Result<(PartitionTable, alloc::vec::Vec<DiskPartitionProbe>), DiskBootError> {
+        let table = detect_partitions(device)?;
+        let mut probes = alloc::vec::Vec::new();
+        for partition in &table.partitions {
+            let mut slice =
+                PartitionBlockDevice::new(&mut *device, partition.start_lba, partition.sectors)?;
+            probes.push(DiskPartitionProbe {
+                partition: partition.clone(),
+                filesystem: probe_filesystem(&mut slice)?,
+            });
+        }
+        Ok((table, probes))
+    }
+
+    pub fn plan_partition_mounts<S: BlockStorage>(
+        device: &mut S,
+        key: [u8; 32],
+    ) -> Result<DiskMountPlan, DiskBootError> {
+        let table = detect_partitions(device)?;
+        let mut entries = alloc::vec::Vec::new();
+        for partition in &table.partitions {
+            let mut slice =
+                PartitionBlockDevice::new(&mut *device, partition.start_lba, partition.sectors)?;
+            let filesystem = probe_filesystem(&mut slice)?;
+
+            let edgefs = if filesystem.kind == FileSystemKind::EdgeFs {
+                let slice = PartitionBlockDevice::new(
+                    &mut *device,
+                    partition.start_lba,
+                    partition.sectors,
+                )?;
+                EdgeFs::probe(slice, key).ok()
+            } else {
+                None
+            };
+
+            let kind = match (filesystem.kind, edgefs.is_some()) {
+                (FileSystemKind::EdgeFs, true) => MountPlanKind::EdgeFsReadWrite,
+                (FileSystemKind::Fat12 | FileSystemKind::Fat16 | FileSystemKind::Fat32, _) => {
+                    MountPlanKind::ForeignReadOnly
+                }
+                (FileSystemKind::ExFat | FileSystemKind::Iso9660, _) => {
+                    MountPlanKind::ForeignReadOnly
+                }
+                (FileSystemKind::Ext, _) => MountPlanKind::FutureNative,
+                _ => MountPlanKind::Unknown,
+            };
+
+            entries.push(MountPlanEntry {
+                partition: partition.clone(),
+                filesystem,
+                edgefs,
+                kind,
+            });
+        }
+
+        Ok(DiskMountPlan { table, entries })
+    }
+
+    pub fn scan_edgefs_partitions<S: BlockStorage>(
+        device: &mut S,
+        key: [u8; 32],
+    ) -> Result<(PartitionTable, alloc::vec::Vec<EdgeFsPartition>), DiskBootError> {
+        let table = detect_partitions(device)?;
+        let mut matches = alloc::vec::Vec::new();
+        for partition in &table.partitions {
+            let slice =
+                PartitionBlockDevice::new(&mut *device, partition.start_lba, partition.sectors)?;
+            if let Ok(info) = EdgeFs::probe(slice, key) {
+                matches.push(EdgeFsPartition {
+                    partition: partition.clone(),
+                    info,
+                });
+            }
+        }
+        Ok((table, matches))
+    }
+
+    pub fn open_first_edgefs_partition<S: BlockStorage>(
+        device: S,
+        key: [u8; 32],
+    ) -> Result<EdgeFs<PartitionBlockDevice<S>>, DiskBootError> {
+        let mut scan_device = device;
+        let (_, matches) = scan_edgefs_partitions(&mut scan_device, key)?;
+        let Some(first) = matches.first() else {
+            return Err(DiskBootError::NoEdgeFsPartition);
+        };
+        let partition = PartitionBlockDevice::new(
+            scan_device,
+            first.partition.start_lba,
+            first.partition.sectors,
+        )?;
+        EdgeFs::open(partition, key).map_err(Into::into)
+    }
+
+    pub fn open_whole_disk_edgefs<S: BlockStorage>(
+        device: S,
+        key: [u8; 32],
+    ) -> Result<EdgeFs<S>, DiskBootError> {
+        EdgeFs::open(device, key).map_err(Into::into)
+    }
+
+    pub fn open_first_fat_partition_readonly<S: BlockStorage>(
+        device: S,
+    ) -> Result<FatReadOnly<PartitionBlockDevice<S>>, DiskBootError> {
+        let mut scan_device = device;
+        let (_, probes) = scan_partition_filesystems(&mut scan_device)?;
+        let Some(first) = probes.iter().find(|probe| {
+            matches!(
+                probe.filesystem.kind,
+                FileSystemKind::Fat12 | FileSystemKind::Fat16 | FileSystemKind::Fat32
+            )
+        }) else {
+            return Err(DiskBootError::NoFatPartition);
+        };
+        let partition = PartitionBlockDevice::new(
+            scan_device,
+            first.partition.start_lba,
+            first.partition.sectors,
+        )?;
+        FatReadOnly::open(partition).map_err(Into::into)
+    }
+
+    pub fn read_first_fat_file_8_3<S: BlockStorage>(
+        device: S,
+        path: &str,
+    ) -> Result<alloc::vec::Vec<u8>, DiskBootError> {
+        read_first_fat_file(device, path)
+    }
+
+    pub fn read_first_fat_file<S: BlockStorage>(
+        device: S,
+        path: &str,
+    ) -> Result<alloc::vec::Vec<u8>, DiskBootError> {
+        let mut fat = open_first_fat_partition_readonly(device)?;
+        fat.read_file(path).map_err(Into::into)
+    }
+
+    pub fn read_first_fat_boot_config<S: BlockStorage>(
+        device: S,
+        path: &str,
+    ) -> Result<BootConfig, DiskBootError> {
+        let bytes = read_first_fat_file_8_3(device, path)?;
+        BootConfig::parse(&bytes).map_err(Into::into)
+    }
+
+    pub fn read_default_fat_boot_config<S: BlockStorage>(
+        device: S,
+    ) -> Result<BootConfig, DiskBootError> {
+        let mut fat = open_first_fat_partition_readonly(device)?;
+        for path in DEFAULT_BOOT_CONFIG_PATHS {
+            match fat.read_file(path) {
+                Ok(bytes) => return BootConfig::parse(&bytes).map_err(Into::into),
+                Err(FatError::NotFound(_)) => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Err(DiskBootError::NoBootConfig)
+    }
+
+    pub fn read_default_fat_boot_config_mut<S: BlockStorage>(
+        device: &mut S,
+    ) -> Result<BootConfig, DiskBootError> {
+        let mut fat = open_first_fat_partition_readonly(&mut *device)?;
+        for path in DEFAULT_BOOT_CONFIG_PATHS {
+            match fat.read_file(path) {
+                Ok(bytes) => return BootConfig::parse(&bytes).map_err(Into::into),
+                Err(FatError::NotFound(_)) => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Err(DiskBootError::NoBootConfig)
+    }
+
+    pub fn open_configured_edgefs<S: BlockStorage>(
+        device: S,
+        config: &BootConfig,
+        key: [u8; 32],
+        fs_id: [u8; 16],
+    ) -> Result<OpenedEdgeFs<S>, DiskBootError> {
+        match config.edgefs {
+            EdgeFsBootTarget::ExistingPartition => {
+                open_first_edgefs_partition(device, key).map(OpenedEdgeFs::Partition)
+            }
+            EdgeFsBootTarget::FormatFirstPartition => {
+                format_first_partition_as_edgefs(device, key, fs_id).map(OpenedEdgeFs::Partition)
+            }
+            EdgeFsBootTarget::FormatWholeDisk => {
+                format_whole_disk_edgefs(device, key, fs_id).map(OpenedEdgeFs::WholeDisk)
+            }
+        }
+    }
+
+    pub fn format_partition_as_edgefs<S: BlockStorage>(
+        device: S,
+        partition: &PartitionEntry,
+        key: [u8; 32],
+        fs_id: [u8; 16],
+    ) -> Result<EdgeFs<PartitionBlockDevice<S>>, DiskBootError> {
+        let partition = PartitionBlockDevice::new(device, partition.start_lba, partition.sectors)?;
+        EdgeFs::format_with_id(partition, key, fs_id).map_err(Into::into)
+    }
+
+    pub fn format_first_partition_as_edgefs<S: BlockStorage>(
+        device: S,
+        key: [u8; 32],
+        fs_id: [u8; 16],
+    ) -> Result<EdgeFs<PartitionBlockDevice<S>>, DiskBootError> {
+        let mut scan_device = device;
+        let table = detect_partitions(&mut scan_device)?;
+        let Some(first) = table.partitions.first() else {
+            return Err(DiskBootError::NoPartition);
+        };
+        format_partition_as_edgefs(scan_device, first, key, fs_id)
+    }
+
+    pub fn format_whole_disk_edgefs<S: BlockStorage>(
+        device: S,
+        key: [u8; 32],
+        fs_id: [u8; 16],
+    ) -> Result<EdgeFs<S>, DiskBootError> {
+        EdgeFs::format_with_id(device, key, fs_id).map_err(Into::into)
+    }
+}
 
 #[cfg(target_os = "none")]
 core::arch::global_asm!(

@@ -21,7 +21,7 @@ ignore = [
   # atomic-polyfill — unmaintained, used via heapless → aead → aes-gcm.
   # No safe upgrade available.
   "RUSTSEC-2023-0089",
-  # atty — unmaintained, only a dev-dependency of criterion.
+  # atty — unmaintained, retained here only for older lockfiles/tooling caches.
   "RUSTSEC-2024-0375",
   # bincode — unmaintained, used via generic-array crypto tree.
   "RUSTSEC-2025-0141",
@@ -35,11 +35,11 @@ highlight = "all"
 # CRITICAL: serde_json is banned as a direct dependency in this workspace.
 # The edgerun protocol uses protobuf for all canonicalization.
 # If you need to serialize something for hashing or signing, use protobuf.
-# serde_json may only appear as a transitive dependency of dev/criterion,
-# trybuild, or as the edgerun-json workspace crate (vendored copy).
+# serde_json may only appear behind explicit host-only comparison tooling
+# or as the edgerun-json workspace crate.
 [[bans.deny]]
 name = "serde_json"
-wrappers = ["criterion", "tinytemplate", "edgerun-json"]
+wrappers = ["edgerun-json"]
 
 [sources]
 unknown-registry = "warn"

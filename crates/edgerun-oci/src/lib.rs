@@ -66,6 +66,8 @@ mod registry {
 
 #[cfg(feature = "json")]
 pub mod bare_rootfs;
+#[cfg(feature = "json")]
+pub mod bare_syscall;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod bundle;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -80,6 +82,8 @@ pub mod ebpf_devices;
 pub mod ebpf_netcls;
 #[cfg(feature = "edgefs")]
 pub mod edgefs;
+#[cfg(feature = "json")]
+pub mod elf;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod error;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -112,12 +116,47 @@ pub mod cli;
 
 #[cfg(feature = "json")]
 pub use bare_rootfs::{BareRootfs, BareRootfsEntry, BareRootfsEntryKind};
+#[cfg(feature = "json")]
+pub use bare_syscall::{
+    dispatch_linux_syscall, dispatch_x86_64_linux_syscall_frame, OciBufferSyscallSink,
+    OciSliceSyscallMemory, OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink,
+    OciX86_64SyscallFrame, OCI_LINUX_SYS_EXIT, OCI_LINUX_SYS_EXIT_GROUP, OCI_LINUX_SYS_WRITE,
+};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use bundle::{create_bundle, write_bundle};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use config_builder::ContainerProcessConfig;
 #[cfg(feature = "edgefs")]
 pub use edgefs::EdgeFsLayerSink;
+#[cfg(feature = "json")]
+pub use elf::{
+    build_elf64_auxv, build_elf_load_plan, build_elf_memory_map,
+    build_elf_memory_map_with_load_bias, build_elf_memory_map_with_page_size,
+    build_elf_memory_map_with_page_size_and_load_bias, build_elf_runtime_layout,
+    build_elf_runtime_mapping_list, build_elf_runtime_memory_map,
+    build_elf_runtime_memory_map_with_load_bias, build_elf_runtime_memory_map_with_page_size,
+    build_elf_runtime_memory_map_with_page_size_and_load_bias, build_elf_runtime_plan,
+    build_launch_elf_load_plan, build_launch_elf_runtime_plan, inspect_elf, inspect_launch_elf,
+    load_prepared_elf64_program, load_prepared_elf64_program_aligned,
+    prepare_and_load_oci_elf_program, prepare_and_load_oci_elf_program_with_load_bias,
+    prepare_and_load_oci_elf_program_with_page_size_and_load_bias, prepare_oci_elf_program,
+    prepare_oci_elf_program_with_load_bias, prepare_oci_elf_program_with_page_size,
+    prepare_oci_elf_program_with_page_size_and_load_bias, read_elf_mapping_chunk,
+    read_elf_runtime_mapping_chunk, read_elf_runtime_mapping_list_chunk,
+    read_elf_runtime_segment_chunk, read_elf_segment_chunk, write_elf64_initial_stack,
+    write_elf64_initial_stack_aligned, write_prepared_elf64_initial_stack,
+    write_prepared_elf64_initial_stack_aligned, write_prepared_elf64_launch_state,
+    write_prepared_elf64_launch_state_aligned, OciElfAuxvEntry, OciElfError, OciElfImage,
+    OciElfInfo, OciElfInitialStack, OciElfLoadBias, OciElfLoadPlan, OciElfLoadSegment,
+    OciElfMachine, OciElfMapper, OciElfMapping, OciElfMemoryMap, OciElfPermissions,
+    OciElfProgramHeader, OciElfRuntimeLayout, OciElfRuntimeMapping, OciElfRuntimeMemoryMap,
+    OciElfRuntimePlan, OciElfSegmentRead, OciElfType, OciElfUnsafeIdentityMapper,
+    OciPreparedLaunchState, OciPreparedProgram, OCI_ELF_AT_BASE, OCI_ELF_AT_ENTRY,
+    OCI_ELF_AT_FLAGS, OCI_ELF_AT_NULL, OCI_ELF_AT_PAGESZ, OCI_ELF_AT_PHDR, OCI_ELF_AT_PHENT,
+    OCI_ELF_AT_PHNUM,
+};
+#[cfg(all(feature = "json", target_arch = "x86_64"))]
+pub use elf::{enter_elf64, enter_elf64_launch_state};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use error::{
     CapabilityError, CgroupError, ConfigError, FifoError, LifecycleError, NamespaceError, OciError,
@@ -189,6 +228,14 @@ pub use userns::drop_capabilities;
 pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
 
 pub use registry::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
+#[cfg(all(
+    feature = "edgefs",
+    any(
+        feature = "registry-client",
+        all(feature = "std", not(target_os = "none"))
+    )
+))]
+pub use registry::client::EdgeFsImagePullReport;
 #[cfg(any(
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))

@@ -40,13 +40,13 @@ pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>>
 /// use edgerun_dns::tftp::blob_provider::BlobTftpProvider;
 ///
 /// // You provide a decryptor function that knows how to decrypt blobs
-/// let decryptor: Box<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync> =
+/// let decryptor: Box<dyn Fn(&[u8], &[u8]) -> edgerun_dns::std::io::Result<Vec<u8>> + Send + Sync> =
 ///     Box::new(|nonce, ciphertext| {
 ///         // Your AES-GCM decryption here
 ///         Ok(Vec::new())
 ///     });
 ///
-/// let mut provider = BlobTftpProvider::new(Box::new(decryptor));
+/// let mut provider = BlobTftpProvider::new(decryptor);
 ///
 /// // Register boot files — map TFTP filenames to blob IDs
 /// // provider.register("bootx64.efi", blob_id);

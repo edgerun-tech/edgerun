@@ -6,14 +6,10 @@ use edgerun_microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
-};
+use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::stream_oriented_error;
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 /// Binary-encode microphone capture for remote transport.
 pub fn encode_microphone_capture(capture: &AudioCapture) -> Vec<u8> {
@@ -91,13 +87,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.device.descriptor()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

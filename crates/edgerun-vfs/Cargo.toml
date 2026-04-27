@@ -9,20 +9,14 @@ keywords = ["vfs", "filesystem", "in-memory", "copy-on-write", "ram"]
 categories = ["filesystem", "caching", "development-tools"]
 
 [dependencies]
-sha1 = { version = "0.10", default-features = false }
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
-dashmap = "5"
 libc = { version = "0.2", optional = true }
 edgerun-inotify = { path = "../edgerun-inotify", optional = true }
-
-[dev-dependencies]
-tempfile = "3"
-criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bin]]
 name = "mount_ramfs"
@@ -33,10 +27,6 @@ required-features = ["mount"]
 name = "vfs-benchmark"
 path = "src/bin/benchmark.rs"
 required-features = ["std"]
-
-[[bench]]
-name = "vfs_bench"
-harness = false
 
 [lints]
 workspace = true

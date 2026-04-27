@@ -34,7 +34,9 @@ pub trait RemoteCapabilityProvider {
     fn open_session(
         &mut self,
         open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError>;
+    ) -> Result<CapabilitySessionAccept, CapabilityError> {
+        Ok(accept_session_open_unchecked(open))
+    }
 
     fn invoke(
         &mut self,

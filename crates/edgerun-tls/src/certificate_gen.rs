@@ -80,8 +80,7 @@ impl CertificateAndKey {
 /// with ECDSA P-256 key, SAN extensions, and 1-year validity.
 pub fn generate_self_signed(hostnames: &[&str]) -> Result<CertificateAndKey, CryptoError> {
     let signing_key = edgerun_crypto::random_p256_signing_key();
-    let common_name = hostnames.first().copied().unwrap_or("localhost");
-    let cert_der = edgerun_crypto::generate_self_signed(&signing_key, common_name);
+    let cert_der = edgerun_crypto::generate_self_signed_for_names(&signing_key, hostnames);
     Ok(CertificateAndKey {
         cert_der,
         signing_key: Arc::new(signing_key),

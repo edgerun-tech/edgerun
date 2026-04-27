@@ -8,17 +8,13 @@ use edgerun_bluetooth::{
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
-};
+use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{
     decode_optional_string_field, decode_string_field, encode_optional_string_field,
     encode_string_field, stream_oriented_error,
 };
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 // --- Enum converters ---
 
@@ -448,13 +444,6 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
-    }
-
     fn invoke(
         &mut self,
         _session_id: &[u8],
@@ -502,13 +491,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.descriptor.clone()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

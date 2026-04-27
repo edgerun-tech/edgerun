@@ -17,8 +17,8 @@
 //!     Response::text(StatusCode::new(200).unwrap(), "Hello!")
 //! });
 //!
-//! let cert = generate_self_signed(&["localhost"]);
-//! let server = Server::new()
+//! let cert = generate_self_signed(&["localhost"]).unwrap();
+//! let mut server = Server::new()
 //!     .with_http(handler, "127.0.0.1:8443")
 //!     .with_tls(cert)
 //!     .with_http3()
@@ -39,6 +39,7 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
+#[cfg(any(feature = "dns", feature = "dhcp", feature = "tftp", feature = "proxy"))]
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -57,7 +58,9 @@ use edgerun_http::connection_middleware::{
     ConnectionChain, ConnectionHandler, ConnectionMiddleware, MiddlewareAdapter, PassThroughHandler,
 };
 use edgerun_http::handler::Handler;
-use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
+#[cfg(feature = "tls")]
+use edgerun_http::server::TlsCertificate;
+use edgerun_http::server::{BoundHttpServer, HttpServer};
 
 #[cfg(all(
     any(feature = "imap", feature = "smtp", feature = "lmtp"),
@@ -70,6 +73,7 @@ pub mod connection_interceptor_adapter;
 ))]
 use connection_interceptor_adapter::ConnectionInterceptorAdapter;
 
+#[cfg(any(feature = "dns", feature = "dhcp", feature = "tftp", feature = "proxy"))]
 fn other_io_error(error: impl fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{error}"))
 }
@@ -355,7 +359,9 @@ pub struct Server {
 struct HttpBuilder {
     handler: Arc<dyn Handler>,
     bind_addr: String,
+    #[cfg(feature = "tls")]
     tls: Option<TlsCertificate>,
+    #[cfg(feature = "http3")]
     http3: bool,
     keep_alive: Option<Duration>,
     max_request_size: usize,
@@ -398,7 +404,9 @@ impl Server {
         self.http = Some(HttpBuilder {
             handler: Arc::new(handler),
             bind_addr: addr.to_string(),
+            #[cfg(feature = "tls")]
             tls: None,
+            #[cfg(feature = "http3")]
             http3: false,
             keep_alive: Some(Duration::from_secs(5)),
             max_request_size: 10 * 1024 * 1024,
@@ -407,6 +415,7 @@ impl Server {
     }
 
     /// Enable TLS for HTTP (required for HTTP/3).
+    #[cfg(feature = "tls")]
     pub fn with_tls(mut self, cert: TlsCertificate) -> Self {
         if let Some(ref mut h) = self.http {
             h.tls = Some(cert);
@@ -415,6 +424,7 @@ impl Server {
     }
 
     /// Enable HTTP/3 on the same port as the TCP listener.
+    #[cfg(feature = "http3")]
     pub fn with_http3(mut self) -> Self {
         if let Some(ref mut h) = self.http {
             h.http3 = true;
@@ -478,9 +488,13 @@ impl Server {
                 server = server.keep_alive(Some(ka));
             }
             server = server.max_request_size(h.max_request_size);
-            if let Some(cert) = h.tls {
-                server = server.with_tls(cert);
+            #[cfg(feature = "tls")]
+            {
+                if let Some(cert) = h.tls {
+                    server = server.with_tls(cert);
+                }
             }
+            #[cfg(feature = "http3")]
             if h.http3 {
                 server = server.with_http3();
             }

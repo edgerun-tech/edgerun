@@ -167,24 +167,33 @@ impl OutboundRelay {
             .map_err(|e| format!("RCPT TO rejected: {}", e))?;
 
         // DKIM sign the message if configured
-        let message_data = if let Some(ref signer) = self.dkim_signer {
-            match signer.sign(&envelope.data, &[]) {
-                Ok(signature) => {
-                    let mut signed = envelope.data.clone();
-                    if !signed.ends_with(b"\r\n") {
-                        signed.push(b'\r');
-                        signed.push(b'\n');
+        let message_data = {
+            #[cfg(feature = "dkim")]
+            {
+                if let Some(ref signer) = self.dkim_signer {
+                    match signer.sign(&envelope.data, &[]) {
+                        Ok(signature) => {
+                            let mut signed = envelope.data.clone();
+                            if !signed.ends_with(b"\r\n") {
+                                signed.push(b'\r');
+                                signed.push(b'\n');
+                            }
+                            signed.extend(signature.as_bytes());
+                            signed
+                        }
+                        Err(e) => {
+                            edgerun_log::warn!("DKIM signing failed: {}, sending unsigned", e);
+                            envelope.data.clone()
+                        }
                     }
-                    signed.extend(signature.as_bytes());
-                    signed
-                }
-                Err(e) => {
-                    edgerun_log::warn!("DKIM signing failed: {}, sending unsigned", e);
+                } else {
                     envelope.data.clone()
                 }
             }
-        } else {
-            envelope.data.clone()
+            #[cfg(not(feature = "dkim"))]
+            {
+                envelope.data.clone()
+            }
         };
 
         // DATA

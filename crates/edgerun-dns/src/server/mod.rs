@@ -101,8 +101,8 @@ impl RateLimiter {
 /// ```no_run
 /// use edgerun_dns::server::{DnsServer, DnsServerConfig};
 /// use edgerun_dns::zone::DnsZone;
-/// use crate::compat::Runtime;
-/// use crate::std::net::Ipv4Addr;
+/// use edgerun_rt::Runtime;
+/// use std::net::Ipv4Addr;
 ///
 /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 /// rt.block_on(async {

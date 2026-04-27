@@ -18,7 +18,7 @@ use super::record::{DnsRecordData, DnsRecordType};
 /// # Example
 /// ```
 /// use edgerun_dns::zone::DnsZone;
-/// use crate::std::net::Ipv4Addr;
+/// use std::net::Ipv4Addr;
 ///
 /// let mut zone = DnsZone::new("example.com");
 /// zone.add_soa("ns1.example.com", "admin.example.com");

@@ -396,6 +396,10 @@ fn build_query_proof_objects(
     snapshot_refs: &[edgerun_proto::edgerun::v0::common::SnapshotRef],
     object_refs: &[edgerun_proto::edgerun::v0::common::ObjectRef],
 ) -> Vec<edgerun_proto::edgerun::v0::common::ObjectRef> {
+    use edgerun_core::validators::{
+        validate_event_set_proof, validate_object_assertion_proof, validate_snapshot_set_proof,
+        ProofStructuralResult,
+    };
     use edgerun_proto::edgerun::v0::access::{
         EventSetProof, ObjectAssertionProof, ProofClass, SnapshotSetProof, StreamHeadsProof,
     };
@@ -433,11 +437,13 @@ fn build_query_proof_objects(
             source_query_id: query.query_id.clone(),
             snapshots: snapshot_refs.to_vec(),
         };
-        store_proof_object(
-            store,
-            &prost::Message::encode_to_vec(&proof),
-            &mut proof_objects,
-        );
+        if validate_snapshot_set_proof(&proof) == ProofStructuralResult::Valid {
+            store_proof_object(
+                store,
+                &prost::Message::encode_to_vec(&proof),
+                &mut proof_objects,
+            );
+        }
     }
 
     if query
@@ -449,11 +455,13 @@ fn build_query_proof_objects(
             events: event_refs.to_vec(),
             related_objects: object_refs.to_vec(),
         };
-        store_proof_object(
-            store,
-            &prost::Message::encode_to_vec(&proof),
-            &mut proof_objects,
-        );
+        if validate_event_set_proof(&proof) == ProofStructuralResult::Valid {
+            store_proof_object(
+                store,
+                &prost::Message::encode_to_vec(&proof),
+                &mut proof_objects,
+            );
+        }
     }
 
     if query
@@ -470,11 +478,13 @@ fn build_query_proof_objects(
                 exists,
                 bundled_result_object: None,
             };
-            store_proof_object(
-                store,
-                &prost::Message::encode_to_vec(&proof),
-                &mut proof_objects,
-            );
+            if validate_object_assertion_proof(&proof) == ProofStructuralResult::Valid {
+                store_proof_object(
+                    store,
+                    &prost::Message::encode_to_vec(&proof),
+                    &mut proof_objects,
+                );
+            }
         }
     }
 
@@ -759,5 +769,32 @@ mod tests {
         assert_eq!(fragment.completeness, ResultCompleteness::Denied as i32);
         assert_eq!(fragment.omission_reason, "response_too_large");
         assert!(fragment.signature.is_some());
+    }
+
+    #[test]
+    fn empty_snapshot_and_event_proofs_are_not_stored() {
+        let signer = TestSigner::new();
+        let mut store = test_store(signer.node_id());
+        let query = QueryRequest {
+            request_version: 1,
+            query_id: b"query-empty-proofs".to_vec(),
+            requester: None,
+            target_scope: None,
+            query_class: QueryClass::Head as i32,
+            time_window: None,
+            checkpoint_base: None,
+            result_limit: None,
+            cost_limit: None,
+            required_proof_classes: vec![
+                ProofClass::SnapshotBase as i32,
+                ProofClass::EventRef as i32,
+            ],
+            query_payload_object: None,
+            signature: None,
+        };
+
+        let proof_objects = build_query_proof_objects(&query, &mut store, &[], &[], &[]);
+
+        assert!(proof_objects.is_empty());
     }
 }

@@ -2,7 +2,38 @@
 
 use edgerun_vfs::{FineGrainedVFS, VirtualFileSystem};
 use std::path::Path;
-use tempfile::TempDir;
+
+struct TempDir {
+    path: std::path::PathBuf,
+}
+
+impl TempDir {
+    fn new() -> std::io::Result<Self> {
+        let base = std::env::temp_dir();
+        for id in 0..100 {
+            let path = base.join(format!("edgerun-vfs-itest-{}-{}", std::process::id(), id));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Ok(Self { path }),
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(err) => return Err(err),
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "could not allocate temporary test directory",
+        ))
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
 
 fn create_test_files(dir: &TempDir, count: usize) {
     for i in 0..count {

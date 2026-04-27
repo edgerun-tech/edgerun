@@ -21,7 +21,7 @@ pub mod prelude {
 
 #[cfg(target_os = "none")]
 pub mod collections {
-    pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+    pub use alloc::collections::{BTreeMap, BTreeMap as HashMap, BTreeSet, BTreeSet as HashSet};
 }
 
 #[cfg(target_os = "none")]
@@ -43,6 +43,32 @@ pub mod ffi {
 pub mod fs {
     use crate::{io, path::PathBuf};
     use alloc::string::String;
+
+    #[derive(Debug)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub const fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        pub fn open<P>(self, _path: P) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
 
     pub struct ReadDir;
     pub struct DirEntry;
@@ -160,6 +186,18 @@ pub mod io {
 
 #[cfg(target_os = "none")]
 pub mod os {
+    pub mod fd {
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> i32;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> i32 {
+                -1
+            }
+        }
+    }
+
     pub mod raw {
         #[allow(non_camel_case_types)]
         pub type c_char = i8;
@@ -170,6 +208,11 @@ pub mod os {
         #[allow(non_camel_case_types)]
         pub type c_ulong = usize;
     }
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
 }
 
 #[cfg(target_os = "none")]

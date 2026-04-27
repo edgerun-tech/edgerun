@@ -33,6 +33,8 @@ pub struct LwM2MClient {
     endpoint: Vec<u8>,
     server: Vec<u8>,
     objects: Vec<LwM2MObject>,
+    resources: Vec<(u16, u16, Vec<u8>)>,
+    registered: bool,
 }
 
 impl LwM2MClient {
@@ -41,81 +43,145 @@ impl LwM2MClient {
             endpoint: endpoint.to_vec(),
             server: server.to_vec(),
             objects: Vec::new(),
+            resources: Vec::new(),
+            registered: false,
         }
     }
 
     pub fn register(&mut self) -> LwM2MRegisterFuture {
-        LwM2MRegisterFuture { done: false }
+        let result = if self.endpoint.is_empty() || self.server.is_empty() {
+            Err(())
+        } else {
+            self.registered = true;
+            Ok(())
+        };
+        LwM2MRegisterFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn read(&self, _obj_id: u16, _res_id: u16) -> LwM2MReadFuture {
-        LwM2MReadFuture { done: false }
+    pub fn read(&self, obj_id: u16, res_id: u16) -> LwM2MReadFuture {
+        let result = if !self.registered {
+            Err(())
+        } else {
+            self.resources
+                .iter()
+                .find(|(obj, res, _)| *obj == obj_id && *res == res_id)
+                .map(|(_, _, data)| data.clone())
+                .ok_or(())
+        };
+        LwM2MReadFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn write(&mut self, _obj_id: u16, _res_id: u16, _data: &[u8]) -> LwM2MWriteFuture {
-        LwM2MWriteFuture { done: false }
+    pub fn write(&mut self, obj_id: u16, res_id: u16, data: &[u8]) -> LwM2MWriteFuture {
+        let result = if !self.registered {
+            Err(())
+        } else {
+            if let Some((_, _, stored)) = self
+                .resources
+                .iter_mut()
+                .find(|(obj, res, _)| *obj == obj_id && *res == res_id)
+            {
+                *stored = data.to_vec();
+            } else {
+                self.resources.push((obj_id, res_id, data.to_vec()));
+            }
+            if !self.objects.iter().any(|object| object.id == obj_id) {
+                self.objects.push(LwM2MObject {
+                    id: obj_id,
+                    instances: 1,
+                });
+            }
+            Ok(())
+        };
+        LwM2MWriteFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn observe(&self, _obj_id: u16, _res_id: u16) -> LwM2MObserveFuture {
-        LwM2MObserveFuture { done: false }
+    pub fn observe(&self, obj_id: u16, res_id: u16) -> LwM2MObserveFuture {
+        self.read(obj_id, res_id).into_observe()
     }
 
     pub fn deregister(&mut self) -> LwM2MDeregisterFuture {
-        LwM2MDeregisterFuture { done: false }
+        self.registered = false;
+        LwM2MDeregisterFuture {
+            result: Some(Ok(())),
+        }
+    }
+
+    #[must_use]
+    pub fn is_registered(&self) -> bool {
+        self.registered
+    }
+
+    #[must_use]
+    pub fn objects(&self) -> &[LwM2MObject] {
+        &self.objects
     }
 }
 
 pub struct LwM2MRegisterFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for LwM2MRegisterFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }
 
 pub struct LwM2MReadFuture {
-    done: bool,
+    result: Option<Result<Vec<u8>, ()>>,
+}
+
+impl LwM2MReadFuture {
+    fn into_observe(self) -> LwM2MObserveFuture {
+        LwM2MObserveFuture {
+            result: self.result,
+        }
+    }
 }
 
 impl Future for LwM2MReadFuture {
     type Output = Result<Vec<u8>, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct LwM2MWriteFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for LwM2MWriteFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }
 
 pub struct LwM2MObserveFuture {
-    done: bool,
+    result: Option<Result<Vec<u8>, ()>>,
 }
 
 impl Future for LwM2MObserveFuture {
     type Output = Result<Vec<u8>, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct LwM2MDeregisterFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for LwM2MDeregisterFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }

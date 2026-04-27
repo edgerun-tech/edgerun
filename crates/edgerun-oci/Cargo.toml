@@ -9,11 +9,10 @@ description = "OCI container runtime and registry client — pull, push, login, 
 [dependencies]
 edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"], optional = true }
 edgerun-crypto = { workspace = true, default-features = false, optional = true }
-edgerun-http = { path = "../edgerun-http", optional = true }
+edgerun-http = { path = "../edgerun-http", default-features = false, features = ["client", "tls"], optional = true }
 edgerun-edgefs = { workspace = true, optional = true }
 edgerun-storage = { workspace = true, optional = true }
 edgerun-rt = { path = "../edgerun-rt", optional = true }
-edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-secret-service = { path = "../edgerun-secret-service", optional = true }
 edgerun-core = { path = "../edgerun-core", optional = true }
 edgerun-encoding = { path = "../edgerun-encoding", optional = true }
@@ -32,7 +31,6 @@ std = [
     "registry-client",
     "serde",
     "dep:edgerun-rt",
-    "dep:edgerun-tls",
     "dep:edgerun-secret-service",
     "dep:edgerun-core",
     "dep:libc",

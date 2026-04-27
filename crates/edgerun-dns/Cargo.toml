@@ -7,7 +7,7 @@ publish.workspace = true
 description = "no_std DNS server and client using edgerun-rt"
 
 [features]
-default = ["dhcp-client", "dnssec", "tsig"]
+default = []
 dhcp = []
 dhcp-client = ["dhcp", "dep:edgerun-crypto"]
 dnssec = [

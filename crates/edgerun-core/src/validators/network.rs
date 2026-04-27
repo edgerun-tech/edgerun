@@ -411,7 +411,22 @@ use crate::crypto::{
     verify_canonical_record, verify_canonical_record_hw, ECDSA_P256_PUBLIC_KEY_LEN,
     ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
 };
-use crate::protocol::{canonical_bytes, ProtocolRecord};
+use crate::protocol::{canonical_bytes, ObjectRef, ProtocolRecord};
+use edgerun_proto::edgerun::v0::common::{Directness, TransportClass};
+
+fn validate_optional_object_ref(
+    object: Option<&ObjectRef>,
+    reason: &'static str,
+) -> Option<ValidationResult> {
+    if object.is_some_and(|object| object.object_id.is_empty()) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr(reason))]),
+            empty_map(),
+        ));
+    }
+    None
+}
 
 /// Validates the structural integrity and signature of a RouteAdvertisement
 /// at the proto type level (spec §14.24).
@@ -466,6 +481,105 @@ pub fn validate_route_advertisement(
             mapping([("reason", ystr("no_reachability_hints"))]),
             empty_map(),
         );
+    }
+    if let Some(ref next_hop) = adv.next_hop_node {
+        if next_hop.node_id.is_empty() {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("empty_next_hop_node_id"))]),
+                empty_map(),
+            );
+        }
+    }
+    for hint in &adv.reachability {
+        if hint.hint_version != 1 {
+            return reject(
+                ReasonCode::VersionUnsupported,
+                mapping([("reason", ystr("unsupported_reachability_hint_version"))]),
+                empty_map(),
+            );
+        }
+        let Some(ref subject) = hint.subject_node else {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("missing_reachability_subject_node"))]),
+                empty_map(),
+            );
+        };
+        if subject.node_id.is_empty() {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("empty_reachability_subject_node_id"))]),
+                empty_map(),
+            );
+        }
+        if subject.node_id != target.node_id {
+            return reject(
+                ReasonCode::TargetMismatch,
+                mapping([("reason", ystr("reachability_subject_target_mismatch"))]),
+                empty_map(),
+            );
+        }
+        if TransportClass::from_i32(hint.transport_class)
+            .is_none_or(|class| class == TransportClass::Unspecified)
+        {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("invalid_reachability_transport_class"))]),
+                empty_map(),
+            );
+        }
+        if hint.locator_payload.is_empty() {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("empty_reachability_locator_payload"))]),
+                empty_map(),
+            );
+        }
+        if Directness::from_i32(hint.directness)
+            .is_none_or(|directness| directness == Directness::Unspecified)
+        {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("invalid_reachability_directness"))]),
+                empty_map(),
+            );
+        }
+        if let (Some(valid_after), Some(valid_until)) = (&hint.valid_after, &hint.valid_until) {
+            if valid_after.seconds > valid_until.seconds
+                || (valid_after.seconds == valid_until.seconds
+                    && valid_after.nanos > valid_until.nanos)
+            {
+                return reject(
+                    ReasonCode::TimeInvalid,
+                    mapping([("reason", ystr("reachability_window_inverted"))]),
+                    empty_map(),
+                );
+            }
+        }
+    }
+    if let Some(result) =
+        validate_optional_object_ref(adv.metric_hint.as_ref(), "empty_metric_hint_object_id")
+    {
+        return result;
+    }
+    if let Some(result) = validate_optional_object_ref(
+        adv.route_metadata.as_ref(),
+        "empty_route_metadata_object_id",
+    ) {
+        return result;
+    }
+    if let (Some(advertised_at), Some(expires_at)) = (&adv.advertised_at, &adv.expires_at) {
+        if advertised_at.seconds > expires_at.seconds
+            || (advertised_at.seconds == expires_at.seconds
+                && advertised_at.nanos > expires_at.nanos)
+        {
+            return reject(
+                ReasonCode::TimeInvalid,
+                mapping([("reason", ystr("route_advertisement_window_inverted"))]),
+                empty_map(),
+            );
+        }
     }
 
     if let Some(ref sig) = adv.signature {
@@ -551,7 +665,7 @@ pub fn validate_route_advertisement(
 mod proto_tests {
     use super::*;
     use edgerun_proto::edgerun::v0::common::{
-        Directness, IdentityRef, NodeRef, Signature, TransportClass,
+        Directness, IdentityRef, NodeRef, ObjectRef, Signature, TransportClass,
     };
     use edgerun_proto::edgerun::v0::network::{ReachabilityHint, RouteAdvertisement};
     use prost_types::Timestamp;
@@ -686,6 +800,148 @@ mod proto_tests {
         ad.target_node = None;
         let result = validate_route_advertisement(&ad);
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
+    }
+
+    #[test]
+    fn test_reject_missing_reachability_subject_node() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.reachability[0].subject_node = None;
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_reachability_subject_target_mismatch() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.reachability[0].subject_node = Some(NodeRef {
+            node_id: vec![9, 9, 9],
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TargetMismatch));
+    }
+
+    #[test]
+    fn test_reject_unspecified_reachability_transport_class() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.reachability[0].transport_class = TransportClass::Unspecified as i32;
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_empty_reachability_locator_payload() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.reachability[0].locator_payload.clear();
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_unspecified_reachability_directness() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.reachability[0].directness = Directness::Unspecified as i32;
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_inverted_reachability_window() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.reachability[0].valid_after = Some(Timestamp {
+            seconds: 2001,
+            nanos: 0,
+        });
+        ad.reachability[0].valid_until = Some(Timestamp {
+            seconds: 2000,
+            nanos: 0,
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn test_reject_empty_next_hop_node() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.next_hop_node = Some(NodeRef { node_id: vec![] });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_empty_metric_hint_object() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.metric_hint = Some(ObjectRef {
+            object_id: vec![],
+            object_kind: None,
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_empty_route_metadata_object() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.route_metadata = Some(ObjectRef {
+            object_id: vec![],
+            object_kind: None,
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_inverted_route_advertisement_window() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.advertised_at = Some(Timestamp {
+            seconds: 30,
+            nanos: 0,
+        });
+        ad.expires_at = Some(Timestamp {
+            seconds: 20,
+            nanos: 0,
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
     }
 
     #[test]

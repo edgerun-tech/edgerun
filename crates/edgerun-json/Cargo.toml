@@ -36,13 +36,23 @@ serde_json_upstream = { package = "serde_json", version = "1", optional = true }
 
 [dev-dependencies]
 serde_crate = { package = "serde", version = "1", features = ["derive"] }
-serde_json_upstream = { package = "serde_json", version = "1" }
-criterion = "0.8"
 
-[[bench]]
-name = "unified"
+[[bin]]
+name = "edgerun-json-benchmark"
+path = "src/bin/benchmark.rs"
+required-features = ["std", "serde_json_bench"]
+
+[[test]]
+name = "error_position_tests"
 required-features = ["serde_json_bench"]
-harness = false
+
+[[test]]
+name = "json_test_suite"
+required-features = ["serde_json_bench"]
+
+[[test]]
+name = "serde_json_comparison"
+required-features = ["serde_json_bench"]
 
 [lints]
 workspace = true

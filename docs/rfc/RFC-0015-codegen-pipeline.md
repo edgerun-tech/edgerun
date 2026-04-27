@@ -93,11 +93,9 @@ plugins:
       - strategy: all
 ```
 
-Generates into 4 crate `src/gen` directories:
+Generates into the active protocol output directories:
 - `crates/edgerun-proto/src/gen` — General edgerun.v0 types
-- `crates/edgerun-html/src/gen` — HTML types
-- `crates/edgerun-css/src/gen` — CSS types
-- `crates/edgerun-ecmascript/src/gen` — ECMAScript types
+- `../edgerun-browser` — browser-facing HTML, CSS, and ECMAScript types
 
 Also generates Go `.pb.go` files in `gen/go/edgerun/v0/`.
 

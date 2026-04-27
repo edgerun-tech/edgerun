@@ -14,21 +14,17 @@ elliptic-curve = { version = "0.13", default-features = false, optional = true }
 sha2 = { version = "0.10", default-features = false }
 signature = { version = "2", default-features = false, optional = true }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"], optional = true }
-chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"], optional = true }
 hmac-crate = { package = "hmac", version = "0.12", default-features = false, optional = true }
 pbkdf2-crate = { package = "pbkdf2", version = "0.12", default-features = false, features = ["hmac"], optional = true }
 rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"], optional = true }
 sha1-crate = { package = "sha1", version = "0.10", default-features = false, optional = true }
 x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"], optional = true }
-x509-cert = { version = "0.3.0-rc.4", default-features = false, features = ["pem"], optional = true }
-typenum = { version = "1.17", optional = true }
 rand_core = { version = "0.6", default-features = false }
 
 [features]
 default = []
 full = [
     "aead",
-    "chacha20poly1305",
     "ed25519",
     "hmac",
     "pbkdf2",
@@ -36,10 +32,8 @@ full = [
     "rsa",
     "sha1",
     "x25519",
-    "x509",
 ]
-aead = ["dep:aes-gcm", "dep:typenum"]
-chacha20poly1305 = ["dep:chacha20poly1305"]
+aead = ["dep:aes-gcm"]
 ed25519 = ["dep:ed25519-dalek", "dep:signature"]
 hmac = ["dep:hmac-crate"]
 pbkdf2 = ["dep:pbkdf2-crate", "hmac"]
@@ -47,7 +41,6 @@ p256 = ["dep:p256", "dep:ecdsa", "dep:elliptic-curve", "dep:signature"]
 rsa = ["dep:rsa"]
 sha1 = ["dep:sha1-crate"]
 x25519 = ["dep:x25519-dalek"]
-x509 = ["dep:x509-cert"]
 
 [lints]
 workspace = true

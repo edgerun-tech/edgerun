@@ -31,11 +31,23 @@ pub struct ModbusRequest {
 
 impl ModbusRequest {
     pub fn read_holding(unit_id: u8, address: u16, quantity: u16) -> Self {
-        Self { unit_id, function: ModbusFunction::ReadHoldingRegisters, address, quantity, data: Vec::new() }
+        Self {
+            unit_id,
+            function: ModbusFunction::ReadHoldingRegisters,
+            address,
+            quantity,
+            data: Vec::new(),
+        }
     }
 
     pub fn write_registers(unit_id: u8, address: u16, data: &[u8]) -> Self {
-        Self { unit_id, function: ModbusFunction::WriteMultipleRegisters, address, quantity: 0, data: data.to_vec() }
+        Self {
+            unit_id,
+            function: ModbusFunction::WriteMultipleRegisters,
+            address,
+            quantity: 0,
+            data: data.to_vec(),
+        }
     }
 }
 
@@ -46,7 +58,10 @@ pub struct ModbusResponse {
 
 impl ModbusResponse {
     pub fn new() -> Self {
-        Self { data: Vec::new(), exception_code: 0 }
+        Self {
+            data: Vec::new(),
+            exception_code: 0,
+        }
     }
 
     pub fn to_u16(&self) -> Vec<u16> {
@@ -67,19 +82,49 @@ impl Default for ModbusResponse {
     }
 }
 
-pub struct ModbusClient;
+pub struct ModbusClient {
+    connected: bool,
+}
 
 impl ModbusClient {
     pub fn new() -> Self {
-        Self
+        Self { connected: false }
     }
 
-    pub fn connect(&self, _host: &[u8], _port: u16) -> ModbusConnectFuture {
-        ModbusConnectFuture { done: false }
+    pub fn connect(&mut self, host: &[u8], port: u16) -> ModbusConnectFuture {
+        let result = if !host.is_empty() && port != 0 {
+            self.connected = true;
+            Ok(())
+        } else {
+            Err(())
+        };
+        ModbusConnectFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn request(&self, _req: &ModbusRequest) -> ModbusRequestFuture {
-        ModbusRequestFuture { done: false }
+    pub fn request(&self, req: &ModbusRequest) -> ModbusRequestFuture {
+        let result = if !self.connected {
+            Err(())
+        } else {
+            let mut response = ModbusResponse::new();
+            response.data = match req.function {
+                ModbusFunction::ReadCoils
+                | ModbusFunction::ReadDiscreteInputs
+                | ModbusFunction::ReadHoldingRegisters
+                | ModbusFunction::ReadInputRegisters => alloc::vec![0; req.quantity as usize * 2],
+                _ => req.data.clone(),
+            };
+            Ok(response)
+        };
+        ModbusRequestFuture {
+            result: Some(result),
+        }
+    }
+
+    #[must_use]
+    pub fn is_connected(&self) -> bool {
+        self.connected
     }
 }
 
@@ -90,23 +135,23 @@ impl Default for ModbusClient {
 }
 
 pub struct ModbusConnectFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for ModbusConnectFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }
 
 pub struct ModbusRequestFuture {
-    done: bool,
+    result: Option<Result<ModbusResponse, ()>>,
 }
 
 impl Future for ModbusRequestFuture {
     type Output = Result<ModbusResponse, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }

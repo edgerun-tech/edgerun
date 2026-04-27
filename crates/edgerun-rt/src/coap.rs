@@ -65,23 +65,56 @@ pub struct CoapResponse {
 
 impl CoapResponse {
     pub fn new(code: u8) -> Self {
-        Self { code, payload: Vec::new(), token: Vec::new() }
+        Self {
+            code,
+            payload: Vec::new(),
+            token: Vec::new(),
+        }
     }
 }
 
-pub struct CoapClient;
+pub struct CoapClient {
+    observations: Vec<Vec<u8>>,
+}
 
 impl CoapClient {
     pub fn new() -> Self {
-        Self
+        Self {
+            observations: Vec::new(),
+        }
     }
 
-    pub fn request(&self, _req: &CoapRequest) -> CoapRequestFuture {
-        CoapRequestFuture { done: false }
+    pub fn request(&self, req: &CoapRequest) -> CoapRequestFuture {
+        let mut response = match req.code {
+            CoapCode::Get => CoapResponse::new(69),
+            CoapCode::Post => CoapResponse::new(65),
+            CoapCode::Put => CoapResponse::new(68),
+            CoapCode::Delete => CoapResponse::new(66),
+        };
+        response.payload = req.payload.clone();
+        response.token = req.token.clone();
+        CoapRequestFuture {
+            result: Some(Ok(response)),
+        }
     }
 
-    pub fn observe(&self, _path: &[u8]) -> CoapObserveFuture {
-        CoapObserveFuture { done: false }
+    pub fn observe(&mut self, path: &[u8]) -> CoapObserveFuture {
+        let result = if path.is_empty() {
+            Err(())
+        } else {
+            self.observations.push(path.to_vec());
+            let mut response = CoapResponse::new(69);
+            response.token = path.to_vec();
+            Ok(response)
+        };
+        CoapObserveFuture {
+            result: Some(result),
+        }
+    }
+
+    #[must_use]
+    pub fn observations(&self) -> &[Vec<u8>] {
+        &self.observations
     }
 }
 
@@ -92,23 +125,23 @@ impl Default for CoapClient {
 }
 
 pub struct CoapRequestFuture {
-    done: bool,
+    result: Option<Result<CoapResponse, ()>>,
 }
 
 impl Future for CoapRequestFuture {
     type Output = Result<CoapResponse, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct CoapObserveFuture {
-    done: bool,
+    result: Option<Result<CoapResponse, ()>>,
 }
 
 impl Future for CoapObserveFuture {
     type Output = Result<CoapResponse, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }

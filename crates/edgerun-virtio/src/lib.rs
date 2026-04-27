@@ -7,11 +7,17 @@ use core::sync::atomic::{fence, Ordering};
 
 pub const VIRTIO_VENDOR_ID: u16 = 0x1af4;
 pub const VIRTIO_MODERN_DEVICE_ID_NET: u16 = 0x1041;
+pub const VIRTIO_MODERN_DEVICE_ID_BLK: u16 = 0x1042;
 
 pub const VIRTIO_NET_F_CSUM: u64 = 1 << 0;
 pub const VIRTIO_NET_F_GUEST_CSUM: u64 = 1 << 1;
 pub const VIRTIO_NET_F_MAC: u64 = 1 << 5;
 pub const VIRTIO_NET_F_STATUS: u64 = 1 << 16;
+pub const VIRTIO_BLK_F_SIZE_MAX: u64 = 1 << 1;
+pub const VIRTIO_BLK_F_SEG_MAX: u64 = 1 << 2;
+pub const VIRTIO_BLK_F_RO: u64 = 1 << 5;
+pub const VIRTIO_BLK_F_BLK_SIZE: u64 = 1 << 6;
+pub const VIRTIO_BLK_F_FLUSH: u64 = 1 << 9;
 pub const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 
 pub const VIRTIO_CONFIG_STATUS_ACKNOWLEDGE: u8 = 1;
@@ -21,6 +27,11 @@ pub const VIRTIO_CONFIG_STATUS_FEATURES_OK: u8 = 8;
 pub const VIRTIO_CONFIG_STATUS_FAILED: u8 = 0x80;
 
 pub const VIRTIO_NET_S_LINK_UP: u16 = 1;
+
+pub const VIRTIO_BLK_T_IN: u32 = 0;
+pub const VIRTIO_BLK_T_OUT: u32 = 1;
+pub const VIRTIO_BLK_T_FLUSH: u32 = 4;
+pub const VIRTIO_BLK_S_OK: u8 = 0;
 
 const VIRTIO_PCI_CAP_VENDOR: u8 = 0x09;
 const VIRTIO_PCI_CAP_COMMON_CFG: u8 = 1;
@@ -34,6 +45,7 @@ const TX_QUEUE: u16 = 1;
 const NET_HDR_LEN: usize = core::mem::size_of::<VirtioNetHdr>();
 const BUFFER_SIZE: usize = 2048;
 const TX_FREE_ALL_MASK: u16 = (1u16 << QUEUE_SIZE) - 1;
+const VIRTQ_DESC_F_NEXT: u16 = 1;
 const VIRTQ_DESC_F_WRITE: u16 = 2;
 
 const PCI_CONFIG_ADDRESS: u16 = 0xcf8;
@@ -58,6 +70,17 @@ struct VirtioPciCap {
 
 #[derive(Clone, Copy)]
 struct ModernNetDevice {
+    bus: u8,
+    slot: u8,
+    func: u8,
+    common: VirtioPciCap,
+    notify: VirtioPciCap,
+    device: VirtioPciCap,
+    isr: Option<VirtioPciCap>,
+}
+
+#[derive(Clone, Copy)]
+struct ModernVirtioDevice {
     bus: u8,
     slot: u8,
     func: u8,
@@ -169,6 +192,41 @@ static mut TX_USED: VirtqUsed = VirtqUsed {
     avail_event: 0,
 };
 static mut TX_BUFFERS: PacketBuffers = PacketBuffers([[0; BUFFER_SIZE]; QUEUE_SIZE]);
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct VirtioBlkReqHeader {
+    request_type: u32,
+    reserved: u32,
+    sector: u64,
+}
+
+#[repr(align(16))]
+struct BlkDescTable([VirtqDesc; QUEUE_SIZE]);
+
+#[repr(align(512))]
+struct BlkData([u8; edgerun_rt::storage::SECTOR_SIZE]);
+
+static mut BLK_DESC: BlkDescTable = BlkDescTable([EMPTY_DESC; QUEUE_SIZE]);
+static mut BLK_AVAIL: VirtqAvail = VirtqAvail {
+    flags: 0,
+    idx: 0,
+    ring: [0; QUEUE_SIZE],
+    used_event: 0,
+};
+static mut BLK_USED: VirtqUsed = VirtqUsed {
+    flags: 0,
+    idx: 0,
+    ring: [EMPTY_USED_ELEM; QUEUE_SIZE],
+    avail_event: 0,
+};
+static mut BLK_HEADER: VirtioBlkReqHeader = VirtioBlkReqHeader {
+    request_type: 0,
+    reserved: 0,
+    sector: 0,
+};
+static mut BLK_DATA: BlkData = BlkData([0; edgerun_rt::storage::SECTOR_SIZE]);
+static mut BLK_STATUS: u8 = 0xff;
 
 pub struct VirtNet {
     mac: [u8; 6],
@@ -608,6 +666,353 @@ impl Default for VirtNet {
     }
 }
 
+pub struct VirtBlk {
+    features: u64,
+    host_features: u64,
+    bus: u8,
+    slot: u8,
+    func: u8,
+    common_cfg: *mut u8,
+    notify_cfg: *mut u8,
+    device_cfg: *mut u8,
+    isr_cfg: *mut u8,
+    notify_off_multiplier: u32,
+    queue_notify_off: u16,
+    queue_size: u16,
+    last_used_idx: u16,
+    sectors: u64,
+    read_only: bool,
+    block_size: u32,
+}
+
+impl VirtBlk {
+    pub const fn new() -> Self {
+        Self {
+            features: 0,
+            host_features: 0,
+            bus: 0,
+            slot: 0,
+            func: 0,
+            common_cfg: core::ptr::null_mut(),
+            notify_cfg: core::ptr::null_mut(),
+            device_cfg: core::ptr::null_mut(),
+            isr_cfg: core::ptr::null_mut(),
+            notify_off_multiplier: 0,
+            queue_notify_off: 0,
+            queue_size: 0,
+            last_used_idx: 0,
+            sectors: 0,
+            read_only: false,
+            block_size: edgerun_rt::storage::SECTOR_SIZE as u32,
+        }
+    }
+
+    pub fn init(&mut self) -> bool {
+        if self.common_cfg.is_null() || self.device_cfg.is_null() || self.notify_cfg.is_null() {
+            return false;
+        }
+
+        self.enable_pci_memory_and_bus_master();
+        self.write_status(0);
+        self.write_status(VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
+        self.write_status(VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER);
+
+        self.host_features = self.read_device_features();
+        self.features = self.host_features
+            & (VIRTIO_F_VERSION_1 | VIRTIO_BLK_F_RO | VIRTIO_BLK_F_BLK_SIZE | VIRTIO_BLK_F_FLUSH);
+        if self.features & VIRTIO_F_VERSION_1 == 0 {
+            self.fail();
+            return false;
+        }
+
+        self.write_driver_features(self.features);
+        self.write_status(self.read_status() | VIRTIO_CONFIG_STATUS_FEATURES_OK);
+        if self.read_status() & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
+            self.fail();
+            return false;
+        }
+
+        self.sectors = read_u64(self.device_cfg);
+        self.read_only = self.features & VIRTIO_BLK_F_RO != 0;
+        if self.features & VIRTIO_BLK_F_BLK_SIZE != 0 {
+            self.block_size = read_u32(unsafe { self.device_cfg.add(20) });
+        }
+        if self.sectors == 0 || self.block_size != edgerun_rt::storage::SECTOR_SIZE as u32 {
+            self.fail();
+            return false;
+        }
+
+        self.select_queue(0);
+        self.queue_size = self.read_queue_size();
+        self.queue_notify_off = self.read_queue_notify_off();
+        if self.queue_size < 3 {
+            self.fail();
+            return false;
+        }
+
+        let (desc, avail, used) = unsafe {
+            (
+                core::ptr::addr_of_mut!(BLK_DESC.0) as u64,
+                core::ptr::addr_of_mut!(BLK_AVAIL) as u64,
+                core::ptr::addr_of_mut!(BLK_USED) as u64,
+            )
+        };
+        if !self.setup_split_queue(0, desc, avail, used) {
+            self.fail();
+            return false;
+        }
+
+        unsafe {
+            self.init_queue();
+        }
+
+        self.write_status(self.read_status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
+        true
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    pub fn block_size(&self) -> u32 {
+        self.block_size
+    }
+
+    pub fn sectors(&self) -> u64 {
+        self.sectors
+    }
+
+    pub fn read_sector(&mut self, sector: u64, out: &mut [u8]) -> bool {
+        if out.len() != edgerun_rt::storage::SECTOR_SIZE || sector >= self.sectors {
+            return false;
+        }
+
+        unsafe {
+            if !self.submit_request(VIRTIO_BLK_T_IN, sector, true) {
+                return false;
+            }
+            core::ptr::copy_nonoverlapping(
+                core::ptr::addr_of!(BLK_DATA.0) as *const u8,
+                out.as_mut_ptr(),
+                edgerun_rt::storage::SECTOR_SIZE,
+            );
+        }
+        true
+    }
+
+    pub fn write_sector(&mut self, sector: u64, data: &[u8]) -> bool {
+        if self.read_only
+            || data.len() != edgerun_rt::storage::SECTOR_SIZE
+            || sector >= self.sectors
+        {
+            return false;
+        }
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
+                edgerun_rt::storage::SECTOR_SIZE,
+            );
+            self.submit_request(VIRTIO_BLK_T_OUT, sector, false)
+        }
+    }
+
+    pub fn flush(&mut self) -> bool {
+        if self.features & VIRTIO_BLK_F_FLUSH == 0 {
+            return true;
+        }
+        unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, false) }
+    }
+
+    fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
+        let common_cfg = map_pci_cap(device.bus, device.slot, device.func, device.common)?;
+        let notify_cfg = map_pci_cap(device.bus, device.slot, device.func, device.notify)?;
+        let device_cfg = map_pci_cap(device.bus, device.slot, device.func, device.device)?;
+        let isr_cfg = device
+            .isr
+            .and_then(|cap| map_pci_cap(device.bus, device.slot, device.func, cap))
+            .unwrap_or(core::ptr::null_mut());
+
+        let mut blk = Self::new();
+        blk.bus = device.bus;
+        blk.slot = device.slot;
+        blk.func = device.func;
+        blk.common_cfg = common_cfg;
+        blk.notify_cfg = notify_cfg;
+        blk.device_cfg = device_cfg;
+        blk.isr_cfg = isr_cfg;
+        blk.notify_off_multiplier = device.notify.notify_off_multiplier;
+        Some(blk)
+    }
+
+    fn enable_pci_memory_and_bus_master(&self) {
+        let command = pci_read_u16(self.bus, self.slot, self.func, PCI_COMMAND);
+        pci_write_u16(
+            self.bus,
+            self.slot,
+            self.func,
+            PCI_COMMAND,
+            command | PCI_COMMAND_MEMORY | PCI_COMMAND_BUS_MASTER,
+        );
+    }
+
+    fn fail(&self) {
+        self.write_status(self.read_status() | VIRTIO_CONFIG_STATUS_FAILED);
+    }
+
+    fn read_status(&self) -> u8 {
+        read_u8(unsafe { self.common_cfg.add(20) })
+    }
+
+    fn write_status(&self, status: u8) {
+        write_u8(unsafe { self.common_cfg.add(20) }, status);
+    }
+
+    fn read_device_features(&self) -> u64 {
+        write_u32(self.common_cfg, 0);
+        let low = read_u32(unsafe { self.common_cfg.add(4) }) as u64;
+        write_u32(self.common_cfg, 1);
+        let high = read_u32(unsafe { self.common_cfg.add(4) }) as u64;
+        low | (high << 32)
+    }
+
+    fn write_driver_features(&self, features: u64) {
+        write_u32(unsafe { self.common_cfg.add(8) }, 0);
+        write_u32(unsafe { self.common_cfg.add(12) }, features as u32);
+        write_u32(unsafe { self.common_cfg.add(8) }, 1);
+        write_u32(unsafe { self.common_cfg.add(12) }, (features >> 32) as u32);
+    }
+
+    fn select_queue(&self, queue: u16) {
+        write_u16(unsafe { self.common_cfg.add(22) }, queue);
+    }
+
+    fn read_queue_size(&self) -> u16 {
+        read_u16(unsafe { self.common_cfg.add(24) })
+    }
+
+    fn read_queue_notify_off(&self) -> u16 {
+        read_u16(unsafe { self.common_cfg.add(30) })
+    }
+
+    fn setup_split_queue(&self, queue: u16, desc: u64, driver: u64, device: u64) -> bool {
+        self.select_queue(queue);
+        if self.read_queue_size() < 3 {
+            return false;
+        }
+
+        write_u16(unsafe { self.common_cfg.add(24) }, QUEUE_SIZE as u16);
+        write_u64(unsafe { self.common_cfg.add(32) }, desc);
+        write_u64(unsafe { self.common_cfg.add(40) }, driver);
+        write_u64(unsafe { self.common_cfg.add(48) }, device);
+        write_u16(unsafe { self.common_cfg.add(28) }, 1);
+        true
+    }
+
+    unsafe fn init_queue(&mut self) {
+        self.last_used_idx = 0;
+        write_volatile_u16(core::ptr::addr_of_mut!(BLK_AVAIL.idx), 0);
+        write_volatile_u16(core::ptr::addr_of_mut!(BLK_USED.idx), 0);
+        core::ptr::write_bytes(
+            core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
+            0,
+            BLK_DATA.0.len(),
+        );
+        BLK_STATUS = 0xff;
+    }
+
+    unsafe fn submit_request(&mut self, request_type: u32, sector: u64, read: bool) -> bool {
+        BLK_HEADER = VirtioBlkReqHeader {
+            request_type,
+            reserved: 0,
+            sector,
+        };
+        BLK_STATUS = 0xff;
+
+        let desc = core::ptr::addr_of_mut!(BLK_DESC.0) as *mut VirtqDesc;
+        core::ptr::write(
+            desc,
+            VirtqDesc {
+                addr: core::ptr::addr_of!(BLK_HEADER) as u64,
+                len: core::mem::size_of::<VirtioBlkReqHeader>() as u32,
+                flags: VIRTQ_DESC_F_NEXT,
+                next: 1,
+            },
+        );
+        core::ptr::write(
+            desc.add(1),
+            VirtqDesc {
+                addr: core::ptr::addr_of_mut!(BLK_DATA.0) as u64,
+                len: edgerun_rt::storage::SECTOR_SIZE as u32,
+                flags: if read {
+                    VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT
+                } else {
+                    VIRTQ_DESC_F_NEXT
+                },
+                next: 2,
+            },
+        );
+        core::ptr::write(
+            desc.add(2),
+            VirtqDesc {
+                addr: core::ptr::addr_of_mut!(BLK_STATUS) as u64,
+                len: 1,
+                flags: VIRTQ_DESC_F_WRITE,
+                next: 0,
+            },
+        );
+
+        let avail = core::ptr::addr_of_mut!(BLK_AVAIL);
+        let idx = read_volatile_u16(core::ptr::addr_of!((*avail).idx));
+        core::ptr::write_volatile(
+            (*avail).ring.as_mut_ptr().add((idx as usize) % QUEUE_SIZE),
+            0,
+        );
+        fence(Ordering::SeqCst);
+        write_volatile_u16(core::ptr::addr_of_mut!((*avail).idx), idx.wrapping_add(1));
+        self.notify_queue();
+
+        let mut spins = 0;
+        while read_volatile_u16(core::ptr::addr_of!(BLK_USED.idx)) == self.last_used_idx {
+            spins += 1;
+            if spins > 10_000_000 {
+                return false;
+            }
+            core::hint::spin_loop();
+        }
+
+        self.last_used_idx = self.last_used_idx.wrapping_add(1);
+        read_u8(core::ptr::addr_of!(BLK_STATUS)) == VIRTIO_BLK_S_OK
+    }
+
+    fn notify_queue(&self) {
+        let offset =
+            (self.queue_notify_off as u32).saturating_mul(self.notify_off_multiplier) as usize;
+        write_u16(unsafe { self.notify_cfg.add(offset) }, 0);
+    }
+}
+
+impl Default for VirtBlk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl edgerun_rt::storage::BlockDevice for VirtBlk {
+    fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> bool {
+        Self::read_sector(self, sector, buf)
+    }
+
+    fn write_sector(&mut self, sector: u64, buf: &[u8]) -> bool {
+        Self::write_sector(self, sector, buf)
+    }
+
+    fn sectors(&self) -> u64 {
+        self.sectors
+    }
+}
+
 pub fn find_virtio_net() -> Option<VirtNet> {
     #[cfg(target_arch = "x86_64")]
     {
@@ -640,7 +1045,63 @@ pub fn find_virtio_net() -> Option<VirtNet> {
     None
 }
 
+pub fn find_virtio_blk() -> Option<VirtBlk> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_BLK)?;
+        return VirtBlk::from_modern_device(device);
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+fn find_modern_virtio_device(device_id: u16) -> Option<ModernVirtioDevice> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        for bus in 0..=0 {
+            for slot in 0..32 {
+                for func in 0..8 {
+                    let vendor = pci_read_u16(bus, slot, func, 0x00);
+                    if vendor == 0xffff {
+                        if func == 0 {
+                            break;
+                        }
+                        continue;
+                    }
+
+                    let device = pci_read_u16(bus, slot, func, 0x02);
+                    if vendor == VIRTIO_VENDOR_ID && device == device_id {
+                        if let Some(device) = read_modern_virtio_device(bus, slot, func) {
+                            return Some(device);
+                        }
+                    }
+
+                    if func == 0 && !is_multifunction(bus, slot) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn read_modern_net_device(bus: u8, slot: u8, func: u8) -> Option<ModernNetDevice> {
+    let device = read_modern_virtio_device(bus, slot, func)?;
+    Some(ModernNetDevice {
+        bus: device.bus,
+        slot: device.slot,
+        func: device.func,
+        common: device.common,
+        notify: device.notify,
+        device: device.device,
+        isr: device.isr,
+    })
+}
+
+fn read_modern_virtio_device(bus: u8, slot: u8, func: u8) -> Option<ModernVirtioDevice> {
     if pci_read_u16(bus, slot, func, PCI_STATUS) & PCI_STATUS_CAPABILITIES == 0 {
         return None;
     }
@@ -687,7 +1148,7 @@ fn read_modern_net_device(bus: u8, slot: u8, func: u8) -> Option<ModernNetDevice
         cap_ptr = cap_next;
     }
 
-    Some(ModernNetDevice {
+    Some(ModernVirtioDevice {
         bus,
         slot,
         func,
@@ -786,6 +1247,11 @@ fn read_u16(ptr: *const u8) -> u16 {
 #[inline]
 fn read_u32(ptr: *const u8) -> u32 {
     unsafe { core::ptr::read_volatile(ptr as *const u32) }
+}
+
+#[inline]
+fn read_u64(ptr: *const u8) -> u64 {
+    unsafe { core::ptr::read_volatile(ptr as *const u64) }
 }
 
 #[inline]

@@ -15,7 +15,6 @@ edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-proto = { path = "../edgerun-proto" }
-edgerun-crypto = { workspace = true, default-features = false }
 prost.workspace = true
 edgerun-log = { path = "../edgerun-log" }
 

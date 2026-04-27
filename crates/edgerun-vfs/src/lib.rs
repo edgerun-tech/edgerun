@@ -74,6 +74,8 @@ mod fine_grained;
 mod git_aware;
 mod grep;
 mod stats;
+#[cfg(test)]
+mod test_support;
 mod vfs;
 
 #[cfg(not(target_os = "none"))]

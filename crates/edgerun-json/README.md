@@ -199,7 +199,8 @@ Benchmarked against the [`serde-rs/json-benchmark`](https://github.com/serde-rs/
 - Serialization: serde_json is generally faster for DOM stringify
 - Typed serde: Both perform similarly (depends on your types)
 
-See [benches/](benches/) for detailed benchmarks. Run with `cargo bench --features serde_json_bench`.
+Run the host-only benchmark binary with
+`cargo run -p edgerun-json --features std,serde_json_bench --bin edgerun-json-benchmark --release`.
 
 ## What feels drop-in already
 
@@ -370,8 +371,8 @@ cargo test --all-features
 # Run fuzzing
 ./scripts/fuzz.sh
 
-# Run benchmarks
-cargo bench
+# Run host-only benchmarks
+cargo run -p edgerun-json --features std,serde_json_bench --bin edgerun-json-benchmark --release
 ```
 
 ### Test Coverage

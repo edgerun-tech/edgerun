@@ -19,6 +19,12 @@ use super::manifest::{ImageManifest, SingleManifest};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use super::oci_spec::generate_oci_spec;
 use super::urlencoding;
+#[cfg(feature = "edgefs")]
+use crate::image_apply::{apply_bare_image_layer_blobs_sha256, BareImageApplyReport};
+#[cfg(feature = "edgefs")]
+use edgerun_edgefs::EdgeFs;
+#[cfg(feature = "edgefs")]
+use edgerun_storage::BlockStorage;
 
 /// An OCI image reference (e.g., `docker.io/library/alpine:latest`).
 #[derive(Clone, Debug)]
@@ -84,6 +90,14 @@ pub struct RegistryClient {
     auth: RegistryAuth,
     token: Option<String>,
     bytes_downloaded: u64,
+}
+
+#[cfg(feature = "edgefs")]
+#[derive(Debug, Clone)]
+pub struct EdgeFsImagePullReport {
+    pub plan: BareImagePlan,
+    pub apply: BareImageApplyReport,
+    pub bytes_downloaded: u64,
 }
 
 impl RegistryClient {
@@ -192,12 +206,17 @@ impl RegistryClient {
             if resp2.status().as_u16() >= 400 {
                 return Err(RegistryError::HttpStatus(resp2.status().as_u16()));
             }
-            Ok(resp2.body().to_vec())
+            Ok(self.count_body(resp2.body()))
         } else if resp.status().as_u16() >= 400 {
             Err(RegistryError::HttpStatus(resp.status().as_u16()))
         } else {
-            Ok(resp.body().to_vec())
+            Ok(self.count_body(resp.body()))
         }
+    }
+
+    fn count_body(&mut self, body: &[u8]) -> Vec<u8> {
+        self.bytes_downloaded = self.bytes_downloaded.saturating_add(body.len() as u64);
+        body.to_vec()
     }
 
     /// Perform an authenticated PUT request.
@@ -418,10 +437,7 @@ impl RegistryClient {
     ) -> Result<ImageManifest, RegistryError> {
         self.ensure_auth(&image.registry).await?;
 
-        let url = format!(
-            "https://{}/v2/{}/manifests/{}",
-            image.registry, image.repository, image.tag
-        );
+        let path = format!("/v2/{}/manifests/{}", image.repository, image.tag);
         let headers = [
             (
                 "Accept",
@@ -434,52 +450,10 @@ impl RegistryClient {
             ),
             ("Accept", "application/vnd.oci.image.index.v1+json"),
         ];
-        let mut builder = Request::builder()
-            .method(edgerun_http::Method::GET)
-            .uri(&url);
-        if let Some(ref token) = self.token {
-            builder = builder.header("Authorization", &format!("Bearer {}", token));
-        }
-        for (k, v) in &headers {
-            builder = builder.header(k, v);
-        }
-        let request = builder.build()?;
-        let client = HttpClient::new().no_redirects();
-        let resp = client
-            .execute(&request)
-            .await
-            .map_err(|e| RegistryError::HttpError(e.to_string()))?;
-
-        if resp.status().as_u16() == 401 {
-            let www_auth = resp
-                .headers()
-                .get("www-authenticate")
-                .or_else(|| resp.headers().get("WWW-Authenticate"))
-                .map(|v| v.as_str())
-                .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
-            self.handle_auth_challenge(&image.registry, www_auth)
-                .await?;
-            // Retry
-            let mut builder2 = Request::builder()
-                .method(edgerun_http::Method::GET)
-                .uri(&url);
-            if let Some(ref token) = self.token {
-                builder2 = builder2.header("Authorization", &format!("Bearer {}", token));
-            }
-            for (k, v) in &headers {
-                builder2 = builder2.header(k, v);
-            }
-            let request2 = builder2.build()?;
-            let resp2 = client
-                .execute(&request2)
-                .await
-                .map_err(|e| RegistryError::HttpError(e.to_string()))?;
-            parse_manifest(resp2.body()).map_err(RegistryError::ParseError)
-        } else if resp.status().as_u16() >= 400 {
-            Err(RegistryError::HttpStatus(resp.status().as_u16()))
-        } else {
-            parse_manifest(resp.body()).map_err(RegistryError::ParseError)
-        }
+        let body = self
+            .authenticated_get(&image.registry, path.as_str(), &headers)
+            .await?;
+        parse_manifest(&body).map_err(RegistryError::ParseError)
     }
 
     /// Fetch a manifest by digest.
@@ -543,6 +517,39 @@ impl RegistryClient {
         plan.validate_descriptors()
             .map_err(|error| RegistryError::ParseError(error.to_string()))?;
         Ok(plan)
+    }
+
+    /// Pull an image through `edgerun-http` and apply its rootfs layers into EdgeFS.
+    ///
+    /// The registry manifest/config and all layer blobs are fetched with the
+    /// same authenticated registry path used by [`Self::fetch_bare_image_plan`].
+    /// Layers are then validated, decompressed, whiteouts are applied, and final
+    /// file contents are written into the provided encrypted EdgeFS instance.
+    #[cfg(feature = "edgefs")]
+    pub async fn pull_into_edgefs<S: BlockStorage>(
+        &mut self,
+        image: &ImageRef,
+        rootfs: &str,
+        fs: &mut EdgeFs<S>,
+    ) -> Result<EdgeFsImagePullReport, RegistryError> {
+        let plan = self.fetch_bare_image_plan(image, rootfs).await?;
+        let mut layer_blobs = Vec::with_capacity(plan.layers.len());
+        for layer in &plan.layers {
+            layer_blobs.push(
+                self.fetch_blob(&image.registry, &image.repository, &layer.digest)
+                    .await?,
+            );
+        }
+
+        let apply =
+            apply_bare_image_layer_blobs_sha256(&plan, layer_blobs.iter().map(Vec::as_slice), fs)
+                .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+
+        Ok(EdgeFsImagePullReport {
+            plan,
+            apply,
+            bytes_downloaded: self.bytes_downloaded,
+        })
     }
 
     /// Pull an image to a local bundle directory.

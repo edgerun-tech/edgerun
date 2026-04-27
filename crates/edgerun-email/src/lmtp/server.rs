@@ -25,6 +25,7 @@ use crate::smtp::types::{
     DsnNotify, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
     SmtpResponseCode, SmtpState,
 };
+#[cfg(feature = "dkim")]
 use edgerun_email_auth::EmailAuthEvaluator;
 
 // ===========================================================================
@@ -169,6 +170,7 @@ enum ControlFlow {
 }
 
 /// Evaluate SPF/DKIM/DMARC and notify the handler.
+#[cfg(feature = "dkim")]
 async fn evaluate_and_notify_auth(
     handler: &Arc<dyn MailHandler>,
     envelope: &MailEnvelope,
@@ -304,6 +306,7 @@ async fn handle_connection(
                                     .await?;
                                     edgerun_log::info!("edgerun-lmtp: delivered to {}", recipient,);
                                     // Evaluate SPF/DKIM/DMARC in background (first recipient only)
+                                    #[cfg(feature = "dkim")]
                                     if recipient == &envelope.recipients[0] {
                                         let handler_clone = Arc::clone(&handler);
                                         let envelope_clone = envelope.clone();

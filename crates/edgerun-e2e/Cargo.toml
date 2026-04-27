@@ -16,7 +16,6 @@ edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-mesh-link = { path = "../edgerun-mesh-link" }
 edgerun-mesh-session = { path = "../edgerun-mesh-session" }
 prost.workspace = true
-prost-types.workspace = true
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 
 [features]

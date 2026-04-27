@@ -136,8 +136,8 @@ edgerun-json/
 │   ├── pre-commit          # Format, clippy, tests
 │   ├── pre-push            # Full test suite
 │   └── post-merge          # Post-pull verification
-├── benches/
-│   └── unified.rs          # Criterion benchmark suite
+├── src/bin/
+│   └── benchmark.rs        # Host-only custom benchmark runner
 ├── docs/
 │   ├── API_COMPARISON.md   # API comparison with serde_json
 │   ├── API_PARITY_REPORT.md# API parity report
@@ -218,8 +218,8 @@ git config core.hooksPath .githooks
 # Run tests
 cargo test
 
-# Run benchmarks
-cargo bench
+# Run host-only benchmarks
+cargo run -p edgerun-json --features std,serde_json_bench --bin edgerun-json-benchmark --release
 
 # Check formatting
 cargo fmt --check

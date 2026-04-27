@@ -34,6 +34,7 @@ use prost::Message;
 /// The ECDSA P-256 algorithm identifier used in protobuf Signature messages.
 pub const SIGNATURE_ALGORITHM_ECDSA_P256_SHA256: i32 =
     signature::Algorithm::SignatureAlgorithmEcdsaP256Sha256 as i32;
+const CAPABILITY_MESSAGE_SIG_DOMAIN: &str = "edgerun:v0:sig:capability-message";
 
 // ---------------------------------------------------------------------------
 // Generic sign / verify
@@ -56,7 +57,7 @@ pub fn sign_message<M: Message>(
 
     // Sign with domain separation for capability protocol messages
     let sig_bytes = signer
-        .sign_record("edgerun:v0:sig:capability-message", &buf)
+        .sign_record(CAPABILITY_MESSAGE_SIG_DOMAIN, &buf)
         .map_err(|e| format!("sign: {e}"))?;
 
     // Set signature
@@ -98,20 +99,6 @@ pub fn verify_message<M: Message + Clone>(
         .encode(&mut buf)
         .map_err(|e| format!("proto encode: {e}"))?;
 
-    // Build the same domain-separated prehash that MeshSigner::sign_record uses:
-    //   digest = SHA-256(domain_tag || 0x00 || SHA-256(message_bytes))
-    let record_hash = edgerun_core::crypto::sha256(&buf);
-    let domain_tag = "edgerun:v0:sig:capability-message";
-    let mut sig_input = Vec::with_capacity(domain_tag.len() + 1 + 32);
-    sig_input.extend_from_slice(domain_tag.as_bytes());
-    sig_input.push(0);
-    sig_input.extend_from_slice(&record_hash);
-    let digest = edgerun_core::crypto::sha256(&sig_input);
-
-    // Build ECDSA signature
-    let ecdsa_sig = edgerun_crypto::p256::ecdsa::Signature::from_slice(&sig.value)
-        .map_err(|e| format!("invalid ECDSA signature: {e}"))?;
-
     // Build verifying key from sender's NodeID (x||y without 0x04 prefix)
     let mut sec1_bytes = [0u8; 65];
     sec1_bytes[0] = 0x04;
@@ -119,11 +106,21 @@ pub fn verify_message<M: Message + Clone>(
     let pubkey = VerifyingKey::from_sec1_bytes(&sec1_bytes)
         .map_err(|e| format!("invalid public key in NodeID: {e}"))?;
 
-    // Verify using PrehashVerifier (since we already have the SHA-256 digest)
-    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
-    pubkey
-        .verify_prehash(&digest, &ecdsa_sig)
-        .map_err(|e| format!("signature verification failed: {e}"))
+    if edgerun_core::crypto::verify_canonical_record(
+        &pubkey,
+        CAPABILITY_MESSAGE_SIG_DOMAIN,
+        &buf,
+        &sig.value,
+    ) || edgerun_core::crypto::verify_canonical_record_hw(
+        &pubkey,
+        CAPABILITY_MESSAGE_SIG_DOMAIN,
+        &buf,
+        &sig.value,
+    ) {
+        Ok(())
+    } else {
+        Err("signature verification failed: signature error".into())
+    }
 }
 
 // ---------------------------------------------------------------------------

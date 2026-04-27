@@ -10,8 +10,8 @@
 //! - Delivery alone has no effect on authoritative node state
 //! - If rejected, the node records a `command_rejected` event
 //! - If committed, the node records a `command_committed` event
-//! - Replay detection: same command_id + same hash = DUPLICATE,
-//!   same command_id + different hash = REJECT
+//! - Replay detection is keyed by canonical command_hash; command_id is
+//!   an application-level idempotency hint
 //! - Timing: not_before / expires_at bounds must be respected
 //! - Delegation chain: if present, must validate end-to-end
 //!
@@ -24,8 +24,8 @@
 use crate::prelude::v1::*;
 
 use crate::protocol::{
-    canonical_bytes, CapabilityDescriptor, CommandEnvelope, DelegationRecord, Digest, IdentityRef,
-    ProtocolRecord,
+    canonical_bytes, CapabilityDescriptor, CommandEnvelope, CommandType, DelegationRecord, Digest,
+    IdentityRef, ObjectRef, ProtocolRecord,
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
@@ -39,7 +39,7 @@ pub struct CommandValidationContext<'a> {
     /// Local node identity (the target node's public key as 64-byte NodeID).
     pub local_node_id: &'a [u8; 64],
     /// Replay cache: maps command_hash -> (command_id, decision_event_seq) for already-processed commands.
-    /// A repeated command_hash is a duplicate; reusing command_id with a different hash is invalid.
+    /// A repeated command_hash is a duplicate; command_id is retained only as an idempotency hint.
     pub replay_cache: &'a crate::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
     /// Known revocation IDs (delegations that have been revoked).
     pub revoked_delegation_ids: &'a crate::collections::HashSet<Vec<u8>>,
@@ -133,6 +133,215 @@ pub fn command_hash(command: &CommandEnvelope) -> Digest {
     }
 }
 
+fn timestamp_millis(ts: &prost_types::Timestamp) -> i64 {
+    ts.seconds * 1000 + (ts.nanos as i64) / 1_000_000
+}
+
+fn validate_object_ref(object: &ObjectRef, label: &str) -> Option<ValidationResult> {
+    if object.object_id.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} object_id is empty")),
+            empty_map(),
+        ));
+    }
+    None
+}
+
+fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationResult> {
+    if command.envelope_version == 0 {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("envelope_version is 0 (unspecified)".into()),
+            empty_map(),
+        ));
+    }
+    if command.command_version == 0 {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("command_version is 0 (unspecified)".into()),
+            empty_map(),
+        ));
+    }
+    if command.envelope_version != 1 {
+        return Some(reject(
+            ReasonCode::VersionUnsupported,
+            Value::String(format!(
+                "unsupported envelope_version: {}",
+                command.envelope_version
+            )),
+            empty_map(),
+        ));
+    }
+    if command.command_version != 1 {
+        return Some(reject(
+            ReasonCode::VersionUnsupported,
+            Value::String(format!(
+                "unsupported command_version: {}",
+                command.command_version
+            )),
+            empty_map(),
+        ));
+    }
+
+    let Some(command_type) = CommandType::from_i32(command.command_type) else {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!(
+                "unknown authority-critical command_type: {}",
+                command.command_type
+            )),
+            empty_map(),
+        ));
+    };
+    if command_type == CommandType::Unspecified {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("command_type is unspecified".into()),
+            empty_map(),
+        ));
+    }
+
+    if command.command_id.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("command_id is empty".into()),
+            empty_map(),
+        ));
+    }
+    let Some(issued_at) = &command.issued_at else {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("command missing issued_at".into()),
+            empty_map(),
+        ));
+    };
+    if issued_at.nanos < 0 || issued_at.nanos >= 1_000_000_000 {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("issued_at nanos out of range".into()),
+            empty_map(),
+        ));
+    }
+
+    let Some(target) = &command.target_node else {
+        return Some(reject(
+            ReasonCode::TargetMismatch,
+            Value::String("no target_node specified".into()),
+            empty_map(),
+        ));
+    };
+    if target.node_id.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("target_node node_id is empty".into()),
+            empty_map(),
+        ));
+    }
+
+    let Some(issuer) = &command.issuer else {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("no issuer identity".into()),
+            empty_map(),
+        ));
+    };
+    if issuer.identity_id.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("issuer identity_id is empty".into()),
+            empty_map(),
+        ));
+    }
+
+    if let Some(not_before) = &command.not_before {
+        if not_before.nanos < 0 || not_before.nanos >= 1_000_000_000 {
+            return Some(reject(
+                ReasonCode::StructuralInvalid,
+                Value::String("not_before nanos out of range".into()),
+                empty_map(),
+            ));
+        }
+    }
+    if let Some(expires_at) = &command.expires_at {
+        if expires_at.nanos < 0 || expires_at.nanos >= 1_000_000_000 {
+            return Some(reject(
+                ReasonCode::StructuralInvalid,
+                Value::String("expires_at nanos out of range".into()),
+                empty_map(),
+            ));
+        }
+    }
+    if let (Some(not_before), Some(expires_at)) = (&command.not_before, &command.expires_at) {
+        if timestamp_millis(not_before) > timestamp_millis(expires_at) {
+            return Some(reject(
+                ReasonCode::TimeInvalid,
+                Value::String("command not_before is after expires_at".into()),
+                empty_map(),
+            ));
+        }
+    }
+
+    if let Some(payload) = &command.payload {
+        match payload {
+            edgerun_proto::edgerun::v0::stream::command_envelope::Payload::PayloadObject(
+                object,
+            ) => {
+                if let Some(result) = validate_object_ref(object, "command payload_object") {
+                    return Some(result);
+                }
+            }
+            edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+                payload,
+            ) => {
+                if payload.is_empty() {
+                    return Some(reject(
+                        ReasonCode::StructuralInvalid,
+                        Value::String("command inline_payload is empty".into()),
+                        empty_map(),
+                    ));
+                }
+            }
+        }
+    }
+
+    if let Some(metadata) = &command.command_metadata {
+        if let Some(result) = validate_object_ref(metadata, "command_metadata") {
+            return Some(result);
+        }
+    }
+
+    if let Some(req) = &command.requested_assurance {
+        for attester in &req.acceptable_attesters {
+            if attester.identity_id.is_empty() {
+                return Some(reject(
+                    ReasonCode::StructuralInvalid,
+                    Value::String(
+                        "requested_assurance acceptable_attester identity_id is empty".into(),
+                    ),
+                    empty_map(),
+                ));
+            }
+        }
+        if let Some(max_age) = &req.max_evidence_age {
+            if max_age.seconds < 0 || max_age.nanos < 0 || max_age.nanos >= 1_000_000_000 {
+                return Some(reject(
+                    ReasonCode::StructuralInvalid,
+                    Value::String("requested_assurance max_evidence_age is invalid".into()),
+                    empty_map(),
+                ));
+            }
+        }
+        if let Some(metadata) = &req.assurance_metadata {
+            if let Some(result) = validate_object_ref(metadata, "requested_assurance metadata") {
+                return Some(result);
+            }
+        }
+    }
+
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Main validation entry point
 // ---------------------------------------------------------------------------
@@ -144,7 +353,7 @@ pub fn command_hash(command: &CommandEnvelope) -> Digest {
 /// Validation order (spec §18.6):
 /// 1. Structural: required fields, target binding
 /// 2. Cryptographic: signature verification
-/// 3. Replay: command_id deduplication
+/// 3. Replay: command_hash duplicate detection
 /// 4. Timing: not_before / expires_at
 /// 5. Authority: delegation chain validation (if present)
 pub fn validate_command(
@@ -152,72 +361,24 @@ pub fn validate_command(
     ctx: &CommandValidationContext<'_>,
 ) -> ValidationResult {
     // --- Step 1: Structural validation ---
-
-    // Version checks: unknown envelope or command versions indicate protocol drift
-    if command.envelope_version == 0 {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("envelope_version is 0 (unspecified)".into()),
-            empty_map(),
-        );
-    }
-    if command.command_version == 0 {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("command_version is 0 (unspecified)".into()),
-            empty_map(),
-        );
-    }
-    if command.envelope_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!(
-                "unsupported envelope_version: {}",
-                command.envelope_version
-            )),
-            empty_map(),
-        );
-    }
-    if command.command_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!(
-                "unsupported command_version: {}",
-                command.command_version
-            )),
-            empty_map(),
-        );
+    if let Some(result) = validate_command_structure(command) {
+        return result;
     }
 
-    if command.command_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("command_id is empty".into()),
-            empty_map(),
-        );
+    let issued_at_ms = timestamp_millis(command.issued_at.as_ref().unwrap());
+    if ctx.now_ms < issued_at_ms {
+        let mut derived = std::collections::BTreeMap::new();
+        derived.insert("issued_at_ms".into(), Value::Int(issued_at_ms));
+        derived.insert("now_ms".into(), Value::Int(ctx.now_ms));
+        return defer(ReasonCode::TimeInvalid, Value::Map(derived));
     }
 
     // Target binding: command must target this node
-    let Some(target) = &command.target_node else {
-        return reject(
-            ReasonCode::TargetMismatch,
-            Value::String("no target_node specified".into()),
-            empty_map(),
-        );
-    };
+    let target = command.target_node.as_ref().unwrap();
     if target.node_id != ctx.local_node_id.as_slice() {
         return reject(
             ReasonCode::TargetMismatch,
             Value::String("command targets a different node".into()),
-            empty_map(),
-        );
-    }
-
-    // Issuer identity must be present
-    if command.issuer.is_none() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("no issuer identity".into()),
             empty_map(),
         );
     }
@@ -285,7 +446,7 @@ pub fn validate_command(
     // --- Step 3: Timing validation ---
     // Per spec §18.6: TIME_CHECK comes before REPLAY_CHECK
     if let Some(ref not_before) = command.not_before {
-        let not_before_ms = not_before.seconds * 1000 + (not_before.nanos as i64) / 1_000_000;
+        let not_before_ms = timestamp_millis(not_before);
         if ctx.now_ms < not_before_ms {
             let mut derived = std::collections::BTreeMap::new();
             derived.insert("not_before_ms".into(), Value::Int(not_before_ms));
@@ -295,7 +456,7 @@ pub fn validate_command(
     }
 
     if let Some(ref expires_at) = command.expires_at {
-        let expires_ms = expires_at.seconds * 1000 + (expires_at.nanos as i64) / 1_000_000;
+        let expires_ms = timestamp_millis(expires_at);
         if ctx.now_ms > expires_ms {
             return reject(
                 ReasonCode::TimeInvalid,
@@ -307,8 +468,8 @@ pub fn validate_command(
 
     // --- Step 4: Replay detection ---
     // Per spec §18.6: REPLAY_CHECK comes after TIME_CHECK
-    // The replay cache is keyed by command_hash for duplicate detection, but
-    // command_id reuse with different command content is rejected by §18.6.
+    // The replay cache is keyed by command_hash. command_id is an idempotency
+    // hint and MUST NOT be used as the replay key (§5.1).
     let computed_hash = command_hash(command).value.clone();
     if ctx.replay_cache.contains_key(&computed_hash) {
         let mut derived = std::collections::BTreeMap::new();
@@ -318,44 +479,60 @@ pub fn validate_command(
         );
         return duplicate(ReasonCode::ReplayDetected, Value::Map(derived));
     }
-    if let Some((existing_hash, (_, decision_event_seq))) = ctx
-        .replay_cache
-        .iter()
-        .find(|(_, (command_id, _))| *command_id == command.command_id)
-    {
-        let mut derived = std::collections::BTreeMap::new();
-        derived.insert(
-            "command_id".into(),
-            Value::String(crate::util::bytes_to_hex(&command.command_id)),
-        );
-        derived.insert(
-            "existing_command_hash".into(),
-            Value::String(crate::util::bytes_to_hex(existing_hash)),
-        );
-        derived.insert(
-            "command_hash".into(),
-            Value::String(crate::util::bytes_to_hex(&computed_hash)),
-        );
-        derived.insert("decision_event_seq".into(), Value::Int(*decision_event_seq));
-        return reject(ReasonCode::ReplayDetected, Value::Map(derived), empty_map());
-    }
 
     // --- Step 5: Assurance requirement check (if requested) ---
     if let Some(ref req) = command.requested_assurance {
-        let required_class = req.required_class;
-        if required_class > 0 && ctx.local_assurance_class < required_class {
-            let mut derived_map = std::collections::BTreeMap::new();
-            derived_map.insert("required_class".into(), Value::Int(required_class as i64));
-            derived_map.insert(
-                "local_class".into(),
-                Value::Int(ctx.local_assurance_class as i64),
-            );
-            let derived = Value::Map(derived_map);
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+
+        if req.assurance_version != 1 {
             return reject(
-                ReasonCode::AuthorityDenied,
-                derived,
-                Value::String("node cannot satisfy requested assurance requirement".into()),
+                ReasonCode::VersionUnsupported,
+                Value::String(format!(
+                    "unsupported assurance requirement version: {}",
+                    req.assurance_version
+                )),
+                empty_map(),
             );
+        }
+
+        let Some(required_class) = AssuranceClass::from_i32(req.required_class) else {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                Value::String(format!(
+                    "invalid requested assurance class: {}",
+                    req.required_class
+                )),
+                empty_map(),
+            );
+        };
+
+        if required_class != AssuranceClass::Unspecified {
+            let Some(_local_class) = AssuranceClass::from_i32(ctx.local_assurance_class) else {
+                return reject(
+                    ReasonCode::StructuralInvalid,
+                    Value::String(format!(
+                        "invalid local assurance class: {}",
+                        ctx.local_assurance_class
+                    )),
+                    empty_map(),
+                );
+            };
+
+            let required_class = req.required_class;
+            if ctx.local_assurance_class < required_class {
+                let mut derived_map = std::collections::BTreeMap::new();
+                derived_map.insert("required_class".into(), Value::Int(required_class as i64));
+                derived_map.insert(
+                    "local_class".into(),
+                    Value::Int(ctx.local_assurance_class as i64),
+                );
+                let derived = Value::Map(derived_map);
+                return reject(
+                    ReasonCode::AuthorityDenied,
+                    derived,
+                    Value::String("node cannot satisfy requested assurance requirement".into()),
+                );
+            }
         }
     }
 
@@ -1005,6 +1182,10 @@ fn extract_public_key(identity: &Option<IdentityRef>) -> Option<[u8; 64]> {
 /// This is useful for structural/crypto validation when the caller
 /// handles replay and timing separately.
 pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult {
+    if let Some(result) = validate_command_structure(command) {
+        return result;
+    }
+
     let Some(sig) = &command.signature else {
         return reject(
             ReasonCode::CryptoInvalid,
@@ -1085,11 +1266,12 @@ mod tests {
     use super::*;
     use crate::collections::{HashMap, HashSet};
     use crate::protocol::{
-        CapabilityDescriptor, CommandEnvelope, DelegationRecord, IdentityRef, NodeRef,
+        CapabilityDescriptor, CommandEnvelope, DelegationRecord, IdentityRef, NodeRef, ObjectRef,
     };
     use crate::result::Verdict;
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_proto::edgerun::v0::common::Signature as ProtoSignature;
+    use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [7u8; 32];
@@ -1116,7 +1298,10 @@ mod tests {
             }),
             command_type: 7, // QUERY
             command_version: 1,
-            issued_at: None,
+            issued_at: Some(prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 0,
+            }),
             not_before: None,
             expires_at: None,
             idempotency_key: Vec::new(),
@@ -1141,6 +1326,11 @@ mod tests {
             algorithm: 1,
             value: sig,
         });
+    }
+
+    fn key_hint_for(key: &SigningKey) -> Vec<u8> {
+        let encoded = key.verifying_key().to_encoded_point(false);
+        encoded.as_bytes()[1..65].to_vec()
     }
 
     fn make_signed_command(key: &SigningKey, key_hint: Option<Vec<u8>>) -> CommandEnvelope {
@@ -1251,6 +1441,220 @@ mod tests {
     }
 
     #[test]
+    fn command_missing_issued_at_is_rejected() {
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.issued_at = None;
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_issued_in_future_defers() {
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.issued_at = Some(prost_types::Timestamp {
+            seconds: 1_800_000_000,
+            nanos: 0,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Defer);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn unknown_command_type_is_rejected() {
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.command_type = 999_999;
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn unspecified_command_type_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.command_type = CommandType::Unspecified as i32;
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_empty_target_node_id_is_rejected_structurally() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.target_node = Some(NodeRef { node_id: vec![] });
+        sign_command(&key, &mut cmd);
+
+        let result = validate_command(&cmd, &default_ctx());
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_empty_issuer_identity_id_is_rejected_structurally() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint.clone()));
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![],
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_inverted_validity_window_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.not_before = Some(prost_types::Timestamp {
+            seconds: 1_700_000_010,
+            nanos: 0,
+        });
+        cmd.expires_at = Some(prost_types::Timestamp {
+            seconds: 1_700_000_001,
+            nanos: 0,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn command_with_empty_payload_object_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.payload = Some(Payload::PayloadObject(ObjectRef {
+            object_id: vec![],
+            object_kind: None,
+        }));
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_empty_inline_payload_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.payload = Some(Payload::InlinePayload(vec![]));
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_empty_metadata_object_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.command_metadata = Some(ObjectRef {
+            object_id: vec![],
+            object_kind: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_signature_validation_reuses_structural_checks() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.command_type = CommandType::Unspecified as i32;
+        sign_command(&key, &mut cmd);
+
+        let result = validate_command_signature(&cmd);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn replay_same_command_hash_is_duplicate() {
         let key = test_signing_key();
         let vk = key.verifying_key();
@@ -1279,8 +1683,8 @@ mod tests {
     }
 
     #[test]
-    fn different_command_same_id_is_rejected() {
-        // Reusing command_id for different command content is rejected by §18.6.
+    fn different_command_same_id_is_distinct() {
+        // §5.1 makes command_hash the replay key; command_id is only an idempotency hint.
         let key = test_signing_key();
         let vk = key.verifying_key();
         let node_id: [u8; 64] = {
@@ -1302,8 +1706,7 @@ mod tests {
         ctx.replay_cache = &cache;
 
         let result = validate_command(&cmd, &ctx);
-        assert_eq!(result.verdict, Verdict::Reject);
-        assert_eq!(result.reason_code, Some(ReasonCode::ReplayDetected));
+        assert_eq!(result.verdict, Verdict::Accept);
     }
 
     #[test]
@@ -1592,6 +1995,166 @@ mod tests {
         // requested_assurance is None by default
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Accept);
+    }
+
+    #[test]
+    fn command_with_unsupported_assurance_requirement_version_is_rejected() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let mut cmd = make_unsigned_command();
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 2,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::VersionUnsupported));
+    }
+
+    #[test]
+    fn command_with_invalid_assurance_class_is_rejected() {
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let mut cmd = make_unsigned_command();
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: 999_999,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_empty_requested_assurance_attester_is_rejected() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![IdentityRef {
+                identity_id: vec![],
+                identity_kind: Some(1),
+                key_hint: None,
+            }],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_empty_requested_assurance_metadata_is_rejected() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: Some(ObjectRef {
+                object_id: vec![],
+                object_kind: None,
+            }),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_negative_requested_assurance_max_age_is_rejected() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: Some(prost_types::Duration {
+                seconds: -1,
+                nanos: 0,
+            }),
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]

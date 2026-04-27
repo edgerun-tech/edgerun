@@ -1,16 +1,10 @@
-//! X.509 certificate parsing using `x509_cert` (der::Decode).
-//!
-//! Proper DER parsing via the `der` / `x509_cert` crates from edgerun-crypto.
-//! No hand-rolled DER walking — full ASN.1 structural decoding.
+//! Minimal X.509 certificate parsing for the TLS certificate fields we use.
 
 use alloc::{
     format,
     string::{String, ToString},
     vec::Vec,
 };
-use edgerun_crypto::x509_cert::der::{Decode, DecodePem, Encode};
-use edgerun_crypto::x509_cert::ext::pkix::name::GeneralName;
-use edgerun_crypto::x509_cert::Certificate as DerCertificate;
 
 /// Parsed X.509 certificate
 #[derive(Debug, Clone)]
@@ -44,19 +38,14 @@ pub struct Certificate {
 impl Certificate {
     /// Parse a single certificate from DER bytes
     pub fn from_der(data: &[u8]) -> Result<Self, String> {
-        let cert = DerCertificate::from_der(data)
-            .map_err(|e| format!("Failed to parse X.509 certificate: {e}"))?;
-        Self::from_parsed(&cert, data.to_vec())
+        parse_certificate_der(data)
     }
 
     /// Parse a certificate from PEM format
     pub fn from_pem(pem: &str) -> Result<Self, String> {
-        let cert = DerCertificate::from_pem(pem)
-            .map_err(|e| format!("Failed to parse PEM certificate: {e}"))?;
-        let der_bytes = cert
-            .to_der()
-            .map_err(|e| format!("Failed to re-encode cert: {e}"))?;
-        Self::from_parsed(&cert, der_bytes)
+        let der = edgerun_crypto::x509_cert_from_pem(pem)
+            .ok_or_else(|| "Failed to parse PEM certificate".to_string())?;
+        Self::from_der(&der)
     }
 
     /// Parse multiple certificates from a TLS Certificate message payload.
@@ -102,97 +91,6 @@ impl Certificate {
             certs.push(cert);
         }
         Ok(certs)
-    }
-
-    /// Build our Certificate from a properly decoded x509_cert::Certificate
-    fn from_parsed(cert: &DerCertificate, der_bytes: Vec<u8>) -> Result<Self, String> {
-        let tbs = cert.tbs_certificate();
-
-        // Subject CN
-        let subject_cn = Self::extract_cn(tbs.subject());
-        let subject_der = tbs.subject().to_der().unwrap_or_default();
-
-        // Issuer CN
-        let issuer_cn = Self::extract_cn(tbs.issuer());
-        let issuer_der = tbs.issuer().to_der().unwrap_or_default();
-
-        // Validity
-        let not_before = Self::time_to_unix(&tbs.validity().not_before);
-        let not_after = Self::time_to_unix(&tbs.validity().not_after);
-
-        // Subject public key
-        let subject_public_key = tbs
-            .subject_public_key_info()
-            .subject_public_key
-            .raw_bytes()
-            .to_vec();
-
-        // Subject Alternative Names
-        let subject_alt_names = Self::extract_sans(cert);
-
-        // Signature algorithm OID
-        let signature_algorithm = cert.signature_algorithm().oid.as_bytes().to_vec();
-
-        // Signature value
-        let signature_value = cert.signature().raw_bytes().to_vec();
-
-        // TBS certificate DER
-        let tbs_certificate_der = cert
-            .tbs_certificate()
-            .to_der()
-            .map_err(|e| format!("Failed to encode TBS: {e}"))?;
-
-        Ok(Certificate {
-            der: der_bytes,
-            subject_cn,
-            issuer_cn,
-            not_before,
-            not_after,
-            subject_public_key,
-            subject_alt_names,
-            issuer_der,
-            subject_der,
-            signature_algorithm,
-            signature_value,
-            tbs_certificate_der,
-        })
-    }
-
-    /// Extract Common Name from an x509_cert Name
-    fn extract_cn(name: &edgerun_crypto::x509_cert::name::Name) -> Option<String> {
-        let _ = name;
-        None
-    }
-
-    /// Extract DNS Subject Alternative Names
-    fn extract_sans(cert: &DerCertificate) -> Vec<String> {
-        use edgerun_crypto::x509_cert::ext::pkix::SubjectAltName;
-        let tbs = cert.tbs_certificate();
-        let Some(exts) = tbs.extensions() else {
-            return Vec::new();
-        };
-
-        let mut sans = Vec::new();
-        for ext in exts.iter() {
-            if ext.extn_id
-                == edgerun_crypto::x509_cert::der::oid::db::rfc5280::ID_CE_SUBJECT_ALT_NAME
-            {
-                if let Ok(san) = SubjectAltName::from_der(ext.extn_value.as_bytes()) {
-                    for name in san.0.iter() {
-                        if let GeneralName::DnsName(dns) = name {
-                            sans.push(dns.to_string());
-                        }
-                    }
-                }
-            }
-        }
-        sans
-    }
-
-    /// Convert x509_cert Time to Unix timestamp
-    fn time_to_unix(time: &edgerun_crypto::x509_cert::time::Time) -> u64 {
-        let date_time = time.to_date_time();
-        date_time.unix_duration().as_secs()
     }
 
     /// Check if the certificate is currently valid
@@ -318,6 +216,392 @@ impl Certificate {
         }
         false
     }
+}
+
+#[derive(Clone, Copy)]
+struct DerNode<'a> {
+    tag: u8,
+    full: &'a [u8],
+    value: &'a [u8],
+}
+
+struct DerReader<'a> {
+    input: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> DerReader<'a> {
+    fn new(input: &'a [u8]) -> Self {
+        Self { input, pos: 0 }
+    }
+
+    fn next(&mut self) -> Result<Option<DerNode<'a>>, String> {
+        if self.pos == self.input.len() {
+            return Ok(None);
+        }
+        let start = self.pos;
+        if self.input.len().saturating_sub(self.pos) < 2 {
+            return Err("Failed to parse X.509 certificate: DER object truncated".into());
+        }
+        let tag = self.input[self.pos];
+        self.pos += 1;
+        let len_first = self.input[self.pos];
+        self.pos += 1;
+        let len = if len_first & 0x80 == 0 {
+            len_first as usize
+        } else {
+            let len_len = (len_first & 0x7f) as usize;
+            if len_len == 0 || len_len > core::mem::size_of::<usize>() {
+                return Err("Failed to parse X.509 certificate: invalid DER length".into());
+            }
+            if self.input.len().saturating_sub(self.pos) < len_len {
+                return Err("Failed to parse X.509 certificate: DER length truncated".into());
+            }
+            let mut len = 0usize;
+            for byte in &self.input[self.pos..self.pos + len_len] {
+                len = (len << 8) | (*byte as usize);
+            }
+            self.pos += len_len;
+            len
+        };
+        let value_start = self.pos;
+        let end = value_start
+            .checked_add(len)
+            .ok_or_else(|| "Failed to parse X.509 certificate: DER length overflow".to_string())?;
+        if end > self.input.len() {
+            return Err("Failed to parse X.509 certificate: DER value truncated".into());
+        }
+        self.pos = end;
+        Ok(Some(DerNode {
+            tag,
+            full: &self.input[start..end],
+            value: &self.input[value_start..end],
+        }))
+    }
+
+    fn expect(&mut self, tag: u8, what: &str) -> Result<DerNode<'a>, String> {
+        let node = self
+            .next()?
+            .ok_or_else(|| format!("Failed to parse X.509 certificate: missing {what}"))?;
+        if node.tag != tag {
+            return Err(format!(
+                "Failed to parse X.509 certificate: expected {what}"
+            ));
+        }
+        Ok(node)
+    }
+}
+
+fn parse_certificate_der(data: &[u8]) -> Result<Certificate, String> {
+    let cert = only_node(data, 0x30, "certificate")?;
+    let mut cert_reader = DerReader::new(cert.value);
+    let tbs = cert_reader.expect(0x30, "TBSCertificate")?;
+    let sig_alg = cert_reader.expect(0x30, "signatureAlgorithm")?;
+    let signature = cert_reader.expect(0x03, "signatureValue")?;
+    if cert_reader.next()?.is_some() {
+        return Err("Failed to parse X.509 certificate: trailing certificate data".into());
+    }
+
+    let signature_algorithm = first_oid(sig_alg.value).unwrap_or_default();
+    let signature_value = bit_string_bytes(signature.value)?.to_vec();
+
+    let mut tbs_reader = DerReader::new(tbs.value);
+    let first = tbs_reader
+        .next()?
+        .ok_or_else(|| "Failed to parse X.509 certificate: empty TBSCertificate".to_string())?;
+    if first.tag != 0xa0 {
+        parse_tbs_after_version(
+            data,
+            tbs,
+            first,
+            &mut tbs_reader,
+            signature_algorithm,
+            signature_value,
+        )
+    } else {
+        let serial = tbs_reader
+            .next()?
+            .ok_or_else(|| "Failed to parse X.509 certificate: missing serial".to_string())?;
+        parse_tbs_after_serial(
+            data,
+            tbs,
+            serial,
+            &mut tbs_reader,
+            signature_algorithm,
+            signature_value,
+        )
+    }
+}
+
+fn parse_tbs_after_version(
+    data: &[u8],
+    tbs: DerNode<'_>,
+    serial: DerNode<'_>,
+    tbs_reader: &mut DerReader<'_>,
+    signature_algorithm: Vec<u8>,
+    signature_value: Vec<u8>,
+) -> Result<Certificate, String> {
+    parse_tbs_after_serial(
+        data,
+        tbs,
+        serial,
+        tbs_reader,
+        signature_algorithm,
+        signature_value,
+    )
+}
+
+fn parse_tbs_after_serial(
+    data: &[u8],
+    tbs: DerNode<'_>,
+    _serial: DerNode<'_>,
+    tbs_reader: &mut DerReader<'_>,
+    signature_algorithm: Vec<u8>,
+    signature_value: Vec<u8>,
+) -> Result<Certificate, String> {
+    let _tbs_sig_alg = tbs_reader.expect(0x30, "TBS signature")?;
+    let issuer = tbs_reader.expect(0x30, "issuer")?;
+    let validity = tbs_reader.expect(0x30, "validity")?;
+    let subject = tbs_reader.expect(0x30, "subject")?;
+    let spki = tbs_reader.expect(0x30, "subjectPublicKeyInfo")?;
+
+    let issuer_cn = extract_cn(issuer.value);
+    let subject_cn = extract_cn(subject.value);
+    let (not_before, not_after) = parse_validity(validity.value)?;
+    let subject_public_key = parse_spki_public_key(spki.value)?;
+
+    let mut subject_alt_names = Vec::new();
+    while let Some(node) = tbs_reader.next()? {
+        if node.tag == 0xa3 {
+            subject_alt_names = parse_extensions(node.value);
+        }
+    }
+
+    Ok(Certificate {
+        der: data.to_vec(),
+        subject_cn,
+        issuer_cn,
+        not_before,
+        not_after,
+        subject_public_key,
+        subject_alt_names,
+        issuer_der: issuer.full.to_vec(),
+        subject_der: subject.full.to_vec(),
+        signature_algorithm,
+        signature_value,
+        tbs_certificate_der: tbs.full.to_vec(),
+    })
+}
+
+fn only_node<'a>(data: &'a [u8], tag: u8, what: &str) -> Result<DerNode<'a>, String> {
+    let mut reader = DerReader::new(data);
+    let node = reader.expect(tag, what)?;
+    if reader.next()?.is_some() {
+        return Err(format!(
+            "Failed to parse X.509 certificate: trailing {what} data"
+        ));
+    }
+    Ok(node)
+}
+
+fn first_oid(data: &[u8]) -> Option<Vec<u8>> {
+    let mut reader = DerReader::new(data);
+    while let Ok(Some(node)) = reader.next() {
+        if node.tag == 0x06 {
+            return Some(node.value.to_vec());
+        }
+    }
+    None
+}
+
+fn bit_string_bytes(value: &[u8]) -> Result<&[u8], String> {
+    if value.is_empty() {
+        return Err("Failed to parse X.509 certificate: empty BIT STRING".into());
+    }
+    if value[0] != 0 {
+        return Err("Failed to parse X.509 certificate: unsupported BIT STRING padding".into());
+    }
+    Ok(&value[1..])
+}
+
+fn parse_spki_public_key(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut reader = DerReader::new(data);
+    let _alg = reader.expect(0x30, "SPKI algorithm")?;
+    let public_key = reader.expect(0x03, "SPKI public key")?;
+    Ok(bit_string_bytes(public_key.value)?.to_vec())
+}
+
+fn parse_validity(data: &[u8]) -> Result<(u64, u64), String> {
+    let mut reader = DerReader::new(data);
+    let not_before = reader
+        .next()?
+        .ok_or_else(|| "Failed to parse X.509 certificate: missing notBefore".to_string())?;
+    let not_after = reader
+        .next()?
+        .ok_or_else(|| "Failed to parse X.509 certificate: missing notAfter".to_string())?;
+    Ok((parse_time(not_before)?, parse_time(not_after)?))
+}
+
+fn parse_time(node: DerNode<'_>) -> Result<u64, String> {
+    match node.tag {
+        0x17 => parse_utc_time(node.value),
+        0x18 => parse_generalized_time(node.value),
+        _ => Err("Failed to parse X.509 certificate: unsupported time tag".into()),
+    }
+}
+
+fn parse_utc_time(value: &[u8]) -> Result<u64, String> {
+    if value.len() != 13 || value[12] != b'Z' {
+        return Err("Failed to parse X.509 certificate: invalid UTCTime".into());
+    }
+    let year = two_digits(&value[0..2])?;
+    let year = if year >= 50 { 1900 + year } else { 2000 + year };
+    unix_from_ymdhms(
+        year as i32,
+        two_digits(&value[2..4])? as u32,
+        two_digits(&value[4..6])? as u32,
+        two_digits(&value[6..8])? as u32,
+        two_digits(&value[8..10])? as u32,
+        two_digits(&value[10..12])? as u32,
+    )
+}
+
+fn parse_generalized_time(value: &[u8]) -> Result<u64, String> {
+    if value.len() != 15 || value[14] != b'Z' {
+        return Err("Failed to parse X.509 certificate: invalid GeneralizedTime".into());
+    }
+    let year = (two_digits(&value[0..2])? * 100 + two_digits(&value[2..4])?) as i32;
+    unix_from_ymdhms(
+        year,
+        two_digits(&value[4..6])? as u32,
+        two_digits(&value[6..8])? as u32,
+        two_digits(&value[8..10])? as u32,
+        two_digits(&value[10..12])? as u32,
+        two_digits(&value[12..14])? as u32,
+    )
+}
+
+fn two_digits(bytes: &[u8]) -> Result<u64, String> {
+    if bytes.len() != 2 || !bytes[0].is_ascii_digit() || !bytes[1].is_ascii_digit() {
+        return Err("Failed to parse X.509 certificate: invalid decimal time field".into());
+    }
+    Ok(((bytes[0] - b'0') as u64) * 10 + (bytes[1] - b'0') as u64)
+}
+
+fn unix_from_ymdhms(
+    year: i32,
+    month: u32,
+    day: u32,
+    hour: u32,
+    minute: u32,
+    second: u32,
+) -> Result<u64, String> {
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
+        return Err("Failed to parse X.509 certificate: invalid time value".into());
+    }
+    let days = days_from_civil(year, month, day);
+    if days < 0 {
+        return Err("Failed to parse X.509 certificate: time before Unix epoch".into());
+    }
+    Ok(days as u64 * 86_400 + hour as u64 * 3_600 + minute as u64 * 60 + second as u64)
+}
+
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let mut y = year as i64;
+    let m = month as i64;
+    let d = day as i64;
+    y -= (m <= 2) as i64;
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = m + if m > 2 { -3 } else { 9 };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+fn extract_cn(name_der_value: &[u8]) -> Option<String> {
+    let mut rdns = DerReader::new(name_der_value);
+    while let Ok(Some(rdn)) = rdns.next() {
+        if rdn.tag != 0x31 {
+            continue;
+        }
+        let mut attrs = DerReader::new(rdn.value);
+        while let Ok(Some(attr)) = attrs.next() {
+            if attr.tag != 0x30 {
+                continue;
+            }
+            let mut parts = DerReader::new(attr.value);
+            let oid = parts.next().ok().flatten()?;
+            let value = parts.next().ok().flatten()?;
+            if oid.tag == 0x06 && oid.value == [0x55, 0x04, 0x03] {
+                return string_value(value);
+            }
+        }
+    }
+    None
+}
+
+fn string_value(node: DerNode<'_>) -> Option<String> {
+    match node.tag {
+        0x0c | 0x13 | 0x16 => core::str::from_utf8(node.value)
+            .ok()
+            .map(ToString::to_string),
+        _ => None,
+    }
+}
+
+fn parse_extensions(data: &[u8]) -> Vec<String> {
+    let Ok(exts) = only_node(data, 0x30, "extensions") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut reader = DerReader::new(exts.value);
+    while let Ok(Some(ext)) = reader.next() {
+        if ext.tag != 0x30 {
+            continue;
+        }
+        let mut parts = DerReader::new(ext.value);
+        let Ok(Some(oid)) = parts.next() else {
+            continue;
+        };
+        if oid.tag != 0x06 || oid.value != [0x55, 0x1d, 0x11] {
+            continue;
+        }
+        let mut value = match parts.next() {
+            Ok(Some(node)) if node.tag == 0x01 => match parts.next() {
+                Ok(Some(value)) => value,
+                _ => continue,
+            },
+            Ok(Some(value)) => value,
+            _ => continue,
+        };
+        if value.tag != 0x04 {
+            continue;
+        }
+        out.extend(parse_san_dns_names(value.value));
+    }
+    out
+}
+
+fn parse_san_dns_names(extn_value: &[u8]) -> Vec<String> {
+    let Ok(names) = only_node(extn_value, 0x30, "subjectAltName") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut reader = DerReader::new(names.value);
+    while let Ok(Some(name)) = reader.next() {
+        if name.tag == 0x82 {
+            if let Ok(dns) = core::str::from_utf8(name.value) {
+                out.push(dns.to_string());
+            }
+        }
+    }
+    out
 }
 
 fn unix_now_secs() -> Option<u64> {

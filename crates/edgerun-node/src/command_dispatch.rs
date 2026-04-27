@@ -2788,7 +2788,10 @@ mod tests {
             }),
             command_type,
             command_version: 1,
-            issued_at: None,
+            issued_at: Some(prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 0,
+            }),
             not_before: None,
             expires_at: None,
             idempotency_key: vec![],
@@ -2867,6 +2870,32 @@ mod tests {
             algorithm: edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32,
             value: sig,
         });
+    }
+
+    fn valid_capability_descriptor() -> edgerun_proto::edgerun::v0::trust::CapabilityDescriptor {
+        edgerun_proto::edgerun::v0::trust::CapabilityDescriptor {
+            capability_version: 1,
+            capability_kind: edgerun_proto::edgerun::v0::trust::CapabilityKind::NodeControl as i32,
+            actions: vec!["delegate".into()],
+            scope: Some(edgerun_proto::edgerun::v0::trust::ScopeDescriptor {
+                scope_version: 1,
+                scope_kind: edgerun_proto::edgerun::v0::trust::ScopeKind::Node as i32,
+                target_nodes: vec![edgerun_proto::edgerun::v0::common::NodeRef {
+                    node_id: b"node-a".to_vec(),
+                }],
+                target_streams: vec![],
+                target_object_kinds: vec![],
+                target_view_types: vec![],
+                target_domains: vec![],
+                time_bounds: None,
+                scope_metadata: None,
+            }),
+            constraints: None,
+            delegation_policy:
+                edgerun_proto::edgerun::v0::trust::DelegationPolicy::DelegableWithAttenuation as i32,
+            minimum_assurance: None,
+            capability_metadata: None,
+        }
     }
 
     fn make_controller_identity(hex_str: &str) -> Vec<u8> {
@@ -2958,17 +2987,7 @@ mod tests {
         std::sync::Arc::new(crate::capacity::ResourceTracker::new(&cap, 0, 0))
     }
 
-    #[test]
-    fn dispatch_rejects_command_with_empty_command_id() {
-        let mut store = test_store();
-        let signer = TestSigner::new();
-        let node_id = signer.node_id();
-        let mut controllers = ControllerSet::new(vec![vec![1, 2, 3]]);
-        let mut replay_cache = HashMap::new();
-        let revoked = HashSet::new();
-        let trusted = vec![vec![1, 2, 3]];
-
-        // Need to append a genesis event first so store has a head
+    fn append_genesis(store: &mut NodeStore, node_id: &NodeID) {
         let genesis = edgerun_core::protocol::EventEnvelope {
             envelope_version: 1,
             stream_id: node_id.0.to_vec(),
@@ -2988,6 +3007,46 @@ mod tests {
             signature: None,
         };
         store.append_event_blocking(genesis).unwrap();
+    }
+
+    fn dispatch_test_command(
+        command: &CommandEnvelope,
+        store: &mut NodeStore,
+        node_id: &NodeID,
+        signer: &TestSigner,
+        controllers: &mut ControllerSet,
+        replay_cache: &mut HashMap<Vec<u8>, (Vec<u8>, i64)>,
+        revoked: &HashSet<Vec<u8>>,
+        trusted: &[Vec<u8>],
+    ) -> CommandDispatchResult {
+        dispatch_command(
+            command,
+            store,
+            &node_id.0,
+            signer,
+            controllers,
+            replay_cache,
+            revoked,
+            trusted,
+            2, // HARDWARE_BACKED
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
+            &test_running_workloads(),
+        )
+    }
+
+    #[test]
+    fn dispatch_rejects_command_with_empty_command_id() {
+        let mut store = test_store();
+        let signer = TestSigner::new();
+        let node_id = signer.node_id();
+        let mut controllers = ControllerSet::new(vec![vec![1, 2, 3]]);
+        let mut replay_cache = HashMap::new();
+        let revoked = HashSet::new();
+        let trusted = vec![vec![1, 2, 3]];
+
+        append_genesis(&mut store, &node_id);
 
         let command = make_command(
             vec![], // empty command_id -> structural reject
@@ -2996,20 +3055,15 @@ mod tests {
             CommandType::Query as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2); // REJECTED
         assert!(!result.reason_code.is_empty());
@@ -3025,25 +3079,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![vec![1, 2, 3]];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let command = make_command(
             vec![1, 2, 3],
@@ -3052,20 +3088,15 @@ mod tests {
             CommandType::Query as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2); // REJECTED
     }
@@ -3080,25 +3111,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![vec![1, 2, 3]];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let mut command = make_command(
             vec![1, 2, 3],
@@ -3108,20 +3121,15 @@ mod tests {
         );
         command.target_node = None; // no target
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
     }
@@ -3136,25 +3144,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![vec![1, 2, 3]];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         // Issuer is NOT in controllers and has no delegation chain
         let command = make_command(
@@ -3164,20 +3154,15 @@ mod tests {
             CommandType::Query as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Fails signature verification first (no signature on command)
         // so it never reaches the controller check
@@ -3195,25 +3180,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         // Command with the controller as command_id (extract_identity_from_command uses command_id)
         let new_ctrl = vec![10, 20, 30];
@@ -3224,20 +3191,15 @@ mod tests {
             CommandType::AddController as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
 
         // Will fail signature verification (no signature), so gets rejected
@@ -3256,25 +3218,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         // Empty command_id -> extract_identity returns empty
         let command = make_command(
@@ -3284,20 +3228,15 @@ mod tests {
             CommandType::AddController as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Should be rejected for structural reasons (empty command_id)
         assert_eq!(result.decision, 2);
@@ -3316,25 +3255,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let command = make_command(
             ctrl_to_remove.clone(),
@@ -3343,20 +3264,15 @@ mod tests {
             CommandType::RemoveController as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Fails signature verification
         assert_eq!(result.decision, 2);
@@ -3373,25 +3289,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let mut command = make_command(
             initial_ctrl.clone(),
@@ -3401,20 +3299,15 @@ mod tests {
         );
         sign_command(&mut command, &signer);
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2,
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
 
         assert_eq!(result.decision, 2);
@@ -3433,25 +3326,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let new_ctrl = vec![42, 42, 42];
         let command = make_command(
@@ -3461,20 +3336,15 @@ mod tests {
             CommandType::TransferControl as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Fails signature verification
         assert_eq!(result.decision, 2);
@@ -3491,25 +3361,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let command = make_command(
             vec![1, 2, 3],
@@ -3518,20 +3370,15 @@ mod tests {
             CommandType::Query as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Fails signature verification, but query type is recognized
         assert_eq!(result.decision, 2);
@@ -3548,25 +3395,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let command = make_command(
             vec![1, 2, 3],
@@ -3575,20 +3404,15 @@ mod tests {
             CommandType::PublishSnapshot as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Should be rejected with "use_produce_snapshot_request" after failing sig check
         assert_eq!(result.decision, 2);
@@ -3605,25 +3429,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let command = make_command(
             vec![1, 2, 3],
@@ -3632,20 +3438,15 @@ mod tests {
             CommandType::FetchObject as i32,
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
     }
@@ -3661,25 +3462,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         // Use an unknown command type
         let command = make_command(
@@ -3689,20 +3472,15 @@ mod tests {
             999, // unknown type
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
     }
@@ -3721,27 +3499,14 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
-        // Build a delegation record and encode as payload
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        // Build a structurally valid but unsigned delegation record.
         let delegation = DelegationRecord {
             record_version: 1,
             delegation_id: vec![1, 2, 3, 4],
@@ -3755,10 +3520,13 @@ mod tests {
                 identity_kind: Some(2),
                 key_hint: None,
             }),
-            issued_at: None,
+            issued_at: Some(prost_types::Timestamp {
+                seconds: now_secs,
+                nanos: 0,
+            }),
             not_before: None,
             expires_at: None,
-            capability: None,
+            capability: Some(valid_capability_descriptor()),
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
@@ -3774,20 +3542,15 @@ mod tests {
         );
         command.payload = Some(Payload::InlinePayload(delegation_bytes));
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Should try to process as delegation but fail signature verification
         assert_eq!(result.decision, 2);
@@ -3807,25 +3570,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let now_secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -3850,7 +3595,7 @@ mod tests {
             }),
             not_before: None,
             expires_at: None,
-            capability: None,
+            capability: Some(valid_capability_descriptor()),
             parent_delegation: None,
             revocation_authorities: vec![],
             delegation_metadata: None,
@@ -3869,20 +3614,15 @@ mod tests {
         )));
         sign_command(&mut command, &signer);
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2,
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
 
         assert_eq!(result.decision, CommandDecision::Committed as i32);
@@ -3902,25 +3642,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         // Build a revocation record and encode as payload
         let revocation = RevocationRecord {
@@ -3959,20 +3681,15 @@ mod tests {
         );
         command.payload = Some(Payload::InlinePayload(revocation_bytes));
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Will fail signature verification but the dispatch path for revocation runs
         assert_eq!(result.decision, 2);
@@ -3992,25 +3709,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let now_secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -4058,20 +3757,15 @@ mod tests {
         )));
         sign_command(&mut command, &signer);
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2,
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
 
         assert_eq!(result.decision, CommandDecision::Committed as i32);
@@ -4088,25 +3782,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let mut command = make_command(
             vec![1, 2, 3],
@@ -4121,20 +3797,15 @@ mod tests {
             ]),
         );
 
-        let result = dispatch_command(
+        let result = dispatch_test_command(
             &command,
             &mut store,
-            &node_id.0,
+            &node_id,
             &signer,
             &mut controllers,
             &mut replay_cache,
             &revoked,
             &trusted,
-            2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
         );
         // Fails signature verification (no signature) — so rejected before reaching custom dispatch
         assert_eq!(result.decision, 2);
@@ -4156,25 +3827,7 @@ mod tests {
         let revoked = HashSet::new();
         let trusted = vec![initial_ctrl.clone()];
 
-        let genesis = edgerun_core::protocol::EventEnvelope {
-            envelope_version: 1,
-            stream_id: node_id.0.to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: None,
-        };
-        store.append_event_blocking(genesis).unwrap();
+        append_genesis(&mut store, &node_id);
 
         let command = make_command(
             vec![1, 2, 3],

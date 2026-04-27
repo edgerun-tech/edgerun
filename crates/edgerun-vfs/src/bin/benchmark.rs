@@ -500,7 +500,7 @@ fn main() {
 
     // ---- SECTION 6: Concurrent Read ----
     println!("----------------------------------------------------------------");
-    println!("  6. CONCURRENT READ (RwLock vs DashMap)");
+    println!("  6. CONCURRENT READ (shared VFS implementations)");
     println!("----------------------------------------------------------------");
 
     let vfs_rwlock = Arc::new(std::sync::RwLock::new(
@@ -563,14 +563,14 @@ fn main() {
         format_duration(fine_per_reader)
     );
     println!(
-        "  DashMap speedup: {}",
+        "  FineGrainedVFS speedup: {}",
         format_speedup(rwlock_total, fine_total)
     );
     println!();
 
     // ---- SECTION 7: Concurrent Write ----
     println!("----------------------------------------------------------------");
-    println!("  7. CONCURRENT WRITE (FineGrainedVFS DashMap)");
+    println!("  7. CONCURRENT WRITE (FineGrainedVFS)");
     println!("----------------------------------------------------------------");
 
     {

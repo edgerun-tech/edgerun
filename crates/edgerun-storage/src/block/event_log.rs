@@ -60,6 +60,28 @@ impl BlockStorage for Box<dyn BlockStorage + Send> {
     }
 }
 
+impl<T: BlockStorage + ?Sized> BlockStorage for &mut T {
+    fn sector_size(&self) -> usize {
+        (**self).sector_size()
+    }
+
+    fn sectors(&self) -> u64 {
+        (**self).sectors()
+    }
+
+    fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), StorageError> {
+        (**self).read_sector(sector, buf)
+    }
+
+    fn write_sector(&mut self, sector: u64, buf: &[u8]) -> Result<(), StorageError> {
+        (**self).write_sector(sector, buf)
+    }
+
+    fn sync(&mut self) -> Result<(), StorageError> {
+        (**self).sync()
+    }
+}
+
 /// Block-backed append-only event log.
 pub struct BlockEventLog<S: BlockStorage> {
     device: RefCell<S>,

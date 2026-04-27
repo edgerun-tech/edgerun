@@ -74,27 +74,75 @@ impl Default for BacnetResponse {
     }
 }
 
-pub struct BacnetClient;
+pub struct BacnetClient {
+    connected: bool,
+    properties: Vec<BacnetProperty>,
+}
 
 impl BacnetClient {
     pub fn new() -> Self {
-        Self
+        Self {
+            connected: false,
+            properties: Vec::new(),
+        }
     }
 
-    pub fn connect(&self, _host: &[u8], _port: u16) -> BacnetConnectFuture {
-        BacnetConnectFuture { done: false }
+    pub fn connect(&mut self, host: &[u8], port: u16) -> BacnetConnectFuture {
+        let result = if !host.is_empty() && port != 0 {
+            self.connected = true;
+            Ok(())
+        } else {
+            Err(())
+        };
+        BacnetConnectFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn read(&self, _req: &BacnetRequest) -> BacnetReadFuture {
-        BacnetReadFuture { done: false }
+    pub fn read(&self, req: &BacnetRequest) -> BacnetReadFuture {
+        let result = if !self.connected {
+            Err(())
+        } else {
+            let mut response = BacnetResponse::new();
+            if let Some(property) = self.properties.iter().find(|p| p.id == req.property) {
+                response.value = property.value.clone();
+            }
+            Ok(response)
+        };
+        BacnetReadFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn write(&self, _req: &BacnetRequest, _value: &[u8]) -> BacnetWriteFuture {
-        BacnetWriteFuture { done: false }
+    pub fn write(&mut self, req: &BacnetRequest, value: &[u8]) -> BacnetWriteFuture {
+        let result = if !self.connected {
+            Err(())
+        } else {
+            if let Some(property) = self.properties.iter_mut().find(|p| p.id == req.property) {
+                property.value = value.to_vec();
+            } else {
+                self.properties.push(BacnetProperty {
+                    id: req.property,
+                    value: value.to_vec(),
+                    datatype: 0,
+                });
+            }
+            Ok(())
+        };
+        BacnetWriteFuture {
+            result: Some(result),
+        }
     }
 
     pub fn subscribe_cov(&self, _req: &BacnetRequest) -> BacnetCovFuture {
-        BacnetCovFuture { done: false }
+        BacnetCovFuture {
+            result: Some(if self.connected { Ok(()) } else { Err(()) }),
+        }
+    }
+
+    #[must_use]
+    pub fn is_connected(&self) -> bool {
+        self.connected
     }
 }
 
@@ -105,45 +153,45 @@ impl Default for BacnetClient {
 }
 
 pub struct BacnetConnectFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for BacnetConnectFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }
 
 pub struct BacnetReadFuture {
-    done: bool,
+    result: Option<Result<BacnetResponse, ()>>,
 }
 
 impl Future for BacnetReadFuture {
     type Output = Result<BacnetResponse, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct BacnetWriteFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for BacnetWriteFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }
 
 pub struct BacnetCovFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for BacnetCovFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }

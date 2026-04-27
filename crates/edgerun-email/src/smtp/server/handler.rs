@@ -5,6 +5,7 @@ use std::io;
 
 use crate::smtp::server::dsn_generator::DsnBounce;
 use crate::smtp::types::MailEnvelope;
+#[cfg(feature = "dkim")]
 use edgerun_email_auth::AuthenticationResults;
 
 // ===========================================================================
@@ -65,6 +66,7 @@ pub trait MailHandler: Send + Sync + 'static {
     /// The implementation can use this to add `Authentication-Results` headers,
     /// log results, or apply policy-based filtering.
     /// Default implementation does nothing.
+    #[cfg(feature = "dkim")]
     fn on_mail_received(&self, _envelope: &MailEnvelope, _auth_results: &AuthenticationResults) {}
 }
 

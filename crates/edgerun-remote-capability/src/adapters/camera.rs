@@ -9,14 +9,10 @@ use edgerun_camera_biometrics::{
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
-};
+use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::stream_oriented_error;
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 fn map_camera_error(err: CameraBiometricError) -> CapabilityError {
     match err {
@@ -312,13 +308,6 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
-    }
-
     fn invoke(
         &mut self,
         _session_id: &[u8],
@@ -383,13 +372,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.descriptor.clone()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

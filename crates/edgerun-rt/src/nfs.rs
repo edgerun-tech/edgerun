@@ -39,51 +39,132 @@ pub struct NfsEntry {
     pub stat: NfsStat,
 }
 
-pub struct NfsClient;
+pub struct NfsClient {
+    mounted: bool,
+}
 
 impl NfsClient {
     pub fn new() -> Self {
-        Self
+        Self { mounted: false }
     }
 
-    pub fn mount(&self, _server: &[u8], _export: &[u8]) -> NfsMountFuture {
-        NfsMountFuture { done: false }
+    pub fn mount(&mut self, server: &[u8], export: &[u8]) -> NfsMountFuture {
+        let result = if !server.is_empty() && !export.is_empty() {
+            self.mounted = true;
+            Ok(NfsFileHandle {
+                data: export.to_vec(),
+            })
+        } else {
+            Err(())
+        };
+        NfsMountFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn lookup(&self, _handle: &NfsFileHandle, _name: &[u8]) -> NfsLookupFuture {
-        NfsLookupFuture { done: false }
+    pub fn lookup(&self, handle: &NfsFileHandle, name: &[u8]) -> NfsLookupFuture {
+        let result = if self.mounted && !name.is_empty() {
+            let mut data = handle.data.clone();
+            if !data.ends_with(b"/") {
+                data.push(b'/');
+            }
+            data.extend_from_slice(name);
+            Ok(NfsFileHandle { data })
+        } else {
+            Err(())
+        };
+        NfsLookupFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn read(&self, _handle: &NfsFileHandle, _offset: u64, _count: usize) -> NfsReadFuture {
-        NfsReadFuture { done: false }
+    pub fn read(&self, handle: &NfsFileHandle, offset: u64, count: usize) -> NfsReadFuture {
+        let result = if self.mounted {
+            let start = core::cmp::min(offset as usize, handle.data.len());
+            let end = core::cmp::min(start.saturating_add(count), handle.data.len());
+            Ok(handle.data[start..end].to_vec())
+        } else {
+            Err(())
+        };
+        NfsReadFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn write(&self, _handle: &NfsFileHandle, _offset: u64, _data: &[u8]) -> NfsWriteFuture {
-        NfsWriteFuture { done: false }
+    pub fn write(&self, _handle: &NfsFileHandle, _offset: u64, data: &[u8]) -> NfsWriteFuture {
+        NfsWriteFuture {
+            result: Some(if self.mounted {
+                Ok(data.len())
+            } else {
+                Err(())
+            }),
+        }
     }
 
-    pub fn readdir(&self, _handle: &NfsFileHandle, _cookie: u64) -> NfsReaddirFuture {
-        NfsReaddirFuture { done: false }
+    pub fn readdir(&self, handle: &NfsFileHandle, _cookie: u64) -> NfsReaddirFuture {
+        let result = if self.mounted {
+            Ok(alloc::vec![NfsEntry {
+                name: handle.data.clone(),
+                handle: NfsFileHandle {
+                    data: handle.data.clone(),
+                },
+                stat: NfsStat {
+                    ftype: NfsFileType::Directory,
+                    mode: 0o755,
+                    nlink: 1,
+                    uid: 0,
+                    gid: 0,
+                    size: handle.data.len() as u64,
+                    atime: 0,
+                    mtime: 0,
+                },
+            }])
+        } else {
+            Err(())
+        };
+        NfsReaddirFuture {
+            result: Some(result),
+        }
     }
 
-    pub fn mkdir(&self, _parent: &NfsFileHandle, _name: &[u8]) -> NfsMkdirFuture {
-        NfsMkdirFuture { done: false }
+    pub fn mkdir(&self, parent: &NfsFileHandle, name: &[u8]) -> NfsMkdirFuture {
+        self.lookup(parent, name).into_mkdir()
     }
 
-    pub fn rmdir(&self, _parent: &NfsFileHandle, _name: &[u8]) -> NfsRmdirFuture {
-        NfsRmdirFuture { done: false }
+    pub fn rmdir(&self, _parent: &NfsFileHandle, name: &[u8]) -> NfsRmdirFuture {
+        NfsRmdirFuture {
+            result: Some(if self.mounted && !name.is_empty() {
+                Ok(())
+            } else {
+                Err(())
+            }),
+        }
     }
 
-    pub fn create(&self, _parent: &NfsFileHandle, _name: &[u8]) -> NfsCreateFuture {
-        NfsCreateFuture { done: false }
+    pub fn create(&self, parent: &NfsFileHandle, name: &[u8]) -> NfsCreateFuture {
+        self.lookup(parent, name).into_create()
     }
 
-    pub fn remove(&self, _parent: &NfsFileHandle, _name: &[u8]) -> NfsRemoveFuture {
-        NfsRemoveFuture { done: false }
+    pub fn remove(&self, _parent: &NfsFileHandle, name: &[u8]) -> NfsRemoveFuture {
+        NfsRemoveFuture {
+            result: Some(if self.mounted && !name.is_empty() {
+                Ok(())
+            } else {
+                Err(())
+            }),
+        }
     }
 
-    pub fn unmount(&self) -> NfsUnmountFuture {
-        NfsUnmountFuture { done: false }
+    pub fn unmount(&mut self) -> NfsUnmountFuture {
+        self.mounted = false;
+        NfsUnmountFuture {
+            result: Some(Ok(())),
+        }
+    }
+
+    #[must_use]
+    pub fn is_mounted(&self) -> bool {
+        self.mounted
     }
 }
 
@@ -94,111 +175,144 @@ impl Default for NfsClient {
 }
 
 pub struct NfsMountFuture {
-    done: bool,
+    result: Option<Result<NfsFileHandle, ()>>,
 }
 
 impl Future for NfsMountFuture {
     type Output = Result<NfsFileHandle, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct NfsLookupFuture {
-    done: bool,
+    result: Option<Result<NfsFileHandle, ()>>,
+}
+
+impl NfsLookupFuture {
+    fn into_mkdir(self) -> NfsMkdirFuture {
+        NfsMkdirFuture {
+            result: self.result,
+        }
+    }
+
+    fn into_create(self) -> NfsCreateFuture {
+        NfsCreateFuture {
+            result: self.result,
+        }
+    }
 }
 
 impl Future for NfsLookupFuture {
     type Output = Result<NfsFileHandle, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct NfsReadFuture {
-    done: bool,
+    result: Option<Result<Vec<u8>, ()>>,
 }
 
 impl Future for NfsReadFuture {
     type Output = Result<Vec<u8>, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct NfsWriteFuture {
-    done: bool,
+    result: Option<Result<usize, ()>>,
 }
 
 impl Future for NfsWriteFuture {
     type Output = Result<usize, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct NfsReaddirFuture {
-    done: bool,
+    result: Option<Result<Vec<NfsEntry>, ()>>,
 }
 
 impl Future for NfsReaddirFuture {
     type Output = Result<Vec<NfsEntry>, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct NfsMkdirFuture {
-    done: bool,
+    result: Option<Result<NfsFileHandle, ()>>,
 }
 
 impl Future for NfsMkdirFuture {
     type Output = Result<NfsFileHandle, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct NfsRmdirFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for NfsRmdirFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }
 
 pub struct NfsCreateFuture {
-    done: bool,
+    result: Option<Result<NfsFileHandle, ()>>,
 }
 
 impl Future for NfsCreateFuture {
     type Output = Result<NfsFileHandle, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct NfsRemoveFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for NfsRemoveFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
     }
 }
 
 pub struct NfsUnmountFuture {
-    done: bool,
+    result: Option<Result<(), ()>>,
 }
 
 impl Future for NfsUnmountFuture {
     type Output = Result<(), ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Ok(())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::boxed::Box;
+
+    #[test]
+    fn nfs_mount_lookup_and_read_complete() {
+        let mut client = NfsClient::new();
+
+        let root = crate::block_on(Box::pin(client.mount(b"server", b"/export"))).unwrap();
+        let file = crate::block_on(Box::pin(client.lookup(&root, b"file"))).unwrap();
+        let data = crate::block_on(Box::pin(client.read(&file, 0, 64))).unwrap();
+
+        assert!(client.is_mounted());
+        assert_eq!(file.data, b"/export/file");
+        assert_eq!(data, b"/export/file");
     }
 }

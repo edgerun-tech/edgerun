@@ -22,7 +22,6 @@ edgerun-json = { path = "../edgerun-json" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-proto = { path = "../edgerun-proto" }
 prost.workspace = true
-prost-types.workspace = true
 
 [features]
 std = []

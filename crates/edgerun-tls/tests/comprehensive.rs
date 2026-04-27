@@ -37,6 +37,8 @@ fn test_cert_generation_multiple_hostnames() {
     // Parse and verify
     let parsed = Certificate::from_der(&cert.cert_der).unwrap();
     assert!(parsed.is_valid_now());
+    assert_eq!(parsed.subject_cn.as_deref(), Some("localhost"));
+    parsed.verify_signature(&parsed).unwrap();
 
     // Check that at least one hostname is in SANs
     // (parser may not extract all SANs correctly, but cert should be valid)

@@ -10,10 +10,6 @@ publish.workspace = true
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 
 
-[dev-dependencies]
-assert_matches = "1"
-proptest = "1"
-
 [features]
 default = []
 std = ["edgerun-encoding/std"]

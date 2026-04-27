@@ -27,7 +27,6 @@ use std::sync::RwLock;
 use crate::smtp::server::dsn_generator::DsnBounce;
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::smtp::types::MailEnvelope;
-use edgerun_email_auth::AuthenticationResults;
 
 // ===========================================================================
 // MaildirStore
@@ -295,6 +294,7 @@ impl MailHandler for MaildirStore {
         Ok(())
     }
 
+    #[cfg(feature = "dkim")]
     fn on_mail_received(
         &self,
         _envelope: &MailEnvelope,

@@ -28,7 +28,10 @@ pub struct GrpcRequest {
 
 impl GrpcRequest {
     pub fn new(method: &[u8], data: &[u8]) -> Self {
-        Self { method: method.to_vec(), data: data.to_vec() }
+        Self {
+            method: method.to_vec(),
+            data: data.to_vec(),
+        }
     }
 }
 
@@ -39,23 +42,48 @@ pub struct GrpcResponse {
 
 impl GrpcResponse {
     pub fn new(status: i32) -> Self {
-        Self { data: Vec::new(), status }
+        Self {
+            data: Vec::new(),
+            status,
+        }
     }
 }
 
-pub struct GrpcClient;
+pub struct GrpcClient {
+    calls: usize,
+}
 
 impl GrpcClient {
     pub fn new() -> Self {
-        Self
+        Self { calls: 0 }
     }
 
-    pub fn call(&self, _req: &GrpcRequest) -> GrpcCallFuture {
-        GrpcCallFuture { done: false }
+    pub fn call(&mut self, req: &GrpcRequest) -> GrpcCallFuture {
+        self.calls += 1;
+        let mut response = GrpcResponse::new(0);
+        response.data = req.data.clone();
+        GrpcCallFuture {
+            result: Some(Ok(response)),
+        }
     }
 
-    pub fn stream(&self, _method: &[u8]) -> GrpcStreamFuture {
-        GrpcStreamFuture { done: false }
+    pub fn stream(&mut self, method: &[u8]) -> GrpcStreamFuture {
+        self.calls += 1;
+        let result = if method.is_empty() {
+            Err(())
+        } else {
+            let mut response = GrpcResponse::new(0);
+            response.data = method.to_vec();
+            Ok(response)
+        };
+        GrpcStreamFuture {
+            result: Some(result),
+        }
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> usize {
+        self.calls
     }
 }
 
@@ -66,24 +94,24 @@ impl Default for GrpcClient {
 }
 
 pub struct GrpcCallFuture {
-    done: bool,
+    result: Option<Result<GrpcResponse, ()>>,
 }
 
 impl Future for GrpcCallFuture {
     type Output = Result<GrpcResponse, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
 pub struct GrpcStreamFuture {
-    done: bool,
+    result: Option<Result<GrpcResponse, ()>>,
 }
 
 impl Future for GrpcStreamFuture {
     type Output = Result<GrpcResponse, ()>;
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Pending
+    fn poll(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap_or(Err(())))
     }
 }
 
@@ -92,5 +120,11 @@ pub struct GrpcServer;
 impl GrpcServer {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for GrpcServer {
+    fn default() -> Self {
+        Self::new()
     }
 }

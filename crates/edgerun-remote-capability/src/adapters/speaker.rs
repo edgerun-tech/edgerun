@@ -5,17 +5,12 @@ use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionOpen,
-};
 use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
     SpeakerSampleFormat,
 };
 
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 /// Binary-encode speaker playback request.
 pub fn encode_speaker_playback_request(request: &AudioPlaybackRequest) -> Vec<u8> {
@@ -175,13 +170,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.device.descriptor()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

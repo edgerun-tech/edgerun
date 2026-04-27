@@ -83,7 +83,6 @@ mod test {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use assert_matches::assert_matches;
     use edgerun_encoding::buf::Cursor;
 
     use crate::prefix_int::Error;
@@ -154,7 +153,7 @@ mod test {
         let buf = vec![95, 225, 255, 255, 255, 255, 255, 255, 255, 255, 1];
         let mut read = Cursor::new(&buf);
         let x = super::decode(5, &mut read);
-        assert_matches!(x, Err(Error::Overflow));
+        assert_eq!(x, Err(Error::Overflow));
     }
 
     #[test]
