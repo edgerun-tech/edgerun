@@ -137,9 +137,7 @@ pub mod fat;
 pub mod pci;
 pub mod virtio_net;
 pub mod ip;
-pub use ip::{IpStack, IpAddr, EthHeader, IpHeader, UdpHeader, TcpHeader, ArpHeader, IcmpHeader, Network, DhcpStateMachine, ETH_TYPE_IPV4, ETH_TYPE_ARP, IP_PROTO_ICMP, IP_PROTO_TCP, IP_PROTO_UDP, ICMP_ECHO_REQUEST, ICMP_ECHO_REPLY, echo_reply, ArpCache, parse_packet, ip_checksum, checksum};
-pub mod dhcp;
-pub use dhcp::{DhcpClient, DhcpState, DHCP_SERVER_PORT, DHCP_CLIENT_PORT};
+pub use ip::{IpStack, IpAddr, EthHeader, IpHeader, UdpHeader, TcpHeader, ArpHeader, IcmpHeader, Network, ETH_TYPE_IPV4, ETH_TYPE_ARP, IP_PROTO_ICMP, IP_PROTO_TCP, IP_PROTO_UDP, ICMP_ECHO_REQUEST, ICMP_ECHO_REPLY, echo_reply, ArpCache, parse_packet, ip_checksum, checksum};
 
 pub mod dns;
 pub use dns::{DnsQuery, DnsResponse, DnsRecord, DnsType, DnsResultCode, DNS_MAX_NAME, DnsClient};

@@ -1744,6 +1744,7 @@ name = "edgerun-unikernel"
 version = "0.1.0"
 dependencies = [
  "edgerun-bare-rt",
+ "edgerun-dhcp",
  "edgerun-platform",
  "edgerun-virtio",
  "getrandom 0.2.17",

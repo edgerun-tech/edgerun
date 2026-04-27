@@ -4,12 +4,14 @@
 #![no_main]
 
 extern crate edgerun_bare_rt as rt;
+extern crate edgerun_dhcp;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
+use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
+use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
 use rt::{
-    block_on, crc32, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
-    RingBuffer, TcpSocket, TftpConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
+    block_on, crc32, IpAddr, IpStack, Network, Rng, RingBuffer, TcpSocket, TftpConfig,
 };
 use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
 
@@ -104,6 +106,11 @@ fn poll_network(
     stats
 }
 
+fn dhcp_ipv4_to_rt(ip: edgerun_dhcp::Ipv4Addr) -> IpAddr {
+    let octets = ip.octets();
+    IpAddr::new(octets[0], octets[1], octets[2], octets[3])
+}
+
 impl Future for NetPump<'_, '_> {
     type Output = ();
 
@@ -191,10 +198,13 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         mac,
     );
     
-    let mut dhcp = DhcpStateMachine::new(mac);
+    let dhcp_xid = 0x12345678;
+    let mut dhcp_ip = IpAddr::zero();
+    let mut dhcp_netmask = IpAddr::new(255, 255, 255, 0);
+    let mut dhcp_gateway = IpAddr::zero();
     let mut network = Network::new(&mut stack);
     
-    let discover = dhcp.discover();
+    let discover = DhcpMessage::discover(dhcp_xid, mac).to_wire();
     rt::log::log(1, "Sending DHCP discover");
     if let Some(pkt) = network.send_udp(
         IpAddr::new(255, 255, 255, 255),
@@ -219,9 +229,22 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             }
             if let Some(ParsedPacket::Udp { header, payload, .. }) = network.recv(&rx_buf[..len]) {
                 if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
-                    if dhcp.parse(payload) {
-                        rt::log::log(1, "DHCP lease accepted");
-                        break;
+                    if let Ok(message) = DhcpMessage::from_wire(payload) {
+                        let lease_response = matches!(
+                            message.options.message_type,
+                            Some(DhcpMessageType::Offer) | Some(DhcpMessageType::Ack)
+                        );
+                        if message.xid == dhcp_xid && lease_response && message.chaddr[..6] == mac {
+                            dhcp_ip = dhcp_ipv4_to_rt(message.yiaddr);
+                            if let Some(netmask) = message.options.subnet_mask {
+                                dhcp_netmask = dhcp_ipv4_to_rt(netmask);
+                            }
+                            if let Some(gateway) = message.options.router {
+                                dhcp_gateway = dhcp_ipv4_to_rt(gateway);
+                            }
+                            rt::log::log(1, "DHCP lease accepted");
+                            break;
+                        }
                     }
                 }
             }
@@ -240,10 +263,10 @@ pub unsafe extern "C" fn kernel_main() -> ! {
 
     drop(network);
     
-    if dhcp.ip != IpAddr::zero() {
-        stack.ip = dhcp.ip;
-        stack.netmask = dhcp.netmask;
-        stack.gateway = dhcp.gateway;
+    if dhcp_ip != IpAddr::zero() {
+        stack.ip = dhcp_ip;
+        stack.netmask = dhcp_netmask;
+        stack.gateway = dhcp_gateway;
     } else {
         rt::log::log(1, "Using static fallback IP");
         stack.ip = IpAddr::new(192, 168, 1, 12);
@@ -251,7 +274,6 @@ pub unsafe extern "C" fn kernel_main() -> ! {
 
     let network = Network::new(&mut stack);
     
-    let _dhcp = DhcpClient::new(mac);
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
     let mut tcp = TcpSocket::new();
     
