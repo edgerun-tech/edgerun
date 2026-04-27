@@ -14,13 +14,15 @@ edgerun-remote-capability = { path = "../edgerun-remote-capability" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-proto = { path = "../edgerun-proto" }
+edgerun-crypto = { workspace = true, default-features = false }
+prost.workspace = true
+edgerun-log = { path = "../edgerun-log" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
+libc.workspace = true
 edgerun-linux-netif = { path = "../edgerun-linux-netif" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
-edgerun-proto = { path = "../edgerun-proto" }
-edgerun-crypto.workspace = true
-prost.workspace = true
-libc.workspace = true
-edgerun-log = { path = "../edgerun-log" }
 
 [lints]
 workspace = true

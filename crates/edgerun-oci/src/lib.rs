@@ -1,113 +1,177 @@
 //! edgerun-oci — OCI container runtime and registry client.
 //!
-//! ## Runtime
-//! Full OCI Runtime Spec v1.0.2 implementation with support for:
-//! - Container lifecycle: create, start, exec, kill, delete
-//! - Cgroups v2 resource management
-//! - Seccomp-BPF filtering
-//! - Rootless operation (Podman-style clone + re-exec)
-//! - All 6 OCI hook types
-//! - Network and device eBPF rules
-//! - Terminal/PTY with SCM_RIGHTS
-//!
-//! ## Registry
-//! Pull and push images from any OCI-compliant registry:
-//! - `RegistryClient::pull()` — resolve manifest, download layers, extract rootfs
-//! - `RegistryClient::push()` — create layers, upload blobs, push manifest
-//! - `SecretClient` — biometric-gated credential storage via edgerun secret service
-//! - Docker Hub, GHCR, GCR, GitLab, Quay, and any private registry
+//! The default build is a no_std, alloc-backed OCI data model and parser layer.
+//! Host runtime, registry network I/O, archive extraction, and CLI support are
+//! available behind the `std` feature.
 
 #![no_std]
 
-#[cfg(feature = "std")]
+extern crate alloc;
+
+#[cfg_attr(all(feature = "std", not(target_os = "none")), macro_use)]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 extern crate std;
 
-#[cfg(feature = "std")]
-mod host {
-use std::collections::HashMap;
+pub mod prelude {
+    pub use alloc::boxed::Box;
+    pub use alloc::format;
+    pub use alloc::string::{String, ToString};
+    pub use alloc::vec;
+    pub use alloc::vec::Vec;
 
-// Runtime modules
-pub mod bundle;
-pub mod cgroups;
-pub mod config_builder;
-pub mod criu;
-pub mod ebpf_devices;
-pub mod ebpf_netcls;
-pub mod error;
-pub mod fifo;
-pub mod handle;
-pub mod hooks;
-pub mod init;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    pub use std::{eprintln, print, println};
+}
+
+#[cfg(feature = "json")]
+pub mod image_plan;
 pub mod json;
-pub mod lifecycle;
-pub mod process;
-pub mod rootfs;
-pub mod rootless;
-pub mod seccomp;
-pub mod state;
-pub mod syscalls;
-pub mod userns;
+#[cfg(feature = "json")]
+pub mod layer_pipeline;
+pub mod runtime_config;
+#[cfg(feature = "json")]
+pub mod tar_layer;
+pub mod validate;
 
-/// CLI command implementations.
-pub mod cli;
-
-// Registry modules (private, re-exported below)
 mod registry {
-    pub(crate) mod auth;
+    pub mod auth;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod client;
-    pub(crate) mod config;
+    pub mod config;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod dbus_client;
-    pub(crate) mod errors;
+    pub mod errors;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod layer;
-    pub(crate) mod manifest;
+    pub mod manifest;
+    #[cfg(feature = "json")]
     pub(crate) mod oci_spec;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod urlencoding;
 }
 
-// Re-export runtime types
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod bundle;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod cgroups;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod config_builder;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod criu;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod ebpf_devices;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod ebpf_netcls;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod error;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod fifo;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod handle;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod hooks;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod init;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod lifecycle;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod process;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod rootfs;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod rootless;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod seccomp;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod state;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod syscalls;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod userns;
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod cli;
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use bundle::{create_bundle, write_bundle};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use config_builder::ContainerProcessConfig;
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use error::{
     CapabilityError, CgroupError, ConfigError, FifoError, LifecycleError, NamespaceError, OciError,
     RootfsError, SeccompError,
 };
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use handle::RunningContainer;
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use hooks::execute_poststop_hooks;
+#[cfg(feature = "json")]
+pub use image_plan::{
+    parse_single_manifest_bytes, platform_matches, select_manifest_for_current_target,
+    select_manifest_for_target, selected_manifest_digest_for_current_target,
+    selected_manifest_digest_from_index_bytes, single_manifest, validate_digest_reference,
+    BareImagePlan, ImagePlanError,
+};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use init::fork_and_init;
 pub use json::*;
+#[cfg(feature = "json")]
+pub use layer_pipeline::{
+    apply_layer_chunks, validate_layer_descriptor, LayerApplyReport, LayerDigest,
+    LayerPipelineError, LayerSink,
+};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use lifecycle::{
     delete_container, fork_container_child, run_bundle, run_create_runtime_hooks,
     run_poststart_hooks, run_poststop_and_cleanup, run_prestart_hooks, run_spec, run_spec_with_id,
     save_created_state, setup_container_cgroups, signal_start, start_bundle, start_spec,
     start_spec_with_id, update_state_running,
 };
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use process::{setup_container_child, ContainerConfig};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootfs::setup_rootfs;
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootless::{generate_gid_map, generate_uid_map};
+pub use runtime_config::{BareNamespace, BareNamespaceKind, BareRuntimeConfig};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use state::{
     container_state_dir, delete_state, fifo_path, load_state, save_state, state_exists,
     state_file_path, ContainerState,
 };
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use syscalls::*;
+#[cfg(feature = "json")]
+pub use tar_layer::{
+    apply_uncompressed_tar_layer, apply_validated_uncompressed_tar_layer, OciWhiteout, TarEntry,
+    TarEntryKind, TarLayerApplyError, TarLayerApplyReport, TarLayerError, TarLayerSink,
+};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use userns::drop_capabilities;
+pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
 
-// Re-export registry types
 pub use registry::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::client::{ImageRef, RegistryClient};
+#[cfg(feature = "json")]
+pub use registry::config::{
+    parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest, HistoryEntry,
+    ImageConfig, ImageConfigInner, RootFs,
+};
+#[cfg(not(feature = "json"))]
 pub use registry::config::{HistoryEntry, ImageConfig, ImageConfigInner, RootFs};
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::dbus_client::SecretClient;
 pub use registry::errors::RegistryError;
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::layer::{
     build_rootfs as registry_build_rootfs, extract_layer, verify_blob_digest,
 };
 pub use registry::manifest::{
     ImageManifest, LayerDescriptor, ManifestDescriptor, PlatformDescriptor, SingleManifest,
 };
-pub use registry::oci_spec::generate_oci_spec;
-
-// ---------------------------------------------------------------------------
-// Namespace helpers — used by bundle.rs, config_builder.rs, process.rs, spec.rs
-// ---------------------------------------------------------------------------
+#[cfg(feature = "json")]
+pub use registry::oci_spec::{generate_oci_spec, generate_oci_spec_model};
 
 pub const DEFAULT_NAMESPACES: &[(&str, Option<&str>)] = &[
     ("mount", None),
@@ -118,7 +182,9 @@ pub const DEFAULT_NAMESPACES: &[(&str, Option<&str>)] = &[
     ("cgroup", None),
 ];
 
-pub fn default_namespaces() -> Vec<OciNamespace> {
+pub fn default_namespaces() -> alloc::vec::Vec<OciNamespace> {
+    use alloc::string::{String, ToString};
+
     DEFAULT_NAMESPACES
         .iter()
         .map(|(t, p)| OciNamespace {
@@ -131,13 +197,15 @@ pub fn default_namespaces() -> Vec<OciNamespace> {
 pub fn namespace_flags(namespaces: &[OciNamespace]) -> i32 {
     let mut flags = 0;
     for ns in namespaces {
+        #[cfg(all(feature = "std", not(target_os = "none")))]
         if let Some(flag) = process::ns_type_to_flag(&ns.ns_type) {
             flags |= flag;
+        }
+
+        #[cfg(any(not(feature = "std"), target_os = "none"))]
+        {
+            let _ = ns;
         }
     }
     flags
 }
-}
-
-#[cfg(feature = "std")]
-pub use host::*;

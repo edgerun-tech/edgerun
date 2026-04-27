@@ -1,5 +1,6 @@
 //! Config file watcher — watches YAML files and triggers reloads.
 
+use alloc::vec::Vec;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

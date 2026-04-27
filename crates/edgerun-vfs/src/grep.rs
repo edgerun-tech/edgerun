@@ -1,6 +1,8 @@
 //! Grep and search functionality
 
-use std::path::PathBuf;
+use alloc::string::String;
+
+use crate::PathBuf;
 
 /// A single grep match result
 #[derive(Debug, Clone)]
@@ -13,6 +15,11 @@ pub struct GrepMatch {
 impl GrepMatch {
     /// Format as grep-style output: path:line:number:content
     pub fn format(&self) -> String {
-        format!("{}:{}:{}", self.path.display(), self.line_number, self.line)
+        alloc::format!(
+            "{}:{}:{}",
+            crate::vfs::path_display(&self.path),
+            self.line_number,
+            self.line
+        )
     }
 }

@@ -15,7 +15,8 @@
 //!   runtime MUST generate an error, stop container, continue lifecycle at step 12
 //! - If poststop fails: runtime MUST log a warning, but remaining hooks continue
 
-use std::collections::HashMap;
+use crate::prelude::*;
+use alloc::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -32,7 +33,7 @@ pub struct ContainerState {
     pub status: String,
     pub pid: u32,
     pub bundle: String,
-    pub annotations: HashMap<String, String>,
+    pub annotations: BTreeMap<String, String>,
 }
 
 impl ContainerState {
@@ -293,7 +294,7 @@ mod tests {
 
     #[test]
     fn container_state_to_json_is_valid() {
-        let mut annotations = HashMap::new();
+        let mut annotations = BTreeMap::new();
         annotations.insert("key".into(), "value".into());
 
         let state = ContainerState {
@@ -322,7 +323,7 @@ mod tests {
             status: "running".into(),
             pid: 1,
             bundle: "/rootfs".into(),
-            annotations: HashMap::new(),
+            annotations: BTreeMap::new(),
         };
         let json = state.to_json();
         assert!(json.contains("\"annotations\": {}"));
@@ -377,7 +378,7 @@ mod tests {
             status: "created".into(),
             pid: 1,
             bundle: "/rootfs".into(),
-            annotations: HashMap::new(),
+            annotations: BTreeMap::new(),
         };
         assert!(execute_hooks(None, &state).is_ok());
         assert!(execute_hooks(Some(&[]), &state).is_ok());
@@ -391,7 +392,7 @@ mod tests {
             status: "created".into(),
             pid: 1,
             bundle: "/rootfs".into(),
-            annotations: HashMap::new(),
+            annotations: BTreeMap::new(),
         };
 
         // Hook with non-existent path should fail
@@ -413,7 +414,7 @@ mod tests {
             status: "created".into(),
             pid: 1,
             bundle: "/rootfs".into(),
-            annotations: HashMap::new(),
+            annotations: BTreeMap::new(),
         };
 
         // Use /bin/true which always exits 0
@@ -435,7 +436,7 @@ mod tests {
             status: "created".into(),
             pid: 1,
             bundle: "/rootfs".into(),
-            annotations: HashMap::new(),
+            annotations: BTreeMap::new(),
         };
 
         // /bin/false always exits 1
@@ -457,7 +458,7 @@ mod tests {
             status: "stopped".into(),
             pid: 1,
             bundle: "/rootfs".into(),
-            annotations: HashMap::new(),
+            annotations: BTreeMap::new(),
         };
 
         // Even with failing hooks, poststop should not return an error
@@ -487,7 +488,7 @@ mod tests {
             status: "created".into(),
             pid: 1,
             bundle: "/rootfs".into(),
-            annotations: HashMap::new(),
+            annotations: BTreeMap::new(),
         };
 
         // false should fail, true should never run

@@ -59,12 +59,14 @@
 use crate::prelude::v1::*;
 
 use crate::{Handler, Request, Response};
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use core::any::{Any, TypeId};
+use core::fmt;
+use core::future::Future;
+use core::pin::Pin;
 use edgerun_bare_rt::sync::Mutex;
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
 
 // ===========================================================================
 // Extensions
@@ -94,13 +96,13 @@ use std::sync::Arc;
 /// ```
 #[derive(Clone)]
 pub struct Extensions {
-    inner: Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
+    inner: Arc<Mutex<BTreeMap<TypeId, Box<dyn Any + Send>>>>,
 }
 
 impl Extensions {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(HashMap::new())),
+            inner: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -153,8 +155,8 @@ impl Default for Extensions {
     }
 }
 
-impl std::fmt::Debug for Extensions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Extensions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let guard = self.inner.lock();
         f.debug_struct("Extensions")
             .field("count", &guard.len())

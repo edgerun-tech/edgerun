@@ -8,8 +8,8 @@ publish.workspace = true
 [dependencies]
 edgerun-bare-rt.workspace = true
 edgerun-log.workspace = true
-edgerun-crypto.workspace = true
-edgerun-http.workspace = true
+edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
+edgerun-http = { workspace = true, default-features = false, features = ["client", "tls"] }
 edgerun-dns.workspace = true
 edgerun-encoding.workspace = true
 edgerun-url = { path = "../edgerun-url", features = ["serde"] }

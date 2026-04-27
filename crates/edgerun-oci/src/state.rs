@@ -4,6 +4,7 @@
 //! When running as root: `/run/edgerun-oci/<id>/`
 //! When running rootless: `$XDG_RUNTIME_DIR/edgerun-oci/<id>/` or `$HOME/.local/state/edgerun-oci/<id>/`
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -85,7 +86,7 @@ pub struct ContainerState {
     pub pid: Option<u32>,
     pub bundle: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<std::collections::HashMap<String, String>>,
+    pub annotations: Option<alloc::collections::BTreeMap<String, String>>,
 }
 
 /// Return the state directory for a container.
@@ -205,7 +206,7 @@ mod tests {
                 status: "created".into(),
                 pid: Some(12345),
                 bundle: "/tmp/bundle".into(),
-                annotations: Some(std::collections::HashMap::from([(
+                annotations: Some(alloc::collections::BTreeMap::from([(
                     "key".into(),
                     "value".into(),
                 )])),

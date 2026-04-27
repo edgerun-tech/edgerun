@@ -13,7 +13,7 @@
 use crate::prelude::v1::*;
 
 use crate::HeaderMap;
-use std::fmt;
+use core::fmt;
 
 /// A protocol that can be upgraded to
 #[derive(Debug, Clone, PartialEq, Eq)]

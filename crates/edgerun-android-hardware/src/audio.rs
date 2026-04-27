@@ -7,7 +7,7 @@ use edgerun_capabilities::{
     CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 
-#[cfg(feature = "android-real")]
+#[cfg(all(feature = "android-real", target_os = "android"))]
 mod real {
     use super::*;
     use once_cell::sync::OnceCell;
@@ -247,7 +247,7 @@ mod real {
     }
 }
 
-#[cfg(not(feature = "android-real"))]
+#[cfg(any(not(feature = "android-real"), not(target_os = "android")))]
 mod real {
     use super::*;
     pub struct AAudioStream;

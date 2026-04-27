@@ -10,9 +10,10 @@ description = "Consolidated encoding utilities for the edgerun workspace"
 default = ["alloc"]
 std = ["alloc"]
 alloc = []
+hpack = ["dep:edgerun-hpack"]
 
 [dependencies]
-edgerun-hpack = { path = "../edgerun-hpack" }
+edgerun-hpack = { path = "../edgerun-hpack", optional = true }
 
 [lints]
 workspace = true

@@ -1,5 +1,16 @@
 //! Edgerun Scheduler
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+pub mod collections {
+    pub type HashMap<K, V> = alloc::collections::BTreeMap<K, V>;
+}
+
 pub mod chain;
 pub mod deployment;
 pub mod error;
@@ -14,8 +25,10 @@ pub use metrics::{MetricsReceiver, ProviderMetrics};
 pub use provider::{ProviderInfo, ProviderManager};
 
 use edgerun_bare_rt::CancellationToken;
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use crate::collections::HashMap;
 
 pub struct Scheduler {
     provider_manager: ProviderManager,

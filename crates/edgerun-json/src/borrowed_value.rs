@@ -1,14 +1,14 @@
 #[allow(unused_imports)]
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::String;
 #[allow(unused_imports)]
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
 use crate::JsonValue;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::Cow;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use std::borrow::Cow;
 
 #[derive(Clone, Debug, PartialEq)]

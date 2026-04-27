@@ -4,6 +4,7 @@
 //! replays these events to produce the current `ConfigState`.
 
 use crate::prelude::v1::*;
+use crate::collections::HashMap;
 use crate::parser::ConfigState;
 use crate::types::ConfigResource;
 
@@ -32,14 +33,14 @@ pub enum ConfigOp {
 /// Projects config state from a sequence of events.
 pub struct ConfigProjector {
     /// Current state indexed by resource name.
-    resources: std::collections::HashMap<String, ConfigEvent>,
+    resources: HashMap<String, ConfigEvent>,
 }
 
 impl ConfigProjector {
     /// Create a new empty projector.
     pub fn new() -> Self {
         Self {
-            resources: std::collections::HashMap::new(),
+            resources: HashMap::new(),
         }
     }
 

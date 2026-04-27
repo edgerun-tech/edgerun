@@ -215,8 +215,8 @@ pub async fn verify_signature<D: DnsQuery>(
     }
 
     // Use RSA verification from edgerun-crypto
-    use rsa::pkcs8::DecodePublicKey;
-    use rsa::RsaPublicKey;
+    use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
+    use edgerun_crypto::rsa::RsaPublicKey;
     let rsa_key = RsaPublicKey::from_public_key_der(&public_key).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
@@ -224,7 +224,7 @@ pub async fn verify_signature<D: DnsQuery>(
         )
     })?;
 
-    let verifying_key = rsa::Pkcs1v15Sign::new::<Sha256>();
+    let verifying_key = edgerun_crypto::rsa::Pkcs1v15Sign::new::<Sha256>();
     rsa_key
         .verify(verifying_key, &hash, &sig.signature)
         .map_err(|e| {

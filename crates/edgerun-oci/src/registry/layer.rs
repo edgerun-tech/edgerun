@@ -5,6 +5,7 @@
 //! - **Streaming digest verification** — no longer loads entire blob into memory
 //! - **Overlay whiteout char device handling** (0:0 device check)
 
+use crate::prelude::*;
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};

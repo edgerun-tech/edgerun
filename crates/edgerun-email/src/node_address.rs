@@ -6,7 +6,10 @@
 //! - Local: stored in maildir, validated by node identity
 //! - Mesh: signed delivery via mesh channels
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+
+type HashMap<K, V> = BTreeMap<K, V>;
 
 /// Node address domain
 pub const NODES_DOMAIN: &str = "nodes.edgerun.tech";

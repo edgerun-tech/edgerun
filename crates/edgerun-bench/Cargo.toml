@@ -12,7 +12,7 @@ edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-tpm = { path = "../edgerun-tpm" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", features = ["tpm"] }
 edgerun-yubikey = { path = "../edgerun-yubikey" }
-edgerun-crypto.workspace = true
+edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 
 [[bin]]
 name = "edgerun-bench"

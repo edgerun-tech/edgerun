@@ -1,5 +1,6 @@
 //! CLI argument parsing and command dispatch for ert.
 
+use crate::prelude::*;
 mod checkpoint;
 mod create;
 mod delete;

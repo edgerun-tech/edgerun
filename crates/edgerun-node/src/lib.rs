@@ -8,8 +8,25 @@
 //! The config is embedded in the genesis event (seq=0) as the authoritative
 //! record of the node's initial state.
 
+#![cfg_attr(target_os = "none", no_std)]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
 pub mod mesh_node;
 pub mod metering;
+
+#[cfg(target_os = "none")]
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt;
+#[cfg(not(target_os = "none"))]
+use std::collections::{HashMap, HashSet};
 
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
@@ -20,11 +37,12 @@ use edgerun_core::value::Value;
 use edgerun_hardware_signing::NodeID;
 use edgerun_storage::core::EventLog;
 use edgerun_storage::{DurableStreamWriter, MemEventLog, StorageError};
-use edgerun_stream::StreamError;
 // Simple YAML config parser (no serde dependency)
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::sync::Arc;
+
+#[cfg(target_os = "none")]
+type HashMap<K, V> = BTreeMap<K, V>;
+#[cfg(target_os = "none")]
+type HashSet<T> = BTreeSet<T>;
 
 /// Node error types.
 #[derive(Debug)]
@@ -53,7 +71,7 @@ impl fmt::Display for NodeError {
     }
 }
 
-impl std::error::Error for NodeError {}
+impl core::error::Error for NodeError {}
 
 impl From<edgerun_stream::StreamError> for NodeError {
     fn from(e: edgerun_stream::StreamError) -> Self {
@@ -340,10 +358,18 @@ impl<L: EventLog> Node<L> {
 }
 
 fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64
+    #[cfg(not(target_os = "none"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        0
+    }
 }
 
 // ---------------------------------------------------------------------------

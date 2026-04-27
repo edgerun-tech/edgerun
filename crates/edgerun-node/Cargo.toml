@@ -82,17 +82,22 @@ edgerun-mesh-link = { path = "../edgerun-mesh-link" }
 edgerun-mesh-daemon = { path = "../edgerun-mesh-daemon" }
 edgerun-mesh-capability = { path = "../edgerun-mesh-capability" }
 edgerun-mesh-session = { path = "../edgerun-mesh-session" }
-edgerun-linux-netif = { path = "../edgerun-linux-netif" }
-edgerun-network-interface = { path = "../edgerun-network-interface" }
-edgerun-crypto.workspace = true
+edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
 prost.workspace = true
 prost-types.workspace = true
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 
 edgerun-log = { path = "../edgerun-log" }
-libc.workspace = true
 
 # Hardware signing is required for node identity and stream writing
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing", default-features = false }
+
+edgerun-json = { path = "../edgerun-json", optional = true }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
+libc.workspace = true
+edgerun-linux-netif = { path = "../edgerun-linux-netif" }
+edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
 edgerun-tpm = { path = "../edgerun-tpm" }
 edgerun-yubikey = { path = "../edgerun-yubikey" }
@@ -141,7 +146,6 @@ edgerun-amd-xdna = { path = "../edgerun-amd-xdna", optional = true }
 edgerun-virtual-disk = { path = "../edgerun-virtual-disk", optional = true }
 
 # Misc
-edgerun-json = { path = "../edgerun-json", optional = true }
 edgerun-machine-report = { path = "../edgerun-machine-report", optional = true }
 
 # OCI container runtime (enable with --features oci)

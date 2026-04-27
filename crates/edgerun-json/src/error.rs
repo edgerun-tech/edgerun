@@ -150,13 +150,13 @@ impl fmt::Display for JsonParseError {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl std::error::Error for JsonError {}
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl std::error::Error for JsonParseError {}
 
 impl JsonError {
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn io(_error: std::io::Error) -> Self {
         Self::Io
     }

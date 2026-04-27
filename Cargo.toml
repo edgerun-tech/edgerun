@@ -159,7 +159,7 @@ edgerun-proto = { path = "crates/edgerun-proto" }
 edgerun-proxy = { path = "crates/edgerun-proxy" }
 edgerun-storage = { path = "crates/edgerun-storage" }
 edgerun-stream = { path = "crates/edgerun-stream" }
-edgerun-http = { path = "crates/edgerun-http" }
+edgerun-http = { path = "crates/edgerun-http", default-features = false }
 edgerun-node = { path = "crates/edgerun-node" }
 edgerun-hardware-signing = { path = "crates/edgerun-hardware-signing" }
 edgerun-capabilities = { path = "crates/edgerun-capabilities" }
@@ -190,7 +190,7 @@ edgerun-email = { path = "crates/edgerun-email" }
 edgerun-log = { path = "crates/edgerun-log" }
 edgerun-bare-rt = { path = "crates/edgerun-bare-rt" }
 # Single crypto boundary — all crypto flows through edgerun-crypto
-edgerun-crypto = { path = "crates/edgerun-crypto" }
+edgerun-crypto = { path = "crates/edgerun-crypto", default-features = false }
 # edgerun-json as drop-in replacement for serde_json
 edgerun-json = { path = "crates/edgerun-json", default-features = false, features = ["alloc", "serde"] }
 edgerun-error = { path = "crates/edgerun-error" }

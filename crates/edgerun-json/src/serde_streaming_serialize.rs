@@ -6,9 +6,9 @@
 //! `to_value → JsonValue → to_json_string`, allocating a full AST then
 //! walking it a second time.
 
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::{String, ToString};
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
 use crate::serde_error::Error;

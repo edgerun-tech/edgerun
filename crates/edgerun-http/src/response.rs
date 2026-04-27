@@ -5,7 +5,7 @@ use crate::prelude::v1::*;
 
 use crate::header::HeaderMap;
 use crate::status::StatusCode;
-use std::fmt;
+use core::fmt;
 
 /// An HTTP response, protocol-agnostic.
 ///

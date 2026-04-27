@@ -2,6 +2,7 @@
 //!
 //! Outputs container state JSON to stdout.
 
+use crate::prelude::*;
 use std::io;
 
 use crate::state::load_state;
@@ -31,13 +32,21 @@ pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
 
     // Output matching rspecs.State JSON format
     let pid_val = updated_state.pid.unwrap_or(0);
+    let annotations = edgerun_json::JsonValue::Object(edgerun_json::Map::from(
+        updated_state
+            .annotations
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(key, value)| (key, edgerun_json::JsonValue::String(value)))
+            .collect::<Vec<_>>(),
+    ));
     let output = edgerun_json::json!({
         "ociVersion": updated_state.oci_version,
         "id": updated_state.id,
         "status": updated_state.status,
         "pid": pid_val,
         "bundle": updated_state.bundle,
-        "annotations": updated_state.annotations.unwrap_or_default(),
+        "annotations": annotations,
     });
     println!(
         "{}",

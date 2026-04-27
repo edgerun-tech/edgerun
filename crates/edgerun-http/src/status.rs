@@ -3,7 +3,8 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::fmt;
+use alloc::borrow::Cow;
+use core::fmt;
 
 /// HTTP status code
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,7 +28,7 @@ impl StatusCode {
     /// Get the status code as a string (e.g., "200").
     ///
     /// Returns a `String` for codes that don't have a static representation.
-    pub fn as_str(&self) -> std::borrow::Cow<'static, str> {
+    pub fn as_str(&self) -> Cow<'static, str> {
         match self.0 {
             100 => "100".into(),
             101 => "101".into(),
@@ -92,7 +93,7 @@ impl StatusCode {
             508 => "508".into(),
             510 => "510".into(),
             511 => "511".into(),
-            other => std::borrow::Cow::Owned(other.to_string()),
+            other => Cow::Owned(other.to_string()),
         }
     }
 

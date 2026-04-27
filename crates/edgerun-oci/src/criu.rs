@@ -3,6 +3,7 @@
 //! This module provides direct syscall-based checkpoint and restore functionality
 //! without shelling out to an external CRIU binary.
 
+use crate::prelude::*;
 use std::ffi::CString;
 use std::io;
 use std::os::raw::{c_char, c_int, c_long, c_uint};

@@ -9,8 +9,10 @@ publish.workspace = true
 edgerun-linux-npu = { path = "../edgerun-linux-npu" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-npu = { path = "../edgerun-npu" }
-libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
+libc.workspace = true
 
 [lints]
 workspace = true

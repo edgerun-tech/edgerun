@@ -7,7 +7,7 @@ publish.workspace = true
 description = "Zero-dependency glob pattern matching"
 
 [features]
-default = ["std"]
+default = []
 std = []
 
 [dependencies]

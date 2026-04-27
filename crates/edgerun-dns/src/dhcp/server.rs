@@ -136,7 +136,9 @@ impl DhcpServer {
         edgerun_log::warn!("  pool: {} - {}", self.pool.pool_start, self.pool.pool_end);
         edgerun_log::warn!(
             "  server: {}, router: {}, dns: {:?}",
-            self.config.server_ip, self.config.router, self.config.dns_servers
+            self.config.server_ip,
+            self.config.router,
+            self.config.dns_servers
         );
 
         loop {
@@ -311,7 +313,8 @@ impl DhcpServer {
                 // Client is requesting another server — ignore
                 edgerun_log::warn!(
                     "edgerun-dhcp: REQUEST for server {} (we are {}) — ignoring",
-                    sid, self.config.server_ip
+                    sid,
+                    self.config.server_ip
                 );
                 return Ok(());
             }

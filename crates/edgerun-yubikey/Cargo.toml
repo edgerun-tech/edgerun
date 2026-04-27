@@ -9,6 +9,8 @@ publish.workspace = true
 edgerun-core = { path = "../edgerun-core" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-encoding = { path = "../edgerun-encoding" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true
 
 [lints]

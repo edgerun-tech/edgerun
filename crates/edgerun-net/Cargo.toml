@@ -11,10 +11,13 @@ name = "edgerun-net"
 path = "src/main.rs"
 
 [dependencies]
-edgerun-dns = { path = "../edgerun-dns" }
+edgerun-dns = { path = "../edgerun-dns", default-features = false, features = ["dhcp"] }
 edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
 edgerun-config = { path = "../edgerun-config" }
 edgerun-log = { path = "../edgerun-log" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
 edgerun-inotify = { path = "../edgerun-inotify" }
 edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 

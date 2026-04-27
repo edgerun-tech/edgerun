@@ -802,7 +802,6 @@ name = "edgerun-config"
 version = "0.1.1"
 dependencies = [
  "edgerun-dhcpv6",
- "edgerun-dns",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-json",
@@ -835,6 +834,7 @@ dependencies = [
  "p256",
  "pbkdf2",
  "rand_core 0.6.4",
+ "rsa",
  "sha1",
  "sha2",
  "signature",
@@ -969,7 +969,6 @@ dependencies = [
  "edgerun-dns",
  "edgerun-encoding",
  "edgerun-log",
- "rsa",
  "signature",
 ]
 
@@ -1099,7 +1098,6 @@ name = "edgerun-json"
 version = "0.1.1"
 dependencies = [
  "criterion 0.8.2",
- "edgerun-encoding",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -1336,6 +1334,7 @@ dependencies = [
 name = "edgerun-net"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-clap",
  "edgerun-config",
  "edgerun-dhcpv6",
@@ -1445,7 +1444,6 @@ dependencies = [
  "edgerun-json",
  "edgerun-log",
  "edgerun-secret-service",
- "rsa",
 ]
 
 [[package]]
@@ -1753,6 +1751,7 @@ version = "0.1.1"
 dependencies = [
  "criterion 0.5.1",
  "dashmap",
+ "edgerun-bare-rt",
  "edgerun-clap",
  "edgerun-glob",
  "edgerun-inotify",

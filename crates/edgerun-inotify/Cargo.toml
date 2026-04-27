@@ -8,6 +8,8 @@ description = "Simple inotify wrapper using raw syscalls"
 
 [dependencies]
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true
 
 [lints]

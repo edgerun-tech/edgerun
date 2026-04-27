@@ -10,6 +10,7 @@
 //! The FIFO must be opened for reading BEFORE pivot_root, since the path
 //! becomes invalid after the root filesystem is replaced.
 
+use crate::prelude::*;
 use std::ffi::CString;
 use std::fs;
 use std::io::{self, Write};

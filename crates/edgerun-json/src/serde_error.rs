@@ -1,8 +1,8 @@
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::String;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -15,7 +15,7 @@ pub struct Error {
     category: Category,
     line: usize,
     column: usize,
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     io_error_kind: Option<std::io::ErrorKind>,
 }
 
@@ -34,14 +34,14 @@ pub struct NumberFromString;
 
 #[cfg(feature = "serde")]
 impl Error {
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn io(error: std::io::Error) -> Self {
         Self {
             message: error.to_string(),
             category: Category::Io,
             line: 0,
             column: 0,
-            #[cfg(feature = "std")]
+            #[cfg(all(feature = "std", not(target_os = "none")))]
             io_error_kind: Some(error.kind()),
         }
     }
@@ -52,7 +52,7 @@ impl Error {
             category: Category::Data,
             line: 0,
             column: 0,
-            #[cfg(feature = "std")]
+            #[cfg(all(feature = "std", not(target_os = "none")))]
             io_error_kind: None,
         }
     }
@@ -85,7 +85,7 @@ impl Error {
         self.column
     }
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn io_error_kind(&self) -> Option<std::io::ErrorKind> {
         self.io_error_kind
     }
@@ -101,7 +101,7 @@ impl fmt::Display for Error {
     }
 }
 
-#[cfg(all(feature = "serde", feature = "std"))]
+#[cfg(all(feature = "serde", feature = "std", not(target_os = "none")))]
 impl From<Error> for std::io::Error {
     fn from(error: Error) -> Self {
         if error.is_io() {
@@ -163,7 +163,7 @@ pub fn json_parse_error_to_serde(input: &str, error: JsonParseError) -> Error {
         category,
         line,
         column,
-        #[cfg(feature = "std")]
+        #[cfg(all(feature = "std", not(target_os = "none")))]
         io_error_kind: None,
     }
 }
@@ -179,12 +179,12 @@ pub fn json_error_to_serde(error: JsonError) -> Error {
         category,
         line: 0,
         column: 0,
-        #[cfg(feature = "std")]
+        #[cfg(all(feature = "std", not(target_os = "none")))]
         io_error_kind: None,
     }
 }
 
-#[cfg(all(feature = "serde", feature = "std"))]
+#[cfg(all(feature = "serde", feature = "std", not(target_os = "none")))]
 #[allow(dead_code)]
 pub fn io(error: std::io::Error) -> Error {
     Error::io(error)

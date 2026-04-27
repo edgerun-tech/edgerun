@@ -1,26 +1,65 @@
 //! OCI spec generation from image config — produces JSON via edgerun-json.
 
-use std::path::Path;
-
+use crate::prelude::*;
+use crate::validate::DEFAULT_ENV;
+use crate::{default_namespaces, OciLinux, OciMount, OciProcess, OciRoot, OciSpec, OciUser};
 use edgerun_json::{json, to_string_pretty};
 
 use super::config::ImageConfig;
 
-pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
+pub fn generate_oci_spec_model(image_config: &ImageConfig, rootfs: &str) -> OciSpec {
+    let process_config = image_config.config.as_ref();
+    let args = image_process_args(process_config);
+    let env = process_config
+        .and_then(|c| c.env.as_ref())
+        .cloned()
+        .unwrap_or_else(|| DEFAULT_ENV.iter().map(|value| (*value).into()).collect());
+    let cwd = process_config
+        .and_then(|c| c.working_dir.as_ref())
+        .cloned()
+        .unwrap_or_else(|| "/".into());
+    let (uid, gid) = parse_user(process_config.and_then(|c| c.user.as_ref()));
+
+    OciSpec {
+        version: "1.0.2".into(),
+        platform: None,
+        process: Some(OciProcess {
+            args: Some(if args.is_empty() {
+                vec!["/bin/sh".into()]
+            } else {
+                args
+            }),
+            env: Some(env),
+            cwd: Some(cwd),
+            user: Some(OciUser {
+                uid: Some(uid),
+                gid: Some(gid),
+                ..OciUser::default()
+            }),
+            no_new_privileges: Some(true),
+            ..OciProcess::default()
+        }),
+        root: Some(OciRoot {
+            path: rootfs.into(),
+            readonly: None,
+        }),
+        hostname: Some("edgerun".into()),
+        domainname: None,
+        linux: Some(OciLinux {
+            namespaces: Some(default_namespaces()),
+            masked_paths: Some(masked_paths()),
+            readonly_paths: Some(readonly_paths()),
+            ..OciLinux::default()
+        }),
+        mounts: volume_mounts_model(image_config),
+        annotations: None,
+    }
+}
+
+pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &str) -> String {
     let process_config = image_config.config.as_ref();
 
-    let args = process_config
-        .and_then(|c| c.entrypoint.as_ref())
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .chain(
-            process_config
-                .and_then(|c| c.cmd.as_ref())
-                .cloned()
-                .unwrap_or_default(),
-        )
-        .collect::<Vec<_>>();
+    let args = image_process_args(process_config);
 
     let env = process_config
         .and_then(|c| c.env.as_ref())
@@ -77,7 +116,7 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
             }
         },
         "root": {
-            "path": rootfs.to_str().unwrap_or("/")
+            "path": rootfs
         },
         "hostname": "edgerun",
         "linux": {
@@ -115,16 +154,119 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
 }
 
 fn parse_user(user_str: Option<&String>) -> (u32, u32) {
-    if let Some(s) = user_str {
-        let parts: Vec<&str> = s.split(':').collect();
-        let uid = parts[0].parse().unwrap_or(0);
-        let gid = if parts.len() > 1 {
-            parts[1].parse().unwrap_or(0)
-        } else {
-            0
-        };
-        (uid, gid)
+    if let Some(user) = user_str {
+        let (uid, gid) = user.split_once(':').unwrap_or((user.as_str(), "0"));
+        (uid.parse().unwrap_or(0), gid.parse().unwrap_or(0))
     } else {
         (0, 0)
+    }
+}
+
+fn image_process_args(process_config: Option<&super::config::ImageConfigInner>) -> Vec<String> {
+    process_config
+        .and_then(|c| c.entrypoint.as_ref())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .chain(
+            process_config
+                .and_then(|c| c.cmd.as_ref())
+                .cloned()
+                .unwrap_or_default(),
+        )
+        .collect()
+}
+
+fn volume_mounts_model(image_config: &ImageConfig) -> Option<Vec<OciMount>> {
+    image_config
+        .config
+        .as_ref()
+        .and_then(|config| config.volumes.as_ref())
+        .map(|volumes| {
+            volumes
+                .keys()
+                .map(|dest| OciMount {
+                    destination: dest.clone(),
+                    mount_type: Some("tmpfs".into()),
+                    source: Some("tmpfs".into()),
+                    options: Some(vec!["nosuid".into(), "nodev".into(), "noexec".into()]),
+                    label: None,
+                    recursive: None,
+                    uid_mappings: None,
+                    gid_mappings: None,
+                })
+                .collect()
+        })
+        .filter(|mounts: &Vec<OciMount>| !mounts.is_empty())
+}
+
+fn masked_paths() -> Vec<String> {
+    [
+        "/proc/acpi",
+        "/proc/kcore",
+        "/proc/keys",
+        "/proc/latency_stats",
+        "/proc/timer_list",
+        "/proc/timer_stats",
+        "/proc/sched_debug",
+        "/proc/scsi",
+        "/sys/firmware",
+    ]
+    .iter()
+    .map(|value| (*value).into())
+    .collect()
+}
+
+fn readonly_paths() -> Vec<String> {
+    [
+        "/proc/asound",
+        "/proc/bus",
+        "/proc/fs",
+        "/proc/irq",
+        "/proc/sys",
+        "/proc/sysrq-trigger",
+    ]
+    .iter()
+    .map(|value| (*value).into())
+    .collect()
+}
+
+#[cfg(all(test, feature = "json", not(feature = "serde")))]
+mod tests {
+    use super::*;
+    use crate::validate_spec;
+    use alloc::collections::BTreeMap;
+
+    #[test]
+    fn generates_valid_oci_spec_model_without_serde() {
+        let mut volumes = BTreeMap::new();
+        volumes.insert("/data".into(), edgerun_json::JsonValue::Null);
+        let image_config = ImageConfig {
+            architecture: Some("amd64".into()),
+            os: Some("linux".into()),
+            config: Some(super::super::config::ImageConfigInner {
+                user: Some("1000:1001".into()),
+                env: Some(vec!["PATH=/bin".into()]),
+                entrypoint: Some(vec!["/init".into()]),
+                cmd: Some(vec!["--serve".into()]),
+                working_dir: Some("/app".into()),
+                exposed_ports: None,
+                volumes: Some(volumes),
+                labels: None,
+                stop_signal: None,
+            }),
+            rootfs: None,
+            history: None,
+        };
+
+        let spec = generate_oci_spec_model(&image_config, "/rootfs");
+
+        validate_spec(&spec).unwrap();
+        let process = spec.process.unwrap();
+        assert_eq!(process.args.unwrap(), vec!["/init", "--serve"]);
+        assert_eq!(process.cwd.as_deref(), Some("/app"));
+        assert_eq!(process.user.unwrap().uid, Some(1000));
+        assert_eq!(spec.root.unwrap().path, "/rootfs");
+        assert_eq!(spec.mounts.unwrap()[0].destination, "/data");
     }
 }

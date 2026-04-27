@@ -11,10 +11,14 @@
 //! - `read_str()` returns `String` (not `&str`) because DashMap guards
 //!   can't outlive the function call. Use `read()` for zero-copy via `Arc<Vec<u8>>`.
 
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+
 use dashmap::DashMap;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::grep::GrepMatch;

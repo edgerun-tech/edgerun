@@ -1,3 +1,10 @@
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
+#[cfg(target_os = "none")]
+use edgerun_encoding::io;
+#[cfg(not(target_os = "none"))]
 use std::io;
 
 use crate::smtp::types::dsn::{DsnNotify, DsnRet};
@@ -205,6 +212,9 @@ impl SmtpCommand {
             // Auth responses during AUTH exchanges are handled by the state machine
             // in session.rs (handle_auth_response), NOT by command parsing.
             _ => Err(io::Error::new(
+                #[cfg(target_os = "none")]
+                io::ErrorKind::InvalidData,
+                #[cfg(not(target_os = "none"))]
                 io::ErrorKind::InvalidInput,
                 format!("Unknown command: {}", trimmed),
             )),

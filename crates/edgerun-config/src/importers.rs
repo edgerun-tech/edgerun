@@ -1,10 +1,12 @@
 //! Import converters — transform dnsmasq.conf and CoreDNS Corefile into
 //! Kubernetes-compatible YAML config resources.
 
-use crate::types::*;
 use crate::prelude::v1::*;
+use crate::collections::HashMap;
+use crate::mem;
+use crate::net::Ipv4Addr;
+use crate::types::*;
 use edgerun_json::JsonValue;
-use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // dnsmasq.conf → ConfigResource
@@ -373,7 +375,7 @@ fn parse_dhcp_host(value: &str) -> DhcpHost {
         let part = part.trim();
         if part.contains(':') && part.len() == 17 {
             h.mac = Some(part.to_string());
-        } else if part.parse::<std::net::Ipv4Addr>().is_ok() {
+        } else if part.parse::<Ipv4Addr>().is_ok() {
             h.ip = Some(part.to_string());
         } else if !part.is_empty() {
             h.hostname = Some(part.to_string());
@@ -401,7 +403,7 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
                     if let Some(z) = current_zone.take() {
                         blocks.push(CoreBlock {
                             zone: z,
-                            plugins: std::mem::take(&mut current_plugins),
+                            plugins: mem::take(&mut current_plugins),
                         });
                     }
                     current_zone = Some(zone.to_string());
@@ -413,7 +415,7 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
                 if let Some(z) = current_zone.take() {
                     blocks.push(CoreBlock {
                         zone: z,
-                        plugins: std::mem::take(&mut current_plugins),
+                        plugins: mem::take(&mut current_plugins),
                     });
                 }
                 blocks.push(CoreBlock {
@@ -428,7 +430,7 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
                     if let Some(z) = current_zone.take() {
                         blocks.push(CoreBlock {
                             zone: z,
-                            plugins: std::mem::take(&mut current_plugins),
+                            plugins: mem::take(&mut current_plugins),
                         });
                     }
                 }
@@ -465,7 +467,7 @@ fn parse_corefile_blocks(corefile: &str) -> Vec<CoreBlock> {
     if let Some(z) = current_zone.take() {
         blocks.push(CoreBlock {
             zone: z,
-            plugins: std::mem::take(&mut current_plugins),
+            plugins: mem::take(&mut current_plugins),
         });
     }
     blocks

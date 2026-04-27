@@ -1,5 +1,7 @@
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use crate::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderInfo {

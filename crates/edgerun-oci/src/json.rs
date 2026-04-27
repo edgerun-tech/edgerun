@@ -1,61 +1,86 @@
 //! OCI spec types with serde-based JSON serialization via edgerun-json.
 
+use crate::prelude::*;
+#[cfg(feature = "serde")]
 use edgerun_json::{from_slice, to_string, to_string_pretty};
+#[cfg(all(feature = "json", not(feature = "serde")))]
+use edgerun_json::{parse_json, JsonValue};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 // ===========================================================================
 // Public API
 // ===========================================================================
 
 /// Parse an OCI spec from JSON bytes.
+#[cfg(feature = "serde")]
 pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
     from_slice(data).map_err(|e| e.to_string())
+}
+
+/// Parse an OCI spec from JSON bytes without serde.
+///
+/// This no_std parser covers the runtime-critical OCI fields needed by a
+/// bare-metal loader: version, platform, process, root, mounts, Linux
+/// namespaces, devices, mappings, sysctls, and basic resource settings.
+#[cfg(all(feature = "json", not(feature = "serde")))]
+pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
+    let text = core::str::from_utf8(data).map_err(|_| "OCI spec is not UTF-8".to_string())?;
+    let value = parse_json(text).map_err(|e| e.to_string())?;
+    parse_oci_spec_value(&value)
 }
 
 // ===========================================================================
 // OCI Spec types
 // ===========================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone)]
 pub struct OciSpec {
-    #[serde(rename = "ociVersion")]
+    #[cfg_attr(feature = "serde", serde(rename = "ociVersion"))]
     pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub platform: Option<OciPlatform>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub process: Option<OciProcess>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub root: Option<OciRoot>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub hostname: Option<String>,
     /// NIS domain name for the container (OCI 1.1.0).
     /// Set via setdomainname(2) syscall.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub domainname: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub linux: Option<OciLinux>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub mounts: Option<Vec<OciMount>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<std::collections::HashMap<String, String>>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub annotations: Option<BTreeMap<String, String>>,
 }
 
 /// Target platform the bundle was built for.
 /// Per OCI spec: runtime must reject bundles whose platform doesn't match the host.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciPlatform {
     /// Operating system: "linux", "windows", "solaris", etc.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub os: Option<String>,
     /// CPU architecture: "amd64", "arm64", "riscv64", etc.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub arch: Option<String>,
     /// OS variant (optional): e.g., "v1", "v2" for Windows.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub os_version: Option<String>,
     /// OS features (optional).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub os_features: Option<Vec<String>>,
 }
 
@@ -100,182 +125,254 @@ impl OciPlatform {
 
 impl OciSpec {
     /// Serialize to compact JSON.
+    #[cfg(feature = "serde")]
     pub fn to_json_string(&self) -> String {
         to_string(self).unwrap_or_default()
     }
 
     /// Serialize to pretty-printed JSON.
+    #[cfg(feature = "serde")]
     pub fn to_json_string_pretty(&self) -> String {
         to_string_pretty(self).unwrap_or_default()
     }
 }
 
 /// Terminal console dimensions (cells, not pixels).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciBox {
     pub width: u64,
     pub height: u64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciProcess {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub terminal: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub user: Option<OciUser>,
     /// Console size for terminal (width and height in cells).
-    #[serde(skip_serializing_if = "Option::is_none", rename = "consoleSize")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "consoleSize")
+    )]
     pub console_size: Option<OciBox>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub args: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub env: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "cwd")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "cwd")
+    )]
     pub cwd: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub capabilities: Option<OciCapabilities>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "rlimits")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "rlimits")
+    )]
     pub rlimits: Option<Vec<OciRlimit>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "noNewPrivileges")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "noNewPrivileges")
+    )]
     pub no_new_privileges: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "oomScoreAdj")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "oomScoreAdj")
+    )]
     pub oom_score_adj: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "apparmorProfile")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "apparmorProfile")
+    )]
     pub apparmor_profile: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "selinuxLabel")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "selinuxLabel")
+    )]
     pub selinux_label: Option<String>,
     /// Real-time scheduling policy and parameters (OCI 1.0.2).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub scheduler: Option<OciScheduler>,
     /// I/O priority for the container process (OCI 1.1.0).
     /// Uses the Linux ioprio_set() interface: class 0-3, priority 0-7.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "ioPriority")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "ioPriority")
+    )]
     pub io_priority: Option<OciIoPriority>,
 }
 
 /// I/O priority configuration (OCI 1.1.0).
 /// Mirrors the Linux ioprio_set(2) interface.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciIoPriority {
     /// I/O scheduling class: 0=none, 1=realtime, 2=best-effort, 3=idle.
-    #[serde(rename = "class")]
+    #[cfg_attr(feature = "serde", serde(rename = "class"))]
     pub class: u32,
     /// I/O priority level within the class (0-7, lower = higher priority).
     /// Ignored for class 0 (none) and class 3 (idle).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub priority: Option<u32>,
 }
 
 /// Real-time scheduling configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciScheduler {
     /// Scheduling policy: "SCHED_OTHER", "SCHED_FIFO", "SCHED_RR", "SCHED_BATCH", "SCHED_IDLE", "SCHED_DEADLINE"
     pub policy: String,
     /// Nice value (only for SCHED_OTHER and SCHED_BATCH).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub nice: Option<i32>,
     /// Scheduling priority (for SCHED_FIFO and SCHED_RR, range 1-99).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub priority: Option<i32>,
     /// SCHED_DEADLINE parameters.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub deadline: Option<OciSchedDeadline>,
 }
 
 /// SCHED_DEADLINE scheduling parameters.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciSchedDeadline {
     /// Runtime in nanoseconds.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "runtime")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "runtime")
+    )]
     pub runtime_ns: Option<u64>,
     /// Period in nanoseconds.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "period")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "period")
+    )]
     pub period_ns: Option<u64>,
     /// Deadline in nanoseconds.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "deadline")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "deadline")
+    )]
     pub deadline_ns: Option<u64>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciUser {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub uid: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub gid: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "additionalGids")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "additionalGids")
+    )]
     pub additional_gids: Option<Vec<u32>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub umask: Option<u32>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciCapabilities {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub bounding: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub effective: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub inheritable: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub permitted: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub ambient: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct OciRlimit {
-    #[serde(rename = "type")]
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub ns_type: String,
     pub hard: u64,
     pub soft: u64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciRoot {
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub readonly: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinux {
-    #[serde(skip_serializing_if = "Option::is_none", rename = "uidMappings")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "uidMappings")
+    )]
     pub uid_mappings: Option<Vec<OciIdMapping>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "gidMappings")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "gidMappings")
+    )]
     pub gid_mappings: Option<Vec<OciIdMapping>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub resources: Option<OciLinuxResources>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "cgroupsPath")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "cgroupsPath")
+    )]
     pub cgroups_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub namespaces: Option<Vec<OciNamespace>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub devices: Option<Vec<OciLinuxDevice>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "maskedPaths")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "maskedPaths")
+    )]
     pub masked_paths: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "readonlyPaths")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "readonlyPaths")
+    )]
     pub readonly_paths: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "mountLabel")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "mountLabel")
+    )]
     pub mount_label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "rootfsPropagation")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "rootfsPropagation")
+    )]
     pub rootfs_propagation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sysctl: Option<std::collections::HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub sysctl: Option<BTreeMap<String, String>>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub hooks: Option<OciHooks>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub seccomp: Option<OciLinuxSeccomp>,
     /// Intel RDT (Resource Director Technology) configuration.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "intelRdt")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "intelRdt")
+    )]
     pub intel_rdt: Option<OciLinuxIntelRdt>,
 }
 
@@ -283,95 +380,125 @@ pub struct OciLinux {
 // OCI Hooks types
 // ===========================================================================
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciHooks {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub prestart: Option<Vec<OciHook>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "createRuntime")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "createRuntime")
+    )]
     pub create_runtime: Option<Vec<OciHook>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "createContainer")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "createContainer")
+    )]
     pub create_container: Option<Vec<OciHook>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "startContainer")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "startContainer")
+    )]
     pub start_container: Option<Vec<OciHook>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "poststart")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "poststart")
+    )]
     pub poststart: Option<Vec<OciHook>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "poststop")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "poststop")
+    )]
     pub poststop: Option<Vec<OciHook>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciHook {
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub args: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub env: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub timeout: Option<u64>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct OciIdMapping {
-    #[serde(rename = "containerID")]
+    #[cfg_attr(feature = "serde", serde(rename = "containerID"))]
     pub container_id: u32,
-    #[serde(rename = "hostID")]
+    #[cfg_attr(feature = "serde", serde(rename = "hostID"))]
     pub host_id: u32,
     pub size: u32,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciNamespace {
-    #[serde(rename = "type")]
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub ns_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub path: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxDevice {
-    #[serde(rename = "type")]
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub ns_type: String,
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "fileMode")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "fileMode")
+    )]
     pub file_mode: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub uid: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub gid: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub major: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub minor: Option<i64>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxCpu {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub shares: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub quota: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub period: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "realtimeRuntime")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "realtimeRuntime")
+    )]
     pub realtime_runtime: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "realtimePeriod")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "realtimePeriod")
+    )]
     pub realtime_period: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cpus: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub mems: Option<String>,
     /// CPU idle cgroup control (OCI 1.1.0).
     /// 0 = not idle, 1 = idle. When idle, CPU bandwidth is deprioritized.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub idle: Option<i64>,
     /// CFS bandwidth burst size in nanoseconds (OCI 1.1.0).
     /// Allows temporary CPU quota overrun for latency-sensitive workloads.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub burst: Option<i64>,
 }
 
@@ -379,52 +506,79 @@ pub struct OciLinuxCpu {
 // Block I/O cgroup types
 // ===========================================================================
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxBlockIO {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub weight: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "leafWeight")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "leafWeight")
+    )]
     pub leaf_weight: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "weightDevice")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "weightDevice")
+    )]
     pub weight_device: Option<Vec<OciLinuxWeightDevice>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "leafWeightDevice")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "leafWeightDevice")
+    )]
     pub leaf_weight_device: Option<Vec<OciLinuxWeightDevice>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename = "throttleReadBpsDevice"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "throttleReadBpsDevice"
+        )
     )]
     pub throttle_read_bps_device: Option<Vec<OciLinuxThrottleDevice>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename = "throttleWriteBpsDevice"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "throttleWriteBpsDevice"
+        )
     )]
     pub throttle_write_bps_device: Option<Vec<OciLinuxThrottleDevice>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename = "throttleReadIOPSDevice"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "throttleReadIOPSDevice"
+        )
     )]
     pub throttle_read_iops_device: Option<Vec<OciLinuxThrottleDevice>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename = "throttleWriteIOPSDevice"
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "throttleWriteIOPSDevice"
+        )
     )]
     pub throttle_write_iops_device: Option<Vec<OciLinuxThrottleDevice>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxWeightDevice {
     pub major: i64,
     pub minor: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub weight: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "leafWeight")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "leafWeight")
+    )]
     pub leaf_weight: Option<u16>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxThrottleDevice {
     pub major: i64,
     pub minor: i64,
@@ -435,27 +589,33 @@ pub struct OciLinuxThrottleDevice {
 // Hugepage and network cgroup types
 // ===========================================================================
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct OciLinuxHugepageLimit {
     pub pagesize: String,
     pub limit: u64,
     /// Reserved huge page accounting (OCI 1.1.0).
     /// When true, apply limit to hugetlb.<size>.rsvd.max instead of hugetlb.<size>.max.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub rsvd: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxNetwork {
-    #[serde(skip_serializing_if = "Option::is_none", rename = "classID")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "classID")
+    )]
     pub class_id: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub priorities: Option<Vec<OciLinuxNetworkPriority>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxNetworkPriority {
     pub name: String,
     pub priority: u32,
@@ -463,25 +623,38 @@ pub struct OciLinuxNetworkPriority {
 
 /// Intel RDT (Resource Director Technology) configuration.
 /// Controls cache and memory bandwidth allocation.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxIntelRdt {
     /// Cache Bitmask (CBM) for L3 cache. E.g., "L3:0=fff"
-    #[serde(skip_serializing_if = "Option::is_none", rename = "l3CacheSchema")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "l3CacheSchema")
+    )]
     pub l3_cache_schema: Option<String>,
     /// Memory bandwidth schema. E.g., "MB:0=70"
-    #[serde(skip_serializing_if = "Option::is_none", rename = "memBwSchema")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "memBwSchema")
+    )]
     pub mem_bw_schema: Option<String>,
     /// Class of Service ID
-    #[serde(skip_serializing_if = "Option::is_none", rename = "closID")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "closID")
+    )]
     pub clos_id: Option<String>,
     /// Enable CMT/MBM monitoring for this container (OCI 1.3.0).
     /// When true, the runtime should enable cache and memory bandwidth monitoring.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "enableMonitoring")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "enableMonitoring")
+    )]
     pub enable_monitoring: Option<bool>,
     /// Combined schemata format (OCI 1.3.0).
     /// E.g., "L3:0=fff\nMB:0=70" — overrides l3_cache_schema and mem_bw_schema if set.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub schemata: Option<String>,
 }
 
@@ -490,28 +663,45 @@ pub struct OciLinuxIntelRdt {
 // ===========================================================================
 
 /// Seccomp filtering configuration from the OCI spec.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxSeccomp {
-    #[serde(skip_serializing_if = "Option::is_none", rename = "defaultAction")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "defaultAction")
+    )]
     pub default_action: Option<OciSeccompAction>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "defaultErrnoRet")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "defaultErrnoRet")
+    )]
     pub default_errno_ret: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub architectures: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "listenerPath")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "listenerPath")
+    )]
     pub listener_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "listenerMetadata")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "listenerMetadata")
+    )]
     pub listener_metadata: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub syscalls: Option<Vec<OciSeccompSyscallEntry>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(
-    rename_all = "SCREAMING_SNAKE_CASE",
-    try_from = "String",
-    into = "String"
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    serde(
+        rename_all = "SCREAMING_SNAKE_CASE",
+        try_from = "String",
+        into = "String"
+    )
 )]
 pub enum OciSeccompAction {
     Kill,
@@ -560,25 +750,30 @@ impl From<OciSeccompAction> for String {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciSeccompSyscallEntry {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub names: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub action: Option<OciSeccompAction>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "errnoRet")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "errnoRet")
+    )]
     pub errno_ret: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub args: Option<Vec<OciSeccompArg>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciSeccompArg {
     pub index: u32,
     pub value: u64,
-    #[serde(rename = "valueTwo")]
+    #[cfg_attr(feature = "serde", serde(rename = "valueTwo"))]
     pub value_two: u64,
     pub op: String,
 }
@@ -587,92 +782,703 @@ pub struct OciSeccompArg {
 // Update OciLinux to include seccomp
 // ===========================================================================
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct OciLinuxResources {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub devices: Option<Vec<OciLinuxDeviceCgroup>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub memory: Option<OciLinuxMemory>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cpu: Option<OciLinuxCpu>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub pids: Option<OciLinuxPids>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "blockIO")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "blockIO")
+    )]
     pub block_io: Option<OciLinuxBlockIO>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub hugepage_limits: Option<Vec<OciLinuxHugepageLimit>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub network: Option<OciLinuxNetwork>,
 }
 
 /// Device cgroup rule for allowed/denied device access.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxDeviceCgroup {
-    #[serde(rename = "type")]
+    #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub ns_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub major: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub minor: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub access: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
 pub struct OciLinuxPids {
     pub limit: i64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciLinuxMemory {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub limit: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub reservation: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub swap: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub kernel: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "kernelTCP")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "kernelTCP")
+    )]
     pub kernel_tcp: Option<i64>,
     /// Hint to runtime to validate memory limit before updating (OCI 1.1.0).
     /// When true, the runtime should check if the new limit is feasible
     /// before applying it, rather than failing after the fact.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "checkBeforeUpdate")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "checkBeforeUpdate")
+    )]
     pub check_before_update: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct OciMount {
     pub destination: String,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "type")
+    )]
     pub mount_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "source")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "source")
+    )]
     pub source: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub options: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "label")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "label")
+    )]
     pub label: Option<String>,
     /// Recursive mount attribute (OCI 1.1).
     /// When true, mount options apply recursively to sub-mounts.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub recursive: Option<bool>,
     /// UID mappings for idmapped mounts (OCI 1.1/1.2, Linux 5.12+).
-    #[serde(skip_serializing_if = "Option::is_none", rename = "uidMappings")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "uidMappings")
+    )]
     pub uid_mappings: Option<Vec<OciIdMapping>>,
     /// GID mappings for idmapped mounts (OCI 1.1/1.2, Linux 5.12+).
-    #[serde(skip_serializing_if = "Option::is_none", rename = "gidMappings")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", rename = "gidMappings")
+    )]
     pub gid_mappings: Option<Vec<OciIdMapping>>,
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_oci_spec_value(value: &JsonValue) -> Result<OciSpec, String> {
+    let object = object(value, "OCI spec")?;
+    let version = required_string(object.get("ociVersion"), "ociVersion")?;
+
+    Ok(OciSpec {
+        version,
+        platform: object.get("platform").map(parse_platform).transpose()?,
+        process: object.get("process").map(parse_process).transpose()?,
+        root: object.get("root").map(parse_root).transpose()?,
+        hostname: optional_string(object.get("hostname"))?,
+        domainname: optional_string(object.get("domainname"))?,
+        linux: object.get("linux").map(parse_linux).transpose()?,
+        mounts: object.get("mounts").map(parse_mounts).transpose()?,
+        annotations: object
+            .get("annotations")
+            .map(parse_string_map)
+            .transpose()?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_platform(value: &JsonValue) -> Result<OciPlatform, String> {
+    let object = object(value, "platform")?;
+    Ok(OciPlatform {
+        os: optional_string(object.get("os"))?,
+        arch: optional_string(object.get("arch"))?,
+        os_version: optional_string(object.get("os.version"))?,
+        os_features: object
+            .get("os.features")
+            .map(parse_string_array)
+            .transpose()?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_process(value: &JsonValue) -> Result<OciProcess, String> {
+    let object = object(value, "process")?;
+    Ok(OciProcess {
+        terminal: optional_bool(object.get("terminal"))?,
+        user: object.get("user").map(parse_user).transpose()?,
+        console_size: object.get("consoleSize").map(parse_box).transpose()?,
+        args: object.get("args").map(parse_string_array).transpose()?,
+        env: object.get("env").map(parse_string_array).transpose()?,
+        cwd: optional_string(object.get("cwd"))?,
+        capabilities: object
+            .get("capabilities")
+            .map(parse_capabilities)
+            .transpose()?,
+        rlimits: object.get("rlimits").map(parse_rlimits).transpose()?,
+        no_new_privileges: optional_bool(object.get("noNewPrivileges"))?,
+        oom_score_adj: optional_i64(object.get("oomScoreAdj"))?,
+        apparmor_profile: optional_string(object.get("apparmorProfile"))?,
+        selinux_label: optional_string(object.get("selinuxLabel"))?,
+        scheduler: object.get("scheduler").map(parse_scheduler).transpose()?,
+        io_priority: object
+            .get("ioPriority")
+            .map(parse_io_priority)
+            .transpose()?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_box(value: &JsonValue) -> Result<OciBox, String> {
+    let object = object(value, "consoleSize")?;
+    Ok(OciBox {
+        width: required_u64(object.get("width"), "consoleSize.width")?,
+        height: required_u64(object.get("height"), "consoleSize.height")?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_user(value: &JsonValue) -> Result<OciUser, String> {
+    let object = object(value, "user")?;
+    Ok(OciUser {
+        uid: optional_u32(object.get("uid"))?,
+        gid: optional_u32(object.get("gid"))?,
+        additional_gids: object
+            .get("additionalGids")
+            .map(parse_u32_array)
+            .transpose()?,
+        umask: optional_u32(object.get("umask"))?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_capabilities(value: &JsonValue) -> Result<OciCapabilities, String> {
+    let object = object(value, "capabilities")?;
+    Ok(OciCapabilities {
+        bounding: object.get("bounding").map(parse_string_array).transpose()?,
+        effective: object
+            .get("effective")
+            .map(parse_string_array)
+            .transpose()?,
+        inheritable: object
+            .get("inheritable")
+            .map(parse_string_array)
+            .transpose()?,
+        permitted: object
+            .get("permitted")
+            .map(parse_string_array)
+            .transpose()?,
+        ambient: object.get("ambient").map(parse_string_array).transpose()?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_rlimits(value: &JsonValue) -> Result<Vec<OciRlimit>, String> {
+    array(value, "rlimits")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let object = object(value, "rlimit")?;
+            Ok(OciRlimit {
+                ns_type: required_string(object.get("type"), "rlimit.type")?,
+                hard: required_u64(object.get("hard"), "rlimit.hard")?,
+                soft: required_u64(object.get("soft"), "rlimit.soft")?,
+            })
+            .map_err(|e: String| format!("rlimits[{index}]: {e}"))
+        })
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_scheduler(value: &JsonValue) -> Result<OciScheduler, String> {
+    let object = object(value, "scheduler")?;
+    Ok(OciScheduler {
+        policy: required_string(object.get("policy"), "scheduler.policy")?,
+        nice: optional_i32(object.get("nice"))?,
+        priority: optional_i32(object.get("priority"))?,
+        deadline: object
+            .get("deadline")
+            .map(parse_sched_deadline)
+            .transpose()?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_sched_deadline(value: &JsonValue) -> Result<OciSchedDeadline, String> {
+    let object = object(value, "scheduler.deadline")?;
+    Ok(OciSchedDeadline {
+        runtime_ns: optional_u64(object.get("runtime"))?,
+        period_ns: optional_u64(object.get("period"))?,
+        deadline_ns: optional_u64(object.get("deadline"))?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_io_priority(value: &JsonValue) -> Result<OciIoPriority, String> {
+    let object = object(value, "ioPriority")?;
+    Ok(OciIoPriority {
+        class: required_u32(object.get("class"), "ioPriority.class")?,
+        priority: optional_u32(object.get("priority"))?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_root(value: &JsonValue) -> Result<OciRoot, String> {
+    let object = object(value, "root")?;
+    Ok(OciRoot {
+        path: required_string(object.get("path"), "root.path")?,
+        readonly: optional_bool(object.get("readonly"))?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_linux(value: &JsonValue) -> Result<OciLinux, String> {
+    let object = object(value, "linux")?;
+    Ok(OciLinux {
+        uid_mappings: object
+            .get("uidMappings")
+            .map(parse_id_mappings)
+            .transpose()?,
+        gid_mappings: object
+            .get("gidMappings")
+            .map(parse_id_mappings)
+            .transpose()?,
+        resources: object.get("resources").map(parse_resources).transpose()?,
+        cgroups_path: optional_string(object.get("cgroupsPath"))?,
+        namespaces: object.get("namespaces").map(parse_namespaces).transpose()?,
+        devices: object.get("devices").map(parse_devices).transpose()?,
+        masked_paths: object
+            .get("maskedPaths")
+            .map(parse_string_array)
+            .transpose()?,
+        readonly_paths: object
+            .get("readonlyPaths")
+            .map(parse_string_array)
+            .transpose()?,
+        mount_label: optional_string(object.get("mountLabel"))?,
+        rootfs_propagation: optional_string(object.get("rootfsPropagation"))?,
+        sysctl: object.get("sysctl").map(parse_string_map).transpose()?,
+        hooks: None,
+        seccomp: None,
+        intel_rdt: object.get("intelRdt").map(parse_intel_rdt).transpose()?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_id_mappings(value: &JsonValue) -> Result<Vec<OciIdMapping>, String> {
+    array(value, "idMappings")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let object = object(value, "idMapping")?;
+            Ok(OciIdMapping {
+                container_id: required_u32(object.get("containerID"), "containerID")?,
+                host_id: required_u32(object.get("hostID"), "hostID")?,
+                size: required_u32(object.get("size"), "size")?,
+            })
+            .map_err(|e: String| format!("idMappings[{index}]: {e}"))
+        })
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_namespaces(value: &JsonValue) -> Result<Vec<OciNamespace>, String> {
+    array(value, "namespaces")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let object = object(value, "namespace")?;
+            Ok(OciNamespace {
+                ns_type: required_string(object.get("type"), "namespace.type")?,
+                path: optional_string(object.get("path"))?,
+            })
+            .map_err(|e: String| format!("namespaces[{index}]: {e}"))
+        })
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_devices(value: &JsonValue) -> Result<Vec<OciLinuxDevice>, String> {
+    array(value, "devices")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let object = object(value, "device")?;
+            Ok(OciLinuxDevice {
+                ns_type: required_string(object.get("type"), "device.type")?,
+                path: required_string(object.get("path"), "device.path")?,
+                file_mode: optional_u32(object.get("fileMode"))?,
+                uid: optional_u32(object.get("uid"))?,
+                gid: optional_u32(object.get("gid"))?,
+                major: optional_i64(object.get("major"))?,
+                minor: optional_i64(object.get("minor"))?,
+            })
+            .map_err(|e: String| format!("devices[{index}]: {e}"))
+        })
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_resources(value: &JsonValue) -> Result<OciLinuxResources, String> {
+    let object = object(value, "resources")?;
+    Ok(OciLinuxResources {
+        devices: object
+            .get("devices")
+            .map(parse_device_cgroups)
+            .transpose()?,
+        memory: object.get("memory").map(parse_memory).transpose()?,
+        cpu: object.get("cpu").map(parse_cpu).transpose()?,
+        pids: object.get("pids").map(parse_pids).transpose()?,
+        block_io: None,
+        hugepage_limits: None,
+        network: None,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_device_cgroups(value: &JsonValue) -> Result<Vec<OciLinuxDeviceCgroup>, String> {
+    array(value, "resources.devices")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let object = object(value, "device cgroup")?;
+            Ok(OciLinuxDeviceCgroup {
+                ns_type: required_string(object.get("type"), "device cgroup.type")?,
+                major: optional_i64(object.get("major"))?,
+                minor: optional_i64(object.get("minor"))?,
+                access: optional_string(object.get("access"))?,
+            })
+            .map_err(|e: String| format!("resources.devices[{index}]: {e}"))
+        })
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_memory(value: &JsonValue) -> Result<OciLinuxMemory, String> {
+    let object = object(value, "memory")?;
+    Ok(OciLinuxMemory {
+        limit: optional_i64(object.get("limit"))?,
+        reservation: optional_i64(object.get("reservation"))?,
+        swap: optional_i64(object.get("swap"))?,
+        kernel: optional_i64(object.get("kernel"))?,
+        kernel_tcp: optional_i64(object.get("kernelTCP"))?,
+        check_before_update: optional_bool(object.get("checkBeforeUpdate"))?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_cpu(value: &JsonValue) -> Result<OciLinuxCpu, String> {
+    let object = object(value, "cpu")?;
+    Ok(OciLinuxCpu {
+        shares: optional_u64(object.get("shares"))?,
+        quota: optional_i64(object.get("quota"))?,
+        period: optional_u64(object.get("period"))?,
+        realtime_runtime: optional_i64(object.get("realtimeRuntime"))?,
+        realtime_period: optional_u64(object.get("realtimePeriod"))?,
+        cpus: optional_string(object.get("cpus"))?,
+        mems: optional_string(object.get("mems"))?,
+        idle: optional_i64(object.get("idle"))?,
+        burst: optional_i64(object.get("burst"))?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_pids(value: &JsonValue) -> Result<OciLinuxPids, String> {
+    let object = object(value, "pids")?;
+    Ok(OciLinuxPids {
+        limit: required_i64(object.get("limit"), "pids.limit")?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_intel_rdt(value: &JsonValue) -> Result<OciLinuxIntelRdt, String> {
+    let object = object(value, "intelRdt")?;
+    Ok(OciLinuxIntelRdt {
+        l3_cache_schema: optional_string(object.get("l3CacheSchema"))?,
+        mem_bw_schema: optional_string(object.get("memBwSchema"))?,
+        clos_id: optional_string(object.get("closID"))?,
+        enable_monitoring: optional_bool(object.get("enableMonitoring"))?,
+        schemata: optional_string(object.get("schemata"))?,
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_mounts(value: &JsonValue) -> Result<Vec<OciMount>, String> {
+    array(value, "mounts")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let object = object(value, "mount")?;
+            Ok(OciMount {
+                destination: required_string(object.get("destination"), "mount.destination")?,
+                mount_type: optional_string(object.get("type"))?,
+                source: optional_string(object.get("source"))?,
+                options: object.get("options").map(parse_string_array).transpose()?,
+                label: optional_string(object.get("label"))?,
+                recursive: optional_bool(object.get("recursive"))?,
+                uid_mappings: object
+                    .get("uidMappings")
+                    .map(parse_id_mappings)
+                    .transpose()?,
+                gid_mappings: object
+                    .get("gidMappings")
+                    .map(parse_id_mappings)
+                    .transpose()?,
+            })
+            .map_err(|e: String| format!("mounts[{index}]: {e}"))
+        })
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_string_map(value: &JsonValue) -> Result<BTreeMap<String, String>, String> {
+    object(value, "string map")?
+        .iter()
+        .map(|(key, value)| Ok((key.clone(), string(value, key)?)))
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_string_array(value: &JsonValue) -> Result<Vec<String>, String> {
+    array(value, "string array")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| string(value, &format!("string array[{index}]")))
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_u32_array(value: &JsonValue) -> Result<Vec<u32>, String> {
+    array(value, "u32 array")?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| u32_value(value, &format!("u32 array[{index}]")))
+        .collect()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn object<'a>(value: &'a JsonValue, name: &str) -> Result<&'a edgerun_json::Map, String> {
+    value
+        .as_object()
+        .ok_or_else(|| format!("{name} must be an object"))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn array<'a>(value: &'a JsonValue, name: &str) -> Result<&'a Vec<JsonValue>, String> {
+    value
+        .as_array()
+        .ok_or_else(|| format!("{name} must be an array"))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn optional_string(value: Option<&JsonValue>) -> Result<Option<String>, String> {
+    value.map(|value| string(value, "string")).transpose()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn required_string(value: Option<&JsonValue>, name: &str) -> Result<String, String> {
+    value
+        .ok_or_else(|| format!("missing required field {name}"))
+        .and_then(|value| string(value, name))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn string(value: &JsonValue, name: &str) -> Result<String, String> {
+    value
+        .as_str()
+        .map(ToString::to_string)
+        .ok_or_else(|| format!("{name} must be a string"))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn optional_bool(value: Option<&JsonValue>) -> Result<Option<bool>, String> {
+    value
+        .map(|value| {
+            value
+                .as_bool()
+                .ok_or_else(|| "field must be a boolean".to_string())
+        })
+        .transpose()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn optional_i32(value: Option<&JsonValue>) -> Result<Option<i32>, String> {
+    value.map(|value| i32_value(value, "field")).transpose()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn optional_i64(value: Option<&JsonValue>) -> Result<Option<i64>, String> {
+    value.map(|value| i64_value(value, "field")).transpose()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn required_i64(value: Option<&JsonValue>, name: &str) -> Result<i64, String> {
+    value
+        .ok_or_else(|| format!("missing required field {name}"))
+        .and_then(|value| i64_value(value, name))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn optional_u32(value: Option<&JsonValue>) -> Result<Option<u32>, String> {
+    value.map(|value| u32_value(value, "field")).transpose()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn required_u32(value: Option<&JsonValue>, name: &str) -> Result<u32, String> {
+    value
+        .ok_or_else(|| format!("missing required field {name}"))
+        .and_then(|value| u32_value(value, name))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn optional_u64(value: Option<&JsonValue>) -> Result<Option<u64>, String> {
+    value.map(|value| u64_value(value, "field")).transpose()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn required_u64(value: Option<&JsonValue>, name: &str) -> Result<u64, String> {
+    value
+        .ok_or_else(|| format!("missing required field {name}"))
+        .and_then(|value| u64_value(value, name))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn i32_value(value: &JsonValue, name: &str) -> Result<i32, String> {
+    let value = i64_value(value, name)?;
+    i32::try_from(value).map_err(|_| format!("{name} is out of range for i32"))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn i64_value(value: &JsonValue, name: &str) -> Result<i64, String> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|v| i64::try_from(v).ok()))
+        .ok_or_else(|| format!("{name} must be an integer"))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn u32_value(value: &JsonValue, name: &str) -> Result<u32, String> {
+    let value = u64_value(value, name)?;
+    u32::try_from(value).map_err(|_| format!("{name} is out of range for u32"))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn u64_value(value: &JsonValue, name: &str) -> Result<u64, String> {
+    value
+        .as_u64()
+        .or_else(|| value.as_i64().and_then(|v| u64::try_from(v).ok()))
+        .ok_or_else(|| format!("{name} must be an unsigned integer"))
 }
 
 // ===========================================================================
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, feature = "json", not(feature = "serde")))]
+mod json_feature_tests {
+    use super::*;
+
+    #[test]
+    fn parse_minimal_oci_spec_without_serde() {
+        let json =
+            r#"{"ociVersion":"1.0.2","root":{"path":"rootfs"},"process":{"args":["/bin/sh"]}}"#;
+
+        let spec = parse_oci_spec(json.as_bytes()).unwrap();
+
+        assert_eq!(spec.version, "1.0.2");
+        assert_eq!(spec.root.unwrap().path, "rootfs");
+        assert_eq!(spec.process.unwrap().args.unwrap(), vec!["/bin/sh"]);
+    }
+
+    #[test]
+    fn parse_runtime_fields_without_serde() {
+        let json = r#"{
+            "ociVersion": "1.0.2",
+            "hostname": "edgerun",
+            "process": {
+                "terminal": true,
+                "args": ["/init", "--boot"],
+                "env": ["PATH=/bin", "TERM=xterm"],
+                "cwd": "/",
+                "user": { "uid": 1000, "gid": 1000, "additionalGids": [10, 11] },
+                "capabilities": { "bounding": ["CAP_CHOWN"], "effective": ["CAP_CHOWN"] },
+                "rlimits": [{ "type": "RLIMIT_NOFILE", "hard": 1024, "soft": 512 }],
+                "noNewPrivileges": true
+            },
+            "root": { "path": "/rootfs", "readonly": true },
+            "mounts": [{ "destination": "/proc", "type": "proc", "source": "proc", "options": ["nosuid"] }],
+            "linux": {
+                "namespaces": [{ "type": "mount" }, { "type": "pid" }],
+                "uidMappings": [{ "containerID": 0, "hostID": 100000, "size": 65536 }],
+                "maskedPaths": ["/proc/kcore"],
+                "readonlyPaths": ["/proc/sys"],
+                "sysctl": { "net.ipv4.ip_forward": "1" },
+                "resources": {
+                    "memory": { "limit": 1048576 },
+                    "cpu": { "shares": 1024, "cpus": "0" },
+                    "pids": { "limit": 64 },
+                    "devices": [{ "type": "c", "major": 1, "minor": 3, "access": "rwm" }]
+                }
+            }
+        }"#;
+
+        let spec = parse_oci_spec(json.as_bytes()).unwrap();
+        let process = spec.process.unwrap();
+        assert_eq!(process.terminal, Some(true));
+        assert_eq!(process.user.unwrap().uid, Some(1000));
+        assert_eq!(process.rlimits.unwrap()[0].soft, 512);
+
+        let linux = spec.linux.unwrap();
+        assert_eq!(linux.namespaces.unwrap()[1].ns_type, "pid");
+        assert_eq!(linux.uid_mappings.unwrap()[0].host_id, 100000);
+        assert_eq!(
+            linux.sysctl.unwrap().get("net.ipv4.ip_forward"),
+            Some(&"1".into())
+        );
+        let resources = linux.resources.unwrap();
+        assert_eq!(resources.memory.unwrap().limit, Some(1048576));
+        assert_eq!(resources.cpu.unwrap().cpus, Some("0".into()));
+        assert_eq!(resources.pids.unwrap().limit, 64);
+        assert_eq!(resources.devices.unwrap()[0].access, Some("rwm".into()));
+
+        let mounts = spec.mounts.unwrap();
+        assert_eq!(mounts[0].destination, "/proc");
+        assert_eq!(mounts[0].options.as_ref().unwrap()[0], "nosuid");
+    }
+
+    #[test]
+    fn parse_oci_spec_without_serde_rejects_missing_version() {
+        assert!(parse_oci_spec(br#"{"root":{"path":"rootfs"}}"#).is_err());
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::*;
     use edgerun_json::from_slice;
@@ -729,7 +1535,7 @@ mod tests {
                 source: Some("proc".into()),
                 ..Default::default()
             }]),
-            annotations: Some(std::collections::HashMap::from([(
+            annotations: Some(BTreeMap::from([(
                 "org.edgerun.container.id".into(),
                 "my-id".into(),
             )])),

@@ -8,6 +8,7 @@ use crate::prelude::v1::*;
 
 use crate::header::HeaderMap;
 use crate::http1::pool::ConnectionPool;
+#[cfg(feature = "tls")]
 use crate::http2::pool::Http2Pool;
 use crate::method::Method;
 use crate::uri::Uri;
@@ -37,6 +38,7 @@ struct ClientInner {
     follow_redirects: bool,
     auto_decompress: bool,
     pool: Arc<Mutex<ConnectionPool>>,
+    #[cfg(feature = "tls")]
     h2_pool: Arc<Mutex<Http2Pool>>,
 }
 
@@ -57,6 +59,7 @@ impl HttpClient {
                 follow_redirects: true,
                 auto_decompress: true,
                 pool: Arc::new(Mutex::new(ConnectionPool::new())),
+                #[cfg(feature = "tls")]
                 h2_pool: Arc::new(Mutex::new(Http2Pool::new())),
             }),
         }
@@ -76,6 +79,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
                 pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
             }),
         }
@@ -90,6 +94,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
                 pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
             }),
         }
@@ -104,6 +109,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
                 pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
             }),
         }
@@ -118,6 +124,7 @@ impl HttpClient {
                 follow_redirects: max > 0,
                 auto_decompress: self.inner.auto_decompress,
                 pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
             }),
         }
@@ -132,6 +139,7 @@ impl HttpClient {
                 follow_redirects: false,
                 auto_decompress: self.inner.auto_decompress,
                 pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
             }),
         }
@@ -146,6 +154,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: false,
                 pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
             }),
         }
@@ -273,6 +282,7 @@ impl HttpClient {
     }
 
     /// Execute an HTTP/3 request via QUIC.
+    #[cfg(feature = "http3")]
     async fn execute_http3(&self, request: &Request) -> Result<Response> {
         use crate::http1::compression;
         use crate::http3::connection::Http3Connection;
@@ -389,6 +399,14 @@ impl HttpClient {
         }
     }
 
+    #[cfg(not(feature = "http3"))]
+    async fn execute_http3(&self, _request: &Request) -> Result<Response> {
+        Err(Error::ProtocolError(
+            "HTTP/3 requires edgerun-http http3 feature".into(),
+        ))
+    }
+
+    #[cfg(feature = "tls")]
     async fn execute_http2(&self, request: &Request) -> Result<Response> {
         let uri = request.uri();
         edgerun_log::debug!("HTTP/2: connecting to {}", uri);
@@ -402,6 +420,13 @@ impl HttpClient {
             h2_resp.status,
             h2_resp.headers,
             h2_resp.body,
+        ))
+    }
+
+    #[cfg(not(feature = "tls"))]
+    async fn execute_http2(&self, _request: &Request) -> Result<Response> {
+        Err(Error::ProtocolError(
+            "HTTP/2 client requires edgerun-http tls feature".into(),
         ))
     }
 }

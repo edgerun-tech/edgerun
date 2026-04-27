@@ -201,7 +201,9 @@ impl TftpServer {
     ) -> Result<(), io::Error> {
         edgerun_log::warn!(
             "edgerun-tftp: RRQ '{}' from {} (blksize={})",
-            filename, client_addr, client_options.blksize
+            filename,
+            client_addr,
+            client_options.blksize
         );
 
         // Check if file exists
@@ -253,7 +255,9 @@ impl TftpServer {
             let _ = self.socket.send_to(&wire, client_addr);
             edgerun_log::warn!(
                 "edgerun-tftp: OACK sent to {} (blksize={}, tsize={})",
-                client_addr, negotiated.blksize, total_size
+                client_addr,
+                negotiated.blksize,
+                total_size
             );
         } else {
             // No options to negotiate, start sending data
@@ -281,7 +285,9 @@ impl TftpServer {
                     // Transfer complete
                     edgerun_log::warn!(
                         "edgerun-tftp: transfer complete '{}' to {} ({} bytes)",
-                        transfer.filename, client_addr, transfer.offset
+                        transfer.filename,
+                        client_addr,
+                        transfer.offset
                     );
                     self.transfers.remove(&key);
                 } else {
@@ -322,7 +328,9 @@ impl TftpServer {
                     if is_last {
                         edgerun_log::warn!(
                             "edgerun-tftp: final block {} for '{}' to {}",
-                            transfer.current_block, transfer.filename, client_addr
+                            transfer.current_block,
+                            transfer.filename,
+                            client_addr
                         );
                     }
                 }

@@ -1,5 +1,6 @@
 //! User namespace mapping and capability management.
 
+use crate::prelude::*;
 use std::io;
 
 use crate::syscalls::{

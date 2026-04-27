@@ -10,15 +10,15 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
-extern crate std;
 #[cfg(target_os = "none")]
 extern crate self as std;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 pub mod prelude {
     pub mod v1 {
-        pub use alloc::boxed::Box;
         pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
         pub use alloc::format;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec;
@@ -49,8 +49,8 @@ pub mod pin {
 
 #[cfg(target_os = "none")]
 pub use edgerun_secret_service::{
-    cmp, collections, convert, env, ffi, fmt, format, fs, io, mem, option, os, path,
-    process, result, slice, str, sync, time,
+    cmp, collections, convert, env, ffi, fmt, format, fs, io, mem, option, os, path, process,
+    result, slice, str, sync, time,
 };
 
 mod account;

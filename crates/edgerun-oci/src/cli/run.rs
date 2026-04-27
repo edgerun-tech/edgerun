@@ -5,6 +5,7 @@
 //!   `ert run --rm alpine:latest echo hello`
 //!   `ert run --name mycontainer --images-dir /mnt/img nginx:latest`
 
+use crate::prelude::*;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;

@@ -1,5 +1,6 @@
 //! Events command implementation — streams cgroup v2 stats as JSON.
 
+use crate::prelude::*;
 use std::fs;
 use std::io::{self, Write};
 

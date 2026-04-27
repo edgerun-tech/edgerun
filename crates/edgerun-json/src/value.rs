@@ -23,16 +23,16 @@
 //! assert_eq!(obj["id"].as_u64(), Some(1));
 //! ```
 
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::ToOwned;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
 
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::format;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::String;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
 use crate::map::Map;
@@ -56,7 +56,7 @@ impl fmt::Display for JsonValueError {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl std::error::Error for JsonValueError {}
 
 /// A JSON value that owns its data.
@@ -587,7 +587,7 @@ where
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl<K, V> From<std::collections::HashMap<K, V>> for JsonValue
 where
     K: Into<String> + Eq + std::hash::Hash,
@@ -603,7 +603,7 @@ where
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl<K, V> From<std::collections::BTreeMap<K, V>> for JsonValue
 where
     K: Into<String> + Ord,

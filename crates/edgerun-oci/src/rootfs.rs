@@ -5,6 +5,7 @@
 //! - Device creation from spec's `linux.devices`
 //! - Overlay whiteout char device handling (0:0 device check)
 
+use crate::prelude::*;
 use std::ffi::CString;
 use std::fs;
 use std::io;
@@ -794,7 +795,9 @@ pub fn setup_rootfs(
 ///
 /// Sysctl keys like `net.ipv4.ip_forward` are written to `/proc/sys/net/ipv4/ip_forward`.
 /// This must be called after /proc is mounted.
-pub fn apply_sysctl(sysctl: Option<&std::collections::HashMap<String, String>>) -> io::Result<()> {
+pub fn apply_sysctl(
+    sysctl: Option<&alloc::collections::BTreeMap<String, String>>,
+) -> io::Result<()> {
     let Some(params) = sysctl else { return Ok(()) };
 
     for (key, value) in params {

@@ -7,23 +7,40 @@ publish.workspace = true
 description = "OCI container runtime and registry client — pull, push, login, create, start, exec containers"
 
 [dependencies]
-edgerun-json = { path = "../edgerun-json", features = ["serde"] }
-edgerun-crypto.workspace = true
-edgerun-http = { path = "../edgerun-http" }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
-edgerun-tls = { path = "../edgerun-tls" }
-edgerun-secret-service = { path = "../edgerun-secret-service" }
-edgerun-core = { path = "../edgerun-core" }
-edgerun-encoding = { path = "../edgerun-encoding" }
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
-libc = "0.2"
-flate2 = { version = "1", optional = true }
-tar = { version = "0.4", optional = true }
-zstd = { version = "0.13", optional = true }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"], optional = true }
+edgerun-crypto = { workspace = true, default-features = false, optional = true }
+edgerun-http = { path = "../edgerun-http", optional = true }
+edgerun-bare-rt = { path = "../edgerun-bare-rt", optional = true }
+edgerun-tls = { path = "../edgerun-tls", optional = true }
+edgerun-secret-service = { path = "../edgerun-secret-service", optional = true }
+edgerun-core = { path = "../edgerun-core", optional = true }
+edgerun-encoding = { path = "../edgerun-encoding", optional = true }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [features]
 default = []
-std = ["dep:flate2", "dep:tar", "dep:zstd"]
+json = ["dep:edgerun-json"]
+serde = ["json", "dep:serde", "edgerun-json/serde"]
+std = [
+    "serde",
+    "dep:edgerun-crypto",
+    "dep:edgerun-http",
+    "dep:edgerun-bare-rt",
+    "dep:edgerun-tls",
+    "dep:edgerun-secret-service",
+    "dep:edgerun-core",
+    "dep:edgerun-encoding",
+    "dep:libc",
+    "dep:flate2",
+    "dep:tar",
+    "dep:zstd",
+]
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
+libc = { version = "0.2", optional = true }
+flate2 = { version = "1", optional = true }
+tar = { version = "0.4", optional = true }
+zstd = { version = "0.13", optional = true }
 
 [[bin]]
 name = "ert"

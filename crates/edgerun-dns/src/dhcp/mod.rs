@@ -14,6 +14,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
+#[cfg(feature = "dhcp-client")]
 pub mod client;
 pub mod lease;
 pub mod message;
@@ -21,6 +22,7 @@ pub mod options;
 pub mod scope;
 pub mod server;
 
+#[cfg(feature = "dhcp-client")]
 pub use client::DhcpClient;
 pub use lease::Lease;
 pub use message::{

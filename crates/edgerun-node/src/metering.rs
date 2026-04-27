@@ -5,8 +5,11 @@
 /// billable reference-core-microseconds using the provider's
 /// PerformanceCertificate multipliers.
 ///
-/// Zero external dependencies — uses only stdlib atomics and time.
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+/// Zero external dependencies — uses only core atomics and target time.
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+#[cfg(target_os = "none")]
+use edgerun_bare_rt::Instant;
+#[cfg(not(target_os = "none"))]
 use std::time::Instant;
 
 use edgerun_core::accounting::{
@@ -17,10 +20,18 @@ use edgerun_core::fixed_point::FixedPoint16;
 /// Monotonically increasing timestamp source.
 /// Returns microseconds since Unix epoch.
 fn now_us() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system time before UNIX epoch")
-        .as_micros() as u64
+    #[cfg(not(target_os = "none"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time before UNIX epoch")
+            .as_micros() as u64
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        0
+    }
 }
 
 impl Clone for WorkMeter {
@@ -36,27 +47,27 @@ impl Clone for WorkMeter {
             allocated_memory_bytes: self.allocated_memory_bytes,
             storage_read_bytes: AtomicU64::new(
                 self.storage_read_bytes
-                    .load(std::sync::atomic::Ordering::Relaxed),
+                    .load(Ordering::Relaxed),
             ),
             storage_written_bytes: AtomicU64::new(
                 self.storage_written_bytes
-                    .load(std::sync::atomic::Ordering::Relaxed),
+                    .load(Ordering::Relaxed),
             ),
             storage_read_ops: AtomicU32::new(
                 self.storage_read_ops
-                    .load(std::sync::atomic::Ordering::Relaxed),
+                    .load(Ordering::Relaxed),
             ),
             storage_write_ops: AtomicU32::new(
                 self.storage_write_ops
-                    .load(std::sync::atomic::Ordering::Relaxed),
+                    .load(Ordering::Relaxed),
             ),
             network_sent_bytes: AtomicU64::new(
                 self.network_sent_bytes
-                    .load(std::sync::atomic::Ordering::Relaxed),
+                    .load(Ordering::Relaxed),
             ),
             network_received_bytes: AtomicU64::new(
                 self.network_received_bytes
-                    .load(std::sync::atomic::Ordering::Relaxed),
+                    .load(Ordering::Relaxed),
             ),
             workload_class: self.workload_class,
             priority: self.priority,

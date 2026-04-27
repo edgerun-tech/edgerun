@@ -8,7 +8,7 @@ use crate::method::Method;
 use crate::middleware::Extensions;
 use crate::uri::Uri;
 use crate::Result;
-use std::fmt;
+use core::fmt;
 
 /// An HTTP request, protocol-agnostic.
 ///
@@ -113,10 +113,7 @@ impl Request {
                 .map(|v| v.as_str().to_ascii_lowercase().contains("chunked"))
                 .unwrap_or(false)
             {
-                Some(
-                    crate::http1::chunked::parse_chunked_body(body_str.as_bytes())
-                        .map_err(|e| crate::Error::InvalidRequest(e.to_string()))?,
-                )
+                Some(parse_chunked_body(body_str.as_bytes())?)
             } else if let Some(cl) = headers.get("content-length") {
                 if let Ok(len) = cl.as_str().parse::<usize>() {
                     Some(body_str[..len.min(body_str.len())].as_bytes().to_vec())
@@ -157,7 +154,7 @@ impl Request {
     pub fn body_as_str(&self) -> Option<&str> {
         self.body
             .as_deref()
-            .and_then(|body| std::str::from_utf8(body).ok())
+            .and_then(|body| core::str::from_utf8(body).ok())
     }
     pub fn into_body(self) -> Option<Vec<u8>> {
         self.body
@@ -201,6 +198,47 @@ impl Request {
         }
         buf
     }
+}
+
+fn parse_chunked_body(input: &[u8]) -> Result<Vec<u8>> {
+    let mut body = Vec::new();
+    let mut pos = 0;
+
+    while pos < input.len() {
+        let line_end = input[pos..]
+            .windows(2)
+            .position(|w| w == b"\r\n")
+            .map(|offset| pos + offset)
+            .ok_or_else(|| crate::Error::InvalidRequest("invalid chunk size line".to_string()))?;
+        let size_line = core::str::from_utf8(&input[pos..line_end])
+            .map_err(|_| crate::Error::InvalidRequest("invalid chunk size".to_string()))?;
+        let size_text = size_line.split(';').next().unwrap_or("").trim();
+        let size = usize::from_str_radix(size_text, 16)
+            .map_err(|_| crate::Error::InvalidRequest("invalid chunk size".to_string()))?;
+
+        pos = line_end + 2;
+        if size == 0 {
+            return Ok(body);
+        }
+        if pos + size > input.len() {
+            return Err(crate::Error::InvalidRequest(
+                "chunk body exceeds input".to_string(),
+            ));
+        }
+
+        body.extend_from_slice(&input[pos..pos + size]);
+        pos += size;
+        if input.get(pos..pos + 2) != Some(b"\r\n") {
+            return Err(crate::Error::InvalidRequest(
+                "missing chunk terminator".to_string(),
+            ));
+        }
+        pos += 2;
+    }
+
+    Err(crate::Error::InvalidRequest(
+        "missing final chunk".to_string(),
+    ))
 }
 
 impl fmt::Display for Request {

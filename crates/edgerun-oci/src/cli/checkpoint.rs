@@ -2,6 +2,7 @@
 //!
 //! Checkpoints a running container using CRIU.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 use std::path::PathBuf;

@@ -3,31 +3,49 @@
 
 extern crate alloc;
 
+#[cfg(feature = "aead")]
 pub mod aead;
+#[cfg(feature = "aead")]
 pub mod aes;
 pub mod error;
 pub mod rng;
 pub mod sha;
 
+#[cfg(feature = "aead")]
 pub use ::aes_gcm;
+#[cfg(feature = "p256")]
 pub use ::ecdsa;
+#[cfg(feature = "ed25519")]
 pub use ::ed25519_dalek;
+#[cfg(feature = "p256")]
 pub use ::elliptic_curve;
+#[cfg(feature = "p256")]
 pub use ::p256;
+#[cfg(feature = "rsa")]
+pub use ::rsa;
+#[cfg(feature = "x25519")]
 pub use ::x25519_dalek;
 
 use crate::error::{CryptoError, Result};
-use crate::sha::Digest;
 
+#[cfg(feature = "aead")]
 pub use aead::{Aes256GcmCipher, CipherU12, CipherU16};
+#[cfg(feature = "aead")]
 pub use aes_gcm::aead::{Aead, AeadInPlace, KeyInit};
+#[cfg(feature = "aead")]
 pub use aes_gcm::AeadCore;
+#[cfg(feature = "aead")]
 pub use aes_gcm::Aes256Gcm as AesGcmCipher;
+#[cfg(feature = "aead")]
 pub use aes_gcm::Nonce;
+#[cfg(feature = "chacha20poly1305")]
 pub use chacha20poly1305::ChaCha20Poly1305;
+#[cfg(feature = "ed25519")]
 pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
+#[cfg(feature = "p256")]
 pub use p256::ecdsa::SigningKey;
 pub use rng::{fill_random, mix_entropy, random_bytes, random_u32, random_u64};
+#[cfg(feature = "ed25519")]
 pub use signature::Signer;
 
 pub use crate::rng::OsRng;
@@ -48,6 +66,7 @@ pub mod sha2 {
     pub use sha2::Digest;
 }
 
+#[cfg(feature = "hmac")]
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
     use hmac_crate::{Hmac, Mac};
 
@@ -57,6 +76,7 @@ pub fn hmac_sha256(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
+#[cfg(feature = "hmac")]
 pub fn hmac_sha384(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
     use hmac_crate::{Hmac, Mac};
 
@@ -66,6 +86,7 @@ pub fn hmac_sha384(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
+#[cfg(feature = "hmac")]
 fn hkdf_expand_sha256(prk: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8> {
     let mut okm = alloc::vec::Vec::with_capacity(len);
     let mut previous = alloc::vec::Vec::new();
@@ -85,6 +106,7 @@ fn hkdf_expand_sha256(prk: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8
     okm
 }
 
+#[cfg(feature = "hmac")]
 fn hkdf_expand_sha384(prk: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8> {
     let mut okm = alloc::vec::Vec::with_capacity(len);
     let mut previous = alloc::vec::Vec::new();
@@ -104,6 +126,7 @@ fn hkdf_expand_sha384(prk: &[u8], info: &[u8], len: usize) -> alloc::vec::Vec<u8
     okm
 }
 
+#[cfg(feature = "hmac")]
 pub fn hkdf_sha256(
     salt: Option<&[u8]>,
     ikm: &[u8],
@@ -120,6 +143,7 @@ pub fn hkdf_sha256(
     hkdf_expand_sha256(prk, info, len)
 }
 
+#[cfg(feature = "hmac")]
 pub fn hkdf_sha384(
     salt: Option<&[u8]>,
     ikm: &[u8],
@@ -136,6 +160,7 @@ pub fn hkdf_sha384(
     hkdf_expand_sha384(prk, info, len)
 }
 
+#[cfg(feature = "p256")]
 pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
     use p256::ecdsa::SigningKey;
     loop {
@@ -147,12 +172,18 @@ pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
     }
 }
 
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 const ENCRYPTED_P256_KEY_MAGIC: &[u8] = b"EDGERUN-P256-GCM1";
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 const ENCRYPTED_P256_SALT_LEN: usize = 16;
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 const ENCRYPTED_P256_NONCE_LEN: usize = 12;
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 const ENCRYPTED_P256_PBKDF2_ITERATIONS: u32 = 100_000;
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 const P256_PRIVATE_KEY_LEN: usize = 32;
 
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 fn derive_p256_encryption_key(passphrase: &str, salt: &[u8]) -> [u8; 32] {
     pbkdf2_crate::pbkdf2_hmac_array::<sha::Sha256, 32>(
         passphrase.as_bytes(),
@@ -161,6 +192,7 @@ fn derive_p256_encryption_key(passphrase: &str, salt: &[u8]) -> [u8; 32] {
     )
 }
 
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 pub fn encrypt_signing_key(
     signing_key: &p256::ecdsa::SigningKey,
     passphrase: &str,
@@ -193,6 +225,7 @@ pub fn encrypt_signing_key(
     out
 }
 
+#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
 pub fn decrypt_signing_key(
     encrypted_data: &[u8],
     passphrase: &str,
@@ -272,6 +305,7 @@ impl CipherSuite {
     }
 }
 
+#[cfg(feature = "hmac")]
 pub mod hkdf {
     use crate::sha::Sha256;
     use alloc::vec::Vec;
@@ -309,10 +343,15 @@ pub mod hkdf {
     }
 }
 
+#[cfg(feature = "x509")]
 pub use x509_cert::der::oid::db::rfc4519::CN;
+#[cfg(feature = "x509")]
 pub use x509_cert::der::oid::db::rfc5280::ID_CE_SUBJECT_ALT_NAME;
+#[cfg(feature = "x509")]
 pub use x509_cert::der::{asn1, Decode, DecodePem, Encode};
+#[cfg(feature = "x509")]
 pub use x509_cert::{name::Name, Certificate};
+#[cfg(feature = "x509")]
 pub mod x509_cert {
     pub use x509_cert::*;
     pub mod ext {
@@ -332,15 +371,18 @@ pub mod x509_cert {
     }
 }
 
+#[cfg(feature = "hmac")]
 pub mod hmac {
     pub use crate::hmac_sha256 as HMAC;
     pub use hmac_crate::{Hmac, Mac};
 }
 
+#[cfg(feature = "pbkdf2")]
 pub mod pbkdf2 {
     pub use pbkdf2_crate::{pbkdf2, pbkdf2_hmac_array};
 }
 
+#[cfg(feature = "sha1")]
 pub mod sha1 {
     pub use sha1_crate::Digest;
     pub use sha1_crate::Sha1;
@@ -353,30 +395,37 @@ pub fn load_cert_and_key_from_pem(
     Err(CryptoError::InvalidKey)
 }
 
+#[cfg(feature = "p256")]
 pub fn generate_self_signed(_key: &SigningKey, _cn: &str) -> alloc::vec::Vec<u8> {
     alloc::vec::Vec::new()
 }
 
+#[cfg(feature = "p256")]
 pub fn generate_self_signed_pem(_key: &SigningKey, _cn: &str) -> alloc::string::String {
     alloc::string::String::new()
 }
 
+#[cfg(feature = "p256")]
 pub fn p256_signing_key_from_pem(_pem: &str) -> Option<SigningKey> {
     None
 }
+#[cfg(feature = "p256")]
 pub fn p256_signing_key_from_der(_der: &[u8]) -> Option<SigningKey> {
     None
 }
+#[cfg(feature = "p256")]
 pub fn p256_signing_key_to_pem(_key: &SigningKey) -> alloc::string::String {
     alloc::string::String::new()
 }
 pub fn pem_encode(_data: &[u8]) -> alloc::string::String {
     alloc::string::String::new()
 }
+#[cfg(feature = "x509")]
 pub fn x509_cert_from_pem(_pem: &str) -> Option<alloc::vec::Vec<u8>> {
     None
 }
 
+#[cfg(feature = "p256")]
 pub mod signature {
     pub use p256::ecdsa::signature::{Signer, SignerMut, Verifier};
     pub mod hazmat {

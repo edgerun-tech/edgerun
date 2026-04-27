@@ -23,17 +23,17 @@
 //! When the `serde` feature is enabled, the same functions support typed
 //! deserialization. See the [crate-level documentation](crate) for examples.
 
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::{String, ToString};
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
 #[cfg(not(feature = "serde"))]
 use crate::error::JsonError;
 use crate::error::JsonParseError;
+use crate::io::{Read, Write};
 use crate::util;
 use crate::JsonValue;
-use edgerun_encoding::io::{Read, Write};
 
 // ---------------------------------------------------------------------------
 // Parsing
@@ -62,9 +62,8 @@ pub fn escape_json_string(input: &str) -> String {
 /// ```
 /// use edgerun_json::parse_json;
 ///
-/// let value = parse_json(r#"{"name":"Alice","scores":[95,87]}"#)?;
+/// let value = parse_json(r#"{"name":"Alice","scores":[95,87]}"#).unwrap();
 /// assert_eq!(value["name"].as_str(), Some("Alice"));
-/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
@@ -92,11 +91,10 @@ pub fn parse_json(input: &str) -> Result<JsonValue, JsonParseError> {
 /// use edgerun_json::parse_json_borrowed;
 ///
 /// let input = r#"{"name":"Alice","active":true}"#;
-/// let value = parse_json_borrowed(input)?;
+/// let value = parse_json_borrowed(input).unwrap();
 /// // Convert to owned for easy inspection
 /// let owned = value.into_owned();
 /// assert_eq!(owned["name"].as_str(), Some("Alice"));
-/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
@@ -125,11 +123,10 @@ pub fn parse_json_borrowed(
 /// ```
 /// use edgerun_json::parse_json_tape;
 ///
-/// let tape = parse_json_tape(r#"{"users":[{"name":"Alice"},{"name":"Bob"}]}"#)?;
+/// let tape = parse_json_tape(r#"{"users":[{"name":"Alice"},{"name":"Bob"}]}"#).unwrap();
 /// let root = tape.root(r#"{"users":[{"name":"Alice"},{"name":"Bob"}]}"#).unwrap();
 /// let users = root.get("users").unwrap();
 /// assert_eq!(users.kind(), edgerun_json::TapeTokenKind::Array);
-/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
@@ -353,9 +350,8 @@ where
 /// use edgerun_json::{json, to_string_pretty};
 ///
 /// let value = json!({"name": "Alice", "age": 30});
-/// let pretty = to_string_pretty(&value)?;
+/// let pretty = to_string_pretty(&value).unwrap();
 /// assert!(pretty.contains("\n"));
-/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[cfg(not(feature = "serde"))]
 pub fn to_string_pretty(value: &JsonValue) -> Result<String, JsonError> {

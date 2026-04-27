@@ -1,7 +1,8 @@
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use edgerun_bare_rt::RwLock;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderMetrics {
@@ -23,10 +24,7 @@ impl ProviderMetrics {
     pub fn new(node_id: [u8; 32]) -> Self {
         Self {
             node_id,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            timestamp: current_unix_secs(),
             cpu_cores_used: 0,
             cpu_cores_available: 0,
             memory_bytes_used: 0,
@@ -70,6 +68,19 @@ impl ProviderMetrics {
         }
         (self.memory_bytes_used as f64 / self.memory_bytes_available as f64) * 100.0
     }
+}
+
+#[cfg(not(target_os = "none"))]
+fn current_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+#[cfg(target_os = "none")]
+fn current_unix_secs() -> u64 {
+    0
 }
 
 pub struct MetricsReceiver {

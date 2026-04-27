@@ -5,6 +5,7 @@
 //!
 //! These programs can set the skb->priority or tc_classid fields.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 use std::os::unix::io::AsRawFd;

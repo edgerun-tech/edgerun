@@ -1,3 +1,4 @@
+use alloc::string::String;
 use edgerun_error::Error;
 
 #[derive(Error, Debug)]

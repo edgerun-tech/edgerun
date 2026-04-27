@@ -1,15 +1,15 @@
 //! YAML parsing implementation - no_std + alloc.
 
 use crate::{JsonValue, Map, Number};
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use std::string::String;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::String;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::ToOwned;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
-#[cfg(all(feature = "alloc", not(feature = "std")))]
+#[cfg(all(feature = "alloc", any(not(feature = "std"), target_os = "none")))]
 use alloc::vec::Vec;
 
 #[derive(Debug)]

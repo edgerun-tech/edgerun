@@ -3,6 +3,11 @@
 //! A single daemon that coordinates all network infrastructure services.
 //! On config reload, services are restarted with the new configuration.
 
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 use std::net::Ipv4Addr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

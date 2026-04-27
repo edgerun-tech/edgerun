@@ -1,5 +1,6 @@
 //! Pause command implementation — freezes the container via cgroup v2 cgroup.freeze.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 

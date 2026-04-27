@@ -1,5 +1,6 @@
 //! Spec command implementation — generates a default OCI spec JSON to stdout.
 
+use crate::prelude::*;
 use std::io;
 
 pub fn cmd_spec(_opts: &crate::cli::GlobalOpts, _args: &[String]) -> io::Result<()> {

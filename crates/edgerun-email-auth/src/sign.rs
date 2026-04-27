@@ -7,13 +7,13 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use std::io;
 
+use edgerun_crypto::rsa::sha2::Digest;
+use edgerun_crypto::rsa::{
+    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding, RsaPrivateKey,
+};
 use edgerun_crypto::sha2::Sha256;
 use edgerun_crypto::OsRng;
 use edgerun_encoding::base64;
-use rsa::sha2::Digest;
-use rsa::{
-    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding, RsaPrivateKey,
-};
 
 pub struct DkimSigner {
     selector: String,
@@ -140,8 +140,9 @@ impl DkimSigner {
         sign_data.extend(canonical_body);
 
         let hash = Sha256::digest(&sign_data);
-        let signing_key = rsa::pkcs1v15::SigningKey::<Sha256>::new((*self.private_key).clone());
-        let signature = rsa::signature::Signer::sign(&signing_key, &hash);
+        let signing_key =
+            edgerun_crypto::rsa::pkcs1v15::SigningKey::<Sha256>::new((*self.private_key).clone());
+        let signature = edgerun_crypto::rsa::signature::Signer::sign(&signing_key, &hash);
         let signature_b64 = base64::standard_encode(signature.to_bytes().as_ref());
 
         let final_header = format!(

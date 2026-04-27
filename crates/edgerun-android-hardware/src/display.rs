@@ -8,7 +8,7 @@ use edgerun_capabilities::{
     CapabilityProvider, CapabilityRole,
 };
 
-#[cfg(feature = "android-real")]
+#[cfg(all(feature = "android-real", target_os = "android"))]
 mod real {
     use super::*;
     use std::ffi::c_void;
@@ -73,7 +73,7 @@ mod real {
     }
 }
 
-#[cfg(not(feature = "android-real"))]
+#[cfg(any(not(feature = "android-real"), not(target_os = "android")))]
 mod real {
     use super::*;
     pub struct ANativeWindowSurface;

@@ -2,6 +2,7 @@
 //!
 //! Generates BPF programs that filter syscalls for container processes.
 
+use crate::prelude::*;
 // ===========================================================================
 // Architecture mapping
 // ===========================================================================

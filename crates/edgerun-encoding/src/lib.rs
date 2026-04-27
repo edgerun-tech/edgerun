@@ -15,6 +15,8 @@ pub mod chunked;
 pub mod cstring;
 pub mod frame;
 pub mod hex;
+#[cfg(feature = "hpack")]
+pub mod hpack;
 pub mod io;
 pub mod ip;
 pub mod kv;
@@ -30,6 +32,7 @@ pub mod tlv;
 pub mod varint;
 
 // HPACK (re-exported from edgerun-hpack)
+#[cfg(feature = "hpack")]
 pub use edgerun_hpack::{Decoder, DecoderError, Encoder, HuffmanDecoder};
 
 pub use base64::{

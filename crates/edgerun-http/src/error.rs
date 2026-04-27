@@ -3,7 +3,7 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 use edgerun_error::Error;
-use std::fmt;
+use core::fmt;
 
 /// HTTP error type — covers HTTP/1.1, HTTP/2, and HTTP/3 errors
 #[derive(Debug, Error)]
@@ -43,6 +43,7 @@ impl From<std::io::Error> for Error {
     }
 }
 
+#[cfg(feature = "http2")]
 impl From<crate::http2::Http2Error> for Error {
     fn from(err: crate::http2::Http2Error) -> Self {
         Error::ProtocolError(format!("HTTP/2 error: {err}"))
@@ -50,7 +51,7 @@ impl From<crate::http2::Http2Error> for Error {
 }
 
 /// Alias for `Result<T, Error>`
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 /// Unified HTTP error type that wraps HTTP/1.1, HTTP/2, and HTTP/3 errors
 #[derive(Debug, Error)]

@@ -1,10 +1,33 @@
 //! Marketplace CLI — interact with Edgerun on-chain programs via Solana RPC.
 
+#![cfg_attr(target_os = "none", no_std)]
+
+#[cfg(target_os = "none")]
+extern crate alloc;
+
+#[cfg(target_os = "none")]
+use alloc::string::String;
+#[cfg(target_os = "none")]
+use core::fmt;
+
+#[cfg(not(target_os = "none"))]
 mod deployment;
+#[cfg(not(target_os = "none"))]
 mod provider;
+
+#[cfg(target_os = "none")]
+mod deployment {
+    pub enum DeploymentCommand {}
+}
+
+#[cfg(target_os = "none")]
+mod provider {
+    pub enum ProviderCommand {}
+}
 
 pub struct Cli {
     pub rpc_url: String,
+    #[cfg(not(target_os = "none"))]
     pub keypair_path: Option<std::path::PathBuf>,
     pub command: Command,
 }
@@ -15,6 +38,7 @@ pub enum Command {
     Status,
 }
 
+#[cfg(not(target_os = "none"))]
 pub fn load_keypair(
     path: &std::path::Path,
 ) -> Result<edgerun_solana::signers::Ed25519Signer, Box<dyn std::error::Error>> {
@@ -27,6 +51,7 @@ pub fn load_keypair(
     Ok(edgerun_solana::signers::Ed25519Signer::from_bytes(&key))
 }
 
+#[cfg(not(target_os = "none"))]
 impl Cli {
     pub fn parse() -> Self {
         let mut args = std::env::args();
@@ -59,6 +84,7 @@ impl Cli {
     }
 }
 
+#[cfg(not(target_os = "none"))]
 fn print_usage() {
     eprintln!("Usage: edgerun-marketplace <command> [options]");
     eprintln!();
@@ -72,6 +98,7 @@ fn print_usage() {
     eprintln!("  SOLANA_KEYPAIR   Path to keypair file (32-byte raw key)");
 }
 
+#[cfg(not(target_os = "none"))]
 pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
@@ -111,4 +138,23 @@ pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
     }
+}
+
+#[cfg(target_os = "none")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MarketplaceCliUnavailable;
+
+#[cfg(target_os = "none")]
+impl fmt::Display for MarketplaceCliUnavailable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("edgerun-marketplace CLI is unavailable on bare target")
+    }
+}
+
+#[cfg(target_os = "none")]
+impl core::error::Error for MarketplaceCliUnavailable {}
+
+#[cfg(target_os = "none")]
+pub fn run() -> Result<(), MarketplaceCliUnavailable> {
+    Err(MarketplaceCliUnavailable)
 }

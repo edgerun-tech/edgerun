@@ -1,5 +1,6 @@
 //! `ert registry login` — authenticate and store credentials via secret service.
 
+use crate::prelude::*;
 use std::io::{self, Write};
 
 use crate::cli::GlobalOpts;

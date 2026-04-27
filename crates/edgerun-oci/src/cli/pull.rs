@@ -1,5 +1,6 @@
 //! `ert pull` command — pull an image from a registry.
 
+use crate::prelude::*;
 use std::path::PathBuf;
 
 use crate::cli::resolve_registry_auth;

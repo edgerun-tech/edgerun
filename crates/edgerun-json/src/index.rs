@@ -1,8 +1,8 @@
 #[allow(unused_imports)]
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::String;
 #[allow(unused_imports)]
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
 use crate::map::Map;

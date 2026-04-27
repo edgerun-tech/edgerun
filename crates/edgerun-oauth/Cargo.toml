@@ -6,14 +6,13 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-crypto = { path = "../edgerun-crypto" }
-edgerun-http = { path = "../edgerun-http" }
+edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["hmac", "p256", "rsa"] }
+edgerun-http = { path = "../edgerun-http", default-features = false, features = ["client", "tls"] }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
-rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"] }
 
 [lints]
 workspace = true

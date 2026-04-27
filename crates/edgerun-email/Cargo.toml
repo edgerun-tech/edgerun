@@ -21,8 +21,8 @@ workspace = true
 [dependencies]
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-log = { path = "../edgerun-log" }
-edgerun-dns = { path = "../edgerun-dns" }
+edgerun-dns = { path = "../edgerun-dns", default-features = false }
 edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }
-edgerun-crypto = { path = "../edgerun-crypto" }
+edgerun-crypto = { path = "../edgerun-crypto", default-features = false }
 edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-encoding = { path = "../edgerun-encoding" }

@@ -5,7 +5,7 @@
 //! - HTTP/1.1: defaults to `Connection: keep-alive`
 
 use crate::Result;
-use std::fmt;
+use core::fmt;
 
 /// HTTP protocol version
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

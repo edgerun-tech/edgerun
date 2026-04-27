@@ -36,16 +36,25 @@
 //! # }
 //! ```
 
+#[cfg(not(target_os = "none"))]
 pub mod client;
+#[cfg(not(target_os = "none"))]
 pub mod protocol;
+#[cfg(not(target_os = "none"))]
 pub mod relay;
+#[cfg(not(target_os = "none"))]
 pub mod server;
 pub mod types;
 
+#[cfg(not(target_os = "none"))]
 pub use crate::server::ConnectionInterceptor;
+#[cfg(not(target_os = "none"))]
 pub use client::{EmailBuilder, MimePart, SmtpClient};
+#[cfg(not(target_os = "none"))]
 pub use relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
+#[cfg(not(target_os = "none"))]
 pub use server::handler::{AuthCredentials, AuthResult};
+#[cfg(not(target_os = "none"))]
 pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
 pub use types::{
     get_date, get_from_address, get_subject, parse_headers, DsnNotify, DsnRet, EnhancedStatusCode,

@@ -7,7 +7,7 @@ publish.workspace = true
 description = "Zero-dependency regex for grep (subset)"
 
 [features]
-default = ["std"]
+default = []
 std = []
 
 [dependencies]

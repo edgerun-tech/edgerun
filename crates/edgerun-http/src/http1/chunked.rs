@@ -35,7 +35,7 @@ pub fn parse_chunked_body_with_trailers(mut data: &[u8]) -> Result<(Vec<u8>, Hea
         let crlf = find_crlf(data, 0)
             .ok_or_else(|| Error::InvalidResponse("Incomplete chunked body".to_string()))?;
 
-        let size_hex = std::str::from_utf8(&data[..crlf])
+        let size_hex = core::str::from_utf8(&data[..crlf])
             .map_err(|_| Error::InvalidResponse("Invalid chunk size".to_string()))?;
 
         let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
@@ -85,7 +85,7 @@ fn parse_trailers(data: &[u8]) -> Result<HeaderMap> {
                 break;
             }
             Some(end) => {
-                let line = std::str::from_utf8(&data[pos..end])
+                let line = core::str::from_utf8(&data[pos..end])
                     .map_err(|_| Error::InvalidResponse("Invalid UTF-8 in trailer".to_string()))?;
 
                 if let Some(colon) = line.find(':') {

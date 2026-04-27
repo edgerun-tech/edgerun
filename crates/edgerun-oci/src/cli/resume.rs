@@ -1,5 +1,6 @@
 //! Resume command implementation — unfreezes the container via cgroup v2 cgroup.freeze.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 

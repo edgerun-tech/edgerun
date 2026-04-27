@@ -10,6 +10,7 @@
 //! 3. Reaps ALL zombie children via `waitpid(-1)` (not just the workload)
 //! 4. Exits with the workload's exit code
 
+use crate::prelude::*;
 use std::io;
 
 static WORKLOAD_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);

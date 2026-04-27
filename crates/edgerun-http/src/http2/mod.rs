@@ -11,6 +11,7 @@ pub mod flow_control;
 pub mod frame;
 pub mod headers;
 pub mod hpack;
+#[cfg(feature = "tls")]
 pub mod pool;
 pub mod server;
 pub mod settings;
@@ -121,8 +122,8 @@ impl From<String> for Http2Error {
     }
 }
 
-impl From<edgerun_encoding::DecoderError> for Http2Error {
-    fn from(err: edgerun_encoding::DecoderError) -> Self {
+impl From<edgerun_hpack::DecoderError> for Http2Error {
+    fn from(err: edgerun_hpack::DecoderError) -> Self {
         Http2Error::HpackDecode(format!("{:?}", err))
     }
 }

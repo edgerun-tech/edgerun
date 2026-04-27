@@ -44,6 +44,7 @@ fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
 }
 
 /// TLS certificate for the server.
+#[cfg(feature = "tls")]
 pub type TlsCertificate = edgerun_tls::certificate_gen::CertificateAndKey;
 
 /// HTTP/2 connection preface (RFC 9113 §3.4).
@@ -54,8 +55,10 @@ pub struct HttpServer {
     handler: Arc<dyn Handler>,
     keep_alive: Option<Duration>,
     max_request_size: usize,
+    #[cfg(feature = "tls")]
     tls_cert: Option<Arc<TlsCertificate>>,
     http2_idle_timeout: Duration,
+    #[cfg(feature = "http3")]
     http3_enabled: bool,
 }
 
@@ -65,8 +68,10 @@ impl HttpServer {
             handler: Arc::new(handler),
             keep_alive: Some(Duration::from_secs(5)),
             max_request_size: 10 * 1024 * 1024,
+            #[cfg(feature = "tls")]
             tls_cert: None,
             http2_idle_timeout: Duration::from_secs(30),
+            #[cfg(feature = "http3")]
             http3_enabled: false,
         }
     }
@@ -84,6 +89,7 @@ impl HttpServer {
     }
 
     /// Enable TLS 1.3 with the given certificate.
+    #[cfg(feature = "tls")]
     pub fn with_tls(mut self, cert: TlsCertificate) -> Self {
         self.tls_cert = Some(Arc::new(cert));
         self
@@ -91,6 +97,7 @@ impl HttpServer {
 
     /// Enable HTTP/3 (QUIC) on the same port as the TCP listener.
     /// Requires TLS to be configured (HTTP/3 embeds TLS 1.3 in QUIC).
+    #[cfg(feature = "http3")]
     pub fn with_http3(mut self) -> Self {
         self.http3_enabled = true;
         self
@@ -103,6 +110,7 @@ impl HttpServer {
         let listener = AsyncTcpListener::bind(&addr)?;
         let local_addr = listener.local_addr()?;
 
+        #[cfg(feature = "http3")]
         let http3_server = if self.http3_enabled && self.tls_cert.is_some() {
             let cert = self.tls_cert.as_ref().unwrap().as_ref().clone();
             let h3 = crate::http3::Http3Server::bind(local_addr, cert)
@@ -119,8 +127,10 @@ impl HttpServer {
             keep_alive: self.keep_alive,
             max_request_size: self.max_request_size,
             local_addr,
+            #[cfg(feature = "tls")]
             tls_cert: self.tls_cert,
             http2_idle_timeout: self.http2_idle_timeout,
+            #[cfg(feature = "http3")]
             http3_server,
         })
     }
@@ -132,8 +142,10 @@ pub struct BoundHttpServer {
     keep_alive: Option<Duration>,
     max_request_size: usize,
     local_addr: SocketAddr,
+    #[cfg(feature = "tls")]
     tls_cert: Option<Arc<TlsCertificate>>,
     http2_idle_timeout: Duration,
+    #[cfg(feature = "http3")]
     http3_server: Option<Arc<crate::http3::Http3Server>>,
 }
 
@@ -153,8 +165,14 @@ impl BoundHttpServer {
     /// Runs both the TCP accept loop (HTTP/1.1 + HTTP/2) and the HTTP/3
     /// server (if enabled) concurrently. Cancels when `shutdown` fires.
     pub async fn serve_with_shutdown(&self, shutdown: CancellationToken) -> std::io::Result<()> {
+        #[cfg(feature = "tls")]
         let tls = self.tls_cert.is_some();
+        #[cfg(not(feature = "tls"))]
+        let tls = false;
+        #[cfg(feature = "http3")]
         let h3 = self.http3_server.is_some();
+        #[cfg(not(feature = "http3"))]
+        let h3 = false;
         edgerun_log::info!(
             "HTTP server listening on {} (HTTP/1.1 + HTTP/2{}{})",
             self.local_addr,
@@ -165,11 +183,13 @@ impl BoundHttpServer {
         let handler = Arc::clone(&self.handler);
         let keep_alive = self.keep_alive;
         let max_size = self.max_request_size;
+        #[cfg(feature = "tls")]
         let tls_cert = self.tls_cert.clone();
         let http2_idle_timeout = self.http2_idle_timeout;
         let tcp_shutdown = shutdown.clone();
 
         // Spawn HTTP/3 accept loop if enabled
+        #[cfg(feature = "http3")]
         let h3_handle = if let Some(ref h3_server) = self.http3_server {
             let h3_handler = Arc::clone(&self.handler);
             let h3_shutdown = shutdown.clone();
@@ -183,7 +203,6 @@ impl BoundHttpServer {
         } else {
             None
         };
-
         // Run TCP accept loop on this task (not spawned — borrows self)
         loop {
             if tcp_shutdown.is_cancelled() {
@@ -194,10 +213,21 @@ impl BoundHttpServer {
                     let h = Arc::clone(&handler);
                     let ka = keep_alive;
                     let ms = max_size;
+                    #[cfg(feature = "tls")]
                     let tc = tls_cert.clone();
                     let h2 = http2_idle_timeout;
                     spawn(async move {
-                        if let Err(e) = handle_connection(stream, h, ka, ms, tc, h2).await {
+                        if let Err(e) = handle_connection(
+                            stream,
+                            h,
+                            ka,
+                            ms,
+                            #[cfg(feature = "tls")]
+                            tc,
+                            h2,
+                        )
+                        .await
+                        {
                             edgerun_log::warn!("Connection error from {}: {}", peer_addr, e);
                         }
                     });
@@ -211,6 +241,7 @@ impl BoundHttpServer {
 
         // Cancel HTTP/3 server if it's running
         shutdown.cancel();
+        #[cfg(feature = "http3")]
         if let Some(h) = h3_handle {
             let _ = h.await;
         }
@@ -226,6 +257,7 @@ impl BoundHttpServer {
             handler,
             self.keep_alive,
             self.max_request_size,
+            #[cfg(feature = "tls")]
             self.tls_cert.clone(),
             self.http2_idle_timeout,
         )
@@ -239,12 +271,13 @@ async fn handle_connection<S>(
     handler: Arc<dyn Handler>,
     keep_alive: Option<Duration>,
     max_request_size: usize,
-    tls_cert: Option<Arc<TlsCertificate>>,
+    #[cfg(feature = "tls")] tls_cert: Option<Arc<TlsCertificate>>,
     http2_idle_timeout: Duration,
 ) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    #[cfg(feature = "tls")]
     if let Some(ref cert) = tls_cert {
         use edgerun_tls::async_tls::AsyncTlsServerStream;
         let tls_stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
@@ -301,7 +334,7 @@ where
                 }
             }
             // Pass skip_preface=true since we already consumed and validated it above.
-            handle_http2(
+            return handle_http2(
                 reader,
                 handler,
                 http2_idle_timeout,
@@ -309,27 +342,27 @@ where
                 true,
                 None,
             )
-            .await
+            .await;
         } else {
-            handle_connection_inner(
+            return handle_connection_inner(
                 tls_stream,
                 handler,
                 keep_alive,
                 max_request_size,
                 http2_idle_timeout,
             )
-            .await
+            .await;
         }
-    } else {
-        handle_connection_inner(
-            stream,
-            handler,
-            keep_alive,
-            max_request_size,
-            http2_idle_timeout,
-        )
-        .await
     }
+
+    handle_connection_inner(
+        stream,
+        handler,
+        keep_alive,
+        max_request_size,
+        http2_idle_timeout,
+    )
+    .await
 }
 
 /// Inner connection handler — reads first line to detect HTTP/1.1 vs HTTP/2.

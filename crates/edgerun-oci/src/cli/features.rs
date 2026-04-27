@@ -1,5 +1,6 @@
 //! Features command implementation — outputs supported features as OCI features JSON.
 
+use crate::prelude::*;
 use std::io;
 
 pub fn cmd_features(_opts: &crate::cli::GlobalOpts, _args: &[String]) -> io::Result<()> {

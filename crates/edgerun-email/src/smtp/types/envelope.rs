@@ -1,3 +1,6 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::smtp::types::dsn::{DsnNotify, DsnRet};
 
 /// SMTP mail envelope (sender + recipients + data).

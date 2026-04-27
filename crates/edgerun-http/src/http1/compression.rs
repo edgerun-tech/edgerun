@@ -12,7 +12,9 @@
 use crate::prelude::v1::*;
 
 use crate::HeaderMap;
-use alloc::{boxed::Box, vec::Vec};
+#[cfg(feature = "http-compression")]
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt;
 
 /// Supported content encodings
@@ -67,9 +69,18 @@ pub fn decompress_body(body: &[u8], headers: &HeaderMap) -> Option<Vec<u8>> {
         .unwrap_or(ContentEncoding::Identity);
 
     match encoding {
+        #[cfg(feature = "http-compression")]
         ContentEncoding::Gzip => decompress_gzip(body),
+        #[cfg(not(feature = "http-compression"))]
+        ContentEncoding::Gzip => None,
+        #[cfg(feature = "http-compression")]
         ContentEncoding::Deflate => decompress_deflate(body),
+        #[cfg(not(feature = "http-compression"))]
+        ContentEncoding::Deflate => None,
+        #[cfg(feature = "http-compression")]
         ContentEncoding::Brotli => decompress_brotli(body),
+        #[cfg(not(feature = "http-compression"))]
+        ContentEncoding::Brotli => None,
         ContentEncoding::Identity => Some(body.to_vec()),
         ContentEncoding::Unknown => Some(body.to_vec()),
     }
@@ -80,6 +91,7 @@ pub fn decompress_body(body: &[u8], headers: &HeaderMap) -> Option<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 /// Compress to gzip format
+#[cfg(feature = "http-compression")]
 fn compress_gzip(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len() + 18);
     out.extend_from_slice(&[0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0xff]);
@@ -90,6 +102,7 @@ fn compress_gzip(data: &[u8]) -> Vec<u8> {
 }
 
 /// Decompress gzip data
+#[cfg(feature = "http-compression")]
 fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
     if data.len() < 18 || data[0] != 0x1f || data[1] != 0x8b || data[2] != 8 {
         return None;
@@ -136,11 +149,13 @@ fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 /// Compress to zlib/deflate format
+#[cfg(feature = "http-compression")]
 fn compress_deflate(data: &[u8]) -> Vec<u8> {
     miniz_oxide::deflate::compress_to_vec_zlib(data, 6)
 }
 
 /// Decompress zlib/deflate data
+#[cfg(feature = "http-compression")]
 fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
     if data.len() < 2 {
         return None;
@@ -154,6 +169,7 @@ fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 /// Compress to brotli format
+#[cfg(feature = "http-compression")]
 fn compress_brotli(data: &[u8]) -> Vec<u8> {
     use brotli::enc::backward_references::BrotliEncoderMode;
     use brotli::enc::BrotliEncoderParams;
@@ -188,6 +204,7 @@ fn compress_brotli(data: &[u8]) -> Vec<u8> {
 }
 
 /// Decompress brotli data
+#[cfg(feature = "http-compression")]
 fn decompress_brotli(data: &[u8]) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(data.len() * 2);
     let mut reader = SliceReader::new(data);
@@ -209,6 +226,7 @@ fn decompress_brotli(data: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
+#[cfg(feature = "http-compression")]
 fn skip_zero_terminated(data: &[u8], mut pos: usize) -> Option<usize> {
     while pos < data.len() {
         let byte = data[pos];
@@ -220,6 +238,7 @@ fn skip_zero_terminated(data: &[u8], mut pos: usize) -> Option<usize> {
     None
 }
 
+#[cfg(feature = "http-compression")]
 fn crc32(data: &[u8]) -> u32 {
     let mut crc = 0xffff_ffffu32;
     for &byte in data {
@@ -232,17 +251,20 @@ fn crc32(data: &[u8]) -> u32 {
     !crc
 }
 
+#[cfg(feature = "http-compression")]
 struct SliceReader<'a> {
     data: &'a [u8],
     pos: usize,
 }
 
+#[cfg(feature = "http-compression")]
 impl<'a> SliceReader<'a> {
     fn new(data: &'a [u8]) -> Self {
         Self { data, pos: 0 }
     }
 }
 
+#[cfg(feature = "http-compression")]
 impl brotli::CustomRead<()> for SliceReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
         let remaining = &self.data[self.pos..];
@@ -253,16 +275,19 @@ impl brotli::CustomRead<()> for SliceReader<'_> {
     }
 }
 
+#[cfg(feature = "http-compression")]
 struct VecWriter<'a> {
     out: &'a mut Vec<u8>,
 }
 
+#[cfg(feature = "http-compression")]
 impl<'a> VecWriter<'a> {
     fn new(out: &'a mut Vec<u8>) -> Self {
         Self { out }
     }
 }
 
+#[cfg(feature = "http-compression")]
 impl brotli::CustomWrite<()> for VecWriter<'_> {
     fn write(&mut self, data: &[u8]) -> Result<usize, ()> {
         self.out.extend_from_slice(data);
@@ -275,16 +300,19 @@ impl brotli::CustomWrite<()> for VecWriter<'_> {
 }
 
 #[derive(Default)]
+#[cfg(feature = "http-compression")]
 struct Rebox<T> {
     b: Box<[T]>,
 }
 
+#[cfg(feature = "http-compression")]
 impl<T> brotli::SliceWrapper<T> for Rebox<T> {
     fn slice(&self) -> &[T] {
         &self.b
     }
 }
 
+#[cfg(feature = "http-compression")]
 impl<T> brotli::SliceWrapperMut<T> for Rebox<T> {
     fn slice_mut(&mut self) -> &mut [T] {
         &mut self.b
@@ -292,8 +320,10 @@ impl<T> brotli::SliceWrapperMut<T> for Rebox<T> {
 }
 
 #[derive(Clone, Copy, Default)]
+#[cfg(feature = "http-compression")]
 struct HeapAllocator;
 
+#[cfg(feature = "http-compression")]
 impl<T: Clone + Default> brotli::Allocator<T> for HeapAllocator {
     type AllocatedMemory = Rebox<T>;
 
@@ -306,6 +336,7 @@ impl<T: Clone + Default> brotli::Allocator<T> for HeapAllocator {
     fn free_cell(&mut self, _data: Self::AllocatedMemory) {}
 }
 
+#[cfg(feature = "http-compression")]
 impl brotli::enc::BrotliAlloc for HeapAllocator {}
 
 // ---------------------------------------------------------------------------
@@ -322,6 +353,7 @@ impl fmt::Display for ContentEncoding {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "http-compression")]
     #[test]
     fn test_gzip_roundtrip() {
         let original = b"Hello, World! This is a test of gzip compression.";
@@ -334,6 +366,7 @@ mod tests {
         assert_eq!(decompressed, original);
     }
 
+    #[cfg(feature = "http-compression")]
     #[test]
     fn test_deflate_roundtrip() {
         let original = b"Hello, World! This is a test of zlib compression.";
@@ -344,6 +377,7 @@ mod tests {
         assert_eq!(decompressed, original);
     }
 
+    #[cfg(feature = "http-compression")]
     #[test]
     fn test_brotli_roundtrip() {
         let original = b"Hello, World! This is a test of brotli compression.";
@@ -362,6 +396,7 @@ mod tests {
         assert_eq!(result, Some(body.to_vec()));
     }
 
+    #[cfg(feature = "http-compression")]
     #[test]
     fn test_decompress_body_gzip() {
         let original = b"test gzip content";

@@ -1,6 +1,7 @@
 //! Config file parser — reads YAML and produces typed config resources.
 
 use crate::prelude::v1::*;
+use crate::collections::HashMap;
 use crate::types::ConfigResource;
 use edgerun_json::yaml::{YamlDeserializer, YamlValue};
 
@@ -230,8 +231,8 @@ impl ConfigState {
     pub fn build_dhcp_scopes(
         &self,
         server_idx: usize,
-    ) -> Result<std::collections::HashMap<String, crate::types::DhcpPoolSpec>, ConfigError> {
-        let mut scopes = std::collections::HashMap::new();
+    ) -> Result<HashMap<String, crate::types::DhcpPoolSpec>, ConfigError> {
+        let mut scopes = HashMap::new();
         if server_idx >= self.dhcp_servers.len() {
             return Ok(scopes);
         }
@@ -247,8 +248,8 @@ impl ConfigState {
     pub fn build_dhcpv6_scopes(
         &self,
         server_idx: usize,
-    ) -> Result<std::collections::HashMap<String, crate::types::Dhcpv6PoolSpec>, ConfigError> {
-        let mut scopes = std::collections::HashMap::new();
+    ) -> Result<HashMap<String, crate::types::Dhcpv6PoolSpec>, ConfigError> {
+        let mut scopes = HashMap::new();
         if server_idx >= self.dhcpv6_servers.len() {
             return Ok(scopes);
         }

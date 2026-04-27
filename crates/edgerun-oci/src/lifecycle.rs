@@ -15,6 +15,7 @@
 //!
 //! Hook failure semantics: error → stop container (except poststop: warn + continue)
 
+use crate::prelude::*;
 use std::ffi::CString;
 use std::fs;
 use std::io;
@@ -119,7 +120,7 @@ fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
         status: "creating".into(),
         pid: 0,
         bundle: ctx.bundle_path.clone(),
-        annotations: std::collections::HashMap::new(),
+        annotations: alloc::collections::BTreeMap::new(),
     };
     if let Some(ref hk) = ctx.create_container_hooks {
         if !hk.is_empty() {
@@ -146,7 +147,7 @@ fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
         status: "created".into(),
         pid: 0,
         bundle: ctx.bundle_path.clone(),
-        annotations: std::collections::HashMap::new(),
+        annotations: alloc::collections::BTreeMap::new(),
     };
     if let Some(ref hk) = ctx.start_container_hooks {
         if !hk.is_empty() {
@@ -515,7 +516,7 @@ pub fn run_poststart_hooks(spec: &OciSpec, container_id: &str, pid: u32) -> io::
             .as_ref()
             .map(|r| r.path.clone())
             .unwrap_or_default(),
-        annotations: std::collections::HashMap::new(),
+        annotations: alloc::collections::BTreeMap::new(),
     };
 
     if let Some(ref poststart) = hooks.poststart {
@@ -634,7 +635,7 @@ fn delete_container_internal(
         status: "stopped".into(),
         pid,
         bundle: bundle_path.to_string(),
-        annotations: std::collections::HashMap::new(),
+        annotations: alloc::collections::BTreeMap::new(),
     };
 
     execute_poststop_hooks(Some(poststop_hooks), &state);

@@ -5,11 +5,31 @@
 //!
 //! This provides LOCAL-ONLY control - no cloud account, no internet required.
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::str;
+use core::time::Duration;
 use edgerun_bare_rt::{timeout, AsyncUdpSocket, Elapsed};
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use serde::{Deserialize, Serialize};
+
+#[cfg(target_os = "none")]
+use edgerun_bare_rt::io::IoError;
+#[cfg(target_os = "none")]
+use core::net::SocketAddr;
+
+#[cfg(not(target_os = "none"))]
+type IoError = std::io::Error;
+#[cfg(not(target_os = "none"))]
 use std::net::SocketAddr;
-use std::time::Duration;
 
 const TUYA_BROADCAST_ADDR: &str = "255.255.255.255";
 const TUYA_DISCOVERY_PORT: u16 = 6667;
@@ -84,7 +104,7 @@ impl TuyaDiscovery {
     pub async fn broadcast_discovery(
         &self,
         bind_addr: SocketAddr,
-    ) -> Result<Vec<TuyaDevice>, std::io::Error> {
+    ) -> Result<Vec<TuyaDevice>, IoError> {
         let broadcast_addr: SocketAddr = format!("{}:{}", TUYA_BROADCAST_ADDR, TUYA_DISCOVERY_PORT)
             .parse()
             .unwrap();
@@ -95,7 +115,7 @@ impl TuyaDiscovery {
         let request = edgerun_json::to_string(&TuyaCommand::Discovery {
             protocol_version: PROTOCOL_VERSION.to_string(),
         })
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        .map_err(json_error)?;
 
         socket.send_to(request.as_bytes(), broadcast_addr).await?;
 
@@ -111,7 +131,7 @@ impl TuyaDiscovery {
                     }
                     last_addr = Some(addr);
 
-                    if let Ok(response) = std::str::from_utf8(&buf[..size]) {
+                    if let Ok(response) = str::from_utf8(&buf[..size]) {
                         if let Ok(TuyaResponse::Discovery {
                             msg_id: _,
                             devId,
@@ -170,7 +190,7 @@ impl TuyaController {
     pub async fn send_command(
         &mut self,
         dps: edgerun_json::Value,
-    ) -> Result<edgerun_json::Value, std::io::Error> {
+    ) -> Result<edgerun_json::Value, IoError> {
         let ip = format!("{}:{}", self.device.ip, TUYA_CONTROL_PORT);
         let addr: SocketAddr = ip.parse().unwrap();
 
@@ -181,46 +201,56 @@ impl TuyaController {
             devId: self.device.id.clone(),
             dps,
         })
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        .map_err(json_error)?;
 
         socket.send_to(request.as_bytes(), addr).await?;
 
         let mut buf = [0u8; 4096];
         let (size, _) = socket.recv_from(&mut buf).await?;
 
-        let response = std::str::from_utf8(&buf[..size]).unwrap();
+        let response = str::from_utf8(&buf[..size]).unwrap();
         let parsed: edgerun_json::Value = edgerun_json::from_str(response).unwrap();
 
         Ok(parsed)
     }
 
-    pub async fn set_power(&mut self, on: bool) -> Result<(), std::io::Error> {
+    pub async fn set_power(&mut self, on: bool) -> Result<(), IoError> {
         let dps = edgerun_json::json!({ "1": on });
         self.send_command(dps).await?;
         self.device.state.on = Some(on);
         Ok(())
     }
 
-    pub async fn set_temperature(&mut self, temp: i32) -> Result<(), std::io::Error> {
+    pub async fn set_temperature(&mut self, temp: i32) -> Result<(), IoError> {
         let dps = edgerun_json::json!({ "2": temp });
         self.send_command(dps).await?;
         self.device.state.temperature = Some(temp);
         Ok(())
     }
 
-    pub async fn set_mode(&mut self, mode: &str) -> Result<(), std::io::Error> {
+    pub async fn set_mode(&mut self, mode: &str) -> Result<(), IoError> {
         let dps = edgerun_json::json!({ "4": mode });
         self.send_command(dps).await?;
         self.device.state.mode = Some(mode.to_string());
         Ok(())
     }
 
-    pub async fn set_fan_speed(&mut self, speed: &str) -> Result<(), std::io::Error> {
+    pub async fn set_fan_speed(&mut self, speed: &str) -> Result<(), IoError> {
         let dps = edgerun_json::json!({ "5": speed });
         self.send_command(dps).await?;
         self.device.state.fan_speed = Some(speed.to_string());
         Ok(())
     }
+}
+
+#[cfg(not(target_os = "none"))]
+fn json_error(error: edgerun_json::Error) -> IoError {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+}
+
+#[cfg(target_os = "none")]
+fn json_error(_error: edgerun_json::Error) -> IoError {
+    IoError::Other("invalid json")
 }
 
 #[cfg(test)]

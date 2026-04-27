@@ -6,9 +6,10 @@
 use crate::prelude::v1::*;
 
 use crate::{Request, Response};
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use core::future::Future;
+use core::pin::Pin;
 
 /// A trait for processing HTTP requests.
 ///

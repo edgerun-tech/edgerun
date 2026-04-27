@@ -1,4 +1,7 @@
 /// Parse headers from raw message data.
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
 pub fn parse_headers(data: &[u8]) -> Vec<(String, String)> {
     let mut headers = Vec::new();
     let text = String::from_utf8_lossy(data);

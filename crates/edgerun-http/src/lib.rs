@@ -133,18 +133,26 @@ pub use uri::{Scheme, Uri};
 // ---------------------------------------------------------------------------
 // Unified API — cross-protocol server, client, handler, request, response
 // ---------------------------------------------------------------------------
+#[cfg(feature = "client")]
 pub mod client;
 pub mod handler;
 pub mod request;
 pub mod response;
+#[cfg(feature = "server")]
 pub mod server;
+#[cfg(all(feature = "static-files", not(target_os = "none")))]
 pub mod static_handler;
 
+#[cfg(feature = "client")]
 pub use client::{HttpClient, HttpVersion};
 pub use handler::{into_handler, into_handler_async, AsyncHandler, Handler, SyncHandler};
 pub use request::{Request, RequestBuilder};
 pub use response::Response;
-pub use server::{BoundHttpServer, HttpServer, TlsCertificate};
+#[cfg(all(feature = "server", feature = "tls"))]
+pub use server::TlsCertificate;
+#[cfg(feature = "server")]
+pub use server::{BoundHttpServer, HttpServer};
+#[cfg(all(feature = "static-files", not(target_os = "none")))]
 pub use static_handler::{serve_static, StaticHandler};
 
 // ---------------------------------------------------------------------------
@@ -166,7 +174,9 @@ pub use connection_middleware::{
 // ---------------------------------------------------------------------------
 // Client middleware system
 // ---------------------------------------------------------------------------
+#[cfg(feature = "client")]
 pub mod client_middleware;
+#[cfg(feature = "client")]
 pub use client_middleware::{
     client_middleware_fn, Chain as ClientChain, Client, ClientExtensions, ClientMiddleware,
     ClientNext, ClientRequest, ClientTransport, FnClientMiddleware,
@@ -175,8 +185,11 @@ pub use client_middleware::{
 // ---------------------------------------------------------------------------
 // Protocol-specific modules
 // ---------------------------------------------------------------------------
+#[cfg(feature = "http1")]
 pub mod http1;
+#[cfg(feature = "http2")]
 pub mod http2;
+#[cfg(feature = "http3")]
 pub mod http3;
 
 #[cfg(test)]

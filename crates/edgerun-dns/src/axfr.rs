@@ -18,8 +18,12 @@ use alloc::{
 
 use super::message::{DnsMessage, DnsOpcode, DnsQuestion, DnsRecord, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};
-use super::tsig::{TsigError, TsigVerifier};
+#[cfg(feature = "tsig")]
+use super::tsig::TsigVerifier;
 use super::zone::DnsZone;
+
+#[cfg(not(feature = "tsig"))]
+pub struct TsigVerifier;
 
 /// Handle an AXFR zone transfer request.
 ///

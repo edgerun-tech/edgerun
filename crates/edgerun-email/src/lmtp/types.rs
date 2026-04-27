@@ -3,7 +3,9 @@
 //! LMTP responses are identical to SMTP responses but with different
 //! semantics: each recipient gets an individual response after DATA.
 
-use std::fmt;
+use alloc::format;
+use alloc::string::{String, ToString};
+use core::fmt;
 
 /// LMTP response code (same format as SMTP, RFC 5321).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -70,12 +70,14 @@ use crate::client::HttpClient;
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::{Error, Request, Response, Result};
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use core::any::{Any, TypeId};
+use core::fmt;
+use core::future::Future;
+use core::pin::Pin;
 use edgerun_bare_rt::sync::Mutex;
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
 
 // ===========================================================================
 // ClientExtensions — type-erased data attached to client requests/responses
@@ -87,13 +89,13 @@ use std::sync::Arc;
 /// `ClientRequest` wrapper rather than the raw [`Request`].
 #[derive(Clone)]
 pub struct ClientExtensions {
-    inner: Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>,
+    inner: Arc<Mutex<BTreeMap<TypeId, Box<dyn Any + Send>>>>,
 }
 
 impl ClientExtensions {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(HashMap::new())),
+            inner: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -140,8 +142,8 @@ impl Default for ClientExtensions {
     }
 }
 
-impl std::fmt::Debug for ClientExtensions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for ClientExtensions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let guard = self.inner.lock();
         f.debug_struct("ClientExtensions")
             .field("count", &guard.len())

@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec;
 
 #[macro_export]

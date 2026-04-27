@@ -1,6 +1,6 @@
-//! QPACK Huffman coding — from edgerun-encoding.
+//! QPACK Huffman coding — from edgerun-hpack.
 
-pub use edgerun_encoding::Encoder;
+pub use edgerun_hpack::Encoder;
 
 use edgerun_hpack::HuffmanDecoder;
 

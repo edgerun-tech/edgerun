@@ -20,11 +20,23 @@
 //! - Per-connection spawn with idle timeout + command limits
 //! - `MailProtocol` trait for protocol-specific command dispatch
 
+#![cfg_attr(target_os = "none", no_std)]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(not(target_os = "none"))]
 pub mod command_middleware;
+#[cfg(not(target_os = "none"))]
 pub mod imap;
 pub mod lmtp;
+#[cfg(not(target_os = "none"))]
 pub mod middleware_impls;
 pub mod node_address;
+#[cfg(not(target_os = "none"))]
 pub mod rt;
+#[cfg(not(target_os = "none"))]
 pub mod server;
 pub mod smtp;

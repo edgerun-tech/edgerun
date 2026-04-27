@@ -7,9 +7,17 @@
 //! When DHCP releases/declines:
 //! - Remove both records from the DNS zone
 
-use std::collections::HashMap;
-use std::net::Ipv4Addr;
-use std::sync::{Arc, Mutex};
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use core::net::Ipv4Addr;
+
+pub type HashMap<K, V> = BTreeMap<K, V>;
+
+#[cfg(target_os = "none")]
+type Mutex<T> = edgerun_bare_rt::Mutex<T>;
+#[cfg(not(target_os = "none"))]
+type Mutex<T> = std::sync::Mutex<T>;
 
 /// Tracks DNS records created by DHCP allocations.
 pub struct DnsDhcpIntegration {
@@ -30,8 +38,8 @@ impl DnsDhcpIntegration {
     /// Called when DHCP allocates an IP to a client.
     /// Creates A and PTR records in DNS.
     pub fn allocate(&self, hostname: &str, ip: Ipv4Addr) {
-        let mut a = self.a_records.lock().unwrap();
-        let mut ptr = self.ptr_records.lock().unwrap();
+        let mut a = lock(&self.a_records);
+        let mut ptr = lock(&self.ptr_records);
 
         // Remove old PTR if hostname was previously assigned different IP
         if let Some(old_ip) = a.get(hostname) {
@@ -53,8 +61,8 @@ impl DnsDhcpIntegration {
     /// Called when DHCP releases or declines an IP.
     /// Removes A and PTR records from DNS.
     pub fn release(&self, hostname: &str, ip: Ipv4Addr) {
-        let mut a = self.a_records.lock().unwrap();
-        let mut ptr = self.ptr_records.lock().unwrap();
+        let mut a = lock(&self.a_records);
+        let mut ptr = lock(&self.ptr_records);
 
         a.remove(hostname);
         ptr.remove(&ip);
@@ -64,18 +72,28 @@ impl DnsDhcpIntegration {
 
     /// Get all DHCP-created A records for DNS zone population.
     pub fn get_a_records(&self) -> HashMap<String, Ipv4Addr> {
-        self.a_records.lock().unwrap().clone()
+        lock(&self.a_records).clone()
     }
 
     /// Get all DHCP-created PTR records for reverse zone population.
     pub fn get_ptr_records(&self) -> HashMap<Ipv4Addr, String> {
-        self.ptr_records.lock().unwrap().clone()
+        lock(&self.ptr_records).clone()
     }
 
     /// Count active DHCP-DNS records.
     pub fn active_count(&self) -> usize {
-        self.a_records.lock().unwrap().len()
+        lock(&self.a_records).len()
     }
+}
+
+#[cfg(not(target_os = "none"))]
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap()
+}
+
+#[cfg(target_os = "none")]
+fn lock<T>(mutex: &Mutex<T>) -> edgerun_bare_rt::MutexGuard<'_, T> {
+    mutex.lock()
 }
 
 impl Default for DnsDhcpIntegration {

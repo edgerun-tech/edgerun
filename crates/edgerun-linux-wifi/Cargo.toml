@@ -12,9 +12,11 @@ edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-wifi = { path = "../edgerun-wifi" }
 edgerun-encoding = { path = "../edgerun-encoding" }
-libc.workspace = true
-edgerun-crypto.workspace = true
+edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "pbkdf2", "sha1"] }
 edgerun-log = { path = "../edgerun-log" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
+libc.workspace = true
 
 [lints]
 workspace = true

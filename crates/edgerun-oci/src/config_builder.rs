@@ -18,7 +18,8 @@
 //!     .build()?;
 //! ```
 
-use std::collections::HashMap;
+use crate::prelude::*;
+use alloc::collections::BTreeMap;
 use std::io;
 
 use crate::json::{OciMount, OciRlimit, OciSpec};
@@ -81,7 +82,7 @@ pub struct ContainerProcessConfig {
     /// Rootfs propagation mode.
     pub rootfs_propagation: Option<String>,
     /// Sysctl parameters.
-    pub sysctl: HashMap<String, String>,
+    pub sysctl: BTreeMap<String, String>,
     /// SELinux mount label.
     pub mount_label: Option<String>,
     /// Whether to allocate a pseudo-terminal (PTY).
@@ -140,7 +141,7 @@ pub struct ContainerConfigBuilder {
     masked_paths: Vec<String>,
     readonly_paths: Vec<String>,
     rootfs_propagation: Option<String>,
-    sysctl: HashMap<String, String>,
+    sysctl: BTreeMap<String, String>,
     mount_label: Option<String>,
     terminal: bool,
 }
@@ -177,7 +178,7 @@ impl ContainerConfigBuilder {
             masked_paths: Vec::new(),
             readonly_paths: Vec::new(),
             rootfs_propagation: Some("private".into()),
-            sysctl: HashMap::new(),
+            sysctl: BTreeMap::new(),
             mount_label: None,
             terminal: false,
         }
@@ -379,7 +380,7 @@ impl ContainerConfigBuilder {
     }
 
     /// Set sysctl parameters.
-    pub fn sysctl(mut self, params: HashMap<String, String>) -> Self {
+    pub fn sysctl(mut self, params: BTreeMap<String, String>) -> Self {
         self.sysctl = params;
         self
     }
@@ -599,7 +600,7 @@ mod tests {
 
     #[test]
     fn builder_sysctl_params() {
-        let mut sysctl = HashMap::new();
+        let mut sysctl = BTreeMap::new();
         sysctl.insert("net.ipv4.ip_forward".into(), "1".into());
         let config = ContainerConfigBuilder::new("/rootfs")
             .sysctl(sysctl)

@@ -3,7 +3,7 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::fmt;
+use core::fmt;
 
 /// HTTP header name
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -50,7 +50,7 @@ impl fmt::Display for HeaderName {
 impl TryFrom<&str> for HeaderName {
     type Error = String;
 
-    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+    fn try_from(s: &str) -> core::result::Result<Self, Self::Error> {
         HeaderName::new(s.to_string())
     }
 }
@@ -58,7 +58,7 @@ impl TryFrom<&str> for HeaderName {
 impl TryFrom<String> for HeaderName {
     type Error = String;
 
-    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+    fn try_from(s: String) -> core::result::Result<Self, Self::Error> {
         HeaderName::new(s)
     }
 }
@@ -97,7 +97,7 @@ impl fmt::Display for HeaderValue {
 impl TryFrom<&str> for HeaderValue {
     type Error = String;
 
-    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+    fn try_from(s: &str) -> core::result::Result<Self, Self::Error> {
         HeaderValue::new(s.to_string())
     }
 }
@@ -105,7 +105,7 @@ impl TryFrom<&str> for HeaderValue {
 impl TryFrom<String> for HeaderValue {
     type Error = String;
 
-    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+    fn try_from(s: String) -> core::result::Result<Self, Self::Error> {
         HeaderValue::new(s)
     }
 }
@@ -125,7 +125,7 @@ impl HeaderMap {
     }
 
     /// Insert a header. Returns `Err` if the name or value is invalid.
-    pub fn insert(&mut self, name: &str, value: &str) -> std::result::Result<(), String> {
+    pub fn insert(&mut self, name: &str, value: &str) -> core::result::Result<(), String> {
         let name = HeaderName::new(name.to_string())?;
         let value = HeaderValue::new(value.to_string())?;
         self.headers.push((name, value));

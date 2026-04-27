@@ -4,6 +4,7 @@
 //!
 //! Supports: memory, cpu, pids, blockIO, hugepage_limits, network.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 use std::io::Write;

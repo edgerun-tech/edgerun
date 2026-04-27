@@ -83,7 +83,9 @@ pub mod std;
 pub mod axfr;
 pub mod cache;
 pub mod client;
+#[cfg(feature = "dhcp")]
 pub mod dhcp;
+#[cfg(feature = "dnssec")]
 pub mod dnssec;
 pub mod doh;
 pub mod dot;
@@ -94,6 +96,7 @@ pub mod resolv_conf;
 pub mod resolver;
 pub mod server;
 pub mod tftp;
+#[cfg(feature = "tsig")]
 pub mod tsig;
 pub mod zone;
 pub mod zone_file;
@@ -104,13 +107,18 @@ pub use doh::{DohServer, DohServerConfig};
 pub use dot::{DotServer, DotServerConfig};
 pub use resolver::{default_root_hints, RecursiveResolver, RootHint};
 pub use server::RateLimiter;
+#[cfg(feature = "tsig")]
 pub use tsig::{TsigAlgorithm, TsigError, TsigKey, TsigSigner, TsigVerifier};
 
 // DHCP re-exports
+#[cfg(feature = "dhcp-client")]
+pub use dhcp::DhcpClient;
+#[cfg(feature = "dhcp")]
 pub use dhcp::{
-    DhcpClient, DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease,
-    NetworkConfig, PxeClientArch,
+    DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease, NetworkConfig,
+    PxeClientArch,
 };
+#[cfg(feature = "dhcp")]
 pub use dhcp::{
     OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_MACHINE_ID, OPT_CLIENT_NDI, OPT_HOST_NAME,
     OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP,
@@ -123,16 +131,20 @@ pub use tftp::{BlobTftpProvider, TftpError, TftpMessage, TftpOpcode, TftpOptions
 pub use resolv_conf::{Nameserver, ResolvConf};
 
 pub use client::DnsClient;
+#[cfg(feature = "dnssec")]
 pub use dnssec::{
     compute_key_tag, validate_response, verify_chain_of_trust, verify_rrsig, DnssecResult,
 };
+#[cfg(feature = "dnssec")]
 pub use dnssec::{
     find_nsec3_covering, nsec3_base32hex, nsec3_hash_owner, nsec3_type_bitmap,
     synthesize_nsec3_chain,
 };
+#[cfg(feature = "dnssec")]
 pub use dnssec::{
     generate_dnskey_ecdsap256, generate_dnskey_ed25519, sign_rrset_ecdsap256, sign_rrsig_ed25519,
 };
+#[cfg(feature = "dnssec")]
 pub use dnssec::{sign_zone_ecdsap256, sign_zone_ed25519};
 pub use message::{DnsHeader, DnsMessage, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};

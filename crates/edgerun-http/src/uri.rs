@@ -3,8 +3,8 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::fmt;
-use std::str::FromStr;
+use core::fmt;
+use core::str::FromStr;
 
 /// Parsed URI
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

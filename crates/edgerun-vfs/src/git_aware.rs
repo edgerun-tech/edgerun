@@ -1,5 +1,7 @@
 //! Git-aware persistence with .edgekeep support
 
+use alloc::vec::Vec;
+
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};

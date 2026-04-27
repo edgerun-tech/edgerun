@@ -9,7 +9,7 @@ name = "http-server"
 path = "src/bin/http-server.rs"
 
 [dependencies]
-edgerun-http = { path = "../edgerun-http", features = ["connection-middleware"] }
+edgerun-http = { path = "../edgerun-http", default-features = false, features = ["connection-middleware", "http3"] }
 edgerun-email = { path = "../edgerun-email", optional = true }
 edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }
 edgerun-dns = { path = "../edgerun-dns", optional = true }

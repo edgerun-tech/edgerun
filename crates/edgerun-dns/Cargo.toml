@@ -6,11 +6,27 @@ license.workspace = true
 publish.workspace = true
 description = "no_std DNS server and client using edgerun-bare-rt"
 
+[features]
+default = ["dhcp-client", "dnssec", "tsig"]
+dhcp = []
+dhcp-client = ["dhcp", "dep:edgerun-crypto"]
+dnssec = [
+    "dep:edgerun-crypto",
+    "edgerun-crypto/ed25519",
+    "edgerun-crypto/p256",
+    "edgerun-crypto/sha1",
+]
+tsig = ["dep:edgerun-crypto", "edgerun-crypto/hmac"]
+
 [dependencies]
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-log = { path = "../edgerun-log" }
-edgerun-crypto = { path = "../edgerun-crypto" }
+edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optional = true }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+
+[[test]]
+name = "dnssec_integration"
+required-features = ["dnssec"]
 
 [lints]
 workspace = true

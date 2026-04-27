@@ -17,8 +17,8 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::fmt;
-use std::ops::Range;
+use core::fmt;
+use core::ops::Range;
 
 /// A parsed Range header value
 #[derive(Debug, Clone, PartialEq, Eq)]

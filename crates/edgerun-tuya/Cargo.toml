@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
-edgerun-json = { path = "../edgerun-json", features = ["serde"] }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "serde"] }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 [[bin]]

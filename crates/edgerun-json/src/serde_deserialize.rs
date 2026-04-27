@@ -1,14 +1,14 @@
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::Cow;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::ToOwned;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::format;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::{String, ToString};
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
@@ -18,15 +18,15 @@ use crate::number::JsonNumber;
 use crate::parse::{parse_i64_fast, parse_u64_fast, Parser};
 use crate::serde_error::json_parse_error_to_serde;
 use crate::JsonValue;
-use edgerun_encoding::io::Read;
+use crate::io::Read;
 use serde_crate::de::{
     value::StringDeserializer, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess,
     Visitor,
 };
 use serde_crate::Deserializer as SerdeDeserializer;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use std::borrow::Cow;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use std::vec;
 
 /// Single-pass JSON deserializer.

@@ -1,4 +1,4 @@
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::String;
 
 use crate::JsonValue;

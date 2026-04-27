@@ -32,9 +32,26 @@
 //!
 //! [`edgerun_http`]: https://docs.rs/edgerun-http
 
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt;
+use core::module_path;
+use core::time::Duration;
 use edgerun_bare_rt::CancellationToken;
-use std::sync::Arc;
-use std::time::Duration;
+
+#[cfg(target_os = "none")]
+use edgerun_http::io;
+#[cfg(not(target_os = "none"))]
+use std::io;
 
 use edgerun_http::connection_middleware::{
     ConnectionChain, ConnectionHandler, ConnectionMiddleware, MiddlewareAdapter, PassThroughHandler,
@@ -42,14 +59,27 @@ use edgerun_http::connection_middleware::{
 use edgerun_http::handler::Handler;
 use edgerun_http::server::{BoundHttpServer, HttpServer, TlsCertificate};
 
+#[cfg(all(
+    any(feature = "imap", feature = "smtp", feature = "lmtp"),
+    not(target_os = "none")
+))]
 pub mod connection_interceptor_adapter;
+#[cfg(all(
+    any(feature = "imap", feature = "smtp", feature = "lmtp"),
+    not(target_os = "none")
+))]
 use connection_interceptor_adapter::ConnectionInterceptorAdapter;
+
+fn other_io_error(error: impl fmt::Display) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, format!("{error}"))
+}
 
 // ---------------------------------------------------------------------------
 // Optional protocol configs (gated by feature flags)
 // ---------------------------------------------------------------------------
 #[cfg(feature = "dns")]
 mod dns_config {
+    use alloc::string::{String, ToString};
 
     #[derive(Debug, Clone)]
     pub struct DnsConfig {
@@ -76,7 +106,9 @@ pub use dns_config::DnsConfig;
 #[cfg(feature = "dhcp")]
 mod dhcp_config {
 
-    use std::net::Ipv4Addr;
+    use alloc::vec;
+    use alloc::vec::Vec;
+    use core::net::Ipv4Addr;
 
     #[derive(Debug, Clone)]
     pub struct DhcpConfig {
@@ -138,6 +170,10 @@ pub use tftp_config::TftpConfig;
 
 #[cfg(feature = "imap")]
 mod imap_config {
+    use alloc::string::{String, ToString};
+    #[cfg(target_os = "none")]
+    use edgerun_http::path::PathBuf;
+    #[cfg(not(target_os = "none"))]
     use std::path::PathBuf;
 
     #[derive(Clone)]
@@ -171,6 +207,12 @@ pub use imap_config::ImapConfig;
 
 #[cfg(feature = "smtp")]
 mod smtp_config {
+    use alloc::string::{String, ToString};
+    use alloc::vec;
+    use alloc::vec::Vec;
+    #[cfg(target_os = "none")]
+    use edgerun_http::path::PathBuf;
+    #[cfg(not(target_os = "none"))]
     use std::path::PathBuf;
 
     #[derive(Clone)]
@@ -225,6 +267,8 @@ pub use smtp_config::SmtpConfig;
 
 #[cfg(feature = "lmtp")]
 mod lmtp_config {
+    use alloc::string::{String, ToString};
+
     #[derive(Clone)]
     pub struct LmtpConfig {
         pub bind_addr: String,
@@ -247,7 +291,8 @@ pub use lmtp_config::LmtpConfig;
 
 #[cfg(feature = "proxy")]
 mod proxy_config {
-    use std::time::Duration;
+    use alloc::string::{String, ToString};
+    use core::time::Duration;
 
     #[derive(Clone)]
     pub struct ProxyConfig {
@@ -349,7 +394,7 @@ impl Server {
     }
 
     /// Enable HTTP with the given handler and bind address.
-    pub fn with_http<H: Handler>(mut self, handler: H, addr: impl std::fmt::Display) -> Self {
+    pub fn with_http<H: Handler>(mut self, handler: H, addr: impl fmt::Display) -> Self {
         self.http = Some(HttpBuilder {
             handler: Arc::new(handler),
             bind_addr: addr.to_string(),
@@ -426,7 +471,7 @@ impl Server {
     }
 
     /// Build and bind all protocol listeners.
-    pub async fn build(self) -> std::io::Result<BoundServer> {
+    pub async fn build(self) -> io::Result<BoundServer> {
         let http_bound = if let Some(h) = self.http {
             let mut server = HttpServer::new(h.handler);
             if let Some(ka) = h.keep_alive {
@@ -439,7 +484,7 @@ impl Server {
             if h.http3 {
                 server = server.with_http3();
             }
-            Some(server.bind(&h.bind_addr).await?)
+            Some(server.bind(h.bind_addr.as_str()).await?)
         } else {
             None
         };
@@ -452,8 +497,7 @@ impl Server {
                 rate_limit_qps: config.rate_limit_qps,
                 bind_addr_ipv6: config.bind_addr_ipv6,
             };
-            let srv = edgerun_dns::DnsServer::new(dns_config)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            let srv = edgerun_dns::DnsServer::new(dns_config).map_err(other_io_error)?;
             Some(srv)
         } else {
             None
@@ -469,11 +513,11 @@ impl Server {
                 lease_time: config.lease_time,
                 tftp_server: None,
                 default_bootfile: None,
-                bootfile_by_arch: std::collections::BTreeMap::new(),
+                bootfile_by_arch: alloc::collections::BTreeMap::new(),
             };
             let srv =
                 edgerun_dhcp::DhcpServer::new(dhcp_config, config.pool_start, config.pool_end)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(other_io_error)?;
             Some(srv)
         } else {
             None
@@ -487,7 +531,7 @@ impl Server {
                 timeout_secs: 5,
             };
             let srv = edgerun_tftp::TftpServer::new(tftp_config, config.provider)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                .map_err(other_io_error)?;
             Some(srv)
         } else {
             None
@@ -525,12 +569,16 @@ impl Server {
                     });
                 chain.build()
             };
+        #[cfg(all(
+            any(feature = "imap", feature = "smtp", feature = "lmtp"),
+            not(target_os = "none")
+        ))]
         let connection_interceptor = Arc::new(ConnectionInterceptorAdapter::new(Arc::clone(
             &connection_middleware,
         )))
             as Arc<dyn edgerun_email::server::ConnectionInterceptor>;
 
-        #[cfg(feature = "imap")]
+        #[cfg(all(feature = "imap", not(target_os = "none")))]
         let imap_server = if let Some(config) = self.imap {
             let imap_config = edgerun_email::imap::server::ImapServerConfig {
                 bind_addr: config.bind_addr,
@@ -542,10 +590,7 @@ impl Server {
             };
             let mut srv = if let Some(ref maildir_root) = config.maildir_root {
                 let store = edgerun_email::imap::MaildirImapStore::new(maildir_root)?;
-                edgerun_email::imap::ImapServer::with_store(
-                    imap_config,
-                    std::sync::Arc::new(store),
-                )?
+                edgerun_email::imap::ImapServer::with_store(imap_config, Arc::new(store))?
             } else {
                 edgerun_email::imap::ImapServer::new(imap_config)?
             };
@@ -555,7 +600,7 @@ impl Server {
             None
         };
 
-        #[cfg(feature = "smtp")]
+        #[cfg(all(feature = "smtp", not(target_os = "none")))]
         let smtp_server = if let Some(config) = self.smtp {
             let smtp_config = edgerun_email::smtp::server::SmtpServerConfig {
                 bind_addr: config.bind_addr,
@@ -576,7 +621,7 @@ impl Server {
 
             let mut srv = if let Some(ref maildir_root) = config.maildir_root {
                 let store = edgerun_email::smtp::server::MaildirStore::new(maildir_root)?;
-                let handler = std::sync::Arc::new(store);
+                let handler = Arc::new(store);
                 edgerun_email::smtp::server::SmtpServer::new(smtp_config, handler)?
             } else {
                 edgerun_email::smtp::SmtpServer::with_memory_store(smtp_config)?
@@ -587,7 +632,7 @@ impl Server {
             None
         };
 
-        #[cfg(feature = "lmtp")]
+        #[cfg(all(feature = "lmtp", not(target_os = "none")))]
         let lmtp_server = if let Some(config) = self.lmtp {
             let lmtp_config = edgerun_email::lmtp::server::LmtpServerConfig {
                 bind_addr: config.bind_addr,
@@ -612,11 +657,11 @@ impl Server {
             dhcp: dhcp_server,
             #[cfg(feature = "tftp")]
             tftp: tftp_server,
-            #[cfg(feature = "imap")]
+            #[cfg(all(feature = "imap", not(target_os = "none")))]
             imap: imap_server,
-            #[cfg(feature = "smtp")]
+            #[cfg(all(feature = "smtp", not(target_os = "none")))]
             smtp: smtp_server,
-            #[cfg(feature = "lmtp")]
+            #[cfg(all(feature = "lmtp", not(target_os = "none")))]
             lmtp: lmtp_server,
             #[cfg(feature = "proxy")]
             proxy: proxy_server,
@@ -640,11 +685,11 @@ pub struct BoundServer {
     dhcp: Option<edgerun_dhcp::DhcpServer>,
     #[cfg(feature = "tftp")]
     tftp: Option<edgerun_tftp::TftpServer>,
-    #[cfg(feature = "imap")]
+    #[cfg(all(feature = "imap", not(target_os = "none")))]
     imap: Option<edgerun_email::imap::ImapServer>,
-    #[cfg(feature = "smtp")]
+    #[cfg(all(feature = "smtp", not(target_os = "none")))]
     smtp: Option<edgerun_email::smtp::SmtpServer>,
-    #[cfg(feature = "lmtp")]
+    #[cfg(all(feature = "lmtp", not(target_os = "none")))]
     lmtp: Option<edgerun_email::lmtp::LmtpServer>,
     #[cfg(feature = "proxy")]
     proxy: Option<edgerun_proxy::ProxyServer>,
@@ -656,8 +701,8 @@ pub struct BoundServer {
 
 impl BoundServer {
     /// Run all protocol listeners until `shutdown` is cancelled.
-    pub async fn run(&mut self, shutdown: CancellationToken) -> std::io::Result<()> {
-        let mut tasks: Vec<edgerun_bare_rt::JoinHandle<std::io::Result<()>>> = Vec::new();
+    pub async fn run(&mut self, shutdown: CancellationToken) -> io::Result<()> {
+        let mut tasks: Vec<edgerun_bare_rt::JoinHandle<io::Result<()>>> = Vec::new();
 
         // HTTP (TCP + optional HTTP/3 UDP)
         if let Some(ref http) = self.http {
@@ -710,7 +755,7 @@ impl BoundServer {
                 let bridge = edgerun_bare_rt::spawn(async move {
                     token.cancelled().await;
                     cancel_tftp.cancel();
-                    Ok::<(), std::io::Error>(())
+                    Ok::<(), io::Error>(())
                 });
 
                 tftp.run(tftp_token).await;
@@ -720,21 +765,21 @@ impl BoundServer {
         }
 
         // IMAP
-        #[cfg(feature = "imap")]
+        #[cfg(all(feature = "imap", not(target_os = "none")))]
         if let Some(imap) = self.imap.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_bare_rt::spawn(async move { imap.run(token).await }));
         }
 
         // SMTP
-        #[cfg(feature = "smtp")]
+        #[cfg(all(feature = "smtp", not(target_os = "none")))]
         if let Some(smtp) = self.smtp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_bare_rt::spawn(async move { smtp.run(token).await }));
         }
 
         // LMTP
-        #[cfg(feature = "lmtp")]
+        #[cfg(all(feature = "lmtp", not(target_os = "none")))]
         if let Some(lmtp) = self.lmtp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_bare_rt::spawn(async move { lmtp.run(token).await }));
@@ -744,9 +789,9 @@ impl BoundServer {
         #[cfg(feature = "proxy")]
         if let Some(proxy) = self.proxy.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(
-                async move { proxy.run(token).await },
-            ));
+            tasks.push(edgerun_bare_rt::spawn(async move {
+                proxy.run(token).await.map_err(other_io_error)
+            }));
         }
 
         // Wait for all tasks

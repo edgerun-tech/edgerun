@@ -314,8 +314,9 @@ impl TsigVerifier {
 
         // Verify time
         let now = current_time();
-        if now < tsig.time_signed - self.fudge as u64 || now > tsig.time_signed + self.fudge as u64
-        {
+        let lower = tsig.time_signed.saturating_sub(self.fudge as u64);
+        let upper = tsig.time_signed.saturating_add(self.fudge as u64);
+        if now < lower || now > upper {
             return Err(TsigError::BadTime);
         }
 

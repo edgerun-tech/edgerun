@@ -7,7 +7,6 @@ publish.workspace = true
 description = "Kubernetes-compatible DNS/DHCP configuration with event-sourced state"
 
 [dependencies]
-edgerun-dns = { path = "../edgerun-dns" }
 edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "serde", "yaml"] }

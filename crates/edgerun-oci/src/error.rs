@@ -1,5 +1,6 @@
 //! Error types for the OCI runtime.
 
+use crate::prelude::*;
 use std::error::Error;
 use std::fmt;
 use std::io;

@@ -31,6 +31,13 @@
 //! }
 //! ```
 
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::module_path;
+
 use crate::{Node, NodeConfig};
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope};
@@ -40,7 +47,6 @@ use edgerun_mesh::{LocalNode, MeshFrame};
 use edgerun_mesh_link::MeshLink;
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
-use std::sync::Arc;
 
 /// A mesh-connected edgerun node.
 ///

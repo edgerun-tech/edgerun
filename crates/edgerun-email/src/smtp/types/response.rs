@@ -1,3 +1,8 @@
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::fmt;
+
 /// SMTP response code (3-digit).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SmtpResponseCode {
@@ -33,8 +38,8 @@ impl SmtpResponseCode {
     }
 }
 
-impl std::fmt::Display for SmtpResponseCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for SmtpResponseCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}{}", self.digit1, self.digit2, self.digit3)
     }
 }
@@ -82,8 +87,8 @@ impl EnhancedStatusCode {
     }
 }
 
-impl std::fmt::Display for EnhancedStatusCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for EnhancedStatusCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}.{}", self.class, self.subject, self.detail)
     }
 }

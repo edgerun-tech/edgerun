@@ -1,10 +1,11 @@
 //! Authentication credentials and helpers.
 
-use std::fs;
-use std::io;
-use std::path::PathBuf;
+use crate::prelude::*;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
-use edgerun_encoding::base64::{standard_decode, standard_encode};
+#[cfg(all(feature = "std", not(target_os = "none")))]
+use std::path::PathBuf;
 
 /// Authentication credentials for a registry.
 #[derive(Clone, Debug)]
@@ -20,6 +21,7 @@ pub enum RegistryAuth {
     /// The `registry_host` is used as the credential key within the
     /// given namespace. The secret service stores `username:password`
     /// as the secret value (basic auth format).
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     FromSecretService {
         data_root: PathBuf,
         namespace: String,
@@ -30,8 +32,9 @@ pub enum RegistryAuth {
 /// Read registry config.json for credentials.
 /// Supports the standard OCI/Docker-compatible config.json format
 /// found at `$HOME/.config/containers/auth.json` or `$HOME/.docker/config.json`.
-pub fn load_registry_auth(path: &std::path::Path) -> io::Result<RegistryAuth> {
-    let data = fs::read_to_string(path)?;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub fn load_registry_auth(path: &std::path::Path) -> std::io::Result<RegistryAuth> {
+    let data = std::fs::read_to_string(path)?;
 
     // Minimal JSON parsing for auths
     if let Some(auths_start) = data.find("\"auths\"") {
@@ -60,10 +63,72 @@ pub fn load_registry_auth(path: &std::path::Path) -> io::Result<RegistryAuth> {
 
 /// Decode a base64-encoded basic auth string ("user:pass").
 pub fn decode_basic_auth(auth: &str) -> Option<(String, String)> {
-    let decoded = standard_decode(auth).ok()?;
+    let decoded = decode_base64_standard(auth)?;
     let s = String::from_utf8(decoded).ok()?;
     let (username, password) = s.split_once(':')?;
     Some((username.to_string(), password.to_string()))
+}
+
+fn decode_base64_standard(input: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut quad = [0u8; 4];
+    let mut quad_len = 0;
+
+    for byte in input.bytes().filter(|b| !b.is_ascii_whitespace()) {
+        quad[quad_len] = byte;
+        quad_len += 1;
+        if quad_len == 4 {
+            decode_base64_quad(&quad, &mut out)?;
+            quad_len = 0;
+        }
+    }
+
+    if quad_len != 0 {
+        if quad_len == 1 {
+            return None;
+        }
+        for slot in &mut quad[quad_len..] {
+            *slot = b'=';
+        }
+        decode_base64_quad(&quad, &mut out)?;
+    }
+
+    Some(out)
+}
+
+fn decode_base64_quad(quad: &[u8; 4], out: &mut Vec<u8>) -> Option<()> {
+    let pad = quad.iter().rev().take_while(|&&b| b == b'=').count();
+    if pad > 2 || quad[..4 - pad].contains(&b'=') {
+        return None;
+    }
+
+    let mut value = 0u32;
+    for &byte in quad {
+        value <<= 6;
+        if byte != b'=' {
+            value |= decode_base64_char(byte)? as u32;
+        }
+    }
+
+    out.push((value >> 16) as u8);
+    if pad < 2 {
+        out.push((value >> 8) as u8);
+    }
+    if pad == 0 {
+        out.push(value as u8);
+    }
+    Some(())
+}
+
+fn decode_base64_char(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
 }
 
 /// Parse a WWW-Authenticate Bearer challenge header.
@@ -102,6 +167,7 @@ pub fn parse_bearer_auth(header: &str) -> Option<(String, String, Option<String>
 /// secret service backend under `{namespace}/{registry_host}`.
 ///
 /// Returns `None` if no credential is found.
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub fn resolve_from_secret_service(
     data_root: &std::path::Path,
     namespace: &str,
@@ -120,7 +186,7 @@ pub fn resolve_from_secret_service(
     Some((username.to_string(), password.to_string()))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std", not(target_os = "none")))]
 mod tests {
     use super::*;
 
@@ -173,8 +239,7 @@ mod tests {
 
     #[test]
     fn decode_basic_auth_roundtrip() {
-        let encoded = standard_encode(b"myuser:mypass");
-        let (user, pass) = decode_basic_auth(&encoded).unwrap();
+        let (user, pass) = decode_basic_auth("bXl1c2VyOm15cGFzcw==").unwrap();
         assert_eq!(user, "myuser");
         assert_eq!(pass, "mypass");
     }

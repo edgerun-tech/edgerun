@@ -2,15 +2,15 @@
 //!
 //! This module provides drop-in replacements for toml functionality.
 
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::ToOwned;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
-#[cfg(all(feature = "alloc", not(feature = "std")))]
+#[cfg(all(feature = "alloc", any(not(feature = "std"), target_os = "none")))]
 use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::{format, string::String};
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 use std::{format, string::String};
 
 use crate::{JsonValue, Map, Number};
@@ -128,7 +128,7 @@ impl core::fmt::Display for TomlError {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl std::error::Error for TomlError {}
 
 pub fn from_toml_str(s: &str) -> Result<TomlValue, TomlError> {

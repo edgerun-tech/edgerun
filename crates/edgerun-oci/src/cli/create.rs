@@ -2,6 +2,7 @@
 //!
 //! Uses the library lifecycle to run hooks with full OCI spec compliance.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 use std::path::Path;

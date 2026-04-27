@@ -4,13 +4,114 @@
 //! Text-only operations (`read_str`, `edit`, `grep`) transparently
 //! handle UTF-8 conversion and skip non-text files.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::str;
+
+use crate::{Path, PathBuf};
 
 use crate::grep::GrepMatch;
 use crate::stats::MemoryStats;
+
+type HashMap<K, V> = BTreeMap<K, V>;
+type HashSet<T> = BTreeSet<T>;
+
+pub(crate) fn path_display(path: &Path) -> String {
+    #[cfg(not(target_os = "none"))]
+    {
+        path.display().to_string()
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        path.to_string()
+    }
+}
+
+fn path_buf_display(path: &PathBuf) -> String {
+    #[cfg(not(target_os = "none"))]
+    {
+        path.display().to_string()
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        path.clone()
+    }
+}
+
+fn path_to_path_buf(path: &Path) -> PathBuf {
+    #[cfg(not(target_os = "none"))]
+    {
+        path.to_path_buf()
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        path.to_string()
+    }
+}
+
+#[cfg(not(target_os = "none"))]
+fn join_path(root: &Path, path: &PathBuf) -> PathBuf {
+    root.join(path)
+}
+
+#[cfg(target_os = "none")]
+fn join_path(root: &Path, path: &PathBuf) -> PathBuf {
+    if root.is_empty() {
+        return path.clone();
+    }
+    let mut joined = root.to_string();
+    if !joined.ends_with('/') {
+        joined.push('/');
+    }
+    joined.push_str(path);
+    joined
+}
+
+fn path_extension(path: &PathBuf) -> Option<&str> {
+    #[cfg(not(target_os = "none"))]
+    {
+        path.extension().and_then(|e| e.to_str())
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        path.rsplit('/').next()?.rsplit_once('.').map(|(_, ext)| ext)
+    }
+}
+
+fn path_as_str(path: &PathBuf) -> Option<&str> {
+    #[cfg(not(target_os = "none"))]
+    {
+        path.to_str()
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        Some(path.as_str())
+    }
+}
+
+fn now_secs() -> u64 {
+    #[cfg(not(target_os = "none"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        0
+    }
+}
 
 /// File metadata
 #[derive(Debug, Clone)]
@@ -44,12 +145,12 @@ impl FileContent {
 
     /// Get content as string slice (returns None for binary files)
     pub fn as_str(&self) -> Option<&str> {
-        std::str::from_utf8(&self.data).ok()
+        str::from_utf8(&self.data).ok()
     }
 
     /// Check if content is valid UTF-8 text
     pub fn is_text(&self) -> bool {
-        std::str::from_utf8(&self.data).is_ok()
+        str::from_utf8(&self.data).is_ok()
     }
 
     /// Check if content is shared (COW)
@@ -95,62 +196,75 @@ impl VirtualFileSystem {
     /// Loads ALL files including binary files and files in target/, .git/, etc.
     /// No directories are skipped. Binary files are stored as-is.
     pub fn load<P: AsRef<Path>>(root: P) -> Result<Self, String> {
-        let root = root.as_ref().to_path_buf();
-        let mut files = BTreeMap::new();
-        let mut metadata = HashMap::new();
-        let mut original_hashes = HashMap::new();
-        let mut memory_usage = 0usize;
+        #[cfg(target_os = "none")]
+        {
+            let _ = root;
+            Err("filesystem loading is unavailable on bare targets".to_string())
+        }
 
-        edgerun_log::info!("Loading filesystem into memory: {}", root.display());
-        let start = std::time::Instant::now();
+        #[cfg(not(target_os = "none"))]
+        {
+            let root = path_to_path_buf(root.as_ref());
+            let mut files = BTreeMap::new();
+            let mut metadata = HashMap::new();
+            let mut original_hashes = HashMap::new();
+            let mut memory_usage = 0usize;
 
-        let file_count = Self::walk_directory(&root, &mut |path, content| {
-            let rel_path = path
-                .strip_prefix(&root)
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|_| path.to_path_buf());
-
-            let hash = Self::compute_hash(&content);
-            let size = content.len();
-            let modified = Self::get_mtime(path);
-
-            memory_usage += size;
-
-            files.insert(rel_path.clone(), FileContent::new(content));
-            metadata.insert(
-                rel_path.clone(),
-                FileMeta {
-                    path: rel_path.clone(),
-                    size,
-                    hash: hash.clone(),
-                    modified,
-                    is_dirty: false,
-                },
+            edgerun_log::info!(
+                "Loading filesystem into memory: {}",
+                path_buf_display(&root)
             );
-            original_hashes.insert(rel_path, hash);
-        })?;
 
-        let elapsed = start.elapsed();
-        let memory_mb = memory_usage as f64 / (1024.0 * 1024.0);
+            let start = std::time::Instant::now();
+            let file_count = Self::walk_directory(&root, &mut |path, content| {
+                let rel_path = path
+                    .strip_prefix(&root)
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|_| path.to_path_buf());
 
-        edgerun_log::info!(
-            "Loaded {} files ({:.2} MB) in {:.2}s",
-            file_count,
-            memory_mb,
-            elapsed.as_secs_f64()
-        );
+                let hash = Self::compute_hash(&content);
+                let size = content.len();
+                let modified = Self::get_mtime(path);
 
-        Ok(Self {
-            files,
-            metadata,
-            original_hashes,
-            deleted: HashSet::new(),
-            root,
-            memory_usage,
-        })
+                memory_usage += size;
+
+                files.insert(rel_path.clone(), FileContent::new(content));
+                metadata.insert(
+                    rel_path.clone(),
+                    FileMeta {
+                        path: rel_path.clone(),
+                        size,
+                        hash: hash.clone(),
+                        modified,
+                        is_dirty: false,
+                    },
+                );
+                original_hashes.insert(rel_path, hash);
+            })?;
+
+            let elapsed = start.elapsed();
+            let memory_mb = memory_usage as f64 / (1024.0 * 1024.0);
+
+            edgerun_log::info!(
+                "Loaded {} files ({:.2} MB) in {:.2}s",
+                file_count,
+                memory_mb,
+                elapsed.as_secs_f64()
+            );
+
+            Ok(Self {
+                files,
+                metadata,
+                original_hashes,
+                deleted: HashSet::new(),
+                root,
+                memory_usage,
+            })
+        }
     }
 
     /// Walk directory and load ALL files (no skipping, including binary).
+    #[cfg(not(target_os = "none"))]
     fn walk_directory<F>(root: &Path, callback: &mut F) -> Result<usize, String>
     where
         F: FnMut(&PathBuf, Vec<u8>),
@@ -189,10 +303,15 @@ impl VirtualFileSystem {
     }
 
     /// Get file modification time
+    #[cfg(not(target_os = "none"))]
     fn get_mtime(path: &Path) -> u64 {
         std::fs::metadata(path)
             .and_then(|m| m.modified())
-            .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
+            .map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            })
             .unwrap_or(0)
     }
 
@@ -214,7 +333,7 @@ impl VirtualFileSystem {
 
     /// Write bytes to file in memory
     pub fn write_bytes(&mut self, path: &Path, content: Vec<u8>) -> Result<(), String> {
-        let path = path.to_path_buf();
+        let path = path_to_path_buf(path);
         self.deleted.remove(&path);
 
         let size = content.len();
@@ -241,10 +360,7 @@ impl VirtualFileSystem {
 
         meta.size = size;
         meta.hash = hash;
-        meta.modified = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        meta.modified = now_secs();
         meta.is_dirty = true;
 
         self.memory_usage = self.memory_usage.saturating_sub(old_size);
@@ -263,20 +379,20 @@ impl VirtualFileSystem {
     where
         F: FnOnce(&mut String) -> Result<(), String>,
     {
-        let path = path.to_path_buf();
+        let path = path_to_path_buf(path);
 
         if self.deleted.contains(&path) {
-            return Err(format!("File {:?} was deleted", path));
+            return Err(format!("File {} was deleted", path_buf_display(&path)));
         }
 
         let file = self
             .files
             .get(&path)
-            .ok_or_else(|| format!("File not found: {:?}", path))?;
+            .ok_or_else(|| format!("File not found: {}", path_buf_display(&path)))?;
 
         let old_size = file.data.len();
         let mut text = String::from_utf8(file.data.to_vec())
-            .map_err(|_| format!("Cannot edit binary file: {:?}", path))?;
+            .map_err(|_| format!("Cannot edit binary file: {}", path_buf_display(&path)))?;
 
         let _ = file;
         f(&mut text)?;
@@ -293,10 +409,7 @@ impl VirtualFileSystem {
         if let Some(meta) = self.metadata.get_mut(&path) {
             meta.size = new_size;
             meta.hash = hash;
-            meta.modified = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
+            meta.modified = now_secs();
             meta.is_dirty = true;
         }
 
@@ -308,7 +421,7 @@ impl VirtualFileSystem {
 
     /// Delete file (tracked until commit)
     pub fn delete(&mut self, path: &Path) -> bool {
-        let path = path.to_path_buf();
+        let path = path_to_path_buf(path);
         if self.files.contains_key(&path) {
             self.deleted.insert(path);
             true
@@ -363,55 +476,63 @@ impl VirtualFileSystem {
 
     /// Persist dirty files to disk (writes bytes, preserves binary content)
     pub fn persist(&mut self) -> Result<PersistResult, String> {
-        let mut persisted = 0;
-        let mut deleted = 0;
-        let mut errors = Vec::new();
+        #[cfg(target_os = "none")]
+        {
+            Err("filesystem persistence is unavailable on bare targets".to_string())
+        }
 
-        for path in self.dirty_files().cloned().collect::<Vec<_>>() {
-            if let Some(content) = self.files.get(&path) {
-                let full_path = self.root.join(&path);
+        #[cfg(not(target_os = "none"))]
+        {
+            let mut persisted = 0;
+            let mut deleted = 0;
+            let mut errors = Vec::new();
 
-                if let Some(parent) = full_path.parent() {
-                    if let Err(e) = std::fs::create_dir_all(parent) {
-                        errors.push(format!("Failed to create directory {:?}: {}", parent, e));
-                        continue;
-                    }
-                }
+            for path in self.dirty_files().cloned().collect::<Vec<_>>() {
+                if let Some(content) = self.files.get(&path) {
+                    let full_path = join_path(&self.root, &path);
 
-                match std::fs::write(&full_path, content.as_bytes()) {
-                    Ok(_) => {
-                        persisted += 1;
-                        if let Some(meta) = self.metadata.get_mut(&path) {
-                            meta.is_dirty = false;
+                    if let Some(parent) = full_path.parent() {
+                        if let Err(e) = std::fs::create_dir_all(parent) {
+                            errors.push(format!("Failed to create directory {:?}: {}", parent, e));
+                            continue;
                         }
                     }
-                    Err(e) => {
-                        errors.push(format!("Failed to write {:?}: {}", path, e));
+
+                    match std::fs::write(&full_path, content.as_bytes()) {
+                        Ok(_) => {
+                            persisted += 1;
+                            if let Some(meta) = self.metadata.get_mut(&path) {
+                                meta.is_dirty = false;
+                            }
+                        }
+                        Err(e) => {
+                            errors.push(format!("Failed to write {:?}: {}", path, e));
+                        }
                     }
                 }
             }
-        }
 
-        for path in self.deleted.drain() {
-            let full_path = self.root.join(&path);
-            match std::fs::remove_file(&full_path) {
-                Ok(_) => {
-                    deleted += 1;
-                    self.files.remove(&path);
-                    self.metadata.remove(&path);
-                    self.original_hashes.remove(&path);
-                }
-                Err(e) => {
-                    errors.push(format!("Failed to delete {:?}: {}", path, e));
+            for path in core::mem::take(&mut self.deleted) {
+                let full_path = join_path(&self.root, &path);
+                match std::fs::remove_file(&full_path) {
+                    Ok(_) => {
+                        deleted += 1;
+                        self.files.remove(&path);
+                        self.metadata.remove(&path);
+                        self.original_hashes.remove(&path);
+                    }
+                    Err(e) => {
+                        errors.push(format!("Failed to delete {}: {}", path_buf_display(&path), e));
+                    }
                 }
             }
-        }
 
-        Ok(PersistResult {
-            persisted,
-            deleted,
-            errors,
-        })
+            Ok(PersistResult {
+                persisted,
+                deleted,
+                errors,
+            })
+        }
     }
 
     /// Get changed files since load
@@ -439,13 +560,14 @@ impl VirtualFileSystem {
 
     /// Get root directory
     pub fn root(&self) -> &Path {
-        &self.root
+        self.root.as_ref()
     }
 
     /// Search for pattern in text files (parallel, in-memory).
     /// Binary files are automatically skipped.
     pub fn grep(&self, pattern: &str) -> Vec<GrepMatch> {
         use edgerun_regex::Regex;
+        #[cfg(not(target_os = "none"))]
         use rayon::prelude::*;
 
         let regex = match Regex::new(pattern) {
@@ -453,25 +575,52 @@ impl VirtualFileSystem {
             None => return Vec::new(),
         };
 
-        self.files
-            .par_iter()
-            .filter(|(path, _)| !self.deleted.contains(*path))
-            .filter_map(|(path, content)| {
-                let text = content.as_str()?;
-                let mut matches = Vec::new();
-                for (line_num, line) in text.lines().enumerate() {
-                    if regex.is_match(line) {
-                        matches.push(GrepMatch {
-                            path: path.clone(),
-                            line_number: line_num + 1,
-                            line: line.to_string(),
-                        });
+        #[cfg(not(target_os = "none"))]
+        {
+            return self
+                .files
+                .par_iter()
+                .filter(|(path, _)| !self.deleted.contains(*path))
+                .filter_map(|(path, content)| {
+                    let text = content.as_str()?;
+                    let mut matches = Vec::new();
+                    for (line_num, line) in text.lines().enumerate() {
+                        if regex.is_match(line) {
+                            matches.push(GrepMatch {
+                                path: path.clone(),
+                                line_number: line_num + 1,
+                                line: line.to_string(),
+                            });
+                        }
                     }
-                }
-                Some(matches)
-            })
-            .flatten()
-            .collect()
+                    Some(matches)
+                })
+                .flatten()
+                .collect();
+        }
+
+        #[cfg(target_os = "none")]
+        {
+            self.files
+                .iter()
+                .filter(|(path, _)| !self.deleted.contains(*path))
+                .filter_map(|(path, content)| {
+                    let text = content.as_str()?;
+                    let mut matches = Vec::new();
+                    for (line_num, line) in text.lines().enumerate() {
+                        if regex.is_match(line) {
+                            matches.push(GrepMatch {
+                                path: path.clone(),
+                                line_number: line_num + 1,
+                                line: line.to_string(),
+                            });
+                        }
+                    }
+                    Some(matches)
+                })
+                .flatten()
+                .collect()
+        }
     }
 
     /// Search for files matching glob pattern
@@ -480,8 +629,7 @@ impl VirtualFileSystem {
             .keys()
             .filter(|path| {
                 !self.deleted.contains(*path)
-                    && path
-                        .to_str()
+                    && path_as_str(path)
                         .map(|s| edgerun_glob::glob_match(pattern, s))
                         .unwrap_or(false)
             })
@@ -493,7 +641,7 @@ impl VirtualFileSystem {
         let mut counts = HashMap::new();
 
         for path in self.files() {
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            if let Some(ext) = path_extension(path) {
                 *counts.entry(ext.to_string()).or_insert(0) += 1;
             }
         }

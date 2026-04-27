@@ -9,7 +9,7 @@ description = "DHCPv6 server and client (RFC 8415)"
 [dependencies]
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-log = { path = "../edgerun-log" }
-edgerun-crypto = { path = "../edgerun-crypto" }
+edgerun-crypto = { path = "../edgerun-crypto", default-features = false }
 edgerun-error.workspace = true
 
 [lints]

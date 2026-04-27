@@ -1,5 +1,7 @@
 //! DSN (Delivery Status Notification) types per RFC 3461.
 
+use alloc::string::{String, ToString};
+
 /// DSN RET parameter — what to return on delivery failure.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum DsnRet {

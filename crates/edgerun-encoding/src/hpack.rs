@@ -3,4 +3,3 @@
 
 pub use edgerun_hpack::Decoder;
 pub use edgerun_hpack::Encoder;
-pub use edgerun_hpack::STATIC_TABLE;

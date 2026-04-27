@@ -206,7 +206,7 @@ mod tests {
 // Real JNI-backed implementation (android-real feature, Android target)
 // ===========================================================================
 
-#[cfg(feature = "android-real")]
+#[cfg(all(feature = "android-real", target_os = "android"))]
 mod real {
     use super::*;
     use jni::objects::{GlobalRef, JValue};
@@ -696,5 +696,5 @@ mod real {
     }
 }
 
-#[cfg(feature = "android-real")]
+#[cfg(all(feature = "android-real", target_os = "android"))]
 pub use real::{init_keystore_jvm, JniKeystoreKey};

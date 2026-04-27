@@ -39,8 +39,9 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::future::Future;
-use std::pin::Pin;
+use alloc::boxed::Box;
+use core::future::Future;
+use core::pin::Pin;
 
 use crate::{Request, Response};
 
@@ -141,7 +142,7 @@ where
 // Handler for Arc<dyn Handler> (for shared ownership)
 // ---------------------------------------------------------------------------
 
-impl Handler for std::sync::Arc<dyn Handler> {
+impl Handler for alloc::sync::Arc<dyn Handler> {
     fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         let this = self.clone();
         Box::pin(async move { this.handle(request).await })

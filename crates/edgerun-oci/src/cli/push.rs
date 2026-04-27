@@ -1,5 +1,6 @@
 //! `ert push` command — push an image to a registry.
 
+use crate::prelude::*;
 use std::path::PathBuf;
 
 use crate::cli::resolve_registry_auth;

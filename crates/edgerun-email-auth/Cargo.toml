@@ -7,10 +7,8 @@ publish.workspace = true
 description = "Email authentication: SPF, DKIM, DMARC evaluation"
 
 [dependencies]
-edgerun-dns = { path = "../edgerun-dns" }
+edgerun-dns = { path = "../edgerun-dns", default-features = false }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 edgerun-log = { path = "../edgerun-log" }
-edgerun-crypto = { path = "../edgerun-crypto" }
-# RSA/SHA2 are only used for DKIM email auth - transitively via edgerun-crypto
-rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"] }
+edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["rsa"] }
 signature = "2"

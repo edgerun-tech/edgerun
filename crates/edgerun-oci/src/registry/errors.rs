@@ -1,7 +1,8 @@
 //! Errors for the OCI registry client.
 
-use std::fmt;
-use std::io;
+use crate::prelude::*;
+use alloc::string::String;
+use core::fmt;
 
 #[derive(Debug)]
 pub enum RegistryError {
@@ -10,8 +11,12 @@ pub enum RegistryError {
     AuthError(String),
     ManifestNotFound(String),
     NoManifests,
-    DigestMismatch { expected: String, computed: String },
-    IoError(io::Error),
+    DigestMismatch {
+        expected: String,
+        computed: String,
+    },
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    IoError(std::io::Error),
     ParseError(String),
 }
 
@@ -30,20 +35,24 @@ impl fmt::Display for RegistryError {
                     expected, computed
                 )
             }
+            #[cfg(all(feature = "std", not(target_os = "none")))]
             RegistryError::IoError(e) => write!(f, "I/O error: {}", e),
             RegistryError::ParseError(e) => write!(f, "Parse error: {}", e),
         }
     }
 }
 
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl std::error::Error for RegistryError {}
 
-impl From<io::Error> for RegistryError {
-    fn from(e: io::Error) -> Self {
+#[cfg(all(feature = "std", not(target_os = "none")))]
+impl From<std::io::Error> for RegistryError {
+    fn from(e: std::io::Error) -> Self {
         RegistryError::IoError(e)
     }
 }
 
+#[cfg(all(feature = "std", not(target_os = "none")))]
 impl From<edgerun_http::Error> for RegistryError {
     fn from(e: edgerun_http::Error) -> Self {
         RegistryError::HttpError(e.to_string())

@@ -18,7 +18,8 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
+use core::fmt;
 
 /// A parsed multipart form field
 #[derive(Debug, Clone)]
@@ -32,13 +33,13 @@ pub struct MultipartField {
     /// The field data
     pub data: Vec<u8>,
     /// Additional headers
-    pub headers: HashMap<String, String>,
+    pub headers: BTreeMap<String, String>,
 }
 
 impl MultipartField {
     /// Get the data as a UTF-8 string
     pub fn text(&self) -> Option<&str> {
-        std::str::from_utf8(&self.data).ok()
+        core::str::from_utf8(&self.data).ok()
     }
 }
 
@@ -154,8 +155,8 @@ pub enum MultipartError {
     InvalidUtf8,
 }
 
-impl std::fmt::Display for MultipartError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for MultipartError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MultipartError::MissingBoundary => write!(f, "missing boundary"),
             MultipartError::MissingContentDisposition => write!(f, "missing Content-Disposition"),
@@ -228,8 +229,8 @@ fn skip_crlf(body: &[u8], start: usize) -> usize {
     pos
 }
 
-fn parse_headers(body: &[u8]) -> Result<(HashMap<String, String>, usize), MultipartError> {
-    let mut headers = HashMap::new();
+fn parse_headers(body: &[u8]) -> Result<(BTreeMap<String, String>, usize), MultipartError> {
+    let mut headers = BTreeMap::new();
     let mut pos = 0;
 
     loop {
@@ -251,7 +252,7 @@ fn parse_headers(body: &[u8]) -> Result<(HashMap<String, String>, usize), Multip
             .unwrap_or(body.len());
 
         let line =
-            std::str::from_utf8(&body[pos..line_end]).map_err(|_| MultipartError::InvalidUtf8)?;
+            core::str::from_utf8(&body[pos..line_end]).map_err(|_| MultipartError::InvalidUtf8)?;
 
         if let Some(colon) = line.find(':') {
             let name = line[..colon].trim().to_lowercase();

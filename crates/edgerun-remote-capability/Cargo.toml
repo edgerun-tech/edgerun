@@ -20,7 +20,7 @@ edgerun-npu = { path = "../edgerun-npu" }
 edgerun-fingerprint = { path = "../edgerun-fingerprint" }
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
-edgerun-crypto.workspace = true
+edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-encoding = { path = "../edgerun-encoding" }
 prost.workspace = true
 

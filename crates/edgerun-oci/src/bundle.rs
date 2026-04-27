@@ -2,6 +2,7 @@
 //!
 //! Creates minimal OCI bundle directories with `config.json` + rootfs path.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 use std::path::Path;

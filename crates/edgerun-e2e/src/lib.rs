@@ -25,10 +25,10 @@
 
 #![no_std]
 
-#[cfg(any(test, feature = "std"))]
+#[cfg(all(any(test, feature = "std"), not(target_os = "none")))]
 extern crate std;
 
-#[cfg(any(test, feature = "std"))]
+#[cfg(all(any(test, feature = "std"), not(target_os = "none")))]
 mod suite {
 use std::{format, println, vec};
 use std::fs;

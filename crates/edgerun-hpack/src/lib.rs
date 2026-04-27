@@ -16,7 +16,7 @@ use core::fmt;
 use core::iter;
 use core::slice;
 
-#[cfg(feature = "interop_tests")]
+#[cfg(all(feature = "interop_tests", not(target_os = "none")))]
 #[allow(unused_imports)]
 extern crate rustc_serialize;
 
@@ -372,7 +372,7 @@ impl<'a> HeaderTable<'a> {
 
 /// The table represents the static header table defined by the HPACK spec.
 /// (HPACK, Appendix A)
-static STATIC_TABLE: &[(&[u8], &[u8])] = &[
+pub static STATIC_TABLE: &[(&[u8], &[u8])] = &[
     (b":authority", b""),
     (b":method", b"GET"),
     (b":method", b"POST"),

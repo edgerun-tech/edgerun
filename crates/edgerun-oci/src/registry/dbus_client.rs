@@ -4,6 +4,7 @@
 //! and provides a high-level API for storing and retrieving registry
 //! credentials with biometric-gated access.
 
+use crate::prelude::*;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;

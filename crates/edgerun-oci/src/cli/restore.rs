@@ -2,6 +2,7 @@
 //!
 //! Restores a container from a checkpoint using CRIU.
 
+use crate::prelude::*;
 use std::fs;
 use std::io;
 use std::path::PathBuf;

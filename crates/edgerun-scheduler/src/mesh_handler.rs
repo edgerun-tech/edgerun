@@ -2,6 +2,8 @@
 //!
 //! Processes MetricsReport frames and reports to on-chain.
 
+use alloc::format;
+use alloc::string::String;
 use crate::Scheduler;
 use edgerun_json::from_slice;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;

@@ -16,7 +16,7 @@ use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::common::{IdentityRef, RateLimit};
 use prost_types::{Duration as ProstDuration, Timestamp};
 use std::collections::{BTreeSet, VecDeque};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // -- Test fixture helpers --
 

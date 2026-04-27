@@ -1419,7 +1419,7 @@ mod tests {
 /// and some other encoder implementations, based on their results
 /// published at
 /// [http2jp/hpack-test-case](https://github.com/http2jp/hpack-test-case)
-#[cfg(feature = "interop_tests")]
+#[cfg(all(feature = "interop_tests", not(target_os = "none")))]
 #[cfg(test)]
 mod interop_tests {
     use std::collections::HashMap;

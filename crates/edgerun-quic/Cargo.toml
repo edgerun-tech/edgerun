@@ -11,7 +11,7 @@ workspace = true
 
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls", default-features = false }
-edgerun-crypto = { path = "../edgerun-crypto" }
+edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["aead", "hmac", "p256"] }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }

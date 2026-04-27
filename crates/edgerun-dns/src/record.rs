@@ -349,6 +349,7 @@ pub enum DnsRecordData {
         options: Vec<u8>,
     },
     /// TSIG transaction signature (RFC 8945).
+    #[cfg(feature = "tsig")]
     TSIG(super::tsig::TsigRdata),
     /// HINFO — host CPU and OS (RFC 1035 §3.3.2).
     HINFO {
@@ -645,6 +646,7 @@ impl DnsRecordData {
                 buf.extend_from_slice(options);
                 buf
             }
+            #[cfg(feature = "tsig")]
             (DnsRecordType::TSIG, DnsRecordData::TSIG(rdata)) => rdata.to_wire(),
             (DnsRecordType::HINFO, DnsRecordData::HINFO { cpu, os }) => {
                 let mut buf = Vec::new();
@@ -1009,49 +1011,60 @@ impl DnsRecordData {
                 })
             }
             DnsRecordType::TSIG => {
-                // TSIG RDATA: algorithm name, time_signed(6), fudge(2), mac_size(2), mac, orig_id(2), error(2), other_len(2), other_data
-                use crate::tsig::TsigRdata;
-                if data.len() < 20 {
+                #[cfg(not(feature = "tsig"))]
+                {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let alg_name = decode_tsig_name(data, 0)?;
-                let alg_len = tsig_name_wire_len(data, 0);
-                let mut pos = alg_len;
-                if pos + 10 > data.len() {
-                    return Ok(Self::Raw(data.to_vec()));
+                #[cfg(feature = "tsig")]
+                {
+                    // TSIG RDATA: algorithm name, time_signed(6), fudge(2), mac_size(2), mac, orig_id(2), error(2), other_len(2), other_data
+                    use crate::tsig::TsigRdata;
+                    if data.len() < 20 {
+                        return Ok(Self::Raw(data.to_vec()));
+                    }
+                    let alg_name = decode_tsig_name(data, 0)?;
+                    let alg_len = tsig_name_wire_len(data, 0);
+                    let mut pos = alg_len;
+                    if pos + 10 > data.len() {
+                        return Ok(Self::Raw(data.to_vec()));
+                    }
+                    let time_hi = u32::from_be_bytes([
+                        data[pos],
+                        data[pos + 1],
+                        data[pos + 2],
+                        data[pos + 3],
+                    ]);
+                    let time_lo = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
+                    let time_signed = ((time_hi as u64) << 16) | (time_lo as u64);
+                    let fudge = u16::from_be_bytes([data[pos + 6], data[pos + 7]]);
+                    let mac_size = u16::from_be_bytes([data[pos + 8], data[pos + 9]]);
+                    pos += 10;
+                    if pos + mac_size as usize + 6 > data.len() {
+                        return Ok(Self::Raw(data.to_vec()));
+                    }
+                    let mac = data[pos..pos + mac_size as usize].to_vec();
+                    pos += mac_size as usize;
+                    let orig_id = u16::from_be_bytes([data[pos], data[pos + 1]]);
+                    let error = u16::from_be_bytes([data[pos + 2], data[pos + 3]]);
+                    let other_len = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
+                    pos += 6;
+                    let other_data = if other_len > 0 && pos + other_len as usize <= data.len() {
+                        data[pos..pos + other_len as usize].to_vec()
+                    } else {
+                        Vec::new()
+                    };
+                    Ok(Self::TSIG(TsigRdata {
+                        algorithm: alg_name,
+                        time_signed,
+                        fudge,
+                        mac_size,
+                        mac,
+                        orig_id,
+                        error,
+                        other_len,
+                        other_data,
+                    }))
                 }
-                let time_hi =
-                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
-                let time_lo = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
-                let time_signed = ((time_hi as u64) << 16) | (time_lo as u64);
-                let fudge = u16::from_be_bytes([data[pos + 6], data[pos + 7]]);
-                let mac_size = u16::from_be_bytes([data[pos + 8], data[pos + 9]]);
-                pos += 10;
-                if pos + mac_size as usize + 6 > data.len() {
-                    return Ok(Self::Raw(data.to_vec()));
-                }
-                let mac = data[pos..pos + mac_size as usize].to_vec();
-                pos += mac_size as usize;
-                let orig_id = u16::from_be_bytes([data[pos], data[pos + 1]]);
-                let error = u16::from_be_bytes([data[pos + 2], data[pos + 3]]);
-                let other_len = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
-                pos += 6;
-                let other_data = if other_len > 0 && pos + other_len as usize <= data.len() {
-                    data[pos..pos + other_len as usize].to_vec()
-                } else {
-                    Vec::new()
-                };
-                Ok(Self::TSIG(TsigRdata {
-                    algorithm: alg_name,
-                    time_signed,
-                    fudge,
-                    mac_size,
-                    mac,
-                    orig_id,
-                    error,
-                    other_len,
-                    other_data,
-                }))
             }
             DnsRecordType::HINFO => {
                 if data.len() < 2 {

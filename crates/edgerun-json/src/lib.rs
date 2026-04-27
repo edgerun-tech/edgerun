@@ -8,14 +8,13 @@
 //! use edgerun_json::{json, from_str, to_string, Value};
 //!
 //! // Parse JSON
-//! let value: Value = from_str(r#"{"ok":true,"n":7}"#)?;
+//! let value: Value = from_str(r#"{"ok":true,"n":7}"#).unwrap();
 //! assert_eq!(value["ok"].as_bool(), Some(true));
 //! assert_eq!(value["n"].as_i64(), Some(7));
 //!
 //! // Build JSON
 //! let built = json!({"msg": "hello", "items": [1, 2, null]});
-//! let encoded = to_string(&built)?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! let encoded = to_string(&built).unwrap();
 //! ```
 //!
 //! # Parsing Paths
@@ -39,7 +38,7 @@
 //! By default, this crate has **zero runtime dependencies**. The `serde` feature
 //! is optional and enables typed serialization/deserialization.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(any(not(feature = "std"), target_os = "none"), no_std)]
 
 extern crate alloc;
 #[cfg(all(test, not(feature = "std")))]
@@ -64,6 +63,7 @@ mod yaml_api;
 mod borrowed_value;
 mod error;
 mod index;
+pub mod io;
 mod json_macro;
 mod map;
 mod number;

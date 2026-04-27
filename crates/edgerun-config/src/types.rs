@@ -15,7 +15,7 @@
 //! ```
 
 use crate::prelude::v1::*;
-use std::collections::HashMap;
+use crate::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // K8s-compatible resource envelope
@@ -737,7 +737,7 @@ pub struct GatewaySpec {
     pub tls: Option<GatewayTlsConfig>,
     /// Route selector - which routes this gateway handles.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub route_selector: Option<std::collections::HashMap<String, String>>,
+    pub route_selector: Option<HashMap<String, String>>,
 }
 
 /// Gateway listener - a port/protocol combination.
@@ -777,7 +777,7 @@ pub struct GatewayTlsConfig {
 pub struct ServiceSpec {
     /// Selector - matches containers with these labels.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selector: Option<std::collections::HashMap<String, String>>,
+    pub selector: Option<HashMap<String, String>>,
     /// Ports to expose.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ports: Vec<ServicePort>,
@@ -945,8 +945,8 @@ pub struct DeploymentSpec {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct DeploymentService {
     /// Ports exposed by container (container_name -> ports).
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub ports: std::collections::HashMap<String, Vec<u16>>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub ports: HashMap<String, Vec<u16>>,
 }
 
 /// Maps to K8s Pod spec with OCI container.
@@ -971,7 +971,7 @@ pub struct ContainerSpec {
     pub replicas: Option<i32>,
     /// Selector for pods (label query).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub selector: Option<std::collections::HashMap<String, String>>,
+    pub selector: Option<HashMap<String, String>>,
     /// Pod template spec.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<PodTemplateSpec>,
@@ -1007,7 +1007,7 @@ pub struct PodSpec {
     pub dns_policy: String,
     /// Node selector.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub node_selector: Option<std::collections::HashMap<String, String>>,
+    pub node_selector: Option<HashMap<String, String>>,
     /// Node name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_name: Option<String>,
@@ -1169,9 +1169,9 @@ pub struct ContainerPort {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ResourceRequirements {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limits: Option<std::collections::HashMap<String, String>>,
+    pub limits: Option<HashMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requests: Option<std::collections::HashMap<String, String>>,
+    pub requests: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -1477,10 +1477,10 @@ pub struct SecretSpec {
     /// Secret data (base64-encoded when serialized).
     /// Stored encrypted in blob store, not in config.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data: Option<std::collections::HashMap<String, Vec<u8>>>,
+    pub data: Option<HashMap<String, Vec<u8>>>,
     /// Secret string data (plaintext when serialized).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub string_data: Option<std::collections::HashMap<String, String>>,
+    pub string_data: Option<HashMap<String, String>>,
     /// Secret type: "Opaque", "kubernetes.io/tls", "kubernetes.io/dockerconfigjson", etc.
     #[serde(default)]
     pub secret_type: SecretType,
@@ -1504,8 +1504,8 @@ pub enum SecretType {
 // ---------------------------------------------------------------------------
 
 fn default_serial() -> u32 {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = crate::time::SystemTime::now()
+        .duration_since(crate::time::UNIX_EPOCH)
         .unwrap_or_default();
     let secs = now.as_secs();
     ((secs / 86400) as u32) * 100 + 1 // YYYYMMDDNN format

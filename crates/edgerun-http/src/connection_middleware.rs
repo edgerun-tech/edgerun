@@ -17,11 +17,13 @@
 //! - **Reject** the connection by returning `Err` (server closes it immediately)
 //! - **Inspect/modify** the stream before passing it downstream
 
-use std::future::Future;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::future::Future;
+use core::pin::Pin;
 use std::io;
 use std::net::SocketAddr;
-use std::pin::Pin;
-use std::sync::Arc;
 
 use edgerun_bare_rt::AsyncTcpStream;
 

@@ -1,5 +1,6 @@
 //! OCI Registry V2 client — async, using `edgerun_http::HttpClient`.
 
+use crate::prelude::*;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -588,7 +589,7 @@ impl RegistryClient {
         apply_whiteouts(&layer_dirs)?;
         build_rootfs(&layer_dirs, &rootfs)?;
 
-        let config_json = generate_oci_spec(&image_config, &rootfs);
+        let config_json = generate_oci_spec(&image_config, rootfs.to_str().unwrap_or("/"));
         std::fs::write(bundle_path.join("config.json"), config_json)?;
 
         Ok(bundle_path.to_path_buf())

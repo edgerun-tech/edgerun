@@ -1,4 +1,4 @@
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_os = "none")))]
 extern crate std;
 
 extern crate alloc;
@@ -76,7 +76,7 @@ impl Command {
         self
     }
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn get_matches(&self) -> ArgMatches {
         self.get_matches_from(std::env::args().skip(1).collect())
     }
@@ -196,7 +196,7 @@ impl Command {
         matches
     }
 
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn print_help(&self) {
         eprintln!("Usage: {} [OPTIONS] [SUBCOMMAND]", self.name);
 
@@ -460,7 +460,7 @@ impl ArgGroup {
 
 pub trait Parser: Sized {
     fn command() -> Command;
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(target_os = "none")))]
     fn parse() -> Self {
         let matches = Self::command().get_matches();
         Self::from(&matches)

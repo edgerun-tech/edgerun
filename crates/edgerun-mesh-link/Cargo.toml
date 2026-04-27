@@ -8,12 +8,14 @@ publish.workspace = true
 [dependencies]
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
-edgerun-network-interface = { path = "../edgerun-network-interface" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true
+edgerun-network-interface = { path = "../edgerun-network-interface" }
 
 [dev-dependencies]
 edgerun-core = { path = "../edgerun-core" }
-edgerun-crypto.workspace = true
+edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-mesh = { path = "../edgerun-mesh" }
 
 [lints]

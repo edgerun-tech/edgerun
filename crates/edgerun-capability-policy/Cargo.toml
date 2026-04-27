@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-crypto.workspace = true
+edgerun-crypto = { workspace = true, default-features = false }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-proto = { path = "../edgerun-proto" }
 prost-types.workspace = true
