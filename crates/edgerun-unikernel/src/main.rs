@@ -130,8 +130,13 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     }
     
     let mut rx_buf = [0u8; 1514];
+    let mut logged_rx = false;
     for _ in 0..1000 {
         if let Some(len) = net.recv(&mut rx_buf) {
+            if !logged_rx {
+                rt::log::log(1, "VirtIO RX packet observed");
+                logged_rx = true;
+            }
             if let Some(ParsedPacket::Udp { header, payload }) = network.recv(&rx_buf[..len]) {
                 if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
                     if dhcp.parse(payload) {
@@ -141,6 +146,16 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                 }
             }
         }
+    }
+
+    let net_stats = net.stats();
+    if net_stats.tx_completed != 0 {
+        rt::log::log(1, "VirtIO TX completed");
+    } else {
+        rt::log::log(1, "VirtIO TX pending");
+    }
+    if net_stats.rx_received == 0 {
+        rt::log::log(1, "VirtIO RX no packets");
     }
 
     drop(network);

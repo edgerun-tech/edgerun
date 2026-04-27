@@ -13,12 +13,19 @@ boot_sector="${BOOT_SECTOR:-/tmp/edgerun-qemu-boot-512.bin}"
 timeout_seconds="${QEMU_TIMEOUT:-8}"
 qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu.log}"
 expected_marker="${QEMU_EXPECT:-VirtIO found}"
+qemu_net_dump="${QEMU_NET_DUMP:-}"
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
     -Zbuild-std=core,alloc
 
 /usr/bin/objcopy -O binary "$kernel_elf" "$kernel_bin"
+
+qemu_extra_args=()
+if [[ -n "$qemu_net_dump" ]]; then
+    rm -f "$qemu_net_dump"
+    qemu_extra_args+=(-object "filter-dump,id=edgerun-net-dump,netdev=n0,file=$qemu_net_dump")
+fi
 
 as --32 -o "$boot_obj" "$repo_root/crates/edgerun-unikernel/qemu_boot.S"
 ld -m elf_i386 -Ttext 0x7c00 --oformat binary -o "$boot_bin" "$boot_obj"
@@ -36,6 +43,7 @@ timeout "$timeout_seconds" qemu-system-x86_64 \
     -device "loader,file=$kernel_bin,addr=0x100000,force-raw=on" \
     -netdev user,id=n0 \
     -device virtio-net-pci,disable-legacy=on,disable-modern=off,netdev=n0 \
+    "${qemu_extra_args[@]}" \
     2>&1 | tee "$qemu_log"
 qemu_status=${PIPESTATUS[0]}
 set -e

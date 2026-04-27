@@ -31,7 +31,7 @@ const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
 const QUEUE_SIZE: usize = 8;
 const RX_QUEUE: u16 = 0;
 const TX_QUEUE: u16 = 1;
-const NET_HDR_LEN: usize = 10;
+const NET_HDR_LEN: usize = 12;
 const BUFFER_SIZE: usize = 2048;
 const VIRTQ_DESC_F_WRITE: u16 = 2;
 
@@ -163,7 +163,21 @@ pub struct VirtNet {
     rx_last_used_idx: u16,
     tx_last_used_idx: u16,
     tx_inflight: bool,
+    tx_submitted: u32,
+    tx_completed: u32,
+    rx_received: u32,
+    rx_invalid: u32,
+    rx_empty: u32,
     link_up: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct VirtNetStats {
+    pub tx_submitted: u32,
+    pub tx_completed: u32,
+    pub rx_received: u32,
+    pub rx_invalid: u32,
+    pub rx_empty: u32,
 }
 
 impl VirtNet {
@@ -188,6 +202,11 @@ impl VirtNet {
             rx_last_used_idx: 0,
             tx_last_used_idx: 0,
             tx_inflight: false,
+            tx_submitted: 0,
+            tx_completed: 0,
+            rx_received: 0,
+            rx_invalid: 0,
+            rx_empty: 0,
             link_up: false,
         }
     }
@@ -293,6 +312,20 @@ impl VirtNet {
         self.mtu
     }
 
+    pub fn stats(&mut self) -> VirtNetStats {
+        unsafe {
+            self.reap_tx_used();
+        }
+
+        VirtNetStats {
+            tx_submitted: self.tx_submitted,
+            tx_completed: self.tx_completed,
+            rx_received: self.rx_received,
+            rx_invalid: self.rx_invalid,
+            rx_empty: self.rx_empty,
+        }
+    }
+
     pub fn send(&mut self, data: &[u8]) -> bool {
         if data.is_empty() || data.len() + NET_HDR_LEN > BUFFER_SIZE {
             return false;
@@ -325,6 +358,7 @@ impl VirtNet {
             fence(Ordering::SeqCst);
             write_volatile_u16(core::ptr::addr_of_mut!((*avail).idx), idx.wrapping_add(1));
             self.tx_inflight = true;
+            self.tx_submitted = self.tx_submitted.wrapping_add(1);
         }
 
         self.notify_queue(TX_QUEUE);
@@ -345,11 +379,17 @@ impl VirtNet {
 
             let desc_id = elem.id as usize;
             if desc_id >= QUEUE_SIZE {
+                self.rx_invalid = self.rx_invalid.wrapping_add(1);
                 return None;
             }
 
             let payload_len = (elem.len as usize).saturating_sub(NET_HDR_LEN);
             let len = core::cmp::min(payload_len, buf.len());
+            if len == 0 {
+                self.rx_empty = self.rx_empty.wrapping_add(1);
+            } else {
+                self.rx_received = self.rx_received.wrapping_add(1);
+            }
             if len != 0 {
                 let src = (core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut [u8; BUFFER_SIZE])
                     .add(desc_id) as *const u8;
@@ -449,6 +489,9 @@ impl VirtNet {
 
     unsafe fn init_rx_queue(&mut self) {
         self.rx_last_used_idx = 0;
+        self.rx_received = 0;
+        self.rx_invalid = 0;
+        self.rx_empty = 0;
         write_volatile_u16(core::ptr::addr_of_mut!(RX_AVAIL.idx), 0);
         write_volatile_u16(core::ptr::addr_of_mut!(RX_USED.idx), 0);
 
@@ -470,6 +513,8 @@ impl VirtNet {
     unsafe fn init_tx_queue(&mut self) {
         self.tx_last_used_idx = 0;
         self.tx_inflight = false;
+        self.tx_submitted = 0;
+        self.tx_completed = 0;
         write_volatile_u16(core::ptr::addr_of_mut!(TX_AVAIL.idx), 0);
         write_volatile_u16(core::ptr::addr_of_mut!(TX_USED.idx), 0);
         core::ptr::write_bytes(core::ptr::addr_of_mut!(TX_BUFFER) as *mut u8, 0, BUFFER_SIZE);
@@ -490,6 +535,9 @@ impl VirtNet {
         let used = core::ptr::addr_of!(TX_USED);
         let used_idx = read_volatile_u16(core::ptr::addr_of!((*used).idx));
         if used_idx != self.tx_last_used_idx {
+            self.tx_completed = self
+                .tx_completed
+                .wrapping_add(used_idx.wrapping_sub(self.tx_last_used_idx) as u32);
             self.tx_last_used_idx = used_idx;
             self.tx_inflight = false;
         }
