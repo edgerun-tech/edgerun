@@ -1,26 +1,12 @@
 //! DHCPv4 message parser/serializer — RFC 2131 wire format.
 
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-#[cfg(feature = "std")]
-pub use std::net::Ipv4Addr;
-
-#[cfg(not(feature = "std"))]
 pub use core::net::Ipv4Addr;
 
-#[cfg(feature = "std")]
-pub type DhcpError = std::io::Error;
-
-#[cfg(feature = "std")]
-mod io {
-    pub use std::io::{Error, ErrorKind};
-}
-
-#[cfg(not(feature = "std"))]
-mod io {
+pub mod io {
     use alloc::string::{String, ToString};
 
     #[derive(Debug, Clone, Eq, PartialEq)]
@@ -31,7 +17,12 @@ mod io {
 
     #[derive(Debug, Clone, Copy, Eq, PartialEq)]
     pub enum ErrorKind {
+        NotFound,
         InvalidData,
+        WouldBlock,
+        TimedOut,
+        ConnectionRefused,
+        Other,
     }
 
     impl Error {
@@ -54,7 +45,6 @@ mod io {
     }
 }
 
-#[cfg(not(feature = "std"))]
 pub type DhcpError = io::Error;
 
 // ---------------------------------------------------------------------------
@@ -349,21 +339,17 @@ impl DhcpMessage {
         if data.len() < Self::HEADER_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "DHCP message too short: {} bytes (min {})",
-                    data.len(),
-                    Self::HEADER_SIZE
-                ),
+                "DHCP message too short",
             ));
         }
 
         let op = match data[0] {
             BOOTREQUEST => DhcpOp::Request,
             BOOTREPLY => DhcpOp::Reply,
-            v => {
+            _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!("Invalid DHCP op: {}", v),
+                    "Invalid DHCP op",
                 ))
             }
         };

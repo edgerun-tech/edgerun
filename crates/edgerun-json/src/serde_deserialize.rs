@@ -1,20 +1,33 @@
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::borrow::Cow;
+#[cfg(not(feature = "std"))]
+use alloc::borrow::ToOwned;
+#[cfg(not(feature = "std"))]
+use alloc::format;
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
+#[cfg(not(feature = "std"))]
+use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::fmt;
+use core::marker::PhantomData;
 
 use crate::map::Map;
 use crate::number::JsonNumber;
 use crate::parse::{parse_i64_fast, parse_u64_fast, Parser};
 use crate::serde_error::json_parse_error_to_serde;
 use crate::JsonValue;
+use edgerun_encoding::io::Read;
 use serde_crate::de::{
     value::StringDeserializer, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess,
     Visitor,
 };
 use serde_crate::Deserializer as SerdeDeserializer;
+#[cfg(feature = "std")]
 use std::borrow::Cow;
-use std::marker::PhantomData;
+#[cfg(feature = "std")]
+use std::vec;
 
 /// Single-pass JSON deserializer.
 ///
@@ -27,7 +40,7 @@ pub struct Deserializer<'de> {
 }
 
 impl Deserializer<'static> {
-    pub fn from_reader<R: std::io::Read>(mut reader: R) -> Self {
+    pub fn from_reader<R: Read>(mut reader: R) -> Self {
         let mut input = String::new();
         match reader.read_to_string(&mut input) {
             Ok(_) => Self {
@@ -40,10 +53,9 @@ impl Deserializer<'static> {
                 input: Cow::Owned(String::new()),
                 offset: 0,
                 failed: true,
-                error: Some(crate::serde_error::Error::io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
+                error: Some(crate::serde_error::Error::custom(
                     "input is not valid UTF-8",
-                ))),
+                )),
             },
         }
     }
@@ -60,7 +72,7 @@ impl<'de> Deserializer<'de> {
     }
 
     pub fn from_slice(input: &'de [u8]) -> Self {
-        match std::str::from_utf8(input) {
+        match core::str::from_utf8(input) {
             Ok(text) => Self::from_str(text),
             Err(_) => Self {
                 input: Cow::Borrowed(""),
@@ -1251,7 +1263,7 @@ struct ValueVisitor;
 impl<'de> Visitor<'de> for ValueVisitor {
     type Value = JsonValue;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a JSON value")
     }
 
@@ -1343,7 +1355,7 @@ struct NumberVisitor;
 impl<'de> Visitor<'de> for NumberVisitor {
     type Value = JsonNumber;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a JSON number")
     }
 
@@ -1401,7 +1413,7 @@ struct MapVisitor;
 impl<'de> Visitor<'de> for MapVisitor {
     type Value = Map;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a JSON object")
     }
 
@@ -1422,7 +1434,7 @@ impl<'de> Visitor<'de> for MapVisitor {
 // ---------------------------------------------------------------------------
 
 struct JsonSeqAccess {
-    iter: std::vec::IntoIter<JsonValue>,
+    iter: vec::IntoIter<JsonValue>,
     len: usize,
 }
 
@@ -1447,7 +1459,7 @@ impl<'de> SeqAccess<'de> for JsonSeqAccess {
 }
 
 struct JsonMapAccess {
-    iter: std::vec::IntoIter<(String, JsonValue)>,
+    iter: vec::IntoIter<(String, JsonValue)>,
     len: usize,
     pending_value: Option<JsonValue>,
 }

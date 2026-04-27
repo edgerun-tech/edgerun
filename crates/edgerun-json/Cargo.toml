@@ -13,7 +13,7 @@ rust-version = "1.70"
 
 [features]
 default = ["alloc"]
-std = []
+std = ["edgerun-encoding/std"]
 alloc = []
 indexmap = []
 raw_value = ["serde"]
@@ -29,7 +29,8 @@ compat_test = []
 serde_json_bench = ["dep:serde_json_upstream", "serde"]
 
 [dependencies]
-serde_crate = { package = "serde", version = "1", optional = true }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+serde_crate = { package = "serde", version = "1", default-features = false, features = ["alloc"], optional = true }
 serde_json_upstream = { package = "serde_json", version = "1", optional = true }
 
 [dev-dependencies]

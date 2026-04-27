@@ -877,7 +877,6 @@ dependencies = [
  "edgerun-bare-rt",
  "edgerun-encoding",
  "edgerun-log",
- "edgerun-rt",
 ]
 
 [[package]]
@@ -1108,6 +1107,7 @@ name = "edgerun-json"
 version = "0.1.1"
 dependencies = [
  "criterion 0.8.2",
+ "edgerun-encoding",
  "serde",
  "serde_bytes",
  "serde_json",

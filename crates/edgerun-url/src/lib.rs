@@ -7,10 +7,8 @@
 
 extern crate alloc;
 
-use alloc::format;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::vec::Vec;
 
 /// A parsed URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,9 +82,13 @@ impl Url {
     /// Convert back to string.
     #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
-        let mut s = format!("{}://{}", self.scheme, self.authority.host);
+        let mut s = String::new();
+        s.push_str(&self.scheme);
+        s.push_str("://");
+        s.push_str(&self.authority.host);
         if let Some(port) = self.authority.port {
-            s = format!("{}:{}", s, port);
+            use core::fmt::Write;
+            let _ = write!(s, ":{port}");
         }
         if !self.path.is_empty() {
             if !self.path.starts_with('/') {
@@ -187,9 +189,16 @@ fn parse_authority(input: &str) -> Option<(&str, Authority)> {
     let slash = input.find('/');
     let question = input.find('?');
     let hash = input.find('#');
-    let end = [slash, question, hash].into_iter().flatten().min()?;
+    let end = [slash, question, hash]
+        .into_iter()
+        .flatten()
+        .min()
+        .unwrap_or(input.len());
 
     let authority_str = &input[..end];
+    if authority_str.is_empty() {
+        return None;
+    }
     let rest = &input[end..];
 
     let (host, port) = if let Some(colon) = authority_str.rfind(':') {
@@ -222,7 +231,7 @@ impl<'de> serde::Deserialize<'de> for Url {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
         Url::parse(&s).map_err(|_| serde::de::Error::custom("invalid URL"))
     }
 }

@@ -271,7 +271,7 @@ pub fn to_toml_string(value: &TomlValue) -> Result<String, TomlError> {
 fn to_toml_value(
     output: &mut String,
     value: &TomlValue,
-    _unused_indent: usize,
+    indent: usize,
 ) -> Result<(), TomlError> {
     match value {
         TomlValue::String(s) => {

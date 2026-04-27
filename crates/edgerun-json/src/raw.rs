@@ -1,7 +1,12 @@
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::borrow::ToOwned;
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::{fmt, result};
 
 use crate::serde_error::Error;
 use crate::JsonParseError;
@@ -30,14 +35,14 @@ impl RawValue {
     }
 }
 
-impl std::fmt::Debug for RawValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for RawValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("RawValue").field(&self.get()).finish()
     }
 }
 
-impl std::fmt::Display for RawValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for RawValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.get())
     }
 }
@@ -107,11 +112,11 @@ impl<'de> Deserialize<'de> for RawKey {
         impl Visitor<'_> for FieldVisitor {
             type Value = ();
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("raw value")
             }
 
-            fn visit_str<E>(self, s: &str) -> std::result::Result<(), E>
+            fn visit_str<E>(self, s: &str) -> result::Result<(), E>
             where
                 E: serde_crate::de::Error,
             {
@@ -163,18 +168,18 @@ impl<'de> DeserializeSeed<'de> for ReferenceFromString {
 impl<'de> Visitor<'de> for ReferenceFromString {
     type Value = &'de RawValue;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("raw value")
     }
 
-    fn visit_borrowed_str<E>(self, s: &'de str) -> std::result::Result<Self::Value, E>
+    fn visit_borrowed_str<E>(self, s: &'de str) -> result::Result<Self::Value, E>
     where
         E: serde_crate::de::Error,
     {
         Ok(unsafe { &*(s as *const str as *const RawValue) })
     }
 
-    fn visit_str<E>(self, s: &str) -> std::result::Result<Self::Value, E>
+    fn visit_str<E>(self, s: &str) -> result::Result<Self::Value, E>
     where
         E: serde_crate::de::Error,
     {
@@ -182,7 +187,7 @@ impl<'de> Visitor<'de> for ReferenceFromString {
         Ok(unsafe { &*(leaked as *const str as *const RawValue) })
     }
 
-    fn visit_string<E>(self, s: String) -> std::result::Result<Self::Value, E>
+    fn visit_string<E>(self, s: String) -> result::Result<Self::Value, E>
     where
         E: serde_crate::de::Error,
     {
@@ -207,18 +212,18 @@ impl<'de> DeserializeSeed<'de> for BoxedFromString {
 impl Visitor<'_> for BoxedFromString {
     type Value = Box<RawValue>;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("raw value")
     }
 
-    fn visit_str<E>(self, s: &str) -> std::result::Result<Self::Value, E>
+    fn visit_str<E>(self, s: &str) -> result::Result<Self::Value, E>
     where
         E: serde_crate::de::Error,
     {
         RawValue::from_string(s.to_owned()).map_err(|error| E::custom(error.to_string()))
     }
 
-    fn visit_string<E>(self, s: String) -> std::result::Result<Self::Value, E>
+    fn visit_string<E>(self, s: String) -> result::Result<Self::Value, E>
     where
         E: serde_crate::de::Error,
     {
@@ -297,11 +302,11 @@ impl<'de: 'a, 'a> Deserialize<'de> for &'a RawValue {
         impl<'de> Visitor<'de> for ReferenceVisitor {
             type Value = &'de RawValue;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("any valid JSON value")
             }
 
-            fn visit_map<V>(self, mut visitor: V) -> std::result::Result<Self::Value, V::Error>
+            fn visit_map<V>(self, mut visitor: V) -> result::Result<Self::Value, V::Error>
             where
                 V: MapAccess<'de>,
             {
@@ -328,11 +333,11 @@ impl<'de> Deserialize<'de> for Box<RawValue> {
         impl<'de> Visitor<'de> for BoxedVisitor {
             type Value = Box<RawValue>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("any valid JSON value")
             }
 
-            fn visit_map<V>(self, mut visitor: V) -> std::result::Result<Self::Value, V::Error>
+            fn visit_map<V>(self, mut visitor: V) -> result::Result<Self::Value, V::Error>
             where
                 V: MapAccess<'de>,
             {

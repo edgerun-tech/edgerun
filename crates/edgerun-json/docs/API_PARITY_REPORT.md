@@ -7,7 +7,7 @@
 ## Summary
 
 - **serde_json top-level items found**: 144
-- **edgerun-json top-level items found**: 217
+- **edgerun-json top-level items found**: 218
 - **Core API items tracked**: 22
 
 - **Present in edgerun-json**: 3 / 4 (75.0%)
@@ -246,7 +246,6 @@
 - `from_f64`
 - `from_i128`
 - `from_reader<R: Read>`
-- `from_reader<R: std::io::Read>`
 - `from_reader<T, R>`
 - `from_slice`
 - `from_slice<T>`
@@ -312,6 +311,7 @@
 - `object`
 - `object_index_or_insert<'a>`
 - `object_schema`
+- `parse`
 - `parse_json`
 - `parse_json_borrowed`
 - `parse_json_tape`

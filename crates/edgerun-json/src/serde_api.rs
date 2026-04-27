@@ -24,7 +24,7 @@
 //! deserialization. See the [crate-level documentation](crate) for examples.
 
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::string::{String, ToString};
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
@@ -33,8 +33,7 @@ use crate::error::JsonError;
 use crate::error::JsonParseError;
 use crate::util;
 use crate::JsonValue;
-#[cfg(feature = "std")]
-use std::io::{Read, Write};
+use edgerun_encoding::io::{Read, Write};
 
 // ---------------------------------------------------------------------------
 // Parsing
@@ -257,7 +256,7 @@ where
 }
 
 /// Reads JSON from a reader and parses it into a [`JsonValue`].
-#[cfg(all(not(feature = "serde"), feature = "std"))]
+#[cfg(not(feature = "serde"))]
 pub fn from_reader<R: Read>(mut reader: R) -> Result<JsonValue, JsonParseError> {
     let mut input = String::new();
     reader
@@ -322,16 +321,13 @@ where
     W: Write,
 {
     let bytes = to_vec(value)?;
-    writer.write_all(&bytes).map_err(|_| {
-        crate::serde_error::Error::io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "write failed",
-        ))
-    })
+    writer
+        .write_all(&bytes)
+        .map_err(|error| crate::serde_error::Error::custom(error.to_string()))
 }
 
 /// Writes a [`JsonValue`] to a writer.
-#[cfg(all(not(feature = "serde"), feature = "std"))]
+#[cfg(not(feature = "serde"))]
 pub fn to_writer<W: Write>(mut writer: W, value: &JsonValue) -> Result<(), JsonError> {
     let bytes = to_vec(value)?;
     writer.write_all(&bytes).map_err(|_| JsonError::Io)
@@ -396,15 +392,12 @@ where
     W: Write,
 {
     let bytes = to_vec_pretty(value)?;
-    writer.write_all(&bytes).map_err(|_| {
-        crate::serde_error::Error::io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "write failed",
-        ))
-    })
+    writer
+        .write_all(&bytes)
+        .map_err(|error| crate::serde_error::Error::custom(error.to_string()))
 }
 
-#[cfg(all(not(feature = "serde"), feature = "std"))]
+#[cfg(not(feature = "serde"))]
 pub fn to_writer_pretty<W: Write>(mut writer: W, value: &JsonValue) -> Result<(), JsonError> {
     let bytes = to_vec_pretty(value)?;
     writer.write_all(&bytes).map_err(|_| JsonError::Io)

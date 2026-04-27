@@ -1,7 +1,10 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 #[cfg(not(feature = "std"))]
+use alloc::string::ToString;
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::fmt;
 
 use crate::{JsonError, JsonParseError};
 
@@ -31,6 +34,7 @@ pub struct NumberFromString;
 
 #[cfg(feature = "serde")]
 impl Error {
+    #[cfg(feature = "std")]
     pub fn io(error: std::io::Error) -> Self {
         Self {
             message: error.to_string(),
@@ -88,11 +92,11 @@ impl Error {
 }
 
 #[cfg(feature = "serde")]
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 #[cfg(feature = "serde")]
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
 }
@@ -111,14 +115,14 @@ impl From<Error> for std::io::Error {
 
 #[cfg(feature = "serde")]
 impl serde_crate::ser::Error for Error {
-    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
         Error::custom(msg.to_string())
     }
 }
 
 #[cfg(feature = "serde")]
 impl serde_crate::de::Error for Error {
-    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
         Error::custom(msg.to_string())
     }
 }
@@ -180,7 +184,7 @@ pub fn json_error_to_serde(error: JsonError) -> Error {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(all(feature = "serde", feature = "std"))]
 #[allow(dead_code)]
 pub fn io(error: std::io::Error) -> Error {
     Error::io(error)

@@ -92,7 +92,6 @@ pub use serde_api::{
     escape_json_string, from_slice, from_str, parse_json, parse_json_borrowed, parse_json_tape,
     to_string, to_string_pretty, to_vec, to_vec_pretty,
 };
-#[cfg(feature = "std")]
 pub use serde_api::{from_reader, to_writer, to_writer_pretty};
 #[cfg(feature = "serde")]
 pub use serde_api::{from_value, to_value};
@@ -119,7 +118,7 @@ pub use yaml::{
 };
 
 #[cfg(feature = "serde")]
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 #[cfg(test)]
 mod tests {

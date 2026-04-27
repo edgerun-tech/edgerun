@@ -2,7 +2,7 @@
 //!
 //! Consolidated encoding utilities.
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
@@ -14,6 +14,7 @@ pub mod cstring;
 pub mod frame;
 pub mod hex;
 pub mod ip;
+pub mod io;
 pub mod kv;
 pub mod net;
 pub mod percent;

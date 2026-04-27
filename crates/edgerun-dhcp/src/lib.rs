@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 #![allow(missing_docs)]
 //! Dependency-free DHCPv4 server and client using only `std`.
 //!
@@ -39,15 +39,12 @@
 
 extern crate alloc;
 
-#[cfg(feature = "std")]
 pub mod client;
 pub mod lease;
 pub mod message;
 pub mod options;
-#[cfg(feature = "std")]
 pub mod server;
 
-#[cfg(feature = "std")]
 pub use client::DhcpClient;
 pub use lease::Lease;
 pub use message::{
@@ -58,5 +55,4 @@ pub use message::{
     OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_MACHINE_ID, OPT_CLIENT_NDI, OPT_HOST_NAME,
     OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP,
 };
-#[cfg(feature = "std")]
 pub use server::DhcpServer;
