@@ -9,6 +9,7 @@ const HEAP_END: usize = 0x200000;
 static HEAP_FREE: AtomicUsize = AtomicUsize::new(HEAP_START);
 static HEAP_END_ADDR: AtomicUsize = AtomicUsize::new(HEAP_END);
 
+#[cfg(target_os = "none")]
 #[global_allocator]
 pub static ALLOCATOR: Allocator = Allocator;
 

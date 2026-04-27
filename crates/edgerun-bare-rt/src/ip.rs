@@ -591,7 +591,7 @@ impl<'a> Network<'a> {
         self.packet_len
     }
 
-    pub fn recv(&mut self, data: &[u8]) -> Option<ParsedPacket> {
+    pub fn recv<'packet>(&mut self, data: &'packet [u8]) -> Option<ParsedPacket<'packet>> {
         if data.len() < 34 {
             return None;
         }
@@ -610,30 +610,123 @@ impl<'a> Network<'a> {
         }
         let payload = &data[payload_start..];
         match ip.proto {
-            IP_PROTO_UDP if payload.len() >= 8 => Some(ParsedPacket::Udp(UdpHeader::from_slice(payload))),
-            IP_PROTO_TCP if payload.len() >= 20 => Some(ParsedPacket::Tcp(TcpHeader::from_slice(payload))),
-            IP_PROTO_ICMP if payload.len() >= 8 => Some(ParsedPacket::Icmp(IcmpHeader::from_slice(payload))),
+            IP_PROTO_UDP if payload.len() >= 8 => {
+                let udp = UdpHeader::from_slice(payload);
+                let udp_len = udp.len as usize;
+                if udp_len < 8 || udp_len > payload.len() {
+                    return None;
+                }
+                Some(ParsedPacket::Udp {
+                    header: udp,
+                    payload: &payload[8..udp_len],
+                })
+            }
+            IP_PROTO_TCP if payload.len() >= 20 => Some(ParsedPacket::Tcp {
+                header: TcpHeader::from_slice(payload),
+                payload: &payload[20..],
+            }),
+            IP_PROTO_ICMP if payload.len() >= 8 => Some(ParsedPacket::Icmp {
+                header: IcmpHeader::from_slice(payload),
+                payload: &payload[8..],
+            }),
             _ => None,
         }
     }
 }
 
-pub enum ParsedPacket {
-    Udp(UdpHeader),
-    Tcp(TcpHeader),
-    Icmp(IcmpHeader),
+pub enum ParsedPacket<'a> {
+    Udp { header: UdpHeader, payload: &'a [u8] },
+    Tcp { header: TcpHeader, payload: &'a [u8] },
+    Icmp { header: IcmpHeader, payload: &'a [u8] },
 }
 
-impl ParsedPacket {
+impl<'a> ParsedPacket<'a> {
     pub fn is_udp(&self) -> bool {
-        matches!(self, ParsedPacket::Udp(_))
+        matches!(self, ParsedPacket::Udp { .. })
     }
     
     pub fn is_tcp(&self) -> bool {
-        matches!(self, ParsedPacket::Tcp(_))
+        matches!(self, ParsedPacket::Tcp { .. })
     }
     
     pub fn is_icmp(&self) -> bool {
-        matches!(self, ParsedPacket::Icmp(_))
+        matches!(self, ParsedPacket::Icmp { .. })
+    }
+
+    pub fn udp_payload(&self) -> Option<&'a [u8]> {
+        match self {
+            ParsedPacket::Udp { payload, .. } => Some(payload),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn udp_packet_round_trips_payload() {
+        let mut stack = IpStack::new();
+        stack.configure(
+            IpAddr::new(192, 168, 1, 12),
+            IpAddr::new(255, 255, 255, 0),
+            IpAddr::zero(),
+            [0x52, 0x54, 0x00, 0x12, 0x34, 0x56],
+        );
+
+        let mut network = Network::new(&mut stack);
+        let payload = [1, 2, 3, 4];
+        let packet_src = network
+            .send_udp(IpAddr::new(255, 255, 255, 255), DHCP_CLIENT_PORT, DHCP_SERVER_PORT, &payload)
+            .unwrap();
+        let mut packet = [0u8; 1514];
+        let packet_len = packet_src.len();
+        packet[..packet_len].copy_from_slice(packet_src);
+
+        let parsed = network.recv(&packet[..packet_len]).unwrap();
+        match parsed {
+            ParsedPacket::Udp { header, payload } => {
+                assert_eq!(header.src_port, DHCP_CLIENT_PORT);
+                assert_eq!(header.dst_port, DHCP_SERVER_PORT);
+                assert_eq!(header.len, 12);
+                assert_eq!(payload, &[1, 2, 3, 4]);
+            }
+            _ => panic!("expected udp packet"),
+        }
+    }
+
+    #[test]
+    fn dhcp_discover_has_cookie_and_udp_ports() {
+        let mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let dhcp = DhcpStateMachine::new(mac);
+        let discover = dhcp.discover();
+        assert_eq!(&discover[236..240], &0x63825363u32.to_be_bytes());
+        assert_eq!(&discover[28..34], &mac);
+
+        let mut stack = IpStack::new();
+        stack.configure(IpAddr::zero(), IpAddr::new(255, 255, 255, 0), IpAddr::zero(), mac);
+        let mut network = Network::new(&mut stack);
+        let packet_src = network
+            .send_udp(
+                IpAddr::new(255, 255, 255, 255),
+                DHCP_CLIENT_PORT,
+                DHCP_SERVER_PORT,
+                &discover,
+            )
+            .unwrap();
+        let mut packet = [0u8; 1514];
+        let packet_len = packet_src.len();
+        packet[..packet_len].copy_from_slice(packet_src);
+
+        let parsed = network.recv(&packet[..packet_len]).unwrap();
+        match parsed {
+            ParsedPacket::Udp { header, payload } => {
+                assert_eq!(header.src_port, DHCP_CLIENT_PORT);
+                assert_eq!(header.dst_port, DHCP_SERVER_PORT);
+                assert_eq!(&payload[236..240], &0x63825363u32.to_be_bytes());
+            }
+            _ => panic!("expected udp packet"),
+        }
     }
 }

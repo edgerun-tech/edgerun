@@ -11,6 +11,7 @@ use rt::{
     block_on, crc32, runtime::spawn, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
     RingBuffer, TcpSocket, TftpConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
 };
+use rt::ip::ParsedPacket;
 
 use core::future::Future;
 use core::pin::Pin;
@@ -118,13 +119,16 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         net.send(pkt);
     }
     
-    drop(network);
-    
     let mut rx_buf = [0u8; 1514];
-    let len = net.recv(&mut rx_buf);
-    if len.is_some() {
-        let _ = dhcp.parse(&rx_buf);
+    if let Some(len) = net.recv(&mut rx_buf) {
+        if let Some(ParsedPacket::Udp { header, payload }) = network.recv(&rx_buf[..len]) {
+            if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
+                let _ = dhcp.parse(payload);
+            }
+        }
     }
+
+    drop(network);
     
     if dhcp.ip != IpAddr::zero() {
         stack.ip = dhcp.ip;
@@ -133,7 +137,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     } else {
         stack.ip = IpAddr::new(192, 168, 1, 12);
     }
-    
+
     let mut network = Network::new(&mut stack);
     
     for _ in 0..100 {
