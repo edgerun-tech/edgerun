@@ -24,7 +24,7 @@
 //!
 //! All messages after ServerHello are encrypted with handshake keys.
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
@@ -74,6 +74,9 @@ pub enum TlsError {
     Cipher(String),
     /// Alert received from peer
     Alert(AlertLevel, Alert),
+    /// Underlying I/O error from the async transport.
+    #[cfg(feature = "std")]
+    Io(std::io::Error),
 }
 
 impl fmt::Display for TlsError {
@@ -84,6 +87,8 @@ impl fmt::Display for TlsError {
             TlsError::Certificate(m) => write!(f, "Certificate error: {m}"),
             TlsError::Cipher(m) => write!(f, "Cipher error: {m}"),
             TlsError::Alert(lv, a) => write!(f, "TLS alert: {lv:?} {a}"),
+            #[cfg(feature = "std")]
+            TlsError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
 }
@@ -93,6 +98,13 @@ impl core::error::Error for TlsError {}
 impl From<String> for TlsError {
     fn from(m: String) -> Self {
         TlsError::Protocol(m)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<std::io::Error> for TlsError {
+    fn from(e: std::io::Error) -> Self {
+        TlsError::Io(e)
     }
 }
 

@@ -5,6 +5,8 @@
 
 #![no_std]
 
+extern crate alloc;
+
 pub mod edgerun {
     pub mod v0 {
         pub mod access {
@@ -39,12 +41,17 @@ pub mod edgerun {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::{String, ToString};
+    use alloc::vec;
+    use alloc::vec::Vec;
+    use core::fmt;
+
     use super::edgerun::v0::*;
 
     // -----------------------------------------------------------------------
     // Helper: roundtrip encode/decode
     // -----------------------------------------------------------------------
-    fn roundtrip<M: prost::Message + Default + PartialEq + std::fmt::Debug>(msg: &M) -> M {
+    fn roundtrip<M: prost::Message + Default + PartialEq + fmt::Debug>(msg: &M) -> M {
         let mut buf = Vec::new();
         msg.encode(&mut buf).expect("encode should succeed");
         M::decode(buf.as_slice()).expect("decode should succeed")

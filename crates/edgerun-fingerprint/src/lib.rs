@@ -168,9 +168,11 @@ pub fn validate_enroll_request(request: &FingerprintEnrollRequest) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::boxed::Box;
     use alloc::format;
     use alloc::string::ToString;
     use alloc::vec;
+    use core::error::Error;
     use edgerun_biometrics::BiometricAssuranceStrength;
 
     #[test]
@@ -259,7 +261,7 @@ mod tests {
 
     #[test]
     fn fingerprint_error_is_std_error() {
-        let err: Box<dyn std::error::Error> = Box::new(FingerprintError::InvalidRequest("test"));
+        let err: Box<dyn Error> = Box::new(FingerprintError::InvalidRequest("test"));
         assert!(err.to_string().contains("invalid fingerprint request"));
     }
 

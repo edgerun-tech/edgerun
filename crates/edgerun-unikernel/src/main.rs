@@ -1,7 +1,7 @@
 //! Edgerun unikernel - bare shell with networking
 
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 extern crate edgerun_bare_rt as rt;
 extern crate edgerun_dhcp;
@@ -19,6 +19,7 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
+#[cfg(target_os = "none")]
 core::arch::global_asm!(
     r#"
     .section .text.entry,"ax"
@@ -136,6 +137,7 @@ impl Future for NetPump<'_, '_> {
     }
 }
 
+#[cfg(target_os = "none")]
 #[panic_handler]
 unsafe fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {
@@ -144,12 +146,14 @@ unsafe fn panic(_info: &core::panic::PanicInfo) -> ! {
 }
 
 #[used]
+#[cfg(target_os = "none")]
 #[link_section = ".multiboot"]
 static MULTIBOOT_HEADER: [u32; 8] = [
     0x1BADB002, 0x00010000, 0xE4514FFE, 0x100000, 0x100000, 0, 0, 0,
 ];
 
 #[no_mangle]
+#[cfg(target_os = "none")]
 pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
@@ -348,3 +352,6 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         core::arch::asm!("hlt");
     }
 }
+
+#[cfg(not(target_os = "none"))]
+fn main() {}

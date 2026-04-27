@@ -469,6 +469,9 @@ static HUFFMAN_CODE_TABLE: &[(u32, u8)] = &[
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use super::BitIterator;
     use super::HuffmanDecoder;
     use super::HuffmanDecoderError;

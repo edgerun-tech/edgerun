@@ -461,9 +461,11 @@ impl<'a> Decoder<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_integer;
+    use alloc::borrow::Cow;
+    use alloc::vec;
+    use alloc::vec::Vec;
 
-    use std::borrow::Cow;
+    use super::decode_integer;
 
     use super::super::encoder::encode_integer;
     use super::super::huffman::HuffmanDecoderError;

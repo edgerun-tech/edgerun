@@ -44,18 +44,25 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
             }
         }
 
-        let format_str = format_string.unwrap_or_else(|| variant_ident.to_string());
-
         match &variant.fields {
             Fields::Unit => {
+                let format_str = format_string.unwrap_or_else(|| variant_ident.to_string());
                 match_arms.push(quote! {
                     #ident::#variant_ident #discriminant => write!(f, #format_str),
                 });
             }
             Fields::Unnamed(unnamed) if unnamed.unnamed.len() == 1 => {
-                match_arms.push(quote! {
-                    #ident::#variant_ident(ref __e) => write!(f, #format_str, __e),
-                });
+                if let Some(format_str) = format_string {
+                    match_arms.push(quote! {
+                        #ident::#variant_ident(ref __e) => write!(f, #format_str, __e),
+                    });
+                } else {
+                    match_arms.push(quote! {
+                        #ident::#variant_ident(ref __e) => {
+                            write!(f, "{}: {}", stringify!(#variant_ident), __e)
+                        }
+                    });
+                }
             }
             _ => {
                 panic!("Error derive: variant must have 0 or 1 fields");

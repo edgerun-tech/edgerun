@@ -9,8 +9,9 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use edgerun_crypto::aes_gcm;
-use edgerun_crypto::{AeadCipher, AeadInPlace, CipherSuite, KeyInit};
+use edgerun_crypto::aes_gcm::{self, Aes128Gcm, Aes256Gcm};
+use edgerun_crypto::aes_gcm::aead::{AeadInPlace, KeyInit};
+use edgerun_crypto::CipherSuite;
 
 use std::collections::HashMap;
 
@@ -23,6 +24,54 @@ pub enum CryptoPhase {
     Handshake,
     /// Application data keys (1-RTT, derived from master secret)
     Application,
+}
+
+#[derive(Clone)]
+enum QuicAead {
+    Aes128(Aes128Gcm),
+    Aes256(Aes256Gcm),
+}
+
+impl QuicAead {
+    fn new(suite: CipherSuite, key: &[u8]) -> Result<Self, aes_gcm::aead::Error> {
+        match suite {
+            CipherSuite::TLS_AES_128_GCM_SHA256 => {
+                let cipher = Aes128Gcm::new_from_slice(key).map_err(|_| aes_gcm::aead::Error)?;
+                Ok(Self::Aes128(cipher))
+            }
+            CipherSuite::TLS_AES_256_GCM_SHA384 => {
+                let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| aes_gcm::aead::Error)?;
+                Ok(Self::Aes256(cipher))
+            }
+        }
+    }
+
+    fn encrypt_in_place_detached(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        buffer: &mut [u8],
+    ) -> Result<aes_gcm::Tag, aes_gcm::aead::Error> {
+        let nonce = aes_gcm::Nonce::from_slice(nonce);
+        match self {
+            Self::Aes128(cipher) => cipher.encrypt_in_place_detached(nonce, aad, buffer),
+            Self::Aes256(cipher) => cipher.encrypt_in_place_detached(nonce, aad, buffer),
+        }
+    }
+
+    fn decrypt_in_place_detached(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        buffer: &mut [u8],
+        tag: &aes_gcm::Tag,
+    ) -> Result<(), aes_gcm::aead::Error> {
+        let nonce = aes_gcm::Nonce::from_slice(nonce);
+        match self {
+            Self::Aes128(cipher) => cipher.decrypt_in_place_detached(nonce, aad, buffer, tag),
+            Self::Aes256(cipher) => cipher.decrypt_in_place_detached(nonce, aad, buffer, tag),
+        }
+    }
 }
 
 impl CryptoPhase {
@@ -81,9 +130,9 @@ impl ProtectionKeys {
 /// QUIC packet protection engine
 pub struct PacketProtection {
     /// Encryption AEAD
-    write_aead: AeadCipher,
+    write_aead: QuicAead,
     /// Decryption AEAD
-    read_aead: AeadCipher,
+    read_aead: QuicAead,
     /// Write IV
     write_iv: Vec<u8>,
     /// Read IV
@@ -95,8 +144,8 @@ pub struct PacketProtection {
 impl PacketProtection {
     /// Create from protection keys
     pub fn new(keys: &ProtectionKeys) -> Self {
-        let write_aead = AeadCipher::new_from_key(&keys.write_key).expect("valid write key");
-        let read_aead = AeadCipher::new_from_key(&keys.read_key).expect("valid read key");
+        let write_aead = QuicAead::new(keys.algorithm, &keys.write_key).expect("valid write key");
+        let read_aead = QuicAead::new(keys.algorithm, &keys.read_key).expect("valid read key");
 
         PacketProtection {
             write_aead,

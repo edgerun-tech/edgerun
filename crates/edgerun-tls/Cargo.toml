@@ -11,12 +11,13 @@ keywords = ["tls", "ssl", "https", "security", "crypto"]
 categories = ["cryptography", "network-programming"]
 
 [features]
-default = []
-std = []
+default = ["std"]
+std = ["dep:edgerun-rt"]
 
 [dependencies]
 edgerun-crypto.workspace = true
 edgerun-bare-rt.workspace = true
+edgerun-rt = { path = "../edgerun-rt", optional = true }
 
 [lints]
 workspace = true

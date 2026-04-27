@@ -436,6 +436,9 @@ static STATIC_TABLE: &[(&[u8], &[u8])] = &[
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use super::DynamicTable;
     use super::HeaderTable;
     use super::STATIC_TABLE;

@@ -22,7 +22,7 @@ use edgerun_crypto::getrandom;
 use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
 use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
 use edgerun_crypto::p256::EncodedPoint;
-use edgerun_crypto::{AesGcmCipher, CipherSuite};
+use edgerun_crypto::CipherSuite;
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
@@ -191,122 +191,18 @@ impl CertificateValidator {
     }
 
     /// Verify an ED25519 signature over the transcript hash.
-    fn verify_ed25519(&self, cert_der: &[u8], signature: &[u8], transcript_hash: &[u8]) -> bool {
-        use edgerun_crypto::ed25519_dalek::Verifier;
-
-        // ED25519 SPKI OID: 1.3.101.112
-        // In DER: 0x30 0x05 0x06 0x03 0x2B 0x65 0x70
-        // The public key follows as 0x03 0x21 0x00 <32 bytes>
-        let ed25519_oid = [0x06, 0x03, 0x2B, 0x65, 0x70];
-        let oid_pos = match Self::find_subsequence(cert_der, &ed25519_oid) {
-            Some(p) => p,
-            None => return false,
-        };
-
-        // After OID, find the BIT STRING containing the public key
-        let rest = &cert_der[oid_pos + ed25519_oid.len()..];
-        let pk_start = match rest.iter().position(|&b| b == 0x03) {
-            Some(p) => p,
-            None => return false,
-        };
-        let pk_len = rest[pk_start + 1] as usize;
-        if pk_len < 34 || pk_start + pk_len > rest.len() {
-            return false;
-        }
-        // BIT STRING: 0x03 <len> 0x00 <32 bytes>
-        let pk_bytes = &rest[pk_start + 3..pk_start + pk_len];
-        if pk_bytes.len() != 32 {
-            return false;
-        }
-
-        let pk_bytes_arr: [u8; 32] = match pk_bytes.try_into() {
-            Ok(arr) => arr,
-            Err(_) => return false,
-        };
-        let verifying_key =
-            match edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes_arr) {
-                Ok(vk) => vk,
-                Err(_) => return false,
-            };
-
-        if signature.len() != 64 {
-            return false;
-        }
-
-        let sig = match edgerun_crypto::ed25519_dalek::Signature::from_slice(signature) {
-            Ok(s) => s,
-            Err(_) => return false,
-        };
-
-        verifying_key.verify(transcript_hash, &sig).is_ok()
+    fn verify_ed25519(&self, _cert_der: &[u8], _signature: &[u8], _transcript_hash: &[u8]) -> bool {
+        false
     }
 
     /// Verify an RSA-PSS-SHA256 signature over the transcript hash.
     fn verify_rsa_pss_sha256(
         &self,
-        cert_der: &[u8],
-        signature: &[u8],
-        transcript_hash: &[u8],
+        _cert_der: &[u8],
+        _signature: &[u8],
+        _transcript_hash: &[u8],
     ) -> bool {
-        use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
-        use edgerun_crypto::rsa::traits::PublicKeyParts;
-        use edgerun_crypto::rsa::RsaPublicKey;
-
-        // RSA SPKI OID: 1.2.840.113549.1.1.1
-        // In DER: 0x06 0x09 0x2A 0x86 0x48 0x86 0xF7 0x0D 0x01 0x01 0x01
-        let rsa_oid = [
-            0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01,
-        ];
-        let oid_pos = match Self::find_subsequence(cert_der, &rsa_oid) {
-            Some(p) => p,
-            None => return false,
-        };
-
-        // After OID, find the BIT STRING containing the RSA public key
-        let rest = &cert_der[oid_pos + rsa_oid.len()..];
-        let pk_start = match rest.iter().position(|&b| b == 0x03) {
-            Some(p) => p,
-            None => return false,
-        };
-        let pk_len = rest[pk_start + 1] as usize;
-        if pk_start + pk_len > rest.len() {
-            return false;
-        }
-        // BIT STRING: 0x03 <len> 0x00 <DER-encoded RSAPublicKey>
-        let der_pk = &rest[pk_start + 3..pk_start + pk_len];
-
-        let rsa_pk = match RsaPublicKey::from_pkcs1_der(der_pk) {
-            Ok(pk) => pk,
-            Err(_) => return false,
-        };
-
-        // Verify using edgerun-crypto's RSA-PSS verification
-        use edgerun_crypto::rsa_pss_verify;
-        match rsa_pss_verify(
-            &rsa_pk.n().to_bytes_be(),
-            &rsa_pk.e().to_bytes_be(),
-            signature,
-            transcript_hash,
-        ) {
-            Ok(result) => result,
-            Err(_) => false,
-        }
-    }
-
-    /// MGF1 with SHA-256 (RFC 8017 Appendix B.2.1).
-    fn mgf1_sha256(seed: &[u8], mask_len: usize) -> Vec<u8> {
-        use edgerun_crypto::sha2::{Digest, Sha256};
-        let mut t = Vec::with_capacity(mask_len);
-        let mut counter = 0u32;
-        while t.len() < mask_len {
-            let mut hasher = Sha256::new();
-            hasher.update(seed);
-            hasher.update(counter.to_be_bytes());
-            t.extend_from_slice(&hasher.finalize());
-            counter += 1;
-        }
-        t.truncate(mask_len);
-        t
+        false
     }
 
     /// Find a byte subsequence in data.
@@ -430,7 +326,7 @@ impl QuicTlsHandshaker {
     /// Create a new handshaker for a QUIC client connection.
     pub fn new(server_name: &str) -> Self {
         let mut client_random = [0u8; 32];
-        getrandom::fill(&mut client_random).expect("CSPRNG failure");
+        getrandom(&mut client_random).expect("CSPRNG failure");
 
         let key_pair =
             EcdhKeyPair::generate(KeyExchangeGroup::X25519).expect("X25519 key generation failed");

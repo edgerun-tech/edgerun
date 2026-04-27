@@ -149,6 +149,7 @@ mod tests {
     use alloc::boxed::Box;
     use alloc::format;
     use alloc::string::ToString;
+    use alloc::vec;
 
     // ── CapabilityError Display & Error trait ─────────────────────────────
 

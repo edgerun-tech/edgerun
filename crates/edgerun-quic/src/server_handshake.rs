@@ -133,7 +133,7 @@ impl QuicTlsServerHandshaker {
     /// Create a new server handshaker with the given certificate.
     pub fn new(cert_and_key: CertificateAndKey) -> Self {
         let mut server_random = [0u8; 32];
-        getrandom::fill(&mut server_random).expect("CSPRNG failure");
+        getrandom(&mut server_random).expect("CSPRNG failure");
 
         let key_pair =
             EcdhKeyPair::generate(KeyExchangeGroup::X25519).expect("X25519 key generation failed");
@@ -573,7 +573,7 @@ mod tests {
 
         // Build a real ClientHello
         let mut client_random = [0u8; 32];
-        getrandom::fill(&mut client_random).unwrap();
+        getrandom(&mut client_random).unwrap();
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
             .key_share(&client_kp.public_key_bytes(), TlsNamedGroup::X25519)
@@ -599,7 +599,7 @@ mod tests {
         let mut hs = QuicTlsServerHandshaker::new(cert);
 
         let mut client_random = [0u8; 32];
-        getrandom::fill(&mut client_random).unwrap();
+        getrandom(&mut client_random).unwrap();
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
             .key_share(&client_kp.public_key_bytes(), TlsNamedGroup::X25519)

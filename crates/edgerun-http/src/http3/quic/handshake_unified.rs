@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn test_client_server_hello_roundtrip() {
         let mut client_random = [0u8; 32];
-        getrandom::fill(&mut client_random).unwrap();
+        getrandom(&mut client_random).unwrap();
 
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn test_server_processes_client_hello() {
         let mut client_random = [0u8; 32];
-        getrandom::fill(&mut client_random).unwrap();
+        getrandom(&mut client_random).unwrap();
 
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn test_server_hello_exchange() {
         let mut client_random = [0u8; 32];
-        getrandom::fill(&mut client_random).unwrap();
+        getrandom(&mut client_random).unwrap();
 
         let client_kp = EcdhKeyPair::generate(KeyExchangeGroup::X25519).unwrap();
         let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
