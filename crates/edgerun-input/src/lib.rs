@@ -1,3 +1,11 @@
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use edgerun_capabilities::{
     capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
     CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,
@@ -83,6 +91,8 @@ pub fn validate_event_read_request(max_events: usize) -> Result<(), CapabilityEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
+    use alloc::vec;
 
     // ----- InputDeviceKind -----
 

@@ -38,6 +38,7 @@ members = [
   "crates/edgerun-dns",
   "crates/edgerun-drm-display",
   "crates/edgerun-display",
+  "crates/edgerun-e2e",
   "crates/edgerun-e2e-capability",
   "crates/edgerun-edit",
   "crates/edgerun-encoding",
@@ -75,7 +76,7 @@ members = [
   "crates/edgerun-node",
   "crates/edgerun-npu",
   "crates/edgerun-oauth",
-"crates/edgerun-oci",
+  "crates/edgerun-oci",
   "crates/edgerun-pci",
   "crates/edgerun-power",
   "crates/edgerun-quectel-ec200a",
@@ -207,7 +208,7 @@ brotli = "8"
 sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
 prost = { version = "0.14", default-features = false, features = ["derive"] }
-prost-types = "0.14"
+prost-types = { version = "0.14", default-features = false }
 der = { version = "0.8", features = ["heapless"] }
 
 [patch.crates-io]

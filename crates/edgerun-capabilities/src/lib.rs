@@ -1,3 +1,10 @@
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+
 pub use edgerun_proto::edgerun::v0::capability::{
     CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
     CapabilityEventKind, CapabilityGrant, CapabilityInvocation, CapabilityModality,
@@ -24,7 +31,7 @@ impl core::fmt::Display for CapabilityError {
     }
 }
 
-impl std::error::Error for CapabilityError {}
+impl core::error::Error for CapabilityError {}
 
 pub trait CapabilityProvider {
     fn descriptor(&self) -> CapabilityDescriptor;
@@ -139,6 +146,9 @@ pub fn validate_grant(grant: &CapabilityGrant) -> Result<(), CapabilityError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::boxed::Box;
+    use alloc::format;
+    use alloc::string::ToString;
 
     // ── CapabilityError Display & Error trait ─────────────────────────────
 
@@ -174,7 +184,7 @@ mod tests {
 
     #[test]
     fn error_is_std_error() {
-        let err: Box<dyn std::error::Error> = Box::new(CapabilityError::InvalidRequest("test"));
+        let err: Box<dyn core::error::Error> = Box::new(CapabilityError::InvalidRequest("test"));
         assert!(err.source().is_none());
     }
 

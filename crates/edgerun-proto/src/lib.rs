@@ -3,34 +3,36 @@
 //! Every domain message is a protobuf struct with `prost::Message`.
 //! Canonical encoding = `prost::Message::encode()` directly.
 
+#![no_std]
+
 pub mod edgerun {
     pub mod v0 {
         pub mod access {
-            include!("gen/edgerun.v0.access.rs");
+            core::include!("gen/edgerun.v0.access.rs");
         }
         pub mod capability {
-            include!("gen/edgerun.v0.capability.rs");
+            core::include!("gen/edgerun.v0.capability.rs");
         }
         pub mod capability_runtime {
-            include!("gen/edgerun.v0.capability_runtime.rs");
+            core::include!("gen/edgerun.v0.capability_runtime.rs");
         }
         pub mod common {
-            include!("gen/edgerun.v0.common.rs");
+            core::include!("gen/edgerun.v0.common.rs");
         }
         pub mod identity {
-            include!("gen/edgerun.v0.identity.rs");
+            core::include!("gen/edgerun.v0.identity.rs");
         }
         pub mod network {
-            include!("gen/edgerun.v0.network.rs");
+            core::include!("gen/edgerun.v0.network.rs");
         }
         pub mod object {
-            include!("gen/edgerun.v0.object.rs");
+            core::include!("gen/edgerun.v0.object.rs");
         }
         pub mod stream {
-            include!("gen/edgerun.v0.stream.rs");
+            core::include!("gen/edgerun.v0.stream.rs");
         }
         pub mod trust {
-            include!("gen/edgerun.v0.trust.rs");
+            core::include!("gen/edgerun.v0.trust.rs");
         }
     }
 }

@@ -1,3 +1,9 @@
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::String;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BiometricAssuranceStrength {
     None,
@@ -51,6 +57,7 @@ impl BiometricState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
 
     #[test]
     fn hardware_protected_biometric_is_strongest() {

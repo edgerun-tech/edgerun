@@ -917,6 +917,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-e2e"
+version = "0.1.1"
+dependencies = [
+ "edgerun-capabilities",
+ "edgerun-core",
+ "edgerun-crypto",
+ "edgerun-hardware-signing",
+ "edgerun-mesh",
+ "edgerun-mesh-link",
+ "edgerun-mesh-session",
+ "edgerun-oci",
+ "edgerun-proto",
+ "edgerun-remote-capability",
+ "edgerun-rt",
+ "edgerun-storage",
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-e2e-capability"
 version = "0.1.1"
 dependencies = [
