@@ -110,6 +110,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     let mut network = Network::new(&mut stack);
     
     let discover = dhcp.discover();
+    rt::log::log(1, "Sending DHCP discover");
     if let Some(pkt) = network.send_udp(
         IpAddr::new(255, 255, 255, 255),
         DHCP_CLIENT_PORT,
@@ -123,7 +124,9 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     if let Some(len) = net.recv(&mut rx_buf) {
         if let Some(ParsedPacket::Udp { header, payload }) = network.recv(&rx_buf[..len]) {
             if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
-                let _ = dhcp.parse(payload);
+                if dhcp.parse(payload) {
+                    rt::log::log(1, "DHCP lease accepted");
+                }
             }
         }
     }
@@ -135,6 +138,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         stack.netmask = dhcp.netmask;
         stack.gateway = dhcp.gateway;
     } else {
+        rt::log::log(1, "Using static fallback IP");
         stack.ip = IpAddr::new(192, 168, 1, 12);
     }
 
