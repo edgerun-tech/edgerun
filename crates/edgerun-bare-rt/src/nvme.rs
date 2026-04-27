@@ -15,6 +15,7 @@ pub const NVME_AQA: usize = 0x24;
 pub const NVME_ASQ: usize = 0x28;
 pub const NVME_ACQ: usize = 0x30;
 
+pub const NVME_CMD_IDENTIFY: u8 = 0x06;
 pub const NVME_CMD_READ: u8 = 0x02;
 pub const NVME_CMD_WRITE: u8 = 0x04;
 pub const NVME_CMD_FLUSH: u8 = 0x00;
@@ -151,6 +152,31 @@ impl NvmeController {
         let doorbell = unsafe { self.ptr.offset(0x1000 / 4) };
         unsafe { doorbell.write(0) };
         true
+    }
+
+    pub fn identify(&mut self) -> bool {
+        if self.sq0.is_null() || self.cq0.is_null() {
+            return false;
+        }
+        let mut data = [0u8; SECTOR_SIZE];
+        unsafe {
+            let cmd = NvmeCommand {
+                opc: NVME_CMD_IDENTIFY,
+                flags: 0,
+                cmdid: 0,
+                nsid: 1,
+                cdw2: [0; 2],
+                prp1: data.as_mut_ptr() as u64,
+                prp2: 0,
+                cdw10: 0,
+                cdw11: 0,
+                cdw12: 0,
+                cdw13: 0,
+                cdw14: 0,
+                cdw15: 0,
+            };
+            self.submit(cmd)
+        }
     }
 
     pub fn sectors(&self) -> u64 {
