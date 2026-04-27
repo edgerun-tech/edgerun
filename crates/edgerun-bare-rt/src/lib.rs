@@ -80,6 +80,7 @@ pub mod storage;
 pub use storage::{BlockDevice, SECTOR_SIZE};
 
 pub mod nvme;
+pub mod ata;
 
 pub mod log;
 pub use log::Level;

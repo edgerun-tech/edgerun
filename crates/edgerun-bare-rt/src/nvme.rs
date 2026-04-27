@@ -5,16 +5,13 @@
 use crate::storage::{BlockDevice, SECTOR_SIZE};
 
 pub const NVME_CAP: usize = 0x00;
-pub const NVME_VER: usize = 0x04;
-pub const NVME_INTMS: usize = 0x08;
-pub const NVME_INTMC: usize = 0x0C;
-pub const NVME_CFG: usize = 0x14;
 pub const NVME_CC: usize = 0x14;
 pub const NVME_CSTS: usize = 0x1C;
 pub const NVME_AQA: usize = 0x24;
 pub const NVME_ASQ: usize = 0x28;
 pub const NVME_ACQ: usize = 0x30;
 
+pub const NVME_BLOCK_SIZE: usize = 512;
 pub const NVME_CMD_IDENTIFY: u8 = 0x06;
 pub const NVME_CMD_READ: u8 = 0x02;
 pub const NVME_CMD_WRITE: u8 = 0x04;
