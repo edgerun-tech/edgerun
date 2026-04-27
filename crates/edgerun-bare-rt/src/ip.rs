@@ -250,8 +250,9 @@ impl ArpHeader {
 
     pub fn to_slice(&self, data: &mut [u8]) {
         data[0..2].copy_from_slice(&[0, 1]);
-        data[2..4].copy_from_slice(&[1, 1]);
-        data[4..6].copy_from_slice(&[6, 0]);
+        data[2..4].copy_from_slice(&ETH_TYPE_IPV4.to_be_bytes());
+        data[4] = 6;
+        data[5] = 4;
         data[6..8].copy_from_slice(&self.oper.to_be_bytes());
         data[8..14].copy_from_slice(&self.sha);
         data[14..18].copy_from_slice(&self.spa);
@@ -583,6 +584,55 @@ impl<'a> Network<'a> {
         Some(&self.packet[..self.packet_len])
     }
 
+    pub fn send_arp_reply(&mut self, request: &ArpHeader) -> Option<&[u8]> {
+        let packet_len = 42;
+        self.packet = [0u8; 1514];
+        let eth = self.stack.eth_header(request.sha, ETH_TYPE_ARP);
+        eth.to_slice(&mut self.packet);
+        let reply = self
+            .stack
+            .arp_request(IpAddr::from_slice(&request.spa), request.sha);
+        reply.to_slice(&mut self.packet[14..42]);
+        self.packet_len = packet_len;
+        Some(&self.packet[..self.packet_len])
+    }
+
+    pub fn send_icmp_echo_reply(
+        &mut self,
+        dst_mac: [u8; 6],
+        dst: IpAddr,
+        request: &IcmpHeader,
+        payload: &[u8],
+    ) -> Option<&[u8]> {
+        let icmp_len = 8usize.checked_add(payload.len())?;
+        let ip_len = 20usize.checked_add(icmp_len)?;
+        let packet_len = 14usize.checked_add(ip_len)?;
+        if packet_len > self.packet.len() || ip_len > u16::MAX as usize {
+            return None;
+        }
+
+        self.packet = [0u8; 1514];
+        let eth = self.stack.eth_header(dst_mac, ETH_TYPE_IPV4);
+        eth.to_slice(&mut self.packet);
+
+        let mut ip = self.stack.ip_header(dst, IP_PROTO_ICMP, ip_len as u16);
+        ip.to_slice(&mut self.packet[14..34]);
+        self.packet[14 + 10] = 0;
+        self.packet[14 + 11] = 0;
+        ip.checksum = ip_checksum(&self.packet[14..34]);
+        self.packet[14 + 10..14 + 12].copy_from_slice(&ip.checksum.to_be_bytes());
+
+        let reply = echo_reply(request, request.sequence);
+        reply.to_slice(&mut self.packet[34..42]);
+        self.packet[42..42 + payload.len()].copy_from_slice(payload);
+        self.packet[36] = 0;
+        self.packet[37] = 0;
+        let icmp_checksum = checksum(&self.packet[34..34 + icmp_len]);
+        self.packet[36..38].copy_from_slice(&icmp_checksum.to_be_bytes());
+        self.packet_len = packet_len;
+        Some(&self.packet[..self.packet_len])
+    }
+
     pub fn packet(&self) -> &[u8] {
         &self.packet[..self.packet_len]
     }
@@ -596,6 +646,14 @@ impl<'a> Network<'a> {
             return None;
         }
         let eth = EthHeader::from_slice(data);
+        if eth.ethertype == ETH_TYPE_ARP {
+            if data.len() < 42 {
+                return None;
+            }
+            let arp = ArpHeader::from_slice(&data[14..42]);
+            self.stack.arp.insert(IpAddr::from_slice(&arp.spa), arp.sha);
+            return Some(ParsedPacket::Arp { eth, header: arp });
+        }
         if eth.ethertype != ETH_TYPE_IPV4 {
             return None;
         }
@@ -603,6 +661,7 @@ impl<'a> Network<'a> {
             return None;
         }
         let ip = IpHeader::from_slice(&data[14..]);
+        self.stack.arp.insert(IpAddr::from_slice(&ip.src), eth.src);
         let ip_header_len = 4 * (ip.ver_ihl & 0x0f) as usize;
         let payload_start = 14 + ip_header_len;
         if ip_header_len < 20 || data.len() < payload_start {
@@ -617,15 +676,21 @@ impl<'a> Network<'a> {
                     return None;
                 }
                 Some(ParsedPacket::Udp {
+                    eth,
+                    ip,
                     header: udp,
                     payload: &payload[8..udp_len],
                 })
             }
             IP_PROTO_TCP if payload.len() >= 20 => Some(ParsedPacket::Tcp {
+                eth,
+                ip,
                 header: TcpHeader::from_slice(payload),
                 payload: &payload[20..],
             }),
             IP_PROTO_ICMP if payload.len() >= 8 => Some(ParsedPacket::Icmp {
+                eth,
+                ip,
                 header: IcmpHeader::from_slice(payload),
                 payload: &payload[8..],
             }),
@@ -635,9 +700,10 @@ impl<'a> Network<'a> {
 }
 
 pub enum ParsedPacket<'a> {
-    Udp { header: UdpHeader, payload: &'a [u8] },
-    Tcp { header: TcpHeader, payload: &'a [u8] },
-    Icmp { header: IcmpHeader, payload: &'a [u8] },
+    Arp { eth: EthHeader, header: ArpHeader },
+    Udp { eth: EthHeader, ip: IpHeader, header: UdpHeader, payload: &'a [u8] },
+    Tcp { eth: EthHeader, ip: IpHeader, header: TcpHeader, payload: &'a [u8] },
+    Icmp { eth: EthHeader, ip: IpHeader, header: IcmpHeader, payload: &'a [u8] },
 }
 
 impl<'a> ParsedPacket<'a> {
@@ -686,7 +752,7 @@ mod tests {
 
         let parsed = network.recv(&packet[..packet_len]).unwrap();
         match parsed {
-            ParsedPacket::Udp { header, payload } => {
+            ParsedPacket::Udp { header, payload, .. } => {
                 assert_eq!(header.src_port, DHCP_CLIENT_PORT);
                 assert_eq!(header.dst_port, DHCP_SERVER_PORT);
                 assert_eq!(header.len, 12);
@@ -721,12 +787,85 @@ mod tests {
 
         let parsed = network.recv(&packet[..packet_len]).unwrap();
         match parsed {
-            ParsedPacket::Udp { header, payload } => {
+            ParsedPacket::Udp { header, payload, .. } => {
                 assert_eq!(header.src_port, DHCP_CLIENT_PORT);
                 assert_eq!(header.dst_port, DHCP_SERVER_PORT);
                 assert_eq!(&payload[236..240], &0x63825363u32.to_be_bytes());
             }
             _ => panic!("expected udp packet"),
         }
+    }
+
+    #[test]
+    fn arp_reply_uses_ethernet_ipv4_header_shape() {
+        let mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let requester_mac = [0x52, 0x55, 0x0a, 0x00, 0x02, 0x02];
+        let mut stack = IpStack::new();
+        stack.configure(
+            IpAddr::new(10, 0, 2, 15),
+            IpAddr::new(255, 255, 255, 0),
+            IpAddr::new(10, 0, 2, 2),
+            mac,
+        );
+
+        let request = ArpHeader {
+            oper: ARP_OP_REQUEST,
+            sha: requester_mac,
+            spa: [10, 0, 2, 2],
+            tha: [0; 6],
+            tpa: [10, 0, 2, 15],
+        };
+        let mut network = Network::new(&mut stack);
+        let packet = network.send_arp_reply(&request).unwrap();
+
+        assert_eq!(&packet[0..6], &requester_mac);
+        assert_eq!(&packet[6..12], &mac);
+        assert_eq!(&packet[12..14], &ETH_TYPE_ARP.to_be_bytes());
+        assert_eq!(&packet[14..16], &[0, 1]);
+        assert_eq!(&packet[16..18], &ETH_TYPE_IPV4.to_be_bytes());
+        assert_eq!(packet[18], 6);
+        assert_eq!(packet[19], 4);
+        assert_eq!(&packet[20..22], &ARP_OP_REPLY.to_be_bytes());
+        assert_eq!(&packet[22..28], &mac);
+        assert_eq!(&packet[28..32], &[10, 0, 2, 15]);
+        assert_eq!(&packet[32..38], &requester_mac);
+        assert_eq!(&packet[38..42], &[10, 0, 2, 2]);
+    }
+
+    #[test]
+    fn icmp_echo_reply_preserves_identifier_sequence_and_payload() {
+        let mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let requester_mac = [0x52, 0x55, 0x0a, 0x00, 0x02, 0x02];
+        let mut stack = IpStack::new();
+        stack.configure(
+            IpAddr::new(10, 0, 2, 15),
+            IpAddr::new(255, 255, 255, 0),
+            IpAddr::new(10, 0, 2, 2),
+            mac,
+        );
+
+        let request = IcmpHeader {
+            icmp_type: ICMP_ECHO_REQUEST,
+            code: 0,
+            checksum: 0,
+            identifier: 7,
+            sequence: 3,
+        };
+        let payload = [1, 2, 3, 4];
+        let mut network = Network::new(&mut stack);
+        let packet = network
+            .send_icmp_echo_reply(requester_mac, IpAddr::new(10, 0, 2, 2), &request, &payload)
+            .unwrap();
+
+        assert_eq!(&packet[0..6], &requester_mac);
+        assert_eq!(&packet[6..12], &mac);
+        assert_eq!(&packet[12..14], &ETH_TYPE_IPV4.to_be_bytes());
+        assert_eq!(packet[23], IP_PROTO_ICMP);
+        assert_eq!(packet[34], ICMP_ECHO_REPLY);
+        assert_eq!(packet[35], 0);
+        assert_eq!(&packet[38..40], &7u16.to_be_bytes());
+        assert_eq!(&packet[40..42], &3u16.to_be_bytes());
+        assert_eq!(&packet[42..46], &payload);
+        assert_eq!(checksum(&packet[34..46]), 0);
     }
 }

@@ -8,10 +8,10 @@ extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
 use rt::{
-    block_on, crc32, runtime::spawn, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
+    crc32, runtime::spawn, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
     RingBuffer, TcpSocket, TftpConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
 };
-use rt::ip::ParsedPacket;
+use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
 
 use core::future::Future;
 use core::pin::Pin;
@@ -41,12 +41,68 @@ _start:
 
 struct NetworkTask;
 
+struct PumpStats {
+    arp_replies: u32,
+    icmp_replies: u32,
+}
+
 impl Future for NetworkTask {
     type Output = ();
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         rt::log::log(3, "Network task");
         Poll::Pending
     }
+}
+
+fn poll_network(
+    net: &mut edgerun_virtio::VirtNet,
+    network: &mut Network<'_>,
+    rx_buf: &mut [u8; 1514],
+) -> PumpStats {
+    let mut stats = PumpStats {
+        arp_replies: 0,
+        icmp_replies: 0,
+    };
+
+    while let Some(len) = net.recv(rx_buf) {
+        match network.recv(&rx_buf[..len]) {
+            Some(ParsedPacket::Arp { header, .. }) => {
+                if header.oper == ARP_OP_REQUEST
+                    && header.tpa == *network.stack.ip.as_bytes()
+                    && network
+                        .send_arp_reply(&header)
+                        .map(|packet| net.send(packet))
+                        .unwrap_or(false)
+                {
+                    stats.arp_replies = stats.arp_replies.wrapping_add(1);
+                }
+            }
+            Some(ParsedPacket::Icmp {
+                eth,
+                ip,
+                header,
+                payload,
+            }) => {
+                if header.icmp_type == ICMP_ECHO_REQUEST
+                    && ip.dst == *network.stack.ip.as_bytes()
+                    && network
+                        .send_icmp_echo_reply(
+                            eth.src,
+                            IpAddr::from_slice(&ip.src),
+                            &header,
+                            payload,
+                        )
+                        .map(|packet| net.send(packet))
+                        .unwrap_or(false)
+                {
+                    stats.icmp_replies = stats.icmp_replies.wrapping_add(1);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    stats
 }
 
 #[panic_handler]
@@ -137,7 +193,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                 rt::log::log(1, "VirtIO RX packet observed");
                 logged_rx = true;
             }
-            if let Some(ParsedPacket::Udp { header, payload }) = network.recv(&rx_buf[..len]) {
+            if let Some(ParsedPacket::Udp { header, payload, .. }) = network.recv(&rx_buf[..len]) {
                 if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
                     if dhcp.parse(payload) {
                         rt::log::log(1, "DHCP lease accepted");
@@ -169,18 +225,10 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         stack.ip = IpAddr::new(192, 168, 1, 12);
     }
 
+    let mut pump_rx_buf = [0u8; 1514];
+    let mut logged_arp = false;
+    let mut logged_icmp = false;
     let mut network = Network::new(&mut stack);
-    
-    for _ in 0..100 {
-        let mut rx_buf = [0u8; 1514];
-        if let Some(len) = net.recv(&mut rx_buf) {
-            if let Some(pkt) = network.recv(&rx_buf[..len]) {
-                if pkt.is_icmp() {
-                    break;
-                }
-            }
-        }
-    }
     
     let _dhcp = DhcpClient::new(mac);
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
@@ -196,11 +244,15 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     if net.is_link_up() {
     }
     
-    let (_ip, _, _) = (stack.ip, stack.netmask, stack.gateway);
-    
-    block_on(NetworkTask);
-
     loop {
-        core::arch::asm!("hlt");
+        let stats = poll_network(&mut net, &mut network, &mut pump_rx_buf);
+        if stats.arp_replies != 0 && !logged_arp {
+            rt::log::log(1, "ARP reply sent");
+            logged_arp = true;
+        }
+        if stats.icmp_replies != 0 && !logged_icmp {
+            rt::log::log(1, "ICMP echo reply sent");
+            logged_icmp = true;
+        }
     }
 }
