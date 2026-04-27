@@ -18,6 +18,9 @@
 //!   4. After handshake: parse `NewSessionTicket` and cache new ticket
 //! ```
 
+use crate::std;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -83,7 +86,7 @@ impl SessionCache {
         if ticket.ticket.is_empty() {
             return;
         }
-        let mut map = self.inner.lock().expect("session cache mutex poisoned");
+        let mut map = self.inner.lock();
         let tickets = map.entry(server_name.to_string()).or_default();
         // Evict expired tickets
         tickets.retain(|t| t.is_valid());
@@ -111,7 +114,7 @@ impl SessionCache {
     /// Get a valid session ticket for a server, if available.
     /// Returns the most recently received valid ticket.
     pub fn get(&self, server_name: &str) -> Option<SessionTicket> {
-        let map = self.inner.lock().expect("session cache mutex poisoned");
+        let map = self.inner.lock();
         if let Some(tickets) = map.get(server_name) {
             // Return the most recent valid ticket
             tickets.iter().rev().find(|t| t.is_valid()).cloned()
@@ -122,15 +125,12 @@ impl SessionCache {
 
     /// Clear all cached tickets.
     pub fn clear(&self) {
-        self.inner
-            .lock()
-            .expect("session cache mutex poisoned")
-            .clear();
+        self.inner.lock().clear();
     }
 
     /// Remove expired tickets and return count of remaining.
     pub fn prune(&self) -> usize {
-        let mut map = self.inner.lock().expect("session cache mutex poisoned");
+        let mut map = self.inner.lock();
         for tickets in map.values_mut() {
             tickets.retain(|t| t.is_valid());
         }

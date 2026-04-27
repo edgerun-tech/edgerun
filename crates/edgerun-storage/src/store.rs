@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::blobs::{BlobKeySource, BlobStore};
+use crate::core::{canonical_event_hash, cas::raw_object_ids};
 use crate::credentials::CredentialStore;
 use crate::error::StorageError;
 use crate::event_loop::{EventLoopBuilder, EventWriter, FetchHandler, PeerDiscoveryHandler};
@@ -435,14 +436,12 @@ impl NodeStore {
 
         use edgerun_proto::edgerun::v0::common::ObjectRef;
 
-        let canonicalization_id = b"raw-bytes-v0";
-        // Spec §17.14: object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || canonical_bytes)
-        let object_id = edgerun_core::crypto::derive_object_id(canonicalization_id, content);
+        let ids = raw_object_ids(content);
 
         // Create LogicalObjectDescriptor (for future storage/persistence)
         let _descriptor = edgerun_proto::edgerun::v0::object::LogicalObjectDescriptor {
             descriptor_version: 1,
-            object_id: object_id.clone(),
+            object_id: ids.object_id.clone(),
             object_kind,
             object_schema_version: 1,
             canonicalization_id: "raw-bytes-v0".into(),
@@ -470,14 +469,11 @@ impl NodeStore {
         let blob_id = self.blobs.store(content, recipients)?;
 
         // Record object presence in file index
-        self.index.mark_object_present(
-            &edgerun_core::util::bytes_to_hex(&object_id),
-            &blob_id,
-            &blob_id,
-        )?;
+        self.index
+            .mark_object_present(&ids.object_id_hex, &ids.representation_id_hex, &blob_id)?;
 
         Ok(ObjectRef {
-            object_id,
+            object_id: ids.object_id,
             object_kind: Some(object_kind),
         })
     }
@@ -503,9 +499,17 @@ impl NodeStore {
             return Ok(None);
         }
 
-        // The blob_id is stored as the representation_id in the presence table
-        // For the simple v0 profile, blob_id == representation_id == content hash
-        let blob_id = object_id_hex.clone();
+        let blob_id = self
+            .index
+            .lookup_objects(std::slice::from_ref(&object_id_hex))?
+            .into_iter()
+            .find(|(id, _, _, status)| id == &object_id_hex && status == "present")
+            .and_then(|(_, _, blob, _)| blob)
+            .ok_or_else(|| {
+                StorageError::InvalidBlob(format!(
+                    "object {object_id_hex} is marked present without a blob id"
+                ))
+            })?;
         let entry = self.blobs.load(&blob_id)?;
         let Some(entry) = entry else {
             return Ok(None);
@@ -1188,8 +1192,7 @@ impl NodeStore {
                     Err(_) => continue, // skip corrupted records during rebuild
                 };
 
-                // Compute hash
-                let event_hash = edgerun_core::crypto::sha256(&event_bytes).to_vec();
+                let event_hash = canonical_event_hash(&proto).value;
 
                 // Rebuild index entry
                 self.index.put_event(
@@ -1396,5 +1399,52 @@ fn decode_varint_from_file(file: &mut File) -> Result<(u64, bool), StorageError>
         Ok(Some(v)) => Ok((v, false)),
         Ok(None) => Ok((0, true)),
         Err(e) => Err(StorageError::Io(e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn tmp_data_root() -> PathBuf {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("node_store_test_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn make_store(data_root: PathBuf) -> NodeStore {
+        let config = NodeStoreConfig {
+            data_root,
+            blob_key_source: std::sync::Arc::new(BlobKeySource::Software {
+                private_key_bytes: vec![0x42; 32],
+            }),
+            node_identity: vec![0x99; 32],
+        };
+        NodeStore::open(&config).unwrap()
+    }
+
+    #[test]
+    fn put_object_can_be_retrieved_by_logical_object_ref() {
+        let data_root = tmp_data_root();
+        let store = make_store(data_root.clone());
+
+        let object_ref = store
+            .put_object(b"hello object", 1, &[vec![0x99; 32]])
+            .unwrap();
+        let object_id_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        let indexed = store.index.lookup_objects(&[object_id_hex]).unwrap();
+
+        assert_eq!(indexed.len(), 1);
+        assert_ne!(indexed[0].1.as_deref(), indexed[0].2.as_deref());
+
+        let loaded = store.get_object(&object_ref).unwrap().unwrap();
+        assert_eq!(loaded.content, b"hello object");
+
+        let _ = std::fs::remove_dir_all(data_root);
     }
 }

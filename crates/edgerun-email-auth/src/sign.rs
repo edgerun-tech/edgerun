@@ -1,17 +1,19 @@
 //! DKIM signing for outbound emails (RFC 6376).
 
+use crate::std;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use std::io;
-use std::path::Path;
-use std::sync::Arc;
 
 use edgerun_crypto::sha2::Sha256;
 use edgerun_crypto::OsRng;
 use edgerun_encoding::base64;
-use rsa::{
-    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding,
-    RsaPrivateKey,
-};
 use rsa::sha2::Digest;
+use rsa::{
+    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding, RsaPrivateKey,
+};
 
 pub struct DkimSigner {
     selector: String,
@@ -44,8 +46,7 @@ impl DkimSigner {
         ))
     }
 
-    pub fn load(domain: &str, selector: &str, path: &Path) -> io::Result<Self> {
-        let pem = std::fs::read_to_string(path)?;
+    pub fn from_private_key_pem(domain: &str, selector: &str, pem: &str) -> io::Result<Self> {
         let private_key = RsaPrivateKey::from_pkcs8_pem(&pem).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -60,10 +61,17 @@ impl DkimSigner {
         ))
     }
 
-    pub fn save_public_key(&self, path: &Path) -> io::Result<()> {
-        let txt_record = self.public_key_txt();
-        std::fs::write(path, txt_record)?;
-        Ok(())
+    pub fn load_from_store<S: DkimKeyStore>(
+        domain: &str,
+        selector: &str,
+        store: &S,
+    ) -> io::Result<Self> {
+        let pem = store.read_private_key_pem(domain, selector)?;
+        Self::from_private_key_pem(domain, selector, &pem)
+    }
+
+    pub fn save_public_key_to_store<S: DkimKeyStore>(&self, store: &S) -> io::Result<()> {
+        store.write_public_key_txt(&self.domain, &self.selector, &self.public_key_txt())
     }
 
     pub fn public_key_txt(&self) -> String {
@@ -143,6 +151,16 @@ impl DkimSigner {
 
         Ok(final_header)
     }
+}
+
+pub trait DkimKeyStore {
+    fn read_private_key_pem(&self, domain: &str, selector: &str) -> io::Result<String>;
+    fn write_public_key_txt(
+        &self,
+        domain: &str,
+        selector: &str,
+        txt_record: &str,
+    ) -> io::Result<()>;
 }
 
 impl Clone for DkimSigner {

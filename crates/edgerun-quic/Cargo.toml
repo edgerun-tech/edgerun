@@ -6,10 +6,6 @@ license.workspace = true
 publish.workspace = true
 description = "QUIC transport protocol (RFC 9000)"
 
-[features]
-default = ["std"]
-std = ["edgerun-tls/std", "edgerun-encoding/std"]
-
 [lints]
 workspace = true
 

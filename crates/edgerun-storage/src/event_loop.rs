@@ -11,8 +11,6 @@
 //! The event log IS the source of truth. FileIndex is a materialized view.
 
 use edgerun_core::protocol::EventEnvelope;
-use edgerun_proto::edgerun::v0::stream as proto_stream;
-use prost::Message;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -23,6 +21,7 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use crate::blobs::BlobStore;
+use crate::core::{canonical_event_hash, encode_event_frame};
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
 
@@ -205,17 +204,12 @@ impl DispatchContext {
             .entry(stream_id.clone())
             .or_insert_with(|| open_stream_file(&self.events_dir, &stream_id));
 
-        // Encode event
-        let proto: proto_stream::EventEnvelope = event.clone();
-        let mut event_bytes = Vec::new();
-        proto_stream::EventEnvelope::encode(&proto, &mut event_bytes)
-            .map_err(|e| StorageError::Encode(format!("encode failed: {e}")))?;
+        let (len_prefix, event_bytes) = encode_event_frame(&event)?;
 
         // Get current file offset before writing
         let offset = file.metadata().map_err(StorageError::Io)?.len();
 
         // Write: [varint length][protobuf bytes]
-        let len_prefix = edgerun_core::varint::encode_varint(event_bytes.len() as u64);
         file.write_all(&len_prefix).map_err(StorageError::Io)?;
         file.write_all(&event_bytes).map_err(StorageError::Io)?;
         file.sync_all().map_err(StorageError::Io)?;
@@ -233,7 +227,7 @@ impl DispatchContext {
 
         // Materialize: update FileIndex
         let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
-        let event_hash = edgerun_core::crypto::sha256(&event_bytes).to_vec();
+        let event_hash = canonical_event_hash(&event).value;
 
         self.index.put_event(
             &stream_id_hex,
@@ -301,14 +295,10 @@ fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> File {
 
 /// Write a single event to disk (used by both the main loop and produce_event).
 fn write_event_to_disk(file: &mut File, event: &EventEnvelope) -> Result<u64, StorageError> {
-    let proto: proto_stream::EventEnvelope = event.clone();
-    let mut event_bytes = Vec::new();
-    proto_stream::EventEnvelope::encode(&proto, &mut event_bytes)
-        .map_err(|e| StorageError::Encode(format!("encode failed: {e}")))?;
+    let (len_prefix, event_bytes) = encode_event_frame(event)?;
 
     let offset = file.metadata().map_err(StorageError::Io)?.len();
 
-    let len_prefix = edgerun_core::varint::encode_varint(event_bytes.len() as u64);
     file.write_all(&len_prefix).map_err(StorageError::Io)?;
     file.write_all(&event_bytes).map_err(StorageError::Io)?;
     file.sync_all().map_err(StorageError::Io)?;
@@ -463,12 +453,7 @@ impl Materializer {
     ) -> Result<(), StorageError> {
         let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
 
-        // Encode to get hash
-        let proto: proto_stream::EventEnvelope = event.clone();
-        let mut event_bytes = Vec::new();
-        proto_stream::EventEnvelope::encode(&proto, &mut event_bytes)
-            .map_err(|e| StorageError::Encode(format!("encode failed: {e}")))?;
-        let event_hash = edgerun_core::crypto::sha256(&event_bytes).to_vec();
+        let event_hash = canonical_event_hash(event).value;
 
         // Index the event with correct offset
         self.index.put_event(

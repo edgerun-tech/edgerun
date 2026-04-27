@@ -1,5 +1,9 @@
 //! DKIM signature parsing and verification (RFC 6376).
 
+use crate::std;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use std::collections::HashMap;
 use std::io;
 
@@ -95,6 +99,7 @@ pub fn parse_dkim_signatures(headers: &[u8]) -> io::Result<Vec<DkimSignature>> {
         match parse_dkim_tag_list(sig_header) {
             Ok(sig) => signatures.push(sig),
             Err(e) => {
+                let _ = &e;
                 edgerun_log::warn!("edgerun-email-auth: DKIM parse error: {}", e);
             }
         }

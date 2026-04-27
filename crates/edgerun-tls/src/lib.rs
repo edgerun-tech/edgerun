@@ -24,7 +24,7 @@
 //!
 //! All messages after ServerHello are encrypted with handshake keys.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 extern crate alloc;
 
@@ -33,28 +33,25 @@ use core::fmt;
 pub use edgerun_bare_rt as rt;
 
 pub mod alert;
-#[cfg(feature = "std")]
 pub mod async_tls;
 pub mod certificate;
-#[cfg(feature = "std")]
 pub mod certificate_gen;
 pub mod cipher;
+pub mod compat;
 pub mod handshake;
 pub mod key_exchange;
 pub mod prf;
 pub mod record;
 pub mod server;
-#[cfg(feature = "std")]
 pub mod session_cache;
+pub mod std;
 pub mod tls_alpn;
 
-#[cfg(feature = "std")]
 pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
-#[cfg(feature = "std")]
+pub use compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
 
 pub use alert::{Alert, AlertLevel};
-#[cfg(feature = "std")]
 pub use certificate_gen::{
     cert_from_pem, generate_self_signed, generate_self_signed_pem, signing_key_from_pem,
     signing_key_to_pem, CertificateAndKey,
@@ -75,7 +72,6 @@ pub enum TlsError {
     /// Alert received from peer
     Alert(AlertLevel, Alert),
     /// Underlying I/O error from the async transport.
-    #[cfg(feature = "std")]
     Io(std::io::Error),
 }
 
@@ -87,7 +83,6 @@ impl fmt::Display for TlsError {
             TlsError::Certificate(m) => write!(f, "Certificate error: {m}"),
             TlsError::Cipher(m) => write!(f, "Cipher error: {m}"),
             TlsError::Alert(lv, a) => write!(f, "TLS alert: {lv:?} {a}"),
-            #[cfg(feature = "std")]
             TlsError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
@@ -101,7 +96,6 @@ impl From<String> for TlsError {
     }
 }
 
-#[cfg(feature = "std")]
 impl From<std::io::Error> for TlsError {
     fn from(e: std::io::Error) -> Self {
         TlsError::Io(e)

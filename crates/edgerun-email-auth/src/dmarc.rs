@@ -1,5 +1,9 @@
 //! DMARC evaluation (RFC 7489).
 
+use crate::std;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use std::io;
 
 use crate::dkim::{DkimResult, DkimStatus};

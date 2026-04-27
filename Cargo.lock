@@ -1024,7 +1024,6 @@ dependencies = [
  "edgerun-dns",
  "edgerun-encoding",
  "edgerun-log",
- "edgerun-rt",
  "rsa",
  "signature",
 ]
@@ -1751,7 +1750,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-bare-rt",
  "edgerun-crypto",
- "edgerun-rt",
 ]
 
 [[package]]

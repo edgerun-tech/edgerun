@@ -18,6 +18,7 @@
 //! Loss of indexes does not invalidate already stored records.
 
 pub mod blobs;
+pub mod core;
 pub mod credentials;
 pub mod error;
 pub mod event_loop;
@@ -25,6 +26,7 @@ pub mod file_index;
 pub mod store;
 
 pub use blobs::{blob_file_path, BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig};
+pub use core::{canonical_event_hash, derive_logical_object_id, derive_representation_id};
 pub use credentials::CredentialStore;
 pub use error::StorageError;
 pub use event_loop::{

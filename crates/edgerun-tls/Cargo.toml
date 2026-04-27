@@ -11,13 +11,13 @@ keywords = ["tls", "ssl", "https", "security", "crypto"]
 categories = ["cryptography", "network-programming"]
 
 [features]
-default = ["std"]
-std = ["dep:edgerun-rt"]
+default = []
+# Compatibility only: TLS is no_std and uses edgerun-bare-rt unconditionally.
+std = []
 
 [dependencies]
 edgerun-crypto.workspace = true
 edgerun-bare-rt.workspace = true
-edgerun-rt = { path = "../edgerun-rt", optional = true }
 
 [lints]
 workspace = true

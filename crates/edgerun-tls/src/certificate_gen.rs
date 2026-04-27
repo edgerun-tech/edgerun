@@ -3,13 +3,16 @@
 //! Provides `CertificateAndKey` — a self-signed certificate with an
 //! associated ECDSA P-256 signing key — plus PEM ↔ DER conversion utilities.
 
-use std::sync::Arc;
+use alloc::format;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
+use edgerun_crypto::error::CryptoError;
 use edgerun_crypto::{
     p256, p256_signing_key_from_der, p256_signing_key_from_pem, p256_signing_key_to_pem,
     pem_encode, x509_cert_from_pem,
 };
-use edgerun_crypto::error::CryptoError;
 
 /// A certificate with an associated ECDSA P-256 signing key.
 ///

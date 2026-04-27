@@ -1,0 +1,77 @@
+//! Minimal std-shaped compatibility surface backed by core, alloc, and edgerun-bare-rt.
+
+pub use core::{fmt, future, pin, result, task};
+
+pub mod collections {
+    pub type HashMap<K, V> = alloc::collections::BTreeMap<K, V>;
+}
+
+pub mod io {
+    use alloc::format;
+    use alloc::string::String;
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum ErrorKind {
+        ConnectionReset,
+        NotConnected,
+        UnexpectedEof,
+        WriteZero,
+        Other,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct Error {
+        kind: ErrorKind,
+        message: String,
+    }
+
+    impl Error {
+        pub fn new(kind: ErrorKind, message: impl fmt::Display) -> Self {
+            Self {
+                kind,
+                message: format!("{message}"),
+            }
+        }
+
+        pub fn other(message: impl fmt::Display) -> Self {
+            Self::new(ErrorKind::Other, message)
+        }
+
+        pub fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(&self.message)
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    impl From<edgerun_bare_rt::IoError> for Error {
+        fn from(value: edgerun_bare_rt::IoError) -> Self {
+            match value {
+                edgerun_bare_rt::IoError::UnexpectedEof => {
+                    Self::new(ErrorKind::UnexpectedEof, value)
+                }
+                edgerun_bare_rt::IoError::WriteZero => Self::new(ErrorKind::WriteZero, value),
+                edgerun_bare_rt::IoError::Other(_) => Self::new(ErrorKind::Other, value),
+            }
+        }
+    }
+
+    pub type Result<T> = core::result::Result<T, Error>;
+}
+
+pub mod sync {
+    pub use alloc::sync::Arc;
+    pub use edgerun_bare_rt::{Mutex, MutexGuard};
+}
+
+pub mod time {
+    pub use edgerun_bare_rt::Duration;
+    pub use edgerun_bare_rt::Instant;
+}

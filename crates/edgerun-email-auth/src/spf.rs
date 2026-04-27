@@ -3,6 +3,9 @@
 //! Queries the SPF record for a domain and evaluates whether the client IP
 //! is authorized to send mail for that domain.
 
+use crate::std;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 use std::io;
 use std::net::IpAddr;
 

@@ -1,5 +1,5 @@
 //! Async TLS 1.3 streams — client and server — wrapping any
-//! `edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin` transport.
+//! `edgerun_tls::AsyncRead + edgerun_tls::AsyncWrite + Unpin` transport.
 //!
 //! Mirrors the sync `TlsStream` / `TlsServerStream` API but uses
 //! async `poll_read` / `poll_write` instead of `std::io::Read` / `Write`.
@@ -7,7 +7,7 @@
 //! # Example (client)
 //! ```ignore
 //! use edgerun_tls::async_tls::AsyncTlsStream;
-//! use std::sync::Arc;
+//! use alloc::sync::Arc;
 //!
 //! // AsyncTlsStream works with any async read/write stream
 //! async fn tls_client_example() {
@@ -18,6 +18,11 @@
 //! }
 //! ```
 
+use crate::std;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -42,7 +47,7 @@ use crate::session_cache::SessionCache;
 use crate::{Result, TlsError};
 use edgerun_crypto::CipherSuite;
 
-use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use crate::compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 // ---------------------------------------------------------------------------
 // AsyncTlsStream — client-side async TLS stream
@@ -161,7 +166,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let key_pair = std::sync::Arc::new(key_pair);
         let server_key_share = sh.server_key_share.clone();
         let shared_secret =
-            edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
+            edgerun_bare_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
                 .await
                 .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
                 .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
@@ -1103,10 +1108,11 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     // 3. Derive handshake keys — offload ECDH to blocking pool
     let key_pair = std::sync::Arc::new(key_pair);
     let client_key_share = client_key_share.clone();
-    let shared_secret = edgerun_rt::spawn_blocking(move || key_pair.exchange(&client_key_share))
-        .await
-        .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
-        .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
+    let shared_secret =
+        edgerun_bare_rt::spawn_blocking(move || key_pair.exchange(&client_key_share))
+            .await
+            .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
+            .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
     let hash = Hasher::Sha256;
     let transcript_hash = hash.hash(&transcript);
 

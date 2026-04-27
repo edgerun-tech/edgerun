@@ -23,16 +23,25 @@
 //! // Add `Authentication-Results: auth_results` to the message
 //! ```
 
+#![no_std]
+
+extern crate alloc;
+
 pub mod dkim;
 pub mod dmarc;
 pub mod sign;
 pub mod spf;
+pub mod std;
 
 pub use dkim::{DkimResult, DkimSignature, DkimStatus};
 pub use dmarc::{DmarcPolicy, DmarcResult, DmarcStatus};
 pub use sign::DkimSigner;
 pub use spf::SpfResult;
 
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 use std::io;
 
 /// Authentication results for a single message.
@@ -141,6 +150,7 @@ impl<'a, D: DnsQuery> EmailAuthEvaluator<'a, D> {
         match spf::check_spf(self.dns, client_ip, &domain).await {
             Ok(result) => result,
             Err(e) => {
+                let _ = &e;
                 edgerun_log::warn!("edgerun-email-auth: SPF check failed: {}", e);
                 SpfResult::TempError
             }
@@ -152,6 +162,7 @@ impl<'a, D: DnsQuery> EmailAuthEvaluator<'a, D> {
         let signatures = match dkim::parse_dkim_signatures(headers) {
             Ok(sigs) => sigs,
             Err(e) => {
+                let _ = &e;
                 edgerun_log::warn!("edgerun-email-auth: DKIM parse error: {}", e);
                 return vec![DkimResult::perm_error("parse error")];
             }
@@ -186,6 +197,7 @@ impl<'a, D: DnsQuery> EmailAuthEvaluator<'a, D> {
         match dmarc::evaluate_dmarc(self.dns, &domain, header_from, spf, dkim).await {
             Ok(result) => Some(result),
             Err(e) => {
+                let _ = &e;
                 edgerun_log::warn!("edgerun-email-auth: DMARC evaluation failed: {}", e);
                 Some(DmarcResult::none("evaluation error"))
             }
