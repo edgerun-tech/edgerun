@@ -149,12 +149,14 @@ impl BlobStore {
 
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
-        edgerun_crypto::getrandom(&mut nonce_bytes).expect("getrandom failed");
+        edgerun_crypto::getrandom(&mut nonce_bytes).map_err(|e| {
+            StorageError::Encryption(format!("random nonce generation failed: {e}"))
+        })?;
         let nonce = &nonce_bytes;
 
         // Encrypt
-        let cipher =
-            edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
+        let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key)
+            .map_err(|e| StorageError::Encryption(format!("invalid AES-256 key: {e}")))?;
         let ciphertext = cipher
             .encrypt(nonce.into(), plaintext)
             .map_err(|e| StorageError::Encryption(format!("AES-GCM encryption failed: {}", e)))?;
@@ -232,11 +234,12 @@ impl BlobStore {
         if nonce.len() != 12 {
             return Err(StorageError::Decryption("nonce must be 12 bytes".into()));
         }
-        let nonce: [u8; 12] = nonce.try_into().expect("nonce length checked above");
-        let cipher =
-            edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes.copy_from_slice(nonce);
+        let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key)
+            .map_err(|e| StorageError::Decryption(format!("invalid AES-256 key: {e}")))?;
         cipher
-            .decrypt((&nonce).into(), ciphertext.as_ref())
+            .decrypt((&nonce_bytes).into(), ciphertext.as_ref())
             .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))
     }
 }
@@ -312,7 +315,10 @@ fn merge_recipients(
 /// Same private key always produces the same blob key, so blobs survive restarts.
 fn derive_blob_key_from_private_key(private_key_bytes: &[u8]) -> [u8; 32] {
     let hk = edgerun_core::crypto::HkdfSha256::new(None, private_key_bytes);
-    hk.expand(b"edgerun:v0:blob-key", 32).try_into().unwrap()
+    let expanded = hk.expand(b"edgerun:v0:blob-key", 32);
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&expanded[..32]);
+    key
 }
 
 const BLOB_KEY_PBKDF2_ITERATIONS: u32 = 100_000;
@@ -350,7 +356,9 @@ fn load_or_create_sealed_key(
     } else {
         // Generate new key, seal it, store on disk
         let mut key = [0u8; 32];
-        edgerun_crypto::getrandom(&mut key).expect("getrandom failed");
+        edgerun_crypto::getrandom(&mut key).map_err(|e| {
+            StorageError::Encryption(format!("random blob key generation failed: {e}"))
+        })?;
 
         let sealed = seal_fn(&key)?;
         let mut file = File::create(&sealed_path)?;
