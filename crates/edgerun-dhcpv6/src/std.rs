@@ -1,4 +1,4 @@
-//! Minimal std-shaped compatibility surface backed by core, alloc, and edgerun-bare-rt.
+//! Minimal std-shaped compatibility surface backed by core, alloc, and edgerun-rt.
 
 pub use core::{cmp, convert, fmt, mem, option, result, str};
 
@@ -66,11 +66,11 @@ pub mod net {
     use alloc::string::{String, ToString};
     pub use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-    pub struct UdpSocket(edgerun_bare_rt::UdpSocket);
+    pub struct UdpSocket(edgerun_rt::UdpSocket);
 
     impl UdpSocket {
         pub fn bind<A: IntoSocketAddr>(addr: A) -> Result<Self, io::Error> {
-            let mut socket = edgerun_bare_rt::UdpSocket::new();
+            let mut socket = edgerun_rt::UdpSocket::new();
             socket
                 .bind(crate::compat::to_bare_addr(addr.into_socket_addr()?))
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -138,14 +138,14 @@ pub mod net {
 
 pub mod time {
     use core::ops::Add;
-    pub use edgerun_bare_rt::Duration;
+    pub use edgerun_rt::Duration;
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
-    pub struct Instant(edgerun_bare_rt::Instant);
+    pub struct Instant(edgerun_rt::Instant);
 
     impl Instant {
         pub fn now() -> Self {
-            Self(edgerun_bare_rt::Instant::now())
+            Self(edgerun_rt::Instant::now())
         }
 
         pub fn elapsed(&self) -> Duration {
@@ -171,8 +171,8 @@ pub mod time {
         }
 
         pub fn duration_since(&self, _epoch: UnixEpoch) -> Result<Duration, ()> {
-            Ok(Duration::from_micros(edgerun_bare_rt::timer::ticks_to_us(
-                edgerun_bare_rt::timer::now(),
+            Ok(Duration::from_micros(edgerun_rt::timer::ticks_to_us(
+                edgerun_rt::timer::now(),
             )))
         }
     }

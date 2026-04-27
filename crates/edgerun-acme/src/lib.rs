@@ -66,7 +66,7 @@ pub mod path {
 #[cfg(target_os = "none")]
 pub mod sync {
     pub use alloc::sync::Arc;
-    pub use edgerun_bare_rt::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+    pub use edgerun_rt::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 }
 
 mod account;

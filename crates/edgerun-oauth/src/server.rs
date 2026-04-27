@@ -188,7 +188,7 @@ struct TokenEntry {
 /// use std::pin::Pin;
 /// use std::future::Future;
 ///
-/// # edgerun_bare_rt::block_on(async {
+/// # edgerun_rt::block_on(async {
 /// let config = ServerConfig::new("https://auth.example.com", "my-issuer");
 /// let oauth = OAuthServer::new(config).unwrap();
 ///

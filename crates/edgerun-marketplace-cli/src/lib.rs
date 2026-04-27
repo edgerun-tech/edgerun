@@ -123,7 +123,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         None => None,
     };
 
-    let rt = edgerun_bare_rt::Builder::new_multi_thread().build()?;
+    let rt = edgerun_rt::Builder::new_multi_thread().build()?;
 
     match cli.command {
         Command::Provider(cmd) => {

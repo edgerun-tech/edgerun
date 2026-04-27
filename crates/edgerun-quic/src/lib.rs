@@ -6,7 +6,7 @@
 extern crate alloc;
 
 pub mod compat {
-    pub use edgerun_bare_rt::{sleep, spawn, timeout, Duration, Instant};
+    pub use edgerun_rt::{sleep, spawn, timeout, Duration, Instant};
 }
 
 pub mod std {
@@ -15,7 +15,7 @@ pub mod std {
     }
 
     pub mod time {
-        pub use edgerun_bare_rt::{Duration, Instant};
+        pub use edgerun_rt::{Duration, Instant};
     }
 
     pub mod io {

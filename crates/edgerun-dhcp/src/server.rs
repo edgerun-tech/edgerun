@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use core::net::Ipv4Addr;
 use core::time::Duration;
 
-use edgerun_bare_rt::{sleep, CancellationToken, Mutex, SocketAddr, UdpSocket};
+use edgerun_rt::{sleep, CancellationToken, Mutex, SocketAddr, UdpSocket};
 
 use super::lease::LeasePool;
 use super::message::io;
@@ -285,6 +285,6 @@ fn network_broadcast(ip: Ipv4Addr, mask: Ipv4Addr) -> Ipv4Addr {
     Ipv4Addr::new(i[0] | !m[0], i[1] | !m[1], i[2] | !m[2], i[3] | !m[3])
 }
 
-fn map_udp_error(_: edgerun_bare_rt::UdpError) -> io::Error {
+fn map_udp_error(_: edgerun_rt::UdpError) -> io::Error {
     io::Error::new(io::ErrorKind::WouldBlock, "UDP operation not ready")
 }

@@ -1,4 +1,4 @@
-//! Async DNS server — handles queries concurrently using edgerun-bare-rt.
+//! Async DNS server — handles queries concurrently using edgerun-rt.
 //!
 //! Listens on both UDP and TCP. Each query is spawned as a separate
 //! async task via `crate::compat::spawn`.

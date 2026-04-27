@@ -12,7 +12,7 @@ default = []
 [dependencies]
 edgerun-virtio = { path = "../edgerun-virtio" }
 edgerun-platform = { path = "../edgerun-platform" }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-dhcp = { path = "../edgerun-dhcp" }
 edgerun-tftp = { path = "../edgerun-tftp" }
 edgerun-tpm = { path = "../edgerun-tpm", default-features = false }

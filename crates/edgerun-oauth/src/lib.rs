@@ -11,7 +11,7 @@
 //! - JWKS endpoint for public key distribution
 //! - Token introspection (RFC 7662)
 //! - File-based token storage with atomic writes
-//! - Async-first API (edgerun-bare-rt runtime)
+//! - Async-first API (edgerun-rt runtime)
 //!
 //! ## Client Quick Start
 //! ```no_run
@@ -25,7 +25,7 @@
 //!     }
 //! }
 //!
-//! # edgerun_bare_rt::block_on(async {
+//! # edgerun_rt::block_on(async {
 //! let config = ClientConfig::device_flow(
 //!     "https://provider.example.com",
 //!     "my-client-id",
@@ -40,7 +40,7 @@
 //! ```no_run
 //! use edgerun_oauth::{OAuthServer, ServerConfig};
 //!
-//! # edgerun_bare_rt::block_on(async {
+//! # edgerun_rt::block_on(async {
 //! let config = ServerConfig::new("https://auth.example.com", "my-issuer");
 //! let server = OAuthServer::new(config).unwrap();
 //!
@@ -118,7 +118,7 @@ pub mod env {
 
 #[cfg(target_os = "none")]
 pub mod sync {
-    pub use edgerun_bare_rt::{RwLockReadGuard, RwLockWriteGuard};
+    pub use edgerun_rt::{RwLockReadGuard, RwLockWriteGuard};
     pub use edgerun_secret_service::sync::{Arc, Mutex, RwLock};
 }
 

@@ -16,7 +16,7 @@ edgerun-dns = { path = "../edgerun-dns", default-features = false, features = ["
 edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
 edgerun-config = { path = "../edgerun-config" }
 edgerun-log = { path = "../edgerun-log" }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 edgerun-inotify = { path = "../edgerun-inotify" }

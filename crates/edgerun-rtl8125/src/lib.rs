@@ -3,7 +3,7 @@
 
 #![no_std]
 
-use edgerun_bare_rt::SpinLock;
+use edgerun_rt::SpinLock;
 
 pub const VENDOR_ID: u16 = 0x10ec;
 pub const DEVICE_ID: u16 = 0x8125;

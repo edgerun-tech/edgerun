@@ -11,7 +11,6 @@ edgerun-bluetooth-gatt = { path = "../edgerun-bluetooth-gatt" }
 edgerun-matter = { path = "../edgerun-matter" }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["hmac"] }
 aes = "0.8"
-cbc = { version = "0.1", features = ["alloc"] }
 
 [lints]
 workspace = true

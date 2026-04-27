@@ -71,12 +71,12 @@ fn main() {
     };
     println!("HTTP server listening on 127.0.0.1:{port} ({protocols})");
 
-    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+    let rt = edgerun_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
     rt.block_on(async move {
-        let shutdown = edgerun_bare_rt::CancellationToken::new();
+        let shutdown = edgerun_rt::CancellationToken::new();
         match server.build().await {
             Ok(mut bound) => {
                 if let Err(e) = bound.run(shutdown).await {

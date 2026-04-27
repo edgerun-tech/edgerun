@@ -1,7 +1,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use edgerun_bare_rt::RwLock;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
+use edgerun_rt::RwLock;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

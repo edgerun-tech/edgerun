@@ -33,4 +33,13 @@ impl MeshSigner for TestSigner {
         bytes.copy_from_slice(&sig.to_bytes());
         Ok(bytes)
     }
+
+    fn sign_message_var(&self, message: &[u8]) -> Result<[u8; 64], HardwareSigningError> {
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+
+        let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(message).unwrap();
+        let mut bytes = [0u8; 64];
+        bytes.copy_from_slice(&sig.to_bytes());
+        Ok(bytes)
+    }
 }

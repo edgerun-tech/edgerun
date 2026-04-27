@@ -28,7 +28,7 @@ use crate::collections::HashMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use edgerun_bare_rt::CancellationToken;
+use edgerun_rt::CancellationToken;
 
 pub struct Scheduler {
     provider_manager: ProviderManager,

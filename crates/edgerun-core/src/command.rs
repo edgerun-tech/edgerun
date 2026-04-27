@@ -39,7 +39,7 @@ pub struct CommandValidationContext<'a> {
     /// Local node identity (the target node's public key as 64-byte NodeID).
     pub local_node_id: &'a [u8; 64],
     /// Replay cache: maps command_hash -> (command_id, decision_event_seq) for already-processed commands.
-    /// command_id is stored as an idempotency hint only; command_hash is the globally unique key.
+    /// A repeated command_hash is a duplicate; reusing command_id with a different hash is invalid.
     pub replay_cache: &'a crate::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
     /// Known revocation IDs (delegations that have been revoked).
     pub revoked_delegation_ids: &'a crate::collections::HashSet<Vec<u8>>,
@@ -307,8 +307,8 @@ pub fn validate_command(
 
     // --- Step 4: Replay detection ---
     // Per spec §18.6: REPLAY_CHECK comes after TIME_CHECK
-    // The replay cache is keyed by command_hash (globally unique SHA-256).
-    // command_id is an application-level idempotency hint only.
+    // The replay cache is keyed by command_hash for duplicate detection, but
+    // command_id reuse with different command content is rejected by §18.6.
     let computed_hash = command_hash(command).value.clone();
     if ctx.replay_cache.contains_key(&computed_hash) {
         let mut derived = std::collections::BTreeMap::new();
@@ -317,6 +317,27 @@ pub fn validate_command(
             Value::String(crate::util::bytes_to_hex(&computed_hash)),
         );
         return duplicate(ReasonCode::ReplayDetected, Value::Map(derived));
+    }
+    if let Some((existing_hash, (_, decision_event_seq))) = ctx
+        .replay_cache
+        .iter()
+        .find(|(_, (command_id, _))| *command_id == command.command_id)
+    {
+        let mut derived = std::collections::BTreeMap::new();
+        derived.insert(
+            "command_id".into(),
+            Value::String(crate::util::bytes_to_hex(&command.command_id)),
+        );
+        derived.insert(
+            "existing_command_hash".into(),
+            Value::String(crate::util::bytes_to_hex(existing_hash)),
+        );
+        derived.insert(
+            "command_hash".into(),
+            Value::String(crate::util::bytes_to_hex(&computed_hash)),
+        );
+        derived.insert("decision_event_seq".into(), Value::Int(*decision_event_seq));
+        return reject(ReasonCode::ReplayDetected, Value::Map(derived), empty_map());
     }
 
     // --- Step 5: Assurance requirement check (if requested) ---
@@ -1258,10 +1279,8 @@ mod tests {
     }
 
     #[test]
-    fn different_command_same_id_is_accepted() {
-        // command_id is only an idempotency hint — two different commands
-        // with the same command_id but different hashes are both valid.
-        // The hash is the globally unique replay key.
+    fn different_command_same_id_is_rejected() {
+        // Reusing command_id for different command content is rejected by §18.6.
         let key = test_signing_key();
         let vk = key.verifying_key();
         let node_id: [u8; 64] = {
@@ -1273,7 +1292,6 @@ mod tests {
         let hint: Vec<u8> = node_id.to_vec();
 
         let cmd = make_signed_command(&key, Some(hint.clone()));
-        let hash = command_hash(&cmd).value;
 
         // Put a DIFFERENT command with the same command_id in the cache
         let mut cache = HashMap::new();
@@ -1283,9 +1301,9 @@ mod tests {
         ctx.local_node_id = &TEST_NODE_ID;
         ctx.replay_cache = &cache;
 
-        // This command should be accepted — its hash is not in the cache
         let result = validate_command(&cmd, &ctx);
-        assert_eq!(result.verdict, Verdict::Accept);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::ReplayDetected));
     }
 
     #[test]

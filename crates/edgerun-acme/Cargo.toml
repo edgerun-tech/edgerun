@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-bare-rt.workspace = true
+edgerun-rt.workspace = true
 edgerun-log.workspace = true
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-http = { workspace = true, default-features = false, features = ["client", "tls"] }

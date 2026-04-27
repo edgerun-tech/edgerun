@@ -32,6 +32,8 @@ pub mod json;
 pub mod layer_pipeline;
 #[cfg(feature = "json")]
 pub mod oci_path;
+#[cfg(feature = "json")]
+pub mod rootfs_access;
 pub mod runtime_config;
 #[cfg(feature = "json")]
 pub mod tar_layer;
@@ -76,6 +78,8 @@ pub mod criu;
 pub mod ebpf_devices;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod ebpf_netcls;
+#[cfg(feature = "edgefs")]
+pub mod edgefs;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod error;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -112,6 +116,8 @@ pub use bare_rootfs::{BareRootfs, BareRootfsEntry, BareRootfsEntryKind};
 pub use bundle::{create_bundle, write_bundle};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use config_builder::ContainerProcessConfig;
+#[cfg(feature = "edgefs")]
+pub use edgefs::EdgeFsLayerSink;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use error::{
     CapabilityError, CgroupError, ConfigError, FifoError, LifecycleError, NamespaceError, OciError,
@@ -155,6 +161,11 @@ pub use oci_path::{layer_path_safe, normalize_layer_path};
 pub use process::{setup_container_child, ContainerConfig};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootfs::setup_rootfs;
+#[cfg(feature = "json")]
+pub use rootfs_access::{
+    build_launch_plan, resolve_executable, resolve_executable_path, OciDeviceId, OciExecutable,
+    OciLaunchPlan, OciRootfs, OciRootfsEntry, OciRootfsEntryKind, OciRootfsError,
+};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootless::{generate_gid_map, generate_uid_map};
 pub use runtime_config::{BareNamespace, BareNamespaceKind, BareRuntimeConfig};

@@ -7,7 +7,7 @@ use core::time::Duration;
 use edgerun_encoding::ip::{ip_to_u32, u32_to_ip};
 
 use crate::message::Ipv4Addr;
-use edgerun_bare_rt::Instant;
+use edgerun_rt::Instant;
 
 /// A DHCP lease record.
 #[derive(Debug, Clone)]

@@ -15,7 +15,7 @@ http-compression = ["dep:brotli", "dep:miniz_oxide"]
 http1 = ["runtime", "dep:edgerun-encoding"]
 http2 = ["runtime", "dep:edgerun-hpack", "dep:edgerun-log"]
 http3 = ["client", "server", "tls", "dep:edgerun-crypto", "dep:edgerun-quic", "dep:edgerun-qpack", "dep:edgerun-encoding", "dep:edgerun-log"]
-runtime = ["dep:edgerun-bare-rt"]
+runtime = ["dep:edgerun-rt"]
 server = ["http1", "http2", "runtime", "dep:edgerun-log"]
 static-files = ["server"]
 tls = ["dep:edgerun-tls"]
@@ -23,7 +23,7 @@ tls = ["dep:edgerun-tls"]
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optional = true }
-edgerun-bare-rt = { path = "../edgerun-bare-rt", optional = true }
+edgerun-rt = { path = "../edgerun-rt", optional = true }
 edgerun-log = { path = "../edgerun-log", optional = true }
 edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"], optional = true }
@@ -36,7 +36,6 @@ brotli = { workspace = true, optional = true }
 [dev-dependencies]
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 edgerun-json = { workspace = true }
-futures = "0.3"
 
 [[test]]
 name = "http3_integration"

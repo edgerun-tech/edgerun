@@ -1,4 +1,4 @@
-//! Async SMTP server and client (RFC 5321) using `edgerun-bare-rt`.
+//! Async SMTP server and client (RFC 5321) using `edgerun-rt`.
 //!
 //! ## Server example
 //! ```no_run

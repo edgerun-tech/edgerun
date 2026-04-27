@@ -4,7 +4,7 @@ use alloc::string::{String, ToString};
 use core::net::Ipv4Addr;
 use core::time::Duration;
 
-use edgerun_bare_rt::{Instant, SocketAddr, UdpSocket};
+use edgerun_rt::{Instant, SocketAddr, UdpSocket};
 
 use super::lease::Lease;
 use super::message::io;
@@ -186,10 +186,10 @@ impl DhcpClient {
     }
 }
 
-fn map_udp_error(_: edgerun_bare_rt::UdpError) -> io::Error {
+fn map_udp_error(_: edgerun_rt::UdpError) -> io::Error {
     io::Error::new(io::ErrorKind::WouldBlock, "UDP operation not ready")
 }
 
 fn random_xid() -> u32 {
-    edgerun_bare_rt::now() as u32 ^ 0x9e37_79b9
+    edgerun_rt::now() as u32 ^ 0x9e37_79b9
 }

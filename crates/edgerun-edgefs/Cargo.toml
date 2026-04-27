@@ -7,7 +7,7 @@ publish.workspace = true
 description = "Encrypted no_std block filesystem for Edgerun runtimes"
 
 [dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["aead"] }
+edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "hmac"] }
 edgerun-storage = { workspace = true }
 
 [lints]

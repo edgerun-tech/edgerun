@@ -13,6 +13,6 @@ default = []
 workspace = true
 
 [dependencies]
-edgerun-bare-rt = { version = "0.1", path = "../edgerun-bare-rt" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 edgerun-log = { path = "../edgerun-log" }

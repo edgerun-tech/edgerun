@@ -80,18 +80,14 @@ pub mod io {
 
     impl core::error::Error for Error {}
 
-    impl From<edgerun_bare_rt::io::IoError> for Error {
-        fn from(error: edgerun_bare_rt::io::IoError) -> Self {
+    impl From<edgerun_rt::io::IoError> for Error {
+        fn from(error: edgerun_rt::io::IoError) -> Self {
             match error {
-                edgerun_bare_rt::io::IoError::UnexpectedEof => {
+                edgerun_rt::io::IoError::UnexpectedEof => {
                     Self::new(ErrorKind::InvalidData, "unexpected EOF")
                 }
-                edgerun_bare_rt::io::IoError::WriteZero => {
-                    Self::new(ErrorKind::Other, "write zero")
-                }
-                edgerun_bare_rt::io::IoError::Other(message) => {
-                    Self::new(ErrorKind::Other, message)
-                }
+                edgerun_rt::io::IoError::WriteZero => Self::new(ErrorKind::Other, "write zero"),
+                edgerun_rt::io::IoError::Other(message) => Self::new(ErrorKind::Other, message),
             }
         }
     }
@@ -115,7 +111,7 @@ pub mod sync {
 
 #[cfg(target_os = "none")]
 pub mod time {
-    pub use edgerun_bare_rt::Duration;
+    pub use edgerun_rt::Duration;
 }
 
 pub mod server;

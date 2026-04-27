@@ -20,7 +20,7 @@
 
 use crate::prelude::v1::*;
 
-use edgerun_bare_rt::RwLock;
+use edgerun_rt::RwLock;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};

@@ -10,7 +10,6 @@ edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-core = { path = "../edgerun-core" }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
-serde_bytes = { version = "0.11", default-features = false, features = ["alloc"] }
 
 [lints]
 workspace = true

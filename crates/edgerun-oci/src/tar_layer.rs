@@ -97,7 +97,7 @@ pub enum OciLayerCompression {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TarEntryKind {
     Regular,
     Directory,
@@ -126,6 +126,9 @@ pub struct TarEntry {
     pub mode: u32,
     pub uid: u32,
     pub gid: u32,
+    pub mtime: u64,
+    pub dev_major: Option<u32>,
+    pub dev_minor: Option<u32>,
     pub link_name: Option<String>,
     pub whiteout: Option<OciWhiteout>,
 }
@@ -503,6 +506,13 @@ fn parse_header(header: &[u8]) -> Result<TarEntry, TarLayerError> {
         mode: parse_octal(&header[100..108])? as u32,
         uid: parse_octal(&header[108..116])? as u32,
         gid: parse_octal(&header[116..124])? as u32,
+        mtime: parse_octal(&header[136..148])?,
+        dev_major: matches!(kind, TarEntryKind::Character | TarEntryKind::Block)
+            .then(|| parse_octal(&header[329..337]).map(|value| value as u32))
+            .transpose()?,
+        dev_minor: matches!(kind, TarEntryKind::Character | TarEntryKind::Block)
+            .then(|| parse_octal(&header[337..345]).map(|value| value as u32))
+            .transpose()?,
         link_name,
     })
 }
@@ -692,7 +702,8 @@ fn round_up_to_block(size: usize) -> usize {
 mod tests {
     use super::*;
     use crate::test_support::{
-        real_sha256_digest_for, tar, tar_entry, test_digest_for, TestDigest, TEST_TAR_BLOCK_SIZE,
+        real_sha256_digest_for, tar, tar_device_entry, tar_entry, tar_entry_with_mtime,
+        test_digest_for, TestDigest, TEST_TAR_BLOCK_SIZE,
     };
     use alloc::vec::Vec;
 
@@ -745,6 +756,35 @@ mod tests {
         assert_eq!(sink.entries[0].0.path, "etc/hosts");
         assert_eq!(sink.entries[0].0.kind, TarEntryKind::Regular);
         assert_eq!(sink.entries[0].1, b"127.0.0.1\n");
+    }
+
+    #[test]
+    fn parses_device_major_minor() {
+        let data = tar(vec![tar_device_entry("dev/null", b'3', 1, 3)]);
+        let mut sink = CollectSink::default();
+
+        let count = apply_uncompressed_tar_layer(&data, &mut sink).unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(sink.entries[0].0.kind, TarEntryKind::Character);
+        assert_eq!(sink.entries[0].0.dev_major, Some(1));
+        assert_eq!(sink.entries[0].0.dev_minor, Some(3));
+    }
+
+    #[test]
+    fn parses_mtime() {
+        let data = tar(vec![tar_entry_with_mtime(
+            "etc/hosts",
+            b'0',
+            b"127.0.0.1\n",
+            1_700_000_000,
+        )]);
+        let mut sink = CollectSink::default();
+
+        let count = apply_uncompressed_tar_layer(&data, &mut sink).unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(sink.entries[0].0.mtime, 1_700_000_000);
     }
 
     #[test]

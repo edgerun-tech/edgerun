@@ -7,7 +7,7 @@ edition.workspace = true
 edgerun-solana = { path = "../edgerun-solana" }
 edgerun-config = { path = "../edgerun-config" }
 edgerun-mesh = { path = "../edgerun-mesh" }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-error.workspace = true
 edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "serde"] }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }

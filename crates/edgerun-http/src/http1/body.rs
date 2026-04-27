@@ -555,7 +555,7 @@ impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_bare_rt::Runtime;
+    use edgerun_rt::Runtime;
 
     #[test]
     fn test_body_full_collect() {

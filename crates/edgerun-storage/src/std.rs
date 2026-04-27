@@ -411,15 +411,15 @@ pub mod sync {
         pub use core::sync::atomic::*;
     }
 
-    pub struct Mutex<T>(edgerun_bare_rt::Mutex<T>);
-    pub struct RwLock<T>(edgerun_bare_rt::RwLock<T>);
+    pub struct Mutex<T>(edgerun_rt::Mutex<T>);
+    pub struct RwLock<T>(edgerun_rt::RwLock<T>);
 
     impl<T> Mutex<T> {
         pub fn new(value: T) -> Self {
-            Self(edgerun_bare_rt::Mutex::new(value))
+            Self(edgerun_rt::Mutex::new(value))
         }
 
-        pub fn lock(&self) -> Result<edgerun_bare_rt::MutexGuard<'_, T>, io::Error> {
+        pub fn lock(&self) -> Result<edgerun_rt::MutexGuard<'_, T>, io::Error> {
             Ok(self.0.lock())
         }
     }
@@ -432,7 +432,7 @@ pub mod sync {
 
     impl<T> RwLock<T> {
         pub fn new(value: T) -> Self {
-            Self(edgerun_bare_rt::RwLock::new(value))
+            Self(edgerun_rt::RwLock::new(value))
         }
 
         pub fn read(&self) -> RwLockReadResult<'_, T> {
@@ -444,17 +444,17 @@ pub mod sync {
         }
     }
 
-    pub struct RwLockReadResult<'a, T>(Option<edgerun_bare_rt::RwLockReadGuard<'a, T>>);
-    pub struct RwLockWriteResult<'a, T>(Option<edgerun_bare_rt::RwLockWriteGuard<'a, T>>);
+    pub struct RwLockReadResult<'a, T>(Option<edgerun_rt::RwLockReadGuard<'a, T>>);
+    pub struct RwLockWriteResult<'a, T>(Option<edgerun_rt::RwLockWriteGuard<'a, T>>);
 
     impl<'a, T> RwLockReadResult<'a, T> {
-        pub fn unwrap(mut self) -> edgerun_bare_rt::RwLockReadGuard<'a, T> {
+        pub fn unwrap(mut self) -> edgerun_rt::RwLockReadGuard<'a, T> {
             self.0.take().expect("rwlock read result consumed")
         }
     }
 
     impl<'a, T> RwLockWriteResult<'a, T> {
-        pub fn unwrap(mut self) -> edgerun_bare_rt::RwLockWriteGuard<'a, T> {
+        pub fn unwrap(mut self) -> edgerun_rt::RwLockWriteGuard<'a, T> {
             self.0.take().expect("rwlock write result consumed")
         }
     }

@@ -6,8 +6,8 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use edgerun_bare_rt::{sleep, spawn, Runtime};
 use edgerun_http::{Handler, HttpClient, HttpServer, HttpVersion, Request, Response, StatusCode};
+use edgerun_rt::{sleep, spawn, Runtime};
 use edgerun_tls::generate_self_signed as gen_cert;
 
 static PORT: AtomicU32 = AtomicU32::new(15000);
@@ -48,7 +48,7 @@ where
             .await
             .expect("server bind");
 
-        let shutdown = edgerun_bare_rt::CancellationToken::new();
+        let shutdown = edgerun_rt::CancellationToken::new();
         let shutdown_clone = shutdown.clone();
         let server_task = spawn(async move {
             if let Err(e) = server.serve_with_shutdown(shutdown_clone).await {

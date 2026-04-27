@@ -150,7 +150,7 @@ impl Handler for alloc::sync::Arc<dyn Handler> {
 mod tests {
     use super::*;
     use crate::{Method, StatusCode};
-    use edgerun_bare_rt::Runtime;
+    use edgerun_rt::Runtime;
 
     #[test]
     fn test_sync_handler() {

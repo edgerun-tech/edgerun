@@ -249,6 +249,7 @@ fn load_vector(dir: &Path) -> Option<VectorCase> {
     // The corpus uses pre-computed hashes in replay_cache, stream_heads, etc.
     // We inject them so the validators can find them.
     let semantic = enrich_with_corpus_hashes(&manifest, semantic, &local_state);
+    let semantic = enrich_with_canonical_artifacts(&manifest, semantic, dir);
 
     let verifier = TestVerifier;
     // For corpus vectors, the hashes are provided via enrichment above.
@@ -305,6 +306,37 @@ fn load_vector(dir: &Path) -> Option<VectorCase> {
         expected,
         result,
     })
+}
+
+fn enrich_with_canonical_artifacts(
+    manifest: &BTreeMap<String, Value>,
+    mut semantic: BTreeMap<String, Value>,
+    dir: &Path,
+) -> BTreeMap<String, Value> {
+    if manifest.get("suite").and_then(Value::as_str) != Some("canonical") {
+        return semantic;
+    }
+
+    let mut artifacts = BTreeMap::new();
+    for name in [
+        "canonical_signable",
+        "canonical_full",
+        "record_hash",
+        "signature_input",
+        "signature",
+        "canonical_bytes",
+    ] {
+        let path = dir.join(format!("{name}.hex"));
+        if let Ok(text) = std::fs::read_to_string(path) {
+            artifacts.insert(name.to_string(), Value::String(text.trim().to_string()));
+        }
+    }
+
+    if !artifacts.is_empty() {
+        semantic.insert("canonical_artifacts".to_string(), Value::Map(artifacts));
+    }
+
+    semantic
 }
 
 impl VectorCase {

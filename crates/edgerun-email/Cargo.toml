@@ -21,7 +21,7 @@ std = []
 workspace = true
 
 [dependencies]
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns", default-features = false }
 edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }

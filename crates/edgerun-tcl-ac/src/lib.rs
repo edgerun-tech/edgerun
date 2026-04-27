@@ -4,12 +4,11 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
-use aes::cipher::{block_padding::Pkcs7, KeyInit, KeyIvInit};
+use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use cbc::cipher::{BlockDecryptMut, BlockEncryptMut};
 use core::option::Option::{None, Some};
 use core::result::Result::{Err, Ok};
 #[cfg(target_os = "none")]
@@ -354,28 +353,17 @@ impl TclAcClient {
     }
 
     fn encrypt_payload(&self, payload: &[u8]) -> Vec<u8> {
-        use aes::cipher::KeyIvInit;
-
         let session = self.session.read().unwrap();
         let key = session.as_ref().map(|s| &s.session_key).unwrap_or(BASE_KEY);
 
-        type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
-        let cipher = Aes128CbcEnc::new(key.into(), PRESET_IV.into());
-        cipher.encrypt_padded_vec_mut::<Pkcs7>(payload)
+        aes128_cbc_encrypt_pkcs7(key, PRESET_IV, payload)
     }
 
     fn decrypt_payload(&self, payload: &[u8]) -> Option<Vec<u8>> {
-        use aes::cipher::KeyIvInit;
-
         let session = self.session.read().unwrap();
         let key = session.as_ref().map(|s| &s.session_key).unwrap_or(BASE_KEY);
 
-        type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
-        let cipher = Aes128CbcDec::new(key.into(), PRESET_IV.into());
-        cipher
-            .decrypt_padded_vec_mut::<Pkcs7>(payload)
-            .ok()
-            .map(|v| v.to_vec())
+        aes128_cbc_decrypt_pkcs7(key, PRESET_IV, payload)
     }
 
     fn build_protocol_packet(&self, cmd: u8, payload: &[u8]) -> Vec<u8> {
@@ -655,6 +643,60 @@ impl TclAcClient {
     }
 }
 
+fn aes128_cbc_encrypt_pkcs7(key: &[u8; 16], iv: &[u8; 16], payload: &[u8]) -> Vec<u8> {
+    let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+    let pad_len = 16 - (payload.len() % 16);
+    let mut out = Vec::with_capacity(payload.len() + pad_len);
+    out.extend_from_slice(payload);
+    out.extend(core::iter::repeat(pad_len as u8).take(pad_len));
+
+    let mut previous = *iv;
+    for block in out.chunks_exact_mut(16) {
+        for i in 0..16 {
+            block[i] ^= previous[i];
+        }
+        cipher.encrypt_block(GenericArray::from_mut_slice(block));
+        previous.copy_from_slice(block);
+    }
+
+    out
+}
+
+fn aes128_cbc_decrypt_pkcs7(key: &[u8; 16], iv: &[u8; 16], payload: &[u8]) -> Option<Vec<u8>> {
+    if payload.is_empty() || payload.len() % 16 != 0 {
+        return None;
+    }
+
+    let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+    let mut out = Vec::with_capacity(payload.len());
+    let mut previous = *iv;
+
+    for block in payload.chunks_exact(16) {
+        let mut decrypted = [0u8; 16];
+        decrypted.copy_from_slice(block);
+        cipher.decrypt_block(GenericArray::from_mut_slice(&mut decrypted));
+        for i in 0..16 {
+            decrypted[i] ^= previous[i];
+        }
+        out.extend_from_slice(&decrypted);
+        previous.copy_from_slice(block);
+    }
+
+    let pad_len = *out.last()? as usize;
+    if pad_len == 0 || pad_len > 16 || pad_len > out.len() {
+        return None;
+    }
+    if !out[out.len() - pad_len..]
+        .iter()
+        .all(|byte| *byte as usize == pad_len)
+    {
+        return None;
+    }
+
+    out.truncate(out.len() - pad_len);
+    Some(out)
+}
+
 impl Default for TclAcClient {
     fn default() -> Self {
         Self::new()
@@ -732,5 +774,32 @@ mod tests {
         let remote = [1u8; 32];
         let key = client.derive_session_key(&local, &remote);
         assert_eq!(key.len(), 16);
+    }
+
+    #[test]
+    fn aes_cbc_roundtrips_payloads() {
+        for payload in [
+            b"".as_slice(),
+            b"short".as_slice(),
+            b"sixteen byte msg".as_slice(),
+        ] {
+            let encrypted = aes128_cbc_encrypt_pkcs7(BASE_KEY, PRESET_IV, payload);
+            assert_eq!(encrypted.len() % 16, 0);
+            assert_eq!(
+                aes128_cbc_decrypt_pkcs7(BASE_KEY, PRESET_IV, &encrypted).as_deref(),
+                Some(payload)
+            );
+        }
+    }
+
+    #[test]
+    fn aes_cbc_rejects_bad_padding() {
+        let mut encrypted = aes128_cbc_encrypt_pkcs7(BASE_KEY, PRESET_IV, b"payload");
+        let last = encrypted.len() - 1;
+        encrypted[last] ^= 0xff;
+        assert_eq!(
+            aes128_cbc_decrypt_pkcs7(BASE_KEY, PRESET_IV, &encrypted),
+            None
+        );
     }
 }

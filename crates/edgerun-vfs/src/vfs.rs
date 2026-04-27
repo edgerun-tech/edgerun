@@ -570,64 +570,35 @@ impl VirtualFileSystem {
         self.root.as_ref()
     }
 
-    /// Search for pattern in text files (parallel, in-memory).
+    /// Search for pattern in text files in memory.
     /// Binary files are automatically skipped.
     pub fn grep(&self, pattern: &str) -> Vec<GrepMatch> {
         use edgerun_regex::Regex;
-        #[cfg(not(target_os = "none"))]
-        use rayon::prelude::*;
 
         let regex = match Regex::new(pattern) {
             Some(r) => r,
             None => return Vec::new(),
         };
 
-        #[cfg(not(target_os = "none"))]
-        {
-            return self
-                .files
-                .par_iter()
-                .filter(|(path, _)| !self.deleted.contains(*path))
-                .filter_map(|(path, content)| {
-                    let text = content.as_str()?;
-                    let mut matches = Vec::new();
-                    for (line_num, line) in text.lines().enumerate() {
-                        if regex.is_match(line) {
-                            matches.push(GrepMatch {
-                                path: path.clone(),
-                                line_number: line_num + 1,
-                                line: line.to_string(),
-                            });
-                        }
+        self.files
+            .iter()
+            .filter(|(path, _)| !self.deleted.contains(*path))
+            .filter_map(|(path, content)| {
+                let text = content.as_str()?;
+                let mut matches = Vec::new();
+                for (line_num, line) in text.lines().enumerate() {
+                    if regex.is_match(line) {
+                        matches.push(GrepMatch {
+                            path: path.clone(),
+                            line_number: line_num + 1,
+                            line: line.to_string(),
+                        });
                     }
-                    Some(matches)
-                })
-                .flatten()
-                .collect();
-        }
-
-        #[cfg(target_os = "none")]
-        {
-            self.files
-                .iter()
-                .filter(|(path, _)| !self.deleted.contains(*path))
-                .filter_map(|(path, content)| {
-                    let text = content.as_str()?;
-                    let mut matches = Vec::new();
-                    for (line_num, line) in text.lines().enumerate() {
-                        if regex.is_match(line) {
-                            matches.push(GrepMatch {
-                                path: path.clone(),
-                                line_number: line_num + 1,
-                                line: line.to_string(),
-                            });
-                        }
-                    }
-                    Some(matches)
-                })
-                .flatten()
-                .collect()
-        }
+                }
+                Some(matches)
+            })
+            .flatten()
+            .collect()
     }
 
     /// Search for files matching glob pattern

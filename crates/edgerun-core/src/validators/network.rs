@@ -408,8 +408,8 @@ pub fn validate_network_case(
 // ===================================================================
 
 use crate::crypto::{
-    verify_canonical_record, ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
-    SIG_DOMAIN_ROUTE_ADVERTISEMENT,
+    verify_canonical_record, verify_canonical_record_hw, ECDSA_P256_PUBLIC_KEY_LEN,
+    ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
 };
 use crate::protocol::{canonical_bytes, ProtocolRecord};
 
@@ -418,6 +418,13 @@ use crate::protocol::{canonical_bytes, ProtocolRecord};
 pub fn validate_route_advertisement(
     adv: &edgerun_proto::edgerun::v0::network::RouteAdvertisement,
 ) -> ValidationResult {
+    if adv.advertisement_version != 1 {
+        return reject(
+            ReasonCode::VersionUnsupported,
+            mapping([("reason", ystr("unsupported_advertisement_version"))]),
+            empty_map(),
+        );
+    }
     let Some(ref target) = adv.target_node else {
         return reject(
             ReasonCode::StructuralInvalid,
@@ -462,9 +469,16 @@ pub fn validate_route_advertisement(
     }
 
     if let Some(ref sig) = adv.signature {
+        if sig.algorithm != SIGNATURE_ALGORITHM_ECDSA_P256 as i32 {
+            return reject(
+                ReasonCode::CryptoInvalid,
+                mapping([("reason", ystr("unsupported_signature_algorithm"))]),
+                empty_map(),
+            );
+        }
         if sig.value.len() != ECDSA_P256_SIGNATURE_LEN {
             return reject(
-                ReasonCode::StructuralInvalid,
+                ReasonCode::CryptoInvalid,
                 mapping([("reason", ystr("bad_signature_length"))]),
                 empty_map(),
             );
@@ -499,7 +513,14 @@ pub fn validate_route_advertisement(
         };
 
         let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
-        if !verify_canonical_record(&vk, SIG_DOMAIN_ROUTE_ADVERTISEMENT, &canonical, &sig.value) {
+        if !verify_canonical_record(&vk, SIG_DOMAIN_ROUTE_ADVERTISEMENT, &canonical, &sig.value)
+            && !verify_canonical_record_hw(
+                &vk,
+                SIG_DOMAIN_ROUTE_ADVERTISEMENT,
+                &canonical,
+                &sig.value,
+            )
+        {
             return reject(
                 ReasonCode::CryptoInvalid,
                 mapping([("reason", ystr("signature_verification_failed"))]),
@@ -511,6 +532,7 @@ pub fn validate_route_advertisement(
     accept(
         mapping([
             ("validation_level", ystr("route_advertisement_valid")),
+            ("advisory_only", Value::Bool(true)),
             (
                 "target_node",
                 ystr(crate::util::bytes_to_hex(
@@ -554,6 +576,27 @@ mod proto_tests {
             crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
         // Sign sig_input directly (per spec §17.11)
         let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&sig_input).unwrap();
+        let mut signed = adv.clone();
+        signed.signature = Some(Signature {
+            algorithm: 1,
+            value: sig.to_bytes().to_vec(),
+        });
+        signed
+    }
+
+    fn sign_ad_hw_style(
+        sk: &edgerun_crypto::p256::ecdsa::SigningKey,
+        adv: &RouteAdvertisement,
+    ) -> RouteAdvertisement {
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+        let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
+        let record_hash =
+            crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_ROUTE_ADVERTISEMENT, &canonical);
+        let sig_input =
+            crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
+        let sig_input_digest = crate::crypto::sha256(&sig_input);
+        let digest: [u8; 32] = sig_input_digest.try_into().unwrap();
+        let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&digest).unwrap();
         let mut signed = adv.clone();
         signed.signature = Some(Signature {
             algorithm: 1,
@@ -611,6 +654,19 @@ mod proto_tests {
         let (sk, pk) = make_test_keypair();
         let ad = make_valid_ad(pk);
         let signed = sign_ad(&sk, &ad);
+        let result = validate_route_advertisement(&signed);
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+        assert_eq!(
+            result.derived.as_map().unwrap().get("advisory_only"),
+            Some(&Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn test_valid_hw_signed_route_ad() {
+        let (sk, pk) = make_test_keypair();
+        let ad = make_valid_ad(pk);
+        let signed = sign_ad_hw_style(&sk, &ad);
         let result = validate_route_advertisement(&signed);
         assert_eq!(result.verdict, crate::result::Verdict::Accept);
     }

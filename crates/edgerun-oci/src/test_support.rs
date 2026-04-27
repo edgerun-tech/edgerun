@@ -97,13 +97,17 @@ pub fn bare_image_plan_for_layers_and_diff_ids(
 }
 
 pub fn tar_entry(path: &str, kind: u8, body: &[u8]) -> Vec<u8> {
+    tar_entry_with_mtime(path, kind, body, 0)
+}
+
+pub fn tar_entry_with_mtime(path: &str, kind: u8, body: &[u8], mtime: u64) -> Vec<u8> {
     let mut header = [0u8; TEST_TAR_BLOCK_SIZE];
     write_field(&mut header[0..100], path.as_bytes());
     write_octal(&mut header[100..108], 0o644);
     write_octal(&mut header[108..116], 0);
     write_octal(&mut header[116..124], 0);
     write_octal(&mut header[124..136], body.len() as u64);
-    write_octal(&mut header[136..148], 0);
+    write_octal(&mut header[136..148], mtime);
     for byte in &mut header[148..156] {
         *byte = b' ';
     }
@@ -117,6 +121,21 @@ pub fn tar_entry(path: &str, kind: u8, body: &[u8]) -> Vec<u8> {
     out.extend_from_slice(body);
     out.resize(out.len() + (round_up_to_block(body.len()) - body.len()), 0);
     out
+}
+
+pub fn tar_device_entry(path: &str, kind: u8, major: u32, minor: u32) -> Vec<u8> {
+    let mut entry = tar_entry(path, kind, &[]);
+    for byte in &mut entry[148..156] {
+        *byte = b' ';
+    }
+    write_octal(&mut entry[329..337], major.into());
+    write_octal(&mut entry[337..345], minor.into());
+    let checksum: u64 = entry[..TEST_TAR_BLOCK_SIZE]
+        .iter()
+        .map(|byte| u64::from(*byte))
+        .sum();
+    write_octal(&mut entry[148..156], checksum);
+    entry
 }
 
 pub fn tar(entries: Vec<Vec<u8>>) -> Vec<u8> {

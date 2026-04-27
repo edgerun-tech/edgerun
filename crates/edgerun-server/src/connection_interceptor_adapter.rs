@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use edgerun_bare_rt::AsyncTcpStream;
+use edgerun_rt::AsyncTcpStream;
 
 pub struct ConnectionInterceptorAdapter {
     handler: Arc<dyn edgerun_http::connection_middleware::ConnectionHandler>,

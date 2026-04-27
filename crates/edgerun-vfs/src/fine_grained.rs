@@ -17,7 +17,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use dashmap::DashMap;
-use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -260,7 +259,7 @@ impl FineGrainedVFS {
         Ok(())
     }
 
-    /// Search for pattern in text files (parallel). Binary files are skipped.
+    /// Search for pattern in text files. Binary files are skipped.
     pub fn grep(&self, pattern: &str) -> Vec<GrepMatch> {
         use edgerun_regex::Regex;
 
@@ -270,7 +269,7 @@ impl FineGrainedVFS {
         };
 
         self.files
-            .par_iter()
+            .iter()
             .filter(|entry| !self.deleted.contains_key(entry.key()))
             .filter_map(|entry| {
                 let path = entry.key();
@@ -372,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grep_is_parallel() {
+    fn test_grep_matches_all_files() {
         let tmp = tempfile::tempdir().unwrap();
         for i in 0..100 {
             let content = format!("fn test_{}() {{ let x = {}; }}\n", i, i);

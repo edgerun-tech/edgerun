@@ -7,9 +7,13 @@
 //! - Revocation record processing
 
 use crate::config::{parse_config, NodeConfig};
+use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use edgerun_core::result::Verdict;
+use edgerun_core::validators_proto::{
+    validate_control_change_command, validate_delegation_chain, validate_revocation_record,
+};
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
@@ -22,8 +26,6 @@ use edgerun_proto::edgerun::v0::trust::{
 };
 use edgerun_storage::NodeStore;
 use prost::Message;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -326,6 +328,35 @@ pub fn dispatch_command(
         );
     }
 
+    if matches!(
+        CommandType::from_i32(command.command_type),
+        Some(
+            CommandType::AddController
+                | CommandType::RemoveController
+                | CommandType::TransferControl
+        )
+    ) {
+        let current_controllers = controllers.to_vec();
+        let control_result = validate_control_change_command(command, &current_controllers, 1);
+        if control_result.verdict != Verdict::Accept {
+            let reason = control_result
+                .reason_code
+                .map(|r| r.as_str().to_string())
+                .unwrap_or_else(|| "control_change_rejected".into());
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &reason,
+                Vec::new(),
+                None,
+            );
+        }
+    }
+
     // Dispatch by command type
     let command_type = command.command_type;
     match command_type {
@@ -418,6 +449,11 @@ pub fn dispatch_command(
                 capacity_tracker,
                 running_workloads,
             )
+        }
+        x if x == CommandType::CreateDelegation as i32
+            || x == CommandType::CreateRevocation as i32 =>
+        {
+            dispatch_custom_command(command, store, stream_id, signer, controllers)
         }
         x if x == CommandType::UpdateConfig as i32 => {
             // Update configuration via event store
@@ -1040,7 +1076,7 @@ fn dispatch_execute_workload(
 
     edgerun_log::info!("pulling: {}", image_str);
     let meter_for_pull = meter.clone();
-    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+    let rt = edgerun_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string());
@@ -1823,8 +1859,20 @@ fn dispatch_create_delegation(
     controllers: &mut ControllerSet,
     delegation: &ProtoDelegationRecord,
 ) -> CommandDispatchResult {
-    // Verify the delegation signature using domain-separated canonical verification.
-    let Some(sig) = &delegation.signature else {
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(std::time::Duration::ZERO)
+        .as_millis() as i64;
+    let validation = validate_delegation_chain(
+        &[delegation.clone()],
+        now_ms,
+        &std::collections::HashSet::new(),
+    );
+    if validation.verdict != Verdict::Accept {
+        let reason = validation
+            .reason_code
+            .map(|r| r.as_str().to_string())
+            .unwrap_or_else(|| "delegation_invalid".into());
         return record_and_respond(
             command,
             store,
@@ -1832,25 +1880,23 @@ fn dispatch_create_delegation(
             signer,
             controllers,
             false,
-            "missing_signature",
-            Vec::new(),
-            None,
-        );
-    };
-    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "bad_signature_length",
+            &reason,
             Vec::new(),
             None,
         );
     }
-    let Some(issuer_ref) = &delegation.issuer else {
+
+    let issuer_id = delegation
+        .issuer
+        .as_ref()
+        .map(|issuer| issuer.identity_id.clone())
+        .unwrap_or_default();
+    let command_issuer_id = command
+        .issuer
+        .as_ref()
+        .map(|issuer| issuer.identity_id.as_slice())
+        .unwrap_or_default();
+    if !controllers.contains(&issuer_id) || issuer_id.as_slice() != command_issuer_id {
         return record_and_respond(
             command,
             store,
@@ -1858,59 +1904,7 @@ fn dispatch_create_delegation(
             signer,
             controllers,
             false,
-            "missing_issuer",
-            Vec::new(),
-            None,
-        );
-    };
-    let Some(key_hint) = &issuer_ref.key_hint else {
-        return record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "missing_key_hint",
-            Vec::new(),
-            None,
-        );
-    };
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04;
-    vk_sec1[1..].copy_from_slice(key_hint);
-    let Ok(vk) = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) else {
-        return record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "bad_public_key",
-            Vec::new(),
-            None,
-        );
-    };
-    let canonical = prost::Message::encode_to_vec(&{
-        let mut s = delegation.clone();
-        s.signature = None;
-        s
-    });
-    if !edgerun_core::crypto::verify_canonical_record(
-        &vk,
-        edgerun_core::crypto::SIG_DOMAIN_DELEGATION_RECORD,
-        &canonical,
-        &sig.value,
-    ) {
-        return record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "signature_verification_failed",
+            "AUTHORITY_DENIED",
             Vec::new(),
             None,
         );
@@ -2039,6 +2033,30 @@ fn dispatch_create_revocation(
         .as_ref()
         .map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id))
         .unwrap_or_default();
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(std::time::Duration::ZERO)
+        .as_millis() as i64;
+    let trusted_issuers = controllers.to_vec();
+    let validation = validate_revocation_record(revocation, now_ms, &trusted_issuers);
+    if validation.verdict != Verdict::Accept {
+        let reason = validation
+            .reason_code
+            .map(|r| r.as_str().to_string())
+            .unwrap_or_else(|| "revocation_invalid".into());
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            &reason,
+            Vec::new(),
+            None,
+        );
+    }
 
     // Determine target type and hex from the oneof
     let (target_type, target_hex) = if let Some(ref target) = revocation.target {
@@ -2782,6 +2800,75 @@ mod tests {
         }
     }
 
+    fn sign_command(command: &mut CommandEnvelope, signer: &TestSigner) {
+        command.signature = None;
+        if let Some(issuer) = &mut command.issuer {
+            issuer.key_hint = Some(signer.node_id.0.to_vec());
+        }
+        let canonical = edgerun_core::protocol::canonical_bytes(
+            &edgerun_core::protocol::ProtocolRecord::CommandEnvelope(command.clone()),
+            true,
+        );
+        let sig = edgerun_core::crypto::sign_canonical_record(
+            &signer.key,
+            edgerun_core::crypto::SIG_DOMAIN_COMMAND_ENVELOPE,
+            &canonical,
+        )
+        .unwrap();
+        command.signature = Some(edgerun_core::protocol::Signature {
+            algorithm: edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32,
+            value: sig,
+        });
+    }
+
+    fn sign_revocation_record(
+        revocation: &mut edgerun_proto::edgerun::v0::trust::RevocationRecord,
+        signer: &TestSigner,
+    ) {
+        revocation.signature = None;
+        if let Some(issuer) = &mut revocation.issuer {
+            issuer.key_hint = Some(signer.node_id.0.to_vec());
+        }
+        let canonical = edgerun_core::protocol::canonical_bytes(
+            &edgerun_core::protocol::ProtocolRecord::RevocationRecord(revocation.clone()),
+            true,
+        );
+        let sig = edgerun_core::crypto::sign_canonical_record(
+            &signer.key,
+            edgerun_core::crypto::SIG_DOMAIN_REVOCATION_RECORD,
+            &canonical,
+        )
+        .unwrap();
+        revocation.signature = Some(edgerun_core::protocol::Signature {
+            algorithm: edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32,
+            value: sig,
+        });
+    }
+
+    fn sign_delegation_record(
+        delegation: &mut edgerun_proto::edgerun::v0::trust::DelegationRecord,
+        signer: &TestSigner,
+    ) {
+        delegation.signature = None;
+        if let Some(issuer) = &mut delegation.issuer {
+            issuer.key_hint = Some(signer.node_id.0.to_vec());
+        }
+        let canonical = edgerun_core::protocol::canonical_bytes(
+            &edgerun_core::protocol::ProtocolRecord::DelegationRecord(delegation.clone()),
+            true,
+        );
+        let sig = edgerun_core::crypto::sign_canonical_record(
+            &signer.key,
+            edgerun_core::crypto::SIG_DOMAIN_DELEGATION_RECORD,
+            &canonical,
+        )
+        .unwrap();
+        delegation.signature = Some(edgerun_core::protocol::Signature {
+            algorithm: edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32,
+            value: sig,
+        });
+    }
+
     fn make_controller_identity(hex_str: &str) -> Vec<u8> {
         edgerun_core::util::hex_to_bytes(hex_str).unwrap_or_default()
     }
@@ -3276,6 +3363,66 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_signed_remove_last_controller_is_rejected() {
+        let mut store = test_store();
+        let signer = TestSigner::new();
+        let node_id = signer.node_id();
+        let initial_ctrl = vec![1, 2, 3];
+        let mut controllers = ControllerSet::new(vec![initial_ctrl.clone()]);
+        let mut replay_cache = HashMap::new();
+        let revoked = HashSet::new();
+        let trusted = vec![initial_ctrl.clone()];
+
+        let genesis = edgerun_core::protocol::EventEnvelope {
+            envelope_version: 1,
+            stream_id: node_id.0.to_vec(),
+            seq: 0,
+            prev_event_hash: None,
+            event_type: EventType::NodeGenesis as i32,
+            event_version: 1,
+            recorded_at: None,
+            effective_at: None,
+            payload_object: None,
+            related_events: vec![],
+            related_commands: vec![],
+            related_objects: vec![],
+            related_delegations: vec![],
+            related_revocations: vec![],
+            event_metadata: None,
+            signature: None,
+        };
+        store.append_event_blocking(genesis).unwrap();
+
+        let mut command = make_command(
+            initial_ctrl.clone(),
+            node_id.0.to_vec(),
+            initial_ctrl.clone(),
+            CommandType::RemoveController as i32,
+        );
+        sign_command(&mut command, &signer);
+
+        let result = dispatch_command(
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
+            2,
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
+            &test_running_workloads(),
+        );
+
+        assert_eq!(result.decision, 2);
+        assert_eq!(result.reason_code, "CONTROL_INVARIANT_FAILED");
+        assert!(controllers.contains(&initial_ctrl));
+    }
+
+    #[test]
     fn dispatch_transfer_control_command() {
         let mut store = test_store();
         let signer = TestSigner::new();
@@ -3647,6 +3794,101 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_signed_delegation_payload_commits() {
+        use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+        use edgerun_proto::edgerun::v0::trust::DelegationRecord;
+
+        let mut store = test_store();
+        let signer = TestSigner::new();
+        let node_id = signer.node_id();
+        let initial_ctrl = node_id.0.to_vec();
+        let mut controllers = ControllerSet::new(vec![initial_ctrl.clone()]);
+        let mut replay_cache = HashMap::new();
+        let revoked = HashSet::new();
+        let trusted = vec![initial_ctrl.clone()];
+
+        let genesis = edgerun_core::protocol::EventEnvelope {
+            envelope_version: 1,
+            stream_id: node_id.0.to_vec(),
+            seq: 0,
+            prev_event_hash: None,
+            event_type: EventType::NodeGenesis as i32,
+            event_version: 1,
+            recorded_at: None,
+            effective_at: None,
+            payload_object: None,
+            related_events: vec![],
+            related_commands: vec![],
+            related_objects: vec![],
+            related_delegations: vec![],
+            related_revocations: vec![],
+            event_metadata: None,
+            signature: None,
+        };
+        store.append_event_blocking(genesis).unwrap();
+
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: vec![1, 2, 3, 4],
+            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+                identity_id: initial_ctrl.clone(),
+                identity_kind: Some(2),
+                key_hint: None,
+            }),
+            recipient: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+                identity_id: vec![5, 6, 7],
+                identity_kind: Some(2),
+                key_hint: None,
+            }),
+            issued_at: Some(prost_types::Timestamp {
+                seconds: now_secs,
+                nanos: 0,
+            }),
+            not_before: None,
+            expires_at: None,
+            capability: None,
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_delegation_record(&mut delegation, &signer);
+
+        let mut command = make_command(
+            vec![1, 2, 3],
+            node_id.0.to_vec(),
+            initial_ctrl.clone(),
+            CommandType::CreateDelegation as i32,
+        );
+        command.payload = Some(Payload::InlinePayload(prost::Message::encode_to_vec(
+            &delegation,
+        )));
+        sign_command(&mut command, &signer);
+
+        let result = dispatch_command(
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
+            2,
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
+            &test_running_workloads(),
+        );
+
+        assert_eq!(result.decision, CommandDecision::Committed as i32);
+    }
+
+    #[test]
     fn dispatch_custom_command_with_revocation_payload() {
         use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
         use edgerun_proto::edgerun::v0::trust::RevocationRecord;
@@ -3734,6 +3976,105 @@ mod tests {
         );
         // Will fail signature verification but the dispatch path for revocation runs
         assert_eq!(result.decision, 2);
+    }
+
+    #[test]
+    fn dispatch_signed_revocation_payload_commits() {
+        use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+        use edgerun_proto::edgerun::v0::trust::{RevocationKind, RevocationRecord};
+
+        let mut store = test_store();
+        let signer = TestSigner::new();
+        let node_id = signer.node_id();
+        let initial_ctrl = node_id.0.to_vec();
+        let mut controllers = ControllerSet::new(vec![initial_ctrl.clone()]);
+        let mut replay_cache = HashMap::new();
+        let revoked = HashSet::new();
+        let trusted = vec![initial_ctrl.clone()];
+
+        let genesis = edgerun_core::protocol::EventEnvelope {
+            envelope_version: 1,
+            stream_id: node_id.0.to_vec(),
+            seq: 0,
+            prev_event_hash: None,
+            event_type: EventType::NodeGenesis as i32,
+            event_version: 1,
+            recorded_at: None,
+            effective_at: None,
+            payload_object: None,
+            related_events: vec![],
+            related_commands: vec![],
+            related_objects: vec![],
+            related_delegations: vec![],
+            related_revocations: vec![],
+            event_metadata: None,
+            signature: None,
+        };
+        store.append_event_blocking(genesis).unwrap();
+
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let mut revocation = RevocationRecord {
+            record_version: 1,
+            revocation_id: vec![10, 20, 30],
+            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+                identity_id: initial_ctrl.clone(),
+                identity_kind: Some(2),
+                key_hint: None,
+            }),
+            issued_at: Some(prost_types::Timestamp {
+                seconds: now_secs,
+                nanos: 0,
+            }),
+            effective_at: None,
+            revocation_kind: RevocationKind::IdentityTrust as i32,
+            scope_override: None,
+            reason_code: "test".into(),
+            replacement_id: vec![],
+            revocation_metadata: None,
+            signature: None,
+            target: Some(
+                edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
+                    edgerun_proto::edgerun::v0::common::IdentityRef {
+                        identity_id: vec![5, 6, 7],
+                        identity_kind: Some(2),
+                        key_hint: None,
+                    },
+                ),
+            ),
+        };
+        sign_revocation_record(&mut revocation, &signer);
+
+        let mut command = make_command(
+            vec![1, 2, 3],
+            node_id.0.to_vec(),
+            initial_ctrl.clone(),
+            CommandType::CreateRevocation as i32,
+        );
+        command.payload = Some(Payload::InlinePayload(prost::Message::encode_to_vec(
+            &revocation,
+        )));
+        sign_command(&mut command, &signer);
+
+        let result = dispatch_command(
+            &command,
+            &mut store,
+            &node_id.0,
+            &signer,
+            &mut controllers,
+            &mut replay_cache,
+            &revoked,
+            &trusted,
+            2,
+            &test_capacity_tracker(),
+            &test_workload_policy(),
+            &test_rate_limiter(),
+            &test_running_workloads(),
+        );
+
+        assert_eq!(result.decision, CommandDecision::Committed as i32);
     }
 
     #[test]

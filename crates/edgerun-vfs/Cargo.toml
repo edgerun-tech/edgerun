@@ -12,16 +12,13 @@ categories = ["filesystem", "caching", "development-tools"]
 sha1 = { version = "0.10", default-features = false }
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
-rayon = "1.10"
-dashmap = { version = "5", features = ["rayon"] }
-ignore = "0.4"
-edgerun-clap = { path = "../edgerun-clap" }
-libc = "0.2"
-edgerun-inotify = { path = "../edgerun-inotify" }
+dashmap = "5"
+libc = { version = "0.2", optional = true }
+edgerun-inotify = { path = "../edgerun-inotify", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -30,7 +27,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bin]]
 name = "mount_ramfs"
 path = "src/bin/mount_ramfs.rs"
-required-features = ["std"]
+required-features = ["mount"]
 
 [[bin]]
 name = "vfs-benchmark"
@@ -46,3 +43,4 @@ workspace = true
 
 [features]
 std = []
+mount = ["std", "dep:libc", "dep:edgerun-inotify"]

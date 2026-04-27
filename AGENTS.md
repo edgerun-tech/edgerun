@@ -1,32 +1,66 @@
 # Edgerun Core Agent Notes
 
-This repository is a large Rust workspace for edge services, bare-metal runtime
-work, mesh networking, hardware capability adapters, protocol crates, and a
-unikernel target.
+Start from the protocol, not from the crate list. The repository implements the
+v0 edgerun model from `edgerun_core_protocol_v0_single_file.md`: single-writer
+streams, signed events, immutable objects, commands that become authoritative
+only after target-node commitment, explicit capabilities/delegation, query-based
+access, and identity-routed networking.
 
-## Working Directory
+## Current Workspace Health
+
+`cargo metadata --no-deps --format-version 1` succeeds in this checkout and
+reports 110 workspace packages/members. The root manifest's textual `members`
+array still contains a duplicate `crates/edgerun-tftp` entry, and a few crate
+directories are reached through path/workspace resolution rather than being
+listed directly in that array.
+
+Useful inventory commands:
 
 ```bash
-cd /home/ken/edgerun_core
+find crates -mindepth 2 -maxdepth 2 -name Cargo.toml | sort
+awk '/^members = \[/{flag=1;next}/^\]/{if(flag){flag=0}}flag{print}' Cargo.toml
 ```
 
-## Default Hosted Checks
+## What To Read First
 
-Use these first when validating normal workspace changes:
+1. `edgerun_core_protocol_v0_single_file.md`
+2. `proto/edgerun/v0/{common,identity,trust,stream,object,access,network}.proto`
+3. `crates/edgerun-core/src/{protocol.rs,crypto.rs,command.rs,validators/*.rs}`
+4. `crates/edgerun-stream/src/lib.rs`
+5. `crates/edgerun-storage/src/{lib.rs,core,store.rs,fs,event_log.rs,file_index.rs,blobs.rs}`
+6. `crates/edgerun-node/src/{lib.rs,store_task.rs,command_dispatch.rs,query_engine.rs,tcp_server.rs,daemon.rs}`
+7. Mesh and capability crates: `edgerun-mesh*`, `edgerun-remote-capability`,
+   `edgerun-capabilities`, `edgerun-capability-policy`
+8. Hardware signing and providers: `edgerun-hardware-signing`, `edgerun-tpm`,
+   `edgerun-yubikey`, Linux/sysfs/ALSA/evdev/V4L2/Goodix/Bluetooth adapters
+
+## Protocol Invariants To Preserve
+
+- Never treat command delivery as authority. A command matters only after the
+  target node validates it and records a `COMMAND_COMMITTED` or
+  `COMMAND_REJECTED` event in its stream.
+- Never mutate authoritative state outside the event log. Indexes, snapshots,
+  route hints, query results, and caches are derived.
+- Stream append must be contiguous by `seq`, hash-linked by previous event
+  hash, and signed by the fixed writer identity.
+- Object identity and stored representation identity are different.
+- Delegation must attenuate: child delegations cannot expand parent actions,
+  scope, timing, assurance, or constraints.
+- Route and query artifacts can be advisory; accepting them does not install
+  trust roots, controller authority, or stream authority.
+
+## Targeted Checks
+
+Prefer package-level checks while editing a specific area:
 
 ```bash
-cargo check --workspace
-cargo test --workspace
+cargo test -p edgerun-core
+cargo test -p edgerun-stream
+cargo test -p edgerun-storage
+cargo test -p edgerun-node
 ```
 
-Many crates touch Linux hardware APIs or service daemons. If a full workspace
-test fails because the host lacks devices, permissions, or kernel features,
-rerun the relevant crate-specific test and document the limitation.
-
-## Unikernel Build
-
-The unikernel is built for the freestanding x86_64 target and requires nightly
-Rust with `build-std`:
+Bare/unikernel build:
 
 ```bash
 cargo +nightly build --release -p edgerun-unikernel \
@@ -34,15 +68,7 @@ cargo +nightly build --release -p edgerun-unikernel \
   -Zbuild-std=core,alloc
 ```
 
-To produce a flat binary:
-
-```bash
-/usr/bin/objcopy -O binary \
-  target/x86_64-unknown-none/release/edgerun-unikernel \
-  /tmp/edgerun.bin
-```
-
-Local QEMU boot helpers:
+QEMU helpers:
 
 ```bash
 scripts/qemu-unikernel.sh
@@ -50,61 +76,32 @@ scripts/qemu-unikernel-net-pump.sh
 scripts/qemu-unikernel-swtpm.sh
 ```
 
-## Bare-Metal Architecture
+## Major Code Areas
 
-- `edgerun-unikernel`: bootable kernel binary and linker/boot glue.
-- `edgerun-platform`: CPU, timer, IRQ, memory, and low-level platform support.
-- `edgerun-bare-rt`: no_std async/runtime primitives, synchronization, timers,
-  and hosted compatibility shims.
-- `edgerun-ipxe`, `edgerun-tftp`, `edgerun-dhcp`: boot/network support.
-- `edgerun-virtio`, `edgerun-rtl8125`: NIC/device support.
+- Protocol validation: `edgerun-core`
+- Signed stream production/verification: `edgerun-stream`
+- Durable event/object storage: `edgerun-storage`
+- Node command/query/mesh orchestration: `edgerun-node`
+- Identity-routed mesh transport: `edgerun-mesh`, `edgerun-mesh-link`,
+  `edgerun-mesh-session`, `edgerun-mesh-daemon`
+- Remote hardware capability protocol: `edgerun-remote-capability`,
+  `edgerun-mesh-capability`
+- Secure identity/signing: `edgerun-hardware-signing`, `edgerun-tpm`,
+  `edgerun-yubikey`, `edgerun-android-keystore`
+- Service protocols: `edgerun-http`, `edgerun-tls`, `edgerun-quic`,
+  `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`, `edgerun-email`,
+  `edgerun-server`, `edgerun-net`, `edgerun-proxy`
+- Runtime and bare metal: `edgerun-rt`, `edgerun-platform`,
+  `edgerun-unikernel`, `edgerun-virtio`, `edgerun-rtl8125`, `edgerun-ipxe`,
+  `edgerun-tftp`
 
-Older docs may mention `edgerun-rt`; the current workspace uses
-`edgerun-bare-rt` broadly instead.
+## Documentation Rule
 
-## no_std / Bare Target Smoke Test
+When updating docs, state whether a feature is:
 
-This list tracks the current bare-oriented crates rather than every crate that
-contains `#![no_std]`:
-
-```bash
-for crate in \
-  edgerun-glob edgerun-regex edgerun-url edgerun-log edgerun-json \
-  edgerun-encoding edgerun-hpack edgerun-qpack edgerun-bare-rt \
-  edgerun-platform edgerun-virtio edgerun-ipxe edgerun-tftp \
-  edgerun-rtl8125 edgerun-http edgerun-tls edgerun-unikernel
-do
-  cargo +nightly build -p "$crate" --release \
-    --target x86_64-unknown-none \
-    -Zbuild-std=core,alloc
-done
-```
-
-## Current Workspace Shape
-
-- Root `Cargo.toml` has 109 workspace members.
-- `crates/` contains 109 crate directories.
-- Most library crates are `no_std` or `alloc`-first.
-- `proto/edgerun/v0` contains the protocol definitions used by `edgerun-proto`.
-
-Major crate families:
-
-- Services: `edgerun-server`, `edgerun-net`, `edgerun-dns`, `edgerun-dhcp`,
-  `edgerun-http`, `edgerun-email`, `edgerun-proxy`, `edgerun-oci`.
-- Mesh/node: `edgerun-node`, `edgerun-mesh*`, `edgerun-scheduler`,
-  `edgerun-remote-capability`.
-- Security: `edgerun-crypto`, `edgerun-tls`, `edgerun-tpm`,
-  `edgerun-yubikey`, `edgerun-hardware-signing`, `edgerun-secret-service`.
-- Hardware: `edgerun-linux-*`, `edgerun-alsa-*`, `edgerun-evdev-input`,
-  `edgerun-v4l2-camera`, `edgerun-goodix-fingerprint`,
-  `edgerun-mgmt-bluetooth`.
-- Traits/capabilities: `edgerun-input`, `edgerun-microphone`,
-  `edgerun-speaker`, `edgerun-display`, `edgerun-network-interface`,
-  `edgerun-usb`, `edgerun-pci`, `edgerun-nfc`, `edgerun-npu`,
-  `edgerun-power`, `edgerun-wifi`, `edgerun-bluetooth`.
-
-## Documentation Caveat
-
-Some docs under `docs/` are historical design material or copied upstream web
-specification references. Prefer the root `Cargo.toml`, crate source, and
-crate-local READMEs when deciding what is currently implemented.
+- implemented in code,
+- a protocol/design requirement,
+- generated type/catalog material,
+- host-only,
+- bare-target/stubbed,
+- or currently blocked by missing implementation/runtime support.

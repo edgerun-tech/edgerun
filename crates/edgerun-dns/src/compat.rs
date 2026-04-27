@@ -1,4 +1,4 @@
-//! edgerun-bare-rt adapters for the async API shape used by edgerun-dns.
+//! edgerun-rt adapters for the async API shape used by edgerun-dns.
 
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -8,32 +8,32 @@ use core::task::{Context, Poll};
 use crate::std::io;
 use crate::std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 
-pub use edgerun_bare_rt::{sleep, spawn, timeout, Duration, Instant};
+pub use edgerun_rt::{sleep, spawn, timeout, Duration, Instant};
 
-pub struct RwLock<T>(edgerun_bare_rt::RwLock<T>);
+pub struct RwLock<T>(edgerun_rt::RwLock<T>);
 
 impl<T> RwLock<T> {
     pub fn new(value: T) -> Self {
-        Self(edgerun_bare_rt::RwLock::new(value))
+        Self(edgerun_rt::RwLock::new(value))
     }
 
-    pub async fn read(&self) -> edgerun_bare_rt::RwLockReadGuard<'_, T> {
+    pub async fn read(&self) -> edgerun_rt::RwLockReadGuard<'_, T> {
         self.0.read()
     }
 
-    pub async fn write(&self) -> edgerun_bare_rt::RwLockWriteGuard<'_, T> {
+    pub async fn write(&self) -> edgerun_rt::RwLockWriteGuard<'_, T> {
         self.0.write()
     }
 }
 
-pub struct AsyncUdpSocket(edgerun_bare_rt::UdpSocket);
+pub struct AsyncUdpSocket(edgerun_rt::UdpSocket);
 
 impl AsyncUdpSocket {
     pub fn bind(addr: &str) -> io::Result<Self> {
         let addr: SocketAddr = addr
             .parse()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-        let mut socket = edgerun_bare_rt::UdpSocket::new();
+        let mut socket = edgerun_rt::UdpSocket::new();
         socket
             .bind(to_bare_addr(addr))
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -84,14 +84,14 @@ impl AsyncUdpSocket {
     }
 }
 
-pub struct AsyncTcpListener(edgerun_bare_rt::TcpListener);
+pub struct AsyncTcpListener(edgerun_rt::TcpListener);
 
 impl AsyncTcpListener {
     pub fn bind(addr: &str) -> io::Result<Self> {
         let addr: SocketAddr = addr
             .parse()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-        let mut listener = edgerun_bare_rt::TcpListener::new();
+        let mut listener = edgerun_rt::TcpListener::new();
         listener
             .bind(to_bare_addr(addr))
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -118,7 +118,7 @@ impl AsyncTcpListener {
     }
 }
 
-pub struct AsyncTcpStream(edgerun_bare_rt::TcpSocket);
+pub struct AsyncTcpStream(edgerun_rt::TcpSocket);
 
 pub trait AsyncRead {
     fn poll_read(
@@ -160,8 +160,8 @@ impl AsyncWrite for AsyncTcpStream {
             self.0
                 .send(
                     buf,
-                    &edgerun_bare_rt::IpStack::new(),
-                    edgerun_bare_rt::IpAddr::new(0, 0, 0, 0),
+                    &edgerun_rt::IpStack::new(),
+                    edgerun_rt::IpAddr::new(0, 0, 0, 0),
                     [0; 6],
                 )
                 .map_err(|e| io::Error::new(io::ErrorKind::WriteZero, e.to_string())),
@@ -169,15 +169,15 @@ impl AsyncWrite for AsyncTcpStream {
     }
 }
 
-pub fn to_bare_addr(addr: SocketAddr) -> edgerun_bare_rt::SocketAddr {
+pub fn to_bare_addr(addr: SocketAddr) -> edgerun_rt::SocketAddr {
     match addr {
         SocketAddr::V4(addr) => {
-            edgerun_bare_rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port())
+            edgerun_rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port())
         }
-        SocketAddr::V6(addr) => edgerun_bare_rt::SocketAddr::new(0, addr.port()),
+        SocketAddr::V6(addr) => edgerun_rt::SocketAddr::new(0, addr.port()),
     }
 }
 
-pub fn from_bare_addr(addr: edgerun_bare_rt::SocketAddr) -> SocketAddr {
+pub fn from_bare_addr(addr: edgerun_rt::SocketAddr) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::from(addr.ip_bytes())), addr.port())
 }

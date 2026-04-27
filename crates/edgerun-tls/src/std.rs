@@ -1,4 +1,4 @@
-//! Minimal std-shaped compatibility surface backed by core, alloc, and edgerun-bare-rt.
+//! Minimal std-shaped compatibility surface backed by core, alloc, and edgerun-rt.
 
 pub use core::{fmt, future, pin, result, task};
 
@@ -51,14 +51,12 @@ pub mod io {
 
     impl core::error::Error for Error {}
 
-    impl From<edgerun_bare_rt::IoError> for Error {
-        fn from(value: edgerun_bare_rt::IoError) -> Self {
+    impl From<edgerun_rt::IoError> for Error {
+        fn from(value: edgerun_rt::IoError) -> Self {
             match value {
-                edgerun_bare_rt::IoError::UnexpectedEof => {
-                    Self::new(ErrorKind::UnexpectedEof, value)
-                }
-                edgerun_bare_rt::IoError::WriteZero => Self::new(ErrorKind::WriteZero, value),
-                edgerun_bare_rt::IoError::Other(_) => Self::new(ErrorKind::Other, value),
+                edgerun_rt::IoError::UnexpectedEof => Self::new(ErrorKind::UnexpectedEof, value),
+                edgerun_rt::IoError::WriteZero => Self::new(ErrorKind::WriteZero, value),
+                edgerun_rt::IoError::Other(_) => Self::new(ErrorKind::Other, value),
             }
         }
     }
@@ -68,10 +66,10 @@ pub mod io {
 
 pub mod sync {
     pub use alloc::sync::Arc;
-    pub use edgerun_bare_rt::{Mutex, MutexGuard};
+    pub use edgerun_rt::{Mutex, MutexGuard};
 }
 
 pub mod time {
-    pub use edgerun_bare_rt::Duration;
-    pub use edgerun_bare_rt::Instant;
+    pub use edgerun_rt::Duration;
+    pub use edgerun_rt::Instant;
 }

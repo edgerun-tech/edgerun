@@ -1,14 +1,25 @@
 # edgerun Reference Core: Implementation Status & Gap Analysis
 
-**Last updated:** 2026-04-24  
-**Project:** edgerun_core  
-**Status:** Active development — core protocol functional, security hardening in progress
+**Last updated:** 2026-04-28
+**Project:** edgerun_core
+**Status:** Historical gap analysis, refreshed with current crate names and
+workspace caveats. Verify individual gap claims against code before treating
+them as current release status.
 
 ---
 
 ## Project Overview
 
-A Rust multi-crate workspace (142 crates) implementing the **edgerun v0 protocol** — a distributed, identity-based, append-only information fabric for peer-to-peer mesh networking, capability-discovered hardware abstraction, and a compute marketplace.
+A Rust multi-crate workspace with 113 first-level directories under `crates/`
+and 110 crate manifests implementing the **edgerun v0 protocol**: a
+distributed, identity-based, append-only information fabric for peer-to-peer
+mesh networking, capability-discovered hardware abstraction, and
+compute-marketplace flows.
+
+Current workspace caveat: `cargo metadata --no-deps --format-version 1`
+succeeds and reports 110 workspace packages/members, but the root
+`Cargo.toml` textual `members` array still contains a duplicate
+`crates/edgerun-tftp` entry.
 
 ### Architecture Summary
 
@@ -39,7 +50,7 @@ A Rust multi-crate workspace (142 crates) implementing the **edgerun v0 protocol
  └──────────────────────────────────────────────────────────────┘
 
  Protocol: edgerun-proto (prost) + edgerun-core (validation, crypto, conformance)
- Runtime:  edgerun-rt (custom epoll-based async, no tokio)
+ Runtime:  edgerun-rt for no_std/bare node paths; host crates use std where gated
  JSON:     edgerun-json (zero-dep, published on crates.io v1.0.149)
 ```
 
@@ -113,7 +124,7 @@ The conformance validator in `validators.rs` does check `trust_roots`, but the *
 
 ### 5. Seccomp-BPF filter not applied
 **Spec:** ~75 essential syscalls whitelist  
-**Status:** ✅ **RESOLVED** — Seccomp-BPF is fully implemented in `edgerun-oci-runtime/src/seccomp.rs` with architecture-specific allow-lists (x86_64: ~80 syscalls, aarch64: ~80 syscalls). Applied in `container.rs` `pre_exec` closure before exec — fail-closed, container startup aborts if seccomp can't be applied.
+**Status:** ✅ **RESOLVED** — Seccomp-BPF is implemented in `crates/edgerun-oci/src/seccomp.rs` with architecture-specific allow-lists. Applied in the container child setup before exec — fail-closed, container startup aborts if seccomp can't be applied.
 
 ### 6. Action lifecycle events partially implemented
 **Status:** `record_action_event()` function exists and is called in `command_dispatch.rs`, emitting `ActionCompleted`/`ActionFailed` events. However, `ACTION_STARTED` is NOT emitted before work begins.
@@ -202,7 +213,7 @@ The conformance validator in `validators.rs` does check `trust_roots`, but the *
 | Location | TODO |
 |----------|------|
 | `edgerun-http2/src/connection.rs:183` | Implement missing HTTP/2 frame types |
-| `edgerun-oci-runtime/src/lib.rs:128` | Add proper aarch64 syscall list (currently placeholder) |
+| `crates/edgerun-oci/src/lib.rs:128` | Historical note: verify aarch64 syscall handling against current `seccomp` module before acting |
 | `edgerun-virtual-disk/src/` | FlushAck implementation |
 | `edgerun-node/src/daemon.rs` | Fetch queue: decode bundled_result_object, store objects |
 

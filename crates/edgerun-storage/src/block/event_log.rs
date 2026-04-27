@@ -24,7 +24,7 @@ const HEADER_SECTOR: u64 = 0;
 const DATA_START_SECTOR: u64 = 1;
 const MAX_VARINT_BYTES: u32 = 10;
 
-/// Trait matching the raw block storage contract used by `edgerun-bare-rt`.
+/// Trait matching the raw block storage contract used by `edgerun-rt`.
 ///
 /// Implementations can be backed by FAT/ATA/NVMe in unikernel, or by a small
 /// in-memory or file-based test adapter in hosted builds.
@@ -430,9 +430,9 @@ impl BlockStorage for InMemoryBlockDevice {
 }
 
 #[cfg(feature = "bare-rt")]
-impl<T: edgerun_bare_rt::storage::BlockDevice + Send> BlockStorage for T {
+impl<T: edgerun_rt::storage::BlockDevice + Send> BlockStorage for T {
     fn sector_size(&self) -> usize {
-        edgerun_bare_rt::storage::SECTOR_SIZE
+        edgerun_rt::storage::SECTOR_SIZE
     }
 
     fn sectors(&self) -> u64 {

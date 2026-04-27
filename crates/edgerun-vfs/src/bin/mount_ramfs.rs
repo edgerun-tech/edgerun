@@ -18,7 +18,6 @@ use std::sync::Arc;
 
 use edgerun_inotify::{Inotify, WatchMask};
 use edgerun_vfs::GitAwarePersist;
-use rayon::ThreadPoolBuilder;
 
 const LOCK_FILE: &str = "/var/run/edgerun-vfs.lock";
 const UNCLEAN_SHUTDOWN_FILE: &str = "/var/run/edgerun-vfs.unclean";
@@ -156,7 +155,7 @@ fn release_lock() {
     fs::remove_file(LOCK_FILE).ok();
 }
 
-/// Write a single file to disk (used by rayon workers)
+/// Write a single file to disk.
 fn write_file(dst: &Path, data: &[u8]) -> std::io::Result<usize> {
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent)?;
@@ -323,12 +322,6 @@ fn main() {
 
     let git_aware = Arc::new(GitAwarePersist::new(&source));
     let metrics = Arc::new(Metrics::new());
-
-    // Create Rayon thread pool for parallel writes
-    let pool = ThreadPoolBuilder::new()
-        .num_threads(cli.sync_workers)
-        .build()
-        .expect("Failed to create thread pool");
 
     // Spawn filesystem watcher
     let watch_ram = ram_disk.clone();

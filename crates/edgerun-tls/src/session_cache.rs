@@ -23,7 +23,7 @@ use alloc::collections::BTreeMap as HashMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use edgerun_bare_rt::Mutex;
+use edgerun_rt::Mutex;
 
 /// A cached session ticket from a NewSessionTicket message.
 #[derive(Clone)]

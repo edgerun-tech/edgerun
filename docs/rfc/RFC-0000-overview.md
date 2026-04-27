@@ -1,11 +1,20 @@
 # RFC-0000: Edgerun Reference Core — System Overview
 
-**Status:** Working Draft
+**Status:** Historical working draft
 **Date:** 2026-04-12
 **Author:** System-generated from codebase audit
 **Supersedes:** None
 
 ---
+
+## Current Status Note
+
+This RFC is a historical architecture snapshot, not the current workspace
+inventory. The current tree has 113 first-level directories under `crates/`, 110
+crate manifests, and `cargo metadata --no-deps --format-version 1` reports 110
+workspace packages/members. Current runtime and OCI package names are
+`edgerun-rt` and `edgerun-oci`; older names in the original draft are kept
+only where they explain historical design intent.
 
 ## Abstract
 
@@ -24,7 +33,7 @@ The unifying principle across both systems is **proto-as-single-source-of-truth*
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     EDGERUN REFERENCE CORE                          │
-│                        137 Rust Crates                              │
+│                 historical 137-crate architecture snapshot          │
 ├──────────────────────────┬──────────────────────────────────────────┤
 │   PROTOCOL FABRIC        │     RENDERING ENGINE                     │
 │   (~40 crates)           │     (~97 crates)                         │
@@ -121,7 +130,7 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 | `edgerun-node` | ✅ Functional | — | Main `edgerund` binary |
 | `edgerun-storage` | ✅ Functional | — | Storage abstraction layer |
 | `edgerun-stream` | ✅ Functional | — | Stream management and validation |
-| `edgerun-rt` | ✅ Functional | — | Async runtime and utilities |
+| `edgerun-rt` | ✅ Functional | — | no_std/bare async runtime and utilities |
 | `edgerun-config` | ✅ Functional | — | Configuration loading |
 | `edgerun-log` | ✅ Functional | — | Logging infrastructure |
 | `edgerun-mesh` | ⚠️ Partial | — | Mesh networking protocol |
@@ -130,7 +139,7 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 | `edgerun-mesh-daemon` | ⚠️ Partial | — | Mesh daemon process |
 | `edgerun-mesh-session` | ⚠️ Partial | — | Mesh session management |
 | `edgerun-mgmt-bluetooth` | ⚠️ Partial | — | Bluetooth management |
-| `edgerun-oci-runtime` | ⚠️ Partial | — | OCI runtime implementation |
+| `edgerun-oci` | ⚠️ Partial | — | OCI data model, runtime, registry, and CLI implementation |
 | `edgerun-oci-registry` | ⚠️ Partial | — | OCI registry implementation |
 | `edgerun-tftp` | ⚠️ Partial | — | TFTP protocol |
 | `edgerun-dns` | ⚠️ Partial | — | DNS resolution |

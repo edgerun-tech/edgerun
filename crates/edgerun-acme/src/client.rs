@@ -1,9 +1,9 @@
 use crate::prelude::v1::*;
 use alloc::sync::Arc;
 
-use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_http::{HttpClient, Method};
+use edgerun_rt::RwLock;
 use edgerun_url::Url;
 
 use crate::account::AccountKey;

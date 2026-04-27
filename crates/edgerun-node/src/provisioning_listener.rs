@@ -1,9 +1,9 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use edgerun_bare_rt::CancellationToken;
-use edgerun_bare_rt::{AsyncReadExt, AsyncWriteExt};
 use edgerun_hardware_signing::NodeID;
+use edgerun_rt::CancellationToken;
+use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
 
 const PROVISION_PORT: u16 = 35630;
 
@@ -22,7 +22,7 @@ pub(crate) async fn run_provisioning_listener(
         }
     };
 
-    let listener = match edgerun_bare_rt::AsyncTcpListener::bind(listen_addr) {
+    let listener = match edgerun_rt::AsyncTcpListener::bind(listen_addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind provisioning on {}: {}", listen_addr, e);
@@ -43,7 +43,7 @@ pub(crate) async fn run_provisioning_listener(
                 edgerun_log::info!("Provisioning connection from {}", peer_addr);
                 let pin = pairing_pin.clone();
                 let pubkey = public_key_hex.clone();
-                edgerun_bare_rt::spawn(async move {
+                edgerun_rt::spawn(async move {
                     if let Err(e) = handle_provisioning_connection(stream, &pin, &pubkey).await {
                         edgerun_log::error!("Provisioning error: {}", e);
                     }
@@ -79,11 +79,11 @@ fn read_json_field(json_str: &str, field: &str) -> Option<String> {
 }
 
 pub(crate) async fn handle_provisioning_connection(
-    mut stream: std::sync::Arc<edgerun_bare_rt::AsyncTcpStream>,
+    mut stream: std::sync::Arc<edgerun_rt::AsyncTcpStream>,
     expected_pin: &Option<String>,
     public_key_hex: &str,
 ) -> Result<(), String> {
-    use edgerun_bare_rt::AsyncReadExt;
+    use edgerun_rt::AsyncReadExt;
 
     let mut buf = [0u8; 512];
     let n = stream.read(&mut buf).await.map_err(|e| e.to_string())?;

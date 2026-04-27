@@ -88,14 +88,12 @@ pub mod io {
     impl core::error::Error for Error {}
 
     #[cfg(feature = "runtime")]
-    impl From<edgerun_bare_rt::IoError> for Error {
-        fn from(value: edgerun_bare_rt::IoError) -> Self {
+    impl From<edgerun_rt::IoError> for Error {
+        fn from(value: edgerun_rt::IoError) -> Self {
             match value {
-                edgerun_bare_rt::IoError::UnexpectedEof => {
-                    Self::new(ErrorKind::UnexpectedEof, value)
-                }
-                edgerun_bare_rt::IoError::WriteZero => Self::new(ErrorKind::WriteZero, value),
-                edgerun_bare_rt::IoError::Other(_) => Self::new(ErrorKind::Other, value),
+                edgerun_rt::IoError::UnexpectedEof => Self::new(ErrorKind::UnexpectedEof, value),
+                edgerun_rt::IoError::WriteZero => Self::new(ErrorKind::WriteZero, value),
+                edgerun_rt::IoError::Other(_) => Self::new(ErrorKind::Other, value),
             }
         }
     }
@@ -188,7 +186,7 @@ pub mod net {
     }
 
     #[cfg(feature = "runtime")]
-    pub struct UdpSocket(edgerun_bare_rt::UdpSocket);
+    pub struct UdpSocket(edgerun_rt::UdpSocket);
 
     #[cfg(feature = "runtime")]
     impl UdpSocket {
@@ -197,7 +195,7 @@ pub mod net {
                 .to_socket_addrs()?
                 .next()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no socket address"))?;
-            let mut socket = edgerun_bare_rt::UdpSocket::new();
+            let mut socket = edgerun_rt::UdpSocket::new();
             socket
                 .bind(to_bare_addr(addr))
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
@@ -206,12 +204,12 @@ pub mod net {
     }
 
     #[cfg(feature = "runtime")]
-    fn to_bare_addr(addr: SocketAddr) -> edgerun_bare_rt::SocketAddr {
+    fn to_bare_addr(addr: SocketAddr) -> edgerun_rt::SocketAddr {
         match addr {
             SocketAddr::V4(v4) => {
-                edgerun_bare_rt::SocketAddr(u32::from_be_bytes(v4.ip().octets()), v4.port())
+                edgerun_rt::SocketAddr(u32::from_be_bytes(v4.ip().octets()), v4.port())
             }
-            SocketAddr::V6(_) => edgerun_bare_rt::SocketAddr(0, addr.port()),
+            SocketAddr::V6(_) => edgerun_rt::SocketAddr(0, addr.port()),
         }
     }
 }
@@ -279,15 +277,15 @@ pub mod sync {
     pub use alloc::sync::Arc;
 
     #[cfg(feature = "runtime")]
-    pub use edgerun_bare_rt::MutexGuard;
+    pub use edgerun_rt::MutexGuard;
 
     #[cfg(feature = "runtime")]
-    pub struct Mutex<T>(edgerun_bare_rt::Mutex<T>);
+    pub struct Mutex<T>(edgerun_rt::Mutex<T>);
 
     #[cfg(feature = "runtime")]
     impl<T> Mutex<T> {
         pub fn new(value: T) -> Self {
-            Self(edgerun_bare_rt::Mutex::new(value))
+            Self(edgerun_rt::Mutex::new(value))
         }
 
         pub fn lock(&self) -> core::result::Result<MutexGuard<'_, T>, ()> {
@@ -302,11 +300,11 @@ pub mod time {
     #[cfg(not(feature = "runtime"))]
     pub use core::time::Duration;
     #[cfg(feature = "runtime")]
-    pub use edgerun_bare_rt::Duration;
+    pub use edgerun_rt::Duration;
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
     #[cfg(feature = "runtime")]
-    pub struct Instant(edgerun_bare_rt::Instant);
+    pub struct Instant(edgerun_rt::Instant);
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
     #[cfg(not(feature = "runtime"))]
     pub struct Instant(Duration);
@@ -315,7 +313,7 @@ pub mod time {
         pub fn now() -> Self {
             #[cfg(feature = "runtime")]
             {
-                Self(edgerun_bare_rt::Instant::now())
+                Self(edgerun_rt::Instant::now())
             }
             #[cfg(not(feature = "runtime"))]
             {

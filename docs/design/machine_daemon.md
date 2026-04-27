@@ -5,7 +5,8 @@
 The `edgerund` binary (from the `edgerun-node` crate) is the primary machine daemon. It provides:
 
 - TPM/YubiKey/software key provisioning for hardware-backed node identity
-- Mesh networking for peer discovery and routing (via `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-router`)
+- Mesh networking for peer discovery and routing (via `edgerun-mesh`,
+  `edgerun-mesh-link`, `edgerun-mesh-session`, and `edgerun-mesh-daemon`)
 - Command processing with ECDSA signature verification and delegation chain validation
 - OCI workload execution (container runtime with namespaces, cgroups v2, pivot_root)
 - Resource metering and RC-µs billing (compute marketplace)
@@ -47,8 +48,8 @@ edgerund status --config node.yaml
 1. Loads config and signer (TPM, YubiKey, or software)
 2. Initializes structured logging
 3. Optionally installs PID 1 signal handlers (`--init` flag or when running as PID 1)
-4. Creates async runtime (`edgerun-rt`)
-5. Initializes mesh networking stack (edgerun-mesh + edgerun-mesh-link + edgerun-mesh-router)
+4. Creates the no_std/bare runtime pieces used by the node (`edgerun-rt`)
+5. Initializes mesh networking stack (`edgerun-mesh` + `edgerun-mesh-link` + `edgerun-mesh-session` + `edgerun-mesh-daemon`)
 6. Starts TCP listener for peer connections (`--listen`)
 7. Starts health HTTP endpoint (`--health-port`)
 8. Enters main event loop: process commands, route mesh frames, manage workloads
@@ -59,7 +60,7 @@ The mesh stack provides peer-to-peer networking:
 
 - **edgerun-mesh**: Frame types (130-byte header with dest/src NodeID, TTL, frame type), ECDSA-signed frames, routing table
 - **edgerun-mesh-link**: Raw Ethernet and UDP link layer, multicast discovery
-- **edgerun-mesh-router**: Bellman-Ford shortest-path routing, dead peer detection, multi-hop frame forwarding
+- **edgerun-mesh-daemon**: Poll loop tying links, router state, sessions, capability handling, commands, and metrics together
 
 ### Command processing
 
@@ -82,7 +83,7 @@ The `WorkMeter` (in `edgerun-node/src/metering.rs`) tracks resource consumption 
 
 ### Storage
 
-- `edgerun-storage`: Append-only event log + SQLite index + encrypted blob store
+- `edgerun-storage`: Append-only event log, rebuildable binary/file indexes, replay cache, and encrypted blob store
 - AES-GCM encryption for stored objects with persistent blob keys
 
 ## Architecture diagram
@@ -95,7 +96,7 @@ The `WorkMeter` (in `edgerun-node/src/metering.rs`) tracks resource consumption 
 ├─────────────────────────────────────────────────────────┤
 │  Identity: TPM 2.0 │ YubiKey │ Software (dev only)      │
 ├─────────────────────────────────────────────────────────┤
-│  Mesh: edgerun-mesh + mesh-link + mesh-router           │
+│  Mesh: mesh + mesh-link + mesh-session + mesh-daemon    │
 │    Frame types │ ECDSA signing │ Bellman-Ford routing   │
 ├─────────────────────────────────────────────────────────┤
 │  Command dispatch: signature verify │ delegation chain  │
@@ -103,7 +104,7 @@ The `WorkMeter` (in `edgerun-node/src/metering.rs`) tracks resource consumption 
 │  Workload: OCI pull │ cgroups v2 │ namespaces │ exec    │
 │  Metering: WorkMeter → RC-µs billing                   │
 ├─────────────────────────────────────────────────────────┤
-│  Storage: event log │ SQLite index │ AES-GCM blobs     │
+│  Storage: event log │ rebuildable indexes │ blobs      │
 ├─────────────────────────────────────────────────────────┤
 │  Health endpoint: HTTP /health on configurable port     │
 └─────────────────────────────────────────────────────────┘

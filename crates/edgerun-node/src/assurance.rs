@@ -45,7 +45,7 @@ pub fn generate_and_record_assurance_claim(
         attester: Some(IdentityRef {
             identity_id: node_id.0.to_vec(),
             identity_kind: Some(2), // NODE
-            key_hint: None,
+            key_hint: Some(node_id.0.to_vec()),
         }),
         issued_at: Some(system_time_to_prost(now)),
         expires_at: Some(system_time_to_prost(expires)),
@@ -93,40 +93,22 @@ pub fn generate_and_record_assurance_claim(
 /// Verifies an AssuranceClaim's signature using domain-separated canonical
 /// verification (spec §17).
 pub fn verify_assurance_claim(claim: &AssuranceClaim) -> Result<(), &'static str> {
-    let Some(ref sig) = claim.signature else {
-        return Err("missing_signature");
-    };
-    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return Err("bad_signature_length");
-    }
     let Some(ref attester) = claim.attester else {
         return Err("no_attester");
     };
-    let Some(ref key_hint) = attester.key_hint else {
-        return Err("no_key_hint");
-    };
-    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
-        return Err("bad_key_hint");
-    }
-
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04;
-    vk_sec1[1..].copy_from_slice(key_hint);
-    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
-        Ok(v) => v,
-        Err(_) => return Err("bad_public_key"),
-    };
-
-    let record = ProtocolRecord::AssuranceClaim(claim.clone());
-    let canonical = canonical_bytes(&record, true);
-
-    if !edgerun_core::crypto::verify_canonical_record(
-        &vk,
-        edgerun_core::crypto::SIG_DOMAIN_ASSURANCE_CLAIM,
-        &canonical,
-        &sig.value,
-    ) {
-        return Err("invalid_signature");
+    let now_ms = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or(std::time::Duration::ZERO)
+        .as_millis() as i64;
+    let validation = edgerun_core::validators_proto::validate_assurance_claim(claim, now_ms, &[]);
+    if validation.verdict != edgerun_core::result::Verdict::Accept {
+        return Err(match validation.reason_code {
+            Some(edgerun_core::result::ReasonCode::CryptoInvalid) => "invalid_signature",
+            Some(edgerun_core::result::ReasonCode::TimeInvalid) => "time_invalid",
+            Some(edgerun_core::result::ReasonCode::AuthorityDenied) => "authority_denied",
+            _ if attester.identity_id.is_empty() => "no_attester",
+            _ => "invalid_assurance_claim",
+        });
     }
 
     Ok(())

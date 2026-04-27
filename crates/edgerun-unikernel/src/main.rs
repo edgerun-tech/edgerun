@@ -3,9 +3,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-extern crate edgerun_bare_rt as rt;
 extern crate edgerun_dhcp;
 extern crate edgerun_platform;
+extern crate edgerun_rt as rt;
 extern crate edgerun_tftp;
 extern crate edgerun_tpm;
 extern crate edgerun_virtio;

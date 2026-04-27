@@ -1,9 +1,0 @@
-[package]
-name = "edgerun-bare-rt"
-version = "0.1.0"
-edition.workspace = true
-license = "MIT"
-
-[dependencies]
-edgerun-platform = { path = "../edgerun-platform" }
-edgerun-log = { path = "../edgerun-log" }

@@ -25,7 +25,7 @@
 //!     }
 //! }
 //!
-//! # edgerun_bare_rt::block_on(async {
+//! # edgerun_rt::block_on(async {
 //! HttpServer::new(HelloHandler)
 //!     .bind("127.0.0.1:0")
 //!     .await
@@ -40,7 +40,7 @@
 //! ```no_run
 //! use edgerun_http::HttpClient;
 //!
-//! # edgerun_bare_rt::block_on(async {
+//! # edgerun_rt::block_on(async {
 //! let client = HttpClient::new();
 //! let response = client.get("http://example.com/").await.unwrap();
 //! println!("Status: {}", response.status().as_u16());

@@ -1,14 +1,24 @@
-# edgerun-oci-runtime
+# edgerun-oci
 
 Minimal OCI container runtime — kernel-only, no external tools.
 
 Uses Linux kernel primitives: namespaces, cgroups v2, pivot_root, mount.
 No Docker, no runc, no systemd, no libc crate. Just raw syscalls and `std`.
 
+## Current status
+
+The workspace package is `edgerun-oci`; the old `edgerun-oci-runtime`
+package name is stale. This README describes the code in `crates/edgerun-oci/`,
+including the CLI entry point at `src/bin/edgerun-oci.rs`.
+
+As of this audit, `cargo metadata --no-deps --format-version 1` succeeds for
+the root workspace. Treat the test counts below as the last recorded
+OCI-specific run, not as freshly verified output from this documentation pass.
+
 ## Architecture
 
 ```
-edgerun-oci-runtime/
+crates/edgerun-oci/
 ├── src/
 │   ├── lib.rs              — Public API, re-exports, namespace helpers
 │   ├── json.rs             — OCI spec types (serde serialization via edgerun-json)
@@ -88,7 +98,7 @@ delete  →  (poststop + cgroup cleanup)                                     →
 | **`time_namespace_accepted_by_validator`** | "time" in KNOWN_NAMESPACES — validates spec with time namespace |
 | **`cgroup_weight_device_per_device_written`** | weightDevice global weight written to cgroup (per-device needs BFQ scheduler) |
 
-Run integration tests with: `sudo cargo test -p edgerun-oci-runtime --test conformance -- --test-threads=1`
+Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -- --test-threads=1`
 
 ## OCI Spec Compliance
 
@@ -310,11 +320,11 @@ No async runtime, no external libraries (no libseccomp, no libcontainer, no libc
 ## Building
 
 ```bash
-cargo build -p edgerun-oci-runtime                  # library + binary
-cargo build -p edgerun-oci-runtime --release         # optimized binary
-cargo test -p edgerun-oci-runtime --lib              # 125 unit tests
-sudo cargo test -p edgerun-oci-runtime --test conformance -- --test-threads=1  # 24 integration tests
-cargo clippy -p edgerun-oci-runtime                  # 0 warnings (enforced)
+cargo build -p edgerun-oci                  # library + binary
+cargo build -p edgerun-oci --release         # optimized binary
+cargo test -p edgerun-oci --lib              # unit tests
+sudo cargo test -p edgerun-oci --test conformance -- --test-threads=1
+cargo clippy -p edgerun-oci
 ```
 
 The binary is `edgerun-oci` — a drop-in replacement for `runc` for basic OCI conformance.

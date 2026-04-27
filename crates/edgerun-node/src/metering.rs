@@ -8,7 +8,7 @@
 /// Zero external dependencies — uses only core atomics and target time.
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 #[cfg(target_os = "none")]
-use edgerun_bare_rt::Instant;
+use edgerun_rt::Instant;
 #[cfg(not(target_os = "none"))]
 use std::time::Instant;
 

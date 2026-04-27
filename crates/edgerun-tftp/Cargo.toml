@@ -11,5 +11,5 @@ default = []
 server = []
 
 [dependencies]
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }

@@ -15,7 +15,7 @@ use core::net::Ipv4Addr;
 pub type HashMap<K, V> = BTreeMap<K, V>;
 
 #[cfg(target_os = "none")]
-type Mutex<T> = edgerun_bare_rt::Mutex<T>;
+type Mutex<T> = edgerun_rt::Mutex<T>;
 #[cfg(not(target_os = "none"))]
 type Mutex<T> = std::sync::Mutex<T>;
 
@@ -92,7 +92,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 #[cfg(target_os = "none")]
-fn lock<T>(mutex: &Mutex<T>) -> edgerun_bare_rt::MutexGuard<'_, T> {
+fn lock<T>(mutex: &Mutex<T>) -> edgerun_rt::MutexGuard<'_, T> {
     mutex.lock()
 }
 

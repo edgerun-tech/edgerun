@@ -331,7 +331,7 @@ fn unix_now_secs() -> Option<u64> {
 
     #[cfg(target_os = "none")]
     {
-        let now = edgerun_bare_rt::now() / 10_000_000;
+        let now = edgerun_rt::now() / 10_000_000;
         (now != 0).then_some(now)
     }
 }

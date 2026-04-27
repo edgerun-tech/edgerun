@@ -1,16 +1,111 @@
 //! Git-aware persistence with .edgekeep support
 
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ignore::gitignore::GitignoreBuilder;
+struct GitignoreRule {
+    pattern: String,
+    negated: bool,
+    directory_only: bool,
+    rooted: bool,
+}
+
+struct GitignoreRules {
+    rules: Vec<GitignoreRule>,
+}
+
+impl GitignoreRules {
+    fn load(root: &Path) -> Option<Self> {
+        let content = fs::read_to_string(root.join(".gitignore")).ok()?;
+        let rules = content
+            .lines()
+            .filter_map(GitignoreRule::parse)
+            .collect::<Vec<_>>();
+
+        if rules.is_empty() {
+            None
+        } else {
+            Some(Self { rules })
+        }
+    }
+
+    fn is_ignored(&self, path: &Path) -> bool {
+        let path = path.to_string_lossy().replace('\\', "/");
+        let mut ignored = false;
+
+        for rule in &self.rules {
+            if rule.matches(&path) {
+                ignored = !rule.negated;
+            }
+        }
+
+        ignored
+    }
+}
+
+impl GitignoreRule {
+    fn parse(line: &str) -> Option<Self> {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            return None;
+        }
+
+        let (negated, line) = line
+            .strip_prefix('!')
+            .map(|rest| (true, rest))
+            .unwrap_or((false, line));
+        let (rooted, line) = line
+            .strip_prefix('/')
+            .map(|rest| (true, rest))
+            .unwrap_or((false, line));
+
+        let directory_only = line.ends_with('/');
+        let pattern = line.trim_end_matches('/').to_string();
+
+        if pattern.is_empty() {
+            None
+        } else {
+            Some(Self {
+                pattern,
+                negated,
+                directory_only,
+                rooted,
+            })
+        }
+    }
+
+    fn matches(&self, path: &str) -> bool {
+        if self.directory_only {
+            return self.matches_directory(path);
+        }
+
+        if self.pattern.contains('/') || self.rooted {
+            return edgerun_glob::glob_match(&self.pattern, path);
+        }
+
+        let basename = path.rsplit('/').next().unwrap_or(path);
+        edgerun_glob::glob_match(&self.pattern, basename)
+    }
+
+    fn matches_directory(&self, path: &str) -> bool {
+        if self.rooted || self.pattern.contains('/') {
+            return path == self.pattern || path.starts_with(&format!("{}/", self.pattern));
+        }
+
+        path == self.pattern
+            || path.starts_with(&format!("{}/", self.pattern))
+            || path.contains(&format!("/{}/", self.pattern))
+    }
+}
 
 /// Manages git-aware persistence
 pub struct GitAwarePersist {
-    gitignore: Option<ignore::gitignore::Gitignore>,
+    gitignore: Option<GitignoreRules>,
     edgekeep: HashSet<PathBuf>,
     root: PathBuf,
 }
@@ -27,16 +122,8 @@ impl GitAwarePersist {
         }
     }
 
-    fn load_gitignore(root: &Path) -> Option<ignore::gitignore::Gitignore> {
-        let mut builder = GitignoreBuilder::new(root);
-
-        // Add .gitignore if it exists
-        let gitignore_path = root.join(".gitignore");
-        if gitignore_path.exists() {
-            builder.add(&gitignore_path);
-        }
-
-        builder.build().ok()
+    fn load_gitignore(root: &Path) -> Option<GitignoreRules> {
+        GitignoreRules::load(root)
     }
 
     fn load_edgekeep(root: &Path) -> HashSet<PathBuf> {
@@ -68,8 +155,7 @@ impl GitAwarePersist {
 
         // If gitignore exists, check if file is ignored
         if let Some(gitignore) = &self.gitignore {
-            let matched = gitignore.matched_path_or_any_parents(rel_path, false);
-            return !matched.is_ignore();
+            return !gitignore.is_ignored(rel_path);
         }
 
         // No gitignore = persist everything

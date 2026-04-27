@@ -132,7 +132,7 @@ fn parse_args() -> Result<Command, String> {
 
 fn main() -> Result<(), String> {
     let cmd = parse_args()?;
-    let rt = edgerun_bare_rt::Builder::new_multi_thread()
+    let rt = edgerun_rt::Builder::new_multi_thread()
         .build()
         .map_err(|e| format!("failed to build runtime: {}", e))?;
 

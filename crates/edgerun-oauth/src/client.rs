@@ -10,10 +10,10 @@ use crate::types::{
     ClientConfig, Credentials, DeviceAuthorizationRequest, DeviceAuthorizationResponse,
     TokenRequest, TokenResponse,
 };
-use edgerun_bare_rt::sleep;
 use edgerun_crypto::sha256;
 use edgerun_encoding::base64::base64url_nopad_encode;
 use edgerun_http::HttpClient;
+use edgerun_rt::sleep;
 use std::time::{Duration, Instant};
 
 /// Callback trait for the device flow UI.

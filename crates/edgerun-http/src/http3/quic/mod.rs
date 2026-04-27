@@ -1173,7 +1173,7 @@ mod tests {
         use crate::http3::quic::packet;
         use crate::runtime::time::Duration;
 
-        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+        let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1377,7 +1377,7 @@ mod tests {
         conn.inject_packet(packet_bytes);
 
         // Receive the stream data
-        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+        let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1436,7 +1436,7 @@ mod tests {
         conn.inject_packet(packet_bytes);
 
         // Accept the incoming stream
-        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+        let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1600,7 +1600,7 @@ mod tests {
         quic.protection = None; // No encryption for this test
 
         // Send the frame
-        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+        let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1630,7 +1630,7 @@ mod tests {
         quic.transport
             .next_packet_number(PacketNumberSpace::ApplicationData);
 
-        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+        let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1667,7 +1667,7 @@ mod tests {
         quic.established = false;
         quic.enable_early_data(keys.clone());
 
-        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+        let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1787,7 +1787,7 @@ mod tests {
         server.quic_mut().inject_packet(pkt_bytes);
 
         // Server accepts the request
-        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+        let rt = edgerun_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();

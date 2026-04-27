@@ -194,7 +194,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let key_pair = std::sync::Arc::new(key_pair);
         let server_key_share = sh.server_key_share.clone();
         let shared_secret =
-            edgerun_bare_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
+            edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
                 .await
                 .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
                 .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
@@ -1190,11 +1190,10 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     // 3. Derive handshake keys — offload ECDH to blocking pool
     let key_pair = std::sync::Arc::new(key_pair);
     let client_key_share = client_key_share.clone();
-    let shared_secret =
-        edgerun_bare_rt::spawn_blocking(move || key_pair.exchange(&client_key_share))
-            .await
-            .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
-            .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
+    let shared_secret = edgerun_rt::spawn_blocking(move || key_pair.exchange(&client_key_share))
+        .await
+        .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
+        .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
     let hash = Hasher::Sha256;
     let transcript_hash = hash.hash(&transcript);
 
@@ -1276,90 +1275,84 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-fn to_bare_io_error(error: std::io::Error) -> edgerun_bare_rt::IoError {
+fn to_bare_io_error(error: std::io::Error) -> edgerun_rt::IoError {
     match error.kind() {
-        std::io::ErrorKind::UnexpectedEof => edgerun_bare_rt::IoError::UnexpectedEof,
-        std::io::ErrorKind::WriteZero => edgerun_bare_rt::IoError::WriteZero,
-        _ => edgerun_bare_rt::IoError::Other("tls io error"),
+        std::io::ErrorKind::UnexpectedEof => edgerun_rt::IoError::UnexpectedEof,
+        std::io::ErrorKind::WriteZero => edgerun_rt::IoError::WriteZero,
+        _ => edgerun_rt::IoError::Other("tls io error"),
     }
 }
 
-impl<S> edgerun_bare_rt::AsyncRead for AsyncTlsStream<S>
+impl<S> edgerun_rt::AsyncRead for AsyncTlsStream<S>
 where
-    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
 {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         self.get_mut().poll_read(cx, buf).map_err(to_bare_io_error)
     }
 }
 
-impl<S> edgerun_bare_rt::AsyncWrite for AsyncTlsStream<S>
+impl<S> edgerun_rt::AsyncWrite for AsyncTlsStream<S>
 where
-    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
 {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         self.get_mut().poll_write(cx, buf).map_err(to_bare_io_error)
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
         self.get_mut().poll_flush(cx).map_err(to_bare_io_error)
     }
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+    ) -> Poll<edgerun_rt::io::Result<()>> {
         self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
     }
 }
 
-impl<S> edgerun_bare_rt::AsyncRead for AsyncTlsServerStream<S>
+impl<S> edgerun_rt::AsyncRead for AsyncTlsServerStream<S>
 where
-    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
 {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         self.get_mut().poll_read(cx, buf).map_err(to_bare_io_error)
     }
 }
 
-impl<S> edgerun_bare_rt::AsyncWrite for AsyncTlsServerStream<S>
+impl<S> edgerun_rt::AsyncWrite for AsyncTlsServerStream<S>
 where
-    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
 {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         self.get_mut().poll_write(cx, buf).map_err(to_bare_io_error)
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
         self.get_mut().poll_flush(cx).map_err(to_bare_io_error)
     }
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+    ) -> Poll<edgerun_rt::io::Result<()>> {
         self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
     }
 }

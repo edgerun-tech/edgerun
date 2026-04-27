@@ -17,14 +17,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::str;
 use core::time::Duration;
-use edgerun_bare_rt::{timeout, AsyncUdpSocket, Elapsed};
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_rt::{timeout, AsyncUdpSocket, Elapsed};
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "none")]
 use core::net::SocketAddr;
 #[cfg(target_os = "none")]
-use edgerun_bare_rt::io::IoError;
+use edgerun_rt::io::IoError;
 
 #[cfg(not(target_os = "none"))]
 type IoError = std::io::Error;

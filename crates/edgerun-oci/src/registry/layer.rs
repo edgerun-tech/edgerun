@@ -7,14 +7,17 @@
 
 use crate::prelude::*;
 use std::fs::{self, File};
-use std::io::{self, BufReader, Read};
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::io::{self, Read};
+use std::os::unix::fs::{symlink, FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use super::errors::RegistryError;
 use crate::layer_pipeline::bytes_to_hex;
 use crate::oci_path::layer_path_safe;
-use crate::tar_layer::{layer_compression, parse_oci_whiteout, OciLayerCompression, OciWhiteout};
+use crate::tar_layer::{
+    apply_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer, layer_compression,
+    parse_oci_whiteout, OciLayerCompression, OciWhiteout, TarEntry, TarEntryKind, TarLayerSink,
+};
 use edgerun_crypto::sha2::Digest;
 
 // ===========================================================================
@@ -55,7 +58,10 @@ pub fn extract_layer(
     dest: &Path,
     media_type: Option<&str>,
 ) -> Result<(), RegistryError> {
-    let file = File::open(blob_path).map_err(RegistryError::IoError)?;
+    let mut file = File::open(blob_path).map_err(RegistryError::IoError)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(RegistryError::IoError)?;
 
     let compression = match layer_compression(media_type) {
         OciLayerCompression::Unknown
@@ -66,94 +72,133 @@ pub fn extract_layer(
         compression => compression,
     };
 
-    match compression {
-        OciLayerCompression::Zstd => {
-            let mut decoder = zstd::Decoder::new(file).map_err(RegistryError::IoError)?;
-            extract_tar_secure(&mut decoder, dest)?;
-        }
-        OciLayerCompression::Gzip => {
-            let mut decoder = flate2::read::GzDecoder::new(file);
-            extract_tar_secure(&mut decoder, dest)?;
-        }
-        OciLayerCompression::Uncompressed | OciLayerCompression::Unknown => {
-            extract_tar_secure(&mut BufReader::new(file), dest)?;
-        }
+    let tar_bytes = match compression {
+        OciLayerCompression::Zstd => decompress_zstd_layer(&bytes),
+        OciLayerCompression::Gzip => decompress_gzip_layer(&bytes),
+        OciLayerCompression::Uncompressed | OciLayerCompression::Unknown => Ok(bytes),
     }
+    .map_err(tar_apply_error)?;
+
+    extract_tar_secure(&tar_bytes, dest)?;
 
     Ok(())
 }
 
 /// Securely extract a tar stream to a directory.
 /// Validates all entry paths to prevent directory traversal and symlink escape.
-pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), RegistryError> {
-    let mut archive = tar::Archive::new(reader);
-    let dest = dest.canonicalize().unwrap_or(dest.to_path_buf());
+pub fn extract_tar_secure(data: &[u8], dest: &Path) -> Result<(), RegistryError> {
+    let dest = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+    let mut sink = FsLayerSink { dest };
+    apply_uncompressed_tar_layer(data, &mut sink).map_err(|error| {
+        RegistryError::IoError(io::Error::new(
+            io::ErrorKind::InvalidData,
+            error.to_string(),
+        ))
+    })?;
+    Ok(())
+}
 
-    for entry in archive.entries().map_err(RegistryError::IoError)? {
-        let entry = entry.map_err(RegistryError::IoError)?;
-        let path = entry.path().map_err(RegistryError::IoError)?;
+fn tar_apply_error(error: crate::tar_layer::TarLayerApplyError) -> RegistryError {
+    RegistryError::IoError(io::Error::new(
+        io::ErrorKind::InvalidData,
+        error.to_string(),
+    ))
+}
 
-        // Validate: entry must resolve within dest.
-        // First try canonicalize (resolves symlinks). If that fails (path doesn't
-        // exist yet), do a manual component check to reject ".." escape attempts.
-        let entry_path = dest.join(&path);
-        let entry_resolved = entry_path.canonicalize().ok();
-        if let Some(ref resolved) = entry_resolved {
-            if !resolved.starts_with(&dest) {
-                return Err(RegistryError::IoError(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    format!("tar entry {:?} escapes destination {:?}", path, dest),
-                )));
-            }
-        } else {
-            // Path doesn't exist yet — check components manually
-            if !path_safe_within_root(&path) {
-                return Err(RegistryError::IoError(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    format!("tar entry {:?} would escape destination", path),
-                )));
-            }
+struct FsLayerSink {
+    dest: PathBuf,
+}
+
+impl FsLayerSink {
+    fn entry_path(&self, entry: &TarEntry) -> Result<PathBuf, String> {
+        let path = Path::new(&entry.path);
+        if !path_safe_within_root(path) {
+            return Err(format!(
+                "tar entry {:?} would escape destination",
+                entry.path
+            ));
         }
-
-        // Validate symlinks: target must resolve within dest
-        if entry.header().entry_type() == tar::EntryType::Symlink {
-            if let Some(link_target) = entry.link_name().map_err(RegistryError::IoError)? {
-                // If absolute, check it's within dest; if relative, resolve from entry's parent
-                let resolved = if link_target.is_absolute() {
-                    dest.join(link_target.strip_prefix("/").unwrap_or(&link_target))
-                } else {
-                    entry_path.parent().unwrap_or(&dest).join(&link_target)
-                };
-                // Try canonicalize first; if target doesn't exist, check manually
-                if let Ok(canonical) = resolved.canonicalize() {
-                    if !canonical.starts_with(&dest) {
-                        return Err(RegistryError::IoError(io::Error::new(
-                            io::ErrorKind::PermissionDenied,
-                            format!(
-                                "symlink {:?} -> {:?} escapes destination",
-                                path, link_target
-                            ),
-                        )));
-                    }
-                } else if !path_safe_within_root(&link_target) {
-                    return Err(RegistryError::IoError(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        format!(
-                            "symlink {:?} -> {:?} would escape destination",
-                            path, link_target
-                        ),
-                    )));
-                }
-            }
-        }
-
-        // Extract the entry
-        // Use unpack_in which validates paths, but we already validated above
-        let mut entry = entry;
-        entry.unpack_in(&dest).map_err(RegistryError::IoError)?;
+        Ok(self.dest.join(path))
     }
 
-    Ok(())
+    fn ensure_parent(path: &Path) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn validate_link(&self, entry_path: &Path, target: &Path) -> Result<(), String> {
+        let resolved = if target.is_absolute() {
+            self.dest.join(target.strip_prefix("/").unwrap_or(target))
+        } else {
+            entry_path.parent().unwrap_or(&self.dest).join(target)
+        };
+
+        if let Ok(canonical) = resolved.canonicalize() {
+            if !canonical.starts_with(&self.dest) {
+                return Err(format!(
+                    "symlink {:?} -> {:?} escapes destination",
+                    entry_path, target
+                ));
+            }
+        } else if !path_safe_within_root(target) {
+            return Err(format!(
+                "symlink {:?} -> {:?} would escape destination",
+                entry_path, target
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+impl TarLayerSink for FsLayerSink {
+    fn apply_entry(&mut self, entry: &TarEntry, data: &[u8]) -> Result<(), String> {
+        let path = self.entry_path(entry)?;
+
+        match entry.kind {
+            TarEntryKind::Regular => {
+                Self::ensure_parent(&path)?;
+                fs::write(&path, data).map_err(|error| error.to_string())?;
+                fs::set_permissions(&path, fs::Permissions::from_mode(entry.mode))
+                    .map_err(|error| error.to_string())?;
+            }
+            TarEntryKind::Directory => {
+                fs::create_dir_all(&path).map_err(|error| error.to_string())?;
+                fs::set_permissions(&path, fs::Permissions::from_mode(entry.mode))
+                    .map_err(|error| error.to_string())?;
+            }
+            TarEntryKind::Symlink => {
+                let target = entry
+                    .link_name
+                    .as_deref()
+                    .ok_or_else(|| format!("symlink {:?} missing target", entry.path))?;
+                let target = Path::new(target);
+                self.validate_link(&path, target)?;
+                Self::ensure_parent(&path)?;
+                let _ = fs::remove_file(&path);
+                symlink(target, &path).map_err(|error| error.to_string())?;
+            }
+            TarEntryKind::Hardlink => {
+                let target = entry
+                    .link_name
+                    .as_deref()
+                    .ok_or_else(|| format!("hardlink {:?} missing target", entry.path))?;
+                let target = self.dest.join(target);
+                Self::ensure_parent(&path)?;
+                let _ = fs::remove_file(&path);
+                fs::hard_link(target, &path).map_err(|error| error.to_string())?;
+            }
+            TarEntryKind::Character | TarEntryKind::Block | TarEntryKind::Fifo => {}
+            TarEntryKind::PaxExtended
+            | TarEntryKind::PaxGlobal
+            | TarEntryKind::GnuLongName
+            | TarEntryKind::GnuLongLink => {}
+        }
+
+        Ok(())
+    }
 }
 
 // ===========================================================================

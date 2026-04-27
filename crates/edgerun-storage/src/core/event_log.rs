@@ -62,10 +62,14 @@ pub trait EventLog {
 #[must_use]
 pub fn canonical_event_hash(event: &EventEnvelope) -> Digest {
     let record = ProtocolRecord::EventEnvelope(event.clone());
-    let canonical = canonical_bytes(&record, false);
+    let canonical = canonical_bytes(&record, true);
+    let hash = edgerun_core::crypto::record_hash(
+        edgerun_core::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
+        &canonical,
+    );
     Digest {
         algorithm: 1,
-        value: edgerun_core::crypto::sha256(&canonical).to_vec(),
+        value: hash,
     }
 }
 
@@ -114,4 +118,52 @@ pub fn encode_event_frame(event: &EventEnvelope) -> Result<(Vec<u8>, Vec<u8>), S
 
     let len_prefix = edgerun_core::varint::encode_varint(event_bytes.len() as u64);
     Ok((len_prefix, event_bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use edgerun_core::protocol::{EventType, Signature};
+
+    fn event_with_signature(marker: u8) -> EventEnvelope {
+        EventEnvelope {
+            envelope_version: 1,
+            stream_id: b"stream-1".to_vec(),
+            seq: 0,
+            prev_event_hash: None,
+            event_type: EventType::NodeGenesis as i32,
+            event_version: 1,
+            recorded_at: None,
+            effective_at: None,
+            payload_object: None,
+            related_events: vec![],
+            related_commands: vec![],
+            related_objects: vec![],
+            related_delegations: vec![],
+            related_revocations: vec![],
+            event_metadata: None,
+            signature: Some(Signature {
+                algorithm: 1,
+                value: vec![marker; 64],
+            }),
+        }
+    }
+
+    #[test]
+    fn canonical_event_hash_matches_stream_hash() {
+        let event = event_with_signature(0xAB);
+
+        assert_eq!(
+            canonical_event_hash(&event),
+            edgerun_stream::compute_event_hash(&event)
+        );
+    }
+
+    #[test]
+    fn canonical_event_hash_uses_signable_form() {
+        let first = event_with_signature(0xAB);
+        let second = event_with_signature(0xCD);
+
+        assert_eq!(canonical_event_hash(&first), canonical_event_hash(&second));
+    }
 }

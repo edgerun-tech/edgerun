@@ -1,10 +1,10 @@
 use crate::prelude::v1::*;
 use alloc::sync::Arc;
 
-use edgerun_bare_rt::RwLock;
 use edgerun_dns::record::DnsRecordType;
 use edgerun_dns::zone::DnsZone;
 use edgerun_encoding::base64url_nopad_encode;
+use edgerun_rt::RwLock;
 use sha2::{Digest, Sha256};
 
 use crate::account::AccountKey;

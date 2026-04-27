@@ -1,32 +1,46 @@
 # Edgerun Core Documentation
 
-This index points at the documentation that is still relevant to the current
-workspace. Some files in `docs/` are historical design notes or copied upstream
-specification references; verify implementation details against the crate source
-and root `Cargo.toml`.
+Read the protocol first. Most other docs are either implementation notes,
+component notes, generated spec snapshots, or older design documents.
 
-## Start Here
+## Core Protocol
 
-- [Root README](../README.md) - current workspace overview and build commands.
-- [Crate layout](../crates/README.md) - crate families under `crates/`.
-- [Protocol README](../proto/README.md) - protobuf source layout.
-- [Core protocol single-file spec](../edgerun_core_protocol_v0_single_file.md)
-  - protocol reference snapshot.
+- [Core Protocol v0](../edgerun_core_protocol_v0_single_file.md) - normative
+  working draft for the identity-based append-only fabric.
+- [Protocol source layout](../proto/README.md) - protobuf tree notes.
+- `proto/edgerun/v0/common.proto` - shared identifiers, refs, digests,
+  signatures, storage/execution/transport classes.
+- `proto/edgerun/v0/identity.proto` - identity records.
+- `proto/edgerun/v0/trust.proto` - capabilities, delegation, revocation,
+  assurance, route trust policy.
+- `proto/edgerun/v0/stream.proto` - events, commands, command results, action
+  lifecycle, secret-service event payloads.
+- `proto/edgerun/v0/object.proto` - logical objects, stored representations,
+  chunks, manifests.
+- `proto/edgerun/v0/access.proto` - snapshots, queries, result fragments, proof
+  objects, aggregates.
+- `proto/edgerun/v0/network.proto` - reachability hints, routes, session
+  hello/accept, relay envelopes.
 
-## Component Documentation
+## Current Implementation
 
-- [HTTP](http/README.md) - HTTP/1.1, HTTP/2, HTTP/3 implementation notes.
-- [HTTP conformance report](http/CONFORMANCE_REPORT.md) - HTTP test status.
-- [h2spec analysis](http/H2SPEC_ANALYSIS.md) - HTTP/2 conformance notes.
-- [TLS](tls/README.md) - TLS 1.2/1.3 crate notes.
-- [OCI runtime](oci-runtime/README.md) - OCI runtime design and usage.
-- [Virtual disk](virtual-disk/README.md) - virtual disk and NBD support.
-- [Remote capability](remote-capability/README.md) - remote capability transport.
-- [Fuzzing](fuzz-README.md) - fuzz target notes.
-- [TPM overview](security/tpm.md) - TPM workflows.
-- [TPM implementation notes](security/tpm-implementation-notes.md) - TPM details.
+- [Root README](../README.md) - current code-grounded overview and build caveats.
+- [Crate layout](../crates/README.md) - implementation-oriented crate map.
+- [HTTP](http/README.md) - HTTP stack notes.
+- [HTTP conformance report](http/CONFORMANCE_REPORT.md)
+- [h2spec analysis](http/H2SPEC_ANALYSIS.md)
+- [TLS](tls/README.md)
+- [OCI runtime](oci-runtime/README.md)
+- [Virtual disk](virtual-disk/README.md)
+- [Remote capability](remote-capability/README.md)
+- [Fuzzing](fuzz-README.md)
+- [TPM overview](security/tpm.md)
+- [TPM implementation notes](security/tpm-implementation-notes.md)
 
 ## Design Notes
+
+These are useful context, but verify claims against code before treating them as
+current status.
 
 - [Machine daemon](design/machine_daemon.md)
 - [Compute marketplace](design/compute-marketplace.md)
@@ -36,8 +50,9 @@ and root `Cargo.toml`.
 
 ## RFCs
 
-The RFCs are design documents. They may describe planned or historical browser
-and web-platform work that is not present as workspace members today.
+The RFC directory is mostly design history and planning. Some rendering and web
+platform RFCs describe generated schemas or earlier goals, not current
+workspace-member implementations.
 
 | RFC | Topic |
 |---|---|
@@ -58,7 +73,9 @@ and web-platform work that is not present as workspace members today.
 | [RFC-0014](rfc/RFC-0014-analysis-tools.md) | Analysis and optimization tools |
 | [RFC-0015](rfc/RFC-0015-codegen-pipeline.md) | Code generation pipeline |
 
-## Specification References
+## Specification Snapshots
+
+These files are large upstream/reference snapshots or generated-source inputs.
 
 - [Fetch spec snapshot](fetch_spec.md)
 - [Encoding spec snapshot](encoding_spec.md)
@@ -69,14 +86,15 @@ and web-platform work that is not present as workspace members today.
 - [UI Events spec snapshot](uievents_spec.md)
 - [Wayland protocol specs](wayland/protocol-specs/README.md)
 
-## Quick Facts
+## Current Facts From The Tree
 
-| Metric | Current value |
+| Metric | Value |
 |---|---:|
-| Workspace members in root `Cargo.toml` | 109 |
-| Crate directories under `crates/` | 109 |
-| Files under `proto/` including README | 47 |
-| Crates with `no_std` or `cfg_attr(..., no_std)` in `src/lib.rs` | 104 |
-
-These numbers were refreshed from the local tree during this documentation
-update.
+| Protocol draft length | 3298 lines |
+| `.proto` files under `proto/edgerun/v0` | 44 |
+| Files under `proto/` including README/generated notes | 47 |
+| First-level directories under `crates/` | 113 |
+| Crate manifests under `crates/` | 110 |
+| `cargo metadata --no-deps` packages/members | 110 |
+| Root `Cargo.toml` textual member entries | 108 |
+| Known inventory quirks | `edgerun-tftp` is duplicated in the textual member list; `edgerun-css`, `edgerun-ecmascript`, and `edgerun-html` are directories without crate manifests |

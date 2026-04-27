@@ -1121,6 +1121,19 @@ impl NodeStore {
             format!("snap-{}", edgerun_core::util::bytes_to_hex(&digest[..8]))
         };
         let node_id = signer.node_id();
+        // Store base_heads as simple delimited text: stream_hex:seq:hash_hex;...
+        let base_heads_text: String = heads
+            .iter()
+            .map(|(sid, seq, hash)| {
+                format!("{}:{}:{}", sid, seq, edgerun_core::util::bytes_to_hex(hash))
+            })
+            .collect::<Vec<_>>()
+            .join(";");
+        let payload_object_ref = self.put_object(
+            base_heads_text.as_bytes(),
+            3, /* OBJECT_KIND_SNAPSHOT */
+            &[],
+        )?;
 
         let mut descriptor = SnapshotDescriptor {
             descriptor_version: 1,
@@ -1130,7 +1143,7 @@ impl NodeStore {
             producer: Some(IdentityRef {
                 identity_id: node_id.0.to_vec(),
                 identity_kind: Some(2), // NODE
-                key_hint: None,
+                key_hint: Some(node_id.0.to_vec()),
             }),
             produced_at: Some(prost_types::Timestamp {
                 seconds: now_seconds,
@@ -1140,7 +1153,7 @@ impl NodeStore {
             base_checkpoints: vec![],
             scope: None,
             completeness,
-            payload_object: None,
+            payload_object: Some(payload_object_ref.clone()),
             supersedes: None,
             snapshot_metadata: None,
             signature: None,
@@ -1160,24 +1173,11 @@ impl NodeStore {
             value: sig.to_vec(),
         });
 
-        // Store as encrypted object
-        let descriptor_bytes = prost::Message::encode_to_vec(&descriptor);
-        let object_ref =
-            self.put_object(&descriptor_bytes, 3 /* OBJECT_KIND_SNAPSHOT */, &[])?;
-
-        // Store base_heads as simple delimited text: stream_hex:seq:hash_hex;...
-        let base_heads_text: String = heads
-            .iter()
-            .map(|(sid, seq, hash)| {
-                format!("{}:{}:{}", sid, seq, edgerun_core::util::bytes_to_hex(hash))
-            })
-            .collect::<Vec<_>>()
-            .join(";");
         let producer_hex = edgerun_core::util::bytes_to_hex(&node_id.0);
 
         self.index.put_snapshot(
             &snapshot_id,
-            &edgerun_core::util::bytes_to_hex(&object_ref.object_id),
+            &edgerun_core::util::bytes_to_hex(&payload_object_ref.object_id),
             view_type,
             &producer_hex,
             now_seconds,
@@ -1199,12 +1199,14 @@ impl NodeStore {
         descriptor: &edgerun_proto::edgerun::v0::access::SnapshotDescriptor,
         trusted_producers: &[Vec<u8>],
     ) -> Result<String, StorageError> {
-        // Structural validation
-        if descriptor.snapshot_id.is_empty() {
-            return Err(StorageError::Decode("snapshot_id is empty".into()));
-        }
-        if descriptor.producer.is_none() {
-            return Err(StorageError::Decode("producer is missing".into()));
+        let validation =
+            edgerun_core::validators_proto::validate_snapshot(descriptor, trusted_producers);
+        if validation.verdict != edgerun_core::result::Verdict::Accept {
+            let reason = validation
+                .reason_code
+                .map(|code| code.as_str().to_string())
+                .unwrap_or_else(|| "snapshot validation failed".into());
+            return Err(StorageError::Decode(reason));
         }
 
         let producer = descriptor
@@ -1212,11 +1214,6 @@ impl NodeStore {
             .as_ref()
             .ok_or_else(|| StorageError::Decode("producer is missing".into()))?;
         let producer_hex = edgerun_core::util::bytes_to_hex(&producer.identity_id);
-
-        // Check producer trust
-        if !trusted_producers.is_empty() && !trusted_producers.contains(&producer.identity_id) {
-            return Err(StorageError::Decode("snapshot producer not trusted".into()));
-        }
 
         // Store as object (if payload_object is present)
         if let Some(ref payload_ref) = descriptor.payload_object {
@@ -1689,6 +1686,58 @@ mod tests {
         let device = InMemoryBlockDevice::new(32, 64);
         let store = NodeStore::open_with_block_device(&config, device.clone()).unwrap();
         (store, device)
+    }
+
+    #[test]
+    fn produce_snapshot_includes_verifiable_producer_key_hint() {
+        let mut store = make_store(tmp_data_root());
+        let signer = TestSigner::new();
+        let mut genesis = event(b"stream-1", 0, None);
+        store
+            .sign_event_envelope(&mut genesis, &signer)
+            .expect("sign genesis");
+        store
+            .append_event_blocking(genesis)
+            .expect("append genesis");
+
+        let descriptor = store
+            .produce_snapshot(&signer, "timeline", 1)
+            .expect("produce snapshot");
+
+        let producer = descriptor.producer.as_ref().expect("producer");
+        assert_eq!(producer.identity_id, signer.node_id().0.to_vec());
+        assert_eq!(producer.key_hint, Some(signer.node_id().0.to_vec()));
+
+        let result = edgerun_core::validators_proto::validate_snapshot(
+            &descriptor,
+            &[signer.node_id().0.to_vec()],
+        );
+        assert_eq!(result.verdict, edgerun_core::result::Verdict::Accept);
+    }
+
+    #[test]
+    fn consume_snapshot_rejects_tampered_signature() {
+        let mut store = make_store(tmp_data_root());
+        let signer = TestSigner::new();
+        let mut genesis = event(b"stream-1", 0, None);
+        store
+            .sign_event_envelope(&mut genesis, &signer)
+            .expect("sign genesis");
+        store
+            .append_event_blocking(genesis)
+            .expect("append genesis");
+
+        let mut descriptor = store
+            .produce_snapshot(&signer, "timeline", 1)
+            .expect("produce snapshot");
+        if let Some(signature) = &mut descriptor.signature {
+            signature.value[0] ^= 0xFF;
+        }
+
+        let err = store
+            .consume_snapshot(&descriptor, &[signer.node_id().0.to_vec()])
+            .unwrap_err();
+        assert!(matches!(err, StorageError::Decode(_)));
     }
 
     fn event(stream_id: &[u8], seq: u64, prev_hash: Option<Vec<u8>>) -> EventEnvelope {

@@ -8,7 +8,7 @@
 //! ```no_run
 //! use edgerun_http::http3::Http3Server;
 //! use edgerun_tls::certificate_gen::generate_self_signed;
-//! use edgerun_bare_rt::Runtime;
+//! use edgerun_rt::Runtime;
 //!
 //! let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 //! rt.block_on(async {
@@ -594,7 +594,7 @@ impl Http3Server {
     /// use edgerun_http::http3::Http3Server;
     /// use edgerun_http::{Handler, Request, Response, StatusCode, into_handler};
     /// use edgerun_tls::certificate_gen::generate_self_signed;
-    /// use edgerun_bare_rt::Runtime;
+    /// use edgerun_rt::Runtime;
     /// use crate::runtime::sync::Arc;
     ///
     /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
@@ -604,7 +604,7 @@ impl Http3Server {
     ///     let handler = into_handler(|_req| {
     ///         Response::text(StatusCode::new(200).unwrap(), "Hello!")
     ///     });
-    ///     let shutdown = edgerun_bare_rt::CancellationToken::new();
+    ///     let shutdown = edgerun_rt::CancellationToken::new();
     ///     server.serve(Arc::new(handler), shutdown).await.unwrap();
     /// });
     /// ```

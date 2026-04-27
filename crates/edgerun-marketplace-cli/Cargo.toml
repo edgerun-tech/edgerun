@@ -10,15 +10,12 @@ required-features = ["std"]
 
 [dependencies]
 edgerun-solana = { path = "../edgerun-solana" }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "serde"] }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
-
-[dev-dependencies]
-mockall = "0.13"
 
 [features]
 std = []

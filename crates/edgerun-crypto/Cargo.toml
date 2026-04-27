@@ -25,7 +25,7 @@ typenum = { version = "1.17", optional = true }
 rand_core = { version = "0.6", default-features = false }
 
 [features]
-default = ["full"]
+default = []
 full = [
     "aead",
     "chacha20poly1305",

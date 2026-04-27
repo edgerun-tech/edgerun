@@ -73,7 +73,7 @@ edgerun-node (edgerund)                    ← The daemon
 │   └── crypto.rs                          ← SHA-256 (inline, no deps)
 ├── edgerun-oci-registry                   ← Docker Hub / OCI registry client
 │   └── (uses edgerun-core::crypto::sha256)← No vendored sha2
-├── edgerun-oci-runtime                    ← Container runtime (namespaces, cgroups)
+├── edgerun-oci                            ← Container runtime (namespaces, cgroups)
 ├── edgerun-storage                        ← Append-only event log + accounting ledger
 │   └── file_index.rs                      ← work_accounting.bin persistence
 └── metering (module in edgerun-node/src/metering.rs)
@@ -111,7 +111,7 @@ command_dispatch.rs: dispatch_execute_workload()
     │   └── Set cgroup pids.max = 256
     │
     ├── PHASE 3: Run Container
-    │   ├── edgerun_oci_runtime::run_bundle()
+    │   ├── edgerun_oci::run_bundle()
     │   │   ├── fork() + unshare(namespaces)
     │   │   ├── pivot_root(rootfs)
     │   │   ├── mount proc, sysfs, devpts
@@ -265,7 +265,8 @@ Everything uses only Rust stdlib or existing project code:
 | Cgroups v2 | File I/O to `/sys/fs/cgroup/` | std::fs |
 | Accounting storage | Binary file append | std::fs |
 
-No tokio, no async runtime, no databases, no external crypto libraries.
+No Tokio, no database service, and no external crypto boundary for protocol
+hashing/signing. Runtime code uses project runtime primitives where needed.
 
 ---
 
@@ -281,7 +282,7 @@ write_uid_map(0, 65534, 1)   → container root → host nobody
 write_gid_map(0, 65534, 1)   → container root GID → host nogroup
 ```
 
-Implemented in `edgerun-oci-runtime/src/lib.rs` — writes `/proc/self/uid_map`
+Implemented in `crates/edgerun-oci/src/lib.rs` — writes `/proc/self/uid_map`
 and `/proc/self/gid_map` in the child's `pre_exec` closure before `pivot_root`.
 
 ### Seccomp-BPF Syscall Filter

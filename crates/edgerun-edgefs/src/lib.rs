@@ -30,12 +30,14 @@ const SUPERBLOCK_MIN_LEN: usize = 64;
 const RECORD_HEADER_LEN: usize = 48;
 const NONCE_LEN: usize = 12;
 const KEY_LEN: usize = 32;
+const AEAD_TAG_LEN: usize = 16;
 const DEFAULT_MODE_FILE: u32 = 0o644;
 const DEFAULT_MODE_DIR: u32 = 0o755;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EdgeFsError {
     InvalidKey,
+    InvalidFormatId,
     InvalidGeometry(String),
     NotFormatted,
     CorruptSuperblock(String),
@@ -46,12 +48,14 @@ pub enum EdgeFsError {
     OutOfSpace,
     NotFound(String),
     InvalidPath(String),
+    HardlinkLoop(String),
 }
 
 impl fmt::Display for EdgeFsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidKey => f.write_str("invalid EdgeFS encryption key"),
+            Self::InvalidFormatId => f.write_str("invalid EdgeFS format identity"),
             Self::InvalidGeometry(e) => write!(f, "invalid block geometry: {e}"),
             Self::NotFormatted => f.write_str("device is not formatted as EdgeFS"),
             Self::CorruptSuperblock(e) => write!(f, "corrupt EdgeFS superblock: {e}"),
@@ -62,6 +66,7 @@ impl fmt::Display for EdgeFsError {
             Self::OutOfSpace => f.write_str("EdgeFS device is full"),
             Self::NotFound(path) => write!(f, "path not found: {path}"),
             Self::InvalidPath(path) => write!(f, "invalid path: {path}"),
+            Self::HardlinkLoop(path) => write!(f, "hardlink loop at path: {path}"),
         }
     }
 }
@@ -81,15 +86,31 @@ pub struct FileMeta {
     pub mode: u32,
     pub uid: u32,
     pub gid: u32,
+    pub mtime: u64,
 }
 
 impl FileMeta {
     pub const fn file(mode: u32, uid: u32, gid: u32) -> Self {
-        Self { mode, uid, gid }
+        Self {
+            mode,
+            uid,
+            gid,
+            mtime: 0,
+        }
     }
 
     pub const fn dir(mode: u32, uid: u32, gid: u32) -> Self {
-        Self { mode, uid, gid }
+        Self {
+            mode,
+            uid,
+            gid,
+            mtime: 0,
+        }
+    }
+
+    pub const fn with_mtime(mut self, mtime: u64) -> Self {
+        self.mtime = mtime;
+        self
     }
 }
 
@@ -99,6 +120,7 @@ impl Default for FileMeta {
             mode: DEFAULT_MODE_FILE,
             uid: 0,
             gid: 0,
+            mtime: 0,
         }
     }
 }
@@ -108,6 +130,7 @@ pub enum EntryKind {
     File,
     Directory,
     Symlink,
+    Hardlink,
     Character,
     Block,
     Fifo,
@@ -119,9 +142,10 @@ impl EntryKind {
             Self::File => 1,
             Self::Directory => 2,
             Self::Symlink => 3,
-            Self::Character => 4,
-            Self::Block => 5,
-            Self::Fifo => 6,
+            Self::Hardlink => 4,
+            Self::Character => 5,
+            Self::Block => 6,
+            Self::Fifo => 7,
         }
     }
 
@@ -130,12 +154,19 @@ impl EntryKind {
             1 => Some(Self::File),
             2 => Some(Self::Directory),
             3 => Some(Self::Symlink),
-            4 => Some(Self::Character),
-            5 => Some(Self::Block),
-            6 => Some(Self::Fifo),
+            4 => Some(Self::Hardlink),
+            5 => Some(Self::Character),
+            6 => Some(Self::Block),
+            7 => Some(Self::Fifo),
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeviceId {
+    pub major: u32,
+    pub minor: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,6 +175,27 @@ pub struct DirEntry {
     pub kind: EntryKind,
     pub meta: FileMeta,
     pub len: usize,
+    pub device: Option<DeviceId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntryRef<'a> {
+    pub path: &'a str,
+    pub kind: EntryKind,
+    pub meta: FileMeta,
+    pub data: &'a [u8],
+    pub link_target: Option<&'a str>,
+    pub device: Option<DeviceId>,
+}
+
+impl EntryRef<'_> {
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
 }
 
 #[derive(Clone)]
@@ -152,6 +204,7 @@ struct IndexedEntry {
     meta: FileMeta,
     data: Vec<u8>,
     link_target: Option<String>,
+    device: Option<DeviceId>,
 }
 
 #[derive(Debug, Clone)]
@@ -163,10 +216,17 @@ struct Superblock {
     fs_id: [u8; 16],
 }
 
+#[derive(Clone)]
+struct KeyMaterial {
+    record: [u8; KEY_LEN],
+    nonce: [u8; KEY_LEN],
+    superblock: [u8; KEY_LEN],
+}
+
 /// A mandatory-encryption block filesystem over a sector-addressable device.
 pub struct EdgeFs<S: BlockStorage> {
     device: S,
-    key: [u8; KEY_LEN],
+    keys: KeyMaterial,
     fs_id: [u8; 16],
     sector_size: usize,
     sectors: u64,
@@ -176,13 +236,45 @@ pub struct EdgeFs<S: BlockStorage> {
 }
 
 impl<S: BlockStorage> EdgeFs<S> {
+    /// Reformat an existing EdgeFS volume with a new nonce domain.
+    ///
+    /// This only works when the device already contains a superblock
+    /// authenticated by `key`. For blank media, use [`Self::format_with_id`]
+    /// with a unique nonzero filesystem ID from a hardware RNG or provisioning
+    /// flow. EdgeFS does not invent randomness in no_std code.
     pub fn format(mut device: S, key: [u8; KEY_LEN]) -> Result<Self> {
         validate_key(&key)?;
         let sector_size = device.sector_size();
         let sectors = device.sectors();
         validate_geometry(sector_size, sectors)?;
 
-        let fs_id = derive_fs_id(&key, sector_size, sectors);
+        let fs_id = derive_next_fs_id(&mut device, &key, sector_size, sectors)?;
+        Self::format_with_geometry(device, key, fs_id, sector_size, sectors)
+    }
+
+    /// Format blank media using a caller-provided filesystem identity.
+    ///
+    /// The `fs_id` is public in the superblock, but it defines the AEAD nonce
+    /// domain for this volume. It must be unique for each format under the same
+    /// encryption key. Passing all zeroes is rejected.
+    pub fn format_with_id(mut device: S, key: [u8; KEY_LEN], fs_id: [u8; 16]) -> Result<Self> {
+        validate_key(&key)?;
+        validate_fs_id(&fs_id)?;
+        let sector_size = device.sector_size();
+        let sectors = device.sectors();
+        validate_geometry(sector_size, sectors)?;
+        Self::format_with_geometry(device, key, fs_id, sector_size, sectors)
+    }
+
+    fn format_with_geometry(
+        mut device: S,
+        key: [u8; KEY_LEN],
+        fs_id: [u8; 16],
+        sector_size: usize,
+        sectors: u64,
+    ) -> Result<Self> {
+        validate_fs_id(&fs_id)?;
+        let keys = derive_key_material(&key, &fs_id);
         let superblock = Superblock {
             generation: 1,
             cursor: DATA_START_SECTOR.saturating_mul(sector_size as u64),
@@ -190,12 +282,12 @@ impl<S: BlockStorage> EdgeFs<S> {
             sectors,
             fs_id,
         };
-        write_superblocks(&mut device, &superblock)?;
+        write_superblocks(&mut device, &keys.superblock, &superblock)?;
         device.sync()?;
 
         Ok(Self {
             device,
-            key,
+            keys,
             fs_id,
             sector_size,
             sectors,
@@ -210,16 +302,18 @@ impl<S: BlockStorage> EdgeFs<S> {
         let sector_size = device.sector_size();
         let sectors = device.sectors();
         validate_geometry(sector_size, sectors)?;
-        let superblock = read_best_superblock(&mut device, sector_size)?;
+        let superblock_key = derive_superblock_key(&key);
+        let superblock = read_best_superblock(&mut device, &superblock_key, sector_size)?;
         if superblock.sector_size != sector_size || superblock.sectors != sectors {
             return Err(EdgeFsError::CorruptSuperblock(
                 "stored geometry does not match device".into(),
             ));
         }
 
+        let keys = derive_key_material(&key, &superblock.fs_id);
         let mut fs = Self {
             device,
-            key,
+            keys,
             fs_id: superblock.fs_id,
             sector_size,
             sectors,
@@ -239,6 +333,24 @@ impl<S: BlockStorage> EdgeFs<S> {
         self.sector_size
     }
 
+    /// Return the public filesystem identity used for nonce-domain separation.
+    pub fn filesystem_id(&self) -> [u8; 16] {
+        self.fs_id
+    }
+
+    pub fn used_bytes(&self) -> u64 {
+        self.cursor
+            .saturating_sub(DATA_START_SECTOR.saturating_mul(self.sector_size as u64))
+    }
+
+    pub fn available_bytes(&self) -> u64 {
+        self.device_bytes().saturating_sub(self.cursor)
+    }
+
+    pub fn compacted_used_bytes(&self) -> Result<u64> {
+        estimate_payloads_size(&self.current_payloads(), self.sector_size)
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -248,11 +360,65 @@ impl<S: BlockStorage> EdgeFs<S> {
     }
 
     pub fn contains(&self, path: &str) -> bool {
-        self.entries.contains_key(normalize_path(path).as_str())
+        normalize_path_checked(path, true)
+            .map(|path| self.entries.contains_key(path.as_str()))
+            .unwrap_or(false)
+    }
+
+    pub fn entry(&self, path: &str) -> Result<Option<EntryRef<'_>>> {
+        let path = normalize_path_checked(path, true)?;
+        Ok(self
+            .entries
+            .get_key_value(&path)
+            .map(|(stored_path, entry)| entry_ref(stored_path.as_str(), entry)))
+    }
+
+    pub fn iter_entries(&self) -> impl Iterator<Item = EntryRef<'_>> {
+        self.entries
+            .iter()
+            .map(|(path, entry)| entry_ref(path.as_str(), entry))
+    }
+
+    pub fn entries_under<'a>(
+        &'a self,
+        path: &str,
+    ) -> Result<impl Iterator<Item = EntryRef<'a>> + 'a> {
+        let path = normalize_path_checked(path, true)?;
+        let prefix = if path.is_empty() {
+            String::new()
+        } else {
+            format!("{path}/")
+        };
+        Ok(self.iter_entries().filter(move |entry| {
+            if prefix.is_empty() {
+                true
+            } else {
+                entry.path.starts_with(prefix.as_str())
+            }
+        }))
+    }
+
+    pub fn children<'a>(&'a self, path: &str) -> Result<impl Iterator<Item = EntryRef<'a>> + 'a> {
+        let path = normalize_path_checked(path, true)?;
+        let prefix = if path.is_empty() {
+            String::new()
+        } else {
+            format!("{path}/")
+        };
+        Ok(self.iter_entries().filter(move |entry| {
+            let relative = if prefix.is_empty() {
+                entry.path
+            } else if let Some(relative) = entry.path.strip_prefix(prefix.as_str()) {
+                relative
+            } else {
+                return false;
+            };
+            !relative.is_empty() && !relative.contains('/')
+        }))
     }
 
     pub fn mkdir_all(&mut self, path: &str, meta: FileMeta) -> Result<()> {
-        let path = normalize_path(path);
+        let path = normalize_path_checked(path, true)?;
         if path.is_empty() {
             return Ok(());
         }
@@ -270,6 +436,7 @@ impl<S: BlockStorage> EdgeFs<S> {
                     meta,
                     data: Vec::new(),
                     link_target: None,
+                    device: None,
                 })?;
             }
         }
@@ -285,6 +452,7 @@ impl<S: BlockStorage> EdgeFs<S> {
             meta,
             data: bytes.to_vec(),
             link_target: None,
+            device: None,
         })
     }
 
@@ -297,6 +465,71 @@ impl<S: BlockStorage> EdgeFs<S> {
             meta,
             data: Vec::new(),
             link_target: Some(target.into()),
+            device: None,
+        })
+    }
+
+    pub fn hardlink(&mut self, path: &str, target: &str, meta: FileMeta) -> Result<()> {
+        let path = normalize_non_empty_path(path)?;
+        let target = normalize_path_checked(target, false)?;
+        self.ensure_parent_dirs(&path, meta)?;
+        self.append_entry(RecordPayload::Put {
+            path,
+            kind: EntryKind::Hardlink,
+            meta,
+            data: Vec::new(),
+            link_target: Some(target),
+            device: None,
+        })
+    }
+
+    pub fn create_node(&mut self, path: &str, kind: EntryKind, meta: FileMeta) -> Result<()> {
+        if !matches!(
+            kind,
+            EntryKind::Directory | EntryKind::Character | EntryKind::Block | EntryKind::Fifo
+        ) {
+            return Err(EdgeFsError::InvalidPath(
+                "create_node requires a directory, device, or fifo kind".into(),
+            ));
+        }
+        if kind == EntryKind::Directory {
+            return self.mkdir_all(path, meta);
+        }
+
+        let path = normalize_non_empty_path(path)?;
+        self.ensure_parent_dirs(&path, meta)?;
+        self.append_entry(RecordPayload::Put {
+            path,
+            kind,
+            meta,
+            data: Vec::new(),
+            link_target: None,
+            device: None,
+        })
+    }
+
+    pub fn create_device_node(
+        &mut self,
+        path: &str,
+        kind: EntryKind,
+        meta: FileMeta,
+        device: DeviceId,
+    ) -> Result<()> {
+        if !matches!(kind, EntryKind::Character | EntryKind::Block) {
+            return Err(EdgeFsError::InvalidPath(
+                "create_device_node requires a character or block kind".into(),
+            ));
+        }
+
+        let path = normalize_non_empty_path(path)?;
+        self.ensure_parent_dirs(&path, meta)?;
+        self.append_entry(RecordPayload::Put {
+            path,
+            kind,
+            meta,
+            data: Vec::new(),
+            link_target: None,
+            device: Some(device),
         })
     }
 
@@ -306,36 +539,150 @@ impl<S: BlockStorage> EdgeFs<S> {
     }
 
     pub fn remove_children(&mut self, path: &str) -> Result<()> {
-        let path = normalize_path(path);
+        let path = normalize_path_checked(path, true)?;
         self.append_entry(RecordPayload::DeleteChildren { path })
     }
 
     pub fn read_file(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        let path = normalize_path(path);
-        Ok(self.entries.get(&path).and_then(|entry| {
-            (entry.kind == EntryKind::File).then(|| entry.data.clone())
-        }))
+        Ok(self.read_file_ref(path)?.map(|bytes| bytes.to_vec()))
+    }
+
+    pub fn read_file_ref(&self, path: &str) -> Result<Option<&[u8]>> {
+        let original = normalize_path_checked(path, true)?;
+        let mut current = original.clone();
+
+        for _ in 0..=self.entries.len() {
+            let Some(entry) = self.entries.get(current.as_str()) else {
+                return Ok(None);
+            };
+
+            match entry.kind {
+                EntryKind::File => return Ok(Some(entry.data.as_slice())),
+                EntryKind::Hardlink => {
+                    let Some(target) = entry.link_target.as_deref() else {
+                        return Ok(None);
+                    };
+                    current = normalize_path_checked(target, false)?;
+                }
+                _ => return Ok(None),
+            }
+        }
+
+        Err(EdgeFsError::HardlinkLoop(original))
+    }
+
+    pub fn file_len(&self, path: &str) -> Result<Option<usize>> {
+        Ok(self.read_file_ref(path)?.map(|bytes| bytes.len()))
+    }
+
+    pub fn read_file_range(
+        &self,
+        path: &str,
+        offset: u64,
+        out: &mut [u8],
+    ) -> Result<Option<usize>> {
+        let Some(bytes) = self.read_file_ref(path)? else {
+            return Ok(None);
+        };
+        let offset = usize::try_from(offset).map_err(|_| EdgeFsError::OutOfSpace)?;
+        if offset >= bytes.len() || out.is_empty() {
+            return Ok(Some(0));
+        }
+
+        let count = core::cmp::min(out.len(), bytes.len() - offset);
+        out[..count].copy_from_slice(&bytes[offset..offset + count]);
+        Ok(Some(count))
     }
 
     pub fn read_link(&self, path: &str) -> Result<Option<String>> {
-        let path = normalize_path(path);
-        Ok(self.entries.get(&path).and_then(|entry| {
-            (entry.kind == EntryKind::Symlink)
-                .then(|| entry.link_target.clone())
+        Ok(self.read_link_ref(path)?.map(String::from))
+    }
+
+    pub fn read_link_ref(&self, path: &str) -> Result<Option<&str>> {
+        Ok(self.entry(path)?.and_then(|entry| {
+            matches!(entry.kind, EntryKind::Symlink | EntryKind::Hardlink)
+                .then_some(entry.link_target)
                 .flatten()
         }))
     }
 
+    pub fn read_device(&self, path: &str) -> Result<Option<DeviceId>> {
+        Ok(self.entry(path)?.and_then(|entry| entry.device))
+    }
+
     pub fn list(&self) -> Vec<DirEntry> {
-        self.entries
-            .iter()
-            .map(|(path, entry)| DirEntry {
-                path: path.clone(),
+        self.iter_entries()
+            .map(|entry| DirEntry {
+                path: entry.path.into(),
                 kind: entry.kind,
                 meta: entry.meta,
-                len: entry.data.len(),
+                len: entry.len(),
+                device: entry.device,
             })
             .collect()
+    }
+
+    /// Rewrite the current tree into a new compact encrypted log.
+    ///
+    /// This reclaims append-log space from overwritten files, deletes, and OCI
+    /// whiteouts. It is intended for controlled points after image layer
+    /// application. The current implementation rewrites in place, so callers
+    /// that need crash-atomic compaction should compact into a separate volume
+    /// with [`Self::compact_into`] and switch over after the new volume opens.
+    pub fn compact(&mut self) -> Result<()> {
+        let payloads = self.current_payloads();
+
+        let old_cursor = self.cursor;
+        self.cursor = DATA_START_SECTOR.saturating_mul(self.sector_size as u64);
+        self.entries.clear();
+        self.generation = self.generation.saturating_add(1);
+
+        for payload in payloads {
+            self.append_entry(payload)?;
+        }
+
+        self.zero_stale_log_tail(self.cursor, old_cursor)?;
+        let superblock = Superblock {
+            generation: self.generation,
+            cursor: self.cursor,
+            sector_size: self.sector_size,
+            sectors: self.sectors,
+            fs_id: self.fs_id,
+        };
+        write_superblocks(&mut self.device, &self.keys.superblock, &superblock)?;
+        self.device.sync()?;
+        Ok(())
+    }
+
+    /// Build a compact encrypted copy of this filesystem on another device.
+    ///
+    /// The source volume is not modified. Use this when the caller has a spare
+    /// partition/device and wants a safer swap-based compaction flow.
+    pub fn compact_into<T: BlockStorage>(
+        &self,
+        target: T,
+        key: [u8; KEY_LEN],
+        fs_id: [u8; 16],
+    ) -> Result<EdgeFs<T>> {
+        validate_key(&key)?;
+        validate_fs_id(&fs_id)?;
+        let target_sector_size = target.sector_size();
+        let target_sectors = target.sectors();
+        validate_geometry(target_sector_size, target_sectors)?;
+        let payloads = self.current_payloads();
+        let required = estimate_payloads_size(&payloads, target_sector_size)?;
+        let available = target_sectors
+            .saturating_sub(DATA_START_SECTOR)
+            .saturating_mul(target_sector_size as u64);
+        if required > available {
+            return Err(EdgeFsError::OutOfSpace);
+        }
+
+        let mut compacted = EdgeFs::format_with_id(target, key, fs_id)?;
+        for payload in payloads {
+            compacted.append_entry(payload)?;
+        }
+        Ok(compacted)
     }
 
     fn ensure_parent_dirs(&mut self, path: &str, meta: FileMeta) -> Result<()> {
@@ -345,12 +692,26 @@ impl<S: BlockStorage> EdgeFs<S> {
         Ok(())
     }
 
+    fn current_payloads(&self) -> Vec<RecordPayload> {
+        self.entries
+            .iter()
+            .map(|(path, entry)| RecordPayload::Put {
+                path: path.clone(),
+                kind: entry.kind,
+                meta: entry.meta,
+                data: entry.data.clone(),
+                link_target: entry.link_target.clone(),
+                device: entry.device,
+            })
+            .collect()
+    }
+
     fn append_entry(&mut self, payload: RecordPayload) -> Result<()> {
         let offset = self.cursor;
         let plaintext = encode_payload(&payload)?;
         let nonce = self.nonce_for_offset(offset);
         let aad = self.record_aad(offset);
-        let ciphertext = encrypt_payload(&self.key, &nonce, &aad, &plaintext)?;
+        let ciphertext = encrypt_payload(&self.keys.record, &nonce, &aad, &plaintext)?;
         let record_len = RECORD_HEADER_LEN + ciphertext.len();
         let padded_len = round_up(record_len, self.sector_size)?;
 
@@ -359,7 +720,12 @@ impl<S: BlockStorage> EdgeFs<S> {
         }
 
         let mut record = vec![0u8; padded_len];
-        encode_record_header(&mut record[..RECORD_HEADER_LEN], &nonce, plaintext.len(), ciphertext.len())?;
+        encode_record_header(
+            &mut record[..RECORD_HEADER_LEN],
+            &nonce,
+            plaintext.len(),
+            ciphertext.len(),
+        )?;
         record[RECORD_HEADER_LEN..RECORD_HEADER_LEN + ciphertext.len()]
             .copy_from_slice(&ciphertext);
         self.write_bytes(offset, &record)?;
@@ -374,7 +740,7 @@ impl<S: BlockStorage> EdgeFs<S> {
             sectors: self.sectors,
             fs_id: self.fs_id,
         };
-        write_superblocks(&mut self.device, &superblock)?;
+        write_superblocks(&mut self.device, &self.keys.superblock, &superblock)?;
         self.device.sync()?;
         Ok(())
     }
@@ -394,7 +760,7 @@ impl<S: BlockStorage> EdgeFs<S> {
             let mut ciphertext = vec![0u8; header.ciphertext_len];
             self.read_bytes(offset + RECORD_HEADER_LEN as u64, &mut ciphertext)?;
             let aad = self.record_aad(offset);
-            let plaintext = decrypt_payload(&self.key, &header.nonce, &aad, &ciphertext)?;
+            let plaintext = decrypt_payload(&self.keys.record, &header.nonce, &aad, &ciphertext)?;
             if plaintext.len() != header.plaintext_len {
                 return Err(EdgeFsError::CorruptRecord(
                     "plaintext length mismatch".into(),
@@ -415,6 +781,7 @@ impl<S: BlockStorage> EdgeFs<S> {
                 meta,
                 data,
                 link_target,
+                device,
             } => {
                 self.entries.insert(
                     path,
@@ -423,13 +790,15 @@ impl<S: BlockStorage> EdgeFs<S> {
                         meta,
                         data,
                         link_target,
+                        device,
                     },
                 );
             }
             RecordPayload::Delete { path } => {
                 self.entries.remove(&path);
                 let prefix = format!("{path}/");
-                self.entries.retain(|entry_path, _| !entry_path.starts_with(&prefix));
+                self.entries
+                    .retain(|entry_path, _| !entry_path.starts_with(&prefix));
             }
             RecordPayload::DeleteChildren { path } => {
                 let prefix = if path.is_empty() {
@@ -453,7 +822,7 @@ impl<S: BlockStorage> EdgeFs<S> {
         input.extend_from_slice(&self.fs_id);
         input.extend_from_slice(&offset.to_le_bytes());
         input.extend_from_slice(b"edgefs:nonce");
-        let hash = edgerun_crypto::sha256(&input);
+        let hash = hmac_tag(&self.keys.nonce, &input);
         let mut nonce = [0u8; NONCE_LEN];
         nonce.copy_from_slice(&hash[..NONCE_LEN]);
         nonce
@@ -486,6 +855,19 @@ impl<S: BlockStorage> EdgeFs<S> {
     fn device_bytes(&self) -> u64 {
         self.sectors.saturating_mul(self.sector_size as u64)
     }
+
+    fn zero_stale_log_tail(&mut self, start: u64, end: u64) -> Result<()> {
+        if end <= start {
+            return Ok(());
+        }
+        let zeroes = vec![0u8; self.sector_size];
+        let first_sector = round_up(start as usize, self.sector_size)? / self.sector_size;
+        let last_sector = end.div_ceil(self.sector_size as u64) as usize;
+        for sector in first_sector..last_sector {
+            self.device.write_sector(sector as u64, &zeroes)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -496,6 +878,7 @@ enum RecordPayload {
         meta: FileMeta,
         data: Vec<u8>,
         link_target: Option<String>,
+        device: Option<DeviceId>,
     },
     Delete {
         path: String,
@@ -503,6 +886,17 @@ enum RecordPayload {
     DeleteChildren {
         path: String,
     },
+}
+
+fn entry_ref<'a>(path: &'a str, entry: &'a IndexedEntry) -> EntryRef<'a> {
+    EntryRef {
+        path,
+        kind: entry.kind,
+        meta: entry.meta,
+        data: entry.data.as_slice(),
+        link_target: entry.link_target.as_deref(),
+        device: entry.device,
+    }
 }
 
 struct RecordHeader {
@@ -514,6 +908,13 @@ struct RecordHeader {
 fn validate_key(key: &[u8; KEY_LEN]) -> Result<()> {
     if key.iter().all(|byte| *byte == 0) {
         return Err(EdgeFsError::InvalidKey);
+    }
+    Ok(())
+}
+
+fn validate_fs_id(fs_id: &[u8; 16]) -> Result<()> {
+    if fs_id.iter().all(|byte| *byte == 0) {
+        return Err(EdgeFsError::InvalidFormatId);
     }
     Ok(())
 }
@@ -532,19 +933,85 @@ fn validate_geometry(sector_size: usize, sectors: u64) -> Result<()> {
     Ok(())
 }
 
-fn derive_fs_id(key: &[u8; KEY_LEN], sector_size: usize, sectors: u64) -> [u8; 16] {
-    let mut input = Vec::with_capacity(KEY_LEN + 8 + 8 + 9);
+fn derive_key_material(master_key: &[u8; KEY_LEN], fs_id: &[u8; 16]) -> KeyMaterial {
+    KeyMaterial {
+        record: derive_labeled_key(master_key, b"edgefs:v1:record", Some(fs_id)),
+        nonce: derive_labeled_key(master_key, b"edgefs:v1:nonce", Some(fs_id)),
+        superblock: derive_superblock_key(master_key),
+    }
+}
+
+fn derive_superblock_key(master_key: &[u8; KEY_LEN]) -> [u8; KEY_LEN] {
+    derive_labeled_key(master_key, b"edgefs:v1:superblock", None)
+}
+
+fn derive_labeled_key(
+    master_key: &[u8; KEY_LEN],
+    label: &[u8],
+    fs_id: Option<&[u8; 16]>,
+) -> [u8; KEY_LEN] {
+    let mut input = Vec::with_capacity(label.len() + fs_id.map(|id| id.len()).unwrap_or(0));
+    input.extend_from_slice(label);
+    if let Some(fs_id) = fs_id {
+        input.extend_from_slice(fs_id);
+    }
+    hmac_tag(master_key, &input)
+}
+
+fn hmac_tag(key: &[u8], data: &[u8]) -> [u8; KEY_LEN] {
+    let tag = edgerun_crypto::hmac_sha256(key, data);
+    let mut out = [0u8; KEY_LEN];
+    out.copy_from_slice(&tag[..KEY_LEN]);
+    out
+}
+
+fn derive_next_fs_id<S: BlockStorage>(
+    device: &mut S,
+    key: &[u8; KEY_LEN],
+    sector_size: usize,
+    sectors: u64,
+) -> Result<[u8; 16]> {
+    let superblock_key = derive_superblock_key(key);
+    let previous = read_best_superblock(device, &superblock_key, sector_size).ok();
+    if previous.is_none() {
+        return Err(EdgeFsError::InvalidFormatId);
+    }
+    let sample = read_format_sample(device, sector_size);
+    let mut input = Vec::with_capacity(KEY_LEN + 8 + 8 + 64);
     input.extend_from_slice(key);
     input.extend_from_slice(&(sector_size as u64).to_le_bytes());
     input.extend_from_slice(&sectors.to_le_bytes());
     input.extend_from_slice(b"edgefs:id");
-    let hash = edgerun_crypto::sha256(&input);
+    if let Some(previous) = previous {
+        input.extend_from_slice(&previous.generation.to_le_bytes());
+        input.extend_from_slice(&previous.cursor.to_le_bytes());
+        input.extend_from_slice(&previous.fs_id);
+    } else {
+        input.extend_from_slice(b"edgefs:first-format");
+    }
+    input.extend_from_slice(&sample);
+    let hash = hmac_tag(key, &input);
     let mut fs_id = [0u8; 16];
     fs_id.copy_from_slice(&hash[..16]);
-    fs_id
+    Ok(fs_id)
 }
 
-fn write_superblocks<S: BlockStorage>(device: &mut S, sb: &Superblock) -> Result<()> {
+fn read_format_sample<S: BlockStorage>(device: &mut S, sector_size: usize) -> Vec<u8> {
+    let mut sample = Vec::new();
+    for sector in [SUPERBLOCK_A, SUPERBLOCK_B, DATA_START_SECTOR] {
+        let mut block = vec![0u8; sector_size];
+        if device.read_sector(sector, &mut block).is_ok() {
+            sample.extend_from_slice(&block);
+        }
+    }
+    sample
+}
+
+fn write_superblocks<S: BlockStorage>(
+    device: &mut S,
+    superblock_key: &[u8; KEY_LEN],
+    sb: &Superblock,
+) -> Result<()> {
     let mut sector = vec![0u8; sb.sector_size];
     sector[..8].copy_from_slice(SUPER_MAGIC);
     put_u16(&mut sector, 8, VERSION);
@@ -554,16 +1021,20 @@ fn write_superblocks<S: BlockStorage>(device: &mut S, sb: &Superblock) -> Result
     put_u32(&mut sector, 28, sb.sector_size as u32);
     put_u64(&mut sector, 32, sb.sectors);
     sector[40..56].copy_from_slice(&sb.fs_id);
-    let checksum = edgerun_crypto::sha256(&sector[..56]);
+    let checksum = superblock_tag(superblock_key, &sector[..56]);
     sector[56..64].copy_from_slice(&checksum[..8]);
     device.write_sector(SUPERBLOCK_A, &sector)?;
     device.write_sector(SUPERBLOCK_B, &sector)?;
     Ok(())
 }
 
-fn read_best_superblock<S: BlockStorage>(device: &mut S, sector_size: usize) -> Result<Superblock> {
-    let a = read_superblock_at(device, sector_size, SUPERBLOCK_A);
-    let b = read_superblock_at(device, sector_size, SUPERBLOCK_B);
+fn read_best_superblock<S: BlockStorage>(
+    device: &mut S,
+    superblock_key: &[u8; KEY_LEN],
+    sector_size: usize,
+) -> Result<Superblock> {
+    let a = read_superblock_at(device, superblock_key, sector_size, SUPERBLOCK_A);
+    let b = read_superblock_at(device, superblock_key, sector_size, SUPERBLOCK_B);
     match (a, b) {
         (Ok(left), Ok(right)) => Ok(if left.generation >= right.generation {
             left
@@ -571,12 +1042,19 @@ fn read_best_superblock<S: BlockStorage>(device: &mut S, sector_size: usize) -> 
             right
         }),
         (Ok(sb), Err(_)) | (Err(_), Ok(sb)) => Ok(sb),
+        (Err(left), Err(right))
+            if !matches!(left, EdgeFsError::NotFormatted)
+                || !matches!(right, EdgeFsError::NotFormatted) =>
+        {
+            Err(left)
+        }
         (Err(_), Err(_)) => Err(EdgeFsError::NotFormatted),
     }
 }
 
 fn read_superblock_at<S: BlockStorage>(
     device: &mut S,
+    superblock_key: &[u8; KEY_LEN],
     sector_size: usize,
     sector_index: u64,
 ) -> Result<Superblock> {
@@ -586,15 +1064,11 @@ fn read_superblock_at<S: BlockStorage>(
         return Err(EdgeFsError::NotFormatted);
     }
     if get_u16(&sector, 8)? != VERSION {
-        return Err(EdgeFsError::CorruptSuperblock(
-            "unsupported version".into(),
-        ));
+        return Err(EdgeFsError::CorruptSuperblock("unsupported version".into()));
     }
-    let checksum = edgerun_crypto::sha256(&sector[..56]);
+    let checksum = superblock_tag(superblock_key, &sector[..56]);
     if sector[56..64] != checksum[..8] {
-        return Err(EdgeFsError::CorruptSuperblock(
-            "checksum mismatch".into(),
-        ));
+        return Err(EdgeFsError::CorruptSuperblock("checksum mismatch".into()));
     }
 
     let stored_sector_size = get_u32(&sector, 28)? as usize;
@@ -608,6 +1082,52 @@ fn read_superblock_at<S: BlockStorage>(
         sectors,
         fs_id,
     })
+}
+
+fn superblock_tag(superblock_key: &[u8; KEY_LEN], header: &[u8]) -> [u8; 32] {
+    hmac_tag(superblock_key, header)
+}
+
+fn estimate_payloads_size(payloads: &[RecordPayload], sector_size: usize) -> Result<u64> {
+    let mut total = 0u64;
+    for payload in payloads {
+        let plaintext_len = encoded_payload_len(payload)?;
+        let record_len = RECORD_HEADER_LEN
+            .checked_add(plaintext_len)
+            .and_then(|len| len.checked_add(AEAD_TAG_LEN))
+            .ok_or_else(|| EdgeFsError::OutOfSpace)?;
+        let padded = round_up(record_len, sector_size)?;
+        total = total
+            .checked_add(padded as u64)
+            .ok_or_else(|| EdgeFsError::OutOfSpace)?;
+    }
+    Ok(total)
+}
+
+fn encoded_payload_len(payload: &RecordPayload) -> Result<usize> {
+    match payload {
+        RecordPayload::Put {
+            path,
+            data,
+            link_target,
+            ..
+        } => {
+            let target_len = link_target.as_ref().map(|target| target.len()).unwrap_or(0);
+            1usize
+                .checked_add(1)
+                .and_then(|len| len.checked_add(1))
+                .and_then(|len| len.checked_add(4 * 7))
+                .and_then(|len| len.checked_add(8 * 2))
+                .and_then(|len| len.checked_add(path.len()))
+                .and_then(|len| len.checked_add(target_len))
+                .and_then(|len| len.checked_add(data.len()))
+                .ok_or_else(|| EdgeFsError::OutOfSpace)
+        }
+        RecordPayload::Delete { path } | RecordPayload::DeleteChildren { path } => 1usize
+            .checked_add(4)
+            .and_then(|len| len.checked_add(path.len()))
+            .ok_or_else(|| EdgeFsError::OutOfSpace),
+    }
 }
 
 fn encrypt_payload(
@@ -707,14 +1227,19 @@ fn encode_payload(payload: &RecordPayload) -> Result<Vec<u8>> {
             meta,
             data,
             link_target,
+            device,
         } => {
             validate_normalized_path(path)?;
             let target = link_target.as_deref().unwrap_or("");
             out.push(1);
             out.push(kind.to_u8());
+            out.push(u8::from(device.is_some()));
             put_u32_vec(&mut out, meta.mode);
             put_u32_vec(&mut out, meta.uid);
             put_u32_vec(&mut out, meta.gid);
+            put_u64_vec(&mut out, meta.mtime);
+            put_u32_vec(&mut out, device.map(|id| id.major).unwrap_or(0));
+            put_u32_vec(&mut out, device.map(|id| id.minor).unwrap_or(0));
             put_u32_vec(&mut out, path.len() as u32);
             put_u32_vec(&mut out, target.len() as u32);
             put_u64_vec(&mut out, data.len() as u64);
@@ -758,17 +1283,28 @@ fn decode_payload(input: &[u8]) -> Result<RecordPayload> {
 }
 
 fn decode_put_payload(input: &[u8]) -> Result<RecordPayload> {
-    if input.len() < 30 {
+    if input.len() < 47 {
         return Err(EdgeFsError::CorruptRecord("short put payload".into()));
     }
     let kind = EntryKind::from_u8(input[0])
         .ok_or_else(|| EdgeFsError::CorruptRecord("unknown entry kind".into()))?;
-    let mut offset = 1usize;
+    let device_present = match input[1] {
+        0 => false,
+        1 => true,
+        _ => return Err(EdgeFsError::CorruptRecord("invalid device marker".into())),
+    };
+    let mut offset = 2usize;
     let (mode, next) = read_u32_at(input, offset)?;
     offset = next;
     let (uid, next) = read_u32_at(input, offset)?;
     offset = next;
     let (gid, next) = read_u32_at(input, offset)?;
+    offset = next;
+    let (mtime, next) = read_u64_at(input, offset)?;
+    offset = next;
+    let (dev_major, next) = read_u32_at(input, offset)?;
+    offset = next;
+    let (dev_minor, next) = read_u32_at(input, offset)?;
     offset = next;
     let (path_len, next) = read_u32_at(input, offset)?;
     offset = next;
@@ -785,15 +1321,26 @@ fn decode_put_payload(input: &[u8]) -> Result<RecordPayload> {
         .checked_add(data_len as usize)
         .ok_or_else(|| EdgeFsError::CorruptRecord("data length overflow".into()))?;
     if data_end > input.len() {
-        return Err(EdgeFsError::CorruptRecord("data extends past payload".into()));
+        return Err(EdgeFsError::CorruptRecord(
+            "data extends past payload".into(),
+        ));
     }
 
     Ok(RecordPayload::Put {
         path,
         kind,
-        meta: FileMeta { mode, uid, gid },
+        meta: FileMeta {
+            mode,
+            uid,
+            gid,
+            mtime,
+        },
         data: input[offset..data_end].to_vec(),
         link_target: (!target.is_empty()).then_some(target),
+        device: device_present.then_some(DeviceId {
+            major: dev_major,
+            minor: dev_minor,
+        }),
     })
 }
 
@@ -833,22 +1380,32 @@ fn transfer_bytes<S: BlockStorage>(
     Ok(())
 }
 
-fn normalize_path(path: &str) -> String {
+fn normalize_path_checked(path: &str, allow_empty: bool) -> Result<String> {
+    if path.contains('\0') {
+        return Err(EdgeFsError::InvalidPath(path.into()));
+    }
+
     let mut out = Vec::new();
     for part in path.split('/') {
         match part {
             "" | "." => {}
             ".." => {
-                out.pop();
+                if out.pop().is_none() {
+                    return Err(EdgeFsError::InvalidPath(path.into()));
+                }
             }
             other => out.push(other),
         }
     }
-    out.join("/")
+    let normalized = out.join("/");
+    if !allow_empty && normalized.is_empty() {
+        return Err(EdgeFsError::InvalidPath(path.into()));
+    }
+    Ok(normalized)
 }
 
 fn normalize_non_empty_path(path: &str) -> Result<String> {
-    let path = normalize_path(path);
+    let path = normalize_path_checked(path, false)?;
     validate_normalized_path(&path)?;
     Ok(path)
 }
@@ -969,9 +1526,49 @@ mod tests {
     }
 
     #[test]
+    fn blank_format_requires_explicit_identity() {
+        let device = InMemoryBlockDevice::new(512, 64);
+        assert!(matches!(
+            EdgeFs::format(device, KEY),
+            Err(EdgeFsError::InvalidFormatId)
+        ));
+    }
+
+    #[test]
+    fn rejects_zero_format_id() {
+        let device = InMemoryBlockDevice::new(512, 64);
+        assert!(matches!(
+            EdgeFs::format_with_id(device, KEY, [0u8; 16]),
+            Err(EdgeFsError::InvalidFormatId)
+        ));
+    }
+
+    #[test]
+    fn format_with_id_uses_caller_identity() {
+        let device = InMemoryBlockDevice::new(512, 64);
+        let fs_id = [0x99; 16];
+        let fs = EdgeFs::format_with_id(device, KEY, fs_id).unwrap();
+        assert_eq!(fs.filesystem_id(), fs_id);
+    }
+
+    #[test]
+    fn reformat_changes_filesystem_identity() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x11; 16]).unwrap();
+        fs.write_file("secret.txt", b"secret", FileMeta::default())
+            .unwrap();
+        let first_id = fs.filesystem_id();
+
+        let reformatted = EdgeFs::format(fs.into_device(), KEY).unwrap();
+
+        assert_ne!(reformatted.filesystem_id(), first_id);
+        assert_eq!(reformatted.read_file("secret.txt").unwrap(), None);
+    }
+
+    #[test]
     fn writes_reads_and_reopens_encrypted_files() {
         let device = InMemoryBlockDevice::new(512, 128);
-        let mut fs = EdgeFs::format(device, KEY).unwrap();
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x12; 16]).unwrap();
 
         fs.write_file(
             "/etc/hostname",
@@ -985,7 +1582,26 @@ mod tests {
             fs.read_file("etc/hostname").unwrap(),
             Some(b"edge-node-01".to_vec())
         );
+        assert_eq!(
+            fs.read_file_ref("etc/hostname").unwrap(),
+            Some(b"edge-node-01".as_slice())
+        );
+        let hostname = fs.entry("etc/hostname").unwrap().unwrap();
+        assert_eq!(hostname.path, "etc/hostname");
+        assert_eq!(hostname.kind, EntryKind::File);
+        assert_eq!(hostname.meta.uid, 1000);
+        assert_eq!(hostname.data, b"edge-node-01");
         assert_eq!(fs.read_link("bin/sh").unwrap(), Some("/bin/busybox".into()));
+        assert_eq!(fs.read_link_ref("bin/sh").unwrap(), Some("/bin/busybox"));
+        let shell = fs.entry("bin/sh").unwrap().unwrap();
+        assert_eq!(shell.kind, EntryKind::Symlink);
+        assert_eq!(shell.link_target, Some("/bin/busybox"));
+        let all_paths = fs
+            .iter_entries()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+        assert!(all_paths.contains(&"etc/hostname"));
+        assert!(all_paths.contains(&"bin/sh"));
 
         let device = fs.into_device();
         let raw = raw_device_bytes(device.clone());
@@ -998,25 +1614,149 @@ mod tests {
             reopened.read_file("etc/hostname").unwrap(),
             Some(b"edge-node-01".to_vec())
         );
-        assert_eq!(reopened.read_link("bin/sh").unwrap(), Some("/bin/busybox".into()));
+        assert_eq!(
+            reopened.read_link("bin/sh").unwrap(),
+            Some("/bin/busybox".into())
+        );
+    }
+
+    #[test]
+    fn hardlinks_read_target_file_bytes() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x1d; 16]).unwrap();
+
+        fs.write_file("bin/busybox", b"ELF-ish", FileMeta::file(0o755, 0, 0))
+            .unwrap();
+        fs.hardlink("bin/sh", "bin/busybox", FileMeta::file(0o755, 0, 0))
+            .unwrap();
+
+        assert_eq!(
+            fs.read_file_ref("bin/sh").unwrap(),
+            Some(b"ELF-ish".as_slice())
+        );
+        assert_eq!(fs.read_file("bin/sh").unwrap(), Some(b"ELF-ish".to_vec()));
+
+        let shell = fs.entry("bin/sh").unwrap().unwrap();
+        assert_eq!(shell.kind, EntryKind::Hardlink);
+        assert_eq!(shell.link_target, Some("bin/busybox"));
+
+        let reopened = EdgeFs::open(fs.into_device(), KEY).unwrap();
+        assert_eq!(
+            reopened.read_file("bin/sh").unwrap(),
+            Some(b"ELF-ish".to_vec())
+        );
+    }
+
+    #[test]
+    fn reads_file_ranges_without_allocating_full_file() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x2a; 16]).unwrap();
+
+        fs.write_file("bin/app", b"0123456789abcdef", FileMeta::file(0o755, 0, 0))
+            .unwrap();
+        fs.hardlink("bin/run", "bin/app", FileMeta::file(0o755, 0, 0))
+            .unwrap();
+
+        assert_eq!(fs.file_len("bin/app").unwrap(), Some(16));
+        assert_eq!(fs.file_len("bin/run").unwrap(), Some(16));
+
+        let mut buf = [0u8; 5];
+        assert_eq!(fs.read_file_range("bin/run", 4, &mut buf).unwrap(), Some(5));
+        assert_eq!(&buf, b"45678");
+        assert_eq!(
+            fs.read_file_range("bin/run", 16, &mut buf).unwrap(),
+            Some(0)
+        );
+        assert_eq!(fs.read_file_range("missing", 0, &mut buf).unwrap(), None);
+    }
+
+    #[test]
+    fn hardlink_loops_are_reported() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x1e; 16]).unwrap();
+
+        fs.hardlink("a", "b", FileMeta::file(0o644, 0, 0)).unwrap();
+        fs.hardlink("b", "a", FileMeta::file(0o644, 0, 0)).unwrap();
+
+        assert!(matches!(
+            fs.read_file_ref("a"),
+            Err(EdgeFsError::HardlinkLoop(path)) if path == "a"
+        ));
+    }
+
+    #[test]
+    fn rejects_paths_that_escape_root() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x1f; 16]).unwrap();
+        fs.write_file("etc/hostname", b"edge", FileMeta::default())
+            .unwrap();
+
+        assert!(matches!(
+            fs.write_file("../etc/passwd", b"bad", FileMeta::default()),
+            Err(EdgeFsError::InvalidPath(_))
+        ));
+        assert!(matches!(
+            fs.read_file("../etc/hostname"),
+            Err(EdgeFsError::InvalidPath(_))
+        ));
+        assert!(matches!(
+            fs.children("../../etc"),
+            Err(EdgeFsError::InvalidPath(_))
+        ));
+        assert!(!fs.contains("../etc/hostname"));
+        assert_eq!(
+            fs.read_file("etc/../etc/hostname").unwrap(),
+            Some(b"edge".to_vec())
+        );
+    }
+
+    #[test]
+    fn rejects_hardlink_targets_that_escape_root() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x20; 16]).unwrap();
+
+        assert!(matches!(
+            fs.hardlink("bin/sh", "../bin/busybox", FileMeta::file(0o755, 0, 0)),
+            Err(EdgeFsError::InvalidPath(_))
+        ));
     }
 
     #[test]
     fn wrong_key_cannot_rebuild_index() {
         let device = InMemoryBlockDevice::new(512, 128);
-        let mut fs = EdgeFs::format(device, KEY).unwrap();
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x13; 16]).unwrap();
         fs.write_file("secret.txt", b"super-secret", FileMeta::default())
             .unwrap();
         let device = fs.into_device();
 
-        let err = EdgeFs::open(device, [0x24; 32]).unwrap_err();
-        assert!(matches!(err, EdgeFsError::Decryption));
+        match EdgeFs::open(device, [0x24; 32]) {
+            Ok(_) => panic!("wrong key unexpectedly opened EdgeFS"),
+            Err(_) => {}
+        };
+    }
+
+    #[test]
+    fn rejects_tampered_superblock_checkpoint() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x14; 16]).unwrap();
+        fs.write_file("secret.txt", b"super-secret", FileMeta::default())
+            .unwrap();
+        let mut device = fs.into_device();
+
+        for sector_index in [SUPERBLOCK_A, SUPERBLOCK_B] {
+            let mut sector = vec![0u8; device.sector_size()];
+            device.read_sector(sector_index, &mut sector).unwrap();
+            sector[20] ^= 0x40;
+            device.write_sector(sector_index, &sector).unwrap();
+        }
+
+        assert!(EdgeFs::open(device, KEY).is_err());
     }
 
     #[test]
     fn delete_and_opaque_directory_replay() {
         let device = InMemoryBlockDevice::new(512, 128);
-        let mut fs = EdgeFs::format(device, KEY).unwrap();
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x15; 16]).unwrap();
         fs.write_file("var/cache/old", b"old", FileMeta::default())
             .unwrap();
         fs.write_file("var/lib/keep", b"keep", FileMeta::default())
@@ -1033,5 +1773,143 @@ mod tests {
             Some(b"new".to_vec())
         );
         assert_eq!(reopened.read_file("var/lib/keep").unwrap(), None);
+    }
+
+    #[test]
+    fn iterates_entries_under_prefix_without_allocating_list() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x1b; 16]).unwrap();
+        fs.write_file("var/cache/a", b"a", FileMeta::default())
+            .unwrap();
+        fs.write_file("var/cache/nested/b", b"b", FileMeta::default())
+            .unwrap();
+        fs.write_file("var/lib/c", b"c", FileMeta::default())
+            .unwrap();
+
+        let cache_paths = fs
+            .entries_under("var/cache")
+            .unwrap()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+
+        assert!(cache_paths.contains(&"var/cache/a"));
+        assert!(cache_paths.contains(&"var/cache/nested"));
+        assert!(cache_paths.contains(&"var/cache/nested/b"));
+        assert!(!cache_paths.contains(&"var/lib/c"));
+    }
+
+    #[test]
+    fn iterates_direct_children_without_allocating_list() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x1c; 16]).unwrap();
+        fs.write_file("var/cache/a", b"a", FileMeta::default())
+            .unwrap();
+        fs.write_file("var/cache/nested/b", b"b", FileMeta::default())
+            .unwrap();
+        fs.write_file("var/lib/c", b"c", FileMeta::default())
+            .unwrap();
+
+        let root_children = fs
+            .children("")
+            .unwrap()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+        assert_eq!(root_children, vec!["var"]);
+
+        let cache_children = fs
+            .children("var/cache")
+            .unwrap()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+
+        assert!(cache_children.contains(&"var/cache/a"));
+        assert!(cache_children.contains(&"var/cache/nested"));
+        assert!(!cache_children.contains(&"var/cache/nested/b"));
+        assert!(!cache_children.contains(&"var/lib/c"));
+    }
+
+    #[test]
+    fn compacts_log_to_current_tree() {
+        let device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(device, KEY, [0x16; 16]).unwrap();
+        fs.write_file("etc/hostname", b"old", FileMeta::default())
+            .unwrap();
+        fs.write_file("etc/hostname", b"edge-node-01", FileMeta::default())
+            .unwrap();
+        fs.write_file("var/cache/deleted", b"delete-me", FileMeta::default())
+            .unwrap();
+        fs.remove_path("var/cache/deleted").unwrap();
+        let before = fs.used_bytes();
+
+        fs.compact().unwrap();
+
+        assert!(fs.used_bytes() < before);
+        assert_eq!(
+            fs.read_file("etc/hostname").unwrap(),
+            Some(b"edge-node-01".to_vec())
+        );
+        assert_eq!(fs.read_file("var/cache/deleted").unwrap(), None);
+
+        let reopened = EdgeFs::open(fs.into_device(), KEY).unwrap();
+        assert_eq!(
+            reopened.read_file("etc/hostname").unwrap(),
+            Some(b"edge-node-01".to_vec())
+        );
+        assert_eq!(reopened.read_file("var/cache/deleted").unwrap(), None);
+    }
+
+    #[test]
+    fn compact_into_builds_reopenable_copy_without_touching_source() {
+        let source_device = InMemoryBlockDevice::new(512, 128);
+        let target_device = InMemoryBlockDevice::new(512, 128);
+        let mut fs = EdgeFs::format_with_id(source_device, KEY, [0x17; 16]).unwrap();
+        fs.write_file("etc/hostname", b"old", FileMeta::default())
+            .unwrap();
+        fs.write_file("etc/hostname", b"edge-node-01", FileMeta::default())
+            .unwrap();
+        fs.write_file("var/cache/deleted", b"delete-me", FileMeta::default())
+            .unwrap();
+        fs.remove_path("var/cache/deleted").unwrap();
+        let source_used = fs.used_bytes();
+
+        let compacted = fs.compact_into(target_device, KEY, [0x18; 16]).unwrap();
+
+        assert_eq!(fs.used_bytes(), source_used);
+        assert_eq!(compacted.used_bytes(), fs.compacted_used_bytes().unwrap());
+        assert!(compacted.used_bytes() < source_used);
+        assert_eq!(
+            compacted.read_file("etc/hostname").unwrap(),
+            Some(b"edge-node-01".to_vec())
+        );
+        assert_eq!(compacted.read_file("var/cache/deleted").unwrap(), None);
+        assert_ne!(compacted.filesystem_id(), fs.filesystem_id());
+
+        let reopened = EdgeFs::open(compacted.into_device(), KEY).unwrap();
+        assert_eq!(
+            reopened.read_file("etc/hostname").unwrap(),
+            Some(b"edge-node-01".to_vec())
+        );
+        assert_eq!(reopened.read_file("var/cache/deleted").unwrap(), None);
+    }
+
+    #[test]
+    fn compact_into_preflights_target_capacity() {
+        let source_device = InMemoryBlockDevice::new(512, 128);
+        let target_device = InMemoryBlockDevice::new(512, 3);
+        let untouched_target = target_device.clone();
+        let mut fs = EdgeFs::format_with_id(source_device, KEY, [0x19; 16]).unwrap();
+        fs.write_file("etc/hostname", b"edge-node-01", FileMeta::default())
+            .unwrap();
+
+        let error = match fs.compact_into(target_device, KEY, [0x1a; 16]) {
+            Ok(_) => panic!("compact_into unexpectedly fit into a tiny target"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, EdgeFsError::OutOfSpace));
+        assert!(matches!(
+            EdgeFs::open(untouched_target, KEY),
+            Err(EdgeFsError::NotFormatted)
+        ));
     }
 }

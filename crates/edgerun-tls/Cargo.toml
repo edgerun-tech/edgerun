@@ -12,12 +12,12 @@ categories = ["cryptography", "network-programming"]
 
 [features]
 default = []
-# Compatibility only: TLS is no_std and uses edgerun-bare-rt unconditionally.
+# Compatibility only: TLS is no_std and uses edgerun-rt unconditionally.
 std = []
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "hmac", "p256", "x25519", "x509"] }
-edgerun-bare-rt.workspace = true
+edgerun-rt.workspace = true
 
 [lints]
 workspace = true

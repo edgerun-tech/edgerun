@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
 
@@ -16,7 +15,7 @@ pub fn run_store_task(
     mut store: NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    mut rx: edgerun_bare_rt::mpsc::Receiver<StoreRequest>,
+    mut rx: edgerun_rt::mpsc::Receiver<StoreRequest>,
     mut global_rate_limiter: ingress::TokenBucket,
     mut message_hash_cache: ingress::RecentHashCache,
     mut allowed_peers: Vec<Vec<u8>>,
@@ -39,14 +38,14 @@ pub fn run_store_task(
         "controller set projected: {} controllers",
         controllers.to_vec().len()
     );
-    let mut replay_cache: std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)> =
-        std::collections::HashMap::new();
+    let mut replay_cache: edgerun_core::collections::HashMap<Vec<u8>, (Vec<u8>, i64)> =
+        edgerun_core::collections::HashMap::new();
 
     // Load active revocations from the database
-    let revoked_delegations: std::collections::HashSet<Vec<u8>> =
+    let revoked_delegations: edgerun_core::collections::HashSet<Vec<u8>> =
         match store.list_active_revocations() {
             Ok(revocations) => {
-                let revoked: std::collections::HashSet<Vec<u8>> = revocations
+                let revoked: edgerun_core::collections::HashSet<Vec<u8>> = revocations
                     .into_iter()
                     .filter(|(typ, _)| typ == "delegation")
                     .filter_map(|(_, hex)| edgerun_core::util::hex_to_bytes(&hex).ok())
@@ -56,7 +55,7 @@ pub fn run_store_task(
             }
             Err(e) => {
                 edgerun_log::warn!("failed to load revocations: {}", e);
-                std::collections::HashSet::new()
+                edgerun_core::collections::HashSet::new()
             }
         };
 
@@ -294,16 +293,18 @@ pub fn run_store_task(
                 reply_tx,
                 peer_id,
             } => {
-                // Verify query signature if present
-                if let Some(ref sig) = query.signature {
-                    if let Err(reason) = verify_query_signature(&query, sig) {
-                        edgerun_log::warn!("query signature verification failed: {}", reason);
-                        if let Some(tx) = reply_tx {
-                            let _ = tx
-                                .send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
-                        }
-                        continue;
+                let query_validation =
+                    edgerun_core::validators_proto::validate_query_request_signature(&query);
+                if query_validation.verdict != edgerun_core::result::Verdict::Accept {
+                    edgerun_log::warn!(
+                        "query signature verification failed: {:?}",
+                        query_validation.reason_code
+                    );
+                    if let Some(tx) = reply_tx {
+                        let _ =
+                            tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                     }
+                    continue;
                 }
                 let result =
                     execute_query(&query, &mut store, stream_id, &responder_node_id, signer);
@@ -553,47 +554,80 @@ fn config_controllers_from_signer(signer: &dyn MeshSigner) -> Vec<Vec<u8>> {
     vec![signer.node_id().0.to_vec()]
 }
 
-/// Verifies the ECDSA P-256 signature on a QueryRequest.
-/// Returns `Ok(())` if the signature is valid, or `Err(reason)` if not.
-/// Uses domain-separated canonical verification per spec §17.
-fn verify_query_signature(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
-    sig: &edgerun_proto::edgerun::v0::common::Signature,
-) -> Result<(), &'static str> {
-    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return Err("bad_signature_length");
-    }
-    let Some(requester) = &query.requester else {
-        return Err("no_requester");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use edgerun_core::protocol::{
+        canonical_bytes, IdentityRef, ProtocolRecord, QueryRequest, Signature,
     };
-    let Some(key_hint) = &requester.key_hint else {
-        return Err("no_key_hint");
-    };
-    if key_hint.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
-        return Err("bad_key_hint");
+    use edgerun_crypto::p256::ecdsa::SigningKey;
+    use edgerun_proto::edgerun::v0::access::QueryClass;
+
+    fn test_signing_key() -> SigningKey {
+        SigningKey::from_bytes(&[42u8; 32].into()).unwrap()
     }
 
-    // Reconstruct the public key from key_hint
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04;
-    vk_sec1[1..].copy_from_slice(key_hint);
-    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
-        Ok(v) => v,
-        Err(_) => return Err("bad_public_key"),
-    };
-
-    // Canonical signable: clear signature, encode via protocol canonical_bytes
-    let record = edgerun_core::protocol::ProtocolRecord::QueryRequest(query.clone());
-    let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-
-    if !edgerun_core::crypto::verify_canonical_record(
-        &vk,
-        edgerun_core::crypto::SIG_DOMAIN_QUERY_REQUEST,
-        &canonical,
-        &sig.value,
-    ) {
-        return Err("invalid_signature");
+    fn key_hint(key: &SigningKey) -> Vec<u8> {
+        let encoded = key.verifying_key().to_encoded_point(false);
+        encoded.as_bytes()[1..65].to_vec()
     }
 
-    Ok(())
+    fn unsigned_query(key: &SigningKey) -> QueryRequest {
+        QueryRequest {
+            request_version: 1,
+            query_id: b"query-1".to_vec(),
+            requester: Some(IdentityRef {
+                identity_id: b"requester-1".to_vec(),
+                identity_kind: Some(1),
+                key_hint: Some(key_hint(key)),
+            }),
+            target_scope: None,
+            query_class: QueryClass::Head as i32,
+            time_window: None,
+            checkpoint_base: None,
+            result_limit: Some(10),
+            cost_limit: None,
+            required_proof_classes: vec![],
+            query_payload_object: None,
+            signature: None,
+        }
+    }
+
+    fn signed_query(key: &SigningKey) -> QueryRequest {
+        let mut query = unsigned_query(key);
+        let canonical = canonical_bytes(&ProtocolRecord::QueryRequest(query.clone()), true);
+        let sig = edgerun_core::crypto::sign_canonical_record(
+            key,
+            edgerun_core::crypto::SIG_DOMAIN_QUERY_REQUEST,
+            &canonical,
+        )
+        .unwrap();
+        query.signature = Some(Signature {
+            algorithm: 1,
+            value: sig,
+        });
+        query
+    }
+
+    #[test]
+    fn query_without_signature_is_rejected() {
+        let key = test_signing_key();
+        let query = unsigned_query(&key);
+
+        let result = edgerun_core::validators_proto::validate_query_request_signature(&query);
+        assert_eq!(result.verdict, edgerun_core::result::Verdict::Reject);
+        assert_eq!(
+            result.reason_code,
+            Some(edgerun_core::result::ReasonCode::CryptoInvalid)
+        );
+    }
+
+    #[test]
+    fn query_with_valid_signature_is_accepted() {
+        let key = test_signing_key();
+        let query = signed_query(&key);
+
+        let result = edgerun_core::validators_proto::validate_query_request_signature(&query);
+        assert_eq!(result.verdict, edgerun_core::result::Verdict::Accept);
+    }
 }

@@ -6,4 +6,4 @@ license = "MIT"
 description = "Realtek RTL8125 NIC driver"
 
 [dependencies]
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }

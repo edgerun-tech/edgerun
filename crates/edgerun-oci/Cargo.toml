@@ -10,7 +10,9 @@ description = "OCI container runtime and registry client — pull, push, login, 
 edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"], optional = true }
 edgerun-crypto = { workspace = true, default-features = false, optional = true }
 edgerun-http = { path = "../edgerun-http", optional = true }
-edgerun-bare-rt = { path = "../edgerun-bare-rt", optional = true }
+edgerun-edgefs = { workspace = true, optional = true }
+edgerun-storage = { workspace = true, optional = true }
+edgerun-rt = { path = "../edgerun-rt", optional = true }
 edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-secret-service = { path = "../edgerun-secret-service", optional = true }
 edgerun-core = { path = "../edgerun-core", optional = true }
@@ -23,27 +25,22 @@ serde = { version = "1", default-features = false, features = ["alloc", "derive"
 default = []
 json = ["dep:edgerun-json", "dep:edgerun-crypto", "dep:miniz_oxide"]
 registry-client = ["json", "dep:edgerun-http", "dep:edgerun-encoding"]
+edgefs = ["json", "dep:edgerun-edgefs", "dep:edgerun-storage"]
 serde = ["json", "dep:serde", "edgerun-json/serde"]
 zstd = ["json", "dep:ruzstd"]
 std = [
     "registry-client",
     "serde",
-    "dep:edgerun-bare-rt",
+    "dep:edgerun-rt",
     "dep:edgerun-tls",
     "dep:edgerun-secret-service",
     "dep:edgerun-core",
     "dep:libc",
-    "dep:flate2",
-    "dep:tar",
-    "dep:zstd",
     "zstd",
 ]
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc = { version = "0.2", optional = true }
-flate2 = { version = "1", optional = true }
-tar = { version = "0.4", optional = true }
-zstd = { version = "0.13", optional = true }
 
 [[bin]]
 name = "ert"

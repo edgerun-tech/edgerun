@@ -4,7 +4,7 @@ resolver = "2"
 members = [
   "crates/edgerun-glob",
   "crates/edgerun-regex",
-  "crates/edgerun-bare-rt",
+  "crates/edgerun-rt",
   "crates/edgerun-ipxe",
   "crates/edgerun-tftp",
   "crates/edgerun-url",
@@ -190,7 +190,7 @@ edgerun-glob = { path = "crates/edgerun-glob" }
 edgerun-regex = { path = "crates/edgerun-regex" }
 edgerun-email = { path = "crates/edgerun-email" }
 edgerun-log = { path = "crates/edgerun-log" }
-edgerun-bare-rt = { path = "crates/edgerun-bare-rt" }
+edgerun-rt = { path = "crates/edgerun-rt" }
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { path = "crates/edgerun-crypto", default-features = false }
 # edgerun-json as drop-in replacement for serde_json

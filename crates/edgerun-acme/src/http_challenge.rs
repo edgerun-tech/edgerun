@@ -6,9 +6,9 @@ use core::pin::Pin;
 
 use sha2::{Digest, Sha256};
 
-use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_http::{Handler, Request, Response, StatusCode};
+use edgerun_rt::RwLock;
 
 #[derive(Clone)]
 pub struct HttpChallengeHandler {

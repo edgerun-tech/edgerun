@@ -1,8 +1,8 @@
 use crate::prelude::v1::*;
 use sha2::{Digest, Sha256};
 
-use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;
+use edgerun_rt::RwLock;
 
 #[derive(Clone)]
 pub struct TlsAlpnChallenge {

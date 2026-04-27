@@ -25,7 +25,7 @@
 //!     .build()
 //!     .await?;
 //!
-//! let shutdown = edgerun_bare_rt::CancellationToken::new();
+//! let shutdown = edgerun_rt::CancellationToken::new();
 //! server.run(shutdown).await
 //! # }
 //! ```
@@ -46,7 +46,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::module_path;
 use core::time::Duration;
-use edgerun_bare_rt::CancellationToken;
+use edgerun_rt::CancellationToken;
 
 #[cfg(target_os = "none")]
 use edgerun_http::io;
@@ -702,13 +702,13 @@ pub struct BoundServer {
 impl BoundServer {
     /// Run all protocol listeners until `shutdown` is cancelled.
     pub async fn run(&mut self, shutdown: CancellationToken) -> io::Result<()> {
-        let mut tasks: Vec<edgerun_bare_rt::JoinHandle<io::Result<()>>> = Vec::new();
+        let mut tasks: Vec<edgerun_rt::JoinHandle<io::Result<()>>> = Vec::new();
 
         // HTTP (TCP + optional HTTP/3 UDP)
         if let Some(ref http) = self.http {
             let token = shutdown.clone();
             let http = Arc::clone(http);
-            tasks.push(edgerun_bare_rt::spawn(async move {
+            tasks.push(edgerun_rt::spawn(async move {
                 http.serve_with_shutdown(token).await
             }));
         }
@@ -717,15 +717,15 @@ impl BoundServer {
         #[cfg(feature = "dns")]
         if let Some(ref dns) = self.dns {
             let dns_run = Arc::clone(dns);
-            tasks.push(edgerun_bare_rt::spawn(async move {
+            tasks.push(edgerun_rt::spawn(async move {
                 let _ = dns_run.run().await;
                 Ok(())
             }));
             let dns_shutdown = Arc::clone(dns);
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(async move {
+            tasks.push(edgerun_rt::spawn(async move {
                 while !token.is_cancelled() {
-                    edgerun_bare_rt::sleep(Duration::from_millis(100)).await;
+                    edgerun_rt::sleep(Duration::from_millis(100)).await;
                 }
                 dns_shutdown.shutdown().await;
                 Ok(())
@@ -736,10 +736,10 @@ impl BoundServer {
         #[cfg(feature = "dhcp")]
         if let Some(dhcp) = self.dhcp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(async move {
+            tasks.push(edgerun_rt::spawn(async move {
                 let _dhcp = dhcp;
                 while !token.is_cancelled() {
-                    edgerun_bare_rt::sleep(Duration::from_millis(100)).await;
+                    edgerun_rt::sleep(Duration::from_millis(100)).await;
                 }
                 Ok(())
             }));
@@ -749,10 +749,10 @@ impl BoundServer {
         #[cfg(feature = "tftp")]
         if let Some(tftp) = self.tftp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(async move {
+            tasks.push(edgerun_rt::spawn(async move {
                 let tftp_token = edgerun_tftp::CancellationToken::new();
                 let cancel_tftp = tftp_token.clone();
-                let bridge = edgerun_bare_rt::spawn(async move {
+                let bridge = edgerun_rt::spawn(async move {
                     token.cancelled().await;
                     cancel_tftp.cancel();
                     Ok::<(), io::Error>(())
@@ -768,28 +768,28 @@ impl BoundServer {
         #[cfg(all(feature = "imap", not(target_os = "none")))]
         if let Some(imap) = self.imap.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(async move { imap.run(token).await }));
+            tasks.push(edgerun_rt::spawn(async move { imap.run(token).await }));
         }
 
         // SMTP
         #[cfg(all(feature = "smtp", not(target_os = "none")))]
         if let Some(smtp) = self.smtp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(async move { smtp.run(token).await }));
+            tasks.push(edgerun_rt::spawn(async move { smtp.run(token).await }));
         }
 
         // LMTP
         #[cfg(all(feature = "lmtp", not(target_os = "none")))]
         if let Some(lmtp) = self.lmtp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(async move { lmtp.run(token).await }));
+            tasks.push(edgerun_rt::spawn(async move { lmtp.run(token).await }));
         }
 
         // Proxy
         #[cfg(feature = "proxy")]
         if let Some(proxy) = self.proxy.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_bare_rt::spawn(async move {
+            tasks.push(edgerun_rt::spawn(async move {
                 proxy.run(token).await.map_err(other_io_error)
             }));
         }

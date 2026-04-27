@@ -1,6 +1,6 @@
 # Edgerun Reference Core: Implementation Status & Gap Analysis
 
-**Last updated:** 2026-04-12
+**Last updated:** 2026-04-28
 **Project:** edgerun_core
 **Status:** Active development — core protocol, crypto, storage, mesh, hardware signing, and most hardware I/O are functional.
 
@@ -8,10 +8,15 @@
 
 ## Project Overview
 
-A Rust multi-crate workspace (138 crates) implementing:
-1. **A distributed protocol** — identity-routed mesh networking, capability-discovered hardware abstraction, append-only event log, hardware-backed signing
-2. **A spec-driven browser engine** — W3C/WHATWG specs → Protocol Buffers → generated type crates → behavioral code → pixels
-3. **Infrastructure services** — DNS/DHCP server, HTTP/1.1/2/3 stack, OCI container runtime, Wayland compositor
+A Rust multi-crate workspace with 113 first-level directories under `crates/`
+and 110 crate manifests implementing the **edgerun v0 protocol**: an
+identity-routed, append-only information fabric with capability delegation,
+local trust policy, hardware-backed signing, mesh transport, object storage,
+and infrastructure services.
+
+The generated web-platform protobuf catalogs under `proto/edgerun/v0/` are
+schema and design assets. They are not evidence that the current workspace
+contains a complete browser engine implementation.
 
 ### Architecture Summary
 
@@ -43,7 +48,7 @@ A Rust multi-crate workspace (138 crates) implementing:
  └──────────────────────────────────────────────────────────────┘
 
  Protocol: edgerun-proto (prost) + edgerun-core (validation, crypto, conformance)
- Runtime:  edgerun-rt (custom epoll-based async, no tokio)
+ Runtime:  edgerun-rt for no_std/bare node paths; host crates use std where gated
  JSON:     edgerun-json (published on crates.io v1.0.149)
  Crypto:   edgerun-crypto (single boundary, no ring/openssl)
 ```
@@ -104,7 +109,7 @@ A Rust multi-crate workspace (138 crates) implementing:
 | P0-1 | Domain separation not applied to signatures | ✅ **RESOLVED** — `sign_record()`, `sign_record_with_tpm_checked()`, `sign_record_with_yubikey_checked()`, `sign_record_with_keystore_checked()` all apply domain tags via `signature_input()` in `edgerun-core/src/crypto.rs` and all hardware backends |
 | P0-3 | Delegation chain does not verify root trust | ✅ **RESOLVED** — `command.rs:296-303` checks root issuer against `ctx.trusted_root_ids`, with test `delegation_chain_root_not_in_trusted_roots_is_rejected` |
 | P0-4 | PerformanceCertificate not cryptographically bound | ✅ **RESOLVED** — `PerformanceCertificate::verify()` validates digest integrity and ECDSA signature |
-| P1-5 | Seccomp-BPF filter not applied | ✅ **RESOLVED** — `edgerun-oci-runtime/src/seccomp.rs` with architecture-specific allow-lists, applied in `pre_exec` |
+| P1-5 | Seccomp-BPF filter not applied | ✅ **RESOLVED** — `crates/edgerun-oci/src/seccomp.rs` with architecture-specific allow-lists, applied in `pre_exec` |
 | P1-6 | Action lifecycle events partially implemented | ✅ **RESOLVED** — `record_action_event()` emits `ActionCompleted`/`ActionFailed` events in `command_dispatch.rs` |
 
 ---

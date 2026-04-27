@@ -10,7 +10,7 @@ edgerun-crypto = { path = "../edgerun-crypto", default-features = false, feature
 edgerun-http = { path = "../edgerun-http", default-features = false, features = ["client", "tls"] }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-json = { path = "../edgerun-json" }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 

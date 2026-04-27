@@ -141,13 +141,6 @@ fn sign_session_accept(
 
 /// Verify a SessionHello's signature and extract the peer's node ID.
 pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str> {
-    use edgerun_core::crypto::{verify_canonical_record, SIG_DOMAIN_SESSION_HELLO};
-    let Some(ref sig) = hello.signature else {
-        return Err("missing_signature");
-    };
-    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return Err("bad_signature_length");
-    }
     let Some(ref initiator) = hello.initiator else {
         return Err("missing_initiator");
     };
@@ -155,21 +148,16 @@ pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str
         return Err("bad_identity_id_length");
     }
 
-    // Verify the signature with domain separation
-    let mut hello_for_verify = hello.clone();
-    let record = ProtocolRecord::SessionHello(hello_for_verify.clone());
-    let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-
-    // Build verifying key from identity_id
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04; // Uncompressed point marker
-    vk_sec1[1..].copy_from_slice(&initiator.identity_id);
-
-    let vk = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
-        .map_err(|_| "bad_public_key")?;
-
-    if !verify_canonical_record(&vk, SIG_DOMAIN_SESSION_HELLO, &canonical, &sig.value) {
-        return Err("invalid_signature");
+    let validation = edgerun_core::validators_proto::validate_session_hello(hello, None);
+    if validation.verdict != edgerun_core::result::Verdict::Accept {
+        return Err(match validation.reason_code {
+            Some(edgerun_core::result::ReasonCode::CryptoInvalid) => "invalid_signature",
+            Some(edgerun_core::result::ReasonCode::VersionUnsupported) => {
+                "unsupported_protocol_version"
+            }
+            Some(edgerun_core::result::ReasonCode::TargetMismatch) => "target_mismatch",
+            _ => "invalid_session_hello",
+        });
     }
 
     let mut node_id_bytes = [0u8; 64];
@@ -182,12 +170,6 @@ pub fn verify_session_accept(
     accept: &SessionAccept,
     expected_nonce: &[u8],
 ) -> Result<NodeID, &'static str> {
-    let Some(ref sig) = accept.signature else {
-        return Err("missing_signature");
-    };
-    if sig.value.len() != edgerun_core::crypto::ECDSA_P256_SIGNATURE_LEN {
-        return Err("bad_signature_length");
-    }
     let Some(ref responder) = accept.responder else {
         return Err("missing_responder");
     };
@@ -195,35 +177,25 @@ pub fn verify_session_accept(
         return Err("bad_identity_id_length");
     }
 
-    // Verify nonce echo
-    if accept.echoed_session_nonce != expected_nonce {
-        return Err("nonce_mismatch");
-    }
-
-    // Verify protocol version is supported
-    if accept.selected_protocol_version != PROTOCOL_VERSION {
-        return Err("unsupported_protocol_version");
-    }
-
-    // Verify the signature with domain separation
-    let record = ProtocolRecord::SessionAccept(accept.clone());
-    let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-
-    // Build verifying key from identity_id
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04; // Uncompressed point marker
-    vk_sec1[1..].copy_from_slice(&responder.identity_id);
-
-    let vk = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
-        .map_err(|_| "bad_public_key")?;
-
-    if !edgerun_core::crypto::verify_canonical_record(
-        &vk,
-        edgerun_core::crypto::SIG_DOMAIN_SESSION_ACCEPT,
-        &canonical,
-        &sig.value,
-    ) {
-        return Err("invalid_signature");
+    let validation = edgerun_core::validators_proto::validate_session_accept(
+        accept,
+        expected_nonce,
+        &[PROTOCOL_VERSION],
+    );
+    if validation.verdict != edgerun_core::result::Verdict::Accept {
+        return Err(match validation.reason_code {
+            Some(edgerun_core::result::ReasonCode::CryptoInvalid) => {
+                if accept.echoed_session_nonce != expected_nonce {
+                    "nonce_mismatch"
+                } else {
+                    "invalid_signature"
+                }
+            }
+            Some(edgerun_core::result::ReasonCode::VersionUnsupported) => {
+                "unsupported_protocol_version"
+            }
+            _ => "invalid_session_accept",
+        });
     }
 
     let mut node_id_bytes = [0u8; 64];
@@ -361,7 +333,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "signature verification failing"]
     fn test_session_hello_verification() {
         let signer = TestSigner::new();
         let nonce = generate_nonce();
@@ -394,7 +365,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "signature verification failing"]
     fn test_session_accept_verification() {
         let signer = TestSigner::new();
         let nonce = generate_nonce();

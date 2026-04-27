@@ -67,7 +67,7 @@ pub fn execute_query(
         } => (max_bytes, max_results),
         QueryCostCheck::Denied { reason } => {
             edgerun_log::warn!("query denied due to cost limits");
-            return build_query_denial(query, responder_node_id, reason);
+            return build_signed_query_denial(query, responder_node_id, reason, signer);
         }
     };
 
@@ -328,20 +328,23 @@ pub fn execute_query(
         }
     }
 
+    let proof_objects =
+        build_query_proof_objects(query, store, &event_refs, &snapshot_refs, &object_refs);
+
     let mut fragment = QueryResultFragment {
         fragment_version: 1,
         query_id: query.query_id.clone(),
         responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
             identity_id: responder_node_id.0.to_vec(),
             identity_kind: Some(2), // NODE
-            key_hint: None,
+            key_hint: Some(responder_node_id.0.to_vec()),
         }),
         answered_at: Some(system_time_to_prost(SystemTime::now())),
         completeness,
         snapshot_refs,
         event_refs,
         object_refs,
-        proof_objects: vec![],
+        proof_objects,
         omission_reason: String::new(),
         bundled_result_object: None,
         result_metadata: None,
@@ -349,18 +352,7 @@ pub fn execute_query(
     };
 
     // Sign the query response with domain separation
-    {
-        use edgerun_core::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT;
-        use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
-        let record = ProtocolRecord::QueryResultFragment(fragment.clone());
-        let canonical = canonical_bytes(&record, true);
-        if let Ok(sig) = signer.sign_record(SIG_DOMAIN_QUERY_RESULT_FRAGMENT, &canonical) {
-            fragment.signature = Some(edgerun_core::protocol::Signature {
-                algorithm: 1,
-                value: sig.to_vec(),
-            });
-        }
-    }
+    sign_query_result_fragment(&mut fragment, signer);
 
     let fragment_bytes = prost::Message::encode_to_vec(&fragment);
 
@@ -368,11 +360,142 @@ pub fn execute_query(
     if let Some(max_b) = max_bytes {
         if fragment_bytes.len() > max_b {
             edgerun_log::warn!("query response exceeds max_total_bytes, returning denial");
-            return build_query_denial(query, responder_node_id, "response_too_large");
+            return build_signed_query_denial(
+                query,
+                responder_node_id,
+                "response_too_large",
+                signer,
+            );
         }
     }
 
     fragment_bytes
+}
+
+fn sign_query_result_fragment(
+    fragment: &mut edgerun_proto::edgerun::v0::access::QueryResultFragment,
+    signer: &dyn MeshSigner,
+) {
+    use edgerun_core::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT;
+    use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
+
+    let record = ProtocolRecord::QueryResultFragment(fragment.clone());
+    let canonical = canonical_bytes(&record, true);
+    if let Ok(sig) = signer.sign_record(SIG_DOMAIN_QUERY_RESULT_FRAGMENT, &canonical) {
+        fragment.signature = Some(edgerun_core::protocol::Signature {
+            algorithm: 1,
+            value: sig.to_vec(),
+        });
+    }
+}
+
+fn build_query_proof_objects(
+    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    store: &mut NodeStore,
+    event_refs: &[edgerun_proto::edgerun::v0::common::EventRef],
+    snapshot_refs: &[edgerun_proto::edgerun::v0::common::SnapshotRef],
+    object_refs: &[edgerun_proto::edgerun::v0::common::ObjectRef],
+) -> Vec<edgerun_proto::edgerun::v0::common::ObjectRef> {
+    use edgerun_proto::edgerun::v0::access::{
+        EventSetProof, ObjectAssertionProof, ProofClass, SnapshotSetProof, StreamHeadsProof,
+    };
+    use edgerun_proto::edgerun::v0::common::{HeadRef, ObjectKind};
+
+    let mut proof_objects = Vec::new();
+
+    if query
+        .required_proof_classes
+        .contains(&(ProofClass::StreamHead as i32))
+    {
+        let proof = StreamHeadsProof {
+            source_query_id: query.query_id.clone(),
+            heads: event_refs
+                .iter()
+                .map(|event_ref| HeadRef {
+                    stream_id: event_ref.stream_id.clone(),
+                    seq: event_ref.seq,
+                    event_hash: event_ref.event_hash.clone(),
+                })
+                .collect(),
+        };
+        store_proof_object(
+            store,
+            &prost::Message::encode_to_vec(&proof),
+            &mut proof_objects,
+        );
+    }
+
+    if query
+        .required_proof_classes
+        .contains(&(ProofClass::SnapshotBase as i32))
+    {
+        let proof = SnapshotSetProof {
+            source_query_id: query.query_id.clone(),
+            snapshots: snapshot_refs.to_vec(),
+        };
+        store_proof_object(
+            store,
+            &prost::Message::encode_to_vec(&proof),
+            &mut proof_objects,
+        );
+    }
+
+    if query
+        .required_proof_classes
+        .contains(&(ProofClass::EventRef as i32))
+    {
+        let proof = EventSetProof {
+            source_query_id: query.query_id.clone(),
+            events: event_refs.to_vec(),
+            related_objects: object_refs.to_vec(),
+        };
+        store_proof_object(
+            store,
+            &prost::Message::encode_to_vec(&proof),
+            &mut proof_objects,
+        );
+    }
+
+    if query
+        .required_proof_classes
+        .contains(&(ProofClass::ObjectRef as i32))
+    {
+        if let Some(object_ref) = &query.query_payload_object {
+            let exists = object_refs
+                .iter()
+                .any(|candidate| candidate.object_id == object_ref.object_id);
+            let proof = ObjectAssertionProof {
+                source_query_id: query.query_id.clone(),
+                object_ref: Some(object_ref.clone()),
+                exists,
+                bundled_result_object: None,
+            };
+            store_proof_object(
+                store,
+                &prost::Message::encode_to_vec(&proof),
+                &mut proof_objects,
+            );
+        }
+    }
+
+    for proof_object in &mut proof_objects {
+        proof_object.object_kind = Some(ObjectKind::Proof as i32);
+    }
+
+    proof_objects
+}
+
+fn store_proof_object(
+    store: &mut NodeStore,
+    proof_bytes: &[u8],
+    proof_objects: &mut Vec<edgerun_proto::edgerun::v0::common::ObjectRef>,
+) {
+    use edgerun_proto::edgerun::v0::common::ObjectKind;
+
+    match store.put_object(proof_bytes, ObjectKind::Proof as i32, &[]) {
+        Ok(object_ref) => proof_objects.push(object_ref),
+        Err(e) => edgerun_log::warn!("failed to store query proof object: {}", e),
+    }
 }
 
 /// Scan events in a stream and return those whose `recorded_at` falls within
@@ -457,7 +580,7 @@ pub fn build_query_denial(
         responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
             identity_id: responder_node_id.0.to_vec(),
             identity_kind: Some(2),
-            key_hint: None,
+            key_hint: Some(responder_node_id.0.to_vec()),
         }),
         answered_at: Some(system_time_to_prost(SystemTime::now())),
         completeness: ResultCompleteness::Denied as i32,
@@ -472,4 +595,169 @@ pub fn build_query_denial(
     };
 
     prost::Message::encode_to_vec(&fragment)
+}
+
+fn build_signed_query_denial(
+    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    responder_node_id: &NodeID,
+    reason: &str,
+    signer: &dyn MeshSigner,
+) -> Vec<u8> {
+    use edgerun_proto::edgerun::v0::access::{QueryResultFragment, ResultCompleteness};
+
+    let mut fragment = QueryResultFragment {
+        fragment_version: 1,
+        query_id: query.query_id.clone(),
+        responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            identity_id: responder_node_id.0.to_vec(),
+            identity_kind: Some(2),
+            key_hint: Some(responder_node_id.0.to_vec()),
+        }),
+        answered_at: Some(system_time_to_prost(SystemTime::now())),
+        completeness: ResultCompleteness::Denied as i32,
+        snapshot_refs: vec![],
+        event_refs: vec![],
+        object_refs: vec![],
+        proof_objects: vec![],
+        omission_reason: reason.to_string(),
+        bundled_result_object: None,
+        result_metadata: None,
+        signature: None,
+    };
+    sign_query_result_fragment(&mut fragment, signer);
+
+    prost::Message::encode_to_vec(&fragment)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_hardware_signing::{HardwareSigningError, MeshSigner};
+    use edgerun_proto::edgerun::v0::access::{
+        CostLimit, ProofClass, QueryClass, QueryRequest, QueryResultFragment, ResultCompleteness,
+        StreamHeadsProof,
+    };
+    use edgerun_storage::{BlobKeySource, NodeStoreConfig};
+    use prost::Message;
+    use std::sync::Arc;
+
+    struct TestSigner {
+        node_id: NodeID,
+        key: edgerun_crypto::p256::ecdsa::SigningKey,
+    }
+
+    impl TestSigner {
+        fn new() -> Self {
+            let key =
+                edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+            let encoded = key.verifying_key().to_encoded_point(false);
+            let mut node_id = [0u8; 64];
+            node_id.copy_from_slice(&encoded.as_bytes()[1..65]);
+            Self {
+                node_id: NodeID(node_id),
+                key,
+            }
+        }
+    }
+
+    impl MeshSigner for TestSigner {
+        fn node_id(&self) -> NodeID {
+            self.node_id
+        }
+
+        fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], HardwareSigningError> {
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
+                self.key.sign_prehash(digest).map_err(|e| {
+                    edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string())
+                })?;
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&sig.to_bytes());
+            Ok(bytes)
+        }
+    }
+
+    fn tmp_data_root() -> std::path::PathBuf {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("query_engine_test_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn test_store(node_id: NodeID) -> NodeStore {
+        let config = NodeStoreConfig {
+            data_root: tmp_data_root(),
+            blob_key_source: Arc::new(BlobKeySource::Software {
+                private_key_bytes: vec![0x42; 32],
+            }),
+            node_identity: node_id.0.to_vec(),
+        };
+        NodeStore::open(&config).unwrap()
+    }
+
+    #[test]
+    fn head_query_with_required_stream_head_proof_returns_proof_object() {
+        let signer = TestSigner::new();
+        let mut store = test_store(signer.node_id());
+        let query = QueryRequest {
+            request_version: 1,
+            query_id: b"query-proof".to_vec(),
+            requester: None,
+            target_scope: None,
+            query_class: QueryClass::Head as i32,
+            time_window: None,
+            checkpoint_base: None,
+            result_limit: None,
+            cost_limit: None,
+            required_proof_classes: vec![ProofClass::StreamHead as i32],
+            query_payload_object: None,
+            signature: None,
+        };
+
+        let bytes = execute_query(&query, &mut store, b"stream-1", &signer.node_id(), &signer);
+        let fragment = QueryResultFragment::decode(&bytes[..]).unwrap();
+
+        assert_eq!(fragment.proof_objects.len(), 1);
+        let proof_object = store
+            .get_object(&fragment.proof_objects[0])
+            .unwrap()
+            .expect("stored proof object");
+        let proof = StreamHeadsProof::decode(&proof_object.content[..]).unwrap();
+        assert_eq!(proof.source_query_id, b"query-proof");
+    }
+
+    #[test]
+    fn oversized_query_response_returns_signed_denial() {
+        let signer = TestSigner::new();
+        let mut store = test_store(signer.node_id());
+        let query = QueryRequest {
+            request_version: 1,
+            query_id: b"query-denial".to_vec(),
+            requester: None,
+            target_scope: None,
+            query_class: QueryClass::Head as i32,
+            time_window: None,
+            checkpoint_base: None,
+            result_limit: None,
+            cost_limit: Some(CostLimit {
+                max_results: None,
+                max_total_bytes: Some(1),
+                max_wall_time: None,
+                max_federated_responders: None,
+            }),
+            required_proof_classes: vec![],
+            query_payload_object: None,
+            signature: None,
+        };
+
+        let bytes = execute_query(&query, &mut store, b"stream-1", &signer.node_id(), &signer);
+        let fragment = QueryResultFragment::decode(&bytes[..]).unwrap();
+
+        assert_eq!(fragment.completeness, ResultCompleteness::Denied as i32);
+        assert_eq!(fragment.omission_reason, "response_too_large");
+        assert!(fragment.signature.is_some());
+    }
 }

@@ -87,7 +87,7 @@ pub use vfs::{Changeset, FileContent, FileMeta, PersistResult, VirtualFileSystem
 pub type SharedVFS = std::sync::Arc<std::sync::RwLock<VirtualFileSystem>>;
 
 #[cfg(target_os = "none")]
-pub type SharedVFS = alloc::sync::Arc<edgerun_bare_rt::RwLock<VirtualFileSystem>>;
+pub type SharedVFS = alloc::sync::Arc<edgerun_rt::RwLock<VirtualFileSystem>>;
 
 #[cfg(target_os = "none")]
 pub type Path = str;

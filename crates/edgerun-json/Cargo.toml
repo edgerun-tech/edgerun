@@ -36,7 +36,6 @@ serde_json_upstream = { package = "serde_json", version = "1", optional = true }
 
 [dev-dependencies]
 serde_crate = { package = "serde", version = "1", features = ["derive"] }
-serde_bytes = "0.11"
 serde_json_upstream = { package = "serde_json", version = "1" }
 criterion = "0.8"
 

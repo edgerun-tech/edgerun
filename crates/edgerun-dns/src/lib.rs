@@ -1,11 +1,11 @@
-//! no_std DNS server and client using edgerun-bare-rt.
+//! no_std DNS server and client using edgerun-rt.
 //!
 //! # Architecture
 //! - **DNS message parser/serializer** — RFC 1035 wire format
-//! - **Async DNS client** — non-blocking queries via edgerun-bare-rt primitives
-//! - **Async DNS server** — concurrent query handling via `edgerun_bare_rt::spawn`
+//! - **Async DNS client** — non-blocking queries via edgerun-rt primitives
+//! - **Async DNS server** — concurrent query handling via `edgerun_rt::spawn`
 //! - **Zone file** — in-memory DNS zone with record management
-//! - **UDP** — socket I/O via `edgerun_bare_rt::UdpSocket`
+//! - **UDP** — socket I/O via `edgerun_rt::UdpSocket`
 //!
 //! # Wire Format (RFC 1035)
 //! ```text
@@ -26,7 +26,7 @@
 //! ```no_run
 //! use edgerun_dns::server::{DnsServer, DnsServerConfig};
 //! use edgerun_dns::zone::DnsZone;
-//! use edgerun_bare_rt::Runtime;
+//! use edgerun_rt::Runtime;
 //!
 //! let rt = Runtime::new().build().unwrap();
 //! rt.block_on(async {

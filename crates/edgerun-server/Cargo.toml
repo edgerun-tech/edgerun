@@ -17,7 +17,7 @@ edgerun-dns = { path = "../edgerun-dns", optional = true }
 edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
 edgerun-tftp = { path = "../edgerun-tftp", optional = true }
 edgerun-proxy = { path = "../edgerun-proxy", optional = true }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-log = { path = "../edgerun-log" }
 

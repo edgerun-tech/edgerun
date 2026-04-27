@@ -1,9 +1,9 @@
 use crate::prelude::*;
-use edgerun_bare_rt::{
+use edgerun_log::{debug, info, warn};
+use edgerun_rt::{
     spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt,
     CancellationToken, ConnectFuture,
 };
-use edgerun_log::{debug, info, warn};
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -155,7 +155,7 @@ impl ProxyServer {
 
         self.graceful_shutdown.store(true, Ordering::Relaxed);
         while self.active_connections.load(Ordering::Relaxed) > 0 {
-            edgerun_bare_rt::sleep(std::time::Duration::from_millis(100)).await;
+            edgerun_rt::sleep(std::time::Duration::from_millis(100)).await;
         }
 
         let _ = http_handle.await;
@@ -249,7 +249,7 @@ async fn handle_connect_tunnel(
 }
 
 async fn tunnel_bidirectional(a: Arc<AsyncTcpStream>, b: Arc<AsyncTcpStream>) {
-    use edgerun_bare_rt::copy_bidirectional;
+    use edgerun_rt::copy_bidirectional;
 
     let mut a = a;
     let mut b = b;
@@ -438,9 +438,9 @@ async fn handle_socks5(
         Ok(Err(e)) => {
             #[cfg(target_os = "none")]
             let rep = match e {
-                edgerun_bare_rt::io::IoError::Other(_) => SOCKS5_REP_GENERAL_FAILURE,
-                edgerun_bare_rt::io::IoError::UnexpectedEof => SOCKS5_REP_GENERAL_FAILURE,
-                edgerun_bare_rt::io::IoError::WriteZero => SOCKS5_REP_GENERAL_FAILURE,
+                edgerun_rt::io::IoError::Other(_) => SOCKS5_REP_GENERAL_FAILURE,
+                edgerun_rt::io::IoError::UnexpectedEof => SOCKS5_REP_GENERAL_FAILURE,
+                edgerun_rt::io::IoError::WriteZero => SOCKS5_REP_GENERAL_FAILURE,
             };
             #[cfg(not(target_os = "none"))]
             let rep = match e.kind() {

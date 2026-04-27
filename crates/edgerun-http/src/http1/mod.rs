@@ -1,7 +1,7 @@
 //! Async HTTP/1.1 implementation (RFC 9112)
 //!
 //! This module provides HTTP/1.1 server built on top of
-//! [`edgerun_bare_rt`] async primitives. The client is in the unified `HttpClient`.
+//! [`edgerun_rt`] async primitives. The client is in the unified `HttpClient`.
 
 pub mod body;
 pub mod chunked;

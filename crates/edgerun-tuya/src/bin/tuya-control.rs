@@ -1,4 +1,4 @@
-use edgerun_bare_rt::Runtime;
+use edgerun_rt::Runtime;
 use edgerun_tuya::{TuyaController, TuyaDevice, TuyaDeviceState};
 use std::env;
 

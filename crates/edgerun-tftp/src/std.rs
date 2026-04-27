@@ -1,4 +1,4 @@
-//! Minimal std-shaped compatibility surface backed by core, alloc, and edgerun-bare-rt.
+//! Minimal std-shaped compatibility surface backed by core, alloc, and edgerun-rt.
 
 pub use core::{fmt, result, str};
 
@@ -55,9 +55,9 @@ pub mod net {
 
 pub mod sync {
     pub use alloc::sync::Arc;
-    pub use edgerun_bare_rt::{AsyncMutex as Mutex, MutexGuard};
+    pub use edgerun_rt::{AsyncMutex as Mutex, MutexGuard};
 }
 
 pub mod time {
-    pub use edgerun_bare_rt::Duration;
+    pub use edgerun_rt::Duration;
 }

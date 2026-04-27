@@ -126,7 +126,7 @@ impl EventWriter {
             })?;
         }
 
-        edgerun_bare_rt::spawn_blocking(move || {
+        edgerun_rt::spawn_blocking(move || {
             result_rx.recv().map_err(|e| {
                 StorageError::Io(std::io::Error::new(
                     std::io::ErrorKind::BrokenPipe,

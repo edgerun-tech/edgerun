@@ -16,7 +16,7 @@ required-features = ["std"]
 
 [dependencies]
 edgerun-http = { path = "../edgerun-http", default-features = false, features = ["server"] }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
+edgerun-rt = { path = "../edgerun-rt" }
 edgerun-clap = { path = "../edgerun-clap", features = ["std"], optional = true }
 edgerun-json = { workspace = true }
 

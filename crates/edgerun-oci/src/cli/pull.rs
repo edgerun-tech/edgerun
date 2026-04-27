@@ -22,7 +22,7 @@ pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
 
     println!("Pulling {}...", image_ref);
 
-    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
+    let rt = edgerun_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| std::io::Error::other(e.to_string()))?;

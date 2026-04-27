@@ -32,7 +32,7 @@ extern crate std as host_std;
 
 use alloc::string::String;
 use core::fmt;
-pub use edgerun_bare_rt as rt;
+pub use edgerun_rt as rt;
 
 pub mod alert;
 pub mod async_tls;
