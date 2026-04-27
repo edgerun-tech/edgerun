@@ -1,0 +1,9 @@
+id: crypto/04-empty-signature-fixture-reject
+suite: crypto
+validator: verify_signature
+version: 1
+priority: mandatory
+description: signed record without expected signature fixture is structurally invalid
+tags:
+- crypto
+- verify_signature

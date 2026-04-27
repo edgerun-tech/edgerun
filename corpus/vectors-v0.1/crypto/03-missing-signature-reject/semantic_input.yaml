@@ -1,0 +1,7 @@
+signed_record:
+  issuer: user_alice
+  target_node: node_server
+  command_type: QUERY
+  issued_at: '2030-01-01T00:10:00Z'
+  command_id: cmd_crypto_missing_signature
+  signature_fixture: user_alice
