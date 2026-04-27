@@ -23,14 +23,14 @@ cleanup() {
 trap cleanup EXIT
 
 for _ in $(seq 1 100); do
-    if grep -q "Using static fallback IP" "$qemu_log" 2>/dev/null; then
+    if grep -q "Net pump started" "$qemu_log" 2>/dev/null; then
         break
     fi
     sleep 0.1
 done
 
-if ! grep -q "Using static fallback IP" "$qemu_log" 2>/dev/null; then
-    echo "QEMU did not reach static fallback IP before injection" >&2
+if ! grep -q "Net pump started" "$qemu_log" 2>/dev/null; then
+    echo "QEMU did not start net pump before injection" >&2
     exit 1
 fi
 

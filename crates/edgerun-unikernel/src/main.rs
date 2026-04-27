@@ -8,7 +8,7 @@ extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
 use rt::{
-    crc32, runtime::spawn, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
+    block_on, crc32, DhcpClient, DhcpStateMachine, IpAddr, IpStack, Network, Rng,
     RingBuffer, TcpSocket, TftpConfig, DHCP_CLIENT_PORT, DHCP_SERVER_PORT,
 };
 use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
@@ -39,19 +39,18 @@ _start:
 "#
 );
 
-struct NetworkTask;
-
 struct PumpStats {
     arp_replies: u32,
     icmp_replies: u32,
 }
 
-impl Future for NetworkTask {
-    type Output = ();
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        rt::log::log(3, "Network task");
-        Poll::Pending
-    }
+struct NetPump<'net, 'stack> {
+    net: &'net mut edgerun_virtio::VirtNet,
+    network: Network<'stack>,
+    rx_buf: [u8; 1514],
+    logged_start: bool,
+    logged_arp: bool,
+    logged_icmp: bool,
 }
 
 fn poll_network(
@@ -103,6 +102,31 @@ fn poll_network(
     }
 
     stats
+}
+
+impl Future for NetPump<'_, '_> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        if !this.logged_start {
+            rt::log::log(1, "Net pump started");
+            this.logged_start = true;
+        }
+
+        let stats = poll_network(this.net, &mut this.network, &mut this.rx_buf);
+        if stats.arp_replies != 0 && !this.logged_arp {
+            rt::log::log(1, "ARP reply sent");
+            this.logged_arp = true;
+        }
+        if stats.icmp_replies != 0 && !this.logged_icmp {
+            rt::log::log(1, "ICMP echo reply sent");
+            this.logged_icmp = true;
+        }
+
+        cx.waker().wake_by_ref();
+        Poll::Pending
+    }
 }
 
 #[panic_handler]
@@ -225,10 +249,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         stack.ip = IpAddr::new(192, 168, 1, 12);
     }
 
-    let mut pump_rx_buf = [0u8; 1514];
-    let mut logged_arp = false;
-    let mut logged_icmp = false;
-    let mut network = Network::new(&mut stack);
+    let network = Network::new(&mut stack);
     
     let _dhcp = DhcpClient::new(mac);
     let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
@@ -239,20 +260,19 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     let _ = tcp.listen(10);
     let _ = rng.next();
     
-    spawn(NetworkTask);
-    
     if net.is_link_up() {
     }
-    
+
+    block_on(NetPump {
+        net: &mut net,
+        network,
+        rx_buf: [0; 1514],
+        logged_start: false,
+        logged_arp: false,
+        logged_icmp: false,
+    });
+
     loop {
-        let stats = poll_network(&mut net, &mut network, &mut pump_rx_buf);
-        if stats.arp_replies != 0 && !logged_arp {
-            rt::log::log(1, "ARP reply sent");
-            logged_arp = true;
-        }
-        if stats.icmp_replies != 0 && !logged_icmp {
-            rt::log::log(1, "ICMP echo reply sent");
-            logged_icmp = true;
-        }
+        core::arch::asm!("hlt");
     }
 }

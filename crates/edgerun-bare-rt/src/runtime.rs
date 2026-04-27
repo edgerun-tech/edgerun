@@ -7,7 +7,7 @@ use crate::Error;
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 pub fn spawn<F>(_f: F) -> JoinHandle<F::Output>
@@ -36,9 +36,7 @@ pub fn block_on<F>(f: F) -> F::Output
 where
     F: Future,
 {
-    let waker = unsafe {
-        edgerun_platform::waker::make_ipi_waker(edgerun_platform::this_cpu())
-    };
+    let waker = noop_waker();
     let mut cx = Context::from_waker(&waker);
     let mut f = alloc::boxed::Box::pin(f);
     loop {
@@ -47,6 +45,20 @@ where
             Poll::Pending => unsafe { edgerun_platform::yield_cpu(); },
         }
     }
+}
+
+fn noop_waker() -> Waker {
+    unsafe fn clone(_: *const ()) -> RawWaker {
+        RawWaker::new(core::ptr::null(), &NOOP_WAKER_VTABLE)
+    }
+    unsafe fn wake(_: *const ()) {}
+    unsafe fn wake_by_ref(_: *const ()) {}
+    unsafe fn drop(_: *const ()) {}
+
+    static NOOP_WAKER_VTABLE: RawWakerVTable =
+        RawWakerVTable::new(clone, wake, wake_by_ref, drop);
+
+    unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &NOOP_WAKER_VTABLE)) }
 }
 
 pub fn shutdown() {}
