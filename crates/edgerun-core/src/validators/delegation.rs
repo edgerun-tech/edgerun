@@ -11,6 +11,9 @@ pub fn validate_delegation_case(
     let issuer = string_value(brief, "issuer", "");
     let action = string_value(brief, "action", "");
     let requested_scope = brief.get("scope");
+    if issuer.is_empty() || action.is_empty() {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
     let trust_roots = set_from_list(local_state.get("trust_roots"));
     let controllers = set_from_list(local_state.get("current_controller_set"));
     if controllers.contains(&issuer) {
@@ -39,13 +42,19 @@ pub fn validate_delegation_case(
     let Some(first) = chain[0].as_map() else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     };
+    if !delegation_link_is_structural(first) {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
     if !trust_roots.contains(&string_value(first, "issuer", "")) {
         return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
     }
     let mut prev_recipient = String::new();
     for (i, item) in chain.iter().enumerate() {
         let Some(link) = item.as_map() else {
-            return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        };
+        if !delegation_link_is_structural(link) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         };
         if i > 0 && string_value(link, "issuer", "") != prev_recipient {
             return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
@@ -120,4 +129,36 @@ pub fn validate_delegation_case(
         ]),
         empty_map(),
     )
+}
+
+fn delegation_link_is_structural(link: &BTreeMap<String, Value>) -> bool {
+    if string_value(link, "issuer", "").is_empty()
+        || string_value(link, "recipient", "").is_empty()
+        || !object_ref_is_valid(link.get("delegation_metadata"))
+    {
+        return false;
+    }
+    let Some(capability) = get_map(link, "capability") else {
+        return false;
+    };
+    if !object_ref_is_valid(capability.get("capability_metadata")) {
+        return false;
+    }
+    let actions = get_seq(capability, "actions").unwrap_or(&[]);
+    !actions.is_empty()
+        && actions
+            .iter()
+            .all(|action| matches!(action, Value::String(action) if !action.is_empty()))
+}
+
+fn object_ref_is_valid(value: Option<&Value>) -> bool {
+    match value {
+        None | Some(Value::Null) => true,
+        Some(Value::String(object_id)) => !object_id.is_empty(),
+        Some(Value::Map(map)) => map
+            .get("object_id")
+            .and_then(Value::as_str)
+            .is_some_and(|object_id| !object_id.is_empty()),
+        Some(_) => false,
+    }
 }
