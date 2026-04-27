@@ -9,7 +9,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::core::{
-    canonical_event_hash, encode_event_frame, AppendReceipt, EventLocation, EventLog, ScannedEvent,
+    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
+    EventLocation, EventLog, ScannedEvent,
 };
 use crate::error::StorageError;
 
@@ -54,29 +55,7 @@ impl EventLog for FsEventLog {
             return Ok(None);
         };
 
-        if location.stream_id != event.stream_id {
-            return Err(StorageError::Decode(format!(
-                "event location stream mismatch at offset {}: location has {}, event has {}",
-                location.file_offset,
-                edgerun_core::util::bytes_to_hex(&location.stream_id),
-                edgerun_core::util::bytes_to_hex(&event.stream_id),
-            )));
-        }
-        if location.seq != event.seq {
-            return Err(StorageError::Decode(format!(
-                "event location seq mismatch at offset {}: location has {}, event has {}",
-                location.file_offset, location.seq, event.seq
-            )));
-        }
-        let event_hash = canonical_event_hash(&event).value;
-        if location.event_hash != event_hash {
-            return Err(StorageError::Decode(format!(
-                "event hash mismatch at offset {}: location has {}, event has {}",
-                location.file_offset,
-                edgerun_core::util::bytes_to_hex(&location.event_hash),
-                edgerun_core::util::bytes_to_hex(&event_hash),
-            )));
-        }
+        validate_event_location(location, &event)?;
 
         Ok(Some(event))
     }

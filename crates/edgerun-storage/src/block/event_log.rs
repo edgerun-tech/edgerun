@@ -13,7 +13,8 @@ use edgerun_proto::edgerun::v0::stream::EventEnvelope as ProtoEventEnvelope;
 use prost::Message;
 
 use crate::core::{
-    canonical_event_hash, encode_event_frame, AppendReceipt, EventLocation, EventLog, ScannedEvent,
+    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
+    EventLocation, EventLog, ScannedEvent,
 };
 use crate::error::StorageError;
 
@@ -322,29 +323,7 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
                 location.file_offset, event.seq
             )));
         }
-        if location.stream_id != event.stream_id {
-            return Err(StorageError::Decode(format!(
-                "event location stream mismatch at offset {}: location has {}, event has {}",
-                location.file_offset,
-                edgerun_core::util::bytes_to_hex(&location.stream_id),
-                edgerun_core::util::bytes_to_hex(&event.stream_id),
-            )));
-        }
-        if location.seq != event.seq {
-            return Err(StorageError::Decode(format!(
-                "event location seq mismatch at offset {}: location has {}, event has {}",
-                location.file_offset, location.seq, event.seq
-            )));
-        }
-        let event_hash = canonical_event_hash(&event).value;
-        if location.event_hash != event_hash {
-            return Err(StorageError::Decode(format!(
-                "event hash mismatch at offset {}: location has {}, event has {}",
-                location.file_offset,
-                edgerun_core::util::bytes_to_hex(&location.event_hash),
-                edgerun_core::util::bytes_to_hex(&event_hash),
-            )));
-        }
+        validate_event_location(location, &event)?;
 
         Ok(Some(event))
     }

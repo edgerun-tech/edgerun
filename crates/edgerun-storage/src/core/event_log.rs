@@ -69,6 +69,38 @@ pub fn canonical_event_hash(event: &EventEnvelope) -> Digest {
     }
 }
 
+/// Verifies an event read from a log still matches its indexed location.
+pub fn validate_event_location(
+    location: &EventLocation,
+    event: &EventEnvelope,
+) -> Result<(), StorageError> {
+    if location.stream_id != event.stream_id {
+        return Err(StorageError::Decode(format!(
+            "event location stream mismatch at offset {}: location has {}, event has {}",
+            location.file_offset,
+            edgerun_core::util::bytes_to_hex(&location.stream_id),
+            edgerun_core::util::bytes_to_hex(&event.stream_id),
+        )));
+    }
+    if location.seq != event.seq {
+        return Err(StorageError::Decode(format!(
+            "event location seq mismatch at offset {}: location has {}, event has {}",
+            location.file_offset, location.seq, event.seq
+        )));
+    }
+    let event_hash = canonical_event_hash(event).value;
+    if location.event_hash != event_hash {
+        return Err(StorageError::Decode(format!(
+            "event hash mismatch at offset {}: location has {}, event has {}",
+            location.file_offset,
+            edgerun_core::util::bytes_to_hex(&location.event_hash),
+            edgerun_core::util::bytes_to_hex(&event_hash),
+        )));
+    }
+
+    Ok(())
+}
+
 /// Encodes an event into the current hosted append-log frame:
 /// `[varint protobuf_len][protobuf EventEnvelope bytes]`.
 ///

@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 use edgerun_core::protocol::EventEnvelope;
 
 use crate::core::{
-    canonical_event_hash, encode_event_frame, AppendReceipt, EventLocation, EventLog, ScannedEvent,
+    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
+    EventLocation, EventLog, ScannedEvent,
 };
 use crate::error::StorageError;
 
@@ -92,26 +93,7 @@ impl EventLog for MemEventLog {
                 location.file_offset, found.offset
             )));
         }
-        if location.stream_id != found.event.stream_id {
-            return Err(StorageError::Decode(format!(
-                "event location stream mismatch at seq {seq}: location has {}, event has {}",
-                edgerun_core::util::bytes_to_hex(&location.stream_id),
-                edgerun_core::util::bytes_to_hex(&found.event.stream_id),
-            )));
-        }
-        if location.seq != found.event.seq {
-            return Err(StorageError::Decode(format!(
-                "event location seq mismatch at seq {seq}: location has {}, event has {}",
-                location.seq, found.event.seq
-            )));
-        }
-        if location.event_hash != found.hash {
-            return Err(StorageError::Decode(format!(
-                "event hash mismatch at seq {seq}: location has {}, event has {}",
-                edgerun_core::util::bytes_to_hex(&location.event_hash),
-                edgerun_core::util::bytes_to_hex(&found.hash),
-            )));
-        }
+        validate_event_location(location, &found.event)?;
 
         Ok(Some(found.event.clone()))
     }

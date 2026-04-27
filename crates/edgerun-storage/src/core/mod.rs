@@ -15,6 +15,6 @@ pub use cas::{
 };
 pub use durable_stream::DurableStreamWriter;
 pub use event_log::{
-    canonical_event_hash, encode_event_frame, AppendReceipt, EventLocation, EventLog, ScannedEvent,
-    StreamHead,
+    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
+    EventLocation, EventLog, ScannedEvent, StreamHead,
 };
