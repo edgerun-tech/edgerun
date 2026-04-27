@@ -1,11 +1,11 @@
-//! Async DNS server and client using edgerun-rt.
+//! no_std DNS server and client using edgerun-bare-rt.
 //!
 //! # Architecture
 //! - **DNS message parser/serializer** — RFC 1035 wire format
-//! - **Async DNS client** — non-blocking queries via edgerun-rt epoll reactor
-//! - **Async DNS server** — concurrent query handling, one task per query via `edgerun_rt::spawn`
-//! - **Zone file** — in-memory DNS zone with record management (protected by async RwLock)
-//! - **UDP** — non-blocking socket I/O via `edgerun_rt::AsyncUdpSocket`
+//! - **Async DNS client** — non-blocking queries via edgerun-bare-rt primitives
+//! - **Async DNS server** — concurrent query handling via `edgerun_bare_rt::spawn`
+//! - **Zone file** — in-memory DNS zone with record management
+//! - **UDP** — socket I/O via `edgerun_bare_rt::UdpSocket`
 //!
 //! # Wire Format (RFC 1035)
 //! ```text
@@ -26,13 +26,12 @@
 //! ```no_run
 //! use edgerun_dns::server::{DnsServer, DnsServerConfig};
 //! use edgerun_dns::zone::DnsZone;
-//! use edgerun_rt::Runtime;
-//! use std::net::Ipv4Addr;
+//! use edgerun_bare_rt::Runtime;
 //!
-//! let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
+//! let rt = Runtime::new().build().unwrap();
 //! rt.block_on(async {
 //!     let mut zone = DnsZone::new("example.com");
-//!     zone.add_a("@", Ipv4Addr::new(192, 168, 1, 1), 3600);
+//!     zone.add_a("@", edgerun_dns::std::net::Ipv4Addr::new(192, 168, 1, 1), 3600);
 //!
 //!     let config = DnsServerConfig::default();
 //!     let server = DnsServer::new(config).unwrap();
@@ -40,6 +39,46 @@
 //!     // server.run().await; // runs forever
 //! });
 //! ```
+
+#![no_std]
+
+#[macro_use]
+extern crate alloc;
+
+pub mod libc {
+    pub type c_int = i32;
+    pub type c_void = core::ffi::c_void;
+    pub type socklen_t = u32;
+
+    pub const SOL_SOCKET: c_int = 1;
+    pub const SO_REUSEADDR: c_int = 2;
+    pub const SO_BROADCAST: c_int = 6;
+
+    pub unsafe fn setsockopt(
+        _socket: c_int,
+        _level: c_int,
+        _optname: c_int,
+        _optval: *const c_void,
+        _optlen: socklen_t,
+    ) -> c_int {
+        0
+    }
+}
+
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        edgerun_log::warn!($($arg)*)
+    };
+}
+
+macro_rules! println {
+    ($($arg:tt)*) => {
+        edgerun_log::info!($($arg)*)
+    };
+}
+
+pub mod compat;
+pub mod std;
 
 pub mod axfr;
 pub mod cache;

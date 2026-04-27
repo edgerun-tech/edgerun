@@ -5,8 +5,8 @@
 //! - `port <number>` — default port for all nameservers
 //! - Ignores comments (`#`), blank lines, and unknown directives
 
-use std::net::{IpAddr, SocketAddr};
-use std::path::Path;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use crate::std::net::{IpAddr, SocketAddr};
 
 const RESOLV_CONF: &str = "/etc/resolv.conf";
 const MAXNS: usize = 3;
@@ -39,7 +39,7 @@ impl ResolvConf {
 
     /// Parse a resolv.conf from the given path.
     pub fn load_path(path: &str) -> Self {
-        match std::fs::read_to_string(path) {
+        match crate::std::fs::read_to_string(path) {
             Ok(content) => Self::parse(&content),
             Err(_) => Self::default_with_fallback(),
         }

@@ -1,8 +1,10 @@
 //! DHCPv4 server — handles DISCOVER/REQUEST and responds with OFFER/ACK/NAK.
 
-use std::io;
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
-use std::time::Duration;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use crate::libc;
+use crate::std::io;
+use crate::std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use crate::std::time::Duration;
 
 use super::lease::LeasePool;
 use super::message::{
@@ -27,7 +29,7 @@ pub struct DhcpServerConfig {
     /// Default bootfile name (used if client doesn't specify arch).
     pub default_bootfile: Option<String>,
     /// Bootfile map: architecture name → bootfile (auto-selects based on client arch).
-    pub bootfile_by_arch: std::collections::HashMap<String, String>,
+    pub bootfile_by_arch: alloc::collections::BTreeMap<String, String>,
 }
 
 /// DHCPv4 server — listens for client requests and hands out leases.
@@ -35,8 +37,8 @@ pub struct DhcpServerConfig {
 /// # Example
 /// ```ignore
 /// use edgerun_dns::dhcp::server::{DhcpServer, DhcpServerConfig};
-/// use std::net::Ipv4Addr;
-/// use std::time::Duration;
+/// use crate::std::net::Ipv4Addr;
+/// use crate::std::time::Duration;
 ///
 /// let config = DhcpServerConfig {
 ///     server_ip: Ipv4Addr::new(192, 168, 1, 1),
@@ -46,7 +48,7 @@ pub struct DhcpServerConfig {
 ///     lease_time: 86400,
 ///     tftp_server: Some(Ipv4Addr::new(192, 168, 1, 1)),
 ///     default_bootfile: Some("pxelinux.0".to_string()),
-///     bootfile_by_arch: std::collections::HashMap::new(),
+///     bootfile_by_arch: alloc::collections::BTreeMap::new(),
 /// };
 ///
 /// let mut server = DhcpServer::new(config,
@@ -79,7 +81,7 @@ impl DhcpServer {
         socket.set_read_timeout(Some(Duration::from_millis(200)))?;
         #[cfg(unix)]
         {
-            use std::os::unix::io::AsRawFd;
+            use crate::std::os::unix::io::AsRawFd;
             let fd = socket.as_raw_fd();
             let opt: libc::c_int = 1;
             unsafe {
@@ -88,7 +90,7 @@ impl DhcpServer {
                     libc::SOL_SOCKET,
                     libc::SO_REUSEADDR,
                     &opt as *const _ as *const libc::c_void,
-                    std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+                    core::mem::size_of::<libc::c_int>() as libc::socklen_t,
                 );
             }
         }
@@ -472,7 +474,7 @@ impl DhcpServer {
         let nak = DhcpMessage::nak(xid, self.config.server_ip, client_mac);
         let wire = nak.to_wire();
         let broadcast =
-            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
+            SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
         let _ = self.socket.send_to(&wire, broadcast);
         Ok(())
     }
@@ -482,15 +484,15 @@ impl DhcpServer {
 
         // RFC 2131 §4.1: If relay agent (giaddr) is set, unicast to it
         if !original.giaddr.is_unspecified() {
-            let addr = SocketAddr::new(std::net::IpAddr::V4(original.giaddr), DHCP_SERVER_PORT);
+            let addr = SocketAddr::new(crate::std::net::IpAddr::V4(original.giaddr), DHCP_SERVER_PORT);
             self.socket.send_to(&wire, addr)?;
         } else if !original.ciaddr.is_unspecified() && !original.broadcast {
-            let addr = SocketAddr::new(std::net::IpAddr::V4(original.ciaddr), DHCP_CLIENT_PORT);
+            let addr = SocketAddr::new(crate::std::net::IpAddr::V4(original.ciaddr), DHCP_CLIENT_PORT);
             self.socket.send_to(&wire, addr)?;
         } else {
             // Broadcast to client
             let broadcast =
-                SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
+                SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
             self.socket.send_to(&wire, broadcast)?;
         }
         Ok(())

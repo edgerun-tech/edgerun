@@ -6,9 +6,11 @@
 //! - The `ciaddr` field for renewals
 //! - Subnet mask matching
 
-use std::collections::HashMap;
-use std::io;
-use std::net::{Ipv4Addr, SocketAddr};
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use crate::libc;
+use crate::std::io;
+use crate::std::net::{Ipv4Addr, SocketAddr};
 
 use super::lease::LeasePool;
 use super::message::{
@@ -115,7 +117,7 @@ fn network_broadcast(network: &Ipv4Addr, mask: &Ipv4Addr) -> Ipv4Addr {
 
 /// A DHCP server with multiple scopes (subnets).
 pub struct DhcpMultiServer {
-    socket: std::net::UdpSocket,
+    socket: crate::std::net::UdpSocket,
     /// Scopes indexed by name.
     scopes: HashMap<String, DhcpScope>,
     /// Interface name for binding.
@@ -132,15 +134,15 @@ impl DhcpMultiServer {
         port: u16,
         scopes: Vec<DhcpScope>,
     ) -> Result<Self, io::Error> {
-        use std::net::UdpSocket;
-        use std::time::Duration;
+        use crate::std::net::UdpSocket;
+        use crate::std::time::Duration;
 
         let socket = UdpSocket::bind(("0.0.0.0", port))?;
         socket.set_broadcast(true)?;
         socket.set_read_timeout(Some(Duration::from_millis(200)))?;
         #[cfg(unix)]
         {
-            use std::os::unix::io::AsRawFd;
+            use crate::std::os::unix::io::AsRawFd;
             let fd = socket.as_raw_fd();
             let opt: libc::c_int = 1;
             unsafe {
@@ -149,7 +151,7 @@ impl DhcpMultiServer {
                     libc::SOL_SOCKET,
                     libc::SO_REUSEADDR,
                     &opt as *const _ as *const libc::c_void,
-                    std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+                    core::mem::size_of::<libc::c_int>() as libc::socklen_t,
                 );
             }
         }
@@ -275,7 +277,7 @@ fn handle_scope_message(
     msg: &DhcpMessage,
     src: SocketAddr,
     server_ip: Ipv4Addr,
-    socket: &std::net::UdpSocket,
+    socket: &crate::std::net::UdpSocket,
 ) -> Result<(), io::Error> {
     let mt = match msg.options.message_type {
         Some(m) => m,
@@ -296,7 +298,7 @@ fn handle_discover(
     scope: &mut DhcpScope,
     msg: &DhcpMessage,
     server_ip: Ipv4Addr,
-    socket: &std::net::UdpSocket,
+    socket: &crate::std::net::UdpSocket,
 ) -> Result<(), io::Error> {
     let mac = msg.client_mac();
     let ip = match scope.pool.allocate(
@@ -331,7 +333,7 @@ fn handle_request(
     scope: &mut DhcpScope,
     msg: &DhcpMessage,
     server_ip: Ipv4Addr,
-    socket: &std::net::UdpSocket,
+    socket: &crate::std::net::UdpSocket,
 ) -> Result<(), io::Error> {
     let mac = msg.client_mac();
     let ip = msg.options.requested_ip.unwrap_or(msg.ciaddr);
@@ -371,7 +373,7 @@ fn handle_inform(
     scope: &mut DhcpScope,
     msg: &DhcpMessage,
     server_ip: Ipv4Addr,
-    socket: &std::net::UdpSocket,
+    socket: &crate::std::net::UdpSocket,
 ) -> Result<(), io::Error> {
     let mac = msg.client_mac();
     let mut ack = DhcpMessage::ack(
@@ -398,15 +400,15 @@ fn send_reply(
     msg: &DhcpMessage,
     req: &DhcpMessage,
     server_ip: Ipv4Addr,
-    socket: &std::net::UdpSocket,
+    socket: &crate::std::net::UdpSocket,
 ) -> Result<(), io::Error> {
     let wire = msg.to_wire();
     let dest = if !req.giaddr.is_unspecified() {
-        SocketAddr::new(std::net::IpAddr::V4(req.giaddr), DHCP_SERVER_PORT)
+        SocketAddr::new(crate::std::net::IpAddr::V4(req.giaddr), DHCP_SERVER_PORT)
     } else if !req.broadcast {
-        SocketAddr::new(std::net::IpAddr::V4(req.ciaddr), DHCP_CLIENT_PORT)
+        SocketAddr::new(crate::std::net::IpAddr::V4(req.ciaddr), DHCP_CLIENT_PORT)
     } else {
-        SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT)
+        SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT)
     };
     socket.send_to(&wire, dest)?;
     Ok(())
@@ -417,11 +419,11 @@ fn send_nak(
     xid: u32,
     mac: [u8; 6],
     req: &DhcpMessage,
-    socket: &std::net::UdpSocket,
+    socket: &crate::std::net::UdpSocket,
 ) -> Result<(), io::Error> {
     let nak = DhcpMessage::nak(xid, server_ip, mac);
     let wire = nak.to_wire();
-    let dest = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
+    let dest = SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
     socket.send_to(&wire, dest)?;
     Ok(())
 }

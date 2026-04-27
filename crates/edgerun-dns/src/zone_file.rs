@@ -2,8 +2,9 @@
 //!
 //! Parses standard zone file format as used by BIND, PowerDNS, etc.
 
-use std::net::Ipv4Addr;
-use std::str::FromStr;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use crate::std::net::Ipv4Addr;
+use core::str::FromStr;
 
 use super::message::DnsRecord;
 use super::record::{DnsRecordData, DnsRecordType};
@@ -21,12 +22,12 @@ pub struct ZoneFileError {
     pub message: String,
 }
 
-impl std::fmt::Display for ZoneFileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ZoneFileError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "zone file error at line {}: {}", self.line, self.message)
     }
 }
-impl std::error::Error for ZoneFileError {}
+impl core::error::Error for ZoneFileError {}
 
 fn parse_err(line: usize, msg: &str) -> ZoneFileError {
     ZoneFileError {
@@ -82,7 +83,7 @@ impl ZoneFileParser {
         }
         let mut zone = DnsZone::new(&self.origin);
         zone.set_default_ttl(self.default_ttl);
-        let records = std::mem::take(&mut self.records);
+        let records = core::mem::take(&mut self.records);
         for rr in records {
             zone.add_record(rr);
         }
@@ -218,7 +219,7 @@ impl ZoneFileParser {
                 Ok(DnsRecord::a(owner.to_string(), ip, ttl))
             }
             DnsRecordType::AAAA => {
-                let ip = std::net::Ipv6Addr::from_str(expect(0, "AAAA: expected IPv6")?)
+                let ip = crate::std::net::Ipv6Addr::from_str(expect(0, "AAAA: expected IPv6")?)
                     .map_err(|e| parse_err(ln, &e.to_string()))?;
                 Ok(DnsRecord::aaaa(owner.to_string(), ip, ttl))
             }

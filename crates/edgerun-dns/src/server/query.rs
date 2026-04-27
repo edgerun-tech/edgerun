@@ -1,9 +1,10 @@
 //! DNS query processing — parsing, resolution, and upstream forwarding.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
 
-use edgerun_rt::AsyncUdpSocket;
+use crate::compat::AsyncUdpSocket;
 
 use crate::message::{DnsMessage, DnsOpcode, DnsRecord, DnsResponseCode};
 use crate::name::validate_name;
@@ -17,11 +18,11 @@ pub const MAX_UDP_RESPONSE: usize = 512;
 #[derive(Clone)]
 pub struct ServerState {
     /// DNS zones, keyed by origin domain name.
-    pub zones: Arc<edgerun_rt::RwLock<HashMap<String, DnsZone>>>,
+    pub zones: Arc<crate::compat::RwLock<HashMap<String, DnsZone>>>,
     /// Default TTL for newly created records.
     pub default_ttl: u32,
     /// Upstream resolver address for recursive forwarding (runtime-configurable).
-    pub forward_to: Arc<edgerun_rt::RwLock<Option<String>>>,
+    pub forward_to: Arc<crate::compat::RwLock<Option<String>>>,
 }
 
 /// Query parse failure — respond with FORMERR.
@@ -183,12 +184,12 @@ fn find_matching_zone_soa(qname: &str, zones: &HashMap<String, DnsZone>) -> Vec<
 pub async fn forward_query(
     upstream_addr: &str,
     query_wire: &[u8],
-) -> Result<Vec<u8>, std::io::Error> {
-    use std::net::SocketAddr;
+) -> Result<Vec<u8>, crate::std::io::Error> {
+    use crate::std::net::SocketAddr;
 
     let socket = AsyncUdpSocket::bind("0.0.0.0:0")?;
     let target: SocketAddr = upstream_addr.parse().map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "bad upstream address")
+        crate::std::io::Error::new(crate::std::io::ErrorKind::InvalidInput, "bad upstream address")
     })?;
 
     // Send the query
@@ -196,12 +197,12 @@ pub async fn forward_query(
 
     // Receive response with 5s timeout
     let mut buf = [0u8; 4096];
-    let (n, _) = edgerun_rt::timeout(
-        std::time::Duration::from_secs(5),
+    let (n, _) = crate::compat::timeout(
+        crate::std::time::Duration::from_secs(5),
         socket.recv_from(&mut buf),
     )
     .await
-    .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "upstream query timed out"))??;
+    .map_err(|_| crate::std::io::Error::new(crate::std::io::ErrorKind::TimedOut, "upstream query timed out"))??;
 
     Ok(buf[..n].to_vec())
 }

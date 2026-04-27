@@ -899,12 +899,10 @@ dependencies = [
 name = "edgerun-dns"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-log",
- "edgerun-rt",
- "edgerun-tls",
- "libc",
 ]
 
 [[package]]

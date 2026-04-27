@@ -1,10 +1,11 @@
 //! DHCPv4 client — implements the DORA (Discover-Offer-Request-Ack) process.
 
-use std::ffi::c_void;
-use std::io;
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
-use std::os::raw::c_int;
-use std::time::{Duration, Instant};
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use crate::std::ffi::c_void;
+use crate::std::io;
+use crate::std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use crate::std::os::raw::c_int;
+use crate::std::time::{Duration, Instant};
 
 use super::lease::Lease;
 use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
@@ -38,7 +39,7 @@ unsafe extern "C" {
 /// use edgerun_dns::dhcp::DhcpClient;
 ///
 /// let mut client = DhcpClient::new("eth0").unwrap();
-/// match client.acquire_lease(std::time::Duration::from_secs(10)) {
+/// match client.acquire_lease(crate::std::time::Duration::from_secs(10)) {
 ///     Ok(lease) => println!("Got IP: {}", lease.ip),
 ///     Err(e) => eprintln!("DHCP failed: {}", e),
 /// }
@@ -74,7 +75,7 @@ impl DhcpClient {
         // Bind to interface (Linux SO_BINDTODEVICE)
         #[cfg(target_os = "linux")]
         {
-            use std::os::unix::io::AsRawFd;
+            use crate::std::os::unix::io::AsRawFd;
             let fd = socket.as_raw_fd();
             let device_name = interface.as_bytes();
             let mut ifr_name = [0i8; 16];
@@ -219,7 +220,7 @@ impl DhcpClient {
 
         let msg = DhcpMessage::release(self.xid, self.mac, lease.ip, server_id);
         // Send to server (unicast)
-        let addr = SocketAddr::new(std::net::IpAddr::V4(server_id), DHCP_SERVER_PORT);
+        let addr = SocketAddr::new(crate::std::net::IpAddr::V4(server_id), DHCP_SERVER_PORT);
         let wire = msg.to_wire();
         let _ = self.socket.send_to(&wire, addr);
 
@@ -239,7 +240,7 @@ impl DhcpClient {
         msg.secs = self.secs_elapsed();
         let wire = msg.to_wire();
         let broadcast =
-            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
+            SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
         self.socket.send_to(&wire, broadcast)?;
         Ok(())
     }
@@ -249,14 +250,14 @@ impl DhcpClient {
         msg.secs = self.secs_elapsed();
         let wire = msg.to_wire();
         let broadcast =
-            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
+            SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
         self.socket.send_to(&wire, broadcast)?;
         Ok(())
     }
 
     fn send_message(&mut self, msg: &DhcpMessage, dest: Ipv4Addr) -> Result<(), io::Error> {
         let wire = msg.to_wire();
-        let addr = SocketAddr::new(std::net::IpAddr::V4(dest), DHCP_SERVER_PORT);
+        let addr = SocketAddr::new(crate::std::net::IpAddr::V4(dest), DHCP_SERVER_PORT);
         self.socket.send_to(&wire, addr)?;
         Ok(())
     }
@@ -264,7 +265,7 @@ impl DhcpClient {
     /// Broadcast a message to all DHCP servers (used for T2 rebind).
     fn send_broadcast(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let wire = msg.to_wire();
-        let addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
+        let addr = SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
         self.socket.send_to(&wire, addr)?;
         Ok(())
     }
@@ -338,7 +339,7 @@ impl DhcpClient {
         let (n, src) = self.socket.recv_from(&mut buf)?;
         let msg = DhcpMessage::from_wire(&buf[..n])?;
         let src_ip = match src.ip() {
-            std::net::IpAddr::V4(ip) => ip,
+            crate::std::net::IpAddr::V4(ip) => ip,
             _ => Ipv4Addr::UNSPECIFIED,
         };
         Ok((msg, src_ip))
@@ -361,7 +362,7 @@ impl DhcpClient {
 
 fn read_mac_from_interface(interface: &str) -> Result<[u8; 6], io::Error> {
     let path = format!("/sys/class/net/{}/address", interface);
-    let mac_str = std::fs::read_to_string(&path)?;
+    let mac_str = crate::std::fs::read_to_string(&path)?;
     edgerun_encoding::hex::parse_mac(mac_str.trim()).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,

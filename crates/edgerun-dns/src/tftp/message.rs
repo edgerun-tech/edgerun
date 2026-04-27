@@ -33,8 +33,9 @@
 //!   -------------------------------------------------
 //! ```
 
-use std::collections::HashMap;
-use std::io;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use crate::std::io;
 
 // ---------------------------------------------------------------------------
 // Constants

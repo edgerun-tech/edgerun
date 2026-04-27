@@ -1,7 +1,9 @@
 //! DHCP lease tracking.
 
-use std::net::Ipv4Addr;
-use std::time::{Duration, Instant};
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use core::fmt::Write;
+use crate::std::net::Ipv4Addr;
+use crate::std::time::{Duration, Instant};
 
 use edgerun_encoding::ip::{ip_to_u32, u32_to_ip};
 
@@ -130,15 +132,15 @@ pub struct LeasePool {
     /// End of the pool (inclusive).
     pub pool_end: Ipv4Addr,
     /// Active leases, keyed by IP (as u32).
-    pub leases: std::collections::HashMap<u32, Lease>,
+    pub leases: alloc::collections::BTreeMap<u32, Lease>,
     /// MAC → IP mapping for fast lookup.
-    pub mac_to_ip: std::collections::HashMap<[u8; 6], u32>,
+    pub mac_to_ip: alloc::collections::BTreeMap<[u8; 6], u32>,
     /// Client-ID → IP mapping (RFC 2131 §9: client-id takes precedence).
-    pub client_id_to_ip: std::collections::HashMap<Vec<u8>, u32>,
+    pub client_id_to_ip: alloc::collections::BTreeMap<Vec<u8>, u32>,
     /// Reserved IPs (not to be handed out).
-    pub reserved: std::collections::HashSet<u32>,
+    pub reserved: alloc::collections::BTreeSet<u32>,
     /// IPs that had conflicts (reported via DECLINE). Blacklisted temporarily.
-    pub conflicts: std::collections::HashMap<u32, Instant>,
+    pub conflicts: alloc::collections::BTreeMap<u32, Instant>,
 }
 
 impl LeasePool {
@@ -147,11 +149,11 @@ impl LeasePool {
         Self {
             pool_start,
             pool_end,
-            leases: std::collections::HashMap::new(),
-            mac_to_ip: std::collections::HashMap::new(),
-            client_id_to_ip: std::collections::HashMap::new(),
-            reserved: std::collections::HashSet::new(),
-            conflicts: std::collections::HashMap::new(),
+            leases: alloc::collections::BTreeMap::new(),
+            mac_to_ip: alloc::collections::BTreeMap::new(),
+            client_id_to_ip: alloc::collections::BTreeMap::new(),
+            reserved: alloc::collections::BTreeSet::new(),
+            conflicts: alloc::collections::BTreeMap::new(),
         }
     }
 
@@ -223,7 +225,7 @@ impl LeasePool {
                 // Expired conflict — clean up
                 self.conflicts.remove(&ip_u32);
             }
-            if let std::collections::hash_map::Entry::Vacant(e) = self.leases.entry(ip_u32) {
+            if let alloc::collections::btree_map::Entry::Vacant(e) = self.leases.entry(ip_u32) {
                 let ip = u32_to_ip(ip_u32);
                 let lease = Lease::offered(mac, ip, lease_time, xid);
                 e.insert(lease);
@@ -366,8 +368,8 @@ impl LeasePool {
     }
 
     /// Get lease state summary for monitoring.
-    pub fn state_summary(&self) -> std::collections::HashMap<&'static str, usize> {
-        let mut summary = std::collections::HashMap::new();
+    pub fn state_summary(&self) -> alloc::collections::BTreeMap<&'static str, usize> {
+        let mut summary = alloc::collections::BTreeMap::new();
         for lease in self.leases.values() {
             let key = match lease.state {
                 LeaseState::Offered => "offered",
@@ -383,9 +385,9 @@ impl LeasePool {
 
     /// Save the lease pool to a file for persistence.
     /// Format: one line per lease as `ip_u32,mac_hex,client_id_hex,lease_time,granted_at_epoch,xid`
-    pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
-        use std::io::Write;
-        let mut f = std::fs::File::create(path)?;
+    pub fn save_to_file(&self, path: &str) -> crate::std::io::Result<()> {
+        use crate::std::io::Write;
+        let mut f = crate::std::fs::File::create(path)?;
         writeln!(f, "# edgerun-dhcp lease database")?;
         writeln!(
             f,
@@ -399,8 +401,8 @@ impl LeasePool {
                 .as_ref()
                 .map(|c| edgerun_encoding::hex::bytes_to_hex_sep(c, ':'))
                 .unwrap_or_else(|| "-".to_string());
-            let epoch = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            let epoch = crate::std::time::SystemTime::now()
+                .duration_since(crate::std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0)
                 .saturating_sub(lease.granted_at.elapsed().as_secs());
@@ -415,11 +417,11 @@ impl LeasePool {
 
     /// Load leases from a file. Restores leases that haven't expired.
     /// Returns the number of leases restored.
-    pub fn load_from_file(&mut self, path: &str) -> std::io::Result<usize> {
-        let content = std::fs::read_to_string(path)?;
+    pub fn load_from_file(&mut self, path: &str) -> crate::std::io::Result<usize> {
+        let content = crate::std::fs::read_to_string(path)?;
         let mut restored = 0;
-        let now_epoch = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now_epoch = crate::std::time::SystemTime::now()
+            .duration_since(crate::std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
@@ -476,7 +478,7 @@ impl LeasePool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
+    use crate::std::thread;
 
     #[test]
     fn test_lease_expiry() {

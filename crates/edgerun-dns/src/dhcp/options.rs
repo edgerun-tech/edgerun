@@ -1,10 +1,11 @@
 //! DHCP options convenience helpers.
 
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use super::message::DhcpOptions;
 use super::message::{
     OPT_DNS_SERVER, OPT_LEASE_TIME, OPT_REBIND_TIME, OPT_RENEWAL_TIME, OPT_ROUTER, OPT_SUBNET_MASK,
 };
-use std::net::Ipv4Addr;
+use crate::std::net::Ipv4Addr;
 
 /// Builder for constructing DHCP option sets.
 pub struct OptionsBuilder {

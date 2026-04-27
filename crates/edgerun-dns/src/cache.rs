@@ -15,8 +15,9 @@
 //! // let cached = cache.get("example.com");
 //! ```
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use crate::std::time::{Duration, Instant};
 
 use super::message::DnsRecord;
 use super::record::DnsRecordType;
@@ -46,7 +47,7 @@ impl CacheEntry {
 /// Thread-safe via `Arc<Mutex<...>>`. Clone to share across tasks.
 #[derive(Clone)]
 pub struct DnsCache {
-    inner: std::sync::Arc<std::sync::Mutex<HashMap<String, CacheEntry>>>,
+    inner: alloc::sync::Arc<crate::std::sync::Mutex<HashMap<String, CacheEntry>>>,
     max_entries: usize,
 }
 
@@ -59,7 +60,7 @@ impl DnsCache {
     /// Create a cache with the given maximum entry count.
     pub fn with_capacity(max_entries: usize) -> Self {
         Self {
-            inner: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
+            inner: alloc::sync::Arc::new(crate::std::sync::Mutex::new(HashMap::new())),
             max_entries,
         }
     }
@@ -199,8 +200,8 @@ pub struct CacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
-    use std::str::FromStr;
+    use crate::std::net::Ipv4Addr;
+    use core::str::FromStr;
 
     fn make_a(ip: &str, ttl: u32) -> Vec<DnsRecord> {
         vec![DnsRecord::a(

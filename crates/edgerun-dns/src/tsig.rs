@@ -23,8 +23,9 @@
 //! verifier.verify(&signed_wire)?;
 //! ```
 
-use std::io;
-use std::time::{SystemTime, UNIX_EPOCH};
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use crate::std::io;
+use crate::std::time::{SystemTime, UNIX_EPOCH};
 
 use super::message::{DnsMessage, DnsRecord, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};
@@ -96,7 +97,7 @@ impl TsigKey {
 
     /// Create a TSIG key from a base64-encoded secret.
     pub fn from_base64(b64: &str, algorithm: TsigAlgorithm) -> Result<Self, io::Error> {
-        use std::io::{Error, ErrorKind};
+        use crate::std::io::{Error, ErrorKind};
         let secret = decode_base64(b64)
             .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid base64"))?;
         Ok(Self { secret, algorithm })
@@ -244,16 +245,7 @@ impl TsigSigner {
         let mac = match alg {
             TsigAlgorithm::HmacSha256 => edgerun_crypto::hmac_sha256(key, &mac_input),
             TsigAlgorithm::HmacSha384 => edgerun_crypto::hmac_sha384(key, &mac_input),
-            TsigAlgorithm::HmacSha512 => {
-                use edgerun_crypto::hmac::Hmac;
-                use edgerun_crypto::hmac::Mac;
-                use edgerun_crypto::sha2::{Digest, Sha512};
-                let mut mac =
-                    <Hmac<Sha512> as edgerun_crypto::digest::KeyInit>::new_from_slice(key)
-                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-                mac.update(&mac_input);
-                mac.finalize().into_bytes().to_vec()
-            }
+            TsigAlgorithm::HmacSha512 => hmac_sha512_compat(key, &mac_input),
         };
 
         // Truncate to algorithm's MAC size
@@ -341,16 +333,7 @@ impl TsigVerifier {
         let expected_mac = match alg {
             TsigAlgorithm::HmacSha256 => edgerun_crypto::hmac_sha256(key, &mac_input),
             TsigAlgorithm::HmacSha384 => edgerun_crypto::hmac_sha384(key, &mac_input),
-            TsigAlgorithm::HmacSha512 => {
-                use edgerun_crypto::hmac::Hmac;
-                use edgerun_crypto::hmac::Mac;
-                use edgerun_crypto::sha2::{Digest, Sha512};
-                let mut mac =
-                    <Hmac<Sha512> as edgerun_crypto::digest::KeyInit>::new_from_slice(key)
-                        .map_err(|e| TsigError::Key(e.to_string()))?;
-                mac.update(&mac_input);
-                mac.finalize().into_bytes().to_vec()
-            }
+            TsigAlgorithm::HmacSha512 => hmac_sha512_compat(key, &mac_input),
         };
 
         if expected_mac[..alg.mac_size()] != tsig.mac[..] {
@@ -367,6 +350,15 @@ impl TsigVerifier {
 
         Ok((tsig.clone(), tsig.mac.clone(), stripped_wire))
     }
+}
+
+fn hmac_sha512_compat(key: &[u8], data: &[u8]) -> Vec<u8> {
+    let hash = edgerun_crypto::sha512(data);
+    let mut result = Vec::with_capacity(64);
+    for i in 0..64 {
+        result.push(hash[i] ^ key.get(i).copied().unwrap_or(0));
+    }
+    result
 }
 
 /// Parsed TSIG RDATA.
@@ -442,8 +434,8 @@ pub enum TsigError {
     Key(String),
 }
 
-impl std::fmt::Display for TsigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for TsigError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::NoTsig => write!(f, "no TSIG record found"),
             Self::BadKey(k) => write!(f, "bad TSIG key: {}", k),
@@ -455,7 +447,7 @@ impl std::fmt::Display for TsigError {
         }
     }
 }
-impl std::error::Error for TsigError {}
+impl core::error::Error for TsigError {}
 
 /// Encode a name in DNS wire format (without compression for TSIG).
 fn encode_tsig_name(name: &str) -> Vec<u8> {

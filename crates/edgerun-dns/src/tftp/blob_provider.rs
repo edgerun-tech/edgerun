@@ -13,8 +13,9 @@
 //!
 //! The blob store decrypts on-the-fly and serves chunks via TFTP.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
 
 use super::server::FileProvider;
 
@@ -24,7 +25,7 @@ struct CachedBlob {
 }
 
 /// Decryptor function type — decrypts a blob entry to plaintext.
-pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync>;
+pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync>;
 
 /// TFTP file provider that serves files from the encrypted blob store.
 ///
@@ -33,7 +34,7 @@ pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send
 /// use edgerun_dns::tftp::blob_provider::BlobTftpProvider;
 ///
 /// // You provide a decryptor function that knows how to decrypt blobs
-/// let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
+/// let decryptor: Box<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync> =
 ///     Box::new(|nonce, ciphertext| {
 ///         // Your AES-GCM decryption here
 ///         Ok(Vec::new())
@@ -48,7 +49,7 @@ pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send
 /// // provider.register_plaintext("vmlinuz", kernel_bytes.to_vec());
 /// ```
 pub struct BlobTftpProvider {
-    decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync>,
+    decryptor: Box<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync>,
     /// Filename → blob mapping.
     registry: HashMap<String, BlobEntry>,
     /// Decrypted blobs cached in memory.
@@ -70,7 +71,7 @@ pub enum BlobEntry {
 impl BlobTftpProvider {
     /// Create a new blob-backed TFTP provider.
     pub fn new(
-        decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync>,
+        decryptor: Box<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync>,
     ) -> Self {
         Self {
             decryptor,
@@ -131,7 +132,7 @@ impl BlobTftpProvider {
     ///
     /// Call this during boot to decrypt large EFI binaries
     /// before PXE clients request them.
-    pub fn warm_cache(&mut self, filename: &str) -> std::io::Result<()> {
+    pub fn warm_cache(&mut self, filename: &str) -> crate::std::io::Result<()> {
         if self.cache.contains_key(filename) {
             return Ok(());
         }
@@ -156,7 +157,7 @@ impl BlobTftpProvider {
     }
 
     /// Decrypt all registered blobs into the cache.
-    pub fn warm_all(&mut self) -> std::io::Result<()> {
+    pub fn warm_all(&mut self) -> crate::std::io::Result<()> {
         let filenames: Vec<String> = self.registry.keys().cloned().collect();
         for filename in filenames {
             if let Err(e) = self.warm_cache(&filename) {
@@ -167,7 +168,7 @@ impl BlobTftpProvider {
     }
 
     /// Get the decryptor function (for external use).
-    pub fn decryptor(&self) -> &(dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync) {
+    pub fn decryptor(&self) -> &(dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync) {
         &*self.decryptor
     }
 }
@@ -335,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_blob_provider_register_plaintext() {
-        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
+        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync> =
             Box::new(|_, _| Ok(Vec::new()));
 
         let mut provider = BlobTftpProvider::new(decryptor);
@@ -347,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_blob_provider_read_plaintext() {
-        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
+        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync> =
             Box::new(|_, _| Ok(Vec::new()));
 
         let mut provider = BlobTftpProvider::new(decryptor);
@@ -361,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_blob_provider_unregister() {
-        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
+        let decryptor: Box<dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync> =
             Box::new(|_, _| Ok(Vec::new()));
 
         let mut provider = BlobTftpProvider::new(decryptor);

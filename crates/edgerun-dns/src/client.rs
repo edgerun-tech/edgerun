@@ -2,12 +2,13 @@
 //!
 //! Uses the edgerun-rt async runtime for non-blocking I/O.
 
-use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::pin::Pin;
-use std::time::Duration;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use crate::std::io;
+use crate::std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use core::pin::Pin;
+use crate::std::time::Duration;
 
-use edgerun_rt::AsyncUdpSocket;
+use crate::compat::AsyncUdpSocket;
 
 use super::message::{DnsMessage, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};
@@ -18,7 +19,7 @@ use super::record::{DnsRecordData, DnsRecordType};
 /// ```no_run
 /// use edgerun_dns::DnsClient;
 /// use edgerun_dns::record::DnsRecordType;
-/// use edgerun_rt::Runtime;
+/// use crate::compat::Runtime;
 ///
 /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 /// rt.block_on(async {
@@ -233,7 +234,7 @@ impl DnsClient {
         poll_send_to(&mut self.socket, &wire, self.server).await?;
 
         // Read response with timeout — async, non-blocking.
-        let response = edgerun_rt::timeout(self.timeout, poll_recv(&mut self.socket))
+        let response = crate::compat::timeout(self.timeout, poll_recv(&mut self.socket))
             .await
             .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "DNS query timed out"))??;
 
@@ -267,12 +268,12 @@ async fn poll_send_to(
     buf: &[u8],
     target: SocketAddr,
 ) -> io::Result<usize> {
-    use std::future::poll_fn;
+    use core::future::poll_fn;
     poll_fn(|cx| Pin::new(&mut *socket).poll_send_to(cx, buf, target)).await
 }
 
 async fn poll_recv(socket: &mut AsyncUdpSocket) -> io::Result<Vec<u8>> {
-    use std::future::poll_fn;
+    use core::future::poll_fn;
     let mut buf = [0u8; 4096];
     let (n, _src) = poll_fn(|cx| Pin::new(&mut *socket).poll_recv_from(cx, &mut buf)).await?;
     Ok(buf[..n].to_vec())

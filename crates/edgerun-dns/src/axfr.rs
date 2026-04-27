@@ -6,8 +6,9 @@
 //!
 //! Optionally secured with TSIG authentication.
 
-use std::collections::HashMap;
-use std::io;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use crate::std::io;
 
 use super::message::{DnsMessage, DnsOpcode, DnsQuestion, DnsRecord, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};
@@ -49,10 +50,10 @@ pub fn handle_axfr(query: &DnsMessage, zone: &DnsZone) -> Result<Vec<DnsMessage>
         let a_is_soa = a.rtype == DnsRecordType::SOA;
         let b_is_soa = b.rtype == DnsRecordType::SOA;
         if a_is_soa && !b_is_soa {
-            return std::cmp::Ordering::Less;
+            return core::cmp::Ordering::Less;
         }
         if !a_is_soa && b_is_soa {
-            return std::cmp::Ordering::Greater;
+            return core::cmp::Ordering::Greater;
         }
         // Then by name, then by type
         a.name
@@ -278,7 +279,7 @@ fn format_rdata(data: &DnsRecordData) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
+    use crate::std::net::Ipv4Addr;
 
     fn make_test_zone() -> DnsZone {
         let mut zone = DnsZone::new("example.com");

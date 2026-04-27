@@ -7,6 +7,7 @@
 //! - **PXE boot support** — option 66/67/93/94/97 for network boot
 //! - **Multiple scopes/subnets** — serve multiple subnets from one server
 
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 pub mod client;
 pub mod lease;
 pub mod message;

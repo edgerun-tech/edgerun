@@ -1,5 +1,6 @@
 //! DNS domain name validation (RFC 1035 §2.3.1, RFC 2181 §11).
 
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 /// Error returned when a domain name fails validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NameError {
@@ -35,8 +36,8 @@ pub enum NameError {
     Empty,
 }
 
-impl std::fmt::Display for NameError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for NameError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::TooLong { len } => {
                 write!(f, "domain name too long: {} characters (max 253)", len)
@@ -55,7 +56,7 @@ impl std::fmt::Display for NameError {
     }
 }
 
-impl std::error::Error for NameError {}
+impl core::error::Error for NameError {}
 
 /// Validate a domain name against RFC 1035 rules.
 ///

@@ -1,7 +1,8 @@
 //! DNS zone — in-memory zone file with record management.
 
-use std::collections::HashMap;
-use std::net::Ipv4Addr;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use crate::std::net::Ipv4Addr;
 
 use super::message::DnsRecord;
 use super::record::{DnsRecordData, DnsRecordType};
@@ -11,7 +12,7 @@ use super::record::{DnsRecordData, DnsRecordType};
 /// # Example
 /// ```
 /// use edgerun_dns::zone::DnsZone;
-/// use std::net::Ipv4Addr;
+/// use crate::std::net::Ipv4Addr;
 ///
 /// let mut zone = DnsZone::new("example.com");
 /// zone.add_soa("ns1.example.com", "admin.example.com");
@@ -56,7 +57,7 @@ impl DnsZone {
     }
 
     /// Add an AAAA record.
-    pub fn add_aaaa(&mut self, name: &str, ip: std::net::Ipv6Addr, ttl: u32) {
+    pub fn add_aaaa(&mut self, name: &str, ip: crate::std::net::Ipv6Addr, ttl: u32) {
         let full_name = self.full_name(name);
         let rr = DnsRecord::aaaa(full_name, ip, ttl);
         self.add_record(rr);

@@ -1,14 +1,15 @@
 //! Async DNS server — handles queries concurrently using edgerun-rt.
 //!
 //! Listens on both UDP and TCP. Each query is spawned as a separate
-//! async task via `edgerun_rt::spawn`.
+//! async task via `crate::compat::spawn`.
 
-use std::collections::HashMap;
-use std::io;
-use std::sync::Arc;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use crate::std::io;
+use alloc::sync::Arc;
 
-use edgerun_rt::AsyncTcpListener;
-use edgerun_rt::AsyncUdpSocket;
+use crate::compat::AsyncTcpListener;
+use crate::compat::AsyncUdpSocket;
 
 pub mod query;
 pub(crate) mod tcp;
@@ -48,24 +49,24 @@ pub struct RateLimiter {
     /// Max queries per second per IP. 0 = unlimited.
     max_qps: u32,
     /// Per-IP state: (token_count, last_refill_time).
-    state: Arc<std::sync::Mutex<HashMap<std::net::IpAddr, (u32, std::time::Instant)>>>,
+    state: Arc<crate::std::sync::Mutex<HashMap<crate::std::net::IpAddr, (u32, crate::std::time::Instant)>>>,
 }
 
 impl RateLimiter {
     pub fn new(max_qps: u32) -> Self {
         Self {
             max_qps,
-            state: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            state: Arc::new(crate::std::sync::Mutex::new(HashMap::new())),
         }
     }
 
     /// Check if a query from `addr` is allowed.
-    pub fn allow(&self, addr: std::net::IpAddr) -> bool {
+    pub fn allow(&self, addr: crate::std::net::IpAddr) -> bool {
         if self.max_qps == 0 {
             return true;
         }
         let mut guard = self.state.lock().unwrap();
-        let now = std::time::Instant::now();
+        let now = crate::std::time::Instant::now();
         let (tokens, last) = guard.entry(addr).or_insert((self.max_qps, now));
         let elapsed = now.duration_since(*last).as_secs_f64();
         *tokens = (*tokens as f64 + elapsed * self.max_qps as f64).min(self.max_qps as f64) as u32;
@@ -82,7 +83,7 @@ impl RateLimiter {
 /// DNS server — authoritative server for one or more zones.
 ///
 /// Listens on both UDP and TCP. Each query is handled concurrently
-/// via `edgerun_rt::spawn`.
+/// via `crate::compat::spawn`.
 ///
 /// # Graceful Shutdown
 /// Call [`DnsServer::shutdown()`] to stop the server loops. The [`DnsServer::run()`]
@@ -92,8 +93,8 @@ impl RateLimiter {
 /// ```no_run
 /// use edgerun_dns::server::{DnsServer, DnsServerConfig};
 /// use edgerun_dns::zone::DnsZone;
-/// use edgerun_rt::Runtime;
-/// use std::net::Ipv4Addr;
+/// use crate::compat::Runtime;
+/// use crate::std::net::Ipv4Addr;
 ///
 /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 /// rt.block_on(async {
@@ -112,7 +113,7 @@ pub struct DnsServer {
     state: ServerState,
     rate_limiter: RateLimiter,
     /// Shutdown signal — when set to true, server loops exit.
-    shutdown_flag: Arc<edgerun_rt::RwLock<bool>>,
+    shutdown_flag: Arc<crate::compat::RwLock<bool>>,
     /// Optional IPv6 UDP socket.
     udp_socket_ipv6: Option<Arc<AsyncUdpSocket>>,
     /// Optional IPv6 TCP listener.
@@ -144,12 +145,12 @@ impl DnsServer {
             udp_socket,
             tcp_listener,
             state: ServerState {
-                zones: Arc::new(edgerun_rt::RwLock::new(HashMap::new())),
+                zones: Arc::new(crate::compat::RwLock::new(HashMap::new())),
                 default_ttl: config.default_ttl,
-                forward_to: Arc::new(edgerun_rt::RwLock::new(None)),
+                forward_to: Arc::new(crate::compat::RwLock::new(None)),
             },
             rate_limiter: RateLimiter::new(config.rate_limit_qps),
-            shutdown_flag: Arc::new(edgerun_rt::RwLock::new(false)),
+            shutdown_flag: Arc::new(crate::compat::RwLock::new(false)),
             udp_socket_ipv6: udp_ipv6,
             tcp_listener_ipv6: tcp_ipv6,
         })
@@ -187,7 +188,7 @@ impl DnsServer {
             let state = self.state.clone();
             let rate_limiter = self.rate_limiter.clone();
             let shutdown = Arc::clone(&self.shutdown_flag);
-            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(
+            crate::compat::spawn(tcp::tcp_accept_loop_with_shutdown(
                 listener,
                 state,
                 rate_limiter,
@@ -202,13 +203,13 @@ impl DnsServer {
             let shutdown = Arc::clone(&self.shutdown_flag);
             let udp6 = Arc::clone(udp6);
             let tcp6 = Arc::clone(tcp6);
-            edgerun_rt::spawn(udp::udp_recv_loop_with_rate_limiting(
+            crate::compat::spawn(udp::udp_recv_loop_with_rate_limiting(
                 udp6,
                 state.clone(),
                 rate_limiter.clone(),
                 shutdown.clone(),
             ));
-            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(
+            crate::compat::spawn(tcp::tcp_accept_loop_with_shutdown(
                 tcp6,
                 state,
                 rate_limiter,

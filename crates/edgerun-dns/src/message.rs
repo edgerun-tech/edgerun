@@ -1,7 +1,8 @@
 //! DNS message parser/serializer — RFC 1035 wire format.
 
-use std::io;
-use std::net::Ipv4Addr;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use crate::std::io;
+use crate::std::net::Ipv4Addr;
 
 use super::record::{
     decode_domain_name, encode_domain_name, encode_domain_name_compressed, DnsRecordData,
@@ -365,7 +366,7 @@ impl DnsRecord {
     }
 
     /// Create an AAAA record (IPv6 address).
-    pub fn aaaa(name: String, ip: std::net::Ipv6Addr, ttl: u32) -> Self {
+    pub fn aaaa(name: String, ip: crate::std::net::Ipv6Addr, ttl: u32) -> Self {
         Self {
             name,
             rtype: DnsRecordType::AAAA,

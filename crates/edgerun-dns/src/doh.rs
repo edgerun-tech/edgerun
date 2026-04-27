@@ -4,8 +4,9 @@
 //! Supports both GET (base64url-encoded `dns` parameter) and
 //! POST (wire-format DNS message in body).
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
 
 use super::cache::DnsCache;
 use super::server::{handle_query, ServerState};
@@ -44,9 +45,9 @@ impl DohServer {
     pub fn new(config: DohServerConfig) -> Self {
         Self {
             state: ServerState {
-                zones: Arc::new(edgerun_rt::RwLock::new(HashMap::new())),
+                zones: Arc::new(crate::compat::RwLock::new(HashMap::new())),
                 default_ttl: 3600,
-                forward_to: Arc::new(edgerun_rt::RwLock::new(None)),
+                forward_to: Arc::new(crate::compat::RwLock::new(None)),
             },
             cache: None,
             config,

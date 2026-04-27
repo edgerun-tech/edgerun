@@ -1,9 +1,10 @@
 //! TFTP server — RFC 1350 with RFC 2347/2348 option negotiation.
 
-use std::collections::HashMap;
-use std::io;
-use std::net::{SocketAddr, UdpSocket};
-use std::time::Duration;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
+use crate::std::io;
+use crate::std::net::{SocketAddr, UdpSocket};
+use crate::std::time::Duration;
 
 use super::message::{TftpError, TftpMessage, TftpOptions};
 

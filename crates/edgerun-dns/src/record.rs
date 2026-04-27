@@ -1,15 +1,16 @@
 //! DNS record types and data structures.
 
-use std::fmt;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use core::fmt;
+use crate::std::net::Ipv4Addr;
+use crate::std::net::Ipv6Addr;
 
 // ---------------------------------------------------------------------------
 // Record type constants (RFC 1035 + extensions)
 // ---------------------------------------------------------------------------
 
 /// DNS record type (TYPE field in RR).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
 pub enum DnsRecordType {
     /// IPv4 address
@@ -701,7 +702,7 @@ impl DnsRecordData {
         rtype: DnsRecordType,
         data: &[u8],
         offset_map: &[(usize, usize)],
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, crate::std::io::Error> {
         match rtype {
             DnsRecordType::A => {
                 if data.len() == 4 {
@@ -713,7 +714,7 @@ impl DnsRecordData {
             DnsRecordType::AAAA => {
                 if data.len() == 16 {
                     let octets: [u8; 16] = data.try_into().map_err(|_| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, "AAAA wrong size")
+                        crate::std::io::Error::new(crate::std::io::ErrorKind::InvalidData, "AAAA wrong size")
                     })?;
                     Ok(Self::AAAA(Ipv6Addr::from(octets)))
                 } else {
@@ -1209,7 +1210,7 @@ pub fn decode_domain_name(
     data: &[u8],
     mut offset: usize,
     offset_map: &[(usize, usize)],
-) -> Result<String, std::io::Error> {
+) -> Result<String, crate::std::io::Error> {
     let mut labels = Vec::new();
 
     loop {
@@ -1225,8 +1226,8 @@ pub fn decode_domain_name(
         // Compression pointer (top 2 bits set)
         if (len_byte & 0xC0) == 0xC0 {
             if offset + 1 >= data.len() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
+                return Err(crate::std::io::Error::new(
+                    crate::std::io::ErrorKind::InvalidData,
                     "Truncated DNS pointer",
                 ));
             }
@@ -1247,8 +1248,8 @@ pub fn decode_domain_name(
         let len = len_byte as usize;
         offset += 1;
         if offset + len > data.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
+            return Err(crate::std::io::Error::new(
+                crate::std::io::ErrorKind::InvalidData,
                 "Truncated DNS label",
             ));
         }
@@ -1283,7 +1284,7 @@ fn domain_name_wire_len(data: &[u8], offset: usize) -> usize {
 }
 
 /// Decode a TSIG algorithm name (simple wire format, no compression).
-fn decode_tsig_name(data: &[u8], offset: usize) -> Result<String, std::io::Error> {
+fn decode_tsig_name(data: &[u8], offset: usize) -> Result<String, crate::std::io::Error> {
     let mut labels = Vec::new();
     let mut pos = offset;
     loop {
@@ -1296,8 +1297,8 @@ fn decode_tsig_name(data: &[u8], offset: usize) -> Result<String, std::io::Error
         }
         pos += 1;
         if pos + len > data.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
+            return Err(crate::std::io::Error::new(
+                crate::std::io::ErrorKind::InvalidData,
                 "truncated TSIG name",
             ));
         }

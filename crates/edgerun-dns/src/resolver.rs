@@ -1,3 +1,4 @@
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 type AnswerCacheEntry = (Vec<DnsRecord>, Instant);
 type NsCacheEntry = (Ipv4Addr, Instant);
 
@@ -11,11 +12,11 @@ type NsCacheEntry = (Ipv4Addr, Instant);
 //
 // Caches all intermediate results with TTL-based expiry.
 
-use std::collections::HashMap;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::time::{Duration, Instant};
+use alloc::collections::BTreeMap as HashMap;
+use crate::std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use crate::std::time::{Duration, Instant};
 
-use edgerun_rt::AsyncUdpSocket;
+use crate::compat::AsyncUdpSocket;
 
 use super::message::{DnsHeader, DnsMessage, DnsQuestion, DnsRecord, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};
@@ -94,9 +95,9 @@ pub struct RecursiveResolver {
     /// Root hints — starting point for iterative resolution.
     root_hints: Vec<RootHint>,
     /// Glue cache: nameserver name → IP address + expiry.
-    ns_cache: std::sync::Arc<std::sync::Mutex<HashMap<String, (Ipv4Addr, Instant)>>>,
+    ns_cache: alloc::sync::Arc<crate::std::sync::Mutex<HashMap<String, (Ipv4Addr, Instant)>>>,
     /// Answer cache: (name, type) → answer records + expiry.
-    answer_cache: std::sync::Arc<std::sync::Mutex<HashMap<String, (Vec<DnsRecord>, Instant)>>>,
+    answer_cache: alloc::sync::Arc<crate::std::sync::Mutex<HashMap<String, (Vec<DnsRecord>, Instant)>>>,
     /// UDP socket for outgoing queries.
     socket: AsyncUdpSocket,
     /// Query timeout.
@@ -107,12 +108,12 @@ pub struct RecursiveResolver {
 
 impl RecursiveResolver {
     /// Create a new recursive resolver.
-    pub fn new(root_hints: Vec<RootHint>) -> std::io::Result<Self> {
+    pub fn new(root_hints: Vec<RootHint>) -> crate::std::io::Result<Self> {
         let socket = AsyncUdpSocket::bind("0.0.0.0:0")?;
         Ok(Self {
             root_hints,
-            ns_cache: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
-            answer_cache: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
+            ns_cache: alloc::sync::Arc::new(crate::std::sync::Mutex::new(HashMap::new())),
+            answer_cache: alloc::sync::Arc::new(crate::std::sync::Mutex::new(HashMap::new())),
             socket,
             timeout: Duration::from_secs(5),
             max_depth: 10,
@@ -129,7 +130,7 @@ impl RecursiveResolver {
         &self,
         name: &str,
         qtype: DnsRecordType,
-    ) -> Result<Vec<DnsRecord>, std::io::Error> {
+    ) -> Result<Vec<DnsRecord>, crate::std::io::Error> {
         let name_lower = name.to_lowercase();
 
         if let Some(records) = self.get_cached_answer(&name_lower, qtype) {
@@ -152,17 +153,17 @@ impl RecursiveResolver {
         qtype: DnsRecordType,
         servers: Vec<Ipv4Addr>,
         depth: usize,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Vec<DnsRecord>, std::io::Error>> + Send + 'a>,
+    ) -> core::pin::Pin<
+        Box<dyn core::future::Future<Output = Result<Vec<DnsRecord>, crate::std::io::Error>> + Send + 'a>,
     > {
         Box::pin(async move {
             if depth >= self.max_depth {
-                return Err(std::io::Error::other(
+                return Err(crate::std::io::Error::other(
                     "recursive resolution exceeded max depth",
                 ));
             }
             if servers.is_empty() {
-                return Err(std::io::Error::other("no nameservers to query"));
+                return Err(crate::std::io::Error::other("no nameservers to query"));
             }
 
             for server in &servers {
@@ -172,7 +173,7 @@ impl RecursiveResolver {
                 let target = SocketAddr::V4(SocketAddrV4::new(*server, 53));
 
                 let response =
-                    match edgerun_rt::timeout(self.timeout, self.query_server(&wire, target)).await
+                    match crate::compat::timeout(self.timeout, self.query_server(&wire, target)).await
                     {
                         Ok(Ok(r)) => r,
                         Ok(Err(e)) => {
@@ -251,7 +252,7 @@ impl RecursiveResolver {
                 }
             }
 
-            Err(std::io::Error::other("all nameservers failed"))
+            Err(crate::std::io::Error::other("all nameservers failed"))
         })
     }
 
@@ -260,7 +261,7 @@ impl RecursiveResolver {
         &self,
         wire: &[u8],
         target: SocketAddr,
-    ) -> Result<Vec<u8>, std::io::Error> {
+    ) -> Result<Vec<u8>, crate::std::io::Error> {
         self.socket.send_to(wire, target).await?;
 
         let mut buf = [0u8; 4096];
@@ -382,7 +383,7 @@ impl RecursiveResolver {
     }
 
     fn random_id(&self) -> u16 {
-        use std::time::SystemTime;
+        use crate::std::time::SystemTime;
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap();
