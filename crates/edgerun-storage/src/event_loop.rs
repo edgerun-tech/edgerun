@@ -432,13 +432,14 @@ fn run_event_loop(
             }
         }
 
-        // Report success
-        let _ = request.result_tx.send(Ok(offset));
-
         // Materialize: update FileIndex from the event
         if let Err(e) = materialize_event_to_index(&index, event, offset) {
-            edgerun_log::warn!("materialize error: {e}");
+            let _ = request.result_tx.send(Err(e));
+            continue;
         }
+
+        // Report success after the event is durable and indexed.
+        let _ = request.result_tx.send(Ok(offset));
 
         // Dispatch to additional handlers
         let ctx = DispatchContext {

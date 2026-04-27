@@ -314,28 +314,67 @@ impl NodeStore {
             return Ok(None);
         };
 
-        match &self.backend {
+        let event = match &self.backend {
             EventBackend::Fs { .. } => read_event_at(
                 &self.config.data_root.join("events"),
                 stream_id,
                 seq,
                 entry.file_offset,
             ),
-            EventBackend::Block { store } => {
-                let location = EventLocation {
-                    stream_id: stream_id.to_vec(),
-                    seq,
-                    event_hash: entry.event_hash,
-                    file_offset: entry.file_offset,
-                    envelope_version: entry.envelope_version as u32,
-                };
+            EventBackend::Block { store } => store
+                .lock()
+                .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?
+                .get_event(stream_id, seq),
+        }?;
 
-                store
-                    .lock()
-                    .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?
-                    .get_event(stream_id, seq)
-            }
+        let Some(event) = event else {
+            return Ok(None);
+        };
+
+        if let Some(message) =
+            Self::get_indexed_event_hash_mismatch_message(stream_id, seq, &entry.event_hash, &event)
+        {
+            return Err(StorageError::Decode(message));
         }
+        Ok(Some(event))
+    }
+
+    /// Validates an event returned by a backend against the materialized index.
+    ///
+    /// The event log is authoritative, but callers using the index for fast
+    /// lookup should still reject stale or forged index records immediately.
+    fn get_indexed_event_hash_mismatch_message(
+        stream_id: &[u8],
+        seq: u64,
+        expected_hash: &[u8],
+        event: &EventEnvelope,
+    ) -> Option<String> {
+        if event.stream_id != stream_id {
+            return Some(format!(
+                "indexed event stream mismatch at seq {}: expected {}, got {}",
+                seq,
+                edgerun_core::util::bytes_to_hex(stream_id),
+                edgerun_core::util::bytes_to_hex(&event.stream_id)
+            ));
+        }
+        if event.seq != seq {
+            return Some(format!(
+                "indexed event seq mismatch at seq {}: envelope contains {}",
+                seq, event.seq
+            ));
+        }
+
+        let event_hash = crate::core::canonical_event_hash(event).value;
+        if expected_hash != event_hash {
+            return Some(format!(
+                "indexed event hash mismatch at seq {}: index has {}, log has {}",
+                seq,
+                edgerun_core::util::bytes_to_hex(expected_hash),
+                edgerun_core::util::bytes_to_hex(&event_hash)
+            ));
+        }
+
+        None
     }
 
     /// Returns the current head (latest seq + hash) for a stream.
@@ -1798,6 +1837,27 @@ mod tests {
         let from_log = store.get_event(b"stream", 1).unwrap().unwrap();
         assert_eq!(from_log.seq, 1);
         assert_eq!(from_log.stream_id, b"stream".to_vec());
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn get_event_rejects_index_hash_mismatch() {
+        let data_root = tmp_data_root();
+        let store = make_store(data_root.clone());
+        let stream_id = b"indexed-stream";
+        let event = event(stream_id, 0, None);
+        let offset = store.append_event_blocking(event).unwrap();
+
+        store.index.clear().unwrap();
+        let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+        store
+            .index
+            .put_event(&stream_id_hex, 0, &[0xff; 32], offset, 1)
+            .unwrap();
+
+        let err = store.get_event(stream_id, 0).unwrap_err();
+        assert!(matches!(err, StorageError::Decode(_)));
 
         let _ = std::fs::remove_dir_all(data_root);
     }
