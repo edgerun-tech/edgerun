@@ -151,14 +151,13 @@ impl Response {
         let status =
             StatusCode::new(status).map_err(|_| crate::Error::InvalidStatusCode(status))?;
 
-        let header_end = raw[line_end..]
-            .find("\r\n\r\n")
-            .map(|i| line_end + i)
-            .ok_or_else(|| {
-                crate::Error::InvalidResponse("Missing header terminator".to_string())
-            })?;
+        let header_start = line_end + 2;
+        let terminator = raw.find("\r\n\r\n").ok_or_else(|| {
+            crate::Error::InvalidResponse("Missing header terminator".to_string())
+        })?;
+        let header_end = terminator.max(header_start);
         let mut headers = HeaderMap::new();
-        for line in raw[line_end + 2..header_end].lines() {
+        for line in raw[header_start..header_end].lines() {
             if let Some(colon) = line.find(':') {
                 let name = line[..colon].trim();
                 let value = line[colon + 1..].trim();
@@ -168,7 +167,7 @@ impl Response {
             }
         }
 
-        let body_start = header_end + 4;
+        let body_start = terminator + 4;
         let raw_body = raw.get(body_start..).unwrap_or_default();
         let mut trailers = HeaderMap::new();
         let body = if (100..200).contains(&status.as_u16())

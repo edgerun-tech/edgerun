@@ -79,10 +79,10 @@ impl HuffmanDecoder {
 
             if current_len > 0 && current_len <= MAX_CODE_LEN {
                 if let Some(symbol) = lookup_symbol(current, current_len) {
-                    if symbol == 255u8 {
+                    if symbol == 256 {
                         return Err(HuffmanDecoderError::EOSInString);
                     }
-                    result.push(symbol);
+                    result.push(symbol as u8);
                     current = 0;
                     current_len = 0;
                 }
@@ -90,18 +90,23 @@ impl HuffmanDecoder {
         }
 
         if current_len > 0 {
-            return Err(HuffmanDecoderError::InvalidPadding);
+            if current_len > 7 {
+                return Err(HuffmanDecoderError::PaddingTooLarge);
+            }
+            if current != (1u32 << current_len) - 1 {
+                return Err(HuffmanDecoderError::InvalidPadding);
+            }
         }
 
         Ok(result)
     }
 }
 
-fn lookup_symbol(code: u32, len: u8) -> Option<u8> {
+fn lookup_symbol(code: u32, len: u8) -> Option<usize> {
     for i in 0..257 {
         let (table_code, table_len) = HUFFMAN_CODE_TABLE[i];
         if table_len == len && table_code == code {
-            return Some(i as u8);
+            return Some(i);
         }
     }
     None

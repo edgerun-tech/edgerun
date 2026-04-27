@@ -53,17 +53,26 @@ impl Request {
         let target = parts
             .next()
             .ok_or_else(|| crate::Error::InvalidRequest("No request target".to_string()))?;
+        let version = parts
+            .next()
+            .ok_or_else(|| crate::Error::InvalidRequest("No HTTP version".to_string()))?;
+        if !version.starts_with("HTTP/") {
+            return Err(crate::Error::InvalidRequest(
+                "Invalid HTTP version".to_string(),
+            ));
+        }
 
         let method = method_str
             .parse()
             .map_err(|e: String| crate::Error::InvalidRequest(e))?;
 
-        let header_end = raw[line_end..]
+        let header_start = line_end + 2;
+        let terminator = raw
             .find("\r\n\r\n")
-            .map(|i| line_end + i)
-            .unwrap_or(raw.len());
+            .ok_or_else(|| crate::Error::InvalidRequest("Missing header terminator".to_string()))?;
+        let header_end = terminator.max(header_start);
 
-        let header_block = &raw[line_end + 2..header_end];
+        let header_block = &raw[header_start..header_end];
         let mut headers = HeaderMap::new();
         for line in header_block.lines() {
             if let Some(colon) = line.find(':') {
@@ -77,6 +86,12 @@ impl Request {
 
         let uri = if target.starts_with("http://") || target.starts_with("https://") {
             Uri::parse(target).map_err(crate::Error::InvalidUri)?
+        } else if target == "*" {
+            let host = headers
+                .get("Host")
+                .map(|v| v.as_str())
+                .unwrap_or("localhost");
+            Uri::parse(&format!("http://{host}/")).map_err(crate::Error::InvalidUri)?
         } else {
             let host = headers
                 .get("Host")
@@ -90,9 +105,19 @@ impl Request {
             Uri::parse(&uri_str).map_err(crate::Error::InvalidUri)?
         };
 
-        let body = if header_end + 4 < raw.len() {
-            let body_str = &raw[header_end + 4..];
-            if let Some(cl) = headers.get("content-length") {
+        let body_start = terminator + 4;
+        let body = if body_start < raw.len() {
+            let body_str = &raw[body_start..];
+            if headers
+                .get("transfer-encoding")
+                .map(|v| v.as_str().to_ascii_lowercase().contains("chunked"))
+                .unwrap_or(false)
+            {
+                Some(
+                    crate::http1::chunked::parse_chunked_body(body_str.as_bytes())
+                        .map_err(|e| crate::Error::InvalidRequest(e.to_string()))?,
+                )
+            } else if let Some(cl) = headers.get("content-length") {
                 if let Ok(len) = cl.as_str().parse::<usize>() {
                     Some(body_str[..len.min(body_str.len())].as_bytes().to_vec())
                 } else {
