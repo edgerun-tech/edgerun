@@ -423,44 +423,12 @@ impl NodeStore {
     fn apply_block_followup_events(
         &self,
         event: &EventEnvelope,
-        location: &EventLocation,
+        _location: &EventLocation,
     ) -> Result<(), StorageError> {
         if event.event_type == OpEventType::FetchRequested.as_i32() {
             if let Some(payload) = &event.payload_object {
                 let target_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
                 self.index.enqueue_fetch("object", &target_id, 0)?;
-            }
-        }
-
-        if event.event_type == OpEventType::PeerDiscovered.as_i32() {
-            let attempt_event = EventEnvelope {
-                envelope_version: event.envelope_version,
-                stream_id: event.stream_id.clone(),
-                seq: location.seq.saturating_add(1),
-                prev_event_hash: Some(Digest {
-                    algorithm: 1,
-                    value: location.event_hash.clone(),
-                }),
-                event_type: OpEventType::ConnectionAttempt.as_i32(),
-                event_version: event.event_version,
-                recorded_at: None,
-                effective_at: None,
-                payload_object: None,
-                related_events: vec![],
-                related_commands: vec![],
-                related_objects: vec![],
-                related_delegations: vec![],
-                related_revocations: vec![],
-                event_metadata: None,
-                signature: None,
-            };
-
-            match &self.backend {
-                EventBackend::Block { store } => {
-                    let _ =
-                        self.append_event_blocking_to_block_store(attempt_event, store, false)?;
-                }
-                EventBackend::Fs { .. } => {}
             }
         }
 
@@ -1837,6 +1805,22 @@ mod tests {
         let from_log = store.get_event(b"stream", 1).unwrap().unwrap();
         assert_eq!(from_log.seq, 1);
         assert_eq!(from_log.stream_id, b"stream".to_vec());
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn block_mode_does_not_append_unsigned_peer_followup() {
+        let data_root = tmp_data_root();
+        let (store, _device) = make_block_store(data_root.clone());
+
+        let mut discovered = event(b"peer-stream", 0, None);
+        discovered.event_type = OpEventType::PeerDiscovered.as_i32();
+        store.append_event_blocking(discovered).unwrap();
+
+        let head = store.get_head(b"peer-stream").unwrap().unwrap();
+        assert_eq!(head.0, 0);
+        assert!(store.get_event(b"peer-stream", 1).unwrap().is_none());
 
         let _ = std::fs::remove_dir_all(data_root);
     }

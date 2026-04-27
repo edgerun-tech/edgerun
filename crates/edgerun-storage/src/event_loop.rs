@@ -524,25 +524,10 @@ pub struct PeerDiscoveryHandler;
 impl EventHandler for PeerDiscoveryHandler {
     fn handle(&self, event: &EventEnvelope, ctx: &DispatchContext) -> Result<(), StorageError> {
         if event.event_type == OpEventType::PeerDiscovered.as_i32() {
-            let attempt_event = EventEnvelope {
-                envelope_version: 1,
-                stream_id: event.stream_id.clone(),
-                seq: 0,
-                prev_event_hash: None,
-                event_type: OpEventType::ConnectionAttempt.as_i32(),
-                event_version: 1,
-                recorded_at: None,
-                effective_at: None,
-                payload_object: None,
-                related_events: vec![],
-                related_commands: vec![],
-                related_objects: vec![],
-                related_delegations: vec![],
-                related_revocations: vec![],
-                event_metadata: None,
-                signature: None,
-            };
-            let _ = ctx.produce_event(attempt_event);
+            if let Some(payload) = &event.payload_object {
+                let node_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                ctx.index.upsert_peer(&node_id, None, "discovered", false)?;
+            }
         }
         Ok(())
     }
