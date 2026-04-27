@@ -30,6 +30,8 @@ mod task_map;
 mod task_map_test;
 mod tcp;
 mod tcp_socket;
+#[cfg(test)]
+mod test_util;
 mod timers;
 mod trace;
 mod udp;

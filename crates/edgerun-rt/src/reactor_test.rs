@@ -2,25 +2,10 @@
 //! FdInterest waker fire logic directly without the runtime.
 
 use crate::reactor::Reactor;
+use crate::test_util::noop_waker;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::task::Waker;
 use std::time::{Duration, Instant};
-
-static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
-    static VTABLE: std::task::RawWakerVTable =
-        std::task::RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
-    const fn clone_noop(_: *const ()) -> std::task::RawWaker {
-        std::task::RawWaker::new(std::ptr::null(), &VTABLE)
-    }
-    const fn wake_noop(_: *const ()) {}
-    const fn drop_noop(_: *const ()) {}
-    unsafe { Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
-});
-
-fn noop_waker() -> Waker {
-    NOOP_WAKER.clone()
-}
 
 #[test]
 fn reactor_creation() {
