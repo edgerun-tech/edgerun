@@ -33,8 +33,46 @@
 //!   -------------------------------------------------
 //! ```
 
-use std::collections::HashMap;
-use std::io;
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::str::FromStr;
+
+pub mod io {
+    use alloc::string::{String, ToString};
+
+    #[derive(Debug, Clone, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+        message: String,
+    }
+
+    #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+    pub enum ErrorKind {
+        InvalidData,
+    }
+
+    impl Error {
+        pub fn new(kind: ErrorKind, message: impl ToString) -> Self {
+            Self {
+                kind,
+                message: message.to_string(),
+            }
+        }
+
+        pub fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+    }
+
+    impl core::fmt::Display for Error {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str(&self.message)
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -157,9 +195,9 @@ impl Default for TftpOptions {
 
 impl TftpOptions {
     /// Parse options from a client RRQ option section.
-    pub fn parse_from_request(data: &[u8], offset: usize) -> (Self, HashMap<String, String>) {
+    pub fn parse_from_request(data: &[u8], offset: usize) -> (Self, BTreeMap<String, String>) {
         let mut opts = Self::default();
-        let mut raw = HashMap::new();
+        let mut raw = BTreeMap::new();
 
         if offset >= data.len() {
             return (opts, raw);
@@ -171,13 +209,13 @@ impl TftpOptions {
             raw.insert(key.clone(), value.clone());
             match key_lower.as_str() {
                 "blksize" => {
-                    if let Ok(bs) = value.parse::<u16>() {
+                    if let Ok(bs) = u16::from_str(&value) {
                         opts.blksize = bs.clamp(8, MAX_BLKSIZE);
                     }
                 }
                 "tsize" => {
                     // Client sends "0" to request tsize; server responds with actual size
-                    if let Ok(size) = value.parse::<u64>() {
+                    if let Ok(size) = u64::from_str(&value) {
                         if size > 0 {
                             opts.tsize = Some(size);
                         }
@@ -185,7 +223,7 @@ impl TftpOptions {
                     }
                 }
                 "timeout" => {
-                    if let Ok(t) = value.parse::<u8>() {
+                    if let Ok(t) = u8::from_str(&value) {
                         if t >= 1 {
                             opts.timeout = t;
                         }
@@ -235,7 +273,7 @@ pub enum TftpMessage {
         filename: String,
         mode: String,
         options: TftpOptions,
-        raw_options: HashMap<String, String>,
+        raw_options: BTreeMap<String, String>,
     },
     /// Write request from client (not supported for PXE, returns error).
     WRQ { filename: String, mode: String },
@@ -250,6 +288,16 @@ pub enum TftpMessage {
 }
 
 impl TftpMessage {
+    /// Convenience: create an octet-mode read request.
+    pub fn rrq(filename: &str) -> Self {
+        Self::RRQ {
+            filename: filename.to_string(),
+            mode: "octet".to_string(),
+            options: TftpOptions::default(),
+            raw_options: BTreeMap::new(),
+        }
+    }
+
     /// Serialize this message to wire format.
     pub fn to_wire(&self) -> Vec<u8> {
         match self {
@@ -357,7 +405,7 @@ impl TftpMessage {
                 let (options, raw_options) = if after_mode < mode_data.len() {
                     TftpOptions::parse_from_request(mode_data, after_mode)
                 } else {
-                    (TftpOptions::default(), HashMap::new())
+                    (TftpOptions::default(), BTreeMap::new())
                 };
 
                 Ok(Self::RRQ {

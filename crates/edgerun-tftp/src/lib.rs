@@ -2,6 +2,10 @@
 
 #![no_std]
 
+extern crate alloc;
+
+pub mod message;
+
 pub const TFTP_PORT: u16 = 69;
 pub const TFTP_BLOCK_SIZE: usize = 512;
 pub const TFTP_MAX_BLOCK: usize = 65535;

@@ -14,4 +14,5 @@ edgerun-virtio = { path = "../edgerun-virtio" }
 edgerun-platform = { path = "../edgerun-platform" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-dhcp = { path = "../edgerun-dhcp" }
+edgerun-tftp = { path = "../edgerun-tftp" }
 getrandom = { version = "0.2", features = ["rdrand"] }

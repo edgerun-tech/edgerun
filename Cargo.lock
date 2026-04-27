@@ -1746,6 +1746,7 @@ dependencies = [
  "edgerun-bare-rt",
  "edgerun-dhcp",
  "edgerun-platform",
+ "edgerun-tftp",
  "edgerun-virtio",
  "getrandom 0.2.17",
 ]

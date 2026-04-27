@@ -5,13 +5,15 @@
 
 extern crate edgerun_bare_rt as rt;
 extern crate edgerun_dhcp;
+extern crate edgerun_tftp;
 extern crate edgerun_virtio;
 extern crate edgerun_platform;
 
 use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
+use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
 use rt::{
-    block_on, crc32, IpAddr, IpStack, Network, Rng, RingBuffer, TcpSocket, TftpConfig,
+    block_on, crc32, IpAddr, IpStack, Network, Rng, RingBuffer, TcpSocket,
 };
 use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
 
@@ -202,6 +204,10 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     let mut dhcp_ip = IpAddr::zero();
     let mut dhcp_netmask = IpAddr::new(255, 255, 255, 0);
     let mut dhcp_gateway = IpAddr::zero();
+    let mut offered_ip = None;
+    let mut offered_netmask = None;
+    let mut offered_gateway = None;
+    let mut requested_lease = false;
     let mut network = Network::new(&mut stack);
     
     let discover = DhcpMessage::discover(dhcp_xid, mac).to_wire();
@@ -230,20 +236,59 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             if let Some(ParsedPacket::Udp { header, payload, .. }) = network.recv(&rx_buf[..len]) {
                 if header.src_port == DHCP_SERVER_PORT && header.dst_port == DHCP_CLIENT_PORT {
                     if let Ok(message) = DhcpMessage::from_wire(payload) {
-                        let lease_response = matches!(
-                            message.options.message_type,
-                            Some(DhcpMessageType::Offer) | Some(DhcpMessageType::Ack)
-                        );
-                        if message.xid == dhcp_xid && lease_response && message.chaddr[..6] == mac {
-                            dhcp_ip = dhcp_ipv4_to_rt(message.yiaddr);
-                            if let Some(netmask) = message.options.subnet_mask {
-                                dhcp_netmask = dhcp_ipv4_to_rt(netmask);
+                        if message.xid != dhcp_xid || message.chaddr[..6] != mac {
+                            continue;
+                        }
+
+                        match message.options.message_type {
+                            Some(DhcpMessageType::Offer) if !requested_lease => {
+                                let Some(server_id) = message.options.server_id else {
+                                    continue;
+                                };
+                                offered_ip = Some(message.yiaddr);
+                                offered_netmask = message.options.subnet_mask;
+                                offered_gateway = message.options.router;
+
+                                let request =
+                                    DhcpMessage::request(dhcp_xid, mac, message.yiaddr, server_id)
+                                        .to_wire();
+                                if let Some(pkt) = network.send_udp(
+                                    IpAddr::new(255, 255, 255, 255),
+                                    DHCP_CLIENT_PORT,
+                                    DHCP_SERVER_PORT,
+                                    &request,
+                                ) {
+                                    if net.send(pkt) {
+                                        requested_lease = true;
+                                        rt::log::log(1, "DHCP request queued");
+                                    } else {
+                                        rt::log::log(1, "DHCP request send failed");
+                                    }
+                                }
                             }
-                            if let Some(gateway) = message.options.router {
-                                dhcp_gateway = dhcp_ipv4_to_rt(gateway);
+                            Some(DhcpMessageType::Ack) if requested_lease => {
+                                dhcp_ip = dhcp_ipv4_to_rt(message.yiaddr);
+                                if dhcp_ip == IpAddr::zero() {
+                                    if let Some(ip) = offered_ip {
+                                        dhcp_ip = dhcp_ipv4_to_rt(ip);
+                                    }
+                                }
+                                if let Some(netmask) =
+                                    message.options.subnet_mask.or(offered_netmask)
+                                {
+                                    dhcp_netmask = dhcp_ipv4_to_rt(netmask);
+                                }
+                                if let Some(gateway) = message.options.router.or(offered_gateway) {
+                                    dhcp_gateway = dhcp_ipv4_to_rt(gateway);
+                                }
+                                rt::log::log(1, "DHCP lease accepted");
+                                break;
                             }
-                            rt::log::log(1, "DHCP lease accepted");
-                            break;
+                            Some(DhcpMessageType::Nak) => {
+                                rt::log::log(1, "DHCP lease rejected");
+                                break;
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -272,9 +317,22 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         stack.ip = IpAddr::new(192, 168, 1, 12);
     }
 
-    let network = Network::new(&mut stack);
+    let mut network = Network::new(&mut stack);
+    let tftp_server = if network.stack.gateway != IpAddr::zero() {
+        network.stack.gateway
+    } else {
+        IpAddr::new(192, 168, 1, 1)
+    };
+    let rrq = TftpMessage::rrq("edgerun.bin").to_wire();
+    rt::log::log(1, "Sending TFTP RRQ");
+    if let Some(pkt) = network.send_udp(tftp_server, 2070, TFTP_PORT, &rrq) {
+        if net.send(pkt) {
+            rt::log::log(1, "TFTP RRQ queued");
+        } else {
+            rt::log::log(1, "TFTP RRQ send failed");
+        }
+    }
     
-    let _tftp = TftpConfig::new(0xC0A80101, "edgerun.bin");
     let mut tcp = TcpSocket::new();
     
     let addr = rt::SocketAddr::new(0xC0A8010C, 8080);
