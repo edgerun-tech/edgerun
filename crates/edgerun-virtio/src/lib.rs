@@ -31,8 +31,9 @@ const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
 const QUEUE_SIZE: usize = 8;
 const RX_QUEUE: u16 = 0;
 const TX_QUEUE: u16 = 1;
-const NET_HDR_LEN: usize = 12;
+const NET_HDR_LEN: usize = core::mem::size_of::<VirtioNetHdr>();
 const BUFFER_SIZE: usize = 2048;
+const TX_FREE_ALL_MASK: u16 = (1u16 << QUEUE_SIZE) - 1;
 const VIRTQ_DESC_F_WRITE: u16 = 2;
 
 const PCI_CONFIG_ADDRESS: u16 = 0xcf8;
@@ -65,6 +66,32 @@ struct ModernNetDevice {
     device: VirtioPciCap,
     isr: Option<VirtioPciCap>,
 }
+
+// QEMU's modern virtio-net path consumes the 12-byte header layout here; using
+// the shorter 10-byte base header shifts Ethernet frames and breaks DHCP.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct VirtioNetHdr {
+    flags: u8,
+    gso_type: u8,
+    hdr_len: u16,
+    gso_size: u16,
+    csum_start: u16,
+    csum_offset: u16,
+    num_buffers: u16,
+}
+
+const _: [(); 12] = [(); core::mem::size_of::<VirtioNetHdr>()];
+
+const EMPTY_NET_HDR: VirtioNetHdr = VirtioNetHdr {
+    flags: 0,
+    gso_type: 0,
+    hdr_len: 0,
+    gso_size: 0,
+    csum_start: 0,
+    csum_offset: 0,
+    num_buffers: 0,
+};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -141,7 +168,7 @@ static mut TX_USED: VirtqUsed = VirtqUsed {
     ring: [EMPTY_USED_ELEM; QUEUE_SIZE],
     avail_event: 0,
 };
-static mut TX_BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+static mut TX_BUFFERS: PacketBuffers = PacketBuffers([[0; BUFFER_SIZE]; QUEUE_SIZE]);
 
 pub struct VirtNet {
     mac: [u8; 6],
@@ -162,7 +189,7 @@ pub struct VirtNet {
     tx_notify_off: u16,
     rx_last_used_idx: u16,
     tx_last_used_idx: u16,
-    tx_inflight: bool,
+    tx_free_mask: u16,
     tx_submitted: u32,
     tx_completed: u32,
     rx_received: u32,
@@ -201,7 +228,7 @@ impl VirtNet {
             tx_notify_off: 0,
             rx_last_used_idx: 0,
             tx_last_used_idx: 0,
-            tx_inflight: false,
+            tx_free_mask: TX_FREE_ALL_MASK,
             tx_submitted: 0,
             tx_completed: 0,
             rx_received: 0,
@@ -333,17 +360,19 @@ impl VirtNet {
 
         unsafe {
             self.reap_tx_used();
-            if self.tx_inflight {
-                return false;
-            }
+            let desc_id = match self.take_tx_descriptor() {
+                Some(desc_id) => desc_id,
+                None => return false,
+            };
 
-            let buffer = core::ptr::addr_of_mut!(TX_BUFFER) as *mut u8;
-            core::ptr::write_bytes(buffer, 0, NET_HDR_LEN);
+            let buffer = (core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut [u8; BUFFER_SIZE])
+                .add(desc_id as usize) as *mut u8;
+            core::ptr::write(buffer as *mut VirtioNetHdr, EMPTY_NET_HDR);
             core::ptr::copy_nonoverlapping(data.as_ptr(), buffer.add(NET_HDR_LEN), data.len());
 
             let desc = core::ptr::addr_of_mut!(TX_DESC.0) as *mut VirtqDesc;
             core::ptr::write(
-                desc,
+                desc.add(desc_id as usize),
                 VirtqDesc {
                     addr: buffer as u64,
                     len: (data.len() + NET_HDR_LEN) as u32,
@@ -354,10 +383,12 @@ impl VirtNet {
 
             let avail = core::ptr::addr_of_mut!(TX_AVAIL);
             let idx = read_volatile_u16(core::ptr::addr_of!((*avail).idx));
-            core::ptr::write_volatile((*avail).ring.as_mut_ptr().add((idx as usize) % QUEUE_SIZE), 0);
+            core::ptr::write_volatile(
+                (*avail).ring.as_mut_ptr().add((idx as usize) % QUEUE_SIZE),
+                desc_id,
+            );
             fence(Ordering::SeqCst);
             write_volatile_u16(core::ptr::addr_of_mut!((*avail).idx), idx.wrapping_add(1));
-            self.tx_inflight = true;
             self.tx_submitted = self.tx_submitted.wrapping_add(1);
         }
 
@@ -512,12 +543,26 @@ impl VirtNet {
 
     unsafe fn init_tx_queue(&mut self) {
         self.tx_last_used_idx = 0;
-        self.tx_inflight = false;
+        self.tx_free_mask = TX_FREE_ALL_MASK;
         self.tx_submitted = 0;
         self.tx_completed = 0;
         write_volatile_u16(core::ptr::addr_of_mut!(TX_AVAIL.idx), 0);
         write_volatile_u16(core::ptr::addr_of_mut!(TX_USED.idx), 0);
-        core::ptr::write_bytes(core::ptr::addr_of_mut!(TX_BUFFER) as *mut u8, 0, BUFFER_SIZE);
+        core::ptr::write_bytes(
+            core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut u8,
+            0,
+            QUEUE_SIZE * BUFFER_SIZE,
+        );
+    }
+
+    fn take_tx_descriptor(&mut self) -> Option<u16> {
+        if self.tx_free_mask == 0 {
+            return None;
+        }
+
+        let desc_id = self.tx_free_mask.trailing_zeros() as u16;
+        self.tx_free_mask &= !(1u16 << desc_id);
+        Some(desc_id)
     }
 
     unsafe fn post_rx_descriptor(&self, desc_id: u16) {
@@ -534,12 +579,14 @@ impl VirtNet {
     unsafe fn reap_tx_used(&mut self) {
         let used = core::ptr::addr_of!(TX_USED);
         let used_idx = read_volatile_u16(core::ptr::addr_of!((*used).idx));
-        if used_idx != self.tx_last_used_idx {
-            self.tx_completed = self
-                .tx_completed
-                .wrapping_add(used_idx.wrapping_sub(self.tx_last_used_idx) as u32);
-            self.tx_last_used_idx = used_idx;
-            self.tx_inflight = false;
+        while self.tx_last_used_idx != used_idx {
+            let ring_idx = (self.tx_last_used_idx as usize) % QUEUE_SIZE;
+            let elem = read_volatile_used_elem((*used).ring.as_ptr().add(ring_idx));
+            if elem.id < QUEUE_SIZE as u32 {
+                self.tx_free_mask |= 1u16 << elem.id;
+            }
+            self.tx_last_used_idx = self.tx_last_used_idx.wrapping_add(1);
+            self.tx_completed = self.tx_completed.wrapping_add(1);
         }
     }
 
