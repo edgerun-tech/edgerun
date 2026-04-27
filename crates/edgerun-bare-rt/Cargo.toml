@@ -6,3 +6,4 @@ license = "MIT"
 
 [dependencies]
 edgerun-platform = { path = "../edgerun-platform" }
+edgerun-log = { path = "../edgerun-log" }

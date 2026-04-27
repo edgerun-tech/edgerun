@@ -1,31 +1,64 @@
-pub struct Level(u8);
+//! Bare-metal adapter for the central `edgerun-log` crate.
 
-impl Level {
-    pub const Error: Self = Self(1);
-    pub const Warn: Self = Self(2);
-    pub const Info: Self = Self(3);
-    pub const Debug: Self = Self(4);
-    pub const Trace: Self = Self(5);
+use core::fmt::{self, Write};
+use core::sync::atomic::{AtomicBool, Ordering};
 
-    pub const ERROR: Self = Self(1);
-    pub const WARN: Self = Self(2);
-    pub const INFO: Self = Self(3);
-    pub const DEBUG: Self = Self(4);
-    pub const TRACE: Self = Self(5);
+pub use edgerun_log::{
+    clear_format_logger, clear_logger, debug, enabled, error, info, level, set_format_logger,
+    set_level, trace, warn, Level,
+};
+
+static SERIAL_LOGGER_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+pub fn init_serial_logger() {
+    if SERIAL_LOGGER_INSTALLED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    edgerun_log::set_format_logger(serial_logger);
 }
 
 #[inline]
-pub fn log(_level: u8, _msg: &str) {
-    #[cfg(target_arch = "x86_64")]
-    {
-        let serial_port = 0x3F8u16;
-        for byte in _msg.bytes() {
-            unsafe {
-                core::arch::asm!("out dx, al", in("al") byte, in("dx") serial_port);
-            }
-        }
+pub fn log(level: u8, message: &str) {
+    init_serial_logger();
+    edgerun_log::log(level_from_legacy(level), "edgerun_bare_rt", message);
+}
+
+fn level_from_legacy(level: u8) -> Level {
+    match level {
+        0 => Level::Trace,
+        1 => Level::Info,
+        2 => Level::Warn,
+        3 => Level::Error,
+        4 => Level::Debug,
+        _ => Level::Trace,
+    }
+}
+
+fn serial_logger(level: Level, module: &str, args: fmt::Arguments<'_>) {
+    let mut writer = SerialWriter;
+    let _ = write!(writer, "[{}] {}: ", level.as_str(), module);
+    let _ = writer.write_fmt(args);
+    let _ = writer.write_str("\n");
+}
+
+struct SerialWriter;
+
+impl Write for SerialWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        serial_write_str(s);
+        Ok(())
+    }
+}
+
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
+fn serial_write_str(s: &str) {
+    let serial_port = 0x3F8u16;
+    for byte in s.bytes() {
         unsafe {
-            core::arch::asm!("out dx, al", in("al") b'\n', in("dx") serial_port);
+            core::arch::asm!("out dx, al", in("al") byte, in("dx") serial_port);
         }
     }
 }
+
+#[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+fn serial_write_str(_s: &str) {}

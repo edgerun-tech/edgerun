@@ -14,17 +14,13 @@ pub enum IoError {
     Other(&'static str),
 }
 
-impl core::fmt::Display for IoError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::UnexpectedEof => write!(f, "unexpected end of file"),
-            Self::WriteZero => write!(f, "write zero"),
-            Self::Other(s) => write!(f, "{}", s),
-        }
+crate::error::impl_error!(IoError, |this, f| {
+    match this {
+        IoError::UnexpectedEof => write!(f, "unexpected end of file"),
+        IoError::WriteZero => write!(f, "write zero"),
+        IoError::Other(s) => write!(f, "{}", s),
     }
-}
-
-impl core::error::Error for IoError {}
+});
 
 #[cfg(not(target_os = "none"))]
 impl From<IoError> for std::io::Error {

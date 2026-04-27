@@ -30,7 +30,7 @@ use core::result::Result::{self, Err, Ok};
 use edgerun_hardware_signing::HardwareSigningError;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRouter};
-use edgerun_mesh_capability::{MeshCapabilityServer, MeshEnvelopeDispatcher};
+use edgerun_mesh_capability::{sync::{Arc, Mutex}, MeshCapabilityServer, MeshEnvelopeDispatcher};
 use edgerun_mesh_link::MeshLink;
 use edgerun_mesh_session::{HandshakeAccept, HandshakeInit, SessionError, SessionManager};
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;
@@ -41,21 +41,14 @@ use libc::{c_int, pollfd, POLLIN};
 #[cfg(target_os = "none")]
 use bare_poll::{c_int, pollfd, POLLIN};
 #[cfg(target_os = "none")]
-use edgerun_mesh_capability::sync::{Arc, Mutex};
-#[cfg(target_os = "none")]
 use edgerun_mesh_link::io;
 #[cfg(target_os = "none")]
 use bare_time::Instant;
-#[cfg(target_os = "none")]
 use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_os = "none")]
 use core::time::Duration;
 #[cfg(not(target_os = "none"))]
 use std::io;
-#[cfg(not(target_os = "none"))]
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(not(target_os = "none"))]
-use std::sync::{Arc, Mutex};
 #[cfg(not(target_os = "none"))]
 use std::time::{Duration, Instant};
 

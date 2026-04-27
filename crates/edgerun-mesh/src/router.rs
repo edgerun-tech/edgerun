@@ -1,6 +1,7 @@
 use crate::{
     FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
 };
+use crate::collections::HashMap;
 use edgerun_hardware_signing::{NodeID, MESH_SIGNATURE_LENGTH};
 
 // ---------------------------------------------------------------------------
@@ -14,7 +15,7 @@ pub struct MeshRouter {
     /// This node's local identity.
     pub(crate) local: LocalNode,
     /// Direct peers (cost 1) keyed by NodeID.
-    peers: std::collections::HashMap<NodeID, MeshPeer>,
+    peers: HashMap<NodeID, MeshPeer>,
     /// The computed routing table.
     routing_table: MeshRoutingTable,
     /// Default TTL for outbound frames.
@@ -27,7 +28,7 @@ impl MeshRouter {
     pub fn new(local: LocalNode) -> Self {
         Self {
             local,
-            peers: std::collections::HashMap::new(),
+            peers: HashMap::new(),
             routing_table: MeshRoutingTable::default(),
             default_ttl: 16,
             heartbeat_interval_secs: 5,

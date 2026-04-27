@@ -92,8 +92,8 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
 };
 use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
 use prost::Message;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use crate::collections::VecDeque;
+use crate::sync::{Arc, Mutex};
 
 pub use client::MeshCapabilityClient;
 pub use dispatcher::MeshEnvelopeDispatcher;

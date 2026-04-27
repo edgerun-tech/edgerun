@@ -10,8 +10,8 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
 };
 use edgerun_remote_capability::RemoteCapabilityProvider;
 use prost::Message;
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use crate::collections::{HashMap, VecDeque};
+use crate::sync::{Arc, Mutex};
 
 use super::*;
 

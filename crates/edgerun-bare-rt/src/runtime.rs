@@ -130,13 +130,7 @@ impl Drop for Runtime {
 #[derive(Debug, Clone, Copy)]
 pub struct JoinError;
 
-impl core::fmt::Display for JoinError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("join error")
-    }
-}
-
-impl core::error::Error for JoinError {}
+crate::error::impl_error!(JoinError, |_this, f| { f.write_str("join error") });
 
 struct JoinState<T> {
     result: crate::sync::Mutex<Option<Result<T, JoinError>>>,

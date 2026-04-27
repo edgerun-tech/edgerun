@@ -1,11 +1,12 @@
-//! Minimal logging.
+//! Minimal no_std logging facade.
 
 #![no_std]
 
-use core::fmt;
+use core::fmt::{self, Write};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(usize)]
 pub enum Level {
     Trace = 0,
     Debug = 1,
@@ -26,128 +27,205 @@ impl Level {
     }
 }
 
+pub type Logger = fn(Level, &str, &str);
+pub type FormatLogger = fn(Level, &str, fmt::Arguments<'_>);
+
 static LOG_LEVEL: AtomicUsize = AtomicUsize::new(Level::Info as usize);
+static LOGGER_FN: AtomicUsize = AtomicUsize::new(0);
+static FORMAT_LOGGER_FN: AtomicUsize = AtomicUsize::new(0);
 
 pub fn set_level(level: Level) {
     LOG_LEVEL.store(level as usize, Ordering::Relaxed);
 }
 
+pub fn level() -> Level {
+    match LOG_LEVEL.load(Ordering::Relaxed) {
+        0 => Level::Trace,
+        1 => Level::Debug,
+        2 => Level::Info,
+        3 => Level::Warn,
+        _ => Level::Error,
+    }
+}
+
 pub fn init_from_env() {}
 
-type LogFn = Option<fn(Level, &str, &str)>;
-
-static LOGGER_FN: AtomicUsize = AtomicUsize::new(0);
-
-pub fn set_logger(logger: fn(Level, &str, &str)) {
+pub fn set_logger(logger: Logger) {
     LOGGER_FN.store(logger as usize, Ordering::Relaxed);
 }
 
-struct LogWriter {
-    buf: [u8; 256],
-    pos: usize,
+pub fn clear_logger() {
+    LOGGER_FN.store(0, Ordering::Relaxed);
 }
 
-impl LogWriter {
-    fn new() -> Self {
-        Self {
-            buf: [0; 256],
-            pos: 0,
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        let len = s.len();
-        if self.pos + len < 256 {
-            self.buf[self.pos..self.pos + len].copy_from_slice(s.as_bytes());
-            self.pos += len;
-        }
-    }
-
-    fn finish(&mut self) -> &str {
-        self.buf[self.pos..].fill(0);
-        self.pos = 0;
-        unsafe { core::str::from_utf8_unchecked(&self.buf[..0]) }
-    }
+pub fn set_format_logger(logger: FormatLogger) {
+    FORMAT_LOGGER_FN.store(logger as usize, Ordering::Relaxed);
 }
 
-static WRITER: AtomicUsize = AtomicUsize::new(0);
+pub fn clear_format_logger() {
+    FORMAT_LOGGER_FN.store(0, Ordering::Relaxed);
+}
 
-fn get_writer() -> &'static mut LogWriter {
-    unsafe { &mut *(WRITER.load(Ordering::Relaxed) as *mut LogWriter) }
+pub fn enabled(level: Level) -> bool {
+    (level as usize) >= LOG_LEVEL.load(Ordering::Relaxed)
 }
 
 pub fn log(level: Level, module: &str, message: &str) {
-    if (level as usize) < LOG_LEVEL.load(Ordering::Relaxed) {
+    log_args(level, module, format_args!("{message}"));
+}
+
+pub fn log_args(level: Level, module: &str, args: fmt::Arguments<'_>) {
+    if !enabled(level) {
         return;
     }
-    let logger_fn = LOGGER_FN.load(Ordering::Relaxed);
-    if logger_fn != 0 {
-        let f: LogFn = unsafe { core::mem::transmute(logger_fn) };
-        if let Some(logger) = f {
-            logger(level, module, message);
+
+    let format_logger = FORMAT_LOGGER_FN.load(Ordering::Relaxed);
+    if format_logger != 0 {
+        let logger: FormatLogger = unsafe { core::mem::transmute(format_logger) };
+        logger(level, module, args);
+        return;
+    }
+
+    let logger = LOGGER_FN.load(Ordering::Relaxed);
+    if logger == 0 {
+        return;
+    }
+
+    let mut buffer = FixedBuffer::new();
+    let _ = buffer.write_fmt(args);
+    let logger: Logger = unsafe { core::mem::transmute(logger) };
+    logger(level, module, buffer.as_str());
+}
+
+pub fn write(level: Level, module: &str, value: impl fmt::Display) {
+    log_args(level, module, format_args!("{value}"));
+}
+
+struct FixedBuffer {
+    bytes: [u8; 512],
+    len: usize,
+}
+
+impl FixedBuffer {
+    const fn new() -> Self {
+        Self {
+            bytes: [0; 512],
+            len: 0,
         }
+    }
+
+    fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.bytes[..self.len]).unwrap_or("<invalid log message>")
     }
 }
 
-pub fn write(level: Level, module: &str, f: impl fmt::Display) -> &str {
-    if (level as usize) < LOG_LEVEL.load(Ordering::Relaxed) {
-        return "";
+impl Write for FixedBuffer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let available = self.bytes.len().saturating_sub(self.len);
+        if available == 0 {
+            return Ok(());
+        }
+
+        let mut copy_len = available.min(s.len());
+        while !s.is_char_boundary(copy_len) {
+            copy_len -= 1;
+        }
+        self.bytes[self.len..self.len + copy_len].copy_from_slice(&s.as_bytes()[..copy_len]);
+        self.len += copy_len;
+        Ok(())
     }
-    let mut w = WRITER.load(Ordering::Relaxed);
-    if w == 0 {
-        return "";
-    }
-    unsafe { &mut *(w as *mut LogWriter) };
-    ""
 }
 
 #[macro_export]
 macro_rules! trace {
-    ($msg:expr) => { $crate::log($crate::Level::Trace, module_path!(), $msg) };
+    ($msg:expr) => {
+        $crate::log($crate::Level::Trace, module_path!(), $msg)
+    };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        {
-        let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
-        $crate::log($crate::Level::Trace, module_path!(), _msg)
-        }
+        $crate::log_args($crate::Level::Trace, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
+
 #[macro_export]
 macro_rules! debug {
-    ($msg:expr) => { $crate::log($crate::Level::Debug, module_path!(), $msg) };
+    ($msg:expr) => {
+        $crate::log($crate::Level::Debug, module_path!(), $msg)
+    };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        {
-        let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
-        $crate::log($crate::Level::Debug, module_path!(), _msg)
-        }
+        $crate::log_args($crate::Level::Debug, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
+
 #[macro_export]
 macro_rules! info {
-    ($msg:expr) => { $crate::log($crate::Level::Info, module_path!(), $msg) };
+    ($msg:expr) => {
+        $crate::log($crate::Level::Info, module_path!(), $msg)
+    };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        {
-        let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
-        $crate::log($crate::Level::Info, module_path!(), _msg)
-        }
+        $crate::log_args($crate::Level::Info, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
+
 #[macro_export]
 macro_rules! warn {
-    ($msg:expr) => { $crate::log($crate::Level::Warn, module_path!(), $msg) };
+    ($msg:expr) => {
+        $crate::log($crate::Level::Warn, module_path!(), $msg)
+    };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        {
-        let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
-        $crate::log($crate::Level::Warn, module_path!(), _msg)
-        }
+        $crate::log_args($crate::Level::Warn, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
+
 #[macro_export]
 macro_rules! error {
-    ($msg:expr) => { $crate::log($crate::Level::Error, module_path!(), $msg) };
-    ($fmt:literal, $($a:expr),* $(,)?) => {
-        {
-        let _msg = core::concat!($fmt, ": ", core::stringify!($($a),*));
-        $crate::log($crate::Level::Error, module_path!(), _msg)
-        }
+    ($msg:expr) => {
+        $crate::log($crate::Level::Error, module_path!(), $msg)
     };
+    ($fmt:literal, $($a:expr),* $(,)?) => {
+        $crate::log_args($crate::Level::Error, module_path!(), core::format_args!($fmt, $($a),*))
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+    static LAST_LEN: AtomicUsize = AtomicUsize::new(0);
+
+    fn test_logger(_level: Level, _module: &str, message: &str) {
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        LAST_LEN.store(message.len(), Ordering::SeqCst);
+        assert_eq!(message, "value=42");
+    }
+
+    #[test]
+    fn formats_arguments_before_calling_legacy_logger() {
+        CALLS.store(0, Ordering::SeqCst);
+        LAST_LEN.store(0, Ordering::SeqCst);
+        clear_format_logger();
+        set_logger(test_logger);
+        set_level(Level::Trace);
+
+        log_args(Level::Info, "test", format_args!("value={}", 42));
+
+        assert_eq!(CALLS.load(Ordering::SeqCst), 1);
+        assert_eq!(LAST_LEN.load(Ordering::SeqCst), "value=42".len());
+        clear_logger();
+    }
+
+    #[test]
+    fn filters_below_current_level() {
+        CALLS.store(0, Ordering::SeqCst);
+        clear_format_logger();
+        set_logger(test_logger);
+        set_level(Level::Warn);
+
+        log_args(Level::Info, "test", format_args!("value={}", 42));
+
+        assert_eq!(CALLS.load(Ordering::SeqCst), 0);
+        clear_logger();
+        set_level(Level::Info);
+    }
 }

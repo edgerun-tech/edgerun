@@ -55,13 +55,7 @@ pub fn sleep_until(deadline: Instant) -> Sleep {
 #[derive(Debug)]
 pub struct Elapsed;
 
-impl core::fmt::Display for Elapsed {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "timeout elapsed")
-    }
-}
-
-impl core::error::Error for Elapsed {}
+crate::error::impl_error!(Elapsed, |_this, f| { write!(f, "timeout elapsed") });
 
 pub struct Timeout<F> {
     inner: Option<F>,
