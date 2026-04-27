@@ -26,15 +26,18 @@ protected:
 
     movl $0x8000, %edi
     xorl %eax, %eax
-    movl $3072, %ecx
+    movl $6144, %ecx
     rep stosl
 
     movl $0x9003, 0x8000
     movl $0xa003, 0x9000
+    movl $0xb003, 0x9008
+    movl $0xc003, 0x9010
+    movl $0xd003, 0x9018
 
     movl $0x00000083, %eax
     movl $0xa000, %edi
-    movl $512, %ecx
+    movl $2048, %ecx
 1:
     movl %eax, (%edi)
     addl $0x200000, %eax

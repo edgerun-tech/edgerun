@@ -35,7 +35,7 @@ timeout "$timeout_seconds" qemu-system-x86_64 \
     -boot a \
     -device "loader,file=$kernel_bin,addr=0x100000,force-raw=on" \
     -netdev user,id=n0 \
-    -device virtio-net-pci,netdev=n0 \
+    -device virtio-net-pci,disable-legacy=on,disable-modern=off,netdev=n0 \
     2>&1 | tee "$qemu_log"
 qemu_status=${PIPESTATUS[0]}
 set -e
