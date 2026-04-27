@@ -443,7 +443,9 @@ fn control_transfer_with_valid_proof_commits() {
         "command",
         mapping([
             ("command_type", ystr("TRANSFER_CONTROL")),
+            ("command_id", ystr("ctrl-transfer")),
             ("issuer", ystr("controller-a")),
+            ("target_node", ystr("node-a")),
             ("from", ystr("controller-a")),
             ("to", ystr("controller-b")),
         ]),
@@ -452,6 +454,7 @@ fn control_transfer_with_valid_proof_commits() {
         _ => unreachable!(),
     };
     let state = match mapping([
+        ("local_node", ystr("node-a")),
         ("current_controller_set", seq([ystr("controller-a")])),
         (
             "control_policy",
