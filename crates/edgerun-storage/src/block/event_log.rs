@@ -322,6 +322,29 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
                 location.file_offset, event.seq
             )));
         }
+        if location.stream_id != event.stream_id {
+            return Err(StorageError::Decode(format!(
+                "event location stream mismatch at offset {}: location has {}, event has {}",
+                location.file_offset,
+                edgerun_core::util::bytes_to_hex(&location.stream_id),
+                edgerun_core::util::bytes_to_hex(&event.stream_id),
+            )));
+        }
+        if location.seq != event.seq {
+            return Err(StorageError::Decode(format!(
+                "event location seq mismatch at offset {}: location has {}, event has {}",
+                location.file_offset, location.seq, event.seq
+            )));
+        }
+        let event_hash = canonical_event_hash(&event).value;
+        if location.event_hash != event_hash {
+            return Err(StorageError::Decode(format!(
+                "event hash mismatch at offset {}: location has {}, event has {}",
+                location.file_offset,
+                edgerun_core::util::bytes_to_hex(&location.event_hash),
+                edgerun_core::util::bytes_to_hex(&event_hash),
+            )));
+        }
 
         Ok(Some(event))
     }
@@ -578,5 +601,26 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(read.stream_id, envelope.stream_id);
+    }
+
+    #[test]
+    fn block_event_log_rejects_location_hash_mismatch() {
+        let device = InMemoryBlockDevice::new(16, 32);
+        let mut log = BlockEventLog::open(device).unwrap();
+        let event = envelope(b"stream", 0, 1);
+        let receipt = log.append_event(&event).unwrap();
+
+        let bad_location = EventLocation {
+            stream_id: event.stream_id.clone(),
+            seq: event.seq,
+            event_hash: vec![0xff; 32],
+            file_offset: receipt.file_offset,
+            envelope_version: event.envelope_version,
+        };
+
+        let err = log
+            .read_event(&event.stream_id, event.seq, &bad_location)
+            .unwrap_err();
+        assert!(matches!(err, StorageError::Decode(_)));
     }
 }
