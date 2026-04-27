@@ -1,0 +1,9 @@
+id: trust/20-revocation-empty-issuer-reject
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: revocation record with empty issuer is structurally invalid
+tags:
+- trust
+- validate_trust
