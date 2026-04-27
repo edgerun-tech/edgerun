@@ -9,7 +9,7 @@ use crate::http2::pool::Http2Pool;
 use crate::method::Method;
 use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
-use edgerun_rt::sync::Mutex;
+use edgerun_bare_rt::sync::Mutex;
 use std::sync::Arc;
 use std::time::Duration;
 

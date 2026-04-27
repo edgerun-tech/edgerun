@@ -1,6 +1,6 @@
 [package]
 name = "edgerun-edit"
-version = "0.1.1"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 
@@ -10,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 edgerun-http = { path = "../edgerun-http" }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 syn = { version = "2", features = ["full", "parsing", "extra-traits", "printing"] }
 proc-macro2 = "1"
 quote = "1"

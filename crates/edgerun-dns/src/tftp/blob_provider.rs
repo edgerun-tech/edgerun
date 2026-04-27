@@ -13,9 +13,15 @@
 //!
 //! The blob store decrypts on-the-fly and serves chunks via TFTP.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use alloc::collections::BTreeMap as HashMap;
 use alloc::sync::Arc;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::server::FileProvider;
 
@@ -168,7 +174,9 @@ impl BlobTftpProvider {
     }
 
     /// Get the decryptor function (for external use).
-    pub fn decryptor(&self) -> &(dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync) {
+    pub fn decryptor(
+        &self,
+    ) -> &(dyn Fn(&[u8], &[u8]) -> crate::std::io::Result<Vec<u8>> + Send + Sync) {
         &*self.decryptor
     }
 }

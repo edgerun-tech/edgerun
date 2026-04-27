@@ -1,7 +1,7 @@
 [package]
 name = "edgerun-proxy"
-version = "0.1.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "HTTP proxy server with CONNECT support for HTTPS tunneling"
 
 [dependencies]

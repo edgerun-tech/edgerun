@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use edgerun_rt::CancellationToken;
+use crate::rt::CancellationToken;
 
 use crate::smtp::relay::bounce::{send_bounce, BounceConfig};
 use crate::smtp::relay::queue::MailIndex;
@@ -71,7 +71,7 @@ impl DeliveryWorker {
             // Dequeue messages due for delivery
             let messages = self.queue.dequeue_due(now, self.config.batch_size).await;
             if messages.is_empty() {
-                edgerun_rt::sleep(self.config.poll_interval).await;
+                crate::rt::sleep(self.config.poll_interval).await;
                 continue;
             }
 

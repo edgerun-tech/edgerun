@@ -1,55 +1,42 @@
 //! Shared HTTP error types
 
+#[cfg(target_os = "none")]
+use crate::std_compat as std;
+#[cfg(target_os = "none")]
+use crate::std_compat::prelude::v1::*;
+use edgerun_error::Error;
 use std::fmt;
 
 /// HTTP error type — covers HTTP/1.1, HTTP/2, and HTTP/3 errors
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Invalid URI
+    #[error("Invalid URI: {0}")]
     InvalidUri(String),
     /// Invalid header
+    #[error("Invalid header: {0}")]
     InvalidHeader(String),
     /// Network error
+    #[error("Network error: {0}")]
     Network(std::io::Error),
     /// Invalid HTTP method
+    #[error("Invalid method: {0}")]
     InvalidMethod(String),
     /// Invalid HTTP request
+    #[error("Invalid request: {0}")]
     InvalidRequest(String),
     /// Invalid status code
+    #[error("Invalid status code: {0}")]
     InvalidStatusCode(u16),
     /// Request timeout
+    #[error("Request timeout")]
     Timeout,
     /// HTTP protocol error
+    #[error("Protocol error: {0}")]
     ProtocolError(String),
     /// Invalid response
+    #[error("Invalid response: {0}")]
     InvalidResponse(String),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::InvalidUri(msg) => write!(f, "Invalid URI: {msg}"),
-            Error::InvalidHeader(msg) => write!(f, "Invalid header: {msg}"),
-            Error::Network(err) => write!(f, "Network error: {err}"),
-            Error::InvalidMethod(msg) => write!(f, "Invalid method: {msg}"),
-            Error::InvalidRequest(msg) => write!(f, "Invalid request: {msg}"),
-            Error::InvalidStatusCode(code) => {
-                write!(f, "Invalid status code: {code}")
-            }
-            Error::Timeout => write!(f, "Request timeout"),
-            Error::ProtocolError(msg) => write!(f, "Protocol error: {msg}"),
-            Error::InvalidResponse(msg) => write!(f, "Invalid response: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Error::Network(err) => Some(err),
-            _ => None,
-        }
-    }
 }
 
 impl From<std::io::Error> for Error {
@@ -68,15 +55,19 @@ impl From<crate::http2::Http2Error> for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Unified HTTP error type that wraps HTTP/1.1, HTTP/2, and HTTP/3 errors
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum HttpError {
     /// HTTP/1.1 error
+    #[error("HTTP/1.1 error: {0}")]
     Http1(Error),
     /// HTTP/2 error
+    #[error("HTTP/2 error: {0}")]
     Http2(Http2ErrorInner),
     /// HTTP/3 error
+    #[error("HTTP/3 error: {0}")]
     Http3(Http3ErrorInner),
     /// I/O error
+    #[error("I/O error: {0}")]
     Io(std::io::Error),
 }
 
@@ -98,36 +89,15 @@ pub struct Http3ErrorInner {
     pub reason: String,
 }
 
-impl fmt::Display for HttpError {
+impl fmt::Display for Http2ErrorInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            HttpError::Http1(err) => write!(f, "HTTP/1.1 error: {}", err),
-            HttpError::Http2(inner) => {
-                write!(
-                    f,
-                    "HTTP/2 error (0x{:02x}): {}",
-                    inner.error_code, inner.reason
-                )
-            }
-            HttpError::Http3(inner) => {
-                write!(
-                    f,
-                    "HTTP/3 error (0x{:02x}): {}",
-                    inner.error_code, inner.reason
-                )
-            }
-            HttpError::Io(err) => write!(f, "I/O error: {}", err),
-        }
+        write!(f, "0x{:02x}: {}", self.error_code, self.reason)
     }
 }
 
-impl std::error::Error for HttpError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            HttpError::Http1(err) => Some(err),
-            HttpError::Io(err) => Some(err),
-            _ => None,
-        }
+impl fmt::Display for Http3ErrorInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:02x}: {}", self.error_code, self.reason)
     }
 }
 

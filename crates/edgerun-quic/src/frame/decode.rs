@@ -1,6 +1,10 @@
 use super::QuicFrame;
 use super::QuicFrameType;
-use alloc::{format, string::{String, ToString}, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 fn decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
     edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| format!("{e}"))

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_http::{HttpClient, Method, Request, Response, StatusCode};
-use edgerun_rt::RwLock;
 use sha2::{Digest, Sha256};
 use url::Url;
 
@@ -58,7 +58,7 @@ impl AcmeClient {
 
     pub async fn init(&self) -> Result<(), AcmeError> {
         let directory = self.fetch_directory().await?;
-        *self.directory.write().await = Some(directory);
+        *self.directory.write() = Some(directory);
         Ok(())
     }
 
@@ -78,22 +78,26 @@ impl AcmeClient {
 
     async fn get_nonce(&self) -> Result<String, AcmeError> {
         let nonce_opt = {
-            let guard = self.nonce.read().await;
+            let guard = self.nonce.read();
             guard.clone()
         };
 
         if let Some(nonce) = nonce_opt {
             // Clear the nonce after use
-            *self.nonce.write().await = None;
+            *self.nonce.write() = None;
             return Ok(nonce);
         }
 
-        let dir = self.directory.read().await;
-        let dir = dir.as_ref().ok_or(AcmeError::NotInitialized)?;
+        let new_nonce_url = {
+            let dir = self.directory.read();
+            dir.as_ref()
+                .map(|dir| dir.new_nonce.clone())
+                .ok_or(AcmeError::NotInitialized)?
+        };
 
         let res = self
             .http_client
-            .request(Method::HEAD, &dir.new_nonce.to_string(), None)
+            .request(Method::HEAD, &new_nonce_url.to_string(), None)
             .await
             .map_err(|e| AcmeError::Network(e.to_string()))?;
 
@@ -115,7 +119,7 @@ impl AcmeClient {
             jwk: Some(self.account_key.jwk()),
             url: url.to_string(),
             nonce: Some(nonce),
-            key_id: self.account_id.read().await.clone(),
+            key_id: self.account_id.read().clone(),
         };
 
         let protected_b64 = base64url_nopad_encode(
@@ -156,7 +160,7 @@ impl AcmeClient {
             .map(|s| s.to_string());
 
         if let Some(nonce) = new_nonce {
-            *self.nonce.write().await = Some(nonce);
+            *self.nonce.write() = Some(nonce);
         }
 
         if status == 200 || status == 201 {
@@ -168,12 +172,16 @@ impl AcmeClient {
     }
 
     pub async fn create_account(&self) -> Result<String, AcmeError> {
-        if let Some(id) = self.account_id.read().await.clone() {
+        if let Some(id) = self.account_id.read().clone() {
             return Ok(id);
         }
 
-        let dir = self.directory.read().await;
-        let dir = dir.as_ref().ok_or(AcmeError::NotInitialized)?;
+        let new_account_url = {
+            let dir = self.directory.read();
+            dir.as_ref()
+                .map(|dir| dir.new_account.clone())
+                .ok_or(AcmeError::NotInitialized)?
+        };
 
         let payload = NewAccountRequestWithNonce {
             contact: if self.config.email.is_empty() {
@@ -189,20 +197,24 @@ impl AcmeClient {
         let payload_bytes =
             serde_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
-        let (_, body) = self.post(&dir.new_account, Some(&payload_bytes)).await?;
+        let (_, body) = self.post(&new_account_url, Some(&payload_bytes)).await?;
 
         let account: crate::types::AccountResponse =
             serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
         let id = account.id;
-        *self.account_id.write().await = Some(id.clone());
+        *self.account_id.write() = Some(id.clone());
 
         Ok(id)
     }
 
     pub async fn create_order(&self, domains: &[String]) -> Result<Order, AcmeError> {
-        let dir = self.directory.read().await;
-        let dir = dir.as_ref().ok_or(AcmeError::NotInitialized)?;
+        let new_order_url = {
+            let dir = self.directory.read();
+            dir.as_ref()
+                .map(|dir| dir.new_order.clone())
+                .ok_or(AcmeError::NotInitialized)?
+        };
 
         let identifiers: Vec<Identifier> = domains
             .iter()
@@ -221,7 +233,7 @@ impl AcmeClient {
         let payload_bytes =
             serde_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
-        let (_, body) = self.post(&dir.new_order, Some(&payload_bytes)).await?;
+        let (_, body) = self.post(&new_order_url, Some(&payload_bytes)).await?;
 
         let order: crate::types::Order =
             serde_json::from_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
@@ -288,8 +300,12 @@ impl AcmeClient {
         cert_der: &[u8],
         reason: Option<u32>,
     ) -> Result<(), AcmeError> {
-        let dir = self.directory.read().await;
-        let dir = dir.as_ref().ok_or(AcmeError::NotInitialized)?;
+        let revoke_cert_url = {
+            let dir = self.directory.read();
+            dir.as_ref()
+                .map(|dir| dir.revoke_cert.clone())
+                .ok_or(AcmeError::NotInitialized)?
+        };
 
         let cert_b64 = base64url_nopad_encode(cert_der);
 
@@ -301,7 +317,7 @@ impl AcmeClient {
         let payload_bytes =
             serde_json::to_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
-        self.post(&dir.revoke_cert, Some(&payload_bytes)).await?;
+        self.post(&revoke_cert_url, Some(&payload_bytes)).await?;
 
         Ok(())
     }

@@ -1,8 +1,14 @@
 //! DHCPv4 message parser/serializer — RFC 2131 wire format.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::std::io;
 use crate::std::net::Ipv4Addr;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 // ---------------------------------------------------------------------------
 // Constants

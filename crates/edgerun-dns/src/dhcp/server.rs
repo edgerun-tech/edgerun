@@ -1,10 +1,16 @@
 //! DHCPv4 server — handles DISCOVER/REQUEST and responds with OFFER/ACK/NAK.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::libc;
 use crate::std::io;
 use crate::std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use crate::std::time::Duration;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::lease::LeasePool;
 use super::message::{
@@ -473,8 +479,10 @@ impl DhcpServer {
     fn send_nak(&mut self, xid: u32, client_mac: [u8; 6]) -> Result<(), io::Error> {
         let nak = DhcpMessage::nak(xid, self.config.server_ip, client_mac);
         let wire = nak.to_wire();
-        let broadcast =
-            SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
+        let broadcast = SocketAddr::new(
+            crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+            DHCP_CLIENT_PORT,
+        );
         let _ = self.socket.send_to(&wire, broadcast);
         Ok(())
     }
@@ -484,15 +492,23 @@ impl DhcpServer {
 
         // RFC 2131 §4.1: If relay agent (giaddr) is set, unicast to it
         if !original.giaddr.is_unspecified() {
-            let addr = SocketAddr::new(crate::std::net::IpAddr::V4(original.giaddr), DHCP_SERVER_PORT);
+            let addr = SocketAddr::new(
+                crate::std::net::IpAddr::V4(original.giaddr),
+                DHCP_SERVER_PORT,
+            );
             self.socket.send_to(&wire, addr)?;
         } else if !original.ciaddr.is_unspecified() && !original.broadcast {
-            let addr = SocketAddr::new(crate::std::net::IpAddr::V4(original.ciaddr), DHCP_CLIENT_PORT);
+            let addr = SocketAddr::new(
+                crate::std::net::IpAddr::V4(original.ciaddr),
+                DHCP_CLIENT_PORT,
+            );
             self.socket.send_to(&wire, addr)?;
         } else {
             // Broadcast to client
-            let broadcast =
-                SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
+            let broadcast = SocketAddr::new(
+                crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+                DHCP_CLIENT_PORT,
+            );
             self.socket.send_to(&wire, broadcast)?;
         }
         Ok(())

@@ -12,7 +12,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use edgerun_rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
+use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
@@ -52,7 +52,7 @@ impl Default for LmtpServerConfig {
 // ===========================================================================
 
 pub struct LmtpServer {
-    listener: Arc<edgerun_rt::AsyncTcpListener>,
+    listener: Arc<crate::rt::AsyncTcpListener>,
     handler: Arc<dyn MailHandler>,
     config: LmtpServerConfig,
     /// Connection interceptor (IP filter, rate limit, etc.).
@@ -64,7 +64,7 @@ pub struct LmtpServer {
 
 impl LmtpServer {
     pub fn new(config: LmtpServerConfig, handler: Arc<dyn MailHandler>) -> io::Result<Self> {
-        let listener = Arc::new(edgerun_rt::AsyncTcpListener::bind(&config.bind_addr)?);
+        let listener = Arc::new(crate::rt::AsyncTcpListener::bind(&config.bind_addr)?);
         edgerun_log::info!("edgerun-lmtp: listening on {}", config.bind_addr);
         Ok(Self {
             listener,
@@ -132,7 +132,7 @@ impl LmtpServer {
                     let command_middleware = self.command_middleware.clone();
 
                     edgerun_log::info!("edgerun-lmtp: connection from {}", peer);
-                    edgerun_rt::spawn(async move {
+                    crate::rt::spawn(async move {
                         if let Err(e) = handle_connection(
                             stream,
                             peer,
@@ -149,7 +149,7 @@ impl LmtpServer {
                 }
                 Err(e) => {
                     edgerun_log::error!("edgerun-lmtp: accept error: {}", e);
-                    edgerun_rt::sleep(std::time::Duration::from_millis(10)).await;
+                    crate::rt::sleep(std::time::Duration::from_millis(10)).await;
                 }
             }
         }
@@ -308,7 +308,7 @@ async fn handle_connection(
                                         let envelope_clone = envelope.clone();
                                         let domain_clone = domain.clone();
                                         let peer_ip_clone = peer_ip_str.clone();
-                                        edgerun_rt::spawn(async move {
+                                        crate::rt::spawn(async move {
                                             evaluate_and_notify_auth(
                                                 &handler_clone,
                                                 &envelope_clone,

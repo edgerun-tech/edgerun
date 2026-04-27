@@ -113,11 +113,17 @@ pub mod net {
             Ok(())
         }
 
-        pub fn set_read_timeout(&self, _timeout: Option<crate::std::time::Duration>) -> io::Result<()> {
+        pub fn set_read_timeout(
+            &self,
+            _timeout: Option<crate::std::time::Duration>,
+        ) -> io::Result<()> {
             Ok(())
         }
 
-        pub fn set_write_timeout(&self, _timeout: Option<crate::std::time::Duration>) -> io::Result<()> {
+        pub fn set_write_timeout(
+            &self,
+            _timeout: Option<crate::std::time::Duration>,
+        ) -> io::Result<()> {
             Ok(())
         }
 
@@ -181,7 +187,6 @@ pub mod net {
             Ok(SocketAddr::new(IpAddr::V4(ip), self.1))
         }
     }
-
 }
 
 pub mod sync {
@@ -209,8 +214,8 @@ pub mod sync {
 }
 
 pub mod time {
-    pub use edgerun_bare_rt::Duration;
     use core::ops::Add;
+    pub use edgerun_bare_rt::Duration;
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
     pub struct Instant(edgerun_bare_rt::Instant);
@@ -257,9 +262,9 @@ pub mod time {
         }
 
         pub fn duration_since(&self, _epoch: UnixEpoch) -> Result<Duration, ()> {
-            Ok(Duration::from_micros(
-                edgerun_bare_rt::timer::ticks_to_us(edgerun_bare_rt::timer::now()),
-            ))
+            Ok(Duration::from_micros(edgerun_bare_rt::timer::ticks_to_us(
+                edgerun_bare_rt::timer::now(),
+            )))
         }
     }
 }

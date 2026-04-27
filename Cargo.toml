@@ -116,6 +116,7 @@ members = [
 edition = "2021"
 license = "MIT"
 publish = true
+rust-version = "1.81"
 version = "0.1.1"
 
 # Version management:
@@ -203,8 +204,8 @@ edgerun-gpu = { path = "crates/edgerun-gpu" }
 # edgerun-rasterizer = { path = "crates/edgerun-rasterizer" }
 # edgerun-css-cascade = { path = "crates/edgerun-css-cascade" }
 # Compression libraries for HTTP content-encoding
-flate2 = "1"
-brotli = "8"
+miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"] }
+brotli = { version = "8", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
 prost = { version = "0.14", default-features = false, features = ["derive"] }

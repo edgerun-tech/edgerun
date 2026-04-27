@@ -2,8 +2,14 @@
 //!
 //! Parses standard zone file format as used by BIND, PowerDNS, etc.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::std::net::Ipv4Addr;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 use core::str::FromStr;
 
 use super::message::DnsRecord;

@@ -12,18 +12,17 @@
 
 use edgerun_core::protocol::EventEnvelope;
 use std::collections::HashMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::Write;
-use std::path::Path;
+use std::fs::File;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use crate::blobs::BlobStore;
-use crate::core::{canonical_event_hash, encode_event_frame};
+use crate::core::canonical_event_hash;
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
+use crate::fs::{open_stream_file, write_event_to_file};
 
 // ---------------------------------------------------------------------------
 // Operational event types — written to the event log alongside protocol events
@@ -204,15 +203,7 @@ impl DispatchContext {
             .entry(stream_id.clone())
             .or_insert_with(|| open_stream_file(&self.events_dir, &stream_id));
 
-        let (len_prefix, event_bytes) = encode_event_frame(&event)?;
-
-        // Get current file offset before writing
-        let offset = file.metadata().map_err(StorageError::Io)?.len();
-
-        // Write: [varint length][protobuf bytes]
-        file.write_all(&len_prefix).map_err(StorageError::Io)?;
-        file.write_all(&event_bytes).map_err(StorageError::Io)?;
-        file.sync_all().map_err(StorageError::Io)?;
+        let offset = write_event_to_file(file, &event)?;
 
         drop(stream_files);
 
@@ -274,36 +265,6 @@ impl DispatchContext {
 
 pub trait EventHandler: Send + Sync {
     fn handle(&self, event: &EventEnvelope, ctx: &DispatchContext) -> Result<(), StorageError>;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> File {
-    let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
-    let log_path = events_dir.join(format!("{stream_id_hex}.log"));
-    if let Some(parent) = log_path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .expect("failed to open event log file")
-}
-
-/// Write a single event to disk (used by both the main loop and produce_event).
-fn write_event_to_disk(file: &mut File, event: &EventEnvelope) -> Result<u64, StorageError> {
-    let (len_prefix, event_bytes) = encode_event_frame(event)?;
-
-    let offset = file.metadata().map_err(StorageError::Io)?.len();
-
-    file.write_all(&len_prefix).map_err(StorageError::Io)?;
-    file.write_all(&event_bytes).map_err(StorageError::Io)?;
-    file.sync_all().map_err(StorageError::Io)?;
-
-    Ok(offset)
 }
 
 // ---------------------------------------------------------------------------
@@ -378,10 +339,6 @@ fn run_event_loop(
     next_seq: Arc<std::sync::Mutex<HashMap<Vec<u8>, u64>>>,
     stream_files: StreamFilesRef,
 ) {
-    let materializer = Materializer {
-        index: Arc::clone(&index),
-    };
-
     loop {
         let request = match rx.recv() {
             Ok(req) => req,
@@ -398,7 +355,7 @@ fn run_event_loop(
             .or_insert_with(|| open_stream_file(&events_dir, &stream_id));
 
         // Write event to disk
-        let offset = match write_event_to_disk(file, event) {
+        let offset = match write_event_to_file(file, event) {
             Ok(off) => off,
             Err(e) => {
                 let _ = request.result_tx.send(Err(e));
@@ -420,7 +377,7 @@ fn run_event_loop(
         let _ = request.result_tx.send(Ok(offset));
 
         // Materialize: update FileIndex from the event
-        if let Err(e) = materializer.materialize_with_offset(event, offset) {
+        if let Err(e) = materialize_event_to_index(&index, event, offset) {
             edgerun_log::warn!("materialize error: {e}");
         }
 
@@ -441,60 +398,49 @@ fn run_event_loop(
     }
 }
 
-struct Materializer {
-    index: Arc<FileIndex>,
-}
+pub(crate) fn materialize_event_to_index(
+    index: &Arc<FileIndex>,
+    event: &EventEnvelope,
+    offset: u64,
+) -> Result<(), StorageError> {
+    let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
+    let event_hash = canonical_event_hash(event).value;
 
-impl Materializer {
-    fn materialize_with_offset(
-        &self,
-        event: &EventEnvelope,
-        offset: u64,
-    ) -> Result<(), StorageError> {
-        let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
+    index.put_event(
+        &stream_id_hex,
+        event.seq as i64,
+        &event_hash,
+        offset,
+        event.envelope_version as i64,
+    )?;
 
-        let event_hash = canonical_event_hash(event).value;
+    index.set_head(&stream_id_hex, event.seq as i64, &event_hash)?;
 
-        // Index the event with correct offset
-        self.index.put_event(
-            &stream_id_hex,
-            event.seq as i64,
-            &event_hash,
-            offset,
-            event.envelope_version as i64,
-        )?;
-
-        // Update stream head
-        self.index
-            .set_head(&stream_id_hex, event.seq as i64, &event_hash)?;
-
-        // Materialize operational events
-        if let Some(op) = OpEventType::from_i32(event.event_type) {
-            match op {
-                OpEventType::CredentialStored => {
-                    if let Some(payload) = &event.payload_object {
-                        let namespace = edgerun_core::util::bytes_to_hex(&payload.object_id);
-                        let name = edgerun_core::util::bytes_to_hex(&event.stream_id);
-                        let blob_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
-                        let _ = self.index.put_credential(&namespace, &name, &blob_id, None);
-                    }
+    if let Some(op) = OpEventType::from_i32(event.event_type) {
+        match op {
+            OpEventType::CredentialStored => {
+                if let Some(payload) = &event.payload_object {
+                    let namespace = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                    let name = edgerun_core::util::bytes_to_hex(&event.stream_id);
+                    let blob_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                    let _ = index.put_credential(&namespace, &name, &blob_id, None);
                 }
-                OpEventType::PeerDiscovered | OpEventType::PeerStatusChanged => {
-                    if let Some(payload) = &event.payload_object {
-                        let node_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
-                        let status = match op {
-                            OpEventType::PeerDiscovered => "discovered",
-                            _ => "status_changed",
-                        };
-                        let _ = self.index.upsert_peer(&node_id, None, status, false);
-                    }
-                }
-                _ => {}
             }
+            OpEventType::PeerDiscovered | OpEventType::PeerStatusChanged => {
+                if let Some(payload) = &event.payload_object {
+                    let node_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                    let status = match op {
+                        OpEventType::PeerDiscovered => "discovered",
+                        _ => "status_changed",
+                    };
+                    let _ = index.upsert_peer(&node_id, None, status, false);
+                }
+            }
+            _ => {}
         }
-
-        Ok(())
     }
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

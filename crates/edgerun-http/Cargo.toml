@@ -13,13 +13,14 @@ connection-middleware = []
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-crypto = { path = "../edgerun-crypto" }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
+edgerun-error.workspace = true
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 edgerun-hpack = { path = "../edgerun-hpack" }
 edgerun-qpack = { path = "../edgerun-qpack" }
-flate2.workspace = true
+miniz_oxide.workspace = true
 brotli.workspace = true
 
 [dev-dependencies]

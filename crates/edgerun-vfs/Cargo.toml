@@ -1,7 +1,7 @@
 [package]
 name = "edgerun-vfs"
-version = "0.1.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "In-memory virtual filesystem with git-aware write-back for transparent RAM acceleration"
 license = "MIT"
 readme = "README.md"

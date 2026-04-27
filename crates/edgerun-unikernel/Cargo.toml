@@ -1,7 +1,7 @@
 [package]
 name = "edgerun-unikernel"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 license = "MIT"
 description = "Edgerun unikernel - bare-metal bootable"
 build = "build.rs"
@@ -15,4 +15,5 @@ edgerun-platform = { path = "../edgerun-platform" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-dhcp = { path = "../edgerun-dhcp" }
 edgerun-tftp = { path = "../edgerun-tftp" }
+edgerun-tpm = { path = "../edgerun-tpm", default-features = false }
 getrandom = { version = "0.2", features = ["rdrand"] }

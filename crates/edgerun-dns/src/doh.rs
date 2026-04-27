@@ -4,9 +4,15 @@
 //! Supports both GET (base64url-encoded `dns` parameter) and
 //! POST (wire-format DNS message in body).
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use alloc::collections::BTreeMap as HashMap;
 use alloc::sync::Arc;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::cache::DnsCache;
 use super::server::{handle_query, ServerState};

@@ -13,7 +13,7 @@ pub use error::SchedulerError;
 pub use metrics::{MetricsReceiver, ProviderMetrics};
 pub use provider::{ProviderInfo, ProviderManager};
 
-use edgerun_rt::CancellationToken;
+use edgerun_bare_rt::CancellationToken;
 use std::collections::HashMap;
 use std::sync::Arc;
 

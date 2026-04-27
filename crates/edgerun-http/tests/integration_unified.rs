@@ -3,8 +3,8 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
+use edgerun_bare_rt::{sleep, spawn, Runtime};
 use edgerun_http::{Handler, HttpClient, HttpServer, HttpVersion, Request, Response, StatusCode};
-use edgerun_rt::{sleep, spawn, Runtime};
 
 static PORT: AtomicU32 = AtomicU32::new(13000);
 
@@ -239,7 +239,7 @@ fn client_http3_explicit() {
             .bind(format!("127.0.0.1:{}", port))
             .await?;
 
-        let shutdown = edgerun_rt::CancellationToken::new();
+        let shutdown = edgerun_bare_rt::CancellationToken::new();
         let shutdown_clone = shutdown.clone();
         let server_task = spawn(async move { server.serve_with_shutdown(shutdown_clone).await });
         sleep(Duration::from_millis(100)).await;
@@ -270,7 +270,7 @@ fn client_best_negotiation() {
             .bind(format!("127.0.0.1:{}", port))
             .await?;
 
-        let shutdown = edgerun_rt::CancellationToken::new();
+        let shutdown = edgerun_bare_rt::CancellationToken::new();
         let shutdown_clone = shutdown.clone();
         let server_task = spawn(async move { server.serve_with_shutdown(shutdown_clone).await });
         sleep(Duration::from_millis(100)).await;

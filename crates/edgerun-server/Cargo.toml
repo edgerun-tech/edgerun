@@ -1,7 +1,7 @@
 [package]
 name = "edgerun-server"
-version = "0.1.1"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 description = "Unified multi-protocol server: HTTP, SMTP, IMAP, LMTP, DNS, DHCP, TFTP, Proxy"
 
 [[bin]]
@@ -16,7 +16,7 @@ edgerun-dns = { path = "../edgerun-dns", optional = true }
 edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
 edgerun-tftp = { path = "../edgerun-tftp", optional = true }
 edgerun-proxy = { path = "../edgerun-proxy", optional = true }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-log = { path = "../edgerun-log" }
 

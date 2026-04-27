@@ -1,6 +1,12 @@
 //! DNS domain name validation (RFC 1035 §2.3.1, RFC 2181 §11).
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 /// Error returned when a domain name fails validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NameError {

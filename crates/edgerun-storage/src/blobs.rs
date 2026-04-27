@@ -136,6 +136,15 @@ impl BlobStore {
         // Derive blob ID from plaintext hash (content-addressed)
         let blob_id = edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(plaintext));
 
+        let blob_path = blob_file_path(&self.config.blob_dir, &blob_id);
+
+        if blob_path.exists() {
+            if !recipients.is_empty() {
+                merge_recipients(&self.config.blob_dir, &blob_id, &recipients)?;
+            }
+            return Ok(blob_id);
+        }
+
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
         edgerun_crypto::getrandom(&mut nonce_bytes).expect("getrandom failed");
@@ -148,8 +157,6 @@ impl BlobStore {
             .encrypt(nonce.into(), plaintext)
             .map_err(|e| StorageError::Encryption(format!("AES-GCM encryption failed: {}", e)))?;
 
-        // Write to filesystem: [nonce (12 bytes)][ciphertext]
-        let blob_path = blob_file_path(&self.config.blob_dir, &blob_id);
         if let Some(parent) = blob_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -253,6 +260,40 @@ fn load_blob_recipients(blob_dir: &Path, blob_id: &str) -> Vec<Vec<u8>> {
             .collect(),
         Err(_) => Vec::new(),
     }
+}
+
+fn merge_recipients(
+    blob_dir: &Path,
+    blob_id: &str,
+    recipients: &[Vec<u8>],
+) -> Result<(), StorageError> {
+    let mut existing = load_blob_recipients(blob_dir, blob_id);
+    let mut changed = false;
+
+    for recipient in recipients {
+        if !existing.iter().any(|existing| existing == recipient) {
+            existing.push(recipient.clone());
+            changed = true;
+        }
+    }
+
+    if !changed {
+        return Ok(());
+    }
+
+    let meta_path = blob_meta_path(blob_dir, blob_id);
+    let content = existing
+        .into_iter()
+        .map(|recipient| edgerun_core::util::bytes_to_hex(&recipient))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if let Some(parent) = meta_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&meta_path, content)?;
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

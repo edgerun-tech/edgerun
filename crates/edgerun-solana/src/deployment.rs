@@ -288,13 +288,13 @@ impl DeploymentClient {
 
 // Dedicated runtime for HTTP calls
 struct HttpRuntime {
-    rt: edgerun_rt::Runtime,
+    rt: edgerun_bare_rt::Runtime,
 }
 
 impl HttpRuntime {
     fn new() -> Self {
         Self {
-            rt: edgerun_rt::Builder::new_multi_thread()
+            rt: edgerun_bare_rt::Builder::new_multi_thread()
                 .build()
                 .expect("runtime"),
         }

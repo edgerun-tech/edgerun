@@ -48,7 +48,10 @@ pub struct CertificateAndKey {
 }
 
 impl CertificateAndKey {
-    pub fn from_der(cert_der: Vec<u8>, signing_key: edgerun_crypto::p256::ecdsa::SigningKey) -> Self {
+    pub fn from_der(
+        cert_der: Vec<u8>,
+        signing_key: edgerun_crypto::p256::ecdsa::SigningKey,
+    ) -> Self {
         Self {
             cert_der,
             signing_key: Arc::new(signing_key),

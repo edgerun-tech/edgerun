@@ -1,4 +1,10 @@
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 type AnswerCacheEntry = (Vec<DnsRecord>, Instant);
 type NsCacheEntry = (Ipv4Addr, Instant);
 
@@ -12,9 +18,9 @@ type NsCacheEntry = (Ipv4Addr, Instant);
 //
 // Caches all intermediate results with TTL-based expiry.
 
-use alloc::collections::BTreeMap as HashMap;
 use crate::std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use crate::std::time::{Duration, Instant};
+use alloc::collections::BTreeMap as HashMap;
 
 use crate::compat::AsyncUdpSocket;
 
@@ -97,7 +103,8 @@ pub struct RecursiveResolver {
     /// Glue cache: nameserver name → IP address + expiry.
     ns_cache: alloc::sync::Arc<crate::std::sync::Mutex<HashMap<String, (Ipv4Addr, Instant)>>>,
     /// Answer cache: (name, type) → answer records + expiry.
-    answer_cache: alloc::sync::Arc<crate::std::sync::Mutex<HashMap<String, (Vec<DnsRecord>, Instant)>>>,
+    answer_cache:
+        alloc::sync::Arc<crate::std::sync::Mutex<HashMap<String, (Vec<DnsRecord>, Instant)>>>,
     /// UDP socket for outgoing queries.
     socket: AsyncUdpSocket,
     /// Query timeout.
@@ -154,7 +161,11 @@ impl RecursiveResolver {
         servers: Vec<Ipv4Addr>,
         depth: usize,
     ) -> core::pin::Pin<
-        Box<dyn core::future::Future<Output = Result<Vec<DnsRecord>, crate::std::io::Error>> + Send + 'a>,
+        Box<
+            dyn core::future::Future<Output = Result<Vec<DnsRecord>, crate::std::io::Error>>
+                + Send
+                + 'a,
+        >,
     > {
         Box::pin(async move {
             if depth >= self.max_depth {
@@ -173,7 +184,8 @@ impl RecursiveResolver {
                 let target = SocketAddr::V4(SocketAddrV4::new(*server, 53));
 
                 let response =
-                    match crate::compat::timeout(self.timeout, self.query_server(&wire, target)).await
+                    match crate::compat::timeout(self.timeout, self.query_server(&wire, target))
+                        .await
                     {
                         Ok(Ok(r)) => r,
                         Ok(Err(e)) => {

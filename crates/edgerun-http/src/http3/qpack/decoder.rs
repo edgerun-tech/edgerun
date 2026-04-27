@@ -4,10 +4,10 @@
 //! When `max_capacity > 0`, the decoder maintains a dynamic table populated from
 //! encoder stream instructions received via `on_encoder_stream()`.
 
+use edgerun_encoding::buf::Cursor;
 use edgerun_qpack::decoder::Decoder as QpackInnerDecoder;
 use edgerun_qpack::dynamic::DynamicTable;
 use edgerun_qpack::{decode_stateless, DecoderError, HeaderField};
-use edgerun_encoding::buf::Cursor;
 
 /// QPACK decoder with dynamic table support.
 pub struct QpackDecoder {

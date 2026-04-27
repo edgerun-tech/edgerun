@@ -1,15 +1,15 @@
 [package]
 name = "edgerun-solana"
-version = "0.1.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 bs58 = "0.5"
-edgerun-error = { path = "../edgerun-error" }
+edgerun-error.workspace = true
 serde = { version = "1", features = ["derive"] }
 edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-crypto = { path = "../edgerun-crypto" }
 
 [dev-dependencies]

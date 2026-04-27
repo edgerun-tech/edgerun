@@ -41,7 +41,7 @@ impl Parser for Cli {
 fn main() {
     let cli = Cli::parse();
     let addr = format!("{}:{}", cli.host, cli.port);
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_bare_rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();

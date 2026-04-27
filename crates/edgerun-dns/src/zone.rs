@@ -1,8 +1,14 @@
 //! DNS zone — in-memory zone file with record management.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use alloc::collections::BTreeMap as HashMap;
 use crate::std::net::Ipv4Addr;
+use alloc::collections::BTreeMap as HashMap;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::message::DnsRecord;
 use super::record::{DnsRecordData, DnsRecordType};

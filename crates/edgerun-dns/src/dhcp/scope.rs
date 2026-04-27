@@ -6,11 +6,17 @@
 //! - The `ciaddr` field for renewals
 //! - Subnet mask matching
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use alloc::collections::BTreeMap as HashMap;
 use crate::libc;
 use crate::std::io;
 use crate::std::net::{Ipv4Addr, SocketAddr};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::lease::LeasePool;
 use super::message::{
@@ -408,7 +414,10 @@ fn send_reply(
     } else if !req.broadcast {
         SocketAddr::new(crate::std::net::IpAddr::V4(req.ciaddr), DHCP_CLIENT_PORT)
     } else {
-        SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT)
+        SocketAddr::new(
+            crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+            DHCP_CLIENT_PORT,
+        )
     };
     socket.send_to(&wire, dest)?;
     Ok(())
@@ -423,7 +432,10 @@ fn send_nak(
 ) -> Result<(), io::Error> {
     let nak = DhcpMessage::nak(xid, server_ip, mac);
     let wire = nak.to_wire();
-    let dest = SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_CLIENT_PORT);
+    let dest = SocketAddr::new(
+        crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+        DHCP_CLIENT_PORT,
+    );
     socket.send_to(&wire, dest)?;
     Ok(())
 }

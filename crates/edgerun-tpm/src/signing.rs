@@ -1,6 +1,4 @@
-use std::path::Path;
-
-use edgerun_core::crypto::signature_input;
+use alloc::vec::Vec;
 
 use crate::constants::TPM_CC_SIGN;
 use crate::device::TpmDevice;
@@ -9,21 +7,21 @@ use crate::types::*;
 use crate::wire::encode_parsed_signature;
 
 // ---------------------------------------------------------------------------
-// LinuxTpmSigningKey
+// TpmTransportSigningKey
 // ---------------------------------------------------------------------------
 
-/// Concrete `TpmSigningKey` backed by a Linux TPM device (`/dev/tpmrm0`).
+/// `TpmSigningKey` backed by an arbitrary byte-level TPM transport.
 #[derive(Clone, Debug)]
-pub struct LinuxTpmSigningKey {
-    device_path: std::path::PathBuf,
+pub struct TpmTransportSigningKey<T> {
+    transport: T,
     handle: TpmHandle,
     authorization_mode: TpmAuthorizationMode,
 }
 
-impl LinuxTpmSigningKey {
-    pub fn new(device_path: impl Into<std::path::PathBuf>, handle: TpmHandle) -> Self {
+impl<T> TpmTransportSigningKey<T> {
+    pub fn new(transport: T, handle: TpmHandle) -> Self {
         Self {
-            device_path: device_path.into(),
+            transport,
             handle,
             authorization_mode: TpmAuthorizationMode::None,
         }
@@ -47,8 +45,12 @@ impl LinuxTpmSigningKey {
         self
     }
 
-    pub fn device_path(&self) -> &Path {
-        &self.device_path
+    pub fn transport(&self) -> &T {
+        &self.transport
+    }
+
+    pub fn transport_mut(&mut self) -> &mut T {
+        &mut self.transport
     }
 
     pub fn handle(&self) -> TpmHandle {
@@ -60,18 +62,19 @@ impl LinuxTpmSigningKey {
     }
 }
 
-impl TpmSigningKey for LinuxTpmSigningKey {
+impl<T> TpmSigningKey for TpmTransportSigningKey<T>
+where
+    T: TpmTransport + Clone,
+{
     fn key_info(&self) -> Result<TpmKeyInfo, TpmError> {
-        use crate::device::LinuxTpmDevice;
-        let mut device = TpmDevice::new(LinuxTpmDevice::new(self.device_path.clone()));
+        let mut device = TpmDevice::new(self.transport.clone());
         device.read_key_info(self.handle)
     }
 
     fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, TpmError> {
-        use crate::device::LinuxTpmDevice;
         let key_info = self.key_info()?;
         let params = sign_params_for_message(self.handle, &key_info.algorithm, message)?;
-        let mut device = TpmDevice::new(LinuxTpmDevice::new(self.device_path.clone()));
+        let mut device = TpmDevice::new(self.transport.clone());
         let parsed = sign_prehashed_with_device(&mut device, &self.authorization_mode, &params)?;
         Ok(encode_parsed_signature(&parsed))
     }
@@ -157,7 +160,11 @@ impl TpmPolicySessionRunner {
 
 /// Build the signature input for a mesh record.
 pub fn signature_input_for_record(sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
-    signature_input(sig_domain_tag, record_hash)
+    let mut input = Vec::with_capacity(sig_domain_tag.len() + 1 + record_hash.len());
+    input.extend_from_slice(sig_domain_tag.as_bytes());
+    input.push(0);
+    input.extend_from_slice(record_hash);
+    input
 }
 
 /// Sign a mesh record hash with a TPM key.
@@ -231,9 +238,9 @@ pub fn hash_message_for_algorithm(
         TpmSignatureAlgorithm::RsaPkcs1v15Sha256
         | TpmSignatureAlgorithm::RsaPssSha256
         | TpmSignatureAlgorithm::EcdsaP256Sha256
-        | TpmSignatureAlgorithm::EcSchnorr => edgerun_core::crypto::sha256(message).to_vec(),
-        TpmSignatureAlgorithm::EcdsaP384Sha384 => edgerun_core::crypto::sha384(message),
-        TpmSignatureAlgorithm::Eddsa => edgerun_core::crypto::sha512(message),
+        | TpmSignatureAlgorithm::EcSchnorr => edgerun_crypto::sha256(message).to_vec(),
+        TpmSignatureAlgorithm::EcdsaP384Sha384 => edgerun_crypto::sha384(message).to_vec(),
+        TpmSignatureAlgorithm::Eddsa => edgerun_crypto::sha512(message).to_vec(),
         TpmSignatureAlgorithm::Opaque(v) => {
             return Err(TpmError::UnsupportedAlgorithm(
                 TpmSignatureAlgorithm::Opaque(v.clone()),
@@ -273,5 +280,116 @@ pub fn default_sign_scheme_for_algorithm(algorithm: &TpmSignatureAlgorithm) -> T
             scheme: 0x0010,
             hash_algorithm: None,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::constants::{
+        TPM_ALG_ECC, TPM_ALG_ECDSA, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_READ_PUBLIC, TPM_CC_SIGN,
+        TPM_ECC_NIST_P256, TPM_RC_SUCCESS, TPM_ST_NO_SESSIONS, TPM_ST_SESSIONS,
+    };
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct FakeTransport {
+        commands: Arc<Mutex<Vec<u32>>>,
+    }
+
+    impl FakeTransport {
+        fn commands(&self) -> Vec<u32> {
+            self.commands.lock().unwrap().clone()
+        }
+    }
+
+    impl TpmTransport for FakeTransport {
+        fn transact(&mut self, command: &[u8]) -> Result<Vec<u8>, TpmError> {
+            if command.len() < 10 {
+                return Err(TpmError::Protocol("command too short".into()));
+            }
+
+            let command_code = u32::from_be_bytes([command[6], command[7], command[8], command[9]]);
+            self.commands.lock().unwrap().push(command_code);
+            match command_code {
+                TPM_CC_READ_PUBLIC => Ok(fake_read_public_response()),
+                TPM_CC_SIGN => Ok(fake_sign_response()),
+                other => Err(TpmError::Protocol(format!(
+                    "unexpected command 0x{other:08x}"
+                ))),
+            }
+        }
+    }
+
+    fn response(tag: u16, body: &[u8]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(10 + body.len());
+        out.extend_from_slice(&tag.to_be_bytes());
+        out.extend_from_slice(&((10 + body.len()) as u32).to_be_bytes());
+        out.extend_from_slice(&TPM_RC_SUCCESS.to_be_bytes());
+        out.extend_from_slice(body);
+        out
+    }
+
+    fn fake_read_public_response() -> Vec<u8> {
+        let mut public = Vec::new();
+        public.extend_from_slice(&TPM_ALG_ECC.to_be_bytes());
+        public.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());
+        public.extend_from_slice(&0x0004_0000u32.to_be_bytes());
+        public.extend_from_slice(&0u16.to_be_bytes());
+        public.extend_from_slice(&TPM_ALG_NULL.to_be_bytes());
+        public.extend_from_slice(&TPM_ALG_ECDSA.to_be_bytes());
+        public.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());
+        public.extend_from_slice(&TPM_ECC_NIST_P256.to_be_bytes());
+        public.extend_from_slice(&TPM_ALG_NULL.to_be_bytes());
+        public.extend_from_slice(&32u16.to_be_bytes());
+        public.extend_from_slice(&[0x11; 32]);
+        public.extend_from_slice(&32u16.to_be_bytes());
+        public.extend_from_slice(&[0x22; 32]);
+
+        let mut name = Vec::new();
+        name.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());
+        name.extend_from_slice(&[0xAA; 32]);
+
+        let mut body = Vec::new();
+        body.extend_from_slice(&(public.len() as u16).to_be_bytes());
+        body.extend_from_slice(&public);
+        body.extend_from_slice(&(name.len() as u16).to_be_bytes());
+        body.extend_from_slice(&name);
+        body.extend_from_slice(&(name.len() as u16).to_be_bytes());
+        body.extend_from_slice(&name);
+        response(TPM_ST_NO_SESSIONS, &body)
+    }
+
+    fn fake_sign_response() -> Vec<u8> {
+        let mut signature = Vec::new();
+        signature.extend_from_slice(&TPM_ALG_ECDSA.to_be_bytes());
+        signature.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());
+        signature.extend_from_slice(&32u16.to_be_bytes());
+        signature.extend_from_slice(&[0x33; 32]);
+        signature.extend_from_slice(&32u16.to_be_bytes());
+        signature.extend_from_slice(&[0x44; 32]);
+
+        let mut body = Vec::new();
+        body.extend_from_slice(&(signature.len() as u32).to_be_bytes());
+        body.extend_from_slice(&signature);
+        response(TPM_ST_SESSIONS, &body)
+    }
+
+    #[test]
+    fn transport_signing_key_uses_generic_transport() {
+        let transport = FakeTransport::default();
+        let key = TpmTransportSigningKey::new(transport.clone(), TpmHandle(0x8100_0001));
+
+        let info = key.key_info().unwrap();
+        assert_eq!(info.algorithm, TpmSignatureAlgorithm::EcdsaP256Sha256);
+        assert_eq!(info.public_key.len(), 64);
+
+        let signature = key.sign_message(b"hello").unwrap();
+        assert_eq!(signature.len(), 72);
+
+        assert_eq!(
+            transport.commands(),
+            vec![TPM_CC_READ_PUBLIC, TPM_CC_READ_PUBLIC, TPM_CC_SIGN]
+        );
     }
 }

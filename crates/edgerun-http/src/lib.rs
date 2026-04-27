@@ -25,7 +25,7 @@
 //!     }
 //! }
 //!
-//! # edgerun_rt::block_on(async {
+//! # edgerun_bare_rt::block_on(async {
 //! HttpServer::new(HelloHandler)
 //!     .bind("127.0.0.1:0")
 //!     .await
@@ -40,7 +40,7 @@
 //! ```no_run
 //! use edgerun_http::HttpClient;
 //!
-//! # edgerun_rt::block_on(async {
+//! # edgerun_bare_rt::block_on(async {
 //! let client = HttpClient::new();
 //! let response = client.get("http://example.com/").await.unwrap();
 //! println!("Status: {}", response.status().as_u16());
@@ -73,7 +73,44 @@
 //! | http3  | [RFC 9001](https://www.rfc-editor.org/rfc/rfc9001) | QUIC TLS Mapping |
 //! | http3  | [RFC 9204](https://www.rfc-editor.org/rfc/rfc9204) | QPACK Header Compression |
 
+#![cfg_attr(target_os = "none", no_std)]
 #![allow(non_camel_case_types)] // HTTP/2 error code names follow RFC 9113
+
+extern crate alloc;
+
+#[cfg(target_os = "none")]
+#[path = "std.rs"]
+mod std_compat;
+#[cfg(target_os = "none")]
+pub use std_compat::*;
+
+#[cfg(target_os = "none")]
+macro_rules! format {
+    ($($arg:tt)*) => {
+        alloc::format!($($arg)*)
+    };
+}
+
+#[cfg(target_os = "none")]
+macro_rules! vec {
+    ($($arg:tt)*) => {
+        alloc::vec![$($arg)*]
+    };
+}
+
+#[cfg(target_os = "none")]
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        edgerun_log::warn!($($arg)*)
+    };
+}
+
+#[cfg(target_os = "none")]
+macro_rules! module_path {
+    () => {
+        core::module_path!()
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Shared HTTP types

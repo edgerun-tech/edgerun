@@ -1,7 +1,7 @@
 [package]
 name = "edgerun-marketplace-cli"
-version = "0.1.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [[bin]]
 name = "edgerun-marketplace"
@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 edgerun-solana = { path = "../edgerun-solana" }
 edgerun-clap = { path = "../edgerun-clap" }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 

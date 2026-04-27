@@ -14,7 +14,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
-use edgerun_rt::Mutex;
+use crate::rt::Mutex;
 
 use crate::command_middleware::{CommandMiddleware, ControlFlow, NextCommand, SessionExtensions};
 

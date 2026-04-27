@@ -7,10 +7,10 @@
 //! - Header block encoding with dynamic table references (Indexed::Dynamic, IndexedWithPostBase)
 //! - Decoder stream feedback via `on_decoder_recv()`
 
+use edgerun_encoding::buf::Cursor;
 use edgerun_qpack::dynamic::DynamicTable;
 use edgerun_qpack::encoder::Encoder;
 use edgerun_qpack::{encode_stateless, EncoderError, HeaderField};
-use edgerun_encoding::buf::Cursor;
 
 /// QPACK encoder with full dynamic table support.
 ///

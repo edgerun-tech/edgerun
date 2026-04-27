@@ -136,19 +136,24 @@ impl Response {
         let mut parts = status_line.splitn(3, ' ');
         let version = parts.next().unwrap_or_default();
         if !version.starts_with("HTTP/") {
-            return Err(crate::Error::InvalidResponse("Invalid status line".to_string()));
+            return Err(crate::Error::InvalidResponse(
+                "Invalid status line".to_string(),
+            ));
         }
         let status = parts
             .next()
             .ok_or_else(|| crate::Error::InvalidResponse("Missing status code".to_string()))?
             .parse::<u16>()
             .map_err(|_| crate::Error::InvalidResponse("Invalid status code".to_string()))?;
-        let status = StatusCode::new(status).map_err(|_| crate::Error::InvalidStatusCode(status))?;
+        let status =
+            StatusCode::new(status).map_err(|_| crate::Error::InvalidStatusCode(status))?;
 
         let header_end = raw[line_end..]
             .find("\r\n\r\n")
             .map(|i| line_end + i)
-            .ok_or_else(|| crate::Error::InvalidResponse("Missing header terminator".to_string()))?;
+            .ok_or_else(|| {
+                crate::Error::InvalidResponse("Missing header terminator".to_string())
+            })?;
         let mut headers = HeaderMap::new();
         for line in raw[line_end + 2..header_end].lines() {
             if let Some(colon) = line.find(':') {
@@ -222,7 +227,9 @@ fn parse_chunked_body(raw: &str, trailers: &mut HeaderMap) -> crate::Result<Vec<
         body.extend_from_slice(&raw.as_bytes()[pos..pos + size]);
         pos += size;
         if raw.get(pos..pos + 2) != Some("\r\n") {
-            return Err(crate::Error::InvalidResponse("Invalid chunk terminator".to_string()));
+            return Err(crate::Error::InvalidResponse(
+                "Invalid chunk terminator".to_string(),
+            ));
         }
         pos += 2;
     }

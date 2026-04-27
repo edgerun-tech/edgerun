@@ -11,7 +11,19 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use edgerun_rt::mpsc::{self, Receiver, Sender};
+use edgerun_bare_rt::mpsc::{self, Receiver, Sender};
+
+fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
+    match error {
+        edgerun_bare_rt::IoError::UnexpectedEof => {
+            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
+        }
+        edgerun_bare_rt::IoError::WriteZero => {
+            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
+        }
+        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Body
@@ -151,7 +163,7 @@ impl Future for ReadChunkFut<'_> {
                 // try_recv first
                 match rx.try_recv() {
                     Ok(chunk) => Poll::Ready(Ok(Some(chunk))),
-                    Err(edgerun_rt::mpsc::TryRecvError::Empty) => {
+                    Err(edgerun_bare_rt::mpsc::TryRecvError::Empty) => {
                         // Need to wait — poll the recv future
                         let raw: *const Receiver<Vec<u8>> = rx;
                         let fut = unsafe { (&*raw).recv() };
@@ -160,7 +172,7 @@ impl Future for ReadChunkFut<'_> {
                             None => Ok(None),
                         })
                     }
-                    Err(edgerun_rt::mpsc::TryRecvError::Disconnected) => Poll::Ready(Ok(None)),
+                    Err(edgerun_bare_rt::mpsc::TryRecvError::Disconnected) => Poll::Ready(Ok(None)),
                 }
             }
         }
@@ -199,7 +211,7 @@ impl BodySender {
 // AsyncBodyReader — reads body from any AsyncRead source
 // ---------------------------------------------------------------------------
 
-use edgerun_rt::AsyncRead;
+use edgerun_bare_rt::AsyncRead;
 
 /// Reads an HTTP body from an [`AsyncRead`] source.
 ///
@@ -328,7 +340,11 @@ impl<R: AsyncRead + Unpin> Future for ReadBodyFut<'_, '_, R> {
 
             let n = {
                 let pinned = Pin::new(&mut this.reader.reader);
-                pinned.poll_read(cx, &mut this.buf[..max_read])?
+                match pinned.poll_read(cx, &mut this.buf[..max_read]) {
+                    Poll::Ready(Ok(n)) => Poll::Ready(n),
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
+                    Poll::Pending => Poll::Pending,
+                }
             };
 
             match n {
@@ -364,7 +380,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             let pinned = Pin::new(&mut self.reader.reader);
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
-                                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                                Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
                                 Poll::Pending => return Poll::Pending,
                             }
                         };
@@ -414,7 +430,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         let pinned = Pin::new(&mut self.reader.reader);
                         match pinned.poll_read(cx, &mut self.buf[..to_read]) {
                             Poll::Ready(Ok(n)) => n,
-                            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                            Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
                             Poll::Pending => return Poll::Pending,
                         }
                     };
@@ -437,7 +453,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         let pinned = Pin::new(&mut self.reader.reader);
                         match pinned.poll_read(cx, &mut crlf_buf) {
                             Poll::Ready(Ok(n)) => n,
-                            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                            Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
                             Poll::Pending => return Poll::Pending,
                         }
                     };
@@ -460,7 +476,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             let pinned = Pin::new(&mut self.reader.reader);
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
-                                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                                Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
                                 Poll::Pending => return Poll::Pending,
                             }
                         };
@@ -509,7 +525,7 @@ impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
                 let pinned = Pin::new(&mut this.reader.reader);
                 match pinned.poll_read(cx, &mut this.read_buf) {
                     Poll::Ready(Ok(n)) => n,
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
                     Poll::Pending => return Poll::Pending,
                 }
             };
@@ -535,7 +551,7 @@ impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_rt::Runtime;
+    use edgerun_bare_rt::Runtime;
 
     #[test]
     fn test_body_full_collect() {

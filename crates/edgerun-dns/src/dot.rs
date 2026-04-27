@@ -4,10 +4,13 @@
 //! Bare-metal builds currently use the same length-prefixed transport as TCP.
 //! A no_std TLS transport can be attached here once edgerun-tls exposes one.
 
-use alloc::{string::{String, ToString}, vec::Vec};
 use crate::std::io;
 use crate::std::net::SocketAddr;
 use alloc::sync::Arc;
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::compat::{AsyncTcpListener, AsyncTcpStream};
 
@@ -68,7 +71,9 @@ impl DotServer {
         Ok(Self {
             tcp_listener,
             state: ServerState {
-                zones: Arc::new(crate::compat::RwLock::new(alloc::collections::BTreeMap::new())),
+                zones: Arc::new(crate::compat::RwLock::new(
+                    alloc::collections::BTreeMap::new(),
+                )),
                 default_ttl: 3600,
                 forward_to: Arc::new(crate::compat::RwLock::new(None)),
             },
@@ -148,7 +153,10 @@ async fn handle_dot_connection(
     rate_limiter: &RateLimiter,
     _cert_and_key: &CertificateAndKey,
 ) -> Result<(), io::Error> {
-    edgerun_log::debug!("edgerun-dns: bare DoT-compatible TCP connection from {}", peer);
+    edgerun_log::debug!(
+        "edgerun-dns: bare DoT-compatible TCP connection from {}",
+        peer
+    );
     super::server::handle_tcp_connection_raw(stream, peer, state, rate_limiter).await
 }
 

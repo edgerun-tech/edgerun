@@ -33,12 +33,19 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
         let mut format_string = None;
 
         for attr in &variant.attrs {
-            if attr.path().is_ident("error") {
-                if let Meta::NameValue(meta) = &attr.meta {
-                    if let Expr::Lit(expr) = &meta.value {
-                        if let Lit::Str(lit_str) = &expr.lit {
-                            format_string = Some(lit_str.value());
-                        }
+            if !attr.path().is_ident("error") {
+                continue;
+            }
+
+            if let Ok(lit_str) = attr.parse_args::<LitStr>() {
+                format_string = Some(lit_str.value());
+                continue;
+            }
+
+            if let Meta::NameValue(meta) = &attr.meta {
+                if let Expr::Lit(expr) = &meta.value {
+                    if let Lit::Str(lit_str) = &expr.lit {
+                        format_string = Some(lit_str.value());
                     }
                 }
             }
@@ -51,15 +58,20 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
                     #ident::#variant_ident #discriminant => write!(f, #format_str),
                 });
             }
-            Fields::Unnamed(unnamed) if unnamed.unnamed.len() == 1 => {
+            Fields::Unnamed(unnamed) => {
+                let bindings: Vec<_> = (0..unnamed.unnamed.len())
+                    .map(|idx| Ident::new(&format!("__field{idx}"), variant_ident.span()))
+                    .collect();
                 if let Some(format_str) = format_string {
+                    let args_len = positional_arg_count(&format_str).unwrap_or(bindings.len());
+                    let args = bindings.iter().take(args_len);
                     match_arms.push(quote! {
-                        #ident::#variant_ident(ref __e) => write!(f, #format_str, __e),
+                        #ident::#variant_ident(#(ref #bindings),*) => write!(f, #format_str, #(#args),*),
                     });
                 } else {
                     match_arms.push(quote! {
-                        #ident::#variant_ident(ref __e) => {
-                            write!(f, "{}: {}", stringify!(#variant_ident), __e)
+                        #ident::#variant_ident(#(ref #bindings),*) => {
+                            write!(f, stringify!(#variant_ident))
                         }
                     });
                 }
@@ -87,4 +99,35 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
     };
 
     expanded.into()
+}
+
+fn positional_arg_count(format_str: &str) -> Option<usize> {
+    let mut max_index: Option<usize> = None;
+    let bytes = format_str.as_bytes();
+    let mut idx = 0;
+
+    while idx < bytes.len() {
+        if bytes[idx] != b'{' || idx + 1 >= bytes.len() || bytes[idx + 1] == b'{' {
+            idx += 1;
+            continue;
+        }
+
+        let mut cursor = idx + 1;
+        let start = cursor;
+        while cursor < bytes.len() && bytes[cursor].is_ascii_digit() {
+            cursor += 1;
+        }
+
+        if cursor > start {
+            if let Ok(position) = format_str[start..cursor].parse::<usize>() {
+                max_index = Some(max_index.map_or(position, |max| max.max(position)));
+            }
+        } else if cursor < bytes.len() && (bytes[cursor] == b'}' || bytes[cursor] == b':') {
+            return None;
+        }
+
+        idx = cursor + 1;
+    }
+
+    max_index.map(|index| index + 1)
 }

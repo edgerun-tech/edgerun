@@ -5,8 +5,14 @@
 //! - `port <number>` — default port for all nameservers
 //! - Ignores comments (`#`), blank lines, and unknown directives
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::std::net::{IpAddr, SocketAddr};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 const RESOLV_CONF: &str = "/etc/resolv.conf";
 const MAXNS: usize = 3;

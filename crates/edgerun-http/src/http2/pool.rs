@@ -9,8 +9,8 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use edgerun_rt::sync::Mutex;
-use edgerun_rt::{timeout as rt_timeout, AsyncTcpStream, ConnectFuture};
+use edgerun_bare_rt::sync::Mutex;
+use edgerun_bare_rt::{timeout as rt_timeout, AsyncTcpStream, ConnectFuture};
 
 use edgerun_tls::async_tls::AsyncTlsStream;
 use edgerun_tls::SessionCache;
@@ -321,7 +321,7 @@ impl Http2Pool {
         let host_str = host.to_string();
         if let Ok(Ok(addrs)) = rt_timeout(
             dns_timeout,
-            edgerun_rt::spawn_blocking(move || {
+            edgerun_bare_rt::spawn_blocking(move || {
                 use std::net::ToSocketAddrs;
                 format!("{}:443", host_str).to_socket_addrs()
             }),

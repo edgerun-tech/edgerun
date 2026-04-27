@@ -8,7 +8,7 @@
 //! ```no_run
 //! use edgerun_http::http3::Http3Server;
 //! use edgerun_tls::certificate_gen::generate_self_signed;
-//! use edgerun_rt::Runtime;
+//! use edgerun_bare_rt::Runtime;
 //!
 //! let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 //! rt.block_on(async {
@@ -35,8 +35,8 @@ use crate::method::Method;
 use crate::request::Request;
 use crate::response::Response;
 use crate::uri::Uri;
-use edgerun_rt::AsyncUdpSocket;
-use edgerun_rt::CancellationToken;
+use edgerun_bare_rt::AsyncUdpSocket;
+use edgerun_bare_rt::CancellationToken;
 use edgerun_tls::certificate_gen::CertificateAndKey;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -647,7 +647,7 @@ impl Http3Server {
     /// use edgerun_http::http3::Http3Server;
     /// use edgerun_http::{Handler, Request, Response, StatusCode, into_handler};
     /// use edgerun_tls::certificate_gen::generate_self_signed;
-    /// use edgerun_rt::Runtime;
+    /// use edgerun_bare_rt::Runtime;
     /// use std::sync::Arc;
     ///
     /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
@@ -657,7 +657,7 @@ impl Http3Server {
     ///     let handler = into_handler(|_req| {
     ///         Response::text(StatusCode::new(200).unwrap(), "Hello!")
     ///     });
-    ///     let shutdown = edgerun_rt::CancellationToken::new();
+    ///     let shutdown = edgerun_bare_rt::CancellationToken::new();
     ///     server.serve(Arc::new(handler), shutdown).await.unwrap();
     /// });
     /// ```
@@ -676,7 +676,7 @@ impl Http3Server {
             match self.accept().await {
                 Ok((mut conn, client_addr)) => {
                     let handler = Arc::clone(&handler);
-                    edgerun_rt::spawn(async move {
+                    edgerun_bare_rt::spawn(async move {
                         if let Err(e) =
                             Self::handle_connection(&mut conn, handler, client_addr).await
                         {
@@ -690,7 +690,7 @@ impl Http3Server {
                 }
                 Err(e) => {
                     edgerun_log::warn!("HTTP/3 accept error: {}", e);
-                    edgerun_rt::sleep(std::time::Duration::from_millis(100)).await;
+                    edgerun_bare_rt::sleep(std::time::Duration::from_millis(100)).await;
                 }
             }
         }

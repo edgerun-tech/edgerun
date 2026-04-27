@@ -27,13 +27,13 @@
 //!                 match next.run(req.clone()).await {
 //!                     Ok(resp) if resp.is_success() => return Ok(resp),
 //!                     Ok(resp) if attempt + 1 < max => {
-//!                         edgerun_rt::sleep(Duration::from_millis(100 * 2u64.pow(attempt as u32))).await;
+//!                         edgerun_bare_rt::sleep(Duration::from_millis(100 * 2u64.pow(attempt as u32))).await;
 //!                         continue;
 //!                     }
 //!                     Err(e) => {
 //!                         last_err = Some(e);
 //!                         if attempt + 1 < max {
-//!                             edgerun_rt::sleep(Duration::from_millis(100 * 2u64.pow(attempt as u32))).await;
+//!                             edgerun_bare_rt::sleep(Duration::from_millis(100 * 2u64.pow(attempt as u32))).await;
 //!                             continue;
 //!                         }
 //!                     }
@@ -67,7 +67,7 @@ use crate::client::HttpClient;
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::{Error, Request, Response, Result};
-use edgerun_rt::sync::Mutex;
+use edgerun_bare_rt::sync::Mutex;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;

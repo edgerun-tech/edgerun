@@ -136,6 +136,8 @@ impl core::fmt::Display for JoinError {
     }
 }
 
+impl core::error::Error for JoinError {}
+
 struct JoinState<T> {
     result: crate::sync::Mutex<Option<Result<T, JoinError>>>,
     aborted: AtomicBool,

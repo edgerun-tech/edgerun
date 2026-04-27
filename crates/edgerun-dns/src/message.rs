@@ -1,8 +1,14 @@
 //! DNS message parser/serializer — RFC 1035 wire format.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::std::io;
 use crate::std::net::Ipv4Addr;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::record::{
     decode_domain_name, encode_domain_name, encode_domain_name_compressed, DnsRecordData,

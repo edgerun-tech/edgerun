@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use edgerun_rt::{
+use crate::rt::{
     AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
     CancellationToken,
 };
@@ -297,7 +297,7 @@ impl Default for ServerConfig {
 /// Listens for TCP connections, spawns a handler per connection,
 /// and gracefully shuts down via `CancellationToken`.
 pub struct ProtocolServer<P: MailProtocol> {
-    listener: Arc<edgerun_rt::AsyncTcpListener>,
+    listener: Arc<crate::rt::AsyncTcpListener>,
     protocol: Arc<P>,
     config: ServerConfig,
 }
@@ -305,7 +305,7 @@ pub struct ProtocolServer<P: MailProtocol> {
 impl<P: MailProtocol> ProtocolServer<P> {
     /// Create a new protocol server.
     pub fn new(config: ServerConfig, protocol: P) -> io::Result<Self> {
-        let listener = Arc::new(edgerun_rt::AsyncTcpListener::bind(&config.bind_addr)?);
+        let listener = Arc::new(crate::rt::AsyncTcpListener::bind(&config.bind_addr)?);
         edgerun_log::info!(
             "edgerun-mail: {} listening on {}",
             std::any::type_name::<P>(),
@@ -328,7 +328,7 @@ impl<P: MailProtocol> ProtocolServer<P> {
                     let shutdown = shutdown.clone();
 
                     edgerun_log::info!("edgerun-mail: connection from {}", peer);
-                    edgerun_rt::spawn(async move {
+                    crate::rt::spawn(async move {
                         if let Err(e) =
                             handle_connection(stream, peer, protocol, config, shutdown).await
                         {
@@ -338,7 +338,7 @@ impl<P: MailProtocol> ProtocolServer<P> {
                 }
                 Err(e) => {
                     edgerun_log::error!("edgerun-mail: accept error: {}", e);
-                    edgerun_rt::sleep(Duration::from_millis(10)).await;
+                    crate::rt::sleep(Duration::from_millis(10)).await;
                 }
             }
         }

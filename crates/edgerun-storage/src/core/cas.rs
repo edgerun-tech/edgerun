@@ -1,5 +1,9 @@
 //! Shared content-addressed storage identifiers.
 
+use edgerun_proto::edgerun::v0::common::ObjectRef;
+
+use crate::error::StorageError;
+
 /// IDs derived for a logical object and its first stored representation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectIds {
@@ -7,6 +11,33 @@ pub struct ObjectIds {
     pub object_id_hex: String,
     pub representation_id: Vec<u8>,
     pub representation_id_hex: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectBytes {
+    pub object_id: Vec<u8>,
+    pub object_kind: i32,
+    pub content: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectPresence {
+    pub object_id_hex: String,
+    pub representation_id_hex: String,
+    pub blob_id: String,
+    pub status: String,
+}
+
+/// Backend contract for logical objects and stored representations.
+pub trait ContentStore {
+    fn put_object(
+        &self,
+        content: &[u8],
+        object_kind: i32,
+        recipients: &[Vec<u8>],
+    ) -> Result<ObjectRef, StorageError>;
+
+    fn get_object(&self, object_ref: &ObjectRef) -> Result<Option<ObjectBytes>, StorageError>;
 }
 
 /// Derives the protocol logical object identity.

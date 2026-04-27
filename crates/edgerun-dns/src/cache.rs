@@ -15,9 +15,15 @@
 //! // let cached = cache.get("example.com");
 //! ```
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use alloc::collections::BTreeMap as HashMap;
 use crate::std::time::{Duration, Instant};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::message::DnsRecord;
 use super::record::DnsRecordType;

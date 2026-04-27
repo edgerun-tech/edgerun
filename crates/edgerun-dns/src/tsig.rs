@@ -23,9 +23,15 @@
 //! verifier.verify(&signed_wire)?;
 //! ```
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::std::io;
 use crate::std::time::{SystemTime, UNIX_EPOCH};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::message::{DnsMessage, DnsRecord, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};

@@ -11,7 +11,7 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll};
 
-pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
+pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
     let queue = Arc::new(Queue {
         data: RefCell::new(VecDeque::new()),
         sender_count: AtomicUsize::new(1),
@@ -26,28 +26,49 @@ pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
     )
 }
 
+pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
+    channel(cap)
+}
+
 struct Queue<T> {
     data: RefCell<VecDeque<T>>,
     sender_count: AtomicUsize,
     closed: AtomicUsize,
 }
 
+unsafe impl<T: core::marker::Send> core::marker::Send for Queue<T> {}
+unsafe impl<T: core::marker::Send> Sync for Queue<T> {}
+
 pub struct Sender<T> {
     queue: Arc<Queue<T>>,
     cap: usize,
 }
 
-impl<T> Sender<T> {
-    pub fn send(&self, value: T) -> Result<(), SendError> {
-        if self.closed() {
-            return Err(SendError);
-        }
-        if self.cap > 0 && self.queue.data.borrow().len() >= self.cap {
-            return Err(SendError);
-        }
-        self.queue.data.borrow_mut().push_back(value);
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
         self.queue.sender_count.fetch_add(1, Ordering::AcqRel);
-        Ok(())
+        Self {
+            queue: self.queue.clone(),
+            cap: self.cap,
+        }
+    }
+}
+
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        if self.queue.sender_count.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.queue.closed.store(1, Ordering::Release);
+        }
+    }
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) -> Send<T> {
+        Send {
+            sender: self.clone(),
+            value: Some(value),
+            result: None,
+        }
     }
 
     pub fn closed(&self) -> bool {
@@ -56,36 +77,104 @@ impl<T> Sender<T> {
 
     pub fn try_send(&self, value: T) -> Result<(), TrySendError<T>> {
         if self.closed() {
-            return Err(TrySendError(value));
+            return Err(TrySendError::Closed(value));
         }
         if self.cap > 0 && self.queue.data.borrow().len() >= self.cap {
-            return Err(TrySendError(value));
+            return Err(TrySendError::Full(value));
         }
         self.queue.data.borrow_mut().push_back(value);
         Ok(())
     }
+
+    pub fn send_nowait(&self, value: T) -> Result<(), SendError<T>> {
+        self.try_send(value).map_err(|e| SendError(e.into_inner()))
+    }
 }
 
-pub struct SendError;
+pub struct Send<T> {
+    sender: Sender<T>,
+    value: Option<T>,
+    result: Option<Result<(), SendError<T>>>,
+}
 
-pub struct TrySendError<T>(pub T);
+impl<T> Send<T> {
+    pub fn unwrap(mut self)
+    where
+        T: core::fmt::Debug,
+    {
+        match self.result.take().unwrap_or_else(|| {
+            let value = self.value.take().expect("send future already completed");
+            self.sender.send_nowait(value)
+        }) {
+            Ok(()) => {}
+            Err(e) => panic!("called `Result::unwrap()` on an `Err` value: {:?}", e),
+        }
+    }
+}
+
+impl<T: Unpin> Future for Send<T> {
+    type Output = Result<(), SendError<T>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        if let Some(result) = this.result.take() {
+            return Poll::Ready(result);
+        }
+        let Some(value) = this.value.take() else {
+            return Poll::Ready(Ok(()));
+        };
+        match this.sender.try_send(value) {
+            Ok(()) => Poll::Ready(Ok(())),
+            Err(TrySendError::Closed(value)) => Poll::Ready(Err(SendError(value))),
+            Err(TrySendError::Full(value)) => {
+                this.value = Some(value);
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+        }
+    }
+}
+
+pub struct SendError<T>(pub T);
+
+pub enum TrySendError<T> {
+    Full(T),
+    Closed(T),
+}
+
+impl<T> TrySendError<T> {
+    pub fn into_inner(self) -> T {
+        match self {
+            Self::Full(value) | Self::Closed(value) => value,
+        }
+    }
+}
 
 impl<T: core::fmt::Debug> core::fmt::Debug for TrySendError<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("TrySendError").field(&self.0).finish()
+        match self {
+            Self::Full(value) => f.debug_tuple("Full").field(value).finish(),
+            Self::Closed(value) => f.debug_tuple("Closed").field(value).finish(),
+        }
     }
 }
 
-impl core::fmt::Debug for SendError {
+impl<T: core::fmt::Debug> core::fmt::Debug for SendError<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Sender closed")
+        f.debug_tuple("SendError").field(&self.0).finish()
     }
 }
 
-impl core::fmt::Display for SendError {
+impl<T> core::fmt::Display for SendError<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "channel closed")
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TryRecvError {
+    Empty,
+    Disconnected,
 }
 
 pub struct Receiver<T> {
@@ -112,8 +201,14 @@ impl<T> Receiver<T> {
         Recv { receiver: self }
     }
 
-    pub fn try_recv(&self) -> Option<T> {
-        self.queue.data.borrow_mut().pop_front()
+    pub fn try_recv(&self) -> Result<T, TryRecvError> {
+        if let Some(value) = self.queue.data.borrow_mut().pop_front() {
+            Ok(value)
+        } else if self.queue.closed.load(Ordering::Acquire) != 0 {
+            Err(TryRecvError::Disconnected)
+        } else {
+            Err(TryRecvError::Empty)
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -137,11 +232,13 @@ impl<T> Future for Recv<'_, T> {
     type Output = Option<T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if let Some(value) = self.receiver.try_recv() {
-            Poll::Ready(Some(value))
-        } else {
-            cx.waker().wake_by_ref();
-            Poll::Pending
+        match self.receiver.try_recv() {
+            Ok(value) => Poll::Ready(Some(value)),
+            Err(TryRecvError::Disconnected) => Poll::Ready(None),
+            Err(TryRecvError::Empty) => {
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
         }
     }
 }

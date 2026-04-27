@@ -358,9 +358,7 @@ pub enum JwtVerifier {
         verifying_key: edgerun_crypto::p256::ecdsa::VerifyingKey,
     },
     /// RSA PKCS#1 v1.5 SHA-256 verification (RS256).
-    Rs256 {
-        verifying_key: rsa::RsaPublicKey,
-    },
+    Rs256 { verifying_key: rsa::RsaPublicKey },
 }
 
 impl JwtVerifier {

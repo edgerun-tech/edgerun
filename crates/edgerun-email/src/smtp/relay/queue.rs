@@ -9,7 +9,7 @@ use std::io::{self, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use edgerun_rt::{spawn_blocking, RwLock};
+use crate::rt::{spawn_blocking, RwLock};
 
 // ===========================================================================
 // Record Types

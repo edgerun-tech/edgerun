@@ -7,7 +7,7 @@
 
 use std::io;
 
-use edgerun_rt::AsyncReadExt;
+use crate::rt::AsyncReadExt;
 
 // ===========================================================================
 // IMAP Token Types
@@ -45,7 +45,7 @@ pub struct ImapReader<R> {
     line_buf: String,
 }
 
-impl<R: edgerun_rt::AsyncRead + Unpin> ImapReader<R> {
+impl<R: crate::rt::AsyncRead + Unpin> ImapReader<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,

@@ -23,7 +23,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use edgerun_rt::AsyncTcpStream;
+use edgerun_bare_rt::AsyncTcpStream;
 
 // ===========================================================================
 // ConnectionHandler trait

@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use edgerun_rt::{
+use crate::rt::{
     AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, CancellationToken,
 };
 
@@ -178,7 +178,7 @@ impl Unpin for SmtpTransport {}
 // ===========================================================================
 
 pub struct SmtpServer {
-    listener: Arc<edgerun_rt::AsyncTcpListener>,
+    listener: Arc<crate::rt::AsyncTcpListener>,
     handler: Arc<dyn MailHandler>,
     config: SmtpServerConfig,
     /// Outbound mail queue. If present, recipients not matching local_domains
@@ -196,7 +196,7 @@ pub struct SmtpServer {
 
 impl SmtpServer {
     pub fn new(config: SmtpServerConfig, handler: Arc<dyn MailHandler>) -> io::Result<Self> {
-        let listener = Arc::new(edgerun_rt::AsyncTcpListener::bind(&config.bind_addr)?);
+        let listener = Arc::new(crate::rt::AsyncTcpListener::bind(&config.bind_addr)?);
         edgerun_log::info!("edgerun-smtp: listening on {}", config.bind_addr);
         Ok(Self {
             listener,
@@ -286,7 +286,7 @@ impl SmtpServer {
             };
             let worker = DeliveryWorker::new(worker_config, relay, Arc::clone(q));
             let shutdown = shutdown.clone();
-            edgerun_rt::spawn(async move {
+            crate::rt::spawn(async move {
                 worker.run(shutdown).await;
             });
         }
@@ -318,7 +318,7 @@ impl SmtpServer {
                             edgerun_log::warn!("edgerun-smtp: rate limit exceeded for {}", peer);
                             // Reject with 421
                             let config = self.config.clone();
-                            edgerun_rt::spawn(async move {
+                            crate::rt::spawn(async move {
                                 let greeting = SmtpResponse::new(
                                     SmtpResponseCode::SERVICE_UNAVAILABLE,
                                     "Too many connections from this IP",
@@ -338,7 +338,7 @@ impl SmtpServer {
                     let command_middleware = self.command_middleware.clone();
 
                     edgerun_log::info!("edgerun-smtp: connection from {}", peer);
-                    edgerun_rt::spawn(async move {
+                    crate::rt::spawn(async move {
                         let result = handle_connection(
                             stream,
                             peer,
@@ -360,7 +360,7 @@ impl SmtpServer {
                 }
                 Err(e) => {
                     edgerun_log::error!("edgerun-smtp: accept error: {}", e);
-                    edgerun_rt::sleep(std::time::Duration::from_millis(10)).await;
+                    crate::rt::sleep(std::time::Duration::from_millis(10)).await;
                 }
             }
         }
@@ -525,7 +525,7 @@ async fn handle_connection(
                     let handler_clone = Arc::clone(&handler);
                     let envelope_clone = envelope.clone();
                     let config_clone = config.clone();
-                    edgerun_rt::spawn(async move {
+                    crate::rt::spawn(async move {
                         evaluate_and_notify_auth(
                             &handler_clone,
                             &envelope_clone,
@@ -685,7 +685,7 @@ async fn handle_connection(
                     let handler_clone = Arc::clone(&handler);
                     let envelope_clone = envelope.clone();
                     let config_clone = config.clone();
-                    edgerun_rt::spawn(async move {
+                    crate::rt::spawn(async move {
                         evaluate_and_notify_auth(
                             &handler_clone,
                             &envelope_clone,
@@ -1352,7 +1352,7 @@ async fn send_response_direct(
     stream: &Arc<AsyncTcpStream>,
     response: &SmtpResponse,
 ) -> io::Result<()> {
-    use edgerun_rt::AsyncWriteExt;
+    use crate::rt::AsyncWriteExt;
     let formatted = response.format();
     let mut s = Arc::clone(stream);
     s.write_all(formatted.as_bytes()).await?;

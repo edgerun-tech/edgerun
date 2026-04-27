@@ -56,7 +56,7 @@
 //! ```
 
 use crate::{Handler, Request, Response};
-use edgerun_rt::sync::Mutex;
+use edgerun_bare_rt::sync::Mutex;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;

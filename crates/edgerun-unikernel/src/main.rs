@@ -7,6 +7,7 @@ extern crate edgerun_bare_rt as rt;
 extern crate edgerun_dhcp;
 extern crate edgerun_platform;
 extern crate edgerun_tftp;
+extern crate edgerun_tpm;
 extern crate edgerun_virtio;
 
 use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
@@ -112,6 +113,39 @@ fn dhcp_ipv4_to_rt(ip: edgerun_dhcp::Ipv4Addr) -> IpAddr {
     IpAddr::new(octets[0], octets[1], octets[2], octets[3])
 }
 
+#[cfg(target_os = "none")]
+unsafe fn probe_tpm2() {
+    rt::log::log(1, "Looking for TPM2 ACPI table...");
+    let transport = match unsafe { edgerun_tpm::CrbTpmTransport::discover_acpi() } {
+        Ok(Some(transport)) => {
+            rt::log::log(1, "TPM2 CRB transport discovered");
+            transport
+        }
+        Ok(None) => {
+            rt::log::log(1, "No TPM2 ACPI table found");
+            return;
+        }
+        Err(_) => {
+            rt::log::log(1, "TPM2 ACPI discovery failed");
+            return;
+        }
+    };
+
+    let mut device = edgerun_tpm::TpmDevice::new(transport);
+    match device.startup(edgerun_tpm::TPM_SU_CLEAR) {
+        Ok(()) => rt::log::log(1, "TPM2 startup ok"),
+        Err(_) => {
+            rt::log::log(1, "TPM2 startup failed");
+            return;
+        }
+    }
+
+    match device.read_public(edgerun_tpm::TpmHandle(0x8100_0001)) {
+        Ok(_) => rt::log::log(1, "TPM2 persistent key readable"),
+        Err(_) => rt::log::log(1, "TPM2 persistent key not readable"),
+    }
+}
+
 impl Future for NetPump<'_, '_> {
     type Output = ();
 
@@ -157,6 +191,10 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
+
+    unsafe {
+        probe_tpm2();
+    }
 
     let mut rng = Rng::new_from_entropy();
     let test_crc = crc32(b"hello");

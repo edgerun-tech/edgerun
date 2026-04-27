@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+edgerun-bare-rt = { path = "../edgerun-bare-rt", optional = true }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-rt = { path = "../edgerun-rt" }
@@ -15,6 +16,9 @@ prost.workspace = true
 prost-types.workspace = true
 libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }
+
+[features]
+bare-rt = ["dep:edgerun-bare-rt"]
 
 [lints]
 workspace = true

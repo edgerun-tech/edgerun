@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use edgerun_rt::{
-    mpsc, oneshot, select, sleep_until, spawn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
+use edgerun_bare_rt::{
+    mpsc, oneshot, select, sleep, spawn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
     JoinHandle,
 };
 
@@ -32,6 +32,18 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// PING timeout — if no response after this duration, kill the connection.
 const PING_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
+    match error {
+        edgerun_bare_rt::IoError::UnexpectedEof => {
+            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
+        }
+        edgerun_bare_rt::IoError::WriteZero => {
+            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
+        }
+        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
+    }
+}
 
 // ===========================================================================
 // Public types
@@ -146,14 +158,18 @@ impl AsyncClient {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         // Send client connection preface + SETTINGS
-        stream.write_all(CONNECTION_PREFACE).await?;
+        stream
+            .write_all(CONNECTION_PREFACE)
+            .await
+            .map_err(bare_io)?;
 
         let client_settings = Settings::new();
         let settings_frame = SettingsFrame::new(client_settings.to_entries());
         stream
             .write_all(&settings_frame.to_frame().to_bytes())
-            .await?;
-        stream.flush().await?;
+            .await
+            .map_err(bare_io)?;
+        stream.flush().await.map_err(bare_io)?;
 
         // Read server SETTINGS frame per RFC 9113 §3.4
         let (server_settings_frame, _) =
@@ -169,8 +185,11 @@ impl AsyncClient {
 
         // Send SETTINGS ACK
         let ack_frame = SettingsFrame::ack();
-        stream.write_all(&ack_frame.to_frame().to_bytes()).await?;
-        stream.flush().await?;
+        stream
+            .write_all(&ack_frame.to_frame().to_bytes())
+            .await
+            .map_err(bare_io)?;
+        stream.flush().await.map_err(bare_io)?;
 
         let (frame_tx, frame_rx) = mpsc::channel::<OutgoingFrame>(64);
         let streams = Arc::new(std::sync::Mutex::new(StreamStateInner::new(
@@ -538,7 +557,7 @@ async fn connection_task<S>(
             )
         } else {
             // No pending PING — race read, channel, and keepalive timer
-            let keepalive = sleep_until(next_keepalive);
+            let keepalive = sleep(IDLE_TIMEOUT);
             select!(
                 async {
                     match read_frame_async(&mut stream, max_frame_size).await {
@@ -688,7 +707,7 @@ async fn connection_task<S>(
                     let ping_frame = PingFrame::new(data);
                     let frame_bytes = ping_frame.to_frame().to_bytes();
                     if let Err(e) = stream.write_all(&frame_bytes).await {
-                        let _ = reply_tx.send(Err(Http2Error::Io(e)));
+                        let _ = reply_tx.send(Err(Http2Error::Io(bare_io(e))));
                         break;
                     }
                     let _ = stream.flush().await;
@@ -989,7 +1008,7 @@ where
     S: AsyncRead + Unpin,
 {
     let mut header = [0u8; 9];
-    stream.read_exact(&mut header).await?;
+    stream.read_exact(&mut header).await.map_err(bare_io)?;
 
     let length = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) | (header[2] as u32);
 
@@ -1002,7 +1021,7 @@ where
 
     let mut payload = vec![0u8; length as usize];
     if length > 0 {
-        stream.read_exact(&mut payload).await?;
+        stream.read_exact(&mut payload).await.map_err(bare_io)?;
     }
 
     let mut frame_bytes = Vec::with_capacity(9 + payload.len());
@@ -1018,6 +1037,6 @@ where
     S: AsyncWrite + Unpin,
 {
     let bytes = frame.to_bytes();
-    stream.write_all(&bytes).await?;
-    stream.flush().await
+    stream.write_all(&bytes).await.map_err(bare_io)?;
+    stream.flush().await.map_err(bare_io)
 }

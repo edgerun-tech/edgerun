@@ -1,8 +1,14 @@
 //! UDP receive loop — non-blocking DNS query handling over UDP
 //! with rate limiting and graceful shutdown.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use alloc::sync::Arc;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::compat::AsyncUdpSocket;
 

@@ -2,7 +2,7 @@
 
 use std::io;
 
-use edgerun_rt::{AsyncRead, AsyncReadExt};
+use crate::rt::{AsyncRead, AsyncReadExt};
 
 /// Default ESMTP extensions advertised in EHLO.
 ///

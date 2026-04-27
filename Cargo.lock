@@ -59,15 +59,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
 
 [[package]]
-name = "alloc-stdlib"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94fb8275041c72129eb51b7d0322c29b8387a0386127718b096429201a5d6ece"
-dependencies = [
- "alloc-no-stdlib",
-]
-
-[[package]]
 name = "alloca"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -176,7 +167,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4bd8b9603c7aa97359dbd97ecf258968c95f3adddd6db2f7e7a5bef101c84560"
 dependencies = [
  "alloc-no-stdlib",
- "alloc-stdlib",
  "brotli-decompressor",
 ]
 
@@ -187,7 +177,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "874bb8112abecc98cbd6d81ea4fa7e94fb9449648c93cc89aa40c81c24d7de03"
 dependencies = [
  "alloc-no-stdlib",
- "alloc-stdlib",
 ]
 
 [[package]]
@@ -665,19 +654,19 @@ name = "edgerun-acme"
 version = "0.1.1"
 dependencies = [
  "base64",
+ "edgerun-bare-rt",
  "edgerun-crypto",
  "edgerun-dns",
  "edgerun-encoding",
+ "edgerun-error",
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
- "edgerun-rt",
  "edgerun-secret-service",
  "log",
  "serde",
  "serde_json",
  "sha2",
- "thiserror",
  "time",
  "url",
 ]
@@ -993,10 +982,10 @@ dependencies = [
 name = "edgerun-edit"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-clap",
  "edgerun-http",
  "edgerun-json",
- "edgerun-rt",
  "prettyplease",
  "proc-macro2",
  "quote",
@@ -1007,12 +996,12 @@ dependencies = [
 name = "edgerun-email"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-crypto",
  "edgerun-dns",
  "edgerun-email-auth",
  "edgerun-encoding",
  "edgerun-log",
- "edgerun-rt",
  "edgerun-tls",
 ]
 
@@ -1115,17 +1104,18 @@ name = "edgerun-http"
 version = "0.1.1"
 dependencies = [
  "brotli",
+ "edgerun-bare-rt",
  "edgerun-crypto",
  "edgerun-dns",
  "edgerun-encoding",
+ "edgerun-error",
  "edgerun-hpack",
  "edgerun-json",
  "edgerun-log",
  "edgerun-qpack",
- "edgerun-rt",
  "edgerun-tls",
- "flate2",
  "futures",
+ "miniz_oxide",
  "serde",
 ]
 
@@ -1287,10 +1277,10 @@ dependencies = [
 name = "edgerun-marketplace-cli"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-clap",
  "edgerun-json",
  "edgerun-log",
- "edgerun-rt",
  "edgerun-solana",
  "mockall",
 ]
@@ -1493,11 +1483,11 @@ dependencies = [
 name = "edgerun-oauth"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-http",
  "edgerun-json",
- "edgerun-rt",
  "edgerun-secret-service",
  "rsa",
 ]
@@ -1626,11 +1616,11 @@ dependencies = [
 name = "edgerun-scheduler"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-config",
  "edgerun-error",
  "edgerun-json",
  "edgerun-mesh",
- "edgerun-rt",
  "edgerun-solana",
  "serde",
 ]
@@ -1652,6 +1642,7 @@ dependencies = [
 name = "edgerun-server"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-dhcp",
  "edgerun-dns",
  "edgerun-email",
@@ -1659,7 +1650,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-log",
  "edgerun-proxy",
- "edgerun-rt",
  "edgerun-tftp",
  "edgerun-tls",
 ]
@@ -1669,11 +1659,11 @@ name = "edgerun-solana"
 version = "0.1.1"
 dependencies = [
  "bs58",
+ "edgerun-bare-rt",
  "edgerun-crypto",
  "edgerun-error",
  "edgerun-http",
  "edgerun-json",
- "edgerun-rt",
  "mockall",
  "serde",
 ]
@@ -1689,6 +1679,7 @@ dependencies = [
 name = "edgerun-storage"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
@@ -1756,16 +1747,16 @@ dependencies = [
 name = "edgerun-tpm"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
+ "edgerun-crypto",
 ]
 
 [[package]]
 name = "edgerun-tuya"
 version = "0.1.1"
 dependencies = [
+ "edgerun-bare-rt",
  "edgerun-capabilities",
  "edgerun-json",
- "edgerun-rt",
  "serde",
 ]
 
@@ -1777,6 +1768,7 @@ dependencies = [
  "edgerun-dhcp",
  "edgerun-platform",
  "edgerun-tftp",
+ "edgerun-tpm",
  "edgerun-virtio",
  "getrandom 0.2.17",
 ]

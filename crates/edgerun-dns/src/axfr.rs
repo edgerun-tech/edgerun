@@ -6,9 +6,15 @@
 //!
 //! Optionally secured with TSIG authentication.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use alloc::collections::BTreeMap as HashMap;
 use crate::std::io;
+use alloc::collections::BTreeMap as HashMap;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::message::{DnsMessage, DnsOpcode, DnsQuestion, DnsRecord, DnsResponseCode};
 use super::record::{DnsRecordData, DnsRecordType};

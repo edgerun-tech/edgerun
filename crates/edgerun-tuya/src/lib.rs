@@ -5,8 +5,8 @@
 //!
 //! This provides LOCAL-ONLY control - no cloud account, no internet required.
 
+use edgerun_bare_rt::{timeout, AsyncUdpSocket, Elapsed};
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_rt::{timeout, AsyncUdpSocket, Elapsed};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -94,7 +94,8 @@ impl TuyaDiscovery {
 
         let request = edgerun_json::to_string(&TuyaCommand::Discovery {
             protocol_version: PROTOCOL_VERSION.to_string(),
-        })?;
+        })
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         socket.send_to(request.as_bytes(), broadcast_addr).await?;
 
@@ -179,7 +180,8 @@ impl TuyaController {
         let request = edgerun_json::to_string(&TuyaCommand::Control {
             devId: self.device.id.clone(),
             dps,
-        })?;
+        })
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         socket.send_to(request.as_bytes(), addr).await?;
 

@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::types::{TpmError, TpmKeyInfo};
 
 /// Abstract interface for a TPM-backed signing key.

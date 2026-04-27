@@ -1,5 +1,5 @@
+use edgerun_bare_rt::RwLock;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
-use edgerun_rt::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 

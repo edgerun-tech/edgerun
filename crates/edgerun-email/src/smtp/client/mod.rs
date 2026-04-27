@@ -11,7 +11,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use edgerun_rt::{
+use crate::rt::{
     AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture,
 };
 
@@ -220,7 +220,7 @@ impl SmtpClient {
     async fn connect_tcp(addr: &str) -> io::Result<AsyncTcpStream> {
         if let Ok(sock_addr) = addr.parse::<SocketAddr>() {
             let fut = ConnectFuture::new(sock_addr);
-            match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
+            match crate::rt::timeout(std::time::Duration::from_secs(10), fut).await {
                 Ok(Ok(stream)) => return Ok(Arc::try_unwrap(stream).ok().unwrap()),
                 Ok(Err(e)) => return Err(e),
                 Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
@@ -232,7 +232,7 @@ impl SmtpClient {
 
         let resolved = Self::dns_resolve(&host, port).await?;
         let fut = ConnectFuture::new(resolved);
-        match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
+        match crate::rt::timeout(std::time::Duration::from_secs(10), fut).await {
             Ok(Ok(stream)) => Ok(Arc::try_unwrap(stream).ok().unwrap()),
             Ok(Err(e)) => Err(e),
             Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
@@ -241,7 +241,7 @@ impl SmtpClient {
 
     async fn dns_resolve(host: &str, port: u16) -> io::Result<SocketAddr> {
         let host_str = host.to_string();
-        let result = edgerun_rt::spawn_blocking(move || {
+        let result = crate::rt::spawn_blocking(move || {
             use std::net::ToSocketAddrs;
             format!("{}:{}", host_str, port).to_socket_addrs()
         })

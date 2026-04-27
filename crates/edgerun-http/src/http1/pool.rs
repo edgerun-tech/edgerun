@@ -22,7 +22,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use edgerun_rt::{
+use edgerun_bare_rt::{
     timeout as rt_timeout, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
     BufReader, ConnectFuture,
 };
@@ -30,10 +30,22 @@ use edgerun_rt::{
 use edgerun_tls::async_tls::AsyncTlsStream;
 use edgerun_tls::SessionCache;
 
-use edgerun_rt::sync::Mutex;
+use edgerun_bare_rt::sync::Mutex;
 
 use crate::http1::compression;
 use crate::{Error, HeaderMap, Method, Request, Response, Result, StatusCode};
+
+fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
+    match error {
+        edgerun_bare_rt::IoError::UnexpectedEof => {
+            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
+        }
+        edgerun_bare_rt::IoError::WriteZero => {
+            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
+        }
+        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
+    }
+}
 
 // ===========================================================================
 // Pool key
@@ -62,16 +74,16 @@ impl PooledConn {
     /// Read a line from the buffered connection.
     async fn read_line(&mut self) -> std::io::Result<Option<String>> {
         match self {
-            PooledConn::Plain(r) => r.read_line().await,
-            PooledConn::Tls(r) => r.read_line().await,
+            PooledConn::Plain(r) => r.read_line().await.map_err(bare_io),
+            PooledConn::Tls(r) => r.read_line().await.map_err(bare_io),
         }
     }
 
     /// Read bytes from the connection.
     async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
-            PooledConn::Plain(r) => r.read(buf).await,
-            PooledConn::Tls(r) => r.read(buf).await,
+            PooledConn::Plain(r) => r.read(buf).await.map_err(bare_io),
+            PooledConn::Tls(r) => r.read(buf).await.map_err(bare_io),
         }
     }
 
@@ -79,12 +91,12 @@ impl PooledConn {
     async fn write_request(&mut self, data: &[u8]) -> std::io::Result<()> {
         match self {
             PooledConn::Plain(r) => {
-                r.get_mut().write_all(data).await?;
-                r.get_mut().flush().await
+                r.get_mut().write_all(data).await.map_err(bare_io)?;
+                r.get_mut().flush().await.map_err(bare_io)
             }
             PooledConn::Tls(r) => {
-                r.get_mut().write_all(data).await?;
-                r.get_mut().flush().await
+                r.get_mut().write_all(data).await.map_err(bare_io)?;
+                r.get_mut().flush().await.map_err(bare_io)
             }
         }
     }
@@ -599,7 +611,7 @@ impl ConnectionPool {
         let host_owned = host.to_string();
         let dns_result = rt_timeout(
             dns_timeout,
-            edgerun_rt::spawn_blocking(move || {
+            edgerun_bare_rt::spawn_blocking(move || {
                 use std::net::ToSocketAddrs;
                 format!("{}:443", host_owned).to_socket_addrs()
             }),

@@ -1,3 +1,7 @@
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 /// Signature algorithms supported by the TPM signing path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TpmSignatureAlgorithm {
@@ -270,6 +274,7 @@ impl core::fmt::Display for TpmError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for TpmError {}
 
 /// Authorization mode for signing operations.

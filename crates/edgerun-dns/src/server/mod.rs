@@ -3,10 +3,16 @@
 //! Listens on both UDP and TCP. Each query is spawned as a separate
 //! async task via `crate::compat::spawn`.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use alloc::collections::BTreeMap as HashMap;
 use crate::std::io;
+use alloc::collections::BTreeMap as HashMap;
 use alloc::sync::Arc;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::compat::AsyncTcpListener;
 use crate::compat::AsyncUdpSocket;
@@ -49,7 +55,9 @@ pub struct RateLimiter {
     /// Max queries per second per IP. 0 = unlimited.
     max_qps: u32,
     /// Per-IP state: (token_count, last_refill_time).
-    state: Arc<crate::std::sync::Mutex<HashMap<crate::std::net::IpAddr, (u32, crate::std::time::Instant)>>>,
+    state: Arc<
+        crate::std::sync::Mutex<HashMap<crate::std::net::IpAddr, (u32, crate::std::time::Instant)>>,
+    >,
 }
 
 impl RateLimiter {

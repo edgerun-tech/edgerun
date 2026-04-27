@@ -1,11 +1,17 @@
 //! DHCPv4 client — implements the DORA (Discover-Offer-Request-Ack) process.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::std::ffi::c_void;
 use crate::std::io;
 use crate::std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use crate::std::os::raw::c_int;
 use crate::std::time::{Duration, Instant};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use super::lease::Lease;
 use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
@@ -239,8 +245,10 @@ impl DhcpClient {
         let mut msg = DhcpMessage::discover(self.xid, self.mac);
         msg.secs = self.secs_elapsed();
         let wire = msg.to_wire();
-        let broadcast =
-            SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
+        let broadcast = SocketAddr::new(
+            crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+            DHCP_SERVER_PORT,
+        );
         self.socket.send_to(&wire, broadcast)?;
         Ok(())
     }
@@ -249,8 +257,10 @@ impl DhcpClient {
         let mut msg = DhcpMessage::request(self.xid, self.mac, ip, server_id);
         msg.secs = self.secs_elapsed();
         let wire = msg.to_wire();
-        let broadcast =
-            SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
+        let broadcast = SocketAddr::new(
+            crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+            DHCP_SERVER_PORT,
+        );
         self.socket.send_to(&wire, broadcast)?;
         Ok(())
     }
@@ -265,7 +275,10 @@ impl DhcpClient {
     /// Broadcast a message to all DHCP servers (used for T2 rebind).
     fn send_broadcast(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let wire = msg.to_wire();
-        let addr = SocketAddr::new(crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST), DHCP_SERVER_PORT);
+        let addr = SocketAddr::new(
+            crate::std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+            DHCP_SERVER_PORT,
+        );
         self.socket.send_to(&wire, addr)?;
         Ok(())
     }

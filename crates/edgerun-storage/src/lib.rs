@@ -18,14 +18,19 @@
 //! Loss of indexes does not invalidate already stored records.
 
 pub mod blobs;
+pub mod block;
 pub mod core;
 pub mod credentials;
 pub mod error;
 pub mod event_loop;
 pub mod file_index;
+pub mod fs;
+pub mod mem;
 pub mod store;
 
 pub use blobs::{blob_file_path, BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig};
+pub use block::BlockStreamStore;
+pub use block::{BlockEventLog, BlockStorage, InMemoryBlockDevice};
 pub use core::{canonical_event_hash, derive_logical_object_id, derive_representation_id};
 pub use credentials::CredentialStore;
 pub use error::StorageError;
@@ -34,4 +39,5 @@ pub use event_loop::{
     EventWriter, FetchHandler, OpEventType, PeerDiscoveryHandler, PeerStatusHandler,
 };
 pub use file_index::{EventIndexEntry, FetchEntry, FileIndex, ReplayEntry, WorkAccountingRecord};
+pub use mem::{MemContentStore, MemEventLog};
 pub use store::{CommandReplayResult, ControllerSet, NodeStore, NodeStoreConfig, ObjectResult};

@@ -1,12 +1,18 @@
 //! TCP accept loop and connection handler — length-prefixed DNS over TCP
 //! with rate limiting and graceful shutdown.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use core::future::poll_fn;
 use crate::std::io;
 use crate::std::net::SocketAddr;
-use core::pin::Pin;
 use alloc::sync::Arc;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+use core::future::poll_fn;
+use core::pin::Pin;
 
 use crate::compat::AsyncRead;
 use crate::compat::AsyncTcpListener;

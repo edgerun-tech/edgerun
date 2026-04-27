@@ -3,7 +3,13 @@
 //! Supports block size negotiation, read requests, encrypted blob store.
 //! Used by PXE boot clients after DHCP provides server/bootfile info.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 pub mod blob_provider;
 pub mod message;
 pub mod server;

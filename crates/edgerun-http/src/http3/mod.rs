@@ -1,5 +1,11 @@
 //! HTTP/3 protocol (RFC 9114)
 
+#[cfg(target_os = "none")]
+use crate::std_compat as std;
+#[cfg(target_os = "none")]
+use crate::std_compat::prelude::v1::*;
+use edgerun_error::Error;
+
 pub mod connection;
 pub mod frame;
 pub mod qpack;
@@ -21,28 +27,19 @@ pub use stream::Http3Stream;
 pub type Result<T> = std::result::Result<T, Http3Error>;
 
 /// HTTP/3 error
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Http3Error {
+    #[error("IO: {0}")]
     Io(std::io::Error),
+    #[error("QUIC: {0}")]
     QuicError(String),
+    #[error("QPACK: {0}")]
     QpackError(String),
+    #[error("Frame: {0}")]
     FrameUnexpected(String),
+    #[error("Protocol: {0}")]
     ProtocolViolation(String),
 }
-
-impl std::fmt::Display for Http3Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Http3Error::Io(e) => write!(f, "IO: {}", e),
-            Http3Error::QuicError(e) => write!(f, "QUIC: {}", e),
-            Http3Error::QpackError(e) => write!(f, "QPACK: {}", e),
-            Http3Error::FrameUnexpected(e) => write!(f, "Frame: {}", e),
-            Http3Error::ProtocolViolation(e) => write!(f, "Protocol: {}", e),
-        }
-    }
-}
-
-impl std::error::Error for Http3Error {}
 
 impl From<std::io::Error> for Http3Error {
     fn from(e: std::io::Error) -> Self {

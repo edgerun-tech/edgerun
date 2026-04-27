@@ -3,6 +3,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 pub mod time;
 pub use time::{Duration, Instant};
@@ -47,7 +49,9 @@ pub mod cancellation;
 pub use cancellation::{CancellationToken, Cancelled};
 
 pub mod io;
-pub use io::{AsyncBufRead, AsyncRead, AsyncWrite, Cursor, IoError};
+pub use io::{
+    AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, Cursor, IoError,
+};
 
 pub mod poll_fn;
 pub use poll_fn::{poll_fn, PollFn};
@@ -60,10 +64,14 @@ pub mod join_internal {
 }
 
 pub mod select;
-pub use select::{select2, select_2, select_3, select_4, Either, Select, Select3, Select4};
+pub use select::{
+    select2, select_2, select_3, select_4, Either, Select, Select2Enum, Select3, Select4,
+};
 
 pub mod channel;
 pub use channel::{channel, Receiver, RecvError, SendError, Sender};
+
+pub mod oneshot;
 
 pub mod mpsc;
 pub use mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
@@ -116,6 +124,11 @@ pub type UdpAddr = SocketAddr;
 
 pub mod tcp;
 pub use tcp::{TcpError, TcpListener, TcpSocket, TcpState};
+
+#[cfg(not(target_os = "none"))]
+pub mod async_net;
+#[cfg(not(target_os = "none"))]
+pub use async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
 
 pub mod ipv4;
 pub use ipv4::{Ipv4Addr, Ipv4Header, IP_DEFAULT_TTL, IP_VERSION};

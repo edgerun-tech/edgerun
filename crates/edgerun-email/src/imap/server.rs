@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::SystemTime;
 
-use edgerun_rt::{
+use crate::rt::{
     AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
     CancellationToken, Mutex,
 };
@@ -1738,7 +1738,7 @@ impl ImapServer {
                     let tls_cert = self.tls_cert.clone();
                     let imaps = self.imaps;
                     let command_middleware = self.command_middleware.clone();
-                    edgerun_rt::spawn(async move {
+                    crate::rt::spawn(async move {
                         if let Err(e) = handle_connection(
                             stream,
                             peer,
@@ -1761,7 +1761,7 @@ impl ImapServer {
                 }
                 Err(e) => {
                     edgerun_log::warn!("edgerun-imap: accept error: {}", e);
-                    edgerun_rt::sleep(std::time::Duration::from_millis(10)).await;
+                    crate::rt::sleep(std::time::Duration::from_millis(10)).await;
                 }
             }
         }

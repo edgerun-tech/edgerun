@@ -19,7 +19,7 @@
 use std::collections::HashMap;
 use std::io;
 
-use edgerun_rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, ConnectFuture};
+use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, ConnectFuture};
 
 use crate::smtp::types::{SmtpResponse, SmtpResponseCode};
 
@@ -56,7 +56,7 @@ impl LmtpClient {
             .parse()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         let fut = ConnectFuture::new(sock_addr);
-        match edgerun_rt::timeout(std::time::Duration::from_secs(10), fut).await {
+        match crate::rt::timeout(std::time::Duration::from_secs(10), fut).await {
             Ok(Ok(stream)) => Ok(std::sync::Arc::try_unwrap(stream).ok().unwrap()),
             Ok(Err(e)) => Err(e),
             Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),

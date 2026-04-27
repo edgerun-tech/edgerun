@@ -4,6 +4,44 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
+#[macro_export]
+macro_rules! select {
+    (biased; $($body:tt)*) => {
+        compile_error!("biased select is not implemented in edgerun-bare-rt")
+    };
+    ($($body:tt)*) => {
+        $crate::select_impl!(2; $($body)*)
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Select2Enum<O> {
+    _0(O),
+    _1(O),
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! select_impl {
+    (2; $fut1:expr, $fut2:expr $(,)?) => {{
+        let f1 = $fut1;
+        let f2 = $fut2;
+        $crate::select_2(f1, f2).await
+    }};
+    (2; $pat1:pat = $fut1:expr => $body1:expr, $pat2:pat = $fut2:expr => $body2:expr $(,)?) => {{
+        let f1 = $fut1;
+        let f2 = $fut2;
+        let result = $crate::select_2(async { $crate::Select2Enum::_0(f1.await) }, async {
+            $crate::Select2Enum::_1(f2.await)
+        })
+        .await;
+        match result {
+            $crate::Select2Enum::_0($pat1) => $body1,
+            $crate::Select2Enum::_1($pat2) => $body2,
+        }
+    }};
+}
+
 pub enum Either<L, R> {
     Left(L),
     Right(R),
@@ -68,21 +106,21 @@ impl<F1, F2> Select<F1, F2> {
 
 impl<F1, F2> Future for Select<F1, F2>
 where
-    F1: Future + Unpin,
-    F2: Future<Output = F1::Output> + Unpin,
+    F1: Future,
+    F2: Future<Output = F1::Output>,
 {
     type Output = F1::Output;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let Some(ref mut f1) = self.fut1 {
-            if let Poll::Ready(v) = Pin::new(f1).poll(cx) {
+            if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f1) }.poll(cx) {
                 self.fut1 = None;
                 self.fut2 = None;
                 return Poll::Ready(v);
             }
         }
         if let Some(ref mut f2) = self.fut2 {
-            return Pin::new(f2).poll(cx);
+            return unsafe { Pin::new_unchecked(f2) }.poll(cx);
         }
         Poll::Pending
     }
@@ -114,15 +152,15 @@ impl<F1, F2, F3> Unpin for Select3<F1, F2, F3> {}
 
 impl<F1, F2, F3> Future for Select3<F1, F2, F3>
 where
-    F1: Future + Unpin,
-    F2: Future<Output = F1::Output> + Unpin,
-    F3: Future<Output = F1::Output> + Unpin,
+    F1: Future,
+    F2: Future<Output = F1::Output>,
+    F3: Future<Output = F1::Output>,
 {
     type Output = F1::Output;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let Some(ref mut f1) = self.fut1 {
-            if let Poll::Ready(v) = Pin::new(f1).poll(cx) {
+            if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f1) }.poll(cx) {
                 self.fut1 = None;
                 self.fut2 = None;
                 self.fut3 = None;
@@ -130,7 +168,7 @@ where
             }
         }
         if let Some(ref mut f2) = self.fut2 {
-            if let Poll::Ready(v) = Pin::new(f2).poll(cx) {
+            if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f2) }.poll(cx) {
                 self.fut1 = None;
                 self.fut2 = None;
                 self.fut3 = None;
@@ -138,7 +176,7 @@ where
             }
         }
         if let Some(ref mut f3) = self.fut3 {
-            return Pin::new(f3).poll(cx);
+            return unsafe { Pin::new_unchecked(f3) }.poll(cx);
         }
         Poll::Pending
     }
@@ -168,16 +206,16 @@ impl<F1, F2, F3, F4> Unpin for Select4<F1, F2, F3, F4> {}
 
 impl<F1, F2, F3, F4> Future for Select4<F1, F2, F3, F4>
 where
-    F1: Future + Unpin,
-    F2: Future<Output = F1::Output> + Unpin,
-    F3: Future<Output = F1::Output> + Unpin,
-    F4: Future<Output = F1::Output> + Unpin,
+    F1: Future,
+    F2: Future<Output = F1::Output>,
+    F3: Future<Output = F1::Output>,
+    F4: Future<Output = F1::Output>,
 {
     type Output = F1::Output;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let Some(ref mut f1) = self.fut1 {
-            if let Poll::Ready(v) = Pin::new(f1).poll(cx) {
+            if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f1) }.poll(cx) {
                 self.fut1 = None;
                 self.fut2 = None;
                 self.fut3 = None;
@@ -186,7 +224,7 @@ where
             }
         }
         if let Some(ref mut f2) = self.fut2 {
-            if let Poll::Ready(v) = Pin::new(f2).poll(cx) {
+            if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f2) }.poll(cx) {
                 self.fut1 = None;
                 self.fut2 = None;
                 self.fut3 = None;
@@ -195,7 +233,7 @@ where
             }
         }
         if let Some(ref mut f3) = self.fut3 {
-            if let Poll::Ready(v) = Pin::new(f3).poll(cx) {
+            if let Poll::Ready(v) = unsafe { Pin::new_unchecked(f3) }.poll(cx) {
                 self.fut1 = None;
                 self.fut2 = None;
                 self.fut3 = None;
@@ -204,7 +242,7 @@ where
             }
         }
         if let Some(ref mut f4) = self.fut4 {
-            return Pin::new(f4).poll(cx);
+            return unsafe { Pin::new_unchecked(f4) }.poll(cx);
         }
         Poll::Pending
     }

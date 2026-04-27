@@ -9,9 +9,9 @@ publish.workspace = true
 edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { path = "../edgerun-json" }
-edgerun-rt = { path = "../edgerun-rt" }
+edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
-edgerun-encoding = { path = "../edgerun-encoding" }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
 rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"] }
 
 [lints]

@@ -58,7 +58,7 @@ use std::future::Future;
 use std::io;
 use std::sync::Arc;
 
-use edgerun_rt::Mutex;
+use crate::rt::Mutex;
 
 // ===========================================================================
 // SessionExtensions — type-erased, session-scoped data store

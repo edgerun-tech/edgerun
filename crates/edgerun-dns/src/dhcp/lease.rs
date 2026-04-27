@@ -1,9 +1,15 @@
 //! DHCP lease tracking.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use core::fmt::Write;
 use crate::std::net::Ipv4Addr;
 use crate::std::time::{Duration, Instant};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+use core::fmt::Write;
 
 use edgerun_encoding::ip::{ip_to_u32, u32_to_ip};
 

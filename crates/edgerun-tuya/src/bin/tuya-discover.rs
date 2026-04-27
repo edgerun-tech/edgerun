@@ -1,4 +1,4 @@
-use edgerun_rt::Runtime;
+use edgerun_bare_rt::Runtime;
 use edgerun_tuya::TuyaDiscovery;
 use std::net::SocketAddr;
 use std::process::exit;

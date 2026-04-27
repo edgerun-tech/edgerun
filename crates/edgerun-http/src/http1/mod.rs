@@ -1,7 +1,7 @@
 //! Async HTTP/1.1 implementation (RFC 9112)
 //!
 //! This module provides HTTP/1.1 server built on top of
-//! [`edgerun_rt`] async primitives. The client is in the unified `HttpClient`.
+//! [`edgerun_bare_rt`] async primitives. The client is in the unified `HttpClient`.
 
 pub mod body;
 pub mod chunked;
@@ -19,7 +19,7 @@ pub use crate::{Request, Response};
 pub use body::{AsyncBodyReader, Body, BodyReader, BodySender};
 pub use compression::{accept_encoding_value, decompress_body, ContentEncoding};
 pub use connection::{determine_connection, ConnectionState};
-pub use edgerun_rt::BufReader;
+pub use edgerun_bare_rt::BufReader;
 pub use handler::{into_handler, into_handler_async, Handler};
 pub use multipart::{extract_boundary, is_multipart, parse_multipart, MultipartField};
 pub use pool::ConnectionPool;

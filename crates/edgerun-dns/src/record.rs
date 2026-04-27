@@ -1,9 +1,15 @@
 //! DNS record types and data structures.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-use core::fmt;
 use crate::std::net::Ipv4Addr;
 use crate::std::net::Ipv6Addr;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+use core::fmt;
 
 // ---------------------------------------------------------------------------
 // Record type constants (RFC 1035 + extensions)
@@ -714,7 +720,10 @@ impl DnsRecordData {
             DnsRecordType::AAAA => {
                 if data.len() == 16 {
                     let octets: [u8; 16] = data.try_into().map_err(|_| {
-                        crate::std::io::Error::new(crate::std::io::ErrorKind::InvalidData, "AAAA wrong size")
+                        crate::std::io::Error::new(
+                            crate::std::io::ErrorKind::InvalidData,
+                            "AAAA wrong size",
+                        )
                     })?;
                     Ok(Self::AAAA(Ipv6Addr::from(octets)))
                 } else {

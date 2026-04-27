@@ -27,6 +27,9 @@ struct Inner<T> {
     sent: AtomicBool,
 }
 
+unsafe impl<T: Send> Send for Inner<T> {}
+unsafe impl<T: Send> Sync for Inner<T> {}
+
 pub struct Sender<T> {
     inner: Arc<Inner<T>>,
 }

@@ -15,6 +15,7 @@ qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu.log}"
 expected_marker="${QEMU_EXPECT:-VirtIO found}"
 qemu_net_dump="${QEMU_NET_DUMP:-}"
 qemu_netdev="${QEMU_NETDEV:-user,id=n0}"
+qemu_tpm_socket="${QEMU_TPM_SOCKET:-}"
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
@@ -26,6 +27,14 @@ qemu_extra_args=()
 if [[ -n "$qemu_net_dump" ]]; then
     rm -f "$qemu_net_dump"
     qemu_extra_args+=(-object "filter-dump,id=edgerun-net-dump,netdev=n0,file=$qemu_net_dump")
+fi
+
+if [[ -n "$qemu_tpm_socket" ]]; then
+    qemu_extra_args+=(
+        -chardev "socket,id=chrtpm,path=$qemu_tpm_socket"
+        -tpmdev "emulator,id=tpm0,chardev=chrtpm"
+        -device "tpm-crb,tpmdev=tpm0"
+    )
 fi
 
 as --32 -o "$boot_obj" "$repo_root/crates/edgerun-unikernel/qemu_boot.S"

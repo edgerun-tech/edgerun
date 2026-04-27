@@ -1,7 +1,7 @@
 [package]
 name = "edgerun-json"
-version = "0.1.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 license = "MIT OR Apache-2.0"
 description = "A zero-dependency JSON crate with owned, borrowed, tape, and compiled-schema fast paths"
 readme = "README.md"
@@ -9,7 +9,7 @@ repository = "https://github.com/Sylchi/edgerun-json"
 homepage = "https://github.com/Sylchi/edgerun-json"
 keywords = ["json", "parser", "serializer", "zero-copy", "tape"]
 categories = ["encoding", "parser-implementations"]
-rust-version = "1.70"
+rust-version.workspace = true
 
 [features]
 default = ["alloc"]

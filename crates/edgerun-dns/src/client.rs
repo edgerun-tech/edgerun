@@ -2,11 +2,17 @@
 //!
 //! Uses the edgerun-rt async runtime for non-blocking I/O.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use crate::std::io;
 use crate::std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use core::pin::Pin;
 use crate::std::time::Duration;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+use core::pin::Pin;
 
 use crate::compat::AsyncUdpSocket;
 

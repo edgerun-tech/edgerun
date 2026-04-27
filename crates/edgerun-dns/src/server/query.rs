@@ -1,8 +1,14 @@
 //! DNS query processing — parsing, resolution, and upstream forwarding.
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
 use alloc::collections::BTreeMap as HashMap;
 use alloc::sync::Arc;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::compat::AsyncUdpSocket;
 
@@ -189,7 +195,10 @@ pub async fn forward_query(
 
     let socket = AsyncUdpSocket::bind("0.0.0.0:0")?;
     let target: SocketAddr = upstream_addr.parse().map_err(|_| {
-        crate::std::io::Error::new(crate::std::io::ErrorKind::InvalidInput, "bad upstream address")
+        crate::std::io::Error::new(
+            crate::std::io::ErrorKind::InvalidInput,
+            "bad upstream address",
+        )
     })?;
 
     // Send the query
@@ -202,7 +211,12 @@ pub async fn forward_query(
         socket.recv_from(&mut buf),
     )
     .await
-    .map_err(|_| crate::std::io::Error::new(crate::std::io::ErrorKind::TimedOut, "upstream query timed out"))??;
+    .map_err(|_| {
+        crate::std::io::Error::new(
+            crate::std::io::ErrorKind::TimedOut,
+            "upstream query timed out",
+        )
+    })??;
 
     Ok(buf[..n].to_vec())
 }

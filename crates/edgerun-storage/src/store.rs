@@ -6,21 +6,36 @@
 //! - `BlobStore` — AES-GCM encrypted payload objects on the filesystem
 //! - Append-only event log — protobuf records on the filesystem
 
-use edgerun_core::protocol::EventEnvelope;
-use edgerun_proto::edgerun::v0::stream as proto_stream;
+use edgerun_core::protocol::{Digest, EventEnvelope};
 use prost::Message;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::blobs::{BlobKeySource, BlobStore};
-use crate::core::{canonical_event_hash, cas::raw_object_ids};
+use crate::block::{BlockStorage, BlockStreamStore};
+use crate::core::{ContentStore, EventLocation, ScannedEvent};
 use crate::credentials::CredentialStore;
 use crate::error::StorageError;
-use crate::event_loop::{EventLoopBuilder, EventWriter, FetchHandler, PeerDiscoveryHandler};
+use crate::event_loop::{
+    EventLoopBuilder, EventWriter, FetchHandler, OpEventType, PeerDiscoveryHandler,
+    materialize_event_to_index,
+};
 use crate::file_index::FileIndex;
+use crate::fs::{FsContentStore, read_event_at, scan_event_logs};
 use std::collections::HashSet;
+
+enum EventBackend {
+    Fs {
+        writer: EventWriter,
+        writer_thread: std::thread::JoinHandle<()>,
+    },
+    Block {
+        store: Arc<Mutex<BlockStreamStore<Box<dyn crate::block::BlockStorage + Send>>>>,
+    },
+}
 
 // ---------------------------------------------------------------------------
 // Controller state
@@ -83,10 +98,27 @@ pub struct NodeStore {
     config: NodeStoreConfig,
     index: Arc<FileIndex>,
     blobs: Arc<BlobStore>,
+    content: FsContentStore,
     credentials: CredentialStore,
-    writer: EventWriter,
-    #[allow(dead_code)]
-    writer_thread: std::thread::JoinHandle<()>,
+    backend: EventBackend,
+}
+
+fn to_event_backend_block<S>(device: S) -> Result<EventBackend, StorageError>
+where
+    S: BlockStorage + Send + 'static,
+{
+    let device: Box<dyn BlockStorage + Send> = Box::new(device);
+    let store = BlockStreamStore::open(device)?;
+    Ok(EventBackend::Block {
+        store: Arc::new(Mutex::new(store)),
+    })
+}
+
+struct StoreComponents {
+    index: Arc<FileIndex>,
+    blobs: Arc<BlobStore>,
+    content: FsContentStore,
+    credentials: CredentialStore,
 }
 
 /// Result of retrieving a logical object.
@@ -108,6 +140,55 @@ impl NodeStore {
         fs::create_dir_all(&events_dir)?;
         fs::create_dir_all(&blobs_dir)?;
 
+        let components = Self::open_common_components(config, blobs_dir)?;
+        let mut builder = EventLoopBuilder::new(
+            events_dir,
+            Arc::clone(&components.index),
+            Arc::clone(&components.blobs),
+        );
+        builder.register_handler(Box::new(FetchHandler));
+        builder.register_handler(Box::new(PeerDiscoveryHandler));
+        let (writer, writer_thread) = builder.build();
+
+        Ok(Self {
+            config: config.clone(),
+            index: components.index,
+            blobs: components.blobs,
+            content: components.content,
+            credentials: components.credentials,
+            backend: EventBackend::Fs {
+                writer,
+                writer_thread,
+            },
+        })
+    }
+
+    /// Opens or initializes storage using a block device for the event stream.
+    pub fn open_with_block_device<S>(
+        config: &NodeStoreConfig,
+        device: S,
+    ) -> Result<Self, StorageError>
+    where
+        S: BlockStorage + Send + 'static,
+    {
+        let blobs_dir = config.data_root.join("blobs");
+        fs::create_dir_all(&blobs_dir)?;
+
+        let components = Self::open_common_components(config, blobs_dir)?;
+        Ok(Self {
+            config: config.clone(),
+            index: components.index,
+            blobs: components.blobs,
+            content: components.content,
+            credentials: components.credentials,
+            backend: to_event_backend_block(device)?,
+        })
+    }
+
+    fn open_common_components(
+        config: &NodeStoreConfig,
+        blobs_dir: PathBuf,
+    ) -> Result<StoreComponents, StorageError> {
         let index = Arc::new(FileIndex::open(&config.data_root)?);
 
         let blob_config = crate::blobs::BlobStoreConfig {
@@ -126,25 +207,18 @@ impl NodeStore {
             },
         };
         let blobs = Arc::new(BlobStore::open(&blob_config, key_source)?);
+        let content = FsContentStore::new(Arc::clone(&blobs), Arc::clone(&index));
         let credentials = CredentialStore::new(
             Arc::clone(&blobs),
             Arc::clone(&index),
             config.node_identity.clone(),
         );
 
-        // Build the event loop — all mutations flow through this
-        let mut builder = EventLoopBuilder::new(events_dir, Arc::clone(&index), Arc::clone(&blobs));
-        builder.register_handler(Box::new(FetchHandler));
-        builder.register_handler(Box::new(PeerDiscoveryHandler));
-        let (writer, writer_thread) = builder.build();
-
-        Ok(Self {
-            config: config.clone(),
+        Ok(StoreComponents {
             index,
             blobs,
+            content,
             credentials,
-            writer,
-            writer_thread,
         })
     }
 
@@ -163,7 +237,12 @@ impl NodeStore {
         if let Err(available) = self.check_disk_space() {
             edgerun_log::warn!("low disk space: {available} bytes available");
         }
-        self.writer.write_event(event).await
+        match &self.backend {
+            EventBackend::Fs { writer, .. } => writer.write_event(event).await,
+            EventBackend::Block { store } => {
+                self.append_event_blocking_to_block_store(event, store, true)
+            }
+        }
     }
 
     /// Synchronous version of `append_event` — for use from blocking threads.
@@ -172,7 +251,12 @@ impl NodeStore {
         if let Err(available) = self.check_disk_space() {
             edgerun_log::warn!("low disk space: {available} bytes available");
         }
-        self.writer.write_event_blocking(event)
+        match &self.backend {
+            EventBackend::Fs { writer, .. } => writer.write_event_blocking(event),
+            EventBackend::Block { store } => {
+                self.append_event_blocking_to_block_store(event, store, true)
+            }
+        }
     }
 
     /// Retrieves an event from the event log by stream ID and sequence number.
@@ -190,36 +274,118 @@ impl NodeStore {
             return Ok(None);
         };
 
-        // Read from event log file
-        let log_path = self
-            .config
-            .data_root
-            .join("events")
-            .join(format!("{}.log", stream_id_hex));
-        let mut file = File::open(&log_path)?;
-        file.seek(SeekFrom::Start(entry.file_offset))?;
+        match &self.backend {
+            EventBackend::Fs { .. } => read_event_at(
+                &self.config.data_root.join("events"),
+                stream_id,
+                seq,
+                entry.file_offset,
+            ),
+            EventBackend::Block { store } => {
+                let location = EventLocation {
+                    stream_id: stream_id.to_vec(),
+                    seq,
+                    event_hash: entry.event_hash,
+                    file_offset: entry.file_offset,
+                    envelope_version: entry.envelope_version as u32,
+                };
 
-        // Read varint length prefix
-        let (len, eof) = decode_varint_from_file(&mut file)?;
-        if eof {
-            return Ok(None);
+                store
+                    .lock()
+                    .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?
+                    .get_event(stream_id, seq)
+            }
         }
-
-        // Read protobuf bytes
-        let mut event_bytes = vec![0u8; len as usize];
-        file.read_exact(&mut event_bytes)?;
-
-        // Decode
-        let proto = proto_stream::EventEnvelope::decode(&event_bytes[..])
-            .map_err(|e| StorageError::Decode(format!("event protobuf decode failed: {}", e)))?;
-
-        Ok(Some(proto))
     }
 
     /// Returns the current head (latest seq + hash) for a stream.
     pub fn get_head(&self, stream_id: &[u8]) -> Result<Option<(i64, Vec<u8>)>, StorageError> {
         let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
-        Ok(self.index.get_head(&stream_id_hex)?)
+        if let Some(head) = self.index.get_head(&stream_id_hex)? {
+            return Ok(Some(head));
+        }
+
+        match &self.backend {
+            EventBackend::Block { store } => {
+                let store = store
+                    .lock()
+                    .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
+                Ok(store
+                    .get_head(stream_id)
+                    .map(|(seq, hash)| (seq as i64, hash)))
+            }
+            EventBackend::Fs { .. } => Ok(None),
+        }
+    }
+
+    fn append_event_blocking_to_block_store(
+        &self,
+        event: EventEnvelope,
+        store: &Arc<Mutex<BlockStreamStore<Box<dyn BlockStorage + Send>>>>,
+        apply_followups: bool,
+    ) -> Result<u64, StorageError> {
+        let location = {
+            let mut store = store
+                .lock()
+                .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
+            let location = store.append_event(event.clone())?;
+            location
+        };
+
+        materialize_event_to_index(&self.index, &event, location.file_offset)?;
+
+        if apply_followups {
+            self.apply_block_followup_events(&event, &location)?;
+        }
+
+        Ok(location.file_offset)
+    }
+
+    fn apply_block_followup_events(
+        &self,
+        event: &EventEnvelope,
+        location: &EventLocation,
+    ) -> Result<(), StorageError> {
+        if event.event_type == OpEventType::FetchRequested.as_i32() {
+            if let Some(payload) = &event.payload_object {
+                let target_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                self.index.enqueue_fetch("object", &target_id, 0)?;
+            }
+        }
+
+        if event.event_type == OpEventType::PeerDiscovered.as_i32() {
+            let attempt_event = EventEnvelope {
+                envelope_version: event.envelope_version,
+                stream_id: event.stream_id.clone(),
+                seq: location.seq.saturating_add(1),
+                prev_event_hash: Some(Digest {
+                    algorithm: 1,
+                    value: location.event_hash.clone(),
+                }),
+                event_type: OpEventType::ConnectionAttempt.as_i32(),
+                event_version: event.event_version,
+                recorded_at: None,
+                effective_at: None,
+                payload_object: None,
+                related_events: vec![],
+                related_commands: vec![],
+                related_objects: vec![],
+                related_delegations: vec![],
+                related_revocations: vec![],
+                event_metadata: None,
+                signature: None,
+            };
+
+            match &self.backend {
+                EventBackend::Block { store } => {
+                    let _ =
+                        self.append_event_blocking_to_block_store(attempt_event, store, false)?;
+                }
+                EventBackend::Fs { .. } => {}
+            }
+        }
+
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -434,48 +600,7 @@ impl NodeStore {
             edgerun_log::warn!("low disk space: {} bytes available", available);
         }
 
-        use edgerun_proto::edgerun::v0::common::ObjectRef;
-
-        let ids = raw_object_ids(content);
-
-        // Create LogicalObjectDescriptor (for future storage/persistence)
-        let _descriptor = edgerun_proto::edgerun::v0::object::LogicalObjectDescriptor {
-            descriptor_version: 1,
-            object_id: ids.object_id.clone(),
-            object_kind,
-            object_schema_version: 1,
-            canonicalization_id: "raw-bytes-v0".into(),
-            canonical_digest: Some(edgerun_proto::edgerun::v0::common::Digest {
-                algorithm: 1, // DIGEST_ALGORITHM_SHA256
-                value: edgerun_core::crypto::sha256(content).to_vec(),
-            }),
-            canonical_size: content.len() as u64,
-            created_at: Some(prost_types::Timestamp {
-                seconds: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64,
-                nanos: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .subsec_nanos() as i32,
-            }),
-            producer: None,
-            describes_object: None,
-            object_metadata: None,
-        };
-
-        // Store the content as an encrypted blob
-        let blob_id = self.blobs.store(content, recipients)?;
-
-        // Record object presence in file index
-        self.index
-            .mark_object_present(&ids.object_id_hex, &ids.representation_id_hex, &blob_id)?;
-
-        Ok(ObjectRef {
-            object_id: ids.object_id,
-            object_kind: Some(object_kind),
-        })
+        self.content.put_object(content, object_kind, recipients)
     }
 
     // -----------------------------------------------------------------------
@@ -492,36 +617,14 @@ impl NodeStore {
         &self,
         object_ref: &edgerun_proto::edgerun::v0::common::ObjectRef,
     ) -> Result<Option<ObjectResult>, StorageError> {
-        let object_id_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
-
-        // Check presence
-        if !self.index.is_object_present(&object_id_hex)? {
-            return Ok(None);
-        }
-
-        let blob_id = self
-            .index
-            .lookup_objects(std::slice::from_ref(&object_id_hex))?
-            .into_iter()
-            .find(|(id, _, _, status)| id == &object_id_hex && status == "present")
-            .and_then(|(_, _, blob, _)| blob)
-            .ok_or_else(|| {
-                StorageError::InvalidBlob(format!(
-                    "object {object_id_hex} is marked present without a blob id"
-                ))
-            })?;
-        let entry = self.blobs.load(&blob_id)?;
-        let Some(entry) = entry else {
-            return Ok(None);
-        };
-
-        let plaintext = self.blobs.decrypt(&entry.nonce, &entry.ciphertext)?;
-
-        Ok(Some(ObjectResult {
-            object_id: object_ref.object_id.clone(),
-            object_kind: object_ref.object_kind.unwrap_or(0),
-            content: plaintext,
-        }))
+        Ok(self
+            .content
+            .get_object(object_ref)?
+            .map(|object| ObjectResult {
+                object_id: object.object_id,
+                object_kind: object.object_kind,
+                content: object.content,
+            }))
     }
 
     /// Resolves an event's payload_object reference to its decrypted content.
@@ -1133,89 +1236,49 @@ impl NodeStore {
     /// This scans all `.log` files in the events directory, replays every event,
     /// and repopulates the seq→offset mapping, stream heads, and event presence index.
     pub fn rebuild_indexes(&self) -> Result<usize, StorageError> {
-        let events_dir = self.config.data_root.join("events");
+        let scanned = self.scan_events_for_rebuild()?;
+        self.rebuild_indexes_from_scanned_events(scanned)
+    }
 
-        // Clear existing index data (heads, events, replay)
+    fn scan_events_for_rebuild(&self) -> Result<Vec<ScannedEvent>, StorageError> {
+        match &self.backend {
+            EventBackend::Fs { .. } => scan_event_logs(&self.config.data_root.join("events")),
+            EventBackend::Block { store } => store
+                .lock()
+                .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?
+                .scan(),
+        }
+    }
+
+    fn rebuild_indexes_from_scanned_events(
+        &self,
+        mut scanned: Vec<ScannedEvent>,
+    ) -> Result<usize, StorageError> {
         self.index.clear()?;
 
-        let mut total_events = 0;
+        scanned.sort_by(|left, right| {
+            left.location
+                .stream_id
+                .cmp(&right.location.stream_id)
+                .then(left.location.seq.cmp(&right.location.seq))
+        });
 
-        for entry in fs::read_dir(&events_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("log") {
-                continue;
-            }
+        let total_events = scanned.len();
+        for scanned_event in scanned {
+            let EventLocation {
+                stream_id,
+                seq,
+                file_offset,
+                ..
+            } = &scanned_event.location;
+            let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
 
-            let stream_id_hex = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_string();
-
-            let _stream_id = match edgerun_core::util::hex_to_bytes(&stream_id_hex) {
-                Ok(id) => id,
-                Err(_) => continue,
-            };
-
-            let mut file = File::open(&path)?;
-            let mut head_seq: i64 = -1;
-            let mut head_hash: Vec<u8> = Vec::new();
-
-            loop {
-                // Record position before reading varint
-                let record_start = file.stream_position()?;
-
-                // Try to read varint length prefix
-                let (len, eof) = match decode_varint_from_file(&mut file) {
-                    Ok(v) => v,
-                    Err(StorageError::Io(ref e))
-                        if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-                    {
-                        break
-                    }
-                    Err(e) => return Err(e),
-                };
-                if eof {
-                    break;
-                }
-
-                let offset = record_start;
-
-                // Read protobuf bytes
-                let mut event_bytes = vec![0u8; len as usize];
-                file.read_exact(&mut event_bytes)?;
-
-                // Decode
-                let proto = match proto_stream::EventEnvelope::decode(&event_bytes[..]) {
-                    Ok(p) => p,
-                    Err(_) => continue, // skip corrupted records during rebuild
-                };
-
-                let event_hash = canonical_event_hash(&proto).value;
-
-                // Rebuild index entry
-                self.index.put_event(
-                    &stream_id_hex,
-                    proto.seq as i64,
-                    &event_hash,
-                    offset,
-                    proto.envelope_version as i64,
-                )?;
-
-                // Track head
-                if proto.seq as i64 > head_seq {
-                    head_seq = proto.seq as i64;
-                    head_hash = event_hash;
-                }
-
-                total_events += 1;
-            }
-
-            // Rebuild head
-            if head_seq >= 0 {
-                self.index.set_head(&stream_id_hex, head_seq, &head_hash)?;
-            }
+            materialize_event_to_index(&self.index, &scanned_event.event, *file_offset)?;
+            self.index.set_head(
+                &stream_id_hex,
+                *seq as i64,
+                &scanned_event.location.event_hash,
+            )?;
         }
 
         Ok(total_events)
@@ -1388,23 +1451,11 @@ pub enum CommandReplayResult {
     Duplicate { prior_decision_seq: i64 },
 }
 
-// ---------------------------------------------------------------------------
-// Varint helpers — use shared edgerun-core::varint for encoding
-// ---------------------------------------------------------------------------
-
-use edgerun_core::varint::{decode_varint_from_read, encode_varint};
-
-fn decode_varint_from_file(file: &mut File) -> Result<(u64, bool), StorageError> {
-    match decode_varint_from_read(file) {
-        Ok(Some(v)) => Ok((v, false)),
-        Ok(None) => Ok((0, true)),
-        Err(e) => Err(StorageError::Io(e)),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block::InMemoryBlockDevice;
+    use edgerun_core::protocol::Digest;
     use std::path::PathBuf;
 
     fn tmp_data_root() -> PathBuf {
@@ -1428,6 +1479,45 @@ mod tests {
         NodeStore::open(&config).unwrap()
     }
 
+    fn make_block_store(data_root: PathBuf) -> (NodeStore, InMemoryBlockDevice) {
+        let config = NodeStoreConfig {
+            data_root,
+            blob_key_source: std::sync::Arc::new(BlobKeySource::Software {
+                private_key_bytes: vec![0x42; 32],
+            }),
+            node_identity: vec![0x99; 32],
+        };
+
+        let device = InMemoryBlockDevice::new(32, 64);
+        let store = NodeStore::open_with_block_device(&config, device.clone()).unwrap();
+        (store, device)
+    }
+
+    fn event(stream_id: &[u8], seq: u64, prev_hash: Option<Vec<u8>>) -> EventEnvelope {
+        EventEnvelope {
+            envelope_version: 1,
+            event_version: 1,
+            stream_id: stream_id.to_vec(),
+            seq,
+            prev_event_hash: prev_hash.map(|value| Digest {
+                algorithm: 1,
+                value,
+            }),
+            event_type: 1,
+            recorded_at: None,
+            effective_at: None,
+            payload_object: None,
+            related_events: vec![],
+            related_commands: vec![],
+            related_objects: vec![],
+            related_delegations: vec![],
+            related_revocations: vec![],
+            event_metadata: None,
+            signature: None,
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn put_object_can_be_retrieved_by_logical_object_ref() {
         let data_root = tmp_data_root();
@@ -1444,6 +1534,65 @@ mod tests {
 
         let loaded = store.get_object(&object_ref).unwrap().unwrap();
         assert_eq!(loaded.content, b"hello object");
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn block_mode_writes_and_reads_events() {
+        let data_root = tmp_data_root();
+        let (store, _device) = make_block_store(data_root.clone());
+
+        assert!(store.get_head(b"stream").unwrap().is_none());
+
+        let first = event(b"stream", 0, None);
+        let first_hash = crate::core::canonical_event_hash(&first).value;
+        let _ = store.append_event_blocking(first).unwrap();
+        assert_eq!(store.get_head(b"stream").unwrap().unwrap().0, 0);
+
+        let second = event(b"stream", 1, Some(first_hash));
+        let _ = store.append_event_blocking(second).unwrap();
+        assert_eq!(store.get_head(b"stream").unwrap().unwrap().0, 1);
+
+        let from_log = store.get_event(b"stream", 1).unwrap().unwrap();
+        assert_eq!(from_log.seq, 1);
+        assert_eq!(from_log.stream_id, b"stream".to_vec());
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn block_mode_rebuilds_indexes_from_stream_scan() {
+        let data_root = tmp_data_root();
+        let config = NodeStoreConfig {
+            data_root: data_root.clone(),
+            blob_key_source: std::sync::Arc::new(BlobKeySource::Software {
+                private_key_bytes: vec![0x42; 32],
+            }),
+            node_identity: vec![0x99; 32],
+        };
+
+        let device = InMemoryBlockDevice::new(32, 64);
+        {
+            let store = NodeStore::open_with_block_device(&config, device.clone()).unwrap();
+            let first = event(b"stream", 0, None);
+            let first_hash = crate::core::canonical_event_hash(&first).value;
+            store.append_event_blocking(first).unwrap();
+            let second = event(b"stream", 1, Some(first_hash));
+            store.append_event_blocking(second).unwrap();
+        }
+
+        let index_dir = data_root.join("indexes");
+        let _ = std::fs::remove_dir_all(&index_dir);
+
+        let reopened = NodeStore::open_with_block_device(&config, device).unwrap();
+        let rebuilt = reopened.rebuild_indexes().unwrap();
+        assert_eq!(rebuilt, 2);
+
+        let head = reopened.get_head(b"stream").unwrap().unwrap();
+        assert_eq!(head.0, 1);
+        assert!(reopened.get_event(b"stream", 0).unwrap().is_some());
+        assert!(reopened.get_event(b"stream", 1).unwrap().is_some());
 
         let _ = std::fs::remove_dir_all(data_root);
     }

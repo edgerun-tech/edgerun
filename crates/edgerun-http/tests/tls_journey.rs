@@ -6,8 +6,8 @@
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 
+use edgerun_bare_rt::{sleep, spawn, Runtime};
 use edgerun_http::{Handler, HttpClient, HttpServer, HttpVersion, Request, Response, StatusCode};
-use edgerun_rt::{sleep, spawn, Runtime};
 use edgerun_tls::generate_self_signed as gen_cert;
 
 static PORT: AtomicU16 = AtomicU16::new(14000);
@@ -128,7 +128,7 @@ fn test_https_tls() {
 
         // Wait for server with timeout
         println!("  [10] Waiting for server (3s timeout)...");
-        match edgerun_rt::timeout(Duration::from_secs(3), server_task).await {
+        match edgerun_bare_rt::timeout(Duration::from_secs(3), server_task).await {
             Ok(Ok(())) => println!("  [11] Server finished OK"),
             Ok(Err(e)) => println!("  [11] Server error: {}", e),
             Err(_) => {

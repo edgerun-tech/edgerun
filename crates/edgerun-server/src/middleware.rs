@@ -45,7 +45,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use edgerun_rt::AsyncTcpStream;
+use edgerun_bare_rt::AsyncTcpStream;
 
 // ===========================================================================
 // ConnectionMiddleware Trait
@@ -357,7 +357,7 @@ impl ConnectionMiddleware for ConnectionLogger {
 
 /// Per-IP connection rate limiter.
 pub struct ConnectionRateLimit {
-    state: Arc<edgerun_rt::Mutex<HashMap<IpAddr, RateLimitEntry>>>,
+    state: Arc<edgerun_bare_rt::Mutex<HashMap<IpAddr, RateLimitEntry>>>,
     max_connections: usize,
     window_secs: u64,
 }
@@ -370,7 +370,7 @@ struct RateLimitEntry {
 impl ConnectionRateLimit {
     pub fn new(max_connections: usize, window_secs: u64) -> Self {
         Self {
-            state: Arc::new(edgerun_rt::Mutex::new(HashMap::new())),
+            state: Arc::new(edgerun_bare_rt::Mutex::new(HashMap::new())),
             max_connections,
             window_secs,
         }
@@ -389,7 +389,7 @@ impl ConnectionMiddleware for ConnectionRateLimit {
         let window = self.window_secs;
 
         Box::pin(async move {
-            let mut map = state.lock().await;
+            let mut map = state.lock();
             let now = Instant::now();
 
             let entry = map.entry(peer.ip()).or_insert(RateLimitEntry {

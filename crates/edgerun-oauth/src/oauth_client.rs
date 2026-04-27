@@ -8,7 +8,7 @@
 //! ```no_run
 //! use edgerun_oauth::{OAuthClientBuilder, ClientConfig, TokenStore};
 //!
-//! # edgerun_rt::block_on(async {
+//! # edgerun_bare_rt::block_on(async {
 //! let config = ClientConfig::device_flow("https://provider.example.com", "my-client-id");
 //! let store = TokenStore::new().unwrap();
 //!
@@ -415,7 +415,7 @@ impl OAuthClient {
         timeout_secs: u64,
         initial_interval: u64,
     ) -> std::result::Result<Credentials, OAuthError> {
-        use edgerun_rt::sleep;
+        use edgerun_bare_rt::sleep;
         use std::time::{Duration, Instant};
 
         let start = Instant::now();

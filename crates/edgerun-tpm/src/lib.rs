@@ -1,7 +1,7 @@
 //! TPM 2.0 signing backend for edgerun.
 //!
 //! Provides raw TPM command construction, response parsing, and a high-level
-//! `TpmSigningKey` abstraction backed by `/dev/tpmrm0` on Linux.
+//! `TpmSigningKey` abstraction over transport-specific TPM I/O.
 //!
 //! ## Quick start
 //!
@@ -12,25 +12,37 @@
 //! let sig = key.sign_message(b"hello")?;
 //! ```
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
 // TSS2 ESAPI module removed — we now use raw TPM commands via /dev/tpmrm0
 
+mod acpi;
 mod constants;
+mod crb;
 mod device;
+#[cfg(feature = "std")]
+mod linux;
 mod signing;
 mod traits;
 mod types;
 mod wire;
 
 // Explicit public API — no glob re-exports
+pub use acpi::{discover_tpm2_info, parse_tpm2_table, AcpiTpm2Info};
 pub use constants::{
     TPM_ALG_ECC, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_SIGN, TPM_ECC_NIST_P256, TPM_RC_SUCCESS,
     TPM_RH_NULL, TPM_RS_PW, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
 };
-pub use device::{LinuxTpmDevice, TpmDevice};
+pub use crb::CrbTpmTransport;
+pub use device::TpmDevice;
+#[cfg(feature = "std")]
+pub use linux::{LinuxTpmDevice, LinuxTpmSigningKey};
 pub use signing::{
     default_sign_scheme_for_algorithm, hash_message_for_algorithm, sign_params_for_message,
     sign_prehashed_with_device, sign_record_with_tpm, sign_record_with_tpm_checked,
-    signature_input_for_record, LinuxTpmSigningKey,
+    signature_input_for_record, TpmTransportSigningKey,
 };
 pub use traits::{TpmSigningKey, TpmTransport};
 pub use types::{

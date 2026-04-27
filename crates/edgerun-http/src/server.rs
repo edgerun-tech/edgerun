@@ -19,14 +19,26 @@ use crate::http2::ErrorCode;
 use crate::method::Method;
 use crate::uri::Uri;
 use crate::{Request, Response, StatusCode};
-use edgerun_rt::BufReader;
-use edgerun_rt::{
+use edgerun_bare_rt::BufReader;
+use edgerun_bare_rt::{
     sleep, spawn, timeout, AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncWrite, AsyncWriteExt,
     CancellationToken,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+
+fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
+    match error {
+        edgerun_bare_rt::IoError::UnexpectedEof => {
+            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
+        }
+        edgerun_bare_rt::IoError::WriteZero => {
+            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
+        }
+        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
+    }
+}
 
 /// TLS certificate for the server.
 pub type TlsCertificate = edgerun_tls::certificate_gen::CertificateAndKey;
@@ -282,7 +294,7 @@ where
                     let _ = reader.get_mut().flush().await;
                     sleep(Duration::from_millis(50)).await;
                     let _ = reader.get_mut().shutdown().await;
-                    return Err(e);
+                    return Err(bare_io(e));
                 }
             }
             // Pass skip_preface=true since we already consumed and validated it above.
@@ -395,7 +407,7 @@ where
             let hline_opt = reader
                 .read_line_max(max_request_size)
                 .await
-                .map_err(std::io::Error::other)?;
+                .map_err(bare_io)?;
             let hline = match hline_opt {
                 Some(s) => s,
                 None => break,
@@ -456,7 +468,11 @@ where
             || response.status().as_u16() == 304
             || response.status().is_informational();
         if !skip_body && !response.body().is_empty() {
-            reader.get_mut().write_all(response.body()).await?;
+            reader
+                .get_mut()
+                .write_all(response.body())
+                .await
+                .map_err(bare_io)?;
         }
 
         current_line = match timeout(ka_timeout, reader.read_line_max(max_request_size)).await {
@@ -526,7 +542,11 @@ where
             reader.consume(buffered);
             let mut discard = [0u8; 7];
             let to_read = remaining_preface - buffered;
-            reader.get_mut().read_exact(&mut discard[..to_read]).await?;
+            reader
+                .get_mut()
+                .read_exact(&mut discard[..to_read])
+                .await
+                .map_err(bare_io)?;
         }
     }
 
@@ -1083,7 +1103,7 @@ where
     S: AsyncRead + Unpin,
 {
     let mut hdr = [0u8; 9];
-    stream.read_exact(&mut hdr).await?;
+    stream.read_exact(&mut hdr).await.map_err(bare_io)?;
     let length = ((hdr[0] as u32) << 16) | ((hdr[1] as u32) << 8) | (hdr[2] as u32);
     let raw_type = hdr[3];
     let flags_byte = hdr[4];
@@ -1096,7 +1116,10 @@ where
         let mut remaining = length as usize;
         while remaining > 0 {
             let to_read = remaining.min(discard.len());
-            stream.read_exact(&mut discard[..to_read]).await?;
+            stream
+                .read_exact(&mut discard[..to_read])
+                .await
+                .map_err(bare_io)?;
             remaining -= to_read;
         }
         return Ok(Err((stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32())));
@@ -1104,7 +1127,7 @@ where
 
     let mut payload = vec![0u8; length as usize];
     if length > 0 {
-        stream.read_exact(&mut payload).await?;
+        stream.read_exact(&mut payload).await.map_err(bare_io)?;
     }
     Ok(Ok(Frame {
         frame_type: FrameType::from_u8(raw_type).unwrap_or(FrameType::Data),
@@ -1118,8 +1141,8 @@ async fn write_frame<S>(stream: &mut S, frame: &Frame) -> std::io::Result<()>
 where
     S: AsyncWrite + Unpin,
 {
-    stream.write_all(&frame.to_bytes()).await?;
-    stream.flush().await
+    stream.write_all(&frame.to_bytes()).await.map_err(bare_io)?;
+    stream.flush().await.map_err(bare_io)
 }
 
 async fn write_goaway<S>(stream: &mut S, last_stream_id: u32, error_code: u32, debug: &[u8])
@@ -1162,20 +1185,28 @@ where
             )
             .as_bytes(),
         )
-        .await?;
+        .await
+        .map_err(bare_io)?;
     for (name, value) in response.headers().iter() {
-        reader.write_all(name.as_str().as_bytes()).await?;
-        reader.write_all(b": ").await?;
-        reader.write_all(value.as_str().as_bytes()).await?;
-        reader.write_all(b"\r\n").await?;
+        reader
+            .write_all(name.as_str().as_bytes())
+            .await
+            .map_err(bare_io)?;
+        reader.write_all(b": ").await.map_err(bare_io)?;
+        reader
+            .write_all(value.as_str().as_bytes())
+            .await
+            .map_err(bare_io)?;
+        reader.write_all(b"\r\n").await.map_err(bare_io)?;
     }
     if !response.headers().contains_key("Content-Length") {
         let cl = if is_head { 0 } else { response.body().len() };
         reader
             .write_all(format!("Content-Length: {}\r\n", cl).as_bytes())
-            .await?;
+            .await
+            .map_err(bare_io)?;
     }
-    reader.write_all(b"\r\n").await?;
+    reader.write_all(b"\r\n").await.map_err(bare_io)?;
     Ok(())
 }
 
@@ -1192,25 +1223,33 @@ where
             )
             .as_bytes(),
         )
-        .await?;
+        .await
+        .map_err(bare_io)?;
     for (name, value) in response.headers().iter() {
-        reader.write_all(name.as_str().as_bytes()).await?;
-        reader.write_all(b": ").await?;
-        reader.write_all(value.as_str().as_bytes()).await?;
-        reader.write_all(b"\r\n").await?;
+        reader
+            .write_all(name.as_str().as_bytes())
+            .await
+            .map_err(bare_io)?;
+        reader.write_all(b": ").await.map_err(bare_io)?;
+        reader
+            .write_all(value.as_str().as_bytes())
+            .await
+            .map_err(bare_io)?;
+        reader.write_all(b"\r\n").await.map_err(bare_io)?;
     }
     if !response.headers().contains_key("Content-Length") {
         reader
             .write_all(format!("Content-Length: {}\r\n", response.body().len()).as_bytes())
-            .await?;
+            .await
+            .map_err(bare_io)?;
     }
-    reader.write_all(b"\r\n").await?;
+    reader.write_all(b"\r\n").await.map_err(bare_io)?;
     if !response.body().is_empty()
         && response.status().as_u16() != 204
         && response.status().as_u16() != 304
         && !response.status().is_informational()
     {
-        reader.write_all(response.body()).await?;
+        reader.write_all(response.body()).await.map_err(bare_io)?;
     }
     Ok(())
 }

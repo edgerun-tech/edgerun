@@ -1,6 +1,6 @@
-use std::fs::OpenOptions;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use alloc::format;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::constants::*;
 use crate::traits::TpmTransport;
@@ -154,18 +154,7 @@ impl<T: TpmTransport> TpmDevice<T> {
     ) -> Result<TpmProvisionedKey, TpmError> {
         let _ = self.startup(TPM_SU_CLEAR);
 
-        // Scan for an available persistent handle
-        let mut available_handle = persistent_handle;
-        {
-            let mut check_device = TpmDevice::new(LinuxTpmDevice::new("/dev/tpmrm0"));
-            let _ = check_device.startup(TPM_SU_CLEAR);
-            for h in (TPM_PERSISTENT_FIRST..=TPM_PERSISTENT_FIRST + 0xFF).step_by(1) {
-                if check_device.read_public(TpmHandle(h)).is_err() {
-                    available_handle = h;
-                    break;
-                }
-            }
-        }
+        let available_handle = persistent_handle;
 
         let object_attributes = TPMA_OBJECT_SIGN_ENCRYPT
             | TPMA_OBJECT_FIXED_TPM
@@ -317,56 +306,5 @@ impl<T: TpmTransport> TpmDevice<T> {
             public_key_bytes,
             name,
         })
-    }
-}
-
-/// Concrete TPM transport via `/dev/tpmrm0` on Linux.
-#[derive(Clone, Debug)]
-pub struct LinuxTpmDevice {
-    path: PathBuf,
-}
-
-impl LinuxTpmDevice {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl TpmTransport for LinuxTpmDevice {
-    fn transact(&mut self, command: &[u8]) -> Result<Vec<u8>, TpmError> {
-        use crate::wire::parse::parse_response_header;
-
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.path)
-            .map_err(|err| TpmError::Io(format!("open {}: {err}", self.path.display())))?;
-        file.write_all(command)
-            .map_err(|err| TpmError::Io(format!("write {}: {err}", self.path.display())))?;
-
-        let mut header_buf = [0u8; 10];
-        file.read_exact(&mut header_buf)
-            .map_err(|err| TpmError::Io(format!("read header {}: {err}", self.path.display())))?;
-        let header = parse_response_header(&header_buf)?;
-        if header.size < header_buf.len() as u32 {
-            return Err(TpmError::Protocol(format!(
-                "response too small: {}",
-                header.size
-            )));
-        }
-        let mut out = Vec::with_capacity(header.size as usize);
-        out.extend_from_slice(&header_buf);
-        let remaining = header.size as usize - header_buf.len();
-        if remaining > 0 {
-            let mut rest = vec![0u8; remaining];
-            file.read_exact(&mut rest)
-                .map_err(|err| TpmError::Io(format!("read body {}: {err}", self.path.display())))?;
-            out.extend_from_slice(&rest);
-        }
-        Ok(out)
     }
 }

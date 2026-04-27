@@ -21,13 +21,13 @@ use crate::rng::fill_random;
 use crate::sha::Digest;
 
 pub use aead::{Aes256GcmCipher, CipherU12, CipherU16};
-pub use aes_gcm::Aes256Gcm as AesGcmCipher;
-pub use aes_gcm::Nonce;
 pub use aes_gcm::aead::{Aead, AeadInPlace, KeyInit};
 pub use aes_gcm::AeadCore;
+pub use aes_gcm::Aes256Gcm as AesGcmCipher;
+pub use aes_gcm::Nonce;
 pub use chacha20poly1305::ChaCha20Poly1305;
-pub use p256::ecdsa::SigningKey;
 pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
+pub use p256::ecdsa::SigningKey;
 pub use signature::Signer;
 
 pub use rand_core::{CryptoRng, OsRng, RngCore};

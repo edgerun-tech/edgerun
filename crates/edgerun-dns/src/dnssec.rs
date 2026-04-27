@@ -7,7 +7,13 @@
 //! - **NSEC3 synthesis**: Proves non-existence of names via hashed
 //!   next-secure records (RFC 5155).
 
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
 
 use super::message::DnsRecord;
@@ -311,9 +317,7 @@ pub fn verify_chain_of_trust(
                     // Compute digest of the DNSKEY RDATA
                     let dnskey_rdata = dnskey.data.to_wire(dnskey.rtype);
                     let computed_digest = match digest_type {
-                        1 => {
-                            sha1_compat(&dnskey_rdata)
-                        }
+                        1 => sha1_compat(&dnskey_rdata),
                         2 => {
                             // SHA-256
                             let mut h = Sha256::new();
@@ -477,7 +481,8 @@ pub fn nsec3_type_bitmap(types: &[DnsRecordType]) -> Vec<u8> {
     }
 
     // Group by window (first byte of type / 256)
-    let mut windows: alloc::collections::BTreeMap<u8, Vec<u16>> = alloc::collections::BTreeMap::new();
+    let mut windows: alloc::collections::BTreeMap<u8, Vec<u16>> =
+        alloc::collections::BTreeMap::new();
     for &t in types {
         let window = (t.as_u16() / 256) as u8;
         windows.entry(window).or_default().push(t.as_u16() % 256);

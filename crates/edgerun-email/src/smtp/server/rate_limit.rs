@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
-use edgerun_rt::Mutex;
+use crate::rt::Mutex;
 
 /// Configuration for per-IP rate limiting.
 #[derive(Clone, Debug)]

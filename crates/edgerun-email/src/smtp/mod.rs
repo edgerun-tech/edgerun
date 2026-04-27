@@ -1,9 +1,9 @@
-//! Async SMTP server and client (RFC 5321) using `edgerun-rt`.
+//! Async SMTP server and client (RFC 5321) using `edgerun-bare-rt`.
 //!
 //! ## Server example
 //! ```no_run
 //! use edgerun_smtp::server::{SmtpServer, SmtpServerConfig};
-//! use edgerun_rt::CancellationToken;
+//! use crate::rt::CancellationToken;
 //!
 //! # async fn example() -> std::io::Result<()> {
 //! let config = SmtpServerConfig::default();

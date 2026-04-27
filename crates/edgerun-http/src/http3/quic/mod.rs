@@ -17,8 +17,8 @@ pub use transport::QuicTransport;
 
 use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 
+use edgerun_bare_rt::AsyncUdpSocket;
 use edgerun_crypto::CipherSuite;
-use edgerun_rt::AsyncUdpSocket;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::Arc;
 
@@ -225,7 +225,7 @@ impl QuicConnection {
                     if !all_handshake_crypto.is_empty() {
                         break;
                     }
-                    edgerun_rt::sleep(std::time::Duration::from_millis(10)).await;
+                    edgerun_bare_rt::sleep(std::time::Duration::from_millis(10)).await;
                 }
                 Err(e) => return Err(e),
             }
@@ -1265,7 +1265,7 @@ mod tests {
         use crate::http3::quic::packet;
         use std::time::Duration;
 
-        let rt = edgerun_rt::Runtime::new_multi_thread()
+        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1353,7 +1353,7 @@ mod tests {
             eprintln!("TIMEOUT TEST: Sent {} bytes", send_bytes.len());
 
             // Try to receive with timeout
-            let result = edgerun_rt::timeout(
+            let result = edgerun_bare_rt::timeout(
                 Duration::from_millis(100),
                 server.recv_from(&mut [0u8; 4096]),
             )
@@ -1473,7 +1473,7 @@ mod tests {
         conn.inject_packet(packet_bytes);
 
         // Receive the stream data
-        let rt = edgerun_rt::Runtime::new_multi_thread()
+        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1532,7 +1532,7 @@ mod tests {
         conn.inject_packet(packet_bytes);
 
         // Accept the incoming stream
-        let rt = edgerun_rt::Runtime::new_multi_thread()
+        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1696,7 +1696,7 @@ mod tests {
         quic.protection = None; // No encryption for this test
 
         // Send the frame
-        let rt = edgerun_rt::Runtime::new_multi_thread()
+        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -1801,7 +1801,7 @@ mod tests {
         server.quic_mut().inject_packet(pkt_bytes);
 
         // Server accepts the request
-        let rt = edgerun_rt::Runtime::new_multi_thread()
+        let rt = edgerun_bare_rt::Runtime::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();

@@ -1,7 +1,7 @@
 //! edgerun-bare-rt adapters for the async API shape used by edgerun-dns.
 
-use alloc::sync::Arc;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
@@ -62,9 +62,12 @@ impl AsyncUdpSocket {
         _cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<(usize, SocketAddr)>> {
-        Poll::Ready(self.0.recv_from(buf).map(|(n, addr)| (n, from_bare_addr(addr))).map_err(
-            |e| io::Error::new(io::ErrorKind::WouldBlock, e.to_string()),
-        ))
+        Poll::Ready(
+            self.0
+                .recv_from(buf)
+                .map(|(n, addr)| (n, from_bare_addr(addr)))
+                .map_err(|e| io::Error::new(io::ErrorKind::WouldBlock, e.to_string())),
+        )
     }
 
     pub fn poll_send_to(
@@ -103,9 +106,10 @@ impl AsyncTcpListener {
         let socket = unsafe { &mut (*this).0 }
             .accept()
             .map_err(|e| io::Error::new(io::ErrorKind::WouldBlock, e.to_string()))?;
-        let peer = socket.remote_addr().map(from_bare_addr).unwrap_or_else(|| {
-            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
-        });
+        let peer = socket
+            .remote_addr()
+            .map(from_bare_addr)
+            .unwrap_or_else(|| SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)));
         Ok((Arc::new(AsyncTcpStream(socket)), peer))
     }
 
@@ -167,7 +171,9 @@ impl AsyncWrite for AsyncTcpStream {
 
 pub fn to_bare_addr(addr: SocketAddr) -> edgerun_bare_rt::SocketAddr {
     match addr {
-        SocketAddr::V4(addr) => edgerun_bare_rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port()),
+        SocketAddr::V4(addr) => {
+            edgerun_bare_rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port())
+        }
         SocketAddr::V6(addr) => edgerun_bare_rt::SocketAddr::new(0, addr.port()),
     }
 }

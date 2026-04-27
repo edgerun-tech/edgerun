@@ -9,7 +9,8 @@
 //! - The encoding is supported (gzip, deflate, br, identity)
 
 use crate::HeaderMap;
-use std::fmt;
+use alloc::{boxed::Box, vec, vec::Vec};
+use core::fmt;
 
 /// Supported content encodings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,27 +78,53 @@ pub fn decompress_body(body: &[u8], headers: &HeaderMap) -> Option<Vec<u8>> {
 
 /// Compress to gzip format
 fn compress_gzip(data: &[u8]) -> Vec<u8> {
-    use flate2::write::GzEncoder;
-    use flate2::Compression;
-    use std::io::Write;
-
-    let mut encoder = GzEncoder::new(Vec::with_capacity(data.len()), Compression::default());
-    encoder.write_all(data).ok();
-    encoder.finish().unwrap_or_default()
+    let mut out = Vec::with_capacity(data.len() + 18);
+    out.extend_from_slice(&[0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0xff]);
+    out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(data, 6));
+    out.extend_from_slice(&crc32(data).to_le_bytes());
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out
 }
 
 /// Decompress gzip data
 fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
-    use flate2::read::GzDecoder;
-    use std::io::Read;
-
-    if data.len() < 10 || data[0] != 0x1f || data[1] != 0x8b {
+    if data.len() < 18 || data[0] != 0x1f || data[1] != 0x8b || data[2] != 8 {
         return None;
     }
 
-    let mut decoder = GzDecoder::new(data);
-    let mut result = Vec::with_capacity(data.len() * 2);
-    decoder.read_to_end(&mut result).ok()?;
+    let flags = data[3];
+    if flags & 0xe0 != 0 {
+        return None;
+    }
+
+    let mut pos = 10;
+    if flags & 0x04 != 0 {
+        if pos + 2 > data.len() {
+            return None;
+        }
+        let xlen = u16::from_le_bytes([data[pos], data[pos + 1]]) as usize;
+        pos = pos.checked_add(2 + xlen)?;
+    }
+    if flags & 0x08 != 0 {
+        pos = skip_zero_terminated(data, pos)?;
+    }
+    if flags & 0x10 != 0 {
+        pos = skip_zero_terminated(data, pos)?;
+    }
+    if flags & 0x02 != 0 {
+        pos = pos.checked_add(2)?;
+    }
+    if pos + 8 > data.len() {
+        return None;
+    }
+
+    let footer = data.len() - 8;
+    let result = miniz_oxide::inflate::decompress_to_vec(&data[pos..footer]).ok()?;
+    let expected_crc = u32::from_le_bytes(data[footer..footer + 4].try_into().ok()?);
+    let expected_len = u32::from_le_bytes(data[footer + 4..].try_into().ok()?);
+    if expected_crc != crc32(&result) || expected_len != result.len() as u32 {
+        return None;
+    }
     Some(result)
 }
 
@@ -107,28 +134,16 @@ fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
 
 /// Compress to zlib/deflate format
 fn compress_deflate(data: &[u8]) -> Vec<u8> {
-    use flate2::write::ZlibEncoder;
-    use flate2::Compression;
-    use std::io::Write;
-
-    let mut encoder = ZlibEncoder::new(Vec::with_capacity(data.len()), Compression::default());
-    encoder.write_all(data).ok();
-    encoder.finish().unwrap_or_default()
+    miniz_oxide::deflate::compress_to_vec_zlib(data, 6)
 }
 
 /// Decompress zlib/deflate data
 fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
-    use flate2::read::ZlibDecoder;
-    use std::io::Read;
-
     if data.len() < 2 {
         return None;
     }
 
-    let mut decoder = ZlibDecoder::new(data);
-    let mut result = Vec::with_capacity(data.len() * 2);
-    decoder.read_to_end(&mut result).ok()?;
-    Some(result)
+    miniz_oxide::inflate::decompress_to_vec_zlib(data).ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -139,20 +154,156 @@ fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
 fn compress_brotli(data: &[u8]) -> Vec<u8> {
     use brotli::enc::backward_references::BrotliEncoderMode;
     use brotli::enc::BrotliEncoderParams;
+
     let mut out = Vec::with_capacity(data.len());
     let mut params = BrotliEncoderParams::default();
     params.mode = BrotliEncoderMode::BROTLI_MODE_GENERIC;
     params.quality = 4; // Moderate compression
-    brotli::BrotliCompress(&mut std::io::Cursor::new(data), &mut out, &params).unwrap_or_default();
+
+    let mut reader = SliceReader::new(data);
+    let mut writer = VecWriter::new(&mut out);
+    let mut input = [0u8; 4096];
+    let mut output = [0u8; 4096];
+    let mut callback =
+        |_: &mut brotli::interface::PredictionModeContextMap<brotli::InputReferenceMut>,
+         _: &mut [brotli::interface::StaticCommand],
+         _: brotli::InputPair,
+         _: &mut HeapAllocator| {};
+
+    brotli::BrotliCompressCustomIo(
+        &mut reader,
+        &mut writer,
+        &mut input,
+        &mut output,
+        &params,
+        HeapAllocator,
+        &mut callback,
+        (),
+    )
+    .ok();
     out
 }
 
 /// Decompress brotli data
 fn decompress_brotli(data: &[u8]) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(data.len() * 2);
-    brotli::BrotliDecompress(&mut std::io::Cursor::new(data), &mut out).ok()?;
+    let mut reader = SliceReader::new(data);
+    let mut writer = VecWriter::new(&mut out);
+    let mut input = [0u8; 4096];
+    let mut output = [0u8; 4096];
+
+    brotli::BrotliDecompressCustomIo(
+        &mut reader,
+        &mut writer,
+        &mut input,
+        &mut output,
+        HeapAllocator,
+        HeapAllocator,
+        HeapAllocator,
+        (),
+    )
+    .ok()?;
     Some(out)
 }
+
+fn skip_zero_terminated(data: &[u8], mut pos: usize) -> Option<usize> {
+    while pos < data.len() {
+        let byte = data[pos];
+        pos += 1;
+        if byte == 0 {
+            return Some(pos);
+        }
+    }
+    None
+}
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            let mask = 0u32.wrapping_sub(crc & 1);
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+        }
+    }
+    !crc
+}
+
+struct SliceReader<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> SliceReader<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        Self { data, pos: 0 }
+    }
+}
+
+impl brotli::CustomRead<()> for SliceReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
+        let remaining = &self.data[self.pos..];
+        let len = remaining.len().min(buf.len());
+        buf[..len].copy_from_slice(&remaining[..len]);
+        self.pos += len;
+        Ok(len)
+    }
+}
+
+struct VecWriter<'a> {
+    out: &'a mut Vec<u8>,
+}
+
+impl<'a> VecWriter<'a> {
+    fn new(out: &'a mut Vec<u8>) -> Self {
+        Self { out }
+    }
+}
+
+impl brotli::CustomWrite<()> for VecWriter<'_> {
+    fn write(&mut self, data: &[u8]) -> Result<usize, ()> {
+        self.out.extend_from_slice(data);
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> Result<(), ()> {
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct Rebox<T> {
+    b: Box<[T]>,
+}
+
+impl<T> brotli::SliceWrapper<T> for Rebox<T> {
+    fn slice(&self) -> &[T] {
+        &self.b
+    }
+}
+
+impl<T> brotli::SliceWrapperMut<T> for Rebox<T> {
+    fn slice_mut(&mut self) -> &mut [T] {
+        &mut self.b
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct HeapAllocator;
+
+impl<T: Clone + Default> brotli::Allocator<T> for HeapAllocator {
+    type AllocatedMemory = Rebox<T>;
+
+    fn alloc_cell(&mut self, len: usize) -> Self::AllocatedMemory {
+        Rebox {
+            b: vec![T::default(); len].into_boxed_slice(),
+        }
+    }
+
+    fn free_cell(&mut self, _data: Self::AllocatedMemory) {}
+}
+
+impl brotli::enc::BrotliAlloc for HeapAllocator {}
 
 // ---------------------------------------------------------------------------
 // Display

@@ -1194,58 +1194,90 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-// ---------------------------------------------------------------------------
-// AsyncRead / AsyncWrite impls for AsyncTlsStream
-// ---------------------------------------------------------------------------
+fn to_bare_io_error(error: std::io::Error) -> edgerun_bare_rt::IoError {
+    match error.kind() {
+        std::io::ErrorKind::UnexpectedEof => edgerun_bare_rt::IoError::UnexpectedEof,
+        std::io::ErrorKind::WriteZero => edgerun_bare_rt::IoError::WriteZero,
+        _ => edgerun_bare_rt::IoError::Other("tls io error"),
+    }
+}
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for AsyncTlsStream<S> {
+impl<S> edgerun_bare_rt::AsyncRead for AsyncTlsStream<S>
+where
+    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+{
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
-        self.get_mut().poll_read(cx, buf)
+    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+        self.get_mut().poll_read(cx, buf).map_err(to_bare_io_error)
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsStream<S> {
+impl<S> edgerun_bare_rt::AsyncWrite for AsyncTlsStream<S>
+where
+    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+{
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        self.get_mut().poll_write(cx, buf)
+    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+        self.get_mut().poll_write(cx, buf).map_err(to_bare_io_error)
     }
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        self.get_mut().poll_flush(cx)
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+        self.get_mut().poll_flush(cx).map_err(to_bare_io_error)
     }
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        self.get_mut().poll_shutdown(cx)
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+        self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for AsyncTlsServerStream<S> {
+impl<S> edgerun_bare_rt::AsyncRead for AsyncTlsServerStream<S>
+where
+    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+{
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
-        self.get_mut().poll_read(cx, buf)
+    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+        self.get_mut().poll_read(cx, buf).map_err(to_bare_io_error)
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsServerStream<S> {
+impl<S> edgerun_bare_rt::AsyncWrite for AsyncTlsServerStream<S>
+where
+    S: edgerun_bare_rt::AsyncRead + edgerun_bare_rt::AsyncWrite + Unpin,
+{
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        self.get_mut().poll_write(cx, buf)
+    ) -> Poll<edgerun_bare_rt::io::Result<usize>> {
+        self.get_mut().poll_write(cx, buf).map_err(to_bare_io_error)
     }
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        self.get_mut().poll_flush(cx)
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+        self.get_mut().poll_flush(cx).map_err(to_bare_io_error)
     }
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        self.get_mut().poll_shutdown(cx)
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<edgerun_bare_rt::io::Result<()>> {
+        self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
     }
 }
