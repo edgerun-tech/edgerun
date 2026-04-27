@@ -150,7 +150,7 @@ impl NodeStore {
         );
         builder.register_handler(Box::new(FetchHandler));
         builder.register_handler(Box::new(PeerDiscoveryHandler));
-        let (writer, writer_thread) = builder.build();
+        let (writer, writer_thread) = builder.build()?;
 
         Ok(Self {
             config: config.clone(),
@@ -1104,8 +1104,10 @@ impl NodeStore {
         // Create snapshot descriptor
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let now_seconds = i64::try_from(now_secs).unwrap_or(i64::MAX);
+        let now_secs = now_seconds as u64;
         let snapshot_id = {
             let digest =
                 edgerun_core::crypto::sha256(format!("{}-{}", view_type, now_secs).as_bytes());
@@ -1124,10 +1126,7 @@ impl NodeStore {
                 key_hint: None,
             }),
             produced_at: Some(prost_types::Timestamp {
-                seconds: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64,
+                seconds: now_seconds,
                 nanos: 0,
             }),
             base_heads,
@@ -1174,7 +1173,7 @@ impl NodeStore {
             &edgerun_core::util::bytes_to_hex(&object_ref.object_id),
             view_type,
             &producer_hex,
-            now_secs as i64,
+            now_seconds,
             completeness,
             &base_heads_text,
         )?;
@@ -1201,7 +1200,10 @@ impl NodeStore {
             return Err(StorageError::Decode("producer is missing".into()));
         }
 
-        let producer = descriptor.producer.as_ref().unwrap();
+        let producer = descriptor
+            .producer
+            .as_ref()
+            .ok_or_else(|| StorageError::Decode("producer is missing".into()))?;
         let producer_hex = edgerun_core::util::bytes_to_hex(&producer.identity_id);
 
         // Check producer trust

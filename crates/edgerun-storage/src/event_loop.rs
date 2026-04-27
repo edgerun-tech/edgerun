@@ -114,7 +114,10 @@ impl EventWriter {
         let request = WriteRequest { event, result_tx };
 
         {
-            let tx = self.tx.lock().unwrap();
+            let tx = self
+                .tx
+                .lock()
+                .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
             tx.send(request).map_err(|e| {
                 StorageError::Io(std::io::Error::new(
                     std::io::ErrorKind::BrokenPipe,
@@ -140,7 +143,10 @@ impl EventWriter {
         let (result_tx, result_rx) = mpsc::sync_channel(1);
         let request = WriteRequest { event, result_tx };
 
-        let tx = self.tx.lock().unwrap();
+        let tx = self
+            .tx
+            .lock()
+            .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
         tx.send(request).map_err(|e| {
             StorageError::Io(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
@@ -193,14 +199,20 @@ impl DispatchContext {
 
         // Assign sequence number
         {
-            let mut next_seq = self.next_seq.lock().unwrap();
+            let mut next_seq = self
+                .next_seq
+                .lock()
+                .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
             let seq = next_seq.entry(stream_id.clone()).or_insert(0);
             event.seq = *seq;
             *seq += 1;
         }
 
         // Get or open the log file for this stream
-        let mut stream_files = self.stream_files.lock().unwrap();
+        let mut stream_files = self
+            .stream_files
+            .lock()
+            .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
         if !stream_files.contains_key(&stream_id) {
             let file = open_stream_file(&self.events_dir, &stream_id)?;
             stream_files.insert(stream_id.clone(), file);
@@ -218,7 +230,10 @@ impl DispatchContext {
 
         // Update next_seq tracking (ensure it's at least seq+1)
         {
-            let mut seq_map = self.next_seq.lock().unwrap();
+            let mut seq_map = self
+                .next_seq
+                .lock()
+                .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
             let entry = seq_map.entry(stream_id).or_insert(0);
             if event.seq + 1 > *entry {
                 *entry = event.seq + 1;
@@ -301,7 +316,7 @@ impl EventLoopBuilder {
         self.handlers.push(handler);
     }
 
-    pub fn build(self) -> (EventWriter, JoinHandle<()>) {
+    pub fn build(self) -> Result<(EventWriter, JoinHandle<()>), StorageError> {
         // Fix #4: bounded channel instead of unbounded mpsc::channel()
         let (tx, rx) = mpsc::sync_channel(EVENT_CHANNEL_CAPACITY);
         let next_seq: Arc<std::sync::Mutex<HashMap<Vec<u8>, u64>>> =
@@ -328,13 +343,13 @@ impl EventLoopBuilder {
                     stream_files_clone,
                 );
             })
-            .expect("failed to spawn event writer thread");
+            .map_err(StorageError::Io)?;
 
         let writer = EventWriter {
             tx: Arc::new(std::sync::Mutex::new(tx)),
         };
 
-        (writer, handle)
+        Ok((writer, handle))
     }
 }
 
@@ -358,7 +373,16 @@ fn run_event_loop(
         let stream_id = event.stream_id.clone();
 
         // Get or open the log file for this stream
-        let mut sf = stream_files.lock().unwrap();
+        let mut sf = match stream_files
+            .lock()
+            .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))
+        {
+            Ok(sf) => sf,
+            Err(e) => {
+                let _ = request.result_tx.send(Err(e));
+                continue;
+            }
+        };
         if !sf.contains_key(&stream_id) {
             match open_stream_file(&events_dir, &stream_id) {
                 Ok(file) => {
@@ -392,7 +416,16 @@ fn run_event_loop(
 
         // Track next seq per stream
         {
-            let mut seq_map = next_seq.lock().unwrap();
+            let mut seq_map = match next_seq
+                .lock()
+                .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))
+            {
+                Ok(seq_map) => seq_map,
+                Err(e) => {
+                    let _ = request.result_tx.send(Err(e));
+                    continue;
+                }
+            };
             let entry = seq_map.entry(stream_id.clone()).or_insert(0);
             if event.seq + 1 > *entry {
                 *entry = event.seq + 1;
