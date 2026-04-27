@@ -75,6 +75,15 @@ fn read_option_str(r: &mut impl Read) -> io::Result<Option<String>> {
     }
 }
 
+fn unix_time_secs() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 fn write_vec_str(w: &mut impl Write, v: &[String]) -> io::Result<()> {
     write_u64(w, v.len() as u64)?;
     for s in v {
@@ -835,11 +844,7 @@ impl FileIndex {
         target_id: &str,
         priority: i64,
     ) -> io::Result<()> {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_time_secs();
         let id = self.next_fetch_id.load(Ordering::Relaxed);
         self.next_fetch_id.store(id + 1, Ordering::Relaxed);
         self.fetch_queue.write().push(FetchEntry {
@@ -978,20 +983,16 @@ impl FileIndex {
         status: &str,
         is_bootstrap: bool,
     ) -> io::Result<()> {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-        let exists = self.peers.read().contains_key(node_id_hex);
-        if exists {
-            if let Some(a) = addr {
-                self.peers.write().get_mut(node_id_hex).unwrap().addr = Some(a.to_string());
+        let now = unix_time_secs();
+        let mut peers = self.peers.write();
+        if let Some(peer) = peers.get_mut(node_id_hex) {
+            if let Some(addr) = addr {
+                peer.addr = Some(addr.to_string());
             }
-            self.peers.write().get_mut(node_id_hex).unwrap().status = status.to_string();
-            self.peers.write().get_mut(node_id_hex).unwrap().last_seen = Some(now);
+            peer.status = status.to_string();
+            peer.last_seen = Some(now);
         } else {
-            self.peers.write().insert(
+            peers.insert(
                 node_id_hex.to_string(),
                 PeerRecord {
                     addr: addr.map(|s| s.to_string()),
@@ -1006,11 +1007,7 @@ impl FileIndex {
     }
 
     pub fn update_peer_status(&self, node_id_hex: &str, status: &str) -> io::Result<()> {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_time_secs();
         if let Some(peer) = self.peers.write().get_mut(node_id_hex) {
             peer.status = status.to_string();
             peer.last_seen = Some(now);
@@ -1044,8 +1041,13 @@ impl FileIndex {
             .peers
             .read()
             .iter()
-            .filter(|(_, v)| v.status == "unreachable" && v.addr.is_some())
-            .map(|(k, v)| (k.clone(), v.addr.clone().unwrap()))
+            .filter_map(|(k, v)| {
+                if v.status == "unreachable" {
+                    v.addr.clone().map(|addr| (k.clone(), addr))
+                } else {
+                    None
+                }
+            })
             .collect())
     }
 
@@ -1059,11 +1061,7 @@ impl FileIndex {
         completeness: i32,
         base_heads: &str,
     ) -> io::Result<()> {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_time_secs();
         self.snapshots.write().insert(
             snapshot_id.to_string(),
             SnapshotRecord {
@@ -1151,11 +1149,7 @@ impl FileIndex {
         capability_hex: &str,
         expires_at: Option<i64>,
     ) -> io::Result<()> {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_time_secs();
         self.delegations.write().insert(
             delegation_id.to_string(),
             DelegationRecord {
@@ -1197,11 +1191,7 @@ impl FileIndex {
         target_hex: &str,
         effective_at: Option<i64>,
     ) -> io::Result<()> {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_time_secs();
         self.revocations.write().insert(
             revocation_id.to_string(),
             RevocationRecord {
@@ -1313,11 +1303,7 @@ impl FileIndex {
         blob_id: &str,
         description: Option<&str>,
     ) -> io::Result<()> {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_time_secs();
         let key = format!("{}/{}", namespace, name);
         self.credentials.write().insert(
             key,
