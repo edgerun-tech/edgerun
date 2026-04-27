@@ -195,9 +195,10 @@ impl Http3Server {
                 Ok(conn) => return Ok(conn),
                 Err(e) => {
                     // Log and try next packet
-                    eprintln!(
+                    edgerun_log::warn!(
                         "[HTTP/3 server] handshake error from {}: {}",
-                        client_addr, e
+                        client_addr,
+                        e
                     );
                 }
             }

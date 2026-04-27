@@ -18,6 +18,7 @@ ignore = "0.4"
 edgerun-clap = { path = "../edgerun-clap" }
 libc = "0.2"
 edgerun-inotify = { path = "../edgerun-inotify" }
+edgerun-log = { path = "../edgerun-log" }
 
 [dev-dependencies]
 tempfile = "3"

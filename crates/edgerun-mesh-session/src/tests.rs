@@ -1,4 +1,7 @@
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
+use alloc::format;
+use alloc::vec;
+use alloc::vec::Vec;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_crypto::p256::PublicKey;
 use edgerun_hardware_signing::NodeID;

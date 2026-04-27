@@ -392,12 +392,15 @@ pub fn discover_and_register_capabilities(
                             multi.register(&descriptor, Box::new(wrapped));
                         }
                         Err(e) => {
-                            eprintln!("edgerund: warning: failed to open evdev device: {}", e)
+                            edgerun_log::warn!(
+                                "edgerund: warning: failed to open evdev device: {}",
+                                e
+                            )
                         }
                     }
                 }
             }
-            Err(e) => eprintln!("edgerund: warning: evdev discovery failed: {}", e),
+            Err(e) => edgerun_log::warn!("edgerund: warning: evdev discovery failed: {}", e),
         }
 
         // --- Speakers (ALSA) ---
@@ -411,7 +414,7 @@ pub fn discover_and_register_capabilities(
                     multi.register(&descriptor, Box::new(wrapped));
                 }
             }
-            Err(e) => eprintln!("edgerund: warning: ALSA speaker discovery failed: {}", e),
+            Err(e) => edgerun_log::warn!("edgerund: warning: ALSA speaker discovery failed: {}", e),
         }
 
         // --- Microphones (ALSA) ---
@@ -436,11 +439,15 @@ pub fn discover_and_register_capabilities(
                                     .with_context(context.clone());
                             multi.register(&descriptor, Box::new(wrapped));
                         }
-                        Err(e) => eprintln!("edgerund: warning: failed to open ALSA mic: {}", e),
+                        Err(e) => {
+                            edgerun_log::warn!("edgerund: warning: failed to open ALSA mic: {}", e)
+                        }
                     }
                 }
             }
-            Err(e) => eprintln!("edgerund: warning: ALSA microphone discovery failed: {}", e),
+            Err(e) => {
+                edgerun_log::warn!("edgerund: warning: ALSA microphone discovery failed: {}", e)
+            }
         }
 
         // --- Cameras (V4L2) ---
@@ -460,7 +467,7 @@ pub fn discover_and_register_capabilities(
                     multi.register(&descriptor, Box::new(wrapped));
                 }
             }
-            Err(e) => eprintln!("edgerund: warning: V4L2 camera discovery failed: {}", e),
+            Err(e) => edgerun_log::warn!("edgerund: warning: V4L2 camera discovery failed: {}", e),
         }
     }
 
@@ -496,7 +503,9 @@ pub fn discover_and_register_capabilities(
                     multi.register(&descriptor, Box::new(wrapped));
                 }
             }
-            Err(e) => eprintln!("edgerund: warning: WiFi interface discovery failed: {}", e),
+            Err(e) => {
+                edgerun_log::warn!("edgerund: warning: WiFi interface discovery failed: {}", e)
+            }
         }
 
         // --- Bluetooth scanning and connections (discover once, use for both) ---
@@ -534,7 +543,7 @@ pub fn discover_and_register_capabilities(
                     multi.register(&descriptor, Box::new(wrapped));
                 }
             }
-            Err(e) => eprintln!(
+            Err(e) => edgerun_log::warn!(
                 "edgerund: warning: Bluetooth controller discovery failed: {}",
                 e
             ),
@@ -562,7 +571,7 @@ pub fn serve_capabilities_unix(
     }
 
     let listener = std::os::unix::net::UnixListener::bind(socket_path)?;
-    eprintln!(
+    edgerun_log::warn!(
         "edgerund: capability server listening on {}",
         socket_path.display()
     );
@@ -577,11 +586,11 @@ pub fn serve_capabilities_unix(
                 match serve_one(&mut *locked, &mut transport) {
                     Ok(true) => {}  // connection served
                     Ok(false) => {} // connection closed gracefully
-                    Err(e) => eprintln!("edgerund: capability serve error: {}", e),
+                    Err(e) => edgerun_log::warn!("edgerund: capability serve error: {}", e),
                 }
             }
             Err(e) => {
-                eprintln!("edgerund: capability server: accept error: {}", e);
+                edgerun_log::warn!("edgerund: capability server: accept error: {}", e);
                 if !socket_path.exists() {
                     break; // socket was removed — time to shut down
                 }
@@ -612,9 +621,9 @@ pub fn build_mesh_capability_server(
     edgerun_mesh_capability::OutboundQueue,
     edgerun_mesh_capability::MeshEnvelopeDispatcher,
 ) {
+    use edgerun_mesh_capability::collections::VecDeque;
+    use edgerun_mesh_capability::sync::{Arc, Mutex};
     use edgerun_mesh_capability::{MeshCapabilityServer, MeshEnvelopeDispatcher, OutboundQueue};
-    use std::collections::VecDeque;
-    use std::sync::{Arc, Mutex};
 
     let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
     let dispatcher = MeshEnvelopeDispatcher::new();

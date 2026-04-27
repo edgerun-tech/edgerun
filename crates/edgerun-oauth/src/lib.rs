@@ -59,10 +59,10 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
-extern crate std;
 #[cfg(target_os = "none")]
 extern crate self as std;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 pub mod prelude {
     pub use alloc::boxed::Box;
@@ -70,9 +70,9 @@ pub mod prelude {
     pub use alloc::string::{String, ToString};
     pub use alloc::vec;
     pub use alloc::vec::Vec;
+    pub use core::option::Option::{self, None, Some};
     pub use core::prelude::rust_2024::*;
     pub use core::result::Result::{self, Err, Ok};
-    pub use core::option::Option::{self, None, Some};
     pub use core::write;
 }
 
@@ -108,8 +108,8 @@ pub mod path {
 
 #[cfg(target_os = "none")]
 pub mod env {
-    use alloc::string::String;
     use crate::io;
+    use alloc::string::String;
 
     pub fn var(_key: &str) -> io::Result<String> {
         Err(io::Error::other("environment is unavailable"))

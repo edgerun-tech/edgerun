@@ -10,8 +10,8 @@
 //! - Signature creation (only verification)
 //! - Non-standard algorithms
 
-use crate::prelude::*;
 use crate::errors::{OAuthError, OAuthResult};
+use crate::prelude::*;
 use edgerun_encoding::base64::base64url_decode;
 use edgerun_json::{from_str, JsonValue, Map};
 

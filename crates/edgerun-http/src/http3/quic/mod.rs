@@ -113,18 +113,18 @@ impl QuicConnection {
     /// Resolves `server` hostname via DNS, binds a UDP socket to a random
     /// local port, and returns the connection ready for HTTP/3 data transfer.
     pub async fn connect(server: &str) -> Result<Self, String> {
-        eprintln!("CLIENT QUIC: connect({})", server);
+        edgerun_log::debug!("CLIENT QUIC: connect({})", server);
         // Resolve hostname to IP address
         let (server_host, server_port) = if let Ok(addr) = server.parse::<SocketAddr>() {
-            eprintln!("CLIENT QUIC: parsed as SocketAddr");
+            edgerun_log::debug!("CLIENT QUIC: parsed as SocketAddr");
             (addr.ip().to_owned(), addr.port())
         } else if let Ok(ip) = server.parse::<IpAddr>() {
-            eprintln!("CLIENT QUIC: parsed as IpAddr");
+            edgerun_log::debug!("CLIENT QUIC: parsed as IpAddr");
             (ip, 443)
         } else {
-            eprintln!("CLIENT QUIC: resolving {}...", server);
+            edgerun_log::debug!("CLIENT QUIC: resolving {}...", server);
             let resolved = Self::resolve_host(server).await?;
-            eprintln!("CLIENT QUIC: resolved to {}", resolved);
+            edgerun_log::debug!("CLIENT QUIC: resolved to {}", resolved);
             (resolved, 443)
         };
 
@@ -134,7 +134,7 @@ impl QuicConnection {
                 .map_err(|e| format!("Failed to bind UDP socket: {}", e))?,
         );
 
-        eprintln!("CLIENT QUIC: Bound UDP socket");
+        edgerun_log::debug!("CLIENT QUIC: Bound UDP socket");
 
         let local_cid = ConnectionId::random();
         let remote_cid = ConnectionId::random();
@@ -213,15 +213,15 @@ impl QuicConnection {
             offset: 0,
             data: crypto_data.to_vec(),
         };
-        eprintln!("CLIENT: Sending ClientHello...");
+        edgerun_log::debug!("CLIENT: Sending ClientHello...");
         self.send_initial_frame(crypto_frame).await?;
-        eprintln!("CLIENT: Waiting for server Initial...");
+        edgerun_log::debug!("CLIENT: Waiting for server Initial...");
 
         // ── Step 3: Receive server's Initial packet ──────────────────
         let server_initial = self.recv_packet().await?;
-        eprintln!("CLIENT: Got server packet, decrypting...");
+        edgerun_log::debug!("CLIENT: Got server packet, decrypting...");
         let decrypted_initial = self.decrypt_packet_initial(&server_initial)?;
-        eprintln!("CLIENT: Decrypted, parsing CRYPTO frame...");
+        edgerun_log::debug!("CLIENT: Decrypted, parsing CRYPTO frame...");
 
         // Parse CRYPTO frame from decrypted payload
         let (server_crypto_data, _) = Self::parse_crypto_frame(&decrypted_initial)
@@ -1759,7 +1759,7 @@ mod tests {
         );
         let pkt_bytes = pkt.to_bytes();
         // Debug: print packet bytes
-        // eprintln!("DEBUG Injected packet: {:02x?}", pkt_bytes);
+        // edgerun_log::debug!("DEBUG Injected packet: {:02x?}", pkt_bytes);
         server.quic_mut().inject_packet(pkt_bytes);
 
         // Server accepts the request

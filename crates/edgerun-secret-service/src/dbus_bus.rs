@@ -2,7 +2,6 @@
 //! and registers `org.freedesktop.secrets` so desktop apps find us.
 
 use crate::prelude::v1::*;
-use std::eprintln;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -50,7 +49,7 @@ impl BusConnection {
             return None; // name taken
         }
 
-        eprintln!(
+        edgerun_log::info!(
             "edgerun-secret-service: registered '{}' on D-Bus session bus",
             service_name
         );

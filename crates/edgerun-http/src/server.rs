@@ -258,7 +258,7 @@ where
         // even over TLS. We must consume the entire preface before reading frames.
         let negotiated_h2 = tls_stream.alpn_protocol() == Some(b"h2");
         if negotiated_h2 {
-            eprintln!("[h2] TLS+ALPN=h2 detected, entering HTTP/2 path");
+            edgerun_log::debug!("[h2] TLS+ALPN=h2 detected, entering HTTP/2 path");
             let mut reader = BufReader::new(tls_stream);
             // The BufReader is fresh — the full 24-byte preface may be in the stream.
             // RFC 9113 §3.5: If preface is invalid, MUST respond with GOAWAY and close.
@@ -502,7 +502,7 @@ async fn handle_http2<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    eprintln!("[h2] handle_http2 entered, skip_preface={}", skip_preface);
+    edgerun_log::debug!("[h2] handle_http2 entered, skip_preface={}", skip_preface);
     // RFC 9113 §3.4: Server MUST validate the connection preface.
     // The preface is "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" (24 bytes).
     // When skip_preface=false (plaintext HTTP/2), we already read "PRI * HTTP/2.0\r\n" via read_line().
@@ -577,9 +577,10 @@ where
         let frame = match timeout(idle_timeout, read_frame(&mut rdwr, server.max_frame_size)).await
         {
             Ok(Ok(Ok(f))) => {
-                eprintln!(
+                edgerun_log::debug!(
                     "[h2] Server got frame: type={}, stream={}",
-                    f.frame_type as u8, f.stream_id
+                    f.frame_type as u8,
+                    f.stream_id
                 );
                 f
             }
@@ -902,7 +903,7 @@ where
                 // RFC 9113 §4.1: frame types that are not understood MUST be ignored.
                 // Don't send RST_STREAM, GOAWAY, or any response - just ignore the frame.
                 if matches!(frame.frame_type, FrameType::Extension) {
-                    eprintln!("[h2] Ignoring unknown frame type");
+                    edgerun_log::debug!("[h2] Ignoring unknown frame type");
                 }
 
                 // RFC 7540 §6.10: During a CONTINUATION sequence, only HEADERS,
@@ -928,7 +929,7 @@ where
                         }
                         FrameType::Extension => {
                             // RFC 9113 §4.1: ignore unknown frame types even during CONTINUATION
-                            eprintln!("[h2] Ignoring unknown frame during CONTINUATION");
+                            edgerun_log::debug!("[h2] Ignoring unknown frame during CONTINUATION");
                             FrameAction::None
                         }
                         _ => FrameAction::None,

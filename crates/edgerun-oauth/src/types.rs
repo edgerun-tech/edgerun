@@ -1,7 +1,7 @@
 //! OAuth 2.0 / OIDC type definitions.
 
-use crate::prelude::*;
 use crate::oauth_client::percent_encode;
+use crate::prelude::*;
 use edgerun_json::{from_str, to_string, JsonValue};
 
 // ---------------------------------------------------------------------------

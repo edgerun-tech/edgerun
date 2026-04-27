@@ -144,7 +144,7 @@ impl BlobTftpProvider {
                 filename.to_string(),
                 Arc::new(CachedBlob { data: plaintext }),
             );
-            eprintln!(
+            edgerun_log::warn!(
                 "edgerun-tftp: cached '{}' ({} bytes)",
                 filename,
                 self.cache[filename].data.len()
@@ -159,7 +159,7 @@ impl BlobTftpProvider {
         let filenames: Vec<String> = self.registry.keys().cloned().collect();
         for filename in filenames {
             if let Err(e) = self.warm_cache(&filename) {
-                eprintln!("edgerun-tftp: failed to cache '{}': {}", filename, e);
+                edgerun_log::warn!("edgerun-tftp: failed to cache '{}': {}", filename, e);
             }
         }
         Ok(())
@@ -234,7 +234,7 @@ impl FileProvider for BlobTftpProvider {
                     return Some(plaintext[offset..end].to_vec());
                 }
                 Err(e) => {
-                    eprintln!("edgerun-tftp: decrypt failed for '{}': {}", filename, e);
+                    edgerun_log::warn!("edgerun-tftp: decrypt failed for '{}': {}", filename, e);
                     return None;
                 }
             }

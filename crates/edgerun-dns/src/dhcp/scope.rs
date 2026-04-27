@@ -216,12 +216,12 @@ impl DhcpMultiServer {
 
     /// Run the server event loop.
     pub fn run(&mut self) -> Result<(), io::Error> {
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-dhcp: multi-scope server listening on 0.0.0.0:{}",
             DHCP_SERVER_PORT
         );
         for (name, scope) in &self.scopes {
-            eprintln!("  scope {}: {}", name, scope.stats());
+            edgerun_log::warn!("  scope {}: {}", name, scope.stats());
         }
 
         loop {
@@ -230,7 +230,7 @@ impl DhcpMultiServer {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(e) if e.kind() == io::ErrorKind::TimedOut => continue,
                 Err(e) => {
-                    eprintln!("edgerun-dhcp: server error: {}", e);
+                    edgerun_log::warn!("edgerun-dhcp: server error: {}", e);
                     return Err(e);
                 }
             }
@@ -245,7 +245,7 @@ impl DhcpMultiServer {
         let msg = match DhcpMessage::from_wire(&buf[..n]) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("edgerun-dhcp: failed to parse from {}: {}", src, e);
+                edgerun_log::warn!("edgerun-dhcp: failed to parse from {}: {}", src, e);
                 return Ok(());
             }
         };
@@ -363,7 +363,7 @@ fn handle_request(
 }
 
 fn handle_release(_scope: &DhcpScope, msg: &DhcpMessage) -> Result<(), io::Error> {
-    eprintln!("edgerun-dhcp: RELEASE for {:?}", msg.options.requested_ip);
+    edgerun_log::warn!("edgerun-dhcp: RELEASE for {:?}", msg.options.requested_ip);
     Ok(())
 }
 

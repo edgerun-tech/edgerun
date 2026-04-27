@@ -101,7 +101,7 @@ impl VirtualFileSystem {
         let mut original_hashes = HashMap::new();
         let mut memory_usage = 0usize;
 
-        eprintln!("Loading filesystem into memory: {}", root.display());
+        edgerun_log::info!("Loading filesystem into memory: {}", root.display());
         let start = std::time::Instant::now();
 
         let file_count = Self::walk_directory(&root, &mut |path, content| {
@@ -133,7 +133,7 @@ impl VirtualFileSystem {
         let elapsed = start.elapsed();
         let memory_mb = memory_usage as f64 / (1024.0 * 1024.0);
 
-        eprintln!(
+        edgerun_log::info!(
             "Loaded {} files ({:.2} MB) in {:.2}s",
             file_count,
             memory_mb,

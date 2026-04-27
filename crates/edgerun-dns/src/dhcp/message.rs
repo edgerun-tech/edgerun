@@ -669,7 +669,7 @@ impl DhcpOptions {
                             MSG_INFORM => Some(DhcpMessageType::Inform),
                             v => {
                                 opts.raw.push((code, value.to_vec()));
-                                eprintln!("Unknown DHCP message type: {}", v);
+                                edgerun_log::warn!("Unknown DHCP message type: {}", v);
                                 None
                             }
                         };

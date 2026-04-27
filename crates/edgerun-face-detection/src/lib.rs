@@ -1252,6 +1252,7 @@ fn atan2_approx(y: f64, x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
 
     #[test]
     fn integral_image_ones() {

@@ -31,10 +31,8 @@ fn typed_from_slice_and_reader_work() {
     let payload: Payload = from_slice(br#"{"ok":false,"count":3,"tags":["slice"]}"#).unwrap();
     assert_eq!(payload.count, 3);
 
-    let payload: Payload = from_reader(std::io::Cursor::new(
-        br#"{"ok":true,"count":9,"tags":["reader"]}"# as &[u8],
-    ))
-    .unwrap();
+    let payload: Payload =
+        from_reader(br#"{"ok":true,"count":9,"tags":["reader"]}"# as &[u8]).unwrap();
     assert_eq!(payload.tags, vec!["reader"]);
 }
 

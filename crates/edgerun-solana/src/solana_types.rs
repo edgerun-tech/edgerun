@@ -37,8 +37,6 @@ impl std::str::FromStr for Pubkey {
             .into_vec()
             .map_err(|_| "bs58 decode failed")?;
         if decoded.len() != 32 {
-            #[cfg(not(target_os = "none"))]
-            eprintln!("DEBUG: decoded {} bytes from '{}'", decoded.len(), s);
             return Err("decoded key must be 32 bytes");
         }
         let mut arr = [0u8; 32];

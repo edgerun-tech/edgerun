@@ -63,8 +63,7 @@ impl TokenStore {
                 match credentials_from_json(&text) {
                     Ok(creds) => Ok(Some(creds)),
                     Err(e) => {
-                        #[cfg(not(target_os = "none"))]
-                        eprintln!("Warning: Failed to parse credentials from secret store: {e}");
+                        edgerun_log::warn!("failed to parse credentials from secret store: {e}");
                         Ok(None)
                     }
                 }

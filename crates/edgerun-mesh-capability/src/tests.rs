@@ -1,4 +1,5 @@
 use super::*;
+use alloc::boxed::Box;
 use edgerun_mesh::{FrameType, MeshFrame, MeshFrameHeader};
 use edgerun_proto::edgerun::v0::capability::{
     CapabilityInvocation, CapabilityRequest, CapabilityResult,
@@ -9,7 +10,7 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
 };
 use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
 use prost::Message;
-use std::sync::{Arc, Mutex};
+use crate::sync::{Arc, Mutex};
 
 // -----------------------------------------------------------------------
 // Test helpers

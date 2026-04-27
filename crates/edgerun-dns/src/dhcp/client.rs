@@ -47,7 +47,7 @@ unsafe extern "C" {
 /// let mut client = DhcpClient::new("eth0").unwrap();
 /// match client.acquire_lease(crate::std::time::Duration::from_secs(10)) {
 ///     Ok(lease) => println!("Got IP: {}", lease.ip),
-///     Err(e) => eprintln!("DHCP failed: {}", e),
+///     Err(e) => edgerun_log::warn!("DHCP failed: {}", e),
 /// }
 /// ```
 pub struct DhcpClient {
@@ -99,7 +99,7 @@ impl DhcpClient {
             };
             if rc < 0 {
                 // Non-fatal — may work without it
-                eprintln!(
+                edgerun_log::warn!(
                     "edgerun-dhcp: warning: SO_BINDTODEVICE failed for {}",
                     interface
                 );

@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-http = { path = "../edgerun-http" }
+edgerun-log = { path = "../edgerun-log" }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
 edgerun-secret-service = { path = "../edgerun-secret-service" }

@@ -16,7 +16,7 @@ edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
 edgerun-config = { path = "../edgerun-config" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-inotify = { path = "../edgerun-inotify" }
-edgerun-clap = { path = "../edgerun-clap" }
+edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 
 [lints]
 workspace = true

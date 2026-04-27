@@ -143,6 +143,10 @@ pub use remote::{
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::boxed::Box;
+    use alloc::format;
+    use alloc::string::ToString;
+    use alloc::vec;
     use std::sync::Arc;
 
     // Tests for re-exported types from the image module

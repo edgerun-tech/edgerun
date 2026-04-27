@@ -78,6 +78,8 @@ pub fn default_usb_descriptor(provider: &str, instance_id: &str) -> CapabilityDe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
+    use alloc::string::ToString;
 
     // --- UsbSpeed ---
 

@@ -144,6 +144,13 @@ pub mod net {
                 .map_err(|e| io::Error::new(io::ErrorKind::WouldBlock, e.to_string()))
         }
 
+        pub fn local_addr(&self) -> io::Result<SocketAddr> {
+            self.0
+                .local_addr()
+                .map(crate::compat::from_bare_addr)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "socket is not bound"))
+        }
+
         pub fn as_raw_fd(&self) -> i32 {
             -1
         }

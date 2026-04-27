@@ -1,9 +1,9 @@
 //! In-memory channel-pair transport for testing.
 
 use crate::prelude::v1::*;
-use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::rc::Rc;
+use crate::cell::RefCell;
+use crate::collections::VecDeque;
+use crate::rc::Rc;
 
 use edgerun_capabilities::CapabilityError;
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;

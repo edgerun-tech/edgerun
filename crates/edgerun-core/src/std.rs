@@ -2,8 +2,8 @@
 
 pub mod prelude {
     pub mod v1 {
-        pub use alloc::boxed::Box;
         pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
         pub use alloc::format;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec;
@@ -161,11 +161,17 @@ pub mod fs {
     }
 
     pub fn read_to_string(_path: impl Sized) -> io::Result<String> {
-        Err(io::Error::new(io::ErrorKind::NotFound, "filesystem unavailable"))
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "filesystem unavailable",
+        ))
     }
 
     pub fn read(_path: impl Sized) -> io::Result<Vec<u8>> {
-        Err(io::Error::new(io::ErrorKind::NotFound, "filesystem unavailable"))
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "filesystem unavailable",
+        ))
     }
 
     pub fn read_dir(_path: impl Sized) -> io::Result<ReadDir> {
@@ -177,7 +183,10 @@ pub mod fs {
     }
 
     pub fn write(_path: impl Sized, _data: impl AsRef<[u8]>) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "filesystem unavailable"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "filesystem unavailable",
+        ))
     }
 
     pub fn remove_file(_path: impl Sized) -> io::Result<()> {
@@ -204,7 +213,10 @@ pub mod fs {
         }
 
         pub fn open(&self, _path: impl Sized) -> io::Result<File> {
-            Err(io::Error::new(io::ErrorKind::Other, "filesystem unavailable"))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "filesystem unavailable",
+            ))
         }
     }
 
@@ -218,7 +230,10 @@ pub mod fs {
 
     impl io::Write for File {
         fn write_all(&mut self, _buf: &[u8]) -> io::Result<()> {
-            Err(io::Error::new(io::ErrorKind::Other, "filesystem unavailable"))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "filesystem unavailable",
+            ))
         }
     }
 }

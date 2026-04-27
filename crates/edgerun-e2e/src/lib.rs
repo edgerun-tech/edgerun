@@ -30,12 +30,15 @@ extern crate std;
 
 #[cfg(any(test, feature = "std"))]
 mod suite {
+use std::{format, println, vec};
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::process::{Child, Command};
+use std::string::{String, ToString};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
+use std::vec::Vec;
 
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use edgerun_crypto::rand_core::RngCore;

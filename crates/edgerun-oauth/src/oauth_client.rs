@@ -23,10 +23,10 @@
 //! # });
 //! ```
 
-use crate::prelude::*;
 use crate::client::DeviceFlowCallback;
 use crate::errors::OAuthError;
 use crate::pkce::PkcePair;
+use crate::prelude::*;
 use crate::token_store::TokenStore;
 use crate::types::{ClientConfig, Credentials};
 use edgerun_crypto::sha256;

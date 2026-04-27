@@ -1,7 +1,7 @@
 //! OIDC Discovery (RFC 8414) and JWKS document types.
 
-use crate::prelude::*;
 use crate::errors::OAuthError;
+use crate::prelude::*;
 use crate::types::Scope;
 use edgerun_json::{from_str, JsonValue};
 

@@ -3,7 +3,6 @@
 
 use crate::prelude::v1::*;
 use std::collections::HashMap;
-use std::eprintln;
 use std::io::{self, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
@@ -65,12 +64,12 @@ impl Server {
         );
 
         if bus.is_some() {
-            eprintln!(
+            edgerun_log::info!(
                 "edgerun-secret-service: listening on {} + D-Bus session bus",
                 socket_path.display()
             );
         } else {
-            eprintln!(
+            edgerun_log::info!(
                 "edgerun-secret-service: listening on {} (no D-Bus session bus found)",
                 socket_path.display()
             );

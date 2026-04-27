@@ -49,8 +49,8 @@ impl ConfigWatcher {
             let mut inotify = match Inotify::init() {
                 Ok(i) => i,
                 Err(e) => {
-                    eprintln!("edgerun-net: inotify init failed: {}", e);
-                    eprintln!("edgerun-net: falling back to polling");
+                    edgerun_log::warn!("edgerun-net: inotify init failed: {}", e);
+                    edgerun_log::warn!("edgerun-net: falling back to polling");
                     // Fallback to polling
                     while !stop.load(Ordering::SeqCst) {
                         thread::sleep(Duration::from_secs(5));
@@ -103,7 +103,7 @@ impl ConfigWatcher {
                         }
                     }
                     Err(e) => {
-                        eprintln!("edgerun-net: inotify read error: {}", e);
+                        edgerun_log::warn!("edgerun-net: inotify read error: {}", e);
                         thread::sleep(Duration::from_millis(500));
                     }
                 }

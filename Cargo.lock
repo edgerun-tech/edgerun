@@ -1443,6 +1443,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-http",
  "edgerun-json",
+ "edgerun-log",
  "edgerun-secret-service",
  "rsa",
 ]
@@ -1578,6 +1579,7 @@ dependencies = [
  "edgerun-biometrics",
  "edgerun-core",
  "edgerun-json",
+ "edgerun-log",
  "edgerun-proto",
  "edgerun-storage",
  "prost",
@@ -1754,6 +1756,7 @@ dependencies = [
  "edgerun-clap",
  "edgerun-glob",
  "edgerun-inotify",
+ "edgerun-log",
  "edgerun-regex",
  "ignore",
  "libc",

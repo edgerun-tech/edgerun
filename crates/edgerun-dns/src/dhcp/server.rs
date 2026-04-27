@@ -129,12 +129,12 @@ impl DhcpServer {
 
     /// Run the server event loop (blocking). Runs until the socket errors.
     pub fn run(&mut self) -> Result<(), io::Error> {
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-dhcp: server listening on 0.0.0.0:{}",
             DHCP_SERVER_PORT
         );
-        eprintln!("  pool: {} - {}", self.pool.pool_start, self.pool.pool_end);
-        eprintln!(
+        edgerun_log::warn!("  pool: {} - {}", self.pool.pool_start, self.pool.pool_end);
+        edgerun_log::warn!(
             "  server: {}, router: {}, dns: {:?}",
             self.config.server_ip, self.config.router, self.config.dns_servers
         );
@@ -145,7 +145,7 @@ impl DhcpServer {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(e) if e.kind() == io::ErrorKind::TimedOut => continue,
                 Err(e) => {
-                    eprintln!("edgerun-dhcp: server error: {}", e);
+                    edgerun_log::warn!("edgerun-dhcp: server error: {}", e);
                     return Err(e);
                 }
             }
@@ -160,7 +160,7 @@ impl DhcpServer {
         let msg = match DhcpMessage::from_wire(&buf[..n]) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("edgerun-dhcp: failed to parse message from {}: {}", src, e);
+                edgerun_log::warn!("edgerun-dhcp: failed to parse message from {}: {}", src, e);
                 return Ok(());
             }
         };
@@ -173,7 +173,7 @@ impl DhcpServer {
         let mt = match msg.options.message_type {
             Some(mt) => mt,
             None => {
-                eprintln!("edgerun-dhcp: message from {} has no message type", src);
+                edgerun_log::warn!("edgerun-dhcp: message from {} has no message type", src);
                 return Ok(());
             }
         };
@@ -193,7 +193,7 @@ impl DhcpServer {
 
     fn handle_discover(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-dhcp: DISCOVER from {} (xid=0x{:08x}) bootp={} rapid={}",
             format_mac(mac),
             msg.xid,
@@ -218,7 +218,7 @@ impl DhcpServer {
         ) {
             Some(ip) => ip,
             None => {
-                eprintln!("edgerun-dhcp: pool exhausted, sending NAK");
+                edgerun_log::warn!("edgerun-dhcp: pool exhausted, sending NAK");
                 return self.send_nak(msg.xid, mac);
             }
         };
@@ -268,7 +268,7 @@ impl DhcpServer {
                 format_mac(mac)
             );
         } else {
-            eprintln!("edgerun-dhcp: sending OFFER {} to {}", ip, format_mac(mac));
+            edgerun_log::warn!("edgerun-dhcp: sending OFFER {} to {}", ip, format_mac(mac));
         }
 
         self.send_reply(&offer, msg)
@@ -279,7 +279,7 @@ impl DhcpServer {
         let requested_ip = msg.options.requested_ip;
         let server_id = msg.options.server_id;
 
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-dhcp: REQUEST from {} (xid=0x{:08x}) req={:?} server={:?}",
             format_mac(mac),
             msg.xid,
@@ -293,7 +293,7 @@ impl DhcpServer {
             if let Some(lease) = self.pool.find_lease_by_ip(msg.ciaddr) {
                 if lease.mac == mac && !lease.is_expired() {
                     // Renew it
-                    eprintln!(
+                    edgerun_log::warn!(
                         "edgerun-dhcp: renewing {} for {}",
                         msg.ciaddr,
                         format_mac(mac)
@@ -301,7 +301,7 @@ impl DhcpServer {
                     return self.send_ack(msg, msg.ciaddr);
                 }
             }
-            eprintln!("edgerun-dhcp: renewal denied for {}", msg.ciaddr);
+            edgerun_log::warn!("edgerun-dhcp: renewal denied for {}", msg.ciaddr);
             return self.send_nak(msg.xid, mac);
         }
 
@@ -309,7 +309,7 @@ impl DhcpServer {
         if let Some(sid) = server_id {
             if sid != self.config.server_ip {
                 // Client is requesting another server — ignore
-                eprintln!(
+                edgerun_log::warn!(
                     "edgerun-dhcp: REQUEST for server {} (we are {}) — ignoring",
                     sid, self.config.server_ip
                 );
@@ -321,7 +321,7 @@ impl DhcpServer {
         let ip = match requested_ip {
             Some(ip) => ip,
             None => {
-                eprintln!("edgerun-dhcp: REQUEST missing requested_ip");
+                edgerun_log::warn!("edgerun-dhcp: REQUEST missing requested_ip");
                 return self.send_nak(msg.xid, mac);
             }
         };
@@ -353,17 +353,17 @@ impl DhcpServer {
             // Same MAC, same IP — just ACK
         } else {
             // Not in pool at all — maybe client is requesting an IP we never offered
-            eprintln!("edgerun-dhcp: REQUEST for {} not in our pool — NAK", ip);
+            edgerun_log::warn!("edgerun-dhcp: REQUEST for {} not in our pool — NAK", ip);
             return self.send_nak(msg.xid, mac);
         }
 
-        eprintln!("edgerun-dhcp: sending ACK {} to {}", ip, format_mac(mac));
+        edgerun_log::warn!("edgerun-dhcp: sending ACK {} to {}", ip, format_mac(mac));
         self.send_ack(msg, ip)
     }
 
     fn handle_release(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-dhcp: RELEASE from {} (xid=0x{:08x})",
             format_mac(mac),
             msg.xid
@@ -375,7 +375,7 @@ impl DhcpServer {
     fn handle_decline(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
         let requested = msg.options.requested_ip;
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-dhcp: DECLINE from {} for {:?}",
             format_mac(mac),
             requested
@@ -391,7 +391,7 @@ impl DhcpServer {
         // INFORM: client has IP already, wants config info
         // Per RFC 2131 §4.3.5, server MUST NOT include lease_time in INFORM response
         let mac = msg.client_mac();
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-dhcp: INFORM from {} (xid=0x{:08x})",
             format_mac(mac),
             msg.xid

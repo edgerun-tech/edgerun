@@ -113,7 +113,7 @@ impl TftpServer {
 
     /// Run the server event loop (blocking).
     pub fn run(&mut self) -> Result<(), io::Error> {
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-tftp: server listening on {}",
             self.socket.local_addr().unwrap()
         );
@@ -124,7 +124,7 @@ impl TftpServer {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(e) if e.kind() == io::ErrorKind::TimedOut => continue,
                 Err(e) => {
-                    eprintln!("edgerun-tftp: server error: {}", e);
+                    edgerun_log::warn!("edgerun-tftp: server error: {}", e);
                     return Err(e);
                 }
             }
@@ -139,7 +139,7 @@ impl TftpServer {
         let msg = match TftpMessage::from_wire(&buf[..n]) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("edgerun-tftp: parse error from {}: {}", src, e);
+                edgerun_log::warn!("edgerun-tftp: parse error from {}: {}", src, e);
                 return Ok(());
             }
         };
@@ -182,7 +182,7 @@ impl TftpServer {
             }
 
             TftpMessage::ERROR { code, message } => {
-                eprintln!("edgerun-tftp: ERROR from {}: {:?} - {}", src, code, message);
+                edgerun_log::warn!("edgerun-tftp: ERROR from {}: {:?} - {}", src, code, message);
                 // Clean up transfer
                 self.transfers.retain(|(addr, _), _| *addr != src);
             }
@@ -199,7 +199,7 @@ impl TftpServer {
         filename: String,
         client_options: TftpOptions,
     ) -> Result<(), io::Error> {
-        eprintln!(
+        edgerun_log::warn!(
             "edgerun-tftp: RRQ '{}' from {} (blksize={})",
             filename, client_addr, client_options.blksize
         );
@@ -208,7 +208,7 @@ impl TftpServer {
         let total_size = match self.provider.file_size(&filename) {
             Some(size) => size,
             None => {
-                eprintln!("edgerun-tftp: file not found: {}", filename);
+                edgerun_log::warn!("edgerun-tftp: file not found: {}", filename);
                 let err = TftpMessage::error(
                     TftpError::FileNotFound,
                     &format!("File not found: {}", filename),
@@ -251,7 +251,7 @@ impl TftpServer {
             };
             let wire = oack.to_wire();
             let _ = self.socket.send_to(&wire, client_addr);
-            eprintln!(
+            edgerun_log::warn!(
                 "edgerun-tftp: OACK sent to {} (blksize={}, tsize={})",
                 client_addr, negotiated.blksize, total_size
             );
@@ -279,7 +279,7 @@ impl TftpServer {
                 // block 0 is ACK for OACK
                 if transfer.offset >= transfer.total_size as usize {
                     // Transfer complete
-                    eprintln!(
+                    edgerun_log::warn!(
                         "edgerun-tftp: transfer complete '{}' to {} ({} bytes)",
                         transfer.filename, client_addr, transfer.offset
                     );
@@ -320,7 +320,7 @@ impl TftpServer {
                     transfer.offset += data_msg_data_len(&data_msg);
 
                     if is_last {
-                        eprintln!(
+                        edgerun_log::warn!(
                             "edgerun-tftp: final block {} for '{}' to {}",
                             transfer.current_block, transfer.filename, client_addr
                         );

@@ -27,17 +27,14 @@ pub mod prelude {
     }
 }
 
-#[cfg(target_os = "none")]
 pub mod cell {
     pub use core::cell::*;
 }
 
-#[cfg(target_os = "none")]
 pub mod rc {
     pub use alloc::rc::*;
 }
 
-#[cfg(target_os = "none")]
 pub mod collections {
     pub use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
     pub type HashMap<K, V> = alloc::collections::BTreeMap<K, V>;

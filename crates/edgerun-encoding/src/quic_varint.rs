@@ -120,7 +120,7 @@ pub fn encode_varint_vec(value: u64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::vec;
+    use alloc::vec;
 
     #[test]
     fn test_encode_decode_1byte() {

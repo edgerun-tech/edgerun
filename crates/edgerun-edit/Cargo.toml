@@ -9,6 +9,11 @@ name = "edgerun-edit"
 path = "src/main.rs"
 required-features = ["std"]
 
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"
+required-features = ["std"]
+
 [dependencies]
 edgerun-http = { path = "../edgerun-http" }
 edgerun-bare-rt = { path = "../edgerun-bare-rt" }
@@ -16,7 +21,7 @@ syn = { version = "2", features = ["full", "parsing", "extra-traits", "printing"
 proc-macro2 = { version = "1", optional = true }
 quote = { version = "1", optional = true }
 prettyplease = { version = "0.2", optional = true }
-edgerun-clap = { path = "../edgerun-clap" }
+edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 edgerun-json = { workspace = true }
 
 [features]
