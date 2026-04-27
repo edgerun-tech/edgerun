@@ -84,6 +84,13 @@ impl ContentStore for FsContentStore {
             return Ok(None);
         };
         let content = self.blobs.decrypt(&entry.nonce, &entry.ciphertext)?;
+        let ids = raw_object_ids(&content);
+        if ids.object_id != object_ref.object_id {
+            return Err(StorageError::InvalidBlob(format!(
+                "decrypted blob for object {object_id_hex} has object id {}",
+                ids.object_id_hex
+            )));
+        }
 
         Ok(Some(ObjectBytes {
             object_id: object_ref.object_id.clone(),
@@ -151,6 +158,36 @@ mod tests {
         assert_eq!(loaded.object_id, object_ref.object_id);
         assert_eq!(loaded.object_kind, 1);
         assert_eq!(loaded.content, b"content-store payload");
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn rejects_object_ref_that_does_not_match_decrypted_bytes() {
+        let data_root = tmp_data_root();
+        let store = make_store(&data_root);
+
+        let object_ref = store
+            .put_object(b"content-store payload", 1, &[vec![0x99; 32]])
+            .unwrap();
+        let original_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        let indexed = store.index.lookup_objects(&[original_hex]).unwrap();
+        let (_, representation_id, blob_id, _) = indexed.into_iter().next().unwrap();
+
+        let mut bad_object_ref = object_ref;
+        bad_object_ref.object_id[0] ^= 0xff;
+        let bad_hex = edgerun_core::util::bytes_to_hex(&bad_object_ref.object_id);
+        store
+            .index
+            .mark_object_present(
+                &bad_hex,
+                representation_id.as_deref().unwrap(),
+                blob_id.as_deref().unwrap(),
+            )
+            .unwrap();
+
+        let result = store.get_object(&bad_object_ref);
+        assert!(matches!(result, Err(StorageError::InvalidBlob(_))));
 
         let _ = std::fs::remove_dir_all(data_root);
     }

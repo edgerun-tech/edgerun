@@ -64,6 +64,13 @@ impl ContentStore for MemContentStore {
         let Some(object) = objects.get(&object_id_hex) else {
             return Ok(None);
         };
+        let ids = raw_object_ids(&object.content);
+        if ids.object_id != object_ref.object_id {
+            return Err(StorageError::InvalidBlob(format!(
+                "stored bytes for object {object_id_hex} have object id {}",
+                ids.object_id_hex
+            )));
+        }
 
         Ok(Some(ObjectBytes {
             object_id: object_ref.object_id.clone(),
@@ -98,5 +105,23 @@ mod tests {
             object_kind: None,
         };
         assert!(store.get_object(&missing).unwrap().is_none());
+    }
+
+    #[test]
+    fn rejects_object_ref_that_does_not_match_stored_bytes() {
+        let store = MemContentStore::new();
+        let mut object_ref = store.put_object(b"mem payload", 7, &[]).unwrap();
+        object_ref.object_id[0] ^= 0xff;
+        let bad_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        store.objects.lock().unwrap().insert(
+            bad_hex,
+            MemObject {
+                object_kind: 7,
+                content: b"mem payload".to_vec(),
+            },
+        );
+
+        let result = store.get_object(&object_ref);
+        assert!(matches!(result, Err(StorageError::InvalidBlob(_))));
     }
 }
