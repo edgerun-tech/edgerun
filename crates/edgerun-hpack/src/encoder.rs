@@ -44,14 +44,25 @@
 //! // indicating that the indexed representation is used).
 //! assert_eq!(encoder.encode(headers), vec![2 | 0x80, 4 | 0x80]);
 //! ```
-use std::io;
-use std::num::Wrapping;
+use alloc::vec::Vec;
+use core::num::Wrapping;
+
+pub trait Writer {
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), ()>;
+}
+
+impl Writer for Vec<u8> {
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), ()> {
+        self.extend_from_slice(buf);
+        Ok(())
+    }
+}
 
 use super::HeaderTable;
 use super::STATIC_TABLE;
 
 /// Encode an integer to the representation defined by HPACK, writing it into the provider
-/// `io::Write` instance. Also allows the caller to specify the leading bits of the first
+/// `Writer` instance. Also allows the caller to specify the leading bits of the first
 /// octet. Any bits that are already set within the last `prefix_size` bits will be cleared
 /// and overwritten by the integer's representation (in other words, only the first
 /// `8 - prefix_size` bits from the `leading_bits` octet are reflected in the first octet
@@ -89,12 +100,12 @@ use super::STATIC_TABLE;
 ///     assert_eq!(vec, vec![31, 154, 10]);
 /// }
 /// ```
-pub fn encode_integer_into<W: io::Write>(
+pub fn encode_integer_into<W: Writer>(
     mut value: usize,
     prefix_size: u8,
     leading_bits: u8,
     writer: &mut W,
-) -> io::Result<()> {
+) -> Result<(), ()> {
     let Wrapping(mask) = if prefix_size >= 8 {
         Wrapping(0xFF)
     } else {
@@ -207,14 +218,14 @@ impl<'a> Encoder<'a> {
         encoded
     }
 
-    /// Encodes the given headers into the given `io::Write` instance. If the io::Write raises an
+    /// Encodes the given headers into the given `Writer` instance. If the Writer raises an
     /// Error at any point, this error is propagated out. Any changes to the internal state of the
     /// encoder will not be rolled back, though, so care should be taken to ensure that the paired
     /// decoder also ends up seeing the same state updates or that their pairing is cancelled.
-    pub fn encode_into<'b, I, W>(&mut self, headers: I, writer: &mut W) -> io::Result<()>
+    pub fn encode_into<'b, I, W>(&mut self, headers: I, writer: &mut W) -> Result<(), ()>
     where
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
-        W: io::Write,
+        W: Writer,
     {
         for header in headers {
             self.encode_header_into(header, writer)?;
@@ -222,15 +233,15 @@ impl<'a> Encoder<'a> {
         Ok(())
     }
 
-    /// Encodes a single given header into the given `io::Write` instance.
+    /// Encodes a single given header into the given `Writer` instance.
     ///
     /// Any errors are propagated, similarly to the `encode_into` method, and it is the callers
     /// responsiblity to make sure that the paired encoder sees them too.
-    pub fn encode_header_into<W: io::Write>(
+    pub fn encode_header_into<W: Writer>(
         &mut self,
         header: (&[u8], &[u8]),
-        writer: &mut W,
-    ) -> io::Result<()> {
+writer: &mut W,
+) -> Result<(), ()> {
         match self.header_table.find_header(header) {
             None => {
                 // The name of the header is in no tables: need to encode
@@ -265,12 +276,12 @@ impl<'a> Encoder<'a> {
     ///   inserted into the dynamic table
     /// - `buf` - The buffer into which the result is placed
     ///
-    fn encode_literal<W: io::Write>(
+    fn encode_literal<W: Writer>(
         &mut self,
         header: &(&[u8], &[u8]),
         should_index: bool,
         buf: &mut W,
-    ) -> io::Result<()> {
+    ) -> Result<(), ()> {
         let mask = if should_index { 0x40 } else { 0x0 };
 
         buf.write_all(&[mask])?;
@@ -285,11 +296,11 @@ impl<'a> Encoder<'a> {
     /// The function does not consider Huffman encoding for now, but always
     /// produces a string literal representations, according to the HPACK spec
     /// section 5.2.
-    fn encode_string_literal<W: io::Write>(
+    fn encode_string_literal<W: Writer>(
         &mut self,
         octet_str: &[u8],
         buf: &mut W,
-    ) -> io::Result<()> {
+    ) -> Result<(), ()> {
         encode_integer_into(octet_str.len(), 7, 0, buf)?;
         buf.write_all(octet_str)?;
         Ok(())
@@ -297,12 +308,12 @@ impl<'a> Encoder<'a> {
 
     /// Encodes a header whose name is indexed and places the result in the
     /// given buffer `buf`.
-    fn encode_indexed_name<W: io::Write>(
+    fn encode_indexed_name<W: Writer>(
         &mut self,
         header: (usize, &[u8]),
         should_index: bool,
         buf: &mut W,
-    ) -> io::Result<()> {
+    ) -> Result<(), ()> {
         let (mask, prefix) = if should_index { (0x40, 6) } else { (0x0, 4) };
 
         encode_integer_into(header.0, prefix, mask, buf)?;
@@ -315,7 +326,7 @@ impl<'a> Encoder<'a> {
     /// and places the result in the given buffer `buf`.
     ///
     /// The encoding is according to the rules of the HPACK spec, section 6.1.
-    fn encode_indexed<W: io::Write>(&self, index: usize, buf: &mut W) -> io::Result<()> {
+    fn encode_indexed<W: Writer>(&self, index: usize, buf: &mut W) -> Result<(), ()> {
         // We need to set the most significant bit, since the bit-pattern is
         // `1xxxxxxx` for indexed headers.
         encode_integer_into(index, 7, 0x80, buf)?;
@@ -366,7 +377,6 @@ mod tests {
 
         let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
-        debug!("{:?}", result);
         assert!(is_decodable(&result, &headers));
     }
 
@@ -383,7 +393,6 @@ mod tests {
         assert_eq!(encoder.header_table.dynamic_table.to_vec(), headers);
         // ...but also indicated as such in the output.
         assert!(0x40 == (0x40 & result[0]));
-        debug!("{:?}", result);
     }
 
     /// Tests that when a header gets added to the dynamic table, the encoder

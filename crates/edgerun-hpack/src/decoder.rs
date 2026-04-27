@@ -45,8 +45,9 @@
 //! });
 //! ```
 
-use std::borrow::Cow;
-use std::num::Wrapping;
+use alloc::borrow::Cow;
+use alloc::vec::Vec;
+use core::num::Wrapping;
 
 use super::huffman::HuffmanDecoder;
 use super::huffman::HuffmanDecoderError;
@@ -134,7 +135,6 @@ fn decode_integer(buf: &[u8], prefix_size: u8) -> Result<(usize, usize), Decoder
 /// bytes consumed from the given buffer.
 fn decode_string<'a>(buf: &'a [u8]) -> Result<(Cow<'a, [u8]>, usize), DecoderError> {
     let (len, consumed) = decode_integer(buf, 7)?;
-    debug!("decode_string: Consumed = {}, len = {}", consumed, len);
     if consumed + len > buf.len() {
         return Err(DecoderError::StringDecodingError(
             StringDecodingError::NotEnoughOctets,
@@ -142,7 +142,6 @@ fn decode_string<'a>(buf: &'a [u8]) -> Result<(Cow<'a, [u8]>, usize), DecoderErr
     }
     let raw_string = &buf[consumed..consumed + len];
     if buf[0] & 128 == 128 {
-        debug!("decode_string: Using the Huffman code");
         // Huffman coding used: pass the raw octets to the Huffman decoder
         // and return its result.
         let mut decoder = HuffmanDecoder::new();
@@ -157,7 +156,6 @@ fn decode_string<'a>(buf: &'a [u8]) -> Result<(Cow<'a, [u8]>, usize), DecoderErr
         Ok((Cow::Owned(decoded), consumed + len))
     } else {
         // The octets were transmitted raw
-        debug!("decode_string: Raw octet string received");
         Ok((Cow::Borrowed(raw_string), consumed + len))
     }
 }
@@ -392,10 +390,6 @@ impl<'a> Decoder<'a> {
     /// Decodes an indexed header representation.
     fn decode_indexed(&self, buf: &[u8]) -> Result<(IndexedHeader<'_>, usize), DecoderError> {
         let (index, consumed) = decode_integer(buf, 7)?;
-        debug!(
-            "Decoding indexed: index = {}, consumed = {}",
-            index, consumed
-        );
 
         let (name, value) = self.get_from_table(index)?;
 
@@ -1601,7 +1595,6 @@ mod interop_tests {
 
         for fixture in files {
             let file_name = fixture.unwrap().path();
-            debug!("Testing fixture: {:?}", file_name);
             test_story(file_name);
         }
     }

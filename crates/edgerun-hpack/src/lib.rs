@@ -2,23 +2,29 @@
 //! performing the encoding and decoding of header sets, according to the
 //! HPACK spec.
 
+#![no_std]
+
+extern crate alloc;
+
+#[macro_use]
+extern crate edgerun_log;
+
+use alloc::collections::VecDeque;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+use core::fmt;
+use core::iter;
+use core::slice;
+
+#[cfg(feature = "interop_tests")]
+#[allow(unused_imports)]
+extern crate rustc_serialize;
+
 type StaticEntryIter<'a> = iter::Map<
     slice::Iter<'a, (&'a [u8], &'a [u8])>,
     fn(&'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8]),
 >;
 type HeaderIterChain<'a> = iter::Chain<StaticEntryIter<'a>, DynamicTableIter<'a>>;
-
-#[macro_use]
-extern crate log;
-#[cfg(feature = "interop_tests")]
-#[allow(unused_imports)]
-extern crate rustc_serialize;
-
-use std::collections::vec_deque;
-use std::collections::VecDeque;
-use std::fmt;
-use std::iter;
-use std::slice;
 
 // Re-export the main HPACK API entry points.
 pub use self::decoder::{Decoder, DecoderError};
@@ -38,9 +44,7 @@ pub mod huffman;
 /// constructed as new instances, containing a borrow from the `Vec`s
 /// representing the underlying Headers.
 struct DynamicTableIter<'a> {
-    /// Stores an iterator through the underlying structure that the
-    /// `DynamicTable` uses
-    inner: vec_deque::Iter<'a, (Vec<u8>, Vec<u8>)>,
+    inner: alloc::collections::vec_deque::Iter<'a, (Vec<u8>, Vec<u8>)>,
 }
 
 impl<'a> Iterator for DynamicTableIter<'a> {
@@ -151,12 +155,7 @@ impl DynamicTable {
         // a magic number determined by them (under reasonable assumptions of
         // how the table is stored).
         self.size += name.len() + value.len() + 32;
-        debug!("New dynamic table size {}", self.size);
-        // Now add it to the internal buffer
-        self.table.push_front((name, value));
-        // ...and make sure we're not over the maximum size.
-        self.consolidate_table();
-        debug!("After consolidation dynamic table size {}", self.size);
+        
     }
 
     /// Consolidates the table entries so that the table size is below the

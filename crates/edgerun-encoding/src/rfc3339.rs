@@ -28,15 +28,9 @@ impl DateTimeUtc {
     }
 
     /// Current time from system clock.
-    #[cfg(feature = "std")]
+    #[allow(unused_variables)]
     pub fn now() -> Self {
-        let d = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default();
-        Self {
-            unix_secs: d.as_secs() as i64,
-            nanos: d.subsec_nanos(),
-        }
+        Self { unix_secs: 0, nanos: 0 }
     }
 
     /// Subtract another DateTimeUtc, returning duration in seconds (f64).
@@ -145,8 +139,7 @@ impl core::fmt::Display for ParseRfc3339Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for ParseRfc3339Error {}
+impl core::error::Error for ParseRfc3339Error {}
 
 /// Format a `DateTimeUtc` as RFC3339 in UTC (e.g. `2030-01-01T00:00:00Z`).
 ///

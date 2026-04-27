@@ -2,7 +2,8 @@
 //! strings, under the Huffman code defined by HPACK.
 //! (HPACK-draft-10, Appendix B)
 
-use std::collections::HashMap;
+use alloc::vec::Vec;
+use core::mem;
 
 /// Represents a symbol that can be inserted into a Huffman-encoded octet
 /// string.
@@ -41,11 +42,9 @@ pub enum HuffmanDecoderError {
 /// `HuffmanDecoder`.
 pub type HuffmanDecoderResult = Result<Vec<u8>, HuffmanDecoderError>;
 
-/// A simple implementation of a Huffman code decoder.
+const MAX_CODE_LEN: u8 = 30;
+
 pub struct HuffmanDecoder {
-    table: HashMap<u8, HashMap<u32, HuffmanCodeSymbol>>,
-    // The representation of the EOS: the left-aligned code representation and
-    // the actual length of the codepoint, as a tuple.
     eos_codepoint: (u32, u8),
 }
 
@@ -56,41 +55,16 @@ impl Default for HuffmanDecoder {
 }
 
 impl HuffmanDecoder {
-    fn from_table(table: &[(u32, u8)]) -> Self {
-        if table.len() != 257 {
-            panic!("Invalid Huffman code table. It must define exactly 257 symbols.");
-        }
-
-        let mut decoder_table: HashMap<u8, HashMap<u32, HuffmanCodeSymbol>> = HashMap::new();
-        let mut eos_codepoint: Option<(u32, u8)> = None;
-
-        for (symbol, &(code, code_len)) in table.iter().enumerate() {
-            decoder_table.entry(code_len).or_default();
-            let subtable = decoder_table.get_mut(&code_len).unwrap();
-            let huff_symbol = HuffmanCodeSymbol::new(symbol);
-            if let HuffmanCodeSymbol::EndOfString = huff_symbol {
-                eos_codepoint = Some((code, code_len));
-            };
-            subtable.insert(code, huff_symbol);
-        }
-
+    fn from_table(_table: &[(u32, u8)]) -> Self {
         Self {
-            table: decoder_table,
-            eos_codepoint: eos_codepoint.unwrap(),
+            eos_codepoint: (0, 0),
         }
     }
 
-    /// Constructs a new HuffmanDecoder with the default Huffman code table, as
-    /// defined in the HPACK-draft-10, Appendix B.
     pub fn new() -> Self {
         HuffmanDecoder::from_table(HUFFMAN_CODE_TABLE)
     }
 
-    /// Decodes the buffer `buf` into a newly allocated `Vec`.
-    ///
-    /// It assumes that the entire buffer should be considered as the Huffman
-    /// encoding of an octet string and handles the padding rules
-    /// accordingly.
     pub fn decode(&mut self, buf: &[u8]) -> HuffmanDecoderResult {
         let mut current: u32 = 0;
         let mut current_len: u8 = 0;
@@ -103,61 +77,34 @@ impl HuffmanDecoder {
                 current |= 1;
             }
 
-            if self.table.contains_key(&current_len) {
-                let length_table = self.table.get(&current_len).unwrap();
-                if length_table.contains_key(&current) {
-                    let decoded_symbol = match *length_table.get(&current).unwrap() {
-                        HuffmanCodeSymbol::Symbol(symbol) => symbol,
-                        HuffmanCodeSymbol::EndOfString => {
-                            // If the EOS symbol is detected within the stream,
-                            // we need to consider it an error.
-                            return Err(HuffmanDecoderError::EOSInString);
-                        }
-                    };
-                    result.push(decoded_symbol);
+            if current_len > 0 && current_len <= MAX_CODE_LEN {
+                if let Some(symbol) = lookup_symbol(current, current_len) {
+                    if symbol == 255u8 {
+                        return Err(HuffmanDecoderError::EOSInString);
+                    }
+                    result.push(symbol);
                     current = 0;
                     current_len = 0;
                 }
             }
         }
 
-        // Now we need to verify that the padding is correct.
-        // The spec mandates that the padding must not be strictly longer than
-        // 7 bits and that it must represent the most significant bits of the
-        // EOS symbol's code.
-
-        // First: the check for the length of the padding
-        if current_len > 7 {
-            return Err(HuffmanDecoderError::PaddingTooLarge);
-        }
-
-        // Second: the padding corresponds to the most-significant bits of the
-        // EOS symbol.
-        // Align both of them to have their most significant bit as the most
-        // significant bit of a u32.
-        let right_align_current = if current_len == 0 {
-            0
-        } else {
-            current << (32 - current_len)
-        };
-        let right_align_eos = self.eos_codepoint.0 << (32 - self.eos_codepoint.1);
-        // Now take only the necessary amount of most significant bit of EOS.
-        // The mask defines a bit pattern of `current_len` leading set bits,
-        // followed by the rest of the bits 0.
-        let mask = if current_len == 0 {
-            0
-        } else {
-            ((1 << current_len) - 1) << (32 - current_len)
-        };
-        // The mask is now used to strip the unwanted bits of the EOS
-        let eos_mask = right_align_eos & mask;
-
-        if eos_mask != right_align_current {
+        if current_len > 0 {
             return Err(HuffmanDecoderError::InvalidPadding);
         }
 
         Ok(result)
     }
+}
+
+fn lookup_symbol(code: u32, len: u8) -> Option<u8> {
+    for i in 0..257 {
+        let (table_code, table_len) = HUFFMAN_CODE_TABLE[i];
+        if table_len == len && table_code == code {
+            return Some(i as u8);
+        }
+    }
+    None
 }
 
 /// Encode bytes using HPACK Huffman coding.

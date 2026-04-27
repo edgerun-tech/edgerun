@@ -274,7 +274,7 @@ impl BufMut for &mut [u8] {
         // SAFETY: we're advancing by valid bytes
         unsafe {
             let ptr = self.as_mut_ptr();
-            *self = std::slice::from_raw_parts_mut(ptr.add(n), self.len() - n);
+            *self = core::slice::from_raw_parts_mut(ptr.add(n), self.len() - n);
         }
     }
 }
@@ -365,101 +365,7 @@ impl<T: AsRef<[u8]>> Buf for Cursor<T> {
     }
 }
 
-impl Buf for std::io::Cursor<&mut Vec<u8>> {
-    #[inline]
-    fn remaining(&self) -> usize {
-        let pos = self.position() as usize;
-        let len = self.get_ref().len();
-        len.saturating_sub(pos)
-    }
 
-    #[inline]
-    fn chunk(&self) -> &[u8] {
-        let pos = self.position() as usize;
-        &self.get_ref()[pos..]
-    }
-
-    #[inline]
-    fn advance(&mut self, n: usize) {
-        use std::io::Read;
-        let mut skip = [0u8; 1];
-        for _ in 0..n {
-            let _ = self.read(&mut skip);
-        }
-    }
-}
-
-impl Buf for std::io::Cursor<Vec<u8>> {
-    #[inline]
-    fn remaining(&self) -> usize {
-        let pos = self.position() as usize;
-        let len = self.get_ref().len();
-        len.saturating_sub(pos)
-    }
-
-    #[inline]
-    fn chunk(&self) -> &[u8] {
-        let pos = self.position() as usize;
-        &self.get_ref()[pos..]
-    }
-
-    #[inline]
-    fn advance(&mut self, n: usize) {
-        use std::io::Read;
-        let mut skip = [0u8; 1];
-        for _ in 0..n {
-            let _ = self.read(&mut skip);
-        }
-    }
-}
-
-impl Buf for std::io::Cursor<&Vec<u8>> {
-    #[inline]
-    fn remaining(&self) -> usize {
-        let pos = self.position() as usize;
-        let len = self.get_ref().len();
-        len.saturating_sub(pos)
-    }
-
-    #[inline]
-    fn chunk(&self) -> &[u8] {
-        let pos = self.position() as usize;
-        &self.get_ref()[pos..]
-    }
-
-    #[inline]
-    fn advance(&mut self, n: usize) {
-        use std::io::Read;
-        let mut skip = [0u8; 1];
-        for _ in 0..n {
-            let _ = self.read(&mut skip);
-        }
-    }
-}
-
-impl Buf for &mut std::io::Cursor<&mut Vec<u8>> {
-    #[inline]
-    fn remaining(&self) -> usize {
-        let pos = self.position() as usize;
-        let len = self.get_ref().len();
-        len.saturating_sub(pos)
-    }
-
-    #[inline]
-    fn chunk(&self) -> &[u8] {
-        let pos = self.position() as usize;
-        &self.get_ref()[pos..]
-    }
-
-    #[inline]
-    fn advance(&mut self, n: usize) {
-        use std::io::Read;
-        let mut skip = [0u8; 1];
-        for _ in 0..n {
-            let _ = self.read(&mut skip);
-        }
-    }
-}
 
 impl Buf for &mut Vec<u8> {
     #[inline]

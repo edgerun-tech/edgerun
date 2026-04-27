@@ -6,9 +6,6 @@
 
 extern crate alloc;
 
-#[cfg(feature = "std")]
-extern crate std;
-
 pub mod base32hex;
 pub mod base64;
 pub mod buf;

@@ -25,36 +25,65 @@ Output: `/tmp/edgerun.bin` (~15KB)
 
 ## no_std Crates
 
+Build tested with `x86_64-unknown-none` + `-Zbuild-std=core,alloc`:
+
 | Crate | Purpose |
 |------|---------|
 | edgerun-bare-rt | Bare-metal async runtime |
 | edgerun-platform | CPU, timer, IRQ, TLS |
 | edgerun-virtio | Virtio-net driver |
-| edgerun-glob | Glob patterns |
-| edgerun-regex | Regex |
-| edgerun-error | Error derive macro |
+| edgerun-glob | Glob patterns (no_std, zero-dep) |
+| edgerun-regex | Regex (no_std, zero-dep) |
+| edgerun-error | Error derive macro (proc-macro) |
 | edgerun-ipxe | iPXE wrapper |
 | edgerun-tftp | TFTP client |
-| edgerun-clap-derive | CLI derive |
-| edgerun-log | Logging |
+| edgerun-log | Minimal logging (no_std, zero-dep) |
+| edgerun-hpack | HPACK header compression (RFC 7541) |
+| edgerun-encoding | Encoding utilities (base64, varint, buf) |
+| edgerun-qpack | QPACK header compression (RFC 9204) |
 | edgerun-json | JSON (alloc feature) |
 
-## Build Multiple Crates
+## Build Test Command
 
 ```bash
 # Test all no_std crates for bare target
-for crate in edgerun-glob edgerun-regex edgerun-error edgerun-ipxe edgerun-tftp edgerun-clap-derive edgerun-log edgerun-json edgerun-bare-rt edgerun-platform edgerun-virtio; do
+for crate in edgerun-glob edgerun-regex edgerun-error edgerun-ipxe edgerun-tftp edgerun-log edgerun-json edgerun-bare-rt edgerun-platform edgerun-virtio edgerun-hpack edgerun-encoding edgerun-qpack; do
   cargo +nightly build -p "$crate" --release --target x86_64-unknown-none -Zbuild-std=core,alloc
 done
 ```
 
-## blocked Crates
+## Blocked Crates
 
-These depend on `std::collections` or external crates like `log`, `serde`, `bytes`:
+These need work to become no_std:
 
-- edgerun-encoding
-- edgerun-hpack  
-- edgerun-qpack
-- edgerun-http
-- edgerun-quic
-- Most other crates
+- **edgerun-http**: Heavy async rt dependencies (edgerun-rt), TLS, DNS
+- **edgerun-quic**: Depends on http + rt + tls + crypto
+- **edgerun-tls**: Depends on edgerun-rt + libc
+- **edgerun-crypto**: External crates without no_std support (getrandom)
+- **edgerun-dns**: Depends on edgerun-rt
+- **edgerun-net**: Depends on getrandom
+
+## Crate Status Notes
+
+### edgerun-encoding (FIXED)
+- Already uses `core::error::Error` ✅
+- Has no_std `Buf`/`BufMut` traits with working `Cursor<T: AsRef<[u8]>>`
+- Removed optional std-only impls (`std::io::Cursor`) - available in std build via standard library
+- `std::time::SystemTime::now()` stubbed for no_std (returns epoch 0)
+
+### edgerun-hpack (FIXED)
+- Replaced `std::collections::VecDeque` → `alloc::collections::VecDeque`
+- Replaced `std::collections::HashMap` → linear table lookup
+- Created custom `Writer` trait (no_std `io::Write`)
+- Uses `edgerun-log` for logging (already no_std)
+- Uses `core::error::Error` (stable in no_std)
+
+### edgerun-http (BLOCKED)
+- Heavily coupled to edgerun-rt (async networking)
+- Would need splitting: protocol parsing core → no_std, server wrapper → rt
+- Protocol parts (frames, HPACK) are separate from I/O
+
+### edgerun-rt vs edgerun-bare-rt
+- **edgerun-rt**: Full async runtime (epoll, sockets, threads) - requires std
+- **edgerun-bare-rt**: Bare-metal async (no std) - different API
+- Network crates use rt; bare-metal crates use bare-rt
