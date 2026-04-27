@@ -2,6 +2,8 @@
 
 #![allow(dead_code)]
 
+use crate::storage::{BlockDevice, SECTOR_SIZE};
+
 pub const NVME_CAP: usize = 0x00;
 pub const NVME_VER: usize = 0x04;
 pub const NVME_INTMS: usize = 0x08;
@@ -150,6 +152,20 @@ impl NvmeController {
     }
 
     pub fn sectors(&self) -> u64 {
+        self.nsze
+    }
+}
+
+impl BlockDevice for NvmeController {
+    fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> bool {
+        self.read(sector, 1, buf)
+    }
+
+    fn write_sector(&mut self, sector: u64, buf: &[u8]) -> bool {
+        self.write(sector, 1, buf)
+    }
+
+    fn sectors(&self) -> u64 {
         self.nsze
     }
 }
