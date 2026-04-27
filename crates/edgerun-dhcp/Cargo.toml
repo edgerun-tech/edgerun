@@ -4,12 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Async DHCPv4 server and client"
+description = "DHCPv4 server and client"
+
+[features]
+default = ["std"]
+std = []
+bare = ["edgerun-bare-rt"]
 
 [lints]
 workspace = true
 
 [dependencies]
-edgerun-encoding = { path = "../edgerun-encoding" }
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-bare-rt = { version = "0.1", optional = true, path = "../edgerun-bare-rt" }

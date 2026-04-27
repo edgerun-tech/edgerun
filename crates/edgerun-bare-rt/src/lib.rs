@@ -52,17 +52,13 @@ pub use weak::Weak;
 pub mod error;
 pub use error::Error;
 
-pub mod dhcp;
-pub use dhcp::{DhcpConfig, DhcpClient, DhcpState};
 
-pub mod tftp;
-pub use tftp::{TftpConfig, TftpClient, TftpState};
 
 pub mod udp;
 pub use udp::{UdpSocket, SocketAddr, UdpError};
 
 pub mod tcp;
-pub use tcp::{TcpSocket, TcpState, TcpError};
+pub use tcp::{TcpSocket, TcpState, TcpError, TcpListener};
 
 pub mod ipv4;
 pub use ipv4::{Ipv4Addr, Ipv4Header, IP_VERSION, IP_DEFAULT_TTL};
@@ -86,6 +82,12 @@ pub mod fat;
 pub mod pci;
 pub mod virtio_net;
 pub mod ip;
+pub use ip::{IpStack, IpAddr, EthHeader, IpHeader, UdpHeader, TcpHeader, ArpHeader, IcmpHeader, Network, ETH_TYPE_IPV4, ETH_TYPE_ARP, IP_PROTO_ICMP, IP_PROTO_TCP, IP_PROTO_UDP, ICMP_ECHO_REQUEST, ICMP_ECHO_REPLY, icmp_checksum, echo_reply, ping, ArpCache, parse_packet, ip_checksum};
+pub mod dhcp;
+pub use dhcp::{DhcpClient, DhcpState};
+
+pub mod tftp;
+pub use tftp::{TftpClient, TftpState, TftpConfig};
 
 pub mod log;
 pub use log::Level;

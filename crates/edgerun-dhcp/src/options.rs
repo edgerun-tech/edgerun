@@ -1,10 +1,13 @@
+#![no_std]
+
 //! DHCP options convenience helpers.
 
-use super::message::DhcpOptions;
-use super::message::{
+use alloc::vec;
+use alloc::vec::Vec;
+use crate::message::{DhcpOptions, Ipv4Addr};
+use crate::message::{
     OPT_DNS_SERVER, OPT_LEASE_TIME, OPT_REBIND_TIME, OPT_RENEWAL_TIME, OPT_ROUTER, OPT_SUBNET_MASK,
 };
-use std::net::Ipv4Addr;
 
 /// Builder for constructing DHCP option sets.
 pub struct OptionsBuilder {
@@ -18,7 +21,7 @@ impl OptionsBuilder {
         }
     }
 
-    pub fn message_type(mut self, mt: super::DhcpMessageType) -> Self {
+    pub fn message_type(mut self, mt: crate::DhcpMessageType) -> Self {
         self.opts.message_type = Some(mt);
         self
     }
