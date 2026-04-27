@@ -31,7 +31,7 @@ impl ContinuationState {
     /// Mark continuation as complete and return the accumulated header block.
     pub fn finish(&mut self) -> Vec<u8> {
         self.expecting = false;
-        std::mem::take(&mut self.header_block_buf)
+        core::mem::take(&mut self.header_block_buf)
     }
 
     /// Abort continuation (e.g. on error) and clear state.

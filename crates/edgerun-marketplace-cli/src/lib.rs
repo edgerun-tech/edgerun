@@ -1,14 +1,21 @@
 //! Marketplace CLI — interact with Edgerun on-chain programs via Solana RPC.
 
-#![cfg_attr(target_os = "none", no_std)]
+#![no_std]
 
-#[cfg(target_os = "none")]
 extern crate alloc;
 
-#[cfg(target_os = "none")]
+#[cfg(not(target_os = "none"))]
+extern crate std;
+
+#[cfg(not(target_os = "none"))]
+use alloc::boxed::Box;
 use alloc::string::String;
+#[cfg(not(target_os = "none"))]
+use alloc::string::ToString;
 #[cfg(target_os = "none")]
 use core::fmt;
+#[cfg(not(target_os = "none"))]
+use std::{eprintln, println};
 
 #[cfg(not(target_os = "none"))]
 mod deployment;

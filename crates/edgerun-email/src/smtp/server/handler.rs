@@ -1,5 +1,6 @@
 //! Pluggable mail backend trait and in-memory implementation.
 
+use crate::prelude::*;
 use std::io;
 
 use crate::smtp::server::dsn_generator::DsnBounce;

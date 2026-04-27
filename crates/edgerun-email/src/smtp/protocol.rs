@@ -1,5 +1,6 @@
 //! Shared protocol utilities — line reader and ESMTP extension list.
 
+use crate::prelude::*;
 use std::io;
 
 use crate::rt::{AsyncRead, AsyncReadExt};

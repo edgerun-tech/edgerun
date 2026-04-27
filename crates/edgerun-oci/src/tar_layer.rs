@@ -1,8 +1,10 @@
 //! no_std parser for uncompressed OCI tar layers.
 
 use crate::layer_pipeline::{
-    apply_layer_chunks, LayerApplyReport, LayerDigest, LayerPipelineError, LayerSink,
+    apply_layer_chunks, sha256_layer_digest, LayerApplyReport, LayerDigest, LayerPipelineError,
+    LayerSink,
 };
+use crate::oci_path::layer_path_safe;
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use core::fmt;
@@ -54,6 +56,8 @@ impl core::error::Error for TarLayerError {}
 pub enum TarLayerApplyError {
     Layer(LayerPipelineError),
     Tar(TarLayerError),
+    Decompress(String),
+    UnsupportedMediaType(Option<String>),
 }
 
 impl fmt::Display for TarLayerApplyError {
@@ -61,6 +65,11 @@ impl fmt::Display for TarLayerApplyError {
         match self {
             Self::Layer(error) => write!(f, "invalid layer blob: {error}"),
             Self::Tar(error) => write!(f, "invalid tar layer: {error}"),
+            Self::Decompress(error) => write!(f, "layer decompression failed: {error}"),
+            Self::UnsupportedMediaType(Some(media_type)) => {
+                write!(f, "unsupported tar layer media type: {media_type}")
+            }
+            Self::UnsupportedMediaType(None) => f.write_str("missing tar layer media type"),
         }
     }
 }
@@ -71,6 +80,21 @@ impl core::error::Error for TarLayerApplyError {}
 pub struct TarLayerApplyReport {
     pub layer: LayerApplyReport,
     pub entries_applied: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedTarLayer {
+    pub layer: LayerApplyReport,
+    pub compression: OciLayerCompression,
+    pub tar_bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OciLayerCompression {
+    Uncompressed,
+    Gzip,
+    Zstd,
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +134,82 @@ pub trait TarLayerSink {
     fn apply_entry(&mut self, entry: &TarEntry, data: &[u8]) -> Result<(), String>;
 }
 
+pub fn apply_validated_tar_layer<'a, I, D, S>(
+    descriptor: &LayerDescriptor,
+    chunks: I,
+    digest: D,
+    sink: &mut S,
+) -> Result<TarLayerApplyReport, TarLayerApplyError>
+where
+    I: IntoIterator<Item = &'a [u8]>,
+    D: LayerDigest,
+    S: TarLayerSink,
+{
+    let decoded = validate_and_decode_tar_layer(descriptor, chunks, digest)?;
+
+    let entries_applied =
+        apply_uncompressed_tar_layer(&decoded.tar_bytes, sink).map_err(TarLayerApplyError::Tar)?;
+
+    Ok(TarLayerApplyReport {
+        layer: decoded.layer,
+        entries_applied,
+    })
+}
+
+pub fn apply_validated_tar_layer_sha256<'a, I, S>(
+    descriptor: &LayerDescriptor,
+    chunks: I,
+    sink: &mut S,
+) -> Result<TarLayerApplyReport, TarLayerApplyError>
+where
+    I: IntoIterator<Item = &'a [u8]>,
+    S: TarLayerSink,
+{
+    apply_validated_tar_layer(descriptor, chunks, sha256_layer_digest(), sink)
+}
+
+pub fn validate_and_decode_tar_layer<'a, I, D>(
+    descriptor: &LayerDescriptor,
+    chunks: I,
+    digest: D,
+) -> Result<DecodedTarLayer, TarLayerApplyError>
+where
+    I: IntoIterator<Item = &'a [u8]>,
+    D: LayerDigest,
+{
+    let mut blob = LayerBytes::default();
+    let layer = apply_layer_chunks(descriptor, chunks, digest, &mut blob)
+        .map_err(TarLayerApplyError::Layer)?;
+
+    let compression = layer_compression(descriptor.media_type.as_deref());
+    let tar_bytes = match compression {
+        OciLayerCompression::Uncompressed => blob.bytes,
+        OciLayerCompression::Gzip => decompress_gzip_layer(&blob.bytes)?,
+        OciLayerCompression::Zstd => decompress_zstd_layer(&blob.bytes)?,
+        OciLayerCompression::Unknown => {
+            return Err(TarLayerApplyError::UnsupportedMediaType(
+                descriptor.media_type.clone(),
+            ));
+        }
+    };
+
+    Ok(DecodedTarLayer {
+        layer,
+        compression,
+        tar_bytes,
+    })
+}
+
+pub fn validate_and_decode_tar_layer_sha256<'a, I>(
+    descriptor: &LayerDescriptor,
+    chunks: I,
+) -> Result<DecodedTarLayer, TarLayerApplyError>
+where
+    I: IntoIterator<Item = &'a [u8]>,
+{
+    validate_and_decode_tar_layer(descriptor, chunks, sha256_layer_digest())
+}
+
 pub fn apply_validated_uncompressed_tar_layer<'a, I, D, S>(
     descriptor: &LayerDescriptor,
     chunks: I,
@@ -121,16 +221,135 @@ where
     D: LayerDigest,
     S: TarLayerSink,
 {
-    let mut blob = LayerBytes::default();
-    let layer = apply_layer_chunks(descriptor, chunks, digest, &mut blob)
-        .map_err(TarLayerApplyError::Layer)?;
-    let entries_applied =
-        apply_uncompressed_tar_layer(&blob.bytes, sink).map_err(TarLayerApplyError::Tar)?;
+    if layer_compression(descriptor.media_type.as_deref()) != OciLayerCompression::Uncompressed {
+        return Err(TarLayerApplyError::UnsupportedMediaType(
+            descriptor.media_type.clone(),
+        ));
+    }
 
-    Ok(TarLayerApplyReport {
-        layer,
-        entries_applied,
-    })
+    apply_validated_tar_layer(descriptor, chunks, digest, sink)
+}
+
+pub fn layer_compression(media_type: Option<&str>) -> OciLayerCompression {
+    match media_type {
+        Some(
+            "application/vnd.oci.image.layer.v1.tar"
+            | "application/vnd.oci.image.layer.nondistributable.v1.tar"
+            | "application/vnd.docker.image.rootfs.diff.tar",
+        ) => OciLayerCompression::Uncompressed,
+        Some(
+            "application/vnd.oci.image.layer.v1.tar+gzip"
+            | "application/vnd.oci.image.layer.nondistributable.v1.tar+gzip"
+            | "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        ) => OciLayerCompression::Gzip,
+        Some(
+            "application/vnd.oci.image.layer.v1.tar+zstd"
+            | "application/vnd.oci.image.layer.nondistributable.v1.tar+zstd",
+        ) => OciLayerCompression::Zstd,
+        _ => OciLayerCompression::Unknown,
+    }
+}
+
+pub fn decompress_gzip_layer(data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {
+    if data.len() < 18 || data[0] != 0x1f || data[1] != 0x8b || data[2] != 8 {
+        return Err(TarLayerApplyError::Decompress("invalid gzip header".into()));
+    }
+
+    let flags = data[3];
+    if flags & 0xe0 != 0 {
+        return Err(TarLayerApplyError::Decompress(
+            "reserved gzip flags are set".into(),
+        ));
+    }
+
+    let mut offset = 10usize;
+    if flags & 0x04 != 0 {
+        if offset + 2 > data.len() {
+            return Err(TarLayerApplyError::Decompress(
+                "truncated gzip extra field".into(),
+            ));
+        }
+        let extra_len = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+        offset = offset
+            .checked_add(2 + extra_len)
+            .ok_or_else(|| TarLayerApplyError::Decompress("gzip extra field overflow".into()))?;
+    }
+    if flags & 0x08 != 0 {
+        offset = skip_gzip_zero_terminated(data, offset, "name")?;
+    }
+    if flags & 0x10 != 0 {
+        offset = skip_gzip_zero_terminated(data, offset, "comment")?;
+    }
+    if flags & 0x02 != 0 {
+        offset = offset
+            .checked_add(2)
+            .ok_or_else(|| TarLayerApplyError::Decompress("gzip header crc overflow".into()))?;
+    }
+    if offset + 8 > data.len() {
+        return Err(TarLayerApplyError::Decompress("truncated gzip body".into()));
+    }
+
+    let footer = data.len() - 8;
+    let out = miniz_oxide::inflate::decompress_to_vec(&data[offset..footer])
+        .map_err(|_| TarLayerApplyError::Decompress("invalid deflate stream".into()))?;
+    let expected_crc = u32::from_le_bytes([
+        data[footer],
+        data[footer + 1],
+        data[footer + 2],
+        data[footer + 3],
+    ]);
+    let expected_len = u32::from_le_bytes([
+        data[footer + 4],
+        data[footer + 5],
+        data[footer + 6],
+        data[footer + 7],
+    ]);
+
+    if expected_crc != crc32(&out) {
+        return Err(TarLayerApplyError::Decompress(
+            "gzip payload crc mismatch".into(),
+        ));
+    }
+    if expected_len != out.len() as u32 {
+        return Err(TarLayerApplyError::Decompress(
+            "gzip payload size mismatch".into(),
+        ));
+    }
+
+    Ok(out)
+}
+
+#[cfg(feature = "zstd")]
+pub fn decompress_zstd_layer(data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {
+    use ruzstd::decoding::StreamingDecoder;
+    use ruzstd::io::Read;
+
+    let mut decoder = StreamingDecoder::new(data)
+        .map_err(|error| TarLayerApplyError::Decompress(format!("invalid zstd frame: {error}")))?;
+    let mut out = Vec::new();
+    decoder
+        .read_to_end(&mut out)
+        .map_err(|error| TarLayerApplyError::Decompress(format!("invalid zstd stream: {error}")))?;
+    Ok(out)
+}
+
+#[cfg(not(feature = "zstd"))]
+pub fn decompress_zstd_layer(_data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {
+    Err(TarLayerApplyError::UnsupportedMediaType(Some(
+        "application/vnd.oci.image.layer.v1.tar+zstd".into(),
+    )))
+}
+
+fn skip_gzip_zero_terminated(
+    data: &[u8],
+    offset: usize,
+    field: &str,
+) -> Result<usize, TarLayerApplyError> {
+    data[offset..]
+        .iter()
+        .position(|byte| *byte == 0)
+        .and_then(|relative| offset.checked_add(relative + 1))
+        .ok_or_else(|| TarLayerApplyError::Decompress(format!("truncated gzip {field} field")))
 }
 
 pub fn apply_uncompressed_tar_layer<S: TarLayerSink>(
@@ -139,6 +358,8 @@ pub fn apply_uncompressed_tar_layer<S: TarLayerSink>(
 ) -> Result<usize, TarLayerError> {
     let mut offset = 0usize;
     let mut applied = 0usize;
+    let mut global = TarEntryOverrides::default();
+    let mut pending = TarEntryOverrides::default();
 
     while offset < data.len() {
         if data.len() - offset < BLOCK_SIZE {
@@ -150,15 +371,7 @@ pub fn apply_uncompressed_tar_layer<S: TarLayerSink>(
             break;
         }
 
-        let entry = parse_header(header)?;
-        if !path_safe(&entry.path) {
-            return Err(TarLayerError::InvalidPath(entry.path));
-        }
-        if let Some(link_name) = entry.link_name.as_ref() {
-            if !path_safe(link_name) {
-                return Err(TarLayerError::InvalidPath(link_name.clone()));
-            }
-        }
+        let mut entry = parse_header(header)?;
 
         offset += BLOCK_SIZE;
         let size = entry.size as usize;
@@ -172,6 +385,18 @@ pub fn apply_uncompressed_tar_layer<S: TarLayerSink>(
 
         let payload = &data[offset..offset + size];
         match entry.kind {
+            TarEntryKind::PaxExtended => {
+                pending.merge(parse_pax_overrides(payload)?);
+            }
+            TarEntryKind::PaxGlobal => {
+                global.merge(parse_pax_overrides(payload)?);
+            }
+            TarEntryKind::GnuLongName => {
+                pending.path = Some(parse_long_name(payload)?);
+            }
+            TarEntryKind::GnuLongLink => {
+                pending.link_name = Some(parse_long_name(payload)?);
+            }
             TarEntryKind::Regular
             | TarEntryKind::Directory
             | TarEntryKind::Symlink
@@ -179,18 +404,12 @@ pub fn apply_uncompressed_tar_layer<S: TarLayerSink>(
             | TarEntryKind::Character
             | TarEntryKind::Block
             | TarEntryKind::Fifo => {
+                apply_overrides(&mut entry, &global, &pending);
+                pending = TarEntryOverrides::default();
+                validate_entry_paths(&entry)?;
                 sink.apply_entry(&entry, payload)
                     .map_err(TarLayerError::Sink)?;
                 applied += 1;
-            }
-            TarEntryKind::PaxExtended
-            | TarEntryKind::PaxGlobal
-            | TarEntryKind::GnuLongName
-            | TarEntryKind::GnuLongLink => {
-                return Err(TarLayerError::UnsupportedEntry {
-                    path: entry.path,
-                    kind: header[156],
-                });
             }
         }
 
@@ -198,6 +417,51 @@ pub fn apply_uncompressed_tar_layer<S: TarLayerSink>(
     }
 
     Ok(applied)
+}
+
+#[derive(Default)]
+struct TarEntryOverrides {
+    path: Option<String>,
+    link_name: Option<String>,
+}
+
+impl TarEntryOverrides {
+    fn merge(&mut self, other: Self) {
+        if other.path.is_some() {
+            self.path = other.path;
+        }
+        if other.link_name.is_some() {
+            self.link_name = other.link_name;
+        }
+    }
+}
+
+fn apply_overrides(entry: &mut TarEntry, global: &TarEntryOverrides, pending: &TarEntryOverrides) {
+    if let Some(path) = global.path.as_ref() {
+        entry.path = path.clone();
+    }
+    if let Some(link_name) = global.link_name.as_ref() {
+        entry.link_name = Some(link_name.clone());
+    }
+    if let Some(path) = pending.path.as_ref() {
+        entry.path = path.clone();
+    }
+    if let Some(link_name) = pending.link_name.as_ref() {
+        entry.link_name = Some(link_name.clone());
+    }
+    entry.whiteout = parse_whiteout(&entry.path);
+}
+
+fn validate_entry_paths(entry: &TarEntry) -> Result<(), TarLayerError> {
+    if !layer_path_safe(&entry.path) {
+        return Err(TarLayerError::InvalidPath(entry.path.clone()));
+    }
+    if let Some(link_name) = entry.link_name.as_ref() {
+        if !layer_path_safe(link_name) {
+            return Err(TarLayerError::InvalidPath(link_name.clone()));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Default)]
@@ -278,6 +542,73 @@ fn parse_whiteout(path: &str) -> Option<OciWhiteout> {
     })
 }
 
+fn parse_pax_overrides(payload: &[u8]) -> Result<TarEntryOverrides, TarLayerError> {
+    let mut offset = 0usize;
+    let mut overrides = TarEntryOverrides::default();
+
+    while offset < payload.len() {
+        let Some(space_offset) = payload[offset..].iter().position(|byte| *byte == b' ') else {
+            return Err(TarLayerError::InvalidHeader(
+                "invalid pax record length".into(),
+            ));
+        };
+        let length_bytes = &payload[offset..offset + space_offset];
+        let record_len = parse_decimal(length_bytes)?;
+        if record_len <= space_offset + 1 || offset + record_len > payload.len() {
+            return Err(TarLayerError::InvalidHeader(
+                "invalid pax record size".into(),
+            ));
+        }
+
+        let record = &payload[offset + space_offset + 1..offset + record_len];
+        let record = record.strip_suffix(b"\n").unwrap_or(record);
+        if let Some(eq_offset) = record.iter().position(|byte| *byte == b'=') {
+            let key = core::str::from_utf8(&record[..eq_offset])
+                .map_err(|_| TarLayerError::InvalidHeader("invalid pax key".into()))?;
+            let value = core::str::from_utf8(&record[eq_offset + 1..])
+                .map_err(|_| TarLayerError::InvalidHeader("invalid pax value".into()))?;
+            match key {
+                "path" => overrides.path = Some(value.into()),
+                "linkpath" => overrides.link_name = Some(value.into()),
+                _ => {}
+            }
+        }
+
+        offset += record_len;
+    }
+
+    Ok(overrides)
+}
+
+fn parse_decimal(bytes: &[u8]) -> Result<usize, TarLayerError> {
+    let mut value = 0usize;
+    if bytes.is_empty() {
+        return Err(TarLayerError::InvalidHeader("missing decimal value".into()));
+    }
+    for byte in bytes {
+        match *byte {
+            b'0'..=b'9' => {
+                value = value
+                    .checked_mul(10)
+                    .and_then(|value| value.checked_add(usize::from(byte - b'0')))
+                    .ok_or_else(|| TarLayerError::InvalidHeader("decimal field overflow".into()))?;
+            }
+            _ => return Err(TarLayerError::InvalidHeader("invalid decimal value".into())),
+        }
+    }
+    Ok(value)
+}
+
+fn parse_long_name(payload: &[u8]) -> Result<String, TarLayerError> {
+    let end = payload
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(payload.len());
+    core::str::from_utf8(&payload[..end])
+        .map(String::from)
+        .map_err(|_| TarLayerError::InvalidHeader("invalid GNU long name".into()))
+}
+
 fn parse_string(field: &[u8]) -> String {
     let end = field
         .iter()
@@ -332,24 +663,16 @@ fn verify_checksum(header: &[u8]) -> Result<(), TarLayerError> {
     }
 }
 
-fn path_safe(path: &str) -> bool {
-    if path.is_empty() || path.starts_with('/') || path.contains('\0') {
-        return false;
-    }
-    let mut depth = 0usize;
-    for component in path.split('/') {
-        match component {
-            "" | "." => {}
-            ".." => {
-                if depth == 0 {
-                    return false;
-                }
-                depth -= 1;
-            }
-            _ => depth += 1,
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for byte in data {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            let mask = 0u32.wrapping_sub(crc & 1);
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
         }
     }
-    true
+    !crc
 }
 
 fn is_zero_block(block: &[u8]) -> bool {
@@ -368,6 +691,9 @@ fn round_up_to_block(size: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{
+        real_sha256_digest_for, tar, tar_entry, test_digest_for, TestDigest, TEST_TAR_BLOCK_SIZE,
+    };
     use alloc::vec::Vec;
 
     #[derive(Default)]
@@ -382,86 +708,30 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
-    struct TestDigest {
-        bytes: Vec<u8>,
-    }
-
-    impl LayerDigest for TestDigest {
-        fn algorithm(&self) -> &'static str {
-            "sha256"
-        }
-
-        fn update(&mut self, chunk: &[u8]) {
-            self.bytes.extend_from_slice(chunk);
-        }
-
-        fn finish(self) -> Vec<u8> {
-            let mut out = [0u8; 32];
-            for (index, byte) in self.bytes.iter().enumerate() {
-                out[index % 32] = out[index % 32].wrapping_add(*byte);
+    fn pax_record(key: &str, value: &str) -> Vec<u8> {
+        let body = format!("{key}={value}\n");
+        let mut len = body.len() + 2;
+        loop {
+            let next = body.len() + len.to_string().len() + 1;
+            if next == len {
+                break format!("{len} {body}").into_bytes();
             }
-            out.to_vec()
+            len = next;
         }
     }
 
-    fn tar_entry(path: &str, kind: u8, body: &[u8]) -> Vec<u8> {
-        let mut header = [0u8; BLOCK_SIZE];
-        write_field(&mut header[0..100], path.as_bytes());
-        write_octal(&mut header[100..108], 0o644);
-        write_octal(&mut header[108..116], 0);
-        write_octal(&mut header[116..124], 0);
-        write_octal(&mut header[124..136], body.len() as u64);
-        write_octal(&mut header[136..148], 0);
-        for byte in &mut header[148..156] {
-            *byte = b' ';
-        }
-        header[156] = kind;
-        write_field(&mut header[257..263], b"ustar");
-        write_field(&mut header[263..265], b"00");
-        let checksum: u64 = header.iter().map(|byte| u64::from(*byte)).sum();
-        write_octal(&mut header[148..156], checksum);
-
-        let mut out = header.to_vec();
-        out.extend_from_slice(body);
-        out.resize(out.len() + (round_up_to_block(body.len()) - body.len()), 0);
-        out
-    }
-
-    fn tar(entries: Vec<Vec<u8>>) -> Vec<u8> {
+    fn gzip(bytes: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
-        for entry in entries {
-            out.extend_from_slice(&entry);
-        }
-        out.extend_from_slice(&[0u8; BLOCK_SIZE]);
-        out.extend_from_slice(&[0u8; BLOCK_SIZE]);
+        out.extend_from_slice(&[0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0xff]);
+        out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(bytes, 6));
+        out.extend_from_slice(&crc32(bytes).to_le_bytes());
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out
     }
 
-    fn write_field(field: &mut [u8], value: &[u8]) {
-        let len = value.len().min(field.len());
-        field[..len].copy_from_slice(&value[..len]);
-    }
-
-    fn write_octal(field: &mut [u8], value: u64) {
-        for byte in field.iter_mut() {
-            *byte = 0;
-        }
-        let s = format!("{:0width$o}", value, width = field.len() - 1);
-        write_field(field, s.as_bytes());
-    }
-
-    fn digest_for(bytes: &[u8]) -> String {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        let mut digest = TestDigest::default();
-        digest.update(bytes);
-        let bytes = digest.finish();
-        let mut out = String::from("sha256:");
-        for byte in bytes {
-            out.push(HEX[(byte >> 4) as usize] as char);
-            out.push(HEX[(byte & 0x0f) as usize] as char);
-        }
-        out
+    #[cfg(feature = "zstd")]
+    fn zstd(bytes: &[u8]) -> Vec<u8> {
+        ruzstd::encoding::compress_to_vec(bytes, ruzstd::encoding::CompressionLevel::Fastest)
     }
 
     #[test]
@@ -482,11 +752,11 @@ mod tests {
         let data = tar(vec![tar_entry("bin/app", b'0', b"run")]);
         let descriptor = LayerDescriptor {
             media_type: Some("application/vnd.oci.image.layer.v1.tar".into()),
-            digest: digest_for(&data),
+            digest: test_digest_for(&data),
             size: data.len() as u64,
         };
         let mut sink = CollectSink::default();
-        let chunks: [&[u8]; 2] = [&data[..512], &data[512..]];
+        let chunks: [&[u8]; 2] = [&data[..TEST_TAR_BLOCK_SIZE], &data[TEST_TAR_BLOCK_SIZE..]];
 
         let report = apply_validated_uncompressed_tar_layer(
             &descriptor,
@@ -500,6 +770,132 @@ mod tests {
         assert_eq!(report.layer.bytes_written, data.len() as u64);
         assert_eq!(sink.entries[0].0.path, "bin/app");
         assert_eq!(sink.entries[0].1, b"run");
+    }
+
+    #[test]
+    fn validates_layer_with_builtin_sha256_digest() {
+        let data = tar(vec![tar_entry("bin/app", b'0', b"run")]);
+        let descriptor = LayerDescriptor {
+            media_type: Some("application/vnd.oci.image.layer.v1.tar".into()),
+            digest: real_sha256_digest_for(&data),
+            size: data.len() as u64,
+        };
+        let mut sink = CollectSink::default();
+
+        let report =
+            apply_validated_tar_layer_sha256(&descriptor, [data.as_slice()], &mut sink).unwrap();
+
+        assert_eq!(report.entries_applied, 1);
+        assert_eq!(sink.entries[0].0.path, "bin/app");
+    }
+
+    #[test]
+    fn validates_and_applies_gzip_tar_layer() {
+        let tar = tar(vec![tar_entry("bin/app", b'0', b"run")]);
+        let data = gzip(&tar);
+        let descriptor = LayerDescriptor {
+            media_type: Some("application/vnd.oci.image.layer.v1.tar+gzip".into()),
+            digest: test_digest_for(&data),
+            size: data.len() as u64,
+        };
+        let mut sink = CollectSink::default();
+
+        let report = apply_validated_tar_layer(
+            &descriptor,
+            [data.as_slice()],
+            TestDigest::default(),
+            &mut sink,
+        )
+        .unwrap();
+
+        assert_eq!(report.entries_applied, 1);
+        assert_eq!(report.layer.bytes_written, data.len() as u64);
+        assert_eq!(sink.entries[0].0.path, "bin/app");
+        assert_eq!(sink.entries[0].1, b"run");
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn validates_and_applies_zstd_tar_layer() {
+        let tar = tar(vec![tar_entry("bin/app", b'0', b"run")]);
+        let data = zstd(&tar);
+        let descriptor = LayerDescriptor {
+            media_type: Some("application/vnd.oci.image.layer.v1.tar+zstd".into()),
+            digest: test_digest_for(&data),
+            size: data.len() as u64,
+        };
+        let mut sink = CollectSink::default();
+
+        let report = apply_validated_tar_layer(
+            &descriptor,
+            [data.as_slice()],
+            TestDigest::default(),
+            &mut sink,
+        )
+        .unwrap();
+
+        assert_eq!(report.entries_applied, 1);
+        assert_eq!(report.layer.bytes_written, data.len() as u64);
+        assert_eq!(sink.entries[0].0.path, "bin/app");
+        assert_eq!(sink.entries[0].1, b"run");
+    }
+
+    #[test]
+    fn classifies_layer_media_types() {
+        assert_eq!(
+            layer_compression(Some("application/vnd.oci.image.layer.v1.tar")),
+            OciLayerCompression::Uncompressed
+        );
+        assert_eq!(
+            layer_compression(Some("application/vnd.oci.image.layer.v1.tar+gzip")),
+            OciLayerCompression::Gzip
+        );
+        assert_eq!(
+            layer_compression(Some("application/vnd.docker.image.rootfs.diff.tar.gzip")),
+            OciLayerCompression::Gzip
+        );
+        assert_eq!(
+            layer_compression(Some("application/vnd.oci.image.layer.v1.tar+zstd")),
+            OciLayerCompression::Zstd
+        );
+        assert_eq!(layer_compression(None), OciLayerCompression::Unknown);
+    }
+
+    #[test]
+    fn rejects_compressed_layer_media_type_before_tar_apply() {
+        let data = tar(vec![tar_entry("bin/app", b'0', b"run")]);
+        let descriptor = LayerDescriptor {
+            media_type: Some("application/vnd.oci.image.layer.v1.tar+gzip".into()),
+            digest: test_digest_for(&data),
+            size: data.len() as u64,
+        };
+        let mut sink = CollectSink::default();
+
+        let error = apply_validated_uncompressed_tar_layer(
+            &descriptor,
+            [data.as_slice()],
+            TestDigest::default(),
+            &mut sink,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            TarLayerApplyError::UnsupportedMediaType(descriptor.media_type)
+        );
+        assert!(sink.entries.is_empty());
+    }
+
+    #[test]
+    fn rejects_gzip_crc_mismatch() {
+        let tar = tar(vec![tar_entry("bin/app", b'0', b"run")]);
+        let mut data = gzip(&tar);
+        let footer = data.len() - 8;
+        data[footer] ^= 0xff;
+
+        let error = decompress_gzip_layer(&data).unwrap_err();
+
+        assert!(matches!(error, TarLayerApplyError::Decompress(_)));
     }
 
     #[test]
@@ -520,6 +916,58 @@ mod tests {
             sink.entries[1].0.whiteout,
             Some(OciWhiteout::OpaqueDirectory("var".into()))
         );
+    }
+
+    #[test]
+    fn applies_pax_path_and_linkpath() {
+        let mut pax = Vec::new();
+        pax.extend_from_slice(&pax_record("path", "very/long/path/from/pax"));
+        pax.extend_from_slice(&pax_record("linkpath", "target/from/pax"));
+        let data = tar(vec![
+            tar_entry("pax", b'x', &pax),
+            tar_entry("short-link", b'2', b""),
+        ]);
+        let mut sink = CollectSink::default();
+
+        apply_uncompressed_tar_layer(&data, &mut sink).unwrap();
+
+        assert_eq!(sink.entries.len(), 1);
+        assert_eq!(sink.entries[0].0.path, "very/long/path/from/pax");
+        assert_eq!(
+            sink.entries[0].0.link_name.as_deref(),
+            Some("target/from/pax")
+        );
+    }
+
+    #[test]
+    fn applies_gnu_long_name() {
+        let long_path = "long/component/name/that/does/not/fit/in/header";
+        let mut long_name = long_path.as_bytes().to_vec();
+        long_name.push(0);
+        let data = tar(vec![
+            tar_entry("././@LongLink", b'L', &long_name),
+            tar_entry("short", b'0', b"body"),
+        ]);
+        let mut sink = CollectSink::default();
+
+        apply_uncompressed_tar_layer(&data, &mut sink).unwrap();
+
+        assert_eq!(sink.entries.len(), 1);
+        assert_eq!(sink.entries[0].0.path, long_path);
+        assert_eq!(sink.entries[0].1, b"body");
+    }
+
+    #[test]
+    fn rejects_unsafe_pax_path() {
+        let data = tar(vec![
+            tar_entry("pax", b'x', &pax_record("path", "../escape")),
+            tar_entry("short", b'0', b"bad"),
+        ]);
+        let mut sink = CollectSink::default();
+
+        let error = apply_uncompressed_tar_layer(&data, &mut sink).unwrap_err();
+
+        assert_eq!(error, TarLayerError::InvalidPath("../escape".into()));
     }
 
     #[test]

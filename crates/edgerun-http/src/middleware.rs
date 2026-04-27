@@ -58,6 +58,7 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
+use crate::lock::SpinMutex;
 use crate::{Handler, Request, Response};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -66,7 +67,6 @@ use core::any::{Any, TypeId};
 use core::fmt;
 use core::future::Future;
 use core::pin::Pin;
-use edgerun_bare_rt::sync::Mutex;
 
 // ===========================================================================
 // Extensions
@@ -96,13 +96,13 @@ use edgerun_bare_rt::sync::Mutex;
 /// ```
 #[derive(Clone)]
 pub struct Extensions {
-    inner: Arc<Mutex<BTreeMap<TypeId, Box<dyn Any + Send>>>>,
+    inner: Arc<SpinMutex<BTreeMap<TypeId, Box<dyn Any + Send>>>>,
 }
 
 impl Extensions {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(BTreeMap::new())),
+            inner: Arc::new(SpinMutex::new(BTreeMap::new())),
         }
     }
 

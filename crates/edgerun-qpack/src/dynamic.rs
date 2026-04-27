@@ -1,9 +1,5 @@
 use alloc::borrow::Cow;
 use alloc::collections::{btree_map::BTreeMap, btree_map::Entry, VecDeque};
-use alloc::string::{String, ToString};
-use alloc::vec;
-use alloc::vec::Vec;
-use core::cmp::Ordering;
 
 use super::{field::HeaderField, static_::StaticTable};
 use crate::vas::{self, VirtualAddressSpace};

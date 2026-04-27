@@ -1,6 +1,7 @@
 use crate::prelude::v1::*;
-use std::sync::Arc;
+use alloc::sync::Arc;
 
+use edgerun_bare_rt::RwLock;
 use edgerun_dns::record::DnsRecordType;
 use edgerun_dns::zone::DnsZone;
 use edgerun_encoding::base64url_nopad_encode;
@@ -57,46 +58,43 @@ impl DnsChallenge {
 
 pub struct DnsChallengeManager {
     account_key: Arc<AccountKey>,
-    active_challenges: std::sync::RwLock<Vec<DnsChallenge>>,
+    active_challenges: RwLock<Vec<DnsChallenge>>,
 }
 
 impl DnsChallengeManager {
     pub fn new(account_key: Arc<AccountKey>) -> Self {
         Self {
             account_key,
-            active_challenges: std::sync::RwLock::new(Vec::new()),
+            active_challenges: RwLock::new(Vec::new()),
         }
     }
 
     pub fn create_challenge(&self, domain: &str, token: &str) -> DnsChallenge {
         let challenge = DnsChallenge::new(domain, token, &self.account_key);
 
-        self.active_challenges
-            .write()
-            .unwrap()
-            .push(challenge.clone());
+        self.active_challenges.write().push(challenge.clone());
 
         challenge
     }
 
     pub fn remove_challenge(&self, domain: &str) {
-        let mut challenges = self.active_challenges.write().unwrap();
+        let mut challenges = self.active_challenges.write();
         challenges.retain(|c| c.domain != domain);
     }
 
     pub fn clear_all(&self) {
-        self.active_challenges.write().unwrap().clear();
+        self.active_challenges.write().clear();
     }
 
     pub fn apply_all_to_zone(&self, zone: &mut DnsZone) {
-        let challenges = self.active_challenges.read().unwrap();
+        let challenges = self.active_challenges.read();
         for challenge in challenges.iter() {
             challenge.add_to_zone(zone);
         }
     }
 
     pub fn remove_all_from_zone(&self, zone: &mut DnsZone) {
-        let challenges = self.active_challenges.read().unwrap();
+        let challenges = self.active_challenges.read();
         for challenge in challenges.iter() {
             challenge.remove_from_zone(zone);
         }

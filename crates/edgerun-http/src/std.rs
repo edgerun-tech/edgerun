@@ -124,6 +124,7 @@ pub mod io {
 
     impl core::error::Error for Error {}
 
+    #[cfg(feature = "runtime")]
     impl From<edgerun_bare_rt::IoError> for Error {
         fn from(value: edgerun_bare_rt::IoError) -> Self {
             match value {
@@ -223,8 +224,10 @@ pub mod net {
         }
     }
 
+    #[cfg(feature = "runtime")]
     pub struct UdpSocket(edgerun_bare_rt::UdpSocket);
 
+    #[cfg(feature = "runtime")]
     impl UdpSocket {
         pub fn bind<A: ToSocketAddrs>(addr: A) -> io::Result<Self> {
             let addr = addr
@@ -239,6 +242,7 @@ pub mod net {
         }
     }
 
+    #[cfg(feature = "runtime")]
     fn to_bare_addr(addr: SocketAddr) -> edgerun_bare_rt::SocketAddr {
         match addr {
             SocketAddr::V4(v4) => {
@@ -310,10 +314,14 @@ pub mod fs {
 
 pub mod sync {
     pub use alloc::sync::Arc;
+
+    #[cfg(feature = "runtime")]
     pub use edgerun_bare_rt::MutexGuard;
 
+    #[cfg(feature = "runtime")]
     pub struct Mutex<T>(edgerun_bare_rt::Mutex<T>);
 
+    #[cfg(feature = "runtime")]
     impl<T> Mutex<T> {
         pub fn new(value: T) -> Self {
             Self(edgerun_bare_rt::Mutex::new(value))
@@ -328,22 +336,50 @@ pub mod sync {
 pub mod time {
     use core::ops::{Add, Sub};
 
+    #[cfg(not(feature = "runtime"))]
+    pub use core::time::Duration;
+    #[cfg(feature = "runtime")]
     pub use edgerun_bare_rt::Duration;
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
+    #[cfg(feature = "runtime")]
     pub struct Instant(edgerun_bare_rt::Instant);
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
+    #[cfg(not(feature = "runtime"))]
+    pub struct Instant(Duration);
 
     impl Instant {
         pub fn now() -> Self {
-            Self(edgerun_bare_rt::Instant::now())
+            #[cfg(feature = "runtime")]
+            {
+                Self(edgerun_bare_rt::Instant::now())
+            }
+            #[cfg(not(feature = "runtime"))]
+            {
+                Self(Duration::from_secs(0))
+            }
         }
 
         pub fn duration_since(self, earlier: Instant) -> Duration {
-            self.0 - earlier.0
+            #[cfg(feature = "runtime")]
+            {
+                self.0 - earlier.0
+            }
+            #[cfg(not(feature = "runtime"))]
+            {
+                self.0.checked_sub(earlier.0).unwrap_or_default()
+            }
         }
 
         pub fn elapsed(self) -> Duration {
-            self.0.elapsed()
+            #[cfg(feature = "runtime")]
+            {
+                self.0.elapsed()
+            }
+            #[cfg(not(feature = "runtime"))]
+            {
+                Duration::from_secs(0)
+            }
         }
     }
 

@@ -27,8 +27,8 @@
 //!
 //! | Feature | Description |
 //! |---------|-------------|
-//! | `std` (default) | Standard library support |
-//! | `alloc` | Allocator support (no std) |
+//! | `alloc` (default) | Allocator support for no_std environments |
+//! | `std` | Standard library interop for reader/writer adapters and std errors |
 //! | `serde` | Serde Serialize/Deserialize support |
 //! | `indexmap` | Use indexmap for ordered maps |
 //! | `raw_value` | Raw value support (requires serde) |
@@ -38,11 +38,22 @@
 //! By default, this crate has **zero runtime dependencies**. The `serde` feature
 //! is optional and enables typed serialization/deserialization.
 
-#![cfg_attr(any(not(feature = "std"), target_os = "none"), no_std)]
+#![no_std]
 
 extern crate alloc;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+extern crate std;
 #[cfg(all(test, not(feature = "std")))]
 extern crate std;
+
+pub(crate) mod prelude {
+    pub use alloc::borrow::{Cow, ToOwned};
+    pub use alloc::boxed::Box;
+    pub use alloc::format;
+    pub use alloc::string::{String, ToString};
+    pub use alloc::vec;
+    pub use alloc::vec::Vec;
+}
 
 // This crate requires either std or alloc. All JSON types use Vec and String.
 #[cfg(all(not(feature = "std"), not(feature = "alloc")))]

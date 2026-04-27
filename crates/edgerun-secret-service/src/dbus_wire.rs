@@ -2,7 +2,7 @@
 
 use crate::dbus_types::*;
 use crate::prelude::v1::*;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap as HashMap;
 use std::io;
 
 // Consume one complete type from a signature string.

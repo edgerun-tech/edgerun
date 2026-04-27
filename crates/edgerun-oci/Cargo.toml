@@ -15,15 +15,17 @@ edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-secret-service = { path = "../edgerun-secret-service", optional = true }
 edgerun-core = { path = "../edgerun-core", optional = true }
 edgerun-encoding = { path = "../edgerun-encoding", optional = true }
+miniz_oxide = { workspace = true, optional = true }
+ruzstd = { version = "0.8.2", default-features = false, optional = true }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [features]
 default = []
-json = ["dep:edgerun-json"]
+json = ["dep:edgerun-json", "dep:edgerun-crypto", "dep:miniz_oxide"]
 serde = ["json", "dep:serde", "edgerun-json/serde"]
+zstd = ["json", "dep:ruzstd"]
 std = [
     "serde",
-    "dep:edgerun-crypto",
     "dep:edgerun-http",
     "dep:edgerun-bare-rt",
     "dep:edgerun-tls",
@@ -34,6 +36,7 @@ std = [
     "dep:flate2",
     "dep:tar",
     "dep:zstd",
+    "zstd",
 ]
 
 [target.'cfg(not(target_os = "none"))'.dependencies]

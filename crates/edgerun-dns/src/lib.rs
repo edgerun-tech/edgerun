@@ -46,6 +46,8 @@
 extern crate alloc;
 
 pub mod libc {
+    #![allow(non_camel_case_types)]
+
     pub type c_int = i32;
     pub type c_void = core::ffi::c_void;
     pub type socklen_t = u32;
@@ -63,18 +65,6 @@ pub mod libc {
     ) -> c_int {
         0
     }
-}
-
-macro_rules! eprintln {
-    ($($arg:tt)*) => {
-        edgerun_log::warn!($($arg)*)
-    };
-}
-
-macro_rules! println {
-    ($($arg:tt)*) => {
-        edgerun_log::info!($($arg)*)
-    };
 }
 
 pub mod compat;

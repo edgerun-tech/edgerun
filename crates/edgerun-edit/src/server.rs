@@ -1,8 +1,12 @@
 //! HTTP server for the editor. Single POST /edit endpoint.
 
+use std::boxed::Box;
 use std::collections::HashMap;
+use std::format;
 use std::path::{Path, PathBuf};
+use std::string::{String, ToString};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::vec::Vec;
 
 use edgerun_http::{
     Chain, Extensions, Handler, HttpServer, Method, Middleware, Next, Request, Response, StatusCode,

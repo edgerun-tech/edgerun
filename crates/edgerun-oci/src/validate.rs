@@ -144,7 +144,7 @@ fn err<T>(message: impl Into<String>) -> Result<T, OciValidationError> {
     Err(OciValidationError::new(message))
 }
 
-const KNOWN_CAPABILITIES: &[&str] = &[
+pub(crate) const KNOWN_CAPABILITIES: &[&str] = &[
     "CAP_CHOWN",
     "CAP_DAC_OVERRIDE",
     "CAP_DAC_READ_SEARCH",
@@ -188,11 +188,11 @@ const KNOWN_CAPABILITIES: &[&str] = &[
     "CAP_CHECKPOINT_RESTORE",
 ];
 
-const KNOWN_NAMESPACES: &[&str] = &[
+pub(crate) const KNOWN_NAMESPACES: &[&str] = &[
     "mount", "pid", "network", "ipc", "uts", "user", "cgroup", "time",
 ];
 
-const KNOWN_RLIMITS: &[&str] = &[
+pub(crate) const KNOWN_RLIMITS: &[&str] = &[
     "RLIMIT_CPU",
     "RLIMIT_FSIZE",
     "RLIMIT_DATA",
@@ -211,7 +211,7 @@ const KNOWN_RLIMITS: &[&str] = &[
     "RLIMIT_RTTIME",
 ];
 
-const KNOWN_SECCOMP_ACTIONS: &[&str] = &[
+pub(crate) const KNOWN_SECCOMP_ACTIONS: &[&str] = &[
     "SCMP_ACT_ALLOW",
     "SCMP_ACT_ERRNO",
     "SCMP_ACT_KILL",
@@ -223,7 +223,7 @@ const KNOWN_SECCOMP_ACTIONS: &[&str] = &[
     "SCMP_ACT_NOTIFY",
 ];
 
-const KNOWN_SECCOMP_ARCHES: &[&str] = &[
+pub(crate) const KNOWN_SECCOMP_ARCHES: &[&str] = &[
     "SCMP_ARCH_X86",
     "SCMP_ARCH_X86_64",
     "SCMP_ARCH_X32",

@@ -45,10 +45,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 
-use edgerun_bare_rt::AsyncUdpSocket;
+use crate::runtime::net::{IpAddr, SocketAddr, ToSocketAddrs, UdpSocket};
+use crate::runtime::sync::Arc;
+use crate::runtime::AsyncUdpSocket;
 use edgerun_crypto::CipherSuite;
-use std::net::{IpAddr, SocketAddr, ToSocketAddrs, UdpSocket};
-use std::sync::Arc;
 
 /// QUIC connection
 pub struct QuicConnection {
@@ -89,12 +89,15 @@ pub struct QuicConnection {
     /// Hash algorithm matching the cipher suite (for HKDF-Expand-Label)
     cipher_suite_hash: edgerun_tls::prf::Hasher,
     /// Next send offset per stream (for STREAM frame fragmentation)
-    stream_send_offset: std::collections::HashMap<u64, u64>,
+    stream_send_offset: alloc::collections::BTreeMap<u64, u64>,
     /// Active path for connection migration (local_addr, remote_addr)
     /// Set when the first packet is received from the peer
-    active_path: Option<(std::net::SocketAddr, std::net::SocketAddr)>,
+    active_path: Option<(
+        crate::runtime::net::SocketAddr,
+        crate::runtime::net::SocketAddr,
+    )>,
     /// Pending migration path challenges (data → deadline)
-    pending_path_challenges: std::collections::HashMap<[u8; 8], std::time::Instant>,
+    pending_path_challenges: alloc::collections::BTreeMap<[u8; 8], crate::runtime::time::Instant>,
     /// Captured sent packets (for integration testing)
     sent_packets_buffer: Vec<Vec<u8>>,
 }
@@ -130,7 +133,7 @@ impl QuicConnection {
 
         // Bind UDP socket
         let socket = Arc::new(
-            AsyncUdpSocket::bind("0.0.0.0:0")
+            crate::runtime::bind_udp_socket("0.0.0.0:0")
                 .map_err(|e| format!("Failed to bind UDP socket: {}", e))?,
         );
 
@@ -160,9 +163,9 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
-            stream_send_offset: std::collections::HashMap::new(),
+            stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
-            pending_path_challenges: std::collections::HashMap::new(),
+            pending_path_challenges: alloc::collections::BTreeMap::new(),
             sent_packets_buffer: Vec::new(),
         };
 
@@ -253,7 +256,7 @@ impl QuicConnection {
                     if !all_handshake_crypto.is_empty() {
                         break;
                     }
-                    edgerun_bare_rt::sleep(std::time::Duration::from_millis(10)).await;
+                    crate::runtime::sleep(crate::runtime::time::Duration::from_millis(10)).await;
                 }
                 Err(e) => return Err(e),
             }
@@ -480,7 +483,8 @@ impl QuicConnection {
     /// Create a dummy connection for testing
     pub fn dummy() -> Self {
         let udp = UdpSocket::bind("127.0.0.1:0").expect("Cannot bind test socket");
-        let socket = Arc::new(AsyncUdpSocket::from_std(udp).expect("Cannot wrap test socket"));
+        let socket =
+            Arc::new(crate::runtime::wrap_udp_socket(udp).expect("Cannot wrap test socket"));
         let local_cid = ConnectionId::random();
         let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
@@ -504,9 +508,9 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
-            stream_send_offset: std::collections::HashMap::new(),
+            stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
-            pending_path_challenges: std::collections::HashMap::new(),
+            pending_path_challenges: alloc::collections::BTreeMap::new(),
             sent_packets_buffer: Vec::new(),
         }
     }
@@ -520,8 +524,12 @@ impl QuicConnection {
     ///
     /// The connection is marked as `established` with no protection keys,
     /// suitable for testing 1-RTT packet construction without encryption.
-    pub fn from_established_test(socket: UdpSocket, target: std::net::SocketAddr) -> Self {
-        let socket = Arc::new(AsyncUdpSocket::from_std(socket).expect("Cannot wrap test socket"));
+    pub fn from_established_test(
+        socket: UdpSocket,
+        target: crate::runtime::net::SocketAddr,
+    ) -> Self {
+        let socket =
+            Arc::new(crate::runtime::wrap_udp_socket(socket).expect("Cannot wrap test socket"));
         let local_cid = ConnectionId::random();
         let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
@@ -545,9 +553,9 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
-            stream_send_offset: std::collections::HashMap::new(),
+            stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
-            pending_path_challenges: std::collections::HashMap::new(),
+            pending_path_challenges: alloc::collections::BTreeMap::new(),
             sent_packets_buffer: Vec::new(),
         }
     }
@@ -557,14 +565,15 @@ impl QuicConnection {
     /// Called after the server-side TLS handshake completes successfully.
     /// The `handshake_result` contains all derived protection keys.
     pub fn from_server(
-        socket: std::net::UdpSocket,
+        socket: crate::runtime::net::UdpSocket,
         client_addr: String,
         client_dcid: ConnectionId,
         client_scid: ConnectionId,
         handshake_result: crate::http3::quic::server_handshake::ServerHandshakeResult,
     ) -> Result<Self, String> {
         let socket = Arc::new(
-            AsyncUdpSocket::from_std(socket).map_err(|e| format!("Cannot wrap socket: {}", e))?,
+            crate::runtime::wrap_udp_socket(socket)
+                .map_err(|e| format!("Cannot wrap socket: {}", e))?,
         );
         let transport = QuicTransport::new(client_dcid.clone(), client_scid.clone());
 
@@ -587,9 +596,9 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
-            stream_send_offset: std::collections::HashMap::new(),
+            stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
-            pending_path_challenges: std::collections::HashMap::new(),
+            pending_path_challenges: alloc::collections::BTreeMap::new(),
             sent_packets_buffer: Vec::new(),
         };
 
@@ -960,7 +969,12 @@ impl QuicConnection {
     /// Get the currently active path (local_addr, remote_addr).
     ///
     /// Returns `None` if no path has been validated yet.
-    pub fn active_path(&self) -> Option<(std::net::SocketAddr, std::net::SocketAddr)> {
+    pub fn active_path(
+        &self,
+    ) -> Option<(
+        crate::runtime::net::SocketAddr,
+        crate::runtime::net::SocketAddr,
+    )> {
         self.active_path
     }
 
@@ -968,7 +982,11 @@ impl QuicConnection {
     ///
     /// This is called after receiving a valid PATH_RESPONSE for a
     /// previously sent PATH_CHALLENGE (RFC 9000 §9.3).
-    pub fn set_active_path(&mut self, local: std::net::SocketAddr, remote: std::net::SocketAddr) {
+    pub fn set_active_path(
+        &mut self,
+        local: crate::runtime::net::SocketAddr,
+        remote: crate::runtime::net::SocketAddr,
+    ) {
         self.active_path = Some((local, remote));
     }
 
@@ -978,7 +996,7 @@ impl QuicConnection {
     pub fn initialize_active_path(&mut self) {
         if self.active_path.is_none() {
             if let Ok(local) = self.socket.local_addr() {
-                if let Ok(remote) = self.server_addr.parse::<std::net::SocketAddr>() {
+                if let Ok(remote) = self.server_addr.parse::<crate::runtime::net::SocketAddr>() {
                     self.active_path = Some((local, remote));
                 }
             }
@@ -992,7 +1010,7 @@ impl QuicConnection {
         let frame = QuicFrame::PathChallenge { data };
         self.pending_path_challenges.insert(
             data,
-            std::time::Instant::now() + std::time::Duration::from_secs(3),
+            crate::runtime::time::Instant::now() + crate::runtime::time::Duration::from_secs(3),
         );
         self.send_frame(frame).await
     }
@@ -1010,7 +1028,7 @@ impl QuicConnection {
     ///
     /// Returns the list of expired challenge data.
     pub fn check_expired_path_challenges(&mut self) -> Vec<[u8; 8]> {
-        let now = std::time::Instant::now();
+        let now = crate::runtime::time::Instant::now();
         let expired: Vec<[u8; 8]> = self
             .pending_path_challenges
             .iter()
@@ -1107,18 +1125,20 @@ impl QuicConnection {
     /// Returns true if no packets have been received within the configured
     /// max_idle_timeout (or a default of 30 seconds).
     pub fn is_idle_timeout(&self) -> bool {
-        let timeout =
-            std::time::Duration::from_millis(self.transport.params.max_idle_timeout.max(30000));
+        let timeout = crate::runtime::time::Duration::from_millis(
+            self.transport.params.max_idle_timeout.max(30000),
+        );
         self.transport.last_activity().elapsed() > timeout
     }
 
     /// Get time until idle timeout fires.
-    pub fn time_until_idle_timeout(&self) -> std::time::Duration {
-        let timeout =
-            std::time::Duration::from_millis(self.transport.params.max_idle_timeout.max(30000));
+    pub fn time_until_idle_timeout(&self) -> crate::runtime::time::Duration {
+        let timeout = crate::runtime::time::Duration::from_millis(
+            self.transport.params.max_idle_timeout.max(30000),
+        );
         let elapsed = self.transport.last_activity().elapsed();
         if elapsed >= timeout {
-            std::time::Duration::ZERO
+            crate::runtime::time::Duration::ZERO
         } else {
             timeout - elapsed
         }
@@ -1128,7 +1148,7 @@ impl QuicConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::UdpSocket;
+    use crate::runtime::net::UdpSocket;
 
     #[test]
     fn test_quic_dummy() {
@@ -1149,7 +1169,7 @@ mod tests {
     fn test_initial_packet_handshake_timeout() {
         use crate::http3::quic::frame::QuicFrame;
         use crate::http3::quic::packet;
-        use std::time::Duration;
+        use crate::runtime::time::Duration;
 
         let rt = edgerun_bare_rt::Runtime::new_multi_thread()
             .enable_all()
@@ -1165,8 +1185,10 @@ mod tests {
             client_socket.connect(server_addr).expect("client connect");
             server_socket.connect(client_addr).expect("server connect");
 
-            let client = Arc::new(AsyncUdpSocket::from_std(client_socket).expect("wrap client"));
-            let server = Arc::new(AsyncUdpSocket::from_std(server_socket).expect("wrap server"));
+            let client =
+                Arc::new(crate::runtime::wrap_udp_socket(client_socket).expect("wrap client"));
+            let server =
+                Arc::new(crate::runtime::wrap_udp_socket(server_socket).expect("wrap server"));
 
             let dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
             let handshaker = handshake::QuicTlsHandshaker::new("example.com");
@@ -1199,9 +1221,9 @@ mod tests {
                 client_app_traffic_secret: Vec::new(),
                 server_app_traffic_secret: Vec::new(),
                 cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
-                stream_send_offset: std::collections::HashMap::new(),
+                stream_send_offset: alloc::collections::BTreeMap::new(),
                 active_path: None,
-                pending_path_challenges: std::collections::HashMap::new(),
+                pending_path_challenges: alloc::collections::BTreeMap::new(),
                 sent_packets_buffer: Vec::new(),
             };
 
@@ -1233,7 +1255,7 @@ mod tests {
                 .expect("send");
 
             // Try to receive with timeout
-            let result = edgerun_bare_rt::timeout(
+            let result = crate::runtime::timeout(
                 Duration::from_millis(100),
                 server.recv_from(&mut [0u8; 4096]),
             )
@@ -1564,8 +1586,8 @@ mod tests {
         let stream_bytes = stream_frame.to_bytes();
 
         // Create two connected UDP sockets for testing
-        let sender = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
-        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+        let sender = crate::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
+        let receiver = crate::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
         sender.set_nonblocking(true).ok();
         receiver.set_nonblocking(true).ok();
         let recv_addr = receiver.local_addr().expect("get receiver addr");
@@ -1595,8 +1617,8 @@ mod tests {
 
     #[test]
     fn test_protected_send_frame_preserves_parseable_header() {
-        let sender = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
-        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+        let sender = crate::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
+        let receiver = crate::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
         let recv_addr = receiver.local_addr().expect("get receiver addr");
         sender.connect(recv_addr).expect("connect sender");
 
@@ -1633,8 +1655,8 @@ mod tests {
 
     #[test]
     fn test_early_data_uses_parseable_zero_rtt_packet() {
-        let sender = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
-        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+        let sender = crate::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
+        let receiver = crate::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
         let recv_addr = receiver.local_addr().expect("get receiver addr");
         sender.connect(recv_addr).expect("connect sender");
 
@@ -1685,8 +1707,8 @@ mod tests {
     #[test]
     fn test_set_active_path() {
         let mut conn = QuicConnection::dummy();
-        let local: std::net::SocketAddr = "127.0.0.1:12345".parse().unwrap();
-        let remote: std::net::SocketAddr = "192.168.1.1:443".parse().unwrap();
+        let local: crate::runtime::net::SocketAddr = "127.0.0.1:12345".parse().unwrap();
+        let remote: crate::runtime::net::SocketAddr = "192.168.1.1:443".parse().unwrap();
 
         conn.set_active_path(local, remote);
         let path = conn.active_path();
@@ -1928,8 +1950,8 @@ mod tests {
         let mut quic = QuicConnection::dummy();
         assert!(quic.active_path().is_none());
 
-        let local: std::net::SocketAddr = "10.0.0.1:50000".parse().unwrap();
-        let remote: std::net::SocketAddr = "10.0.0.2:443".parse().unwrap();
+        let local: crate::runtime::net::SocketAddr = "10.0.0.1:50000".parse().unwrap();
+        let remote: crate::runtime::net::SocketAddr = "10.0.0.2:443".parse().unwrap();
         quic.set_active_path(local, remote);
 
         let path = quic.active_path().expect("active_path should be set");

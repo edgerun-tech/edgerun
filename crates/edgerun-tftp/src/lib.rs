@@ -5,6 +5,7 @@
 extern crate alloc;
 
 pub mod compat;
+pub mod blob_provider;
 pub mod message;
 pub mod server;
 pub mod std;

@@ -1,7 +1,7 @@
 //! D-Bus types and constants. No I/O here.
 
 use crate::prelude::v1::*;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap as HashMap;
 
 pub const BYTE_ORDER: u8 = b'l';
 pub const F_PATH: u8 = 1;

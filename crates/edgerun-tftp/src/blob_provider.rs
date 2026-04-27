@@ -13,10 +13,14 @@
 //!
 //! The blob store decrypts on-the-fly and serves chunks via TFTP.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap as HashMap;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use super::server::FileProvider;
+use crate::std::io;
 
 /// A decrypted blob cached in memory for fast TFTP serving.
 struct CachedBlob {
@@ -24,7 +28,7 @@ struct CachedBlob {
 }
 
 /// Decryptor function type — decrypts a blob entry to plaintext.
-pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync>;
+pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> io::Result<Vec<u8>> + Send + Sync>;
 
 /// TFTP file provider that serves files from the encrypted blob store.
 ///
@@ -33,7 +37,7 @@ pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send
 /// use edgerun_tftp::blob_provider::BlobTftpProvider;
 ///
 /// // You provide a decryptor function that knows how to decrypt blobs
-/// let decryptor: Box<dyn Fn(&[u8], &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync> =
+/// let decryptor: Box<dyn Fn(&[u8], &[u8]) -> edgerun_tftp::std::io::Result<Vec<u8>> + Send + Sync> =
 ///     Box::new(|nonce, ciphertext| {
 ///         // Your AES-GCM decryption here
 ///         Ok(Vec::new())
@@ -130,7 +134,7 @@ impl BlobTftpProvider {
     ///
     /// Call this during boot to decrypt large EFI binaries
     /// before PXE clients request them.
-    pub fn warm_cache(&mut self, filename: &str) -> std::io::Result<()> {
+    pub fn warm_cache(&mut self, filename: &str) -> io::Result<()> {
         if self.cache.contains_key(filename) {
             return Ok(());
         }
@@ -155,7 +159,7 @@ impl BlobTftpProvider {
     }
 
     /// Decrypt all registered blobs into the cache.
-    pub fn warm_all(&mut self) -> std::io::Result<()> {
+    pub fn warm_all(&mut self) -> io::Result<()> {
         let filenames: Vec<String> = self.registry.keys().cloned().collect();
         for filename in filenames {
             if let Err(e) = self.warm_cache(&filename) {

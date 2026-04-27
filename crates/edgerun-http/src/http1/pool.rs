@@ -20,15 +20,15 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
-use edgerun_bare_rt::{
+use crate::runtime::net::{IpAddr, SocketAddr};
+use crate::runtime::time::{Duration, Instant};
+use crate::runtime::{
     timeout as rt_timeout, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
     BufReader, ConnectFuture,
 };
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
+use alloc::vec;
 
 #[cfg(feature = "tls")]
 use edgerun_tls::async_tls::AsyncTlsStream;
@@ -46,22 +46,10 @@ impl SessionCache {
     }
 }
 
-use edgerun_bare_rt::sync::Mutex;
+use crate::runtime::Mutex;
 
 use crate::http1::compression;
 use crate::{Error, HeaderMap, Method, Request, Response, Result, StatusCode};
-
-fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
-    match error {
-        edgerun_bare_rt::IoError::UnexpectedEof => {
-            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
-        }
-        edgerun_bare_rt::IoError::WriteZero => {
-            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
-        }
-        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
-    }
-}
 
 // ===========================================================================
 // Pool key
@@ -89,34 +77,40 @@ enum PooledConn {
 
 impl PooledConn {
     /// Read a line from the buffered connection.
-    async fn read_line(&mut self) -> std::io::Result<Option<String>> {
+    async fn read_line(&mut self) -> crate::runtime::io::Result<Option<String>> {
         match self {
-            PooledConn::Plain(r) => r.read_line().await.map_err(bare_io),
+            PooledConn::Plain(r) => r.read_line().await.map_err(crate::runtime::bare_io),
             #[cfg(feature = "tls")]
-            PooledConn::Tls(r) => r.read_line().await.map_err(bare_io),
+            PooledConn::Tls(r) => r.read_line().await.map_err(crate::runtime::bare_io),
         }
     }
 
     /// Read bytes from the connection.
-    async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    async fn read(&mut self, buf: &mut [u8]) -> crate::runtime::io::Result<usize> {
         match self {
-            PooledConn::Plain(r) => r.read(buf).await.map_err(bare_io),
+            PooledConn::Plain(r) => r.read(buf).await.map_err(crate::runtime::bare_io),
             #[cfg(feature = "tls")]
-            PooledConn::Tls(r) => r.read(buf).await.map_err(bare_io),
+            PooledConn::Tls(r) => r.read(buf).await.map_err(crate::runtime::bare_io),
         }
     }
 
     /// Write the request and flush.
-    async fn write_request(&mut self, data: &[u8]) -> std::io::Result<()> {
+    async fn write_request(&mut self, data: &[u8]) -> crate::runtime::io::Result<()> {
         match self {
             PooledConn::Plain(r) => {
-                r.get_mut().write_all(data).await.map_err(bare_io)?;
-                r.get_mut().flush().await.map_err(bare_io)
+                r.get_mut()
+                    .write_all(data)
+                    .await
+                    .map_err(crate::runtime::bare_io)?;
+                r.get_mut().flush().await.map_err(crate::runtime::bare_io)
             }
             #[cfg(feature = "tls")]
             PooledConn::Tls(r) => {
-                r.get_mut().write_all(data).await.map_err(bare_io)?;
-                r.get_mut().flush().await.map_err(bare_io)
+                r.get_mut()
+                    .write_all(data)
+                    .await
+                    .map_err(crate::runtime::bare_io)?;
+                r.get_mut().flush().await.map_err(crate::runtime::bare_io)
             }
         }
     }
@@ -570,8 +564,8 @@ impl ConnectionPool {
             }
         }
         (
-            Err(Error::Network(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
+            Err(Error::Network(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::ConnectionReset,
                 "all pooled connections failed",
             ))),
             conns,
@@ -697,8 +691,8 @@ impl ConnectionPool {
         let host_owned = host.to_string();
         let dns_result = rt_timeout(
             dns_timeout,
-            edgerun_bare_rt::spawn_blocking(move || {
-                use std::net::ToSocketAddrs;
+            crate::runtime::spawn_blocking(move || {
+                use crate::runtime::net::ToSocketAddrs;
                 format!("{}:{}", host_owned, port).to_socket_addrs()
             }),
         )
@@ -921,7 +915,7 @@ impl ConnectionPool {
                 line_buf.pop();
             }
 
-            let size_hex = std::str::from_utf8(&line_buf)
+            let size_hex = core::str::from_utf8(&line_buf)
                 .map_err(|_| Error::InvalidResponse("invalid chunk size".into()))?;
             let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
             let chunk_size = usize::from_str_radix(size_str, 16)

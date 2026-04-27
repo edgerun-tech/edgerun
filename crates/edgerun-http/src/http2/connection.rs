@@ -12,8 +12,9 @@ use super::stream::{Stream, StreamManager};
 use super::Http2Error;
 use super::{ErrorCode, Result};
 use super::{Settings, CONNECTION_PREFACE};
-use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use crate::runtime::io::{self, Read, Write};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::vec;
 
 /// HTTP/2 connection state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

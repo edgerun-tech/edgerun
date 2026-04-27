@@ -1,5 +1,5 @@
 use crate::prelude::v1::*;
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;

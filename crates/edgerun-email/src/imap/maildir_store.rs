@@ -7,6 +7,7 @@
 //! SMTP (delivery) → MaildirStore → {root}/{user}/new/ → MaildirImapStore → IMAP (fetch)
 //! ```
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::io;

@@ -78,7 +78,7 @@ pub struct FisNcq {
 #[repr(C, packed)]
 pub struct AhciCommandList {
     prdtl: u16,
-    pRD: u8,
+    prd: u8,
     rsv1: u8,
     ctba: u32,
     ctbau: u32,

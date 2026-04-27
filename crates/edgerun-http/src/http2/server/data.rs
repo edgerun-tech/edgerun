@@ -6,6 +6,7 @@ use super::Http2Server;
 use crate::http2::frame::{DataFrame, Frame};
 use crate::http2::hpack::Encoder;
 use crate::http2::ErrorCode;
+use alloc::vec;
 
 impl Http2Server {
     /// Process an incoming DATA frame.

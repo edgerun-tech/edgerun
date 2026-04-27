@@ -1,6 +1,7 @@
 use crate::prelude::v1::*;
 use sha2::{Digest, Sha256};
 
+use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;
 
 #[derive(Clone)]
@@ -38,31 +39,30 @@ impl TlsAlpnChallenge {
 
 pub struct TlsAlpnManager {
     thumbprint: String,
-    active_challenge: std::sync::RwLock<Option<TlsAlpnChallenge>>,
+    active_challenge: RwLock<Option<TlsAlpnChallenge>>,
 }
 
 impl TlsAlpnManager {
     pub fn new(thumbprint: String) -> Self {
         Self {
             thumbprint,
-            active_challenge: std::sync::RwLock::new(None),
+            active_challenge: RwLock::new(None),
         }
     }
 
     pub fn set_challenge(&self, domain: &str, token: &str) -> TlsAlpnChallenge {
         let challenge = TlsAlpnChallenge::new(domain, token, &self.thumbprint);
-        *self.active_challenge.write().unwrap() = Some(challenge.clone());
+        *self.active_challenge.write() = Some(challenge.clone());
         challenge
     }
 
     pub fn clear_challenge(&self) {
-        *self.active_challenge.write().unwrap() = None;
+        *self.active_challenge.write() = None;
     }
 
     pub fn get_challenge_value(&self) -> Option<String> {
         self.active_challenge
             .read()
-            .unwrap()
             .as_ref()
             .map(|c| c.challenge_value().to_string())
     }

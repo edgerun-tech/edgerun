@@ -6,6 +6,7 @@
 //! - In-memory mailbox storage (pluggable via `MailStore` trait)
 //! - STARTTLS support (with `tls` feature)
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;

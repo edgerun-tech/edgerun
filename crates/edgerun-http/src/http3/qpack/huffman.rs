@@ -2,13 +2,14 @@
 
 pub use edgerun_hpack::Encoder;
 
+use alloc::vec::Vec;
 use edgerun_hpack::HuffmanDecoder;
 
-pub fn encode(input: &[u8]) -> std::vec::Vec<u8> {
+pub fn encode(input: &[u8]) -> Vec<u8> {
     edgerun_hpack::huffman::encode(input)
 }
 
-pub fn decode(input: &[u8]) -> std::result::Result<std::vec::Vec<u8>, ()> {
+pub fn decode(input: &[u8]) -> core::result::Result<Vec<u8>, ()> {
     let mut decoder = HuffmanDecoder::new();
     decoder.decode(input).map_err(|_| ())
 }

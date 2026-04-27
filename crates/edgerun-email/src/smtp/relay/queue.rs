@@ -3,6 +3,7 @@
 //! Uses in-memory HashMaps guarded by async RwLock, persisted to disk
 //! via `spawn_blocking` for crash safety.
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Cursor, Read, Write};

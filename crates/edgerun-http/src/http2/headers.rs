@@ -42,7 +42,7 @@ use crate::http2::ErrorCode;
 /// Result of header validation.
 /// `Ok` means headers are valid.
 /// `Err` contains the error code and a description.
-pub type ValidationResult = std::result::Result<(), (u32, &'static str)>;
+pub type ValidationResult = core::result::Result<(), (u32, &'static str)>;
 
 /// Validate HTTP/2 request headers (client → server direction).
 ///

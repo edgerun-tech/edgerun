@@ -3,7 +3,7 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::path::{Path, PathBuf};
+use crate::runtime::path::{Path, PathBuf};
 
 use crate::{Handler, Request, Response, StatusCode};
 
@@ -97,7 +97,7 @@ impl Handler for StaticHandler {
                 }
             };
 
-            match std::fs::read(&path) {
+            match crate::runtime::fs::read(&path) {
                 Ok(content) => {
                     let mime = StaticHandler::guess_mime_type(&path);
                     Response::new(StatusCode::OK)

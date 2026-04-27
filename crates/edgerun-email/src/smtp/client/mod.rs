@@ -4,6 +4,7 @@ pub mod builder;
 
 pub use builder::{EmailBuilder, MimePart};
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;

@@ -1,7 +1,11 @@
 //! Git integration for automatic rollback and staging.
 
+use std::format;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::string::{String, ToString};
+use std::vec;
+use std::vec::Vec;
 
 /// Run a git command in the given directory. Returns (stdout, stderr, success).
 fn run_git(dir: &Path, args: &[&str]) -> (String, String, bool) {

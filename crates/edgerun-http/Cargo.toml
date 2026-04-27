@@ -9,25 +9,26 @@ description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 [features]
 default = ["std", "client", "server", "http1", "http2", "static-files", "http-compression", "http3", "tls"]
 std = []
-client = ["http1", "http2"]
+client = ["http1", "http2", "runtime", "dep:edgerun-dns", "dep:edgerun-log"]
 connection-middleware = []
 http-compression = ["dep:brotli", "dep:miniz_oxide"]
-http1 = []
-http2 = []
-http3 = ["client", "server", "tls", "dep:edgerun-crypto", "dep:edgerun-quic", "dep:edgerun-qpack"]
-server = ["http1", "http2"]
+http1 = ["runtime", "dep:edgerun-encoding"]
+http2 = ["runtime", "dep:edgerun-hpack", "dep:edgerun-log"]
+http3 = ["client", "server", "tls", "dep:edgerun-crypto", "dep:edgerun-quic", "dep:edgerun-qpack", "dep:edgerun-encoding", "dep:edgerun-log"]
+runtime = ["dep:edgerun-bare-rt"]
+server = ["http1", "http2", "runtime", "dep:edgerun-log"]
 static-files = ["server", "std"]
 tls = ["dep:edgerun-tls"]
 
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optional = true }
-edgerun-bare-rt = { path = "../edgerun-bare-rt" }
-edgerun-log = { path = "../edgerun-log" }
-edgerun-dns = { path = "../edgerun-dns", default-features = false }
+edgerun-bare-rt = { path = "../edgerun-bare-rt", optional = true }
+edgerun-log = { path = "../edgerun-log", optional = true }
+edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
 edgerun-error.workspace = true
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
-edgerun-hpack = { path = "../edgerun-hpack" }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"], optional = true }
+edgerun-hpack = { path = "../edgerun-hpack", optional = true }
 edgerun-qpack = { path = "../edgerun-qpack", optional = true }
 edgerun-quic = { path = "../edgerun-quic", optional = true }
 miniz_oxide = { workspace = true, optional = true }

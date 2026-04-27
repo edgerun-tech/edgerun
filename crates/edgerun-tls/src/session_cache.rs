@@ -18,12 +18,12 @@
 //!   4. After handshake: parse `NewSessionTicket` and cache new ticket
 //! ```
 
-use crate::std;
+use crate::std::time::{Duration, Instant};
+use alloc::collections::BTreeMap as HashMap;
 use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use edgerun_bare_rt::Mutex;
 
 /// A cached session ticket from a NewSessionTicket message.
 #[derive(Clone)]

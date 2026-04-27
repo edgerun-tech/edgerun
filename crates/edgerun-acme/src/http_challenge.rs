@@ -1,9 +1,12 @@
 use crate::prelude::v1::*;
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
+use core::future::Future;
+use core::pin::Pin;
 
 use sha2::{Digest, Sha256};
 
+use edgerun_bare_rt::RwLock;
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_http::{Handler, Request, Response, StatusCode};
 
@@ -34,10 +37,7 @@ impl HttpChallengeHandler {
 }
 
 impl Handler for HttpChallengeHandler {
-    fn handle(
-        &self,
-        _req: Request,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    fn handle(&self, _req: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         Box::pin(async move {
             let path = _req.uri().path();
 
@@ -54,14 +54,14 @@ impl Handler for HttpChallengeHandler {
 
 #[derive(Clone)]
 pub struct HttpChallengeServer {
-    handlers: Arc<std::sync::RwLock<HashMap<String, HttpChallengeHandler>>>,
+    handlers: Arc<RwLock<HashMap<String, HttpChallengeHandler>>>,
     thumbprint: String,
 }
 
 impl HttpChallengeServer {
     pub fn new(thumbprint: String) -> Self {
         Self {
-            handlers: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            handlers: Arc::new(RwLock::new(HashMap::new())),
             thumbprint,
         }
     }
@@ -70,31 +70,28 @@ impl HttpChallengeServer {
         let key_authz = HttpChallengeHandler::compute_key_authorization(token, &self.thumbprint);
         let handler = HttpChallengeHandler::new(token, &key_authz);
         let path = format!("/.well-known/acme-challenge/{}", token);
-        self.handlers.write().unwrap().insert(path.clone(), handler);
+        self.handlers.write().insert(path.clone(), handler);
         key_authz
     }
 
     pub fn remove_challenge(&self, token: &str) {
         let path = format!("/.well-known/acme-challenge/{}", token);
-        self.handlers.write().unwrap().remove(&path);
+        self.handlers.write().remove(&path);
     }
 
     pub fn clear_all(&self) {
-        self.handlers.write().unwrap().clear();
+        self.handlers.write().clear();
     }
 }
 
 impl Handler for HttpChallengeServer {
-    fn handle(
-        &self,
-        req: Request,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    fn handle(&self, req: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         let handlers = Arc::clone(&self.handlers);
 
         Box::pin(async move {
             let path = req.uri().path().to_string();
 
-            let handler = handlers.read().unwrap().get(&path).cloned();
+            let handler = handlers.read().get(&path).cloned();
 
             if let Some(handler) = handler {
                 handler.handle(req).await

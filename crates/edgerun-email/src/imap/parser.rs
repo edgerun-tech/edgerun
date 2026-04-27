@@ -5,6 +5,7 @@
 //! Responses: `* ...` (untagged) or `TAG OK/NO/BAD ...`
 //! Literals: `{N}\r\n` followed by N bytes of data.
 
+use crate::prelude::*;
 use std::io;
 
 use crate::rt::AsyncReadExt;

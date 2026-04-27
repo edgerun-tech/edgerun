@@ -11,11 +11,11 @@ use crate::http1::pool::ConnectionPool;
 #[cfg(feature = "tls")]
 use crate::http2::pool::Http2Pool;
 use crate::method::Method;
+use crate::runtime::time::Duration;
+use crate::runtime::Mutex;
 use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
-use edgerun_bare_rt::sync::Mutex;
-use std::sync::Arc;
-use std::time::Duration;
+use alloc::sync::Arc;
 
 /// HTTP protocol preference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -329,8 +329,8 @@ impl HttpClient {
             };
 
             let mut conn = Http3Connection::connect(&server_addr).await.map_err(|e| {
-                Error::Network(std::io::Error::new(
-                    std::io::ErrorKind::ConnectionRefused,
+                Error::Network(crate::runtime::io::Error::new(
+                    crate::runtime::io::ErrorKind::ConnectionRefused,
                     e,
                 ))
             })?;
@@ -350,15 +350,15 @@ impl HttpClient {
                 .send_request(&method, &req_uri, &headers, body)
                 .await
                 .map_err(|e| {
-                    Error::Network(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
+                    Error::Network(crate::runtime::io::Error::new(
+                        crate::runtime::io::ErrorKind::BrokenPipe,
                         format!("{:?}", e),
                     ))
                 })?;
 
             let response = conn.recv_response(stream_id).await.map_err(|e| {
-                Error::Network(std::io::Error::new(
-                    std::io::ErrorKind::ConnectionReset,
+                Error::Network(crate::runtime::io::Error::new(
+                    crate::runtime::io::ErrorKind::ConnectionReset,
                     format!("{:?}", e),
                 ))
             })?;

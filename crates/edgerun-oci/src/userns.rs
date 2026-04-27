@@ -102,51 +102,6 @@ pub fn set_capabilities(
 ///
 /// This must be called BEFORE dropping privileges (setuid/setgid).
 pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
-    // All known Linux capabilities that we can attempt to drop.
-    const ALL_CAPS: &[&str] = &[
-        "CAP_CHOWN",
-        "CAP_DAC_OVERRIDE",
-        "CAP_DAC_READ_SEARCH",
-        "CAP_FOWNER",
-        "CAP_FSETID",
-        "CAP_KILL",
-        "CAP_SETGID",
-        "CAP_SETUID",
-        "CAP_SETPCAP",
-        "CAP_LINUX_IMMUTABLE",
-        "CAP_NET_BIND_SERVICE",
-        "CAP_NET_BROADCAST",
-        "CAP_NET_ADMIN",
-        "CAP_NET_RAW",
-        "CAP_IPC_LOCK",
-        "CAP_IPC_OWNER",
-        "CAP_SYS_MODULE",
-        "CAP_SYS_RAWIO",
-        "CAP_SYS_CHROOT",
-        "CAP_SYS_PTRACE",
-        "CAP_SYS_PACCT",
-        "CAP_SYS_ADMIN",
-        "CAP_SYS_BOOT",
-        "CAP_SYS_NICE",
-        "CAP_SYS_RESOURCE",
-        "CAP_SYS_TIME",
-        "CAP_SYS_TTY_CONFIG",
-        "CAP_MKNOD",
-        "CAP_LEASE",
-        "CAP_AUDIT_WRITE",
-        "CAP_AUDIT_CONTROL",
-        "CAP_SETFCAP",
-        "CAP_MAC_OVERRIDE",
-        "CAP_MAC_ADMIN",
-        "CAP_SYSLOG",
-        "CAP_WAKE_ALARM",
-        "CAP_BLOCK_SUSPEND",
-        "CAP_AUDIT_READ",
-        "CAP_PERFMON",
-        "CAP_BPF",
-        "CAP_CHECKPOINT_RESTORE",
-    ];
-
     let keep: Vec<&str> = bounding_caps
         .map(|caps| caps.iter().map(|s| s.as_str()).collect())
         .unwrap_or_default();
@@ -162,7 +117,7 @@ pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
         }
     }
 
-    for &cap in ALL_CAPS {
+    for &cap in crate::validate::KNOWN_CAPABILITIES {
         let cap_stripped = cap.strip_prefix("CAP_").unwrap_or(cap);
         if !keep.contains(&cap_stripped) && !keep.contains(&cap) {
             // Best-effort drop — some caps may already be dropped or unavailable

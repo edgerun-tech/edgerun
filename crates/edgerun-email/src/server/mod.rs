@@ -11,6 +11,7 @@
 //! - IMAP (port 143, STARTTLS, IMAPS on port 993)
 //! - LMTP (port 24, no TLS — local delivery only)
 
+use crate::prelude::*;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;

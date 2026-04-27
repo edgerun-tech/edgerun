@@ -1,5 +1,8 @@
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
 use edgerun_solana::signers::Ed25519Signer;
 use edgerun_solana::{solana_types::Pubkey, ProviderClient};
+use std::{eprintln, println};
 
 pub enum ProviderCommand {
     Register {

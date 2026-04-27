@@ -20,12 +20,20 @@
 //! - Per-connection spawn with idle timeout + command limits
 //! - `MailProtocol` trait for protocol-specific command dispatch
 
-#![cfg_attr(target_os = "none", no_std)]
+#![no_std]
 
 extern crate alloc;
 
 #[cfg(not(target_os = "none"))]
 extern crate std;
+
+pub(crate) mod prelude {
+    pub use alloc::boxed::Box;
+    pub use alloc::format;
+    pub use alloc::string::{String, ToString};
+    pub use alloc::vec;
+    pub use alloc::vec::Vec;
+}
 
 #[cfg(not(target_os = "none"))]
 pub mod command_middleware;

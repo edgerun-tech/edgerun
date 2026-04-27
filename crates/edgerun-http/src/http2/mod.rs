@@ -4,6 +4,7 @@
 
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
+use core::fmt;
 
 pub mod client;
 pub mod connection;
@@ -40,7 +41,7 @@ pub use stream::Stream;
 #[derive(Debug)]
 pub enum Http2Error {
     /// I/O error
-    Io(std::io::Error),
+    Io(crate::runtime::io::Error),
     /// Frame parsing error
     FrameParse(String),
     /// HPACK decoding error
@@ -69,8 +70,8 @@ pub enum Http2Error {
     SettingsTimeout,
 }
 
-impl std::fmt::Display for Http2Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Http2Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Http2Error::Io(err) => write!(f, "I/O error: {}", err),
             Http2Error::FrameParse(msg) => write!(f, "Frame parse error: {}", msg),
@@ -101,17 +102,17 @@ impl core::error::Error for Http2Error {
     }
 }
 
-impl From<std::io::Error> for Http2Error {
-    fn from(err: std::io::Error) -> Self {
+impl From<crate::runtime::io::Error> for Http2Error {
+    fn from(err: crate::runtime::io::Error) -> Self {
         Http2Error::Io(err)
     }
 }
 
-impl From<Http2Error> for std::io::Error {
+impl From<Http2Error> for crate::runtime::io::Error {
     fn from(err: Http2Error) -> Self {
         match err {
             Http2Error::Io(err) => err,
-            other => std::io::Error::other(other.to_string()),
+            other => crate::runtime::io::Error::other(other.to_string()),
         }
     }
 }
@@ -129,7 +130,7 @@ impl From<edgerun_hpack::DecoderError> for Http2Error {
 }
 
 /// HTTP/2 result type
-pub type Result<T> = std::result::Result<T, Http2Error>;
+pub type Result<T> = core::result::Result<T, Http2Error>;
 
 /// HTTP/2 error codes (RFC 9113 / RFC 7540 Section 7)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,5 +1,6 @@
 //! YAML parsing implementation - no_std + alloc.
 
+use crate::prelude::*;
 use crate::{JsonValue, Map, Number};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use std::string::String;

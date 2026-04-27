@@ -178,7 +178,7 @@ impl Http2Server {
             let content_length = headers
                 .iter()
                 .find(|(k, _)| k == b"content-length")
-                .and_then(|(_, v)| std::str::from_utf8(v).ok()?.parse::<u64>().ok());
+                .and_then(|(_, v)| core::str::from_utf8(v).ok()?.parse::<u64>().ok());
 
             if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
                 s.content_length = content_length;
@@ -301,7 +301,7 @@ impl Http2Server {
         let content_length = headers
             .iter()
             .find(|(k, _)| k == b"content-length")
-            .and_then(|(_, v)| std::str::from_utf8(v).ok()?.parse::<u64>().ok());
+            .and_then(|(_, v)| core::str::from_utf8(v).ok()?.parse::<u64>().ok());
 
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             s.content_length = content_length;

@@ -69,6 +69,7 @@ use crate::prelude::v1::*;
 use crate::client::HttpClient;
 use crate::header::HeaderMap;
 use crate::method::Method;
+use crate::runtime::Mutex;
 use crate::{Error, Request, Response, Result};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -77,7 +78,6 @@ use core::any::{Any, TypeId};
 use core::fmt;
 use core::future::Future;
 use core::pin::Pin;
-use edgerun_bare_rt::sync::Mutex;
 
 // ===========================================================================
 // ClientExtensions — type-erased data attached to client requests/responses

@@ -1,6 +1,8 @@
-#![cfg_attr(any(not(feature = "std"), target_os = "none"), no_std)]
+#![no_std]
 
 extern crate alloc;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+extern crate std;
 
 pub mod derive;
 

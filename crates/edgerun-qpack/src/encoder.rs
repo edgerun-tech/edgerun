@@ -1,4 +1,3 @@
-use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp;
 use edgerun_encoding::buf::{Buf, BufMut, Cursor};

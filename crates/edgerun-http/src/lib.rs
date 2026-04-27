@@ -79,13 +79,19 @@
 extern crate alloc;
 
 #[cfg(target_os = "none")]
-extern crate self as std;
-
-#[cfg(target_os = "none")]
 #[path = "std.rs"]
 mod std_compat;
 #[cfg(target_os = "none")]
 pub use std_compat::*;
+
+#[cfg(feature = "runtime")]
+pub mod runtime;
+#[cfg(feature = "runtime")]
+pub use runtime::{collections, fs, io, net, path, sync, time};
+#[cfg(all(not(feature = "runtime"), not(target_os = "none")))]
+pub use std::{collections, fs, io, net, path, sync, time};
+#[cfg(all(not(feature = "runtime"), target_os = "none"))]
+pub use std_compat::{collections, fs, io, net, path, sync, time};
 
 #[cfg(target_os = "none")]
 macro_rules! format {
@@ -94,32 +100,13 @@ macro_rules! format {
     };
 }
 
-#[cfg(target_os = "none")]
-macro_rules! vec {
-    ($($arg:tt)*) => {
-        alloc::vec![$($arg)*]
-    };
-}
-
-#[cfg(target_os = "none")]
-macro_rules! eprintln {
-    ($($arg:tt)*) => {
-        edgerun_log::warn!($($arg)*)
-    };
-}
-
-#[cfg(target_os = "none")]
-macro_rules! module_path {
-    () => {
-        core::module_path!()
-    };
-}
-
 // ---------------------------------------------------------------------------
 // Shared HTTP types
 // ---------------------------------------------------------------------------
+mod chunked;
 pub mod error;
 pub mod header;
+mod lock;
 pub mod method;
 pub mod status;
 pub mod uri;

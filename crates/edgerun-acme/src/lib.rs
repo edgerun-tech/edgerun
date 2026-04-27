@@ -48,10 +48,26 @@ pub mod pin {
 }
 
 #[cfg(target_os = "none")]
-pub use edgerun_secret_service::{
-    cmp, collections, convert, env, ffi, fmt, format, fs, io, mem, option, os, path, process,
-    result, slice, str, sync, time,
-};
+pub use core::{cmp, convert, fmt, mem, option, result, slice, str};
+
+#[cfg(target_os = "none")]
+pub mod collections {
+    pub use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
+
+    pub type HashMap<K, V> = alloc::collections::BTreeMap<K, V>;
+    pub type HashSet<T> = alloc::collections::BTreeSet<T>;
+}
+
+#[cfg(target_os = "none")]
+pub mod path {
+    pub use edgerun_secret_service::path::{Path, PathBuf};
+}
+
+#[cfg(target_os = "none")]
+pub mod sync {
+    pub use alloc::sync::Arc;
+    pub use edgerun_bare_rt::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+}
 
 mod account;
 mod cert_store;

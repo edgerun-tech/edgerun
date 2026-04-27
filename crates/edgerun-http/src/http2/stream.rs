@@ -4,7 +4,7 @@
 use crate::prelude::v1::*;
 
 use super::Result;
-use std::collections::VecDeque;
+use alloc::collections::{BTreeMap, VecDeque};
 
 /// Stream states (RFC 7540 Section 5.1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -212,7 +212,7 @@ impl Stream {
 /// Stream manager for multiplexing
 pub struct StreamManager {
     /// Active streams
-    streams: std::collections::HashMap<u32, Stream>,
+    streams: BTreeMap<u32, Stream>,
     /// Maximum concurrent streams
     max_concurrent_streams: Option<u32>,
     /// Next client-initiated stream ID
@@ -227,7 +227,7 @@ impl StreamManager {
     /// Create a new stream manager
     pub fn new(initial_window_size: u32) -> Self {
         StreamManager {
-            streams: std::collections::HashMap::new(),
+            streams: BTreeMap::new(),
             max_concurrent_streams: None,
             next_client_stream: 1, // Client streams are odd: 1, 3, 5, ...
             next_server_stream: 2, // Server streams are even: 2, 4, 6, ...

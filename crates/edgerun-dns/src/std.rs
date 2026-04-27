@@ -8,6 +8,8 @@ pub mod ffi {
 
 pub mod os {
     pub mod raw {
+        #![allow(non_camel_case_types)]
+
         pub type c_int = i32;
     }
 

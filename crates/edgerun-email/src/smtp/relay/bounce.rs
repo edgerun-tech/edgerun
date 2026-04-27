@@ -3,6 +3,7 @@
 //!
 //! This runs when the delivery worker exhausts all retries for a message.
 
+use crate::prelude::*;
 use std::io;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

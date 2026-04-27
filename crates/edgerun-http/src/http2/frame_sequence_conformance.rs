@@ -17,9 +17,9 @@ pub struct FrameSequenceValidator {
     /// Connection-level GOAWAY has been received
     goaway_received: bool,
     /// Per-stream state: whether HEADERS has been received
-    stream_headers_seen: std::collections::HashSet<u32>,
+    stream_headers_seen: alloc::collections::BTreeSet<u32>,
     /// Per-stream state: whether stream is closed
-    stream_closed: std::collections::HashSet<u32>,
+    stream_closed: alloc::collections::BTreeSet<u32>,
     /// Whether we're expecting a CONTINUATION frame
     expecting_continuation: bool,
 }
@@ -29,15 +29,15 @@ impl FrameSequenceValidator {
         FrameSequenceValidator {
             settings_received: false,
             goaway_received: false,
-            stream_headers_seen: std::collections::HashSet::new(),
-            stream_closed: std::collections::HashSet::new(),
+            stream_headers_seen: alloc::collections::BTreeSet::new(),
+            stream_closed: alloc::collections::BTreeSet::new(),
             expecting_continuation: false,
         }
     }
 
     /// Validate a frame in the context of the current connection state.
     /// Returns Ok(()) or an error description.
-    pub fn validate(&mut self, frame: &Frame) -> std::result::Result<(), String> {
+    pub fn validate(&mut self, frame: &Frame) -> core::result::Result<(), String> {
         match frame.frame_type {
             FrameType::Settings => {
                 if frame.stream_id != 0 {

@@ -3,6 +3,7 @@
 //! Generates `multipart/report; report-type=delivery-status` messages
 //! for delivery failure notifications.
 
+use crate::prelude::*;
 use crate::smtp::types::response::EnhancedStatusCode;
 
 /// DSN action describing what happened to a recipient.

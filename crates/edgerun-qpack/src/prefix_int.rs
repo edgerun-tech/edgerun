@@ -1,5 +1,3 @@
-use core::fmt;
-
 use edgerun_encoding::buf::{Buf, BufMut};
 
 #[derive(Debug, PartialEq, Clone)]

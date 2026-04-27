@@ -4,7 +4,6 @@ mod encode;
 
 use alloc::vec::Vec;
 use core::convert::TryInto;
-use core::fmt;
 use core::num::TryFromIntError;
 
 use edgerun_encoding::buf::{Buf, BufMut};

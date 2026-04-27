@@ -23,6 +23,8 @@
 //! assert_eq!(obj["id"].as_u64(), Some(1));
 //! ```
 
+use crate::prelude::*;
+
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::ToOwned;
 #[cfg(any(not(feature = "std"), target_os = "none"))]

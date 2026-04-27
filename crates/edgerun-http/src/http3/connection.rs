@@ -4,8 +4,8 @@
 use crate::prelude::v1::*;
 
 use crate::http3::{Http3Error, Result};
-use std::collections::HashMap;
-use std::str::FromStr;
+use alloc::collections::{btree_map::Entry, BTreeMap};
+use core::str::FromStr;
 
 use super::frame::{Http3Frame, Http3FrameType};
 use super::qpack::{QpackDecoder, QpackEncoder};
@@ -18,7 +18,6 @@ use crate::http3::error_codes;
 use crate::method::Method;
 use crate::status::StatusCode;
 use crate::uri::Uri;
-use std::collections::hash_map::Entry;
 
 /// HTTP/3 connection
 pub struct Http3Connection {
@@ -33,7 +32,7 @@ pub struct Http3Connection {
     /// Remote HTTP/3 settings (populated from peer's SETTINGS frame)
     remote_settings: Http3Settings,
     /// Streams
-    streams: HashMap<u64, Http3Stream>,
+    streams: BTreeMap<u64, Http3Stream>,
     /// Next bidirectional stream ID
     next_bidi_stream_id: u64,
     /// Next unidirectional stream ID
@@ -47,16 +46,19 @@ pub struct Http3Connection {
     /// Buffered CRYPTO data to send
     pending_crypto: Vec<u8>,
     /// Receive buffers for streams (leftover bytes after HTTP/3 frame parsing)
-    recv_buffers: HashMap<u64, Vec<u8>>,
+    recv_buffers: BTreeMap<u64, Vec<u8>>,
     /// Tracks which streams have already received HEADERS frames
     /// Key = stream_id, Value = true if HEADERS received
-    stream_headers_received: HashMap<u64, bool>,
+    stream_headers_received: BTreeMap<u64, bool>,
     /// Stream priorities (RFC 9218)
     /// Key = stream_id, Value = (urgency, incremental)
-    stream_priorities: HashMap<u64, (u8, bool)>,
+    stream_priorities: BTreeMap<u64, (u8, bool)>,
     /// Connection migration state (RFC 9000 §9)
     /// The current active path (source and destination addresses)
-    active_path: Option<(std::net::SocketAddr, std::net::SocketAddr)>,
+    active_path: Option<(
+        crate::runtime::net::SocketAddr,
+        crate::runtime::net::SocketAddr,
+    )>,
     /// GOAWAY: the highest stream ID the peer will accept (RFC 9114 §5.2)
     /// None = no GOAWAY received, Some(id) = no new streams > id
     going_away: Option<u64>,
@@ -68,7 +70,7 @@ pub struct Http3Connection {
     qpack_decoder_stream_id: Option<u64>,
     /// Known unidirectional stream types (for dispatching incoming uni streams)
     /// Key = stream_id, Value = stream type varint
-    known_uni_stream_types: HashMap<u64, u64>,
+    known_uni_stream_types: BTreeMap<u64, u64>,
     /// Max push ID received from peer (client-side: server's push limit)
     max_push_id_received: u64,
     /// Max bidirectional streams allowed by peer (from QUIC transport params)
@@ -84,9 +86,7 @@ impl Http3Connection {
     }
 
     /// Get mutable access to known_uni_stream_types (for testing).
-    pub(crate) fn known_uni_stream_types_mut(
-        &mut self,
-    ) -> &mut std::collections::HashMap<u64, u64> {
+    pub(crate) fn known_uni_stream_types_mut(&mut self) -> &mut BTreeMap<u64, u64> {
         &mut self.known_uni_stream_types
     }
 
@@ -117,22 +117,22 @@ impl Http3Connection {
             qpack_decoder: QpackDecoder::new(),
             local_settings: Http3Settings::new(),
             remote_settings: Http3Settings::new(),
-            streams: HashMap::new(),
+            streams: BTreeMap::new(),
             next_bidi_stream_id: 0,
             next_uni_stream_id: 2,
             max_push_id: 0,
             server_name: server_name.to_string(),
             control_stream_id: None,
             pending_crypto: Vec::new(),
-            recv_buffers: HashMap::new(),
-            stream_headers_received: HashMap::new(),
-            stream_priorities: HashMap::new(),
+            recv_buffers: BTreeMap::new(),
+            stream_headers_received: BTreeMap::new(),
+            stream_priorities: BTreeMap::new(),
             active_path: None,
             going_away: None,
             sent_goaway_id: u64::MAX,
             qpack_encoder_stream_id: None,
             qpack_decoder_stream_id: None,
-            known_uni_stream_types: HashMap::new(),
+            known_uni_stream_types: BTreeMap::new(),
             max_push_id_received: 0,
             max_bidi_streams: 100,
             max_uni_streams: 100,
@@ -153,22 +153,22 @@ impl Http3Connection {
             qpack_decoder: QpackDecoder::new(),
             local_settings: Http3Settings::new(),
             remote_settings: Http3Settings::new(),
-            streams: HashMap::new(),
+            streams: BTreeMap::new(),
             next_bidi_stream_id: 1,
             next_uni_stream_id: 3,
             max_push_id: 0,
             server_name: String::new(),
             control_stream_id: None,
             pending_crypto: Vec::new(),
-            recv_buffers: HashMap::new(),
-            stream_headers_received: HashMap::new(),
-            stream_priorities: HashMap::new(),
+            recv_buffers: BTreeMap::new(),
+            stream_headers_received: BTreeMap::new(),
+            stream_priorities: BTreeMap::new(),
             active_path: None,
             going_away: None,
             sent_goaway_id: u64::MAX,
             qpack_encoder_stream_id: None,
             qpack_decoder_stream_id: None,
-            known_uni_stream_types: HashMap::new(),
+            known_uni_stream_types: BTreeMap::new(),
             max_push_id_received: 0,
             max_bidi_streams: 100,
             max_uni_streams: 100,
@@ -190,22 +190,22 @@ impl Http3Connection {
             qpack_decoder: QpackDecoder::new(),
             local_settings: Http3Settings::new(),
             remote_settings: Http3Settings::new(),
-            streams: HashMap::new(),
+            streams: BTreeMap::new(),
             next_bidi_stream_id: 1,
             next_uni_stream_id: 3,
             max_push_id: 0,
             server_name: String::new(),
             control_stream_id: None,
             pending_crypto: Vec::new(),
-            recv_buffers: HashMap::new(),
-            stream_headers_received: HashMap::new(),
-            stream_priorities: HashMap::new(),
+            recv_buffers: BTreeMap::new(),
+            stream_headers_received: BTreeMap::new(),
+            stream_priorities: BTreeMap::new(),
             active_path: None,
             going_away: None,
             sent_goaway_id: u64::MAX,
             qpack_encoder_stream_id: None,
             qpack_decoder_stream_id: None,
-            known_uni_stream_types: HashMap::new(),
+            known_uni_stream_types: BTreeMap::new(),
             max_push_id_received: 0,
             max_bidi_streams: 100,
             max_uni_streams: 100,
@@ -1700,22 +1700,22 @@ mod tests {
             qpack_decoder: QpackDecoder::new(),
             local_settings: Http3Settings::new(),
             remote_settings: Http3Settings::new(),
-            streams: HashMap::new(),
+            streams: BTreeMap::new(),
             next_bidi_stream_id: 0,
             next_uni_stream_id: 2,
             max_push_id: 0,
             server_name: "example.com".to_string(),
             control_stream_id: None,
             pending_crypto: Vec::new(),
-            recv_buffers: HashMap::new(),
-            stream_headers_received: HashMap::new(),
-            stream_priorities: HashMap::new(),
+            recv_buffers: BTreeMap::new(),
+            stream_headers_received: BTreeMap::new(),
+            stream_priorities: BTreeMap::new(),
             active_path: None,
             going_away: None,
             sent_goaway_id: u64::MAX,
             qpack_encoder_stream_id: None,
             qpack_decoder_stream_id: None,
-            known_uni_stream_types: HashMap::new(),
+            known_uni_stream_types: BTreeMap::new(),
             max_push_id_received: 0,
             max_bidi_streams: 100,
             max_uni_streams: 100,

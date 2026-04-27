@@ -1,5 +1,6 @@
 //! Outbound mail relay — DNS MX lookup + SMTP delivery to remote MTAs.
 
+use crate::prelude::*;
 use std::io;
 use std::time::Duration;
 

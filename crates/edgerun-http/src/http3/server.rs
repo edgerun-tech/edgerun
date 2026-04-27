@@ -37,12 +37,14 @@ use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::request::Request;
 use crate::response::Response;
+use crate::runtime;
+use crate::runtime::net::SocketAddr;
+use crate::runtime::AsyncUdpSocket;
+use crate::runtime::CancellationToken;
 use crate::uri::Uri;
-use edgerun_bare_rt::AsyncUdpSocket;
-use edgerun_bare_rt::CancellationToken;
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
 use edgerun_tls::certificate_gen::CertificateAndKey;
-use std::net::SocketAddr;
-use std::sync::Arc;
 
 use super::connection::Http3Connection;
 use super::qpack::{QpackDecoder, QpackEncoder};
@@ -55,8 +57,7 @@ use super::quic::QuicTlsServerHandshaker;
 use super::quic::QUIC_VERSION_V1;
 use super::Http3Error;
 use crate::http3::settings::Http3Settings;
-use std::collections::HashMap;
-use std::sync::Mutex;
+use crate::runtime::sync::Mutex;
 
 /// Per-client address validation state (RFC 9000 §8.1).
 ///
@@ -72,7 +73,7 @@ struct AddressValidationState {
     /// (set to true when we receive a valid Handshake packet)
     address_validated: bool,
     /// Timestamp of last activity (for cleanup)
-    last_activity: std::time::Instant,
+    last_activity: crate::runtime::time::Instant,
 }
 
 impl AddressValidationState {
@@ -81,7 +82,7 @@ impl AddressValidationState {
             bytes_received: 0,
             bytes_sent: 0,
             address_validated: false,
-            last_activity: std::time::Instant::now(),
+            last_activity: crate::runtime::time::Instant::now(),
         }
     }
 
@@ -98,7 +99,7 @@ impl AddressValidationState {
     /// Record bytes received from this client.
     fn record_received(&mut self, bytes: u64) {
         self.bytes_received += bytes;
-        self.last_activity = std::time::Instant::now();
+        self.last_activity = crate::runtime::time::Instant::now();
     }
 
     /// Record bytes sent to this client.
@@ -131,11 +132,11 @@ pub struct Http3Server {
 
 impl Http3Server {
     /// Bind to the given address and prepare to accept HTTP/3 connections.
-    pub async fn bind<A: std::net::ToSocketAddrs>(
+    pub async fn bind<A: crate::runtime::net::ToSocketAddrs>(
         addr: A,
         cert_and_key: CertificateAndKey,
-    ) -> std::io::Result<Self> {
-        let socket = Arc::new(AsyncUdpSocket::bind(addr)?);
+    ) -> crate::runtime::io::Result<Self> {
+        let socket = Arc::new(runtime::bind_udp_socket(addr)?);
         Ok(Http3Server {
             socket,
             cert_and_key,
@@ -145,7 +146,7 @@ impl Http3Server {
     }
 
     /// Local address of the server.
-    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+    pub fn local_addr(&self) -> crate::runtime::io::Result<SocketAddr> {
         Ok(self.socket.local_addr()?)
     }
 
@@ -407,8 +408,8 @@ impl Http3Server {
     ///
     /// Server connections don't use the socket directly — I/O is handled
     /// through the server's AsyncUdpSocket.
-    fn dummy_socket() -> std::io::Result<std::net::UdpSocket> {
-        std::net::UdpSocket::bind("127.0.0.1:0")
+    fn dummy_socket() -> crate::runtime::io::Result<crate::runtime::net::UdpSocket> {
+        crate::runtime::net::UdpSocket::bind("127.0.0.1:0")
     }
 
     /// Build Initial response packet (contains ServerHello).
@@ -593,7 +594,7 @@ impl Http3Server {
     /// use edgerun_http::{Handler, Request, Response, StatusCode, into_handler};
     /// use edgerun_tls::certificate_gen::generate_self_signed;
     /// use edgerun_bare_rt::Runtime;
-    /// use std::sync::Arc;
+    /// use crate::runtime::sync::Arc;
     ///
     /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     /// rt.block_on(async {
@@ -610,7 +611,7 @@ impl Http3Server {
         &self,
         handler: Arc<dyn Handler>,
         shutdown: CancellationToken,
-    ) -> std::io::Result<()> {
+    ) -> crate::runtime::io::Result<()> {
         edgerun_log::info!("HTTP/3 server listening on {} (h3)", self.local_addr()?);
         loop {
             if shutdown.is_cancelled() {
@@ -621,7 +622,7 @@ impl Http3Server {
             match self.accept().await {
                 Ok((mut conn, client_addr)) => {
                     let handler = Arc::clone(&handler);
-                    edgerun_bare_rt::spawn(async move {
+                    crate::runtime::spawn(async move {
                         if let Err(e) =
                             Self::handle_connection(&mut conn, handler, client_addr).await
                         {
@@ -635,7 +636,7 @@ impl Http3Server {
                 }
                 Err(e) => {
                     edgerun_log::warn!("HTTP/3 accept error: {}", e);
-                    edgerun_bare_rt::sleep(std::time::Duration::from_millis(100)).await;
+                    crate::runtime::sleep(crate::runtime::time::Duration::from_millis(100)).await;
                 }
             }
         }
@@ -684,9 +685,9 @@ mod tests {
     use edgerun_tls::certificate_gen::generate_self_signed;
 
     fn test_server(cert_and_key: CertificateAndKey) -> Http3Server {
-        let socket = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind test socket");
+        let socket = crate::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind test socket");
         Http3Server {
-            socket: Arc::new(AsyncUdpSocket::from_std(socket).expect("wrap test socket")),
+            socket: Arc::new(crate::runtime::wrap_udp_socket(socket).expect("wrap test socket")),
             cert_and_key,
             pending: Mutex::new(Vec::new()),
             validation_state: Mutex::new(HashMap::new()),

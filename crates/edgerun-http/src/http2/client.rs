@@ -7,11 +7,12 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use crate::runtime::time::{Duration, Instant};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
+use alloc::vec;
 
-use edgerun_bare_rt::{
+use crate::runtime::{
     mpsc, oneshot, select, sleep, spawn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
     JoinHandle,
 };
@@ -36,18 +37,6 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 /// PING timeout — if no response after this duration, kill the connection.
 const PING_TIMEOUT: Duration = Duration::from_secs(10);
 
-fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
-    match error {
-        edgerun_bare_rt::IoError::UnexpectedEof => {
-            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
-        }
-        edgerun_bare_rt::IoError::WriteZero => {
-            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
-        }
-        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
-    }
-}
-
 // ===========================================================================
 // Public types
 // ===========================================================================
@@ -71,8 +60,8 @@ impl PendingRequest {
     /// Wait for the response headers. Returns status + headers.
     pub async fn await_response(self) -> Result<(StatusCode, HeaderMap)> {
         let resp = self.response_rx.await.map_err(|_| {
-            Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
+            Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::ConnectionReset,
                 "response channel closed",
             ))
         })??;
@@ -102,8 +91,8 @@ impl PendingRequest {
             ..
         } = self;
         let resp = response_rx.await.map_err(|_| {
-            Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
+            Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::ConnectionReset,
                 "response channel closed",
             ))
         })??;
@@ -147,7 +136,7 @@ impl PendingRequest {
 /// ```
 pub struct AsyncClient {
     frame_tx: mpsc::Sender<OutgoingFrame>,
-    streams: Arc<std::sync::Mutex<StreamStateInner>>,
+    streams: Arc<crate::runtime::sync::Mutex<StreamStateInner>>,
     _task: JoinHandle<()>,
     next_stream_id: u32,
     /// Max frame size for outgoing DATA frames.
@@ -164,15 +153,15 @@ impl AsyncClient {
         stream
             .write_all(CONNECTION_PREFACE)
             .await
-            .map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
 
         let client_settings = Settings::new();
         let settings_frame = SettingsFrame::new(client_settings.to_entries());
         stream
             .write_all(&settings_frame.to_frame().to_bytes())
             .await
-            .map_err(bare_io)?;
-        stream.flush().await.map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
+        stream.flush().await.map_err(crate::runtime::bare_io)?;
 
         // Read server SETTINGS frame per RFC 9113 §3.4
         let (server_settings_frame, _) =
@@ -191,11 +180,11 @@ impl AsyncClient {
         stream
             .write_all(&ack_frame.to_frame().to_bytes())
             .await
-            .map_err(bare_io)?;
-        stream.flush().await.map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
+        stream.flush().await.map_err(crate::runtime::bare_io)?;
 
         let (frame_tx, frame_rx) = mpsc::channel::<OutgoingFrame>(64);
-        let streams = Arc::new(std::sync::Mutex::new(StreamStateInner::new(
+        let streams = Arc::new(crate::runtime::sync::Mutex::new(StreamStateInner::new(
             client_settings,
             server_settings,
         )));
@@ -243,8 +232,8 @@ impl AsyncClient {
             end_stream,
         };
         self.frame_tx.send(msg).await.map_err(|_| {
-            Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
+            Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::BrokenPipe,
                 "connection closed",
             ))
         })?;
@@ -258,8 +247,8 @@ impl AsyncClient {
                 end_stream: true,
             };
             self.frame_tx.send(msg).await.map_err(|_| {
-                Http2Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
+                Http2Error::Io(crate::runtime::io::Error::new(
+                    crate::runtime::io::ErrorKind::BrokenPipe,
                     "connection closed",
                 ))
             })?;
@@ -314,8 +303,8 @@ impl AsyncClient {
             end_stream: false,
         };
         self.frame_tx.send(msg).await.map_err(|_| {
-            Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
+            Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::BrokenPipe,
                 "connection closed",
             ))
         })?;
@@ -372,8 +361,8 @@ impl AsyncClient {
                 end_stream: is_last,
             };
             self.frame_tx.send(msg).await.map_err(|_| {
-                Http2Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
+                Http2Error::Io(crate::runtime::io::Error::new(
+                    crate::runtime::io::ErrorKind::BrokenPipe,
                     "connection closed",
                 ))
             })?;
@@ -387,14 +376,14 @@ impl AsyncClient {
         let (tx, rx) = oneshot::channel();
         let msg = OutgoingFrame::Ping { reply_tx: tx };
         self.frame_tx.send(msg).await.map_err(|_| {
-            Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
+            Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::BrokenPipe,
                 "connection closed",
             ))
         })?;
         rx.await.map_err(|_| {
-            Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
+            Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::ConnectionReset,
                 "ping channel closed",
             ))
         })?
@@ -513,7 +502,7 @@ impl StreamStateInner {
 async fn connection_task<S>(
     mut stream: S,
     mut frame_rx: mpsc::Receiver<OutgoingFrame>,
-    state: Arc<std::sync::Mutex<StreamStateInner>>,
+    state: Arc<crate::runtime::sync::Mutex<StreamStateInner>>,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -702,15 +691,15 @@ async fn connection_task<S>(
                     let _ = write_frame_async(&mut stream, &wu_stream.to_frame()).await;
                 }
                 OutgoingFrame::Ping { reply_tx } => {
-                    let ping_id = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
+                    let ping_id = crate::runtime::time::SystemTime::now()
+                        .duration_since(crate::runtime::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
                     let data = ping_id.to_be_bytes();
                     let ping_frame = PingFrame::new(data);
                     let frame_bytes = ping_frame.to_frame().to_bytes();
                     if let Err(e) = stream.write_all(&frame_bytes).await {
-                        let _ = reply_tx.send(Err(Http2Error::Io(bare_io(e))));
+                        let _ = reply_tx.send(Err(Http2Error::Io(crate::runtime::bare_io(e))));
                         break;
                     }
                     let _ = stream.flush().await;
@@ -732,8 +721,8 @@ async fn connection_task<S>(
                 }
             },
             ConnectionEvent::KeepaliveTick => {
-                let ping_id = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                let ping_id = crate::runtime::time::SystemTime::now()
+                    .duration_since(crate::runtime::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs();
                 let data = ping_id.to_be_bytes();
@@ -760,8 +749,8 @@ async fn connection_task<S>(
     let mut s = state.lock().unwrap();
     for (_, cb) in core::mem::take(&mut s.stream_callbacks) {
         if let Some(tx) = cb.response_tx {
-            let _ = tx.send(Err(Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
+            let _ = tx.send(Err(Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::ConnectionReset,
                 "connection closed",
             ))));
         }
@@ -772,7 +761,7 @@ async fn connection_task<S>(
 /// Process an incoming frame.
 async fn process_incoming_frame<S>(
     stream: &mut S,
-    state: &Arc<std::sync::Mutex<StreamStateInner>>,
+    state: &Arc<crate::runtime::sync::Mutex<StreamStateInner>>,
     frame: &Frame,
     continuation_state: &mut Option<(u32, Vec<u8>, bool)>,
     max_frame_size: u32,
@@ -916,8 +905,8 @@ where
 
         FrameType::Goaway => {
             edgerun_log::debug!("HTTP/2 GOAWAY received");
-            return Err(Http2Error::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
+            return Err(Http2Error::Io(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::ConnectionReset,
                 "GOAWAY received",
             )));
         }
@@ -951,7 +940,7 @@ where
 }
 
 async fn handle_response_headers(
-    state: &Arc<std::sync::Mutex<StreamStateInner>>,
+    state: &Arc<crate::runtime::sync::Mutex<StreamStateInner>>,
     stream_id: u32,
     headers: Vec<(Vec<u8>, Vec<u8>)>,
     end_stream: bool,
@@ -963,13 +952,13 @@ async fn handle_response_headers(
 
         for (name, value) in &headers {
             if name == b":status" {
-                if let Ok(s) = std::str::from_utf8(value) {
+                if let Ok(s) = core::str::from_utf8(value) {
                     if let Ok(code) = s.parse::<u16>() {
                         status_code = code;
                     }
                 }
             } else {
-                if let (Ok(n), Ok(v)) = (std::str::from_utf8(name), std::str::from_utf8(value)) {
+                if let (Ok(n), Ok(v)) = (core::str::from_utf8(name), core::str::from_utf8(value)) {
                     let _ = resp_headers.insert(n, v);
                 }
             }
@@ -1006,40 +995,56 @@ async fn handle_response_headers(
 // Async frame I/O helpers
 // ===========================================================================
 
-async fn read_frame_async<S>(stream: &mut S, max_frame_size: u32) -> std::io::Result<(Frame, usize)>
+async fn read_frame_async<S>(
+    stream: &mut S,
+    max_frame_size: u32,
+) -> crate::runtime::io::Result<(Frame, usize)>
 where
     S: AsyncRead + Unpin,
 {
     let mut header = [0u8; 9];
-    stream.read_exact(&mut header).await.map_err(bare_io)?;
+    stream
+        .read_exact(&mut header)
+        .await
+        .map_err(crate::runtime::bare_io)?;
 
     let length = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) | (header[2] as u32);
 
     if length > max_frame_size {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        return Err(crate::runtime::io::Error::new(
+            crate::runtime::io::ErrorKind::InvalidData,
             format!("frame size {} exceeds max {}", length, max_frame_size),
         ));
     }
 
     let mut payload = vec![0u8; length as usize];
     if length > 0 {
-        stream.read_exact(&mut payload).await.map_err(bare_io)?;
+        stream
+            .read_exact(&mut payload)
+            .await
+            .map_err(crate::runtime::bare_io)?;
     }
 
     let mut frame_bytes = Vec::with_capacity(9 + payload.len());
     frame_bytes.extend_from_slice(&header);
     frame_bytes.extend_from_slice(&payload);
 
-    Frame::from_bytes(&frame_bytes, max_frame_size)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{:?}", e)))
+    Frame::from_bytes(&frame_bytes, max_frame_size).map_err(|e| {
+        crate::runtime::io::Error::new(
+            crate::runtime::io::ErrorKind::InvalidData,
+            format!("{:?}", e),
+        )
+    })
 }
 
-async fn write_frame_async<S>(stream: &mut S, frame: &Frame) -> std::io::Result<()>
+async fn write_frame_async<S>(stream: &mut S, frame: &Frame) -> crate::runtime::io::Result<()>
 where
     S: AsyncWrite + Unpin,
 {
     let bytes = frame.to_bytes();
-    stream.write_all(&bytes).await.map_err(bare_io)?;
-    stream.flush().await.map_err(bare_io)
+    stream
+        .write_all(&bytes)
+        .await
+        .map_err(crate::runtime::bare_io)?;
+    stream.flush().await.map_err(crate::runtime::bare_io)
 }

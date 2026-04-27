@@ -1,8 +1,6 @@
 extern crate alloc;
 
 use alloc::format;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
 use crate::{dynamic::DynamicTable, HeaderField};
 

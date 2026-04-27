@@ -10,23 +10,12 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use alloc::vec;
+use core::future::Future;
+use core::pin::Pin;
+use core::task::{Context, Poll};
 
-use edgerun_bare_rt::mpsc::{self, Receiver, Sender};
-
-fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
-    match error {
-        edgerun_bare_rt::IoError::UnexpectedEof => {
-            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
-        }
-        edgerun_bare_rt::IoError::WriteZero => {
-            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
-        }
-        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
-    }
-}
+use crate::runtime::mpsc::{self, Receiver, Sender};
 
 // ---------------------------------------------------------------------------
 // Body
@@ -84,7 +73,7 @@ impl Body {
     }
 
     /// Read the entire body into a single `Vec<u8>`.
-    pub async fn collect(self) -> std::io::Result<Vec<u8>> {
+    pub async fn collect(self) -> crate::runtime::io::Result<Vec<u8>> {
         match self.inner {
             BodyInner::Full(data) => Ok(data),
             BodyInner::Stream(stream) => {
@@ -145,7 +134,7 @@ pub struct ReadChunkFut<'a> {
 }
 
 impl Future for ReadChunkFut<'_> {
-    type Output = std::io::Result<Option<Vec<u8>>>;
+    type Output = crate::runtime::io::Result<Option<Vec<u8>>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
@@ -166,16 +155,16 @@ impl Future for ReadChunkFut<'_> {
                 // try_recv first
                 match rx.try_recv() {
                     Ok(chunk) => Poll::Ready(Ok(Some(chunk))),
-                    Err(edgerun_bare_rt::mpsc::TryRecvError::Empty) => {
+                    Err(crate::runtime::mpsc::TryRecvError::Empty) => {
                         // Need to wait — poll the recv future
                         let raw: *const Receiver<Vec<u8>> = rx;
                         let fut = unsafe { (&*raw).recv() };
-                        std::pin::pin!(fut).poll(cx).map(|r| match r {
+                        core::pin::pin!(fut).poll(cx).map(|r| match r {
                             Some(chunk) => Ok(Some(chunk)),
                             None => Ok(None),
                         })
                     }
-                    Err(edgerun_bare_rt::mpsc::TryRecvError::Disconnected) => Poll::Ready(Ok(None)),
+                    Err(crate::runtime::mpsc::TryRecvError::Disconnected) => Poll::Ready(Ok(None)),
                 }
             }
         }
@@ -199,11 +188,11 @@ impl BodySender {
     /// Send a data chunk into the body stream.
     ///
     /// Returns `Err` if the body reader has been dropped.
-    pub fn send(&mut self, data: Vec<u8>) -> std::io::Result<()> {
+    pub fn send(&mut self, data: Vec<u8>) -> crate::runtime::io::Result<()> {
         match self.tx.try_send(data) {
             Ok(()) => Ok(()),
-            Err(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
+            Err(_) => Err(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::BrokenPipe,
                 "body reader was dropped",
             )),
         }
@@ -214,7 +203,7 @@ impl BodySender {
 // AsyncBodyReader — reads body from any AsyncRead source
 // ---------------------------------------------------------------------------
 
-use edgerun_bare_rt::AsyncRead;
+use crate::runtime::AsyncRead;
 
 /// Reads an HTTP body from an [`AsyncRead`] source.
 ///
@@ -320,7 +309,7 @@ pub struct ReadBodyFut<'a, 'b, R> {
 }
 
 impl<R: AsyncRead + Unpin> Future for ReadBodyFut<'_, '_, R> {
-    type Output = std::io::Result<usize>;
+    type Output = crate::runtime::io::Result<usize>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
@@ -345,7 +334,7 @@ impl<R: AsyncRead + Unpin> Future for ReadBodyFut<'_, '_, R> {
                 let pinned = Pin::new(&mut this.reader.reader);
                 match pinned.poll_read(cx, &mut this.buf[..max_read]) {
                     Poll::Ready(Ok(n)) => Poll::Ready(n),
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(crate::runtime::bare_io(e))),
                     Poll::Pending => Poll::Pending,
                 }
             };
@@ -370,7 +359,10 @@ impl<R: AsyncRead + Unpin> Future for ReadBodyFut<'_, '_, R> {
 }
 
 impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
-    fn poll_chunked_read(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<usize>> {
+    fn poll_chunked_read(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<crate::runtime::io::Result<usize>> {
         loop {
             match self.reader.state {
                 ChunkState::ChunkSize => {
@@ -383,13 +375,15 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             let pinned = Pin::new(&mut self.reader.reader);
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
-                                Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
+                                Poll::Ready(Err(e)) => {
+                                    return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                                }
                                 Poll::Pending => return Poll::Pending,
                             }
                         };
                         if n == 0 {
-                            return Poll::Ready(Err(std::io::Error::new(
-                                std::io::ErrorKind::UnexpectedEof,
+                            return Poll::Ready(Err(crate::runtime::io::Error::new(
+                                crate::runtime::io::ErrorKind::UnexpectedEof,
                                 "unexpected EOF reading chunk size",
                             )));
                         }
@@ -403,15 +397,18 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         line.pop();
                     }
 
-                    let size_hex = std::str::from_utf8(&line).map_err(|_| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
+                    let size_hex = core::str::from_utf8(&line).map_err(|_| {
+                        crate::runtime::io::Error::new(
+                            crate::runtime::io::ErrorKind::InvalidData,
                             "invalid chunk size encoding",
                         )
                     })?;
                     let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
                     let chunk_size = usize::from_str_radix(size_str, 16).map_err(|_| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid chunk size")
+                        crate::runtime::io::Error::new(
+                            crate::runtime::io::ErrorKind::InvalidData,
+                            "invalid chunk size",
+                        )
                     })?;
 
                     if chunk_size == 0 {
@@ -433,13 +430,15 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         let pinned = Pin::new(&mut self.reader.reader);
                         match pinned.poll_read(cx, &mut self.buf[..to_read]) {
                             Poll::Ready(Ok(n)) => n,
-                            Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
+                            Poll::Ready(Err(e)) => {
+                                return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                            }
                             Poll::Pending => return Poll::Pending,
                         }
                     };
                     if n == 0 {
-                        return Poll::Ready(Err(std::io::Error::new(
-                            std::io::ErrorKind::UnexpectedEof,
+                        return Poll::Ready(Err(crate::runtime::io::Error::new(
+                            crate::runtime::io::ErrorKind::UnexpectedEof,
                             "unexpected EOF reading chunk data",
                         )));
                     }
@@ -456,13 +455,15 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         let pinned = Pin::new(&mut self.reader.reader);
                         match pinned.poll_read(cx, &mut crlf_buf) {
                             Poll::Ready(Ok(n)) => n,
-                            Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
+                            Poll::Ready(Err(e)) => {
+                                return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                            }
                             Poll::Pending => return Poll::Pending,
                         }
                     };
                     if n == 0 {
-                        return Poll::Ready(Err(std::io::Error::new(
-                            std::io::ErrorKind::UnexpectedEof,
+                        return Poll::Ready(Err(crate::runtime::io::Error::new(
+                            crate::runtime::io::ErrorKind::UnexpectedEof,
                             "unexpected EOF after chunk data",
                         )));
                     }
@@ -479,7 +480,9 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             let pinned = Pin::new(&mut self.reader.reader);
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
-                                Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
+                                Poll::Ready(Err(e)) => {
+                                    return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                                }
                                 Poll::Pending => return Poll::Pending,
                             }
                         };
@@ -518,7 +521,7 @@ pub struct CollectBodyFut<R> {
 }
 
 impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
-    type Output = std::io::Result<Vec<u8>>;
+    type Output = crate::runtime::io::Result<Vec<u8>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
@@ -528,13 +531,13 @@ impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
                 let pinned = Pin::new(&mut this.reader.reader);
                 match pinned.poll_read(cx, &mut this.read_buf) {
                     Poll::Ready(Ok(n)) => n,
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(bare_io(e))),
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(crate::runtime::bare_io(e))),
                     Poll::Pending => return Poll::Pending,
                 }
             };
 
             if n == 0 {
-                let data = std::mem::take(&mut this.data);
+                let data = core::mem::take(&mut this.data);
                 return Poll::Ready(Ok(data));
             }
 
@@ -543,7 +546,7 @@ impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
             if let Some(rem) = &mut this.reader.remaining {
                 *rem -= n as u64;
                 if *rem == 0 {
-                    let data = std::mem::take(&mut this.data);
+                    let data = core::mem::take(&mut this.data);
                     return Poll::Ready(Ok(data));
                 }
             }

@@ -6,6 +6,8 @@
 //! `to_value → JsonValue → to_json_string`, allocating a full AST then
 //! walking it a second time.
 
+use crate::prelude::*;
+
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::{String, ToString};
 #[cfg(any(not(feature = "std"), target_os = "none"))]

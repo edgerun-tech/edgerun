@@ -201,44 +201,7 @@ impl Request {
 }
 
 fn parse_chunked_body(input: &[u8]) -> Result<Vec<u8>> {
-    let mut body = Vec::new();
-    let mut pos = 0;
-
-    while pos < input.len() {
-        let line_end = input[pos..]
-            .windows(2)
-            .position(|w| w == b"\r\n")
-            .map(|offset| pos + offset)
-            .ok_or_else(|| crate::Error::InvalidRequest("invalid chunk size line".to_string()))?;
-        let size_line = core::str::from_utf8(&input[pos..line_end])
-            .map_err(|_| crate::Error::InvalidRequest("invalid chunk size".to_string()))?;
-        let size_text = size_line.split(';').next().unwrap_or("").trim();
-        let size = usize::from_str_radix(size_text, 16)
-            .map_err(|_| crate::Error::InvalidRequest("invalid chunk size".to_string()))?;
-
-        pos = line_end + 2;
-        if size == 0 {
-            return Ok(body);
-        }
-        if pos + size > input.len() {
-            return Err(crate::Error::InvalidRequest(
-                "chunk body exceeds input".to_string(),
-            ));
-        }
-
-        body.extend_from_slice(&input[pos..pos + size]);
-        pos += size;
-        if input.get(pos..pos + 2) != Some(b"\r\n") {
-            return Err(crate::Error::InvalidRequest(
-                "missing chunk terminator".to_string(),
-            ));
-        }
-        pos += 2;
-    }
-
-    Err(crate::Error::InvalidRequest(
-        "missing final chunk".to_string(),
-    ))
+    crate::chunked::parse_body(input).map_err(|err| crate::Error::InvalidRequest(err.to_string()))
 }
 
 impl fmt::Display for Request {

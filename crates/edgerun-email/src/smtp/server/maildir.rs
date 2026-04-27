@@ -14,6 +14,7 @@
 //! This crate stores messages as individual files — no database, no index files.
 //! The filesystem IS the index.
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};

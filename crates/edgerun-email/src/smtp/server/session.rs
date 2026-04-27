@@ -1,5 +1,6 @@
 //! Per-connection session handling — command loop, state machine, SASL AUTH, STARTTLS upgrade.
 
+use crate::prelude::*;
 use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;

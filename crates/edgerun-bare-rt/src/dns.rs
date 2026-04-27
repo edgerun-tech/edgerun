@@ -66,7 +66,7 @@ impl DnsClient {
     }
 
     pub fn resolve(&self, _name: &[u8], _qtype: DnsType) -> DnsResolveFuture {
-        DnsResolveFuture { done: false }
+        DnsResolveFuture
     }
 }
 
@@ -76,9 +76,7 @@ impl Default for DnsClient {
     }
 }
 
-pub struct DnsResolveFuture {
-    done: bool,
-}
+pub struct DnsResolveFuture;
 
 impl Future for DnsResolveFuture {
     type Output = Result<DnsResponse, ()>;

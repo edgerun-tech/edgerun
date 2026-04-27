@@ -22,13 +22,13 @@ pub use settings::Http3Settings;
 pub use stream::Http3Stream;
 
 /// Result type
-pub type Result<T> = std::result::Result<T, Http3Error>;
+pub type Result<T> = core::result::Result<T, Http3Error>;
 
 /// HTTP/3 error
 #[derive(Debug, Error)]
 pub enum Http3Error {
     #[error("IO: {0}")]
-    Io(std::io::Error),
+    Io(crate::runtime::io::Error),
     #[error("QUIC: {0}")]
     QuicError(String),
     #[error("QPACK: {0}")]
@@ -39,8 +39,8 @@ pub enum Http3Error {
     ProtocolViolation(String),
 }
 
-impl From<std::io::Error> for Http3Error {
-    fn from(e: std::io::Error) -> Self {
+impl From<crate::runtime::io::Error> for Http3Error {
+    fn from(e: crate::runtime::io::Error) -> Self {
         Http3Error::Io(e)
     }
 }

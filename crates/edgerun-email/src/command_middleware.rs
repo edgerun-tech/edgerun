@@ -52,6 +52,7 @@
 //!     .build();
 //! ```
 
+use crate::prelude::*;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;

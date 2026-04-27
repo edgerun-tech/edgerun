@@ -20,28 +20,17 @@ use crate::http2::hpack::{Decoder, Encoder};
 use crate::http2::server::{FrameAction, Http2Server};
 use crate::http2::ErrorCode;
 use crate::method::Method;
+use crate::runtime::net::SocketAddr;
+use crate::runtime::sync::Arc;
+use crate::runtime::time::Duration;
+use crate::runtime::CancellationToken;
+use crate::runtime::{
+    bind_tcp_listener, sleep, spawn, timeout, AsyncRead, AsyncReadExt, AsyncTcpListener,
+    AsyncWrite, AsyncWriteExt, BufReader,
+};
 use crate::uri::Uri;
 use crate::{Request, Response, StatusCode};
-use edgerun_bare_rt::BufReader;
-use edgerun_bare_rt::{
-    sleep, spawn, timeout, AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncWrite, AsyncWriteExt,
-    CancellationToken,
-};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
-
-fn bare_io(error: edgerun_bare_rt::IoError) -> std::io::Error {
-    match error {
-        edgerun_bare_rt::IoError::UnexpectedEof => {
-            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
-        }
-        edgerun_bare_rt::IoError::WriteZero => {
-            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
-        }
-        edgerun_bare_rt::IoError::Other(_) => std::io::Error::other(error),
-    }
-}
+use alloc::vec;
 
 /// TLS certificate for the server.
 #[cfg(feature = "tls")]
@@ -105,9 +94,9 @@ impl HttpServer {
 
     pub async fn bind(
         self,
-        addr: impl std::net::ToSocketAddrs,
-    ) -> std::io::Result<BoundHttpServer> {
-        let listener = AsyncTcpListener::bind(&addr)?;
+        addr: impl crate::runtime::net::ToSocketAddrs,
+    ) -> crate::runtime::io::Result<BoundHttpServer> {
+        let listener = bind_tcp_listener(addr)?;
         let local_addr = listener.local_addr()?;
 
         #[cfg(feature = "http3")]
@@ -115,7 +104,7 @@ impl HttpServer {
             let cert = self.tls_cert.as_ref().unwrap().as_ref().clone();
             let h3 = crate::http3::Http3Server::bind(local_addr, cert)
                 .await
-                .map_err(std::io::Error::other)?;
+                .map_err(crate::runtime::io::Error::other)?;
             Some(Arc::new(h3))
         } else {
             None
@@ -155,7 +144,7 @@ impl BoundHttpServer {
     }
 
     /// Serve HTTP requests indefinitely on both TCP (HTTP/1.1 + HTTP/2) and UDP (HTTP/3).
-    pub async fn serve(&self) -> std::io::Result<()> {
+    pub async fn serve(&self) -> crate::runtime::io::Result<()> {
         let shutdown = CancellationToken::new();
         self.serve_with_shutdown(shutdown).await
     }
@@ -164,7 +153,10 @@ impl BoundHttpServer {
     ///
     /// Runs both the TCP accept loop (HTTP/1.1 + HTTP/2) and the HTTP/3
     /// server (if enabled) concurrently. Cancels when `shutdown` fires.
-    pub async fn serve_with_shutdown(&self, shutdown: CancellationToken) -> std::io::Result<()> {
+    pub async fn serve_with_shutdown(
+        &self,
+        shutdown: CancellationToken,
+    ) -> crate::runtime::io::Result<()> {
         #[cfg(feature = "tls")]
         let tls = self.tls_cert.is_some();
         #[cfg(not(feature = "tls"))]
@@ -198,7 +190,7 @@ impl BoundHttpServer {
                 h3_server
                     .serve(h3_handler, h3_shutdown)
                     .await
-                    .map_err(std::io::Error::other)
+                    .map_err(crate::runtime::io::Error::other)
             }))
         } else {
             None
@@ -249,7 +241,7 @@ impl BoundHttpServer {
         Ok(())
     }
 
-    pub async fn accept_one(&self) -> std::io::Result<()> {
+    pub async fn accept_one(&self) -> crate::runtime::io::Result<()> {
         let (stream, _) = self.listener.accept().await?;
         let handler = Arc::clone(&self.handler);
         handle_connection(
@@ -273,7 +265,7 @@ async fn handle_connection<S>(
     max_request_size: usize,
     #[cfg(feature = "tls")] tls_cert: Option<Arc<TlsCertificate>>,
     http2_idle_timeout: Duration,
-) -> std::io::Result<()>
+) -> crate::runtime::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -282,7 +274,7 @@ where
         use edgerun_tls::async_tls::AsyncTlsServerStream;
         let tls_stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
             .await
-            .map_err(|e| std::io::Error::other(format!("TLS handshake failed: {e}")))?;
+            .map_err(|e| crate::runtime::io::Error::other(format!("TLS handshake failed: {e}")))?;
 
         // When TLS is established, use the negotiated ALPN protocol to
         // determine the HTTP version.
@@ -314,8 +306,8 @@ where
                         sleep(Duration::from_millis(50)).await;
                         // Close the write side of the connection
                         let _ = reader.get_mut().shutdown().await;
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
+                        return Err(crate::runtime::io::Error::new(
+                            crate::runtime::io::ErrorKind::InvalidInput,
                             "Invalid HTTP/2 connection preface",
                         ));
                     }
@@ -330,7 +322,7 @@ where
                     let _ = reader.get_mut().flush().await;
                     sleep(Duration::from_millis(50)).await;
                     let _ = reader.get_mut().shutdown().await;
-                    return Err(bare_io(e));
+                    return Err(crate::runtime::bare_io(e));
                 }
             }
             // Pass skip_preface=true since we already consumed and validated it above.
@@ -372,7 +364,7 @@ async fn handle_connection_inner<S>(
     keep_alive: Option<Duration>,
     max_request_size: usize,
     http2_idle_timeout: Duration,
-) -> std::io::Result<()>
+) -> crate::runtime::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -404,7 +396,7 @@ async fn handle_http1_line<S>(
     handler: Arc<dyn Handler>,
     keep_alive: Option<Duration>,
     max_request_size: usize,
-) -> std::io::Result<()>
+) -> crate::runtime::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -443,7 +435,7 @@ where
             let hline_opt = reader
                 .read_line_max(max_request_size)
                 .await
-                .map_err(bare_io)?;
+                .map_err(crate::runtime::bare_io)?;
             let hline = match hline_opt {
                 Some(s) => s,
                 None => break,
@@ -508,7 +500,7 @@ where
                 .get_mut()
                 .write_all(response.body())
                 .await
-                .map_err(bare_io)?;
+                .map_err(crate::runtime::bare_io)?;
         }
 
         current_line = match timeout(ka_timeout, reader.read_line_max(max_request_size)).await {
@@ -531,7 +523,7 @@ async fn handle_http2<S>(
     max_header_size: usize,
     skip_preface: bool,
     first_line: Option<String>,
-) -> std::io::Result<()>
+) -> crate::runtime::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -560,8 +552,8 @@ where
             let mut rdwr = reader.into_inner();
             let _ = rdwr.write_all(&goaway.to_bytes()).await;
             let _ = rdwr.flush().await;
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
+            return Err(crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::InvalidInput,
                 "Invalid HTTP/2 connection preface",
             ));
         }
@@ -582,7 +574,7 @@ where
                 .get_mut()
                 .read_exact(&mut discard[..to_read])
                 .await
-                .map_err(bare_io)?;
+                .map_err(crate::runtime::bare_io)?;
         }
     }
 
@@ -591,8 +583,8 @@ where
     let mut decoder = Decoder::new();
     let mut server = Http2Server::new();
     let mut expecting_continuation: Option<(u32, Vec<u8>, bool)> = None;
-    let mut pending_body_data: std::collections::HashMap<u32, Vec<u8>> =
-        std::collections::HashMap::new();
+    let mut pending_body_data: alloc::collections::BTreeMap<u32, Vec<u8>> =
+        alloc::collections::BTreeMap::new();
     let mut frame_count: u64 = 0;
 
     // RFC 9113 §3.4: Server MUST send initial SETTINGS frame immediately
@@ -1055,22 +1047,22 @@ async fn process_request_with_body(
     let method = headers
         .iter()
         .find(|(k, _)| k == b":method")
-        .and_then(|(_, v)| std::str::from_utf8(v).ok()?.parse().ok())
+        .and_then(|(_, v)| core::str::from_utf8(v).ok()?.parse().ok())
         .unwrap_or(Method::GET);
     let scheme = headers
         .iter()
         .find(|(k, _)| k == b":scheme")
-        .and_then(|(_, v)| std::str::from_utf8(v).ok())
+        .and_then(|(_, v)| core::str::from_utf8(v).ok())
         .unwrap_or("http");
     let path = headers
         .iter()
         .find(|(k, _)| k == b":path")
-        .and_then(|(_, v)| std::str::from_utf8(v).ok())
+        .and_then(|(_, v)| core::str::from_utf8(v).ok())
         .unwrap_or("/");
     let authority = headers
         .iter()
         .find(|(k, _)| k == b":authority")
-        .and_then(|(_, v)| std::str::from_utf8(v).ok())
+        .and_then(|(_, v)| core::str::from_utf8(v).ok())
         .unwrap_or("localhost");
     let uri = Uri::parse(&format!("{}://{}{}", scheme, authority, path))
         .unwrap_or_else(|_| Uri::parse("http://localhost/").unwrap());
@@ -1078,7 +1070,7 @@ async fn process_request_with_body(
     let mut req_headers = HeaderMap::new();
     for (k, v) in headers {
         if !k.starts_with(b":") {
-            if let (Ok(kk), Ok(vv)) = (std::str::from_utf8(k), std::str::from_utf8(v)) {
+            if let (Ok(kk), Ok(vv)) = (core::str::from_utf8(k), core::str::from_utf8(v)) {
                 let _ = req_headers.insert(kk, vv);
             }
         }
@@ -1087,7 +1079,7 @@ async fn process_request_with_body(
     let content_length = headers
         .iter()
         .find(|(k, _)| k == b"content-length")
-        .and_then(|(_, v)| std::str::from_utf8(v).ok()?.parse::<usize>().ok());
+        .and_then(|(_, v)| core::str::from_utf8(v).ok()?.parse::<usize>().ok());
     if let Some(s) = server.stream_manager.get_stream_mut(stream_id) {
         s.content_length = content_length.map(|x| x as u64);
     }
@@ -1135,12 +1127,15 @@ async fn process_request_with_body(
 async fn read_frame<S>(
     stream: &mut S,
     max_frame_size: u32,
-) -> std::io::Result<Result<Frame, (u32, u32)>>
+) -> crate::runtime::io::Result<Result<Frame, (u32, u32)>>
 where
     S: AsyncRead + Unpin,
 {
     let mut hdr = [0u8; 9];
-    stream.read_exact(&mut hdr).await.map_err(bare_io)?;
+    stream
+        .read_exact(&mut hdr)
+        .await
+        .map_err(crate::runtime::bare_io)?;
     let length = ((hdr[0] as u32) << 16) | ((hdr[1] as u32) << 8) | (hdr[2] as u32);
     let raw_type = hdr[3];
     let flags_byte = hdr[4];
@@ -1156,7 +1151,7 @@ where
             stream
                 .read_exact(&mut discard[..to_read])
                 .await
-                .map_err(bare_io)?;
+                .map_err(crate::runtime::bare_io)?;
             remaining -= to_read;
         }
         return Ok(Err((stream_id, ErrorCode::FRAME_SIZE_ERROR.to_u32())));
@@ -1164,7 +1159,10 @@ where
 
     let mut payload = vec![0u8; length as usize];
     if length > 0 {
-        stream.read_exact(&mut payload).await.map_err(bare_io)?;
+        stream
+            .read_exact(&mut payload)
+            .await
+            .map_err(crate::runtime::bare_io)?;
     }
     Ok(Ok(Frame {
         frame_type: FrameType::from_u8(raw_type).unwrap_or(FrameType::Data),
@@ -1174,12 +1172,15 @@ where
     }))
 }
 
-async fn write_frame<S>(stream: &mut S, frame: &Frame) -> std::io::Result<()>
+async fn write_frame<S>(stream: &mut S, frame: &Frame) -> crate::runtime::io::Result<()>
 where
     S: AsyncWrite + Unpin,
 {
-    stream.write_all(&frame.to_bytes()).await.map_err(bare_io)?;
-    stream.flush().await.map_err(bare_io)
+    stream
+        .write_all(&frame.to_bytes())
+        .await
+        .map_err(crate::runtime::bare_io)?;
+    stream.flush().await.map_err(crate::runtime::bare_io)
 }
 
 async fn write_goaway<S>(stream: &mut S, last_stream_id: u32, error_code: u32, debug: &[u8])
@@ -1209,7 +1210,7 @@ async fn write_response_head<S>(
     reader: &mut BufReader<S>,
     response: &Response,
     is_head: bool,
-) -> std::io::Result<()>
+) -> crate::runtime::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -1223,31 +1224,43 @@ where
             .as_bytes(),
         )
         .await
-        .map_err(bare_io)?;
+        .map_err(crate::runtime::bare_io)?;
     for (name, value) in response.headers().iter() {
         reader
             .write_all(name.as_str().as_bytes())
             .await
-            .map_err(bare_io)?;
-        reader.write_all(b": ").await.map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
+        reader
+            .write_all(b": ")
+            .await
+            .map_err(crate::runtime::bare_io)?;
         reader
             .write_all(value.as_str().as_bytes())
             .await
-            .map_err(bare_io)?;
-        reader.write_all(b"\r\n").await.map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
+        reader
+            .write_all(b"\r\n")
+            .await
+            .map_err(crate::runtime::bare_io)?;
     }
     if !response.headers().contains_key("Content-Length") {
         let cl = if is_head { 0 } else { response.body().len() };
         reader
             .write_all(format!("Content-Length: {}\r\n", cl).as_bytes())
             .await
-            .map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
     }
-    reader.write_all(b"\r\n").await.map_err(bare_io)?;
+    reader
+        .write_all(b"\r\n")
+        .await
+        .map_err(crate::runtime::bare_io)?;
     Ok(())
 }
 
-async fn write_response<S>(reader: &mut BufReader<S>, response: Response) -> std::io::Result<()>
+async fn write_response<S>(
+    reader: &mut BufReader<S>,
+    response: Response,
+) -> crate::runtime::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -1261,32 +1274,44 @@ where
             .as_bytes(),
         )
         .await
-        .map_err(bare_io)?;
+        .map_err(crate::runtime::bare_io)?;
     for (name, value) in response.headers().iter() {
         reader
             .write_all(name.as_str().as_bytes())
             .await
-            .map_err(bare_io)?;
-        reader.write_all(b": ").await.map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
+        reader
+            .write_all(b": ")
+            .await
+            .map_err(crate::runtime::bare_io)?;
         reader
             .write_all(value.as_str().as_bytes())
             .await
-            .map_err(bare_io)?;
-        reader.write_all(b"\r\n").await.map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
+        reader
+            .write_all(b"\r\n")
+            .await
+            .map_err(crate::runtime::bare_io)?;
     }
     if !response.headers().contains_key("Content-Length") {
         reader
             .write_all(format!("Content-Length: {}\r\n", response.body().len()).as_bytes())
             .await
-            .map_err(bare_io)?;
+            .map_err(crate::runtime::bare_io)?;
     }
-    reader.write_all(b"\r\n").await.map_err(bare_io)?;
+    reader
+        .write_all(b"\r\n")
+        .await
+        .map_err(crate::runtime::bare_io)?;
     if !response.body().is_empty()
         && response.status().as_u16() != 204
         && response.status().as_u16() != 304
         && !response.status().is_informational()
     {
-        reader.write_all(response.body()).await.map_err(bare_io)?;
+        reader
+            .write_all(response.body())
+            .await
+            .map_err(crate::runtime::bare_io)?;
     }
     Ok(())
 }

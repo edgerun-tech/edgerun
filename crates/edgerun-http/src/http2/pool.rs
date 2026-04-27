@@ -7,13 +7,13 @@
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
 
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use crate::runtime::net::{IpAddr, SocketAddr};
+use crate::runtime::time::{Duration, Instant};
+use crate::runtime::{timeout as rt_timeout, AsyncTcpStream, ConnectFuture};
+use alloc::collections::BTreeMap as HashMap;
+use alloc::sync::Arc;
 
-use edgerun_bare_rt::sync::Mutex;
-use edgerun_bare_rt::{timeout as rt_timeout, AsyncTcpStream, ConnectFuture};
+use crate::runtime::Mutex;
 
 use edgerun_tls::async_tls::AsyncTlsStream;
 use edgerun_tls::SessionCache;
@@ -324,8 +324,8 @@ impl Http2Pool {
         let host_str = host.to_string();
         if let Ok(Ok(addrs)) = rt_timeout(
             dns_timeout,
-            edgerun_bare_rt::spawn_blocking(move || {
-                use std::net::ToSocketAddrs;
+            crate::runtime::spawn_blocking(move || {
+                use crate::runtime::net::ToSocketAddrs;
                 format!("{}:443", host_str).to_socket_addrs()
             }),
         )

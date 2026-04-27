@@ -5,8 +5,8 @@
 //! timeout, the session auto-locks and requires re-verification.
 
 use crate::prelude::v1::*;
+use alloc::collections::BTreeMap as HashMap;
 use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
-use std::collections::HashMap;
 
 // ===========================================================================
 // Session state

@@ -255,7 +255,7 @@ impl Frame {
 
     /// Validate frame semantics per RFC 9113 (RFC 7540 Section 6).
     /// Returns the connection error code if a protocol violation is found.
-    pub fn validate_semantics(&self) -> std::result::Result<(), u32> {
+    pub fn validate_semantics(&self) -> core::result::Result<(), u32> {
         use crate::http2::ErrorCode;
 
         match self.frame_type {

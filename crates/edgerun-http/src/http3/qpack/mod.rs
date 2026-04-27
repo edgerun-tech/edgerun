@@ -7,6 +7,7 @@
 
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
+use core::fmt;
 
 pub mod decoder;
 pub mod encoder;
@@ -24,8 +25,8 @@ pub enum QpackError {
     Decode(String),
 }
 
-impl std::fmt::Display for QpackError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for QpackError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             QpackError::Encode(msg) => write!(f, "QPACK encode error: {}", msg),
             QpackError::Decode(msg) => write!(f, "QPACK decode error: {}", msg),

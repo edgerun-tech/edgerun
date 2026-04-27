@@ -3,7 +3,7 @@
 //! This crate provides both a CLI binary and a library of AST-level
 //! edit operations for Rust source files.
 
-#![cfg_attr(any(not(feature = "std"), target_os = "none"), no_std)]
+#![no_std]
 
 #[cfg(all(feature = "std", not(target_os = "none")))]
 extern crate std;

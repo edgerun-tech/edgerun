@@ -1,6 +1,7 @@
 //! HTTP/2 flow control (RFC 7540 Section 5.2)
 
 use super::{Http2Error, Result};
+use alloc::collections::BTreeMap;
 
 /// Flow controller for connection or stream level
 pub struct FlowController {
@@ -113,7 +114,7 @@ pub struct FlowControlManager {
     /// Connection-level flow controller
     connection_flow: FlowController,
     /// Stream-level flow controllers
-    stream_flows: std::collections::HashMap<u32, FlowController>,
+    stream_flows: BTreeMap<u32, FlowController>,
 }
 
 impl FlowControlManager {
@@ -121,7 +122,7 @@ impl FlowControlManager {
     pub fn new(initial_window_size: u32) -> Self {
         FlowControlManager {
             connection_flow: FlowController::new(initial_window_size),
-            stream_flows: std::collections::HashMap::new(),
+            stream_flows: BTreeMap::new(),
         }
     }
 

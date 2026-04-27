@@ -40,9 +40,9 @@ pub struct CommandValidationContext<'a> {
     pub local_node_id: &'a [u8; 64],
     /// Replay cache: maps command_hash -> (command_id, decision_event_seq) for already-processed commands.
     /// command_id is stored as an idempotency hint only; command_hash is the globally unique key.
-    pub replay_cache: &'a std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    pub replay_cache: &'a crate::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
     /// Known revocation IDs (delegations that have been revoked).
-    pub revoked_delegation_ids: &'a std::collections::HashSet<Vec<u8>>,
+    pub revoked_delegation_ids: &'a crate::collections::HashSet<Vec<u8>>,
     /// Current time as unix timestamp millis (for timing checks).
     pub now_ms: i64,
     /// Trusted root identity IDs. If empty, direct authority is accepted.

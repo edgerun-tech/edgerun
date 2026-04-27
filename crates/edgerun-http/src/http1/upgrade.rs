@@ -111,8 +111,8 @@ pub fn build_upgrade_response(
 /// Requires the client's `Sec-WebSocket-Key` to compute the accept key.
 /// See RFC 6455 §4.2.2.
 pub fn build_websocket_accept_headers(client_key: &str) -> HeaderMap {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use crate::runtime::collections::hash_map::DefaultHasher;
+    use core::hash::{Hash, Hasher};
 
     let mut headers = HeaderMap::new();
     let _ = headers.insert("Upgrade", "websocket");

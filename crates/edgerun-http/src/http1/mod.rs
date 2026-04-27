@@ -9,6 +9,7 @@ pub mod compression;
 pub mod connection;
 pub mod handler;
 pub mod multipart;
+#[cfg(feature = "client")]
 pub mod pool;
 pub mod range;
 pub mod upgrade;
@@ -16,12 +17,13 @@ pub mod version;
 
 pub use crate::{Request, Response};
 
+pub use crate::runtime::BufReader;
 pub use body::{AsyncBodyReader, Body, BodyReader, BodySender};
 pub use compression::{accept_encoding_value, decompress_body, ContentEncoding};
 pub use connection::{determine_connection, ConnectionState};
-pub use edgerun_bare_rt::BufReader;
 pub use handler::{into_handler, into_handler_async, Handler};
 pub use multipart::{extract_boundary, is_multipart, parse_multipart, MultipartField};
+#[cfg(feature = "client")]
 pub use pool::ConnectionPool;
 pub use range::{
     build_partial_response, get_range, has_range_header, is_range_satisfiable, parse_range_header,

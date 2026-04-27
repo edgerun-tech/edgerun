@@ -202,38 +202,8 @@ impl Response {
 }
 
 fn parse_chunked_body(raw: &str, trailers: &mut HeaderMap) -> crate::Result<Vec<u8>> {
-    let mut pos = 0;
-    let mut body = Vec::new();
-    while pos < raw.len() {
-        let line_end = raw[pos..]
-            .find("\r\n")
-            .ok_or_else(|| crate::Error::InvalidResponse("Invalid chunk".to_string()))?
-            + pos;
-        let size_text = raw[pos..line_end].split(';').next().unwrap_or("").trim();
-        let size = usize::from_str_radix(size_text, 16)
-            .map_err(|_| crate::Error::InvalidResponse("Invalid chunk size".to_string()))?;
-        pos = line_end + 2;
-        if size == 0 {
-            if let Some(end) = raw[pos..].find("\r\n\r\n") {
-                for line in raw[pos..pos + end].lines() {
-                    if let Some(colon) = line.find(':') {
-                        let _ = trailers.insert(line[..colon].trim(), line[colon + 1..].trim());
-                    }
-                }
-            }
-            break;
-        }
-        if pos + size > raw.len() {
-            return Err(crate::Error::InvalidResponse("Truncated chunk".to_string()));
-        }
-        body.extend_from_slice(&raw.as_bytes()[pos..pos + size]);
-        pos += size;
-        if raw.get(pos..pos + 2) != Some("\r\n") {
-            return Err(crate::Error::InvalidResponse(
-                "Invalid chunk terminator".to_string(),
-            ));
-        }
-        pos += 2;
-    }
+    let (body, parsed_trailers) = crate::chunked::parse_body_with_trailers(raw.as_bytes())
+        .map_err(|err| crate::Error::InvalidResponse(err.to_string()))?;
+    *trailers = parsed_trailers;
     Ok(body)
 }

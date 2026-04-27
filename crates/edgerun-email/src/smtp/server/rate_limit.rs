@@ -4,6 +4,7 @@
 //! within a configurable time window. When the limit is exceeded,
 //! new connections are temporarily rejected.
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};

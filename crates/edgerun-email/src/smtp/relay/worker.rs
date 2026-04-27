@@ -1,6 +1,7 @@
 //! Delivery worker — background process that drains the mail queue and
 //! attempts delivery with exponential backoff.
 
+use crate::prelude::*;
 use std::sync::Arc;
 use std::time::Duration;
 

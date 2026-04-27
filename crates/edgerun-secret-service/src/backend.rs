@@ -4,7 +4,7 @@
 //! cryptographically linked, prev_hash-chained event log.
 
 use crate::prelude::v1::*;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap as HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 

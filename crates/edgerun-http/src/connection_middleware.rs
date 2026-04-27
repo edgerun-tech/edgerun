@@ -17,15 +17,15 @@
 //! - **Reject** the connection by returning `Err` (server closes it immediately)
 //! - **Inspect/modify** the stream before passing it downstream
 
+use crate::runtime::io;
+use crate::runtime::net::SocketAddr;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
-use std::io;
-use std::net::SocketAddr;
 
-use edgerun_bare_rt::AsyncTcpStream;
+use crate::runtime::AsyncTcpStream;
 
 // ===========================================================================
 // ConnectionHandler trait

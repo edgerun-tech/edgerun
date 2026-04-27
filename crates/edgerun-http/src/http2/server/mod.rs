@@ -57,9 +57,12 @@ mod headers;
 mod response;
 
 pub use continuation::ContinuationState;
-pub use response::{respond_with_200, rst_stream, send_goaway, send_ping_ack, send_settings_ack};
+pub use response::{
+    respond_with_200, rst_stream, send_goaway, send_ping_ack, send_settings_ack, write_frame,
+};
 
-use std::collections::HashMap;
+use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+use alloc::vec;
 
 use super::flow_control::FlowController;
 use super::settings::Settings;
@@ -111,7 +114,7 @@ pub struct Http2Server {
     /// Track closed stream IDs to handle post-closure frames gracefully.
     /// Stores stream IDs that were recently closed, so we can accept
     /// WINDOW_UPDATE/PRIORITY/RST_STREAM on them without connection errors.
-    closed_stream_ids: std::collections::HashSet<u32>,
+    closed_stream_ids: HashSet<u32>,
 }
 
 impl Http2Server {
@@ -127,7 +130,7 @@ impl Http2Server {
             last_processed_stream_id: 0,
             goaway_sent: false,
             pending_headers: HashMap::new(),
-            closed_stream_ids: std::collections::HashSet::new(),
+            closed_stream_ids: HashSet::new(),
         }
     }
 
@@ -163,7 +166,7 @@ impl Http2Server {
             }
         }
 
-        FrameAction::WriteFrames(vec![SettingsFrame::ack().to_frame()])
+        response::write_frame(SettingsFrame::ack().to_frame())
     }
 
     /// Apply a single client setting (used for h2c upgrade)

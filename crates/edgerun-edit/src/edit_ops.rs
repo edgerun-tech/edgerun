@@ -1,7 +1,12 @@
 //! AST-level edit operations. All operations parse → transform → prettyplease → write.
 
 use std::collections::HashSet;
+use std::boxed::Box;
+use std::format;
 use std::path::{Path, PathBuf};
+use std::string::{String, ToString};
+use std::vec;
+use std::vec::Vec;
 
 use prettyplease::unparse as pretty_unparse;
 use quote::ToTokens;

@@ -2,8 +2,8 @@
 
 #[cfg(target_os = "none")]
 use crate::prelude::v1::*;
-use edgerun_error::Error;
 use core::fmt;
+use edgerun_error::Error;
 
 /// HTTP error type — covers HTTP/1.1, HTTP/2, and HTTP/3 errors
 #[derive(Debug, Error)]
@@ -16,7 +16,7 @@ pub enum Error {
     InvalidHeader(String),
     /// Network error
     #[error("Network error: {0}")]
-    Network(std::io::Error),
+    Network(crate::io::Error),
     /// Invalid HTTP method
     #[error("Invalid method: {0}")]
     InvalidMethod(String),
@@ -37,8 +37,8 @@ pub enum Error {
     InvalidResponse(String),
 }
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
+impl From<crate::io::Error> for Error {
+    fn from(err: crate::io::Error) -> Self {
         Error::Network(err)
     }
 }
@@ -67,7 +67,7 @@ pub enum HttpError {
     Http3(Http3ErrorInner),
     /// I/O error
     #[error("I/O error: {0}")]
-    Io(std::io::Error),
+    Io(crate::io::Error),
 }
 
 /// HTTP/2 error details
@@ -100,8 +100,8 @@ impl fmt::Display for Http3ErrorInner {
     }
 }
 
-impl From<std::io::Error> for HttpError {
-    fn from(err: std::io::Error) -> Self {
+impl From<crate::io::Error> for HttpError {
+    fn from(err: crate::io::Error) -> Self {
         HttpError::Io(err)
     }
 }

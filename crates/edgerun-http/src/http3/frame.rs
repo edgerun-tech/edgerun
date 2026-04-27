@@ -210,9 +210,13 @@ impl Http3Frame {
         edgerun_encoding::quic_varint::encode_varint(value, output)
     }
 
-    pub(crate) fn decode_varint(data: &[u8]) -> Result<(u64, usize), std::io::Error> {
-        edgerun_encoding::quic_varint::decode_varint(data)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, format!("{e}")))
+    pub(crate) fn decode_varint(data: &[u8]) -> Result<(u64, usize), crate::runtime::io::Error> {
+        edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| {
+            crate::runtime::io::Error::new(
+                crate::runtime::io::ErrorKind::UnexpectedEof,
+                format!("{e}"),
+            )
+        })
     }
 }
 

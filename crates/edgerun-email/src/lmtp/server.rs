@@ -8,6 +8,7 @@
 //! LMTP does NOT support: AUTH, STARTTLS, VRFY, EXPN, RSET, TURN, ETRN, BDAT.
 //! It is a local delivery protocol — no queueing, no relaying.
 
+use crate::prelude::*;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;

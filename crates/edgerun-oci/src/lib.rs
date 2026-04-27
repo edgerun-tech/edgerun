@@ -24,13 +24,19 @@ pub mod prelude {
 }
 
 #[cfg(feature = "json")]
+pub mod image_apply;
+#[cfg(feature = "json")]
 pub mod image_plan;
 pub mod json;
 #[cfg(feature = "json")]
 pub mod layer_pipeline;
+#[cfg(feature = "json")]
+pub mod oci_path;
 pub mod runtime_config;
 #[cfg(feature = "json")]
 pub mod tar_layer;
+#[cfg(all(test, feature = "json"))]
+pub(crate) mod test_support;
 pub mod validate;
 
 mod registry {
@@ -50,6 +56,8 @@ mod registry {
     pub(crate) mod urlencoding;
 }
 
+#[cfg(feature = "json")]
+pub mod bare_rootfs;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod bundle;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -92,6 +100,8 @@ pub mod userns;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod cli;
 
+#[cfg(feature = "json")]
+pub use bare_rootfs::{BareRootfs, BareRootfsEntry, BareRootfsEntryKind};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use bundle::{create_bundle, write_bundle};
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -106,6 +116,11 @@ pub use handle::RunningContainer;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use hooks::execute_poststop_hooks;
 #[cfg(feature = "json")]
+pub use image_apply::{
+    apply_bare_image_layer_blobs, apply_bare_image_layer_blobs_sha256, BareImageApplyError,
+    BareImageApplyReport,
+};
+#[cfg(feature = "json")]
 pub use image_plan::{
     parse_single_manifest_bytes, platform_matches, select_manifest_for_current_target,
     select_manifest_for_target, selected_manifest_digest_for_current_target,
@@ -117,8 +132,9 @@ pub use init::fork_and_init;
 pub use json::*;
 #[cfg(feature = "json")]
 pub use layer_pipeline::{
-    apply_layer_chunks, validate_layer_descriptor, LayerApplyReport, LayerDigest,
-    LayerPipelineError, LayerSink,
+    apply_layer_chunks, bytes_to_hex, format_digest, sha256_layer_digest,
+    validate_layer_descriptor, LayerApplyReport, LayerDigest, LayerPipelineError, LayerSink,
+    Sha256LayerDigest,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use lifecycle::{
@@ -127,6 +143,8 @@ pub use lifecycle::{
     save_created_state, setup_container_cgroups, signal_start, start_bundle, start_spec,
     start_spec_with_id, update_state_running,
 };
+#[cfg(feature = "json")]
+pub use oci_path::{layer_path_safe, normalize_layer_path};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use process::{setup_container_child, ContainerConfig};
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -143,8 +161,11 @@ pub use state::{
 pub use syscalls::*;
 #[cfg(feature = "json")]
 pub use tar_layer::{
-    apply_uncompressed_tar_layer, apply_validated_uncompressed_tar_layer, OciWhiteout, TarEntry,
-    TarEntryKind, TarLayerApplyError, TarLayerApplyReport, TarLayerError, TarLayerSink,
+    apply_uncompressed_tar_layer, apply_validated_tar_layer, apply_validated_tar_layer_sha256,
+    apply_validated_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer,
+    layer_compression, validate_and_decode_tar_layer, validate_and_decode_tar_layer_sha256,
+    DecodedTarLayer, OciLayerCompression, OciWhiteout, TarEntry, TarEntryKind, TarLayerApplyError,
+    TarLayerApplyReport, TarLayerError, TarLayerSink,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use userns::drop_capabilities;

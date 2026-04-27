@@ -3,6 +3,7 @@
 //! Auto-negotiates STARTTLS on connect. Uses the same `AsyncTlsStream::client()`
 //! handshake utility as SMTP — single shared TLS implementation.
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;

@@ -2,6 +2,7 @@
 //!
 //! Defines the full set of IMAP4rev1 commands (RFC 3501) and their typed representations.
 
+use crate::prelude::*;
 use std::io;
 
 use crate::imap::types::{FetchAttr, SearchKey};

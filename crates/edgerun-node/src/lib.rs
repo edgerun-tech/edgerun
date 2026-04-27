@@ -8,7 +8,7 @@
 //! The config is embedded in the genesis event (seq=0) as the authoritative
 //! record of the node's initial state.
 
-#![cfg_attr(target_os = "none", no_std)]
+#![no_std]
 
 extern crate alloc;
 
@@ -18,15 +18,12 @@ extern crate std;
 pub mod mesh_node;
 pub mod metering;
 
-#[cfg(target_os = "none")]
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
-#[cfg(not(target_os = "none"))]
-use std::collections::{HashMap, HashSet};
 
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
@@ -39,9 +36,7 @@ use edgerun_storage::core::EventLog;
 use edgerun_storage::{DurableStreamWriter, MemEventLog, StorageError};
 // Simple YAML config parser (no serde dependency)
 
-#[cfg(target_os = "none")]
 type HashMap<K, V> = BTreeMap<K, V>;
-#[cfg(target_os = "none")]
 type HashSet<T> = BTreeSet<T>;
 
 /// Node error types.

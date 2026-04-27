@@ -4,6 +4,7 @@ use crate::image_plan::{validate_digest_reference, ImagePlanError};
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use core::fmt;
+use edgerun_crypto::digest::Digest as _;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LayerPipelineError {
@@ -41,6 +42,29 @@ pub trait LayerDigest {
     fn algorithm(&self) -> &'static str;
     fn update(&mut self, chunk: &[u8]);
     fn finish(self) -> Vec<u8>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Sha256LayerDigest {
+    hasher: edgerun_crypto::Sha256,
+}
+
+impl LayerDigest for Sha256LayerDigest {
+    fn algorithm(&self) -> &'static str {
+        "sha256"
+    }
+
+    fn update(&mut self, chunk: &[u8]) {
+        self.hasher.update(chunk);
+    }
+
+    fn finish(self) -> Vec<u8> {
+        self.hasher.finalize().to_vec()
+    }
+}
+
+pub fn sha256_layer_digest() -> Sha256LayerDigest {
+    Sha256LayerDigest::default()
 }
 
 pub trait LayerSink {
@@ -91,7 +115,7 @@ where
         });
     }
 
-    let actual_digest = format!("{}:{}", digest.algorithm(), bytes_to_hex(&digest.finish()));
+    let actual_digest = format_digest(digest.algorithm(), &digest.finish());
     if actual_digest != descriptor.digest {
         return Err(LayerPipelineError::DigestMismatch {
             expected: descriptor.digest.clone(),
@@ -136,7 +160,11 @@ pub fn validate_layer_descriptor(
     Ok(())
 }
 
-fn bytes_to_hex(bytes: &[u8]) -> String {
+pub fn format_digest(algorithm: &str, bytes: &[u8]) -> String {
+    format!("{algorithm}:{}", bytes_to_hex(bytes))
+}
+
+pub fn bytes_to_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {

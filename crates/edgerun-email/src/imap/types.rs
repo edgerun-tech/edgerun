@@ -1,5 +1,6 @@
 //! Core IMAP types — mailboxes, flags, envelopes, and session state.
 
+use crate::prelude::*;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 

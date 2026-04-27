@@ -1,7 +1,11 @@
 //! Project loading: discover all .rs source files from a Cargo.toml.
 
 use std::collections::HashSet;
+use std::format;
 use std::path::{Path, PathBuf};
+use std::string::String;
+use std::vec;
+use std::vec::Vec;
 
 /// All source files for a cargo project.
 #[derive(Clone)]

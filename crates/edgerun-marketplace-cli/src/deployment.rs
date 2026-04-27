@@ -1,5 +1,8 @@
+use alloc::boxed::Box;
+use alloc::string::String;
 use edgerun_solana::signers::Ed25519Signer;
 use edgerun_solana::{solana_types::Pubkey, DeploymentClient};
+use std::{eprintln, println};
 
 pub enum DeploymentCommand {
     Create {

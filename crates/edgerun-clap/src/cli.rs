@@ -7,6 +7,8 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use edgerun_json::{JsonNumber, Value};
+#[cfg(all(feature = "std", not(target_os = "none")))]
+use std::eprintln;
 
 pub struct Command {
     name: String,

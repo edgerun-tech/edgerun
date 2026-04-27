@@ -2,10 +2,15 @@
 
 use super::FrameAction;
 use crate::http2::frame::{
-    GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
+    Frame, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
 use crate::http2::hpack::Encoder;
 use crate::http2::stream::StreamManager;
+use alloc::vec;
+
+pub fn write_frame(frame: Frame) -> FrameAction {
+    FrameAction::WriteFrames(vec![frame])
+}
 
 /// Send a 200 OK response.
 pub fn respond_with_200(stream_id: u32, encoder: &mut Encoder) -> FrameAction {
@@ -22,7 +27,7 @@ pub fn respond_with_200(stream_id: u32, encoder: &mut Encoder) -> FrameAction {
     );
 
     let hf = HeadersFrame::new(stream_id, header_block, true);
-    FrameAction::WriteFrames(vec![hf.to_frame()])
+    write_frame(hf.to_frame())
 }
 
 /// Send a RST_STREAM frame for the given stream.
@@ -32,11 +37,10 @@ pub fn rst_stream(
     stream_manager: &mut StreamManager,
 ) -> FrameAction {
     let rst = RstStreamFrame::new(stream_id, error_code);
-    let frames = vec![rst.to_frame()];
     if let Some(s) = stream_manager.get_stream_mut(stream_id) {
         s.close();
     }
-    FrameAction::WriteFrames(frames)
+    write_frame(rst.to_frame())
 }
 
 /// Send a RST_STREAM frame and return the stream_id for caller to record.
@@ -47,22 +51,21 @@ pub fn rst_stream_with_record(
     stream_manager: &mut StreamManager,
 ) -> (FrameAction, u32) {
     let rst = RstStreamFrame::new(stream_id, error_code);
-    let frames = vec![rst.to_frame()];
     if let Some(s) = stream_manager.get_stream_mut(stream_id) {
         s.close();
     }
-    (FrameAction::WriteFrames(frames), stream_id)
+    (write_frame(rst.to_frame()), stream_id)
 }
 
 /// Send SETTINGS ACK.
 pub fn send_settings_ack() -> FrameAction {
-    FrameAction::WriteFrames(vec![SettingsFrame::ack().to_frame()])
+    write_frame(SettingsFrame::ack().to_frame())
 }
 
 /// Send PING ACK with the given data.
 pub fn send_ping_ack(data: [u8; 8]) -> FrameAction {
     let ack = PingFrame::ack(data);
-    FrameAction::WriteFrames(vec![ack.to_frame()])
+    write_frame(ack.to_frame())
 }
 
 /// Send a GOAWAY frame.

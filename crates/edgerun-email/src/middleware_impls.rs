@@ -6,6 +6,7 @@
 //! - `SmtpRateLimit` — per-IP command rate limiting
 //! - `ImapCommandLogger` — log every IMAP command and response
 
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;

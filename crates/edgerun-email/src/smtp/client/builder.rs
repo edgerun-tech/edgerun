@@ -1,5 +1,7 @@
 //! RFC 5322 / MIME email message builder.
 
+use crate::prelude::*;
+
 /// A MIME part within a multipart message.
 #[derive(Debug, Clone)]
 pub struct MimePart {
