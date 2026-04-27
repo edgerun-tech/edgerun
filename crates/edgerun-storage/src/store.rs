@@ -480,6 +480,23 @@ impl NodeStore {
     ///
     /// Returns the number of events validated, or an error describing the break.
     pub fn validate_stream_chain(&self, stream_id: &[u8]) -> Result<u64, StorageError> {
+        self.validate_stream_chain_inner(stream_id, None)
+    }
+
+    /// Validates a stream chain and verifies each event signature against `writer`.
+    pub fn validate_stream_chain_with_writer(
+        &self,
+        stream_id: &[u8],
+        writer: &edgerun_hardware_signing::NodeID,
+    ) -> Result<u64, StorageError> {
+        self.validate_stream_chain_inner(stream_id, Some(writer))
+    }
+
+    fn validate_stream_chain_inner(
+        &self,
+        stream_id: &[u8],
+        writer: Option<&edgerun_hardware_signing::NodeID>,
+    ) -> Result<u64, StorageError> {
         use edgerun_proto::edgerun::v0::stream::EventEnvelope;
 
         let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
@@ -520,6 +537,28 @@ impl NodeStore {
                 Err(e) => return Err(e),
             };
 
+            if event.stream_id != stream_id {
+                return Err(StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "stream_id mismatch at seq {}: expected {}, got {}",
+                        seq,
+                        stream_id_hex,
+                        edgerun_core::util::bytes_to_hex(&event.stream_id)
+                    ),
+                )));
+            }
+
+            if event.seq != seq {
+                return Err(StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "event seq mismatch at seq {}: envelope contains {}",
+                        seq, event.seq
+                    ),
+                )));
+            }
+
             // Check genesis: seq 0 must have no prev_hash
             if seq == 0 {
                 if event.prev_event_hash.is_some() {
@@ -550,6 +589,19 @@ impl NodeStore {
                 }
             }
 
+            let event_hash = crate::core::canonical_event_hash(&event).value;
+            if record.event_hash != event_hash {
+                return Err(StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "event hash mismatch at seq {}: index has {}, log has {}",
+                        seq,
+                        edgerun_core::util::bytes_to_hex(&record.event_hash),
+                        edgerun_core::util::bytes_to_hex(&event_hash)
+                    ),
+                )));
+            }
+
             // Check signature is present
             if event.signature.is_none() {
                 return Err(StorageError::Io(std::io::Error::new(
@@ -558,8 +610,12 @@ impl NodeStore {
                 )));
             }
 
+            if let Some(writer) = writer {
+                edgerun_stream::verify_event(&event, writer)?;
+            }
+
             // Record this event's hash for next iteration
-            prev_hash = Some(record.event_hash.clone());
+            prev_hash = Some(event_hash);
         }
 
         Ok(head_seq as u64 + 1)
@@ -1660,6 +1716,52 @@ mod tests {
         assert!(stored.signature.is_some());
         assert!(edgerun_stream::verify_event(&stored, &signer.node_id()).is_ok());
         assert_eq!(store.get_head(stream_id).unwrap().unwrap().0, 0);
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn validate_stream_chain_with_writer_verifies_signed_events() {
+        let data_root = tmp_data_root();
+        let (store, _device) = make_block_store(data_root.clone());
+        let signer = TestSigner::new();
+        let stream_id = b"signed-validated-stream";
+
+        let first = event(stream_id, 0, None);
+        store.append_signed_event_blocking(first, &signer).unwrap();
+        let first = store.get_event(stream_id, 0).unwrap().unwrap();
+        let first_hash = crate::core::canonical_event_hash(&first).value;
+
+        let second = event(stream_id, 1, Some(first_hash));
+        store.append_signed_event_blocking(second, &signer).unwrap();
+
+        assert_eq!(store.validate_stream_chain(stream_id).unwrap(), 2);
+        assert_eq!(
+            store
+                .validate_stream_chain_with_writer(stream_id, &signer.node_id())
+                .unwrap(),
+            2
+        );
+
+        let _ = std::fs::remove_dir_all(data_root);
+    }
+
+    #[test]
+    fn validate_stream_chain_with_writer_rejects_wrong_writer() {
+        let data_root = tmp_data_root();
+        let (store, _device) = make_block_store(data_root.clone());
+        let signer = TestSigner::new();
+        let wrong_signer = TestSigner::new();
+        let stream_id = b"wrong-writer-stream";
+
+        store
+            .append_signed_event_blocking(event(stream_id, 0, None), &signer)
+            .unwrap();
+
+        let err = store
+            .validate_stream_chain_with_writer(stream_id, &wrong_signer.node_id())
+            .unwrap_err();
+        assert!(matches!(err, StorageError::Stream(_)));
 
         let _ = std::fs::remove_dir_all(data_root);
     }

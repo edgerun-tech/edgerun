@@ -511,7 +511,7 @@ pub async fn cmd_run(
         let (head_seq, _) = head;
 
         // Validate stream chain integrity on startup
-        match store.validate_stream_chain(stream_id_bytes) {
+        match store.validate_stream_chain_with_writer(stream_id_bytes, &node_id) {
             Ok(event_count) => {
                 edgerun_log::info!("stream chain validated: {} events", event_count);
             }
