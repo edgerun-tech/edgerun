@@ -9,7 +9,6 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 
 use super::frame::{Http3Frame, Http3FrameType};
-use super::qpack::{QpackDecoder, QpackEncoder};
 use super::quic::QuicConnection as QuicConn;
 use super::settings::Http3Settings;
 use super::stream::{Http3Stream, Http3StreamType};
@@ -20,6 +19,7 @@ use crate::http3::error_codes;
 use crate::method::Method;
 use crate::status::StatusCode;
 use crate::uri::Uri;
+use edgerun_qpack::{QpackDecoder, QpackEncoder};
 
 /// HTTP/3 connection
 pub struct Http3Connection {

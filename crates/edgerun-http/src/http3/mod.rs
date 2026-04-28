@@ -5,7 +5,6 @@ use core::fmt;
 
 pub mod connection;
 pub mod frame;
-pub mod qpack;
 pub mod quic;
 pub mod server;
 pub mod settings;
@@ -13,8 +12,8 @@ pub mod stream;
 pub mod varint;
 
 pub use connection::Http3Connection;
+pub use edgerun_qpack::{QpackDecoder, QpackEncoder};
 pub use frame::Http3Frame;
-pub use qpack::{QpackDecoder, QpackEncoder};
 pub use quic::QuicConnection;
 pub use server::Http3Server;
 pub use settings::Http3Settings;

@@ -150,7 +150,7 @@ fn test_transport_parameters_default() {
 fn test_http3_request_response_roundtrip() {
     use crate::header::HeaderMap;
     use crate::http3::connection::Http3Connection;
-    use crate::http3::qpack::{QpackDecoder, QpackEncoder};
+    use crate::http3::{QpackDecoder, QpackEncoder};
     use crate::method::Method;
     use crate::status::StatusCode;
     use crate::uri::Uri;
@@ -245,7 +245,7 @@ fn test_stream_frame_receive_path() {
 fn test_server_accept_and_decode_request() {
     use crate::http3::connection::Http3Connection;
     use crate::http3::frame::Http3Frame;
-    use crate::http3::qpack::{QpackDecoder, QpackEncoder};
+    use crate::http3::{QpackDecoder, QpackEncoder};
     use crate::method::Method;
 
     // ── Client side: encode a request ──────────────────────────────
@@ -415,7 +415,7 @@ fn test_full_quic_tls_handshake() {
 #[test]
 fn test_server_sends_1rtt_response() {
     use crate::http3::frame::Http3Frame;
-    use crate::http3::qpack::QpackEncoder;
+    use crate::http3::QpackEncoder;
 
     let mut encoder = QpackEncoder::new();
     let (header_block, _) = encoder.encode(&[(":status", "200")]).unwrap();
@@ -587,7 +587,7 @@ fn test_stream_send_offset_starts_at_zero() {
 fn test_integration_full_http3_flow() {
     use crate::http3::connection::Http3Connection;
     use crate::http3::frame::Http3Frame;
-    use crate::http3::qpack::{QpackDecoder, QpackEncoder};
+    use crate::http3::{QpackDecoder, QpackEncoder};
     use crate::method::Method;
     use crate::uri::Uri;
 
@@ -741,7 +741,7 @@ fn test_integration_push_flow() {
         push_data.push(push_id as u8);
     }
 
-    let mut encoder = crate::http3::qpack::QpackEncoder::new();
+    let mut encoder = crate::http3::QpackEncoder::new();
     let (header_block, _) = encoder.encode(&[(":status", "200")]).unwrap();
     let headers_frame = Http3Frame::Headers { header_block };
     push_data.extend_from_slice(&headers_frame.to_bytes());

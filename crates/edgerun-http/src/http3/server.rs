@@ -48,7 +48,6 @@ use alloc::vec::Vec;
 use edgerun_tls::certificate_gen::CertificateAndKey;
 
 use super::connection::Http3Connection;
-use super::qpack::{QpackDecoder, QpackEncoder};
 use super::quic::crypto::PacketProtection;
 use super::quic::frame::QuicFrame;
 use super::quic::packet::{PacketType, QuicPacket, QuicPacketHeader};
@@ -59,6 +58,7 @@ use super::quic::QUIC_VERSION_V1;
 use super::Http3Error;
 use crate::http3::settings::Http3Settings;
 use crate::runtime::sync::Mutex;
+use edgerun_qpack::{QpackDecoder, QpackEncoder};
 
 /// Per-client address validation state (RFC 9000 §8.1).
 ///
