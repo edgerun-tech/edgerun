@@ -164,7 +164,7 @@ where
     T: TryFrom<JsonValue, Error = E>,
     E: fmt::Display,
 {
-    from_value_as(parse_json(input)?) 
+    from_value_as(parse_json(input)?)
 }
 
 /// Parses a UTF-8 JSON byte slice and converts it into a caller-defined type without serde.

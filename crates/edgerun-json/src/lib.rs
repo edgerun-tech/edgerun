@@ -98,8 +98,9 @@ pub use index::ValueIndex;
 pub use map::Map;
 pub use number::JsonNumber;
 pub use serde_api::{
-    escape_json_string, from_slice, from_str, parse_json, parse_json_borrowed, parse_json_tape,
-    to_string, to_string_pretty, to_vec, to_vec_pretty,
+    escape_json_string, from_slice, from_slice_as, from_str, from_str_as, from_value_as,
+    parse_json, parse_json_borrowed, parse_json_tape, to_string, to_string_pretty, to_vec,
+    to_vec_pretty,
 };
 pub use serde_api::{from_reader, to_writer, to_writer_pretty};
 #[cfg(feature = "serde")]
@@ -108,7 +109,7 @@ pub use tape::{
     CompiledObjectSchema, CompiledRowSchema, CompiledTapeKey, CompiledTapeKeys, IndexedTapeObject,
     JsonTape, TapeObjectIndex, TapeToken, TapeTokenKind, TapeValue,
 };
-pub use value::{JsonValue, Number, Value};
+pub use value::{JsonValue, JsonValueError, Number, Value};
 
 #[cfg(feature = "raw_value")]
 pub use raw::{to_raw_value, RawValue};
@@ -192,6 +193,39 @@ mod tests {
         assert_eq!(n, 42);
         assert_eq!(values.len(), 1);
         assert_eq!(object.required_str("k").unwrap(), "v");
+    }
+
+    #[test]
+    fn parses_custom_types_without_serde() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct Node {
+            name: String,
+            online: bool,
+            seq: u64,
+        }
+
+        impl TryFrom<JsonValue> for Node {
+            type Error = JsonValueError;
+
+            fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+                Ok(Self {
+                    name: value.required_str("name")?.to_owned(),
+                    online: value.required_bool("online")?,
+                    seq: value.required_u64("seq")?,
+                })
+            }
+        }
+
+        let node: Node = from_str_as(r#"{"name":"edge-1","online":true,"seq":9}"#).unwrap();
+
+        assert_eq!(
+            node,
+            Node {
+                name: "edge-1".to_owned(),
+                online: true,
+                seq: 9,
+            }
+        );
     }
 
     #[test]
