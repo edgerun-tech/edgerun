@@ -187,6 +187,35 @@ fn validate_timestamp_shape(
     None
 }
 
+fn validate_supported_version(value: u32, label: &str, field: &str) -> Option<ValidationResult> {
+    if value != 1 {
+        return Some(reject(
+            ReasonCode::VersionUnsupported,
+            Value::String(format!("{label} unsupported {field}")),
+            empty_map(),
+        ));
+    }
+    None
+}
+
+fn validate_command_version_field(value: u32, field: &str) -> Option<ValidationResult> {
+    if value == 0 {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{field} is 0 (unspecified)")),
+            empty_map(),
+        ));
+    }
+    if value != 1 {
+        return Some(reject(
+            ReasonCode::VersionUnsupported,
+            Value::String(format!("unsupported {field}: {value}")),
+            empty_map(),
+        ));
+    }
+    None
+}
+
 fn is_valid_non_negative_duration(duration: &prost_types::Duration) -> bool {
     duration.seconds >= 0 && (0..1_000_000_000).contains(&duration.nanos)
 }
@@ -258,12 +287,10 @@ fn validate_constraint_set(
     constraints: &edgerun_proto::edgerun::v0::trust::ConstraintSet,
     label: &str,
 ) -> Option<ValidationResult> {
-    if constraints.constraint_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!("{label} unsupported constraint_version")),
-            empty_map(),
-        ));
+    if let Some(result) =
+        validate_supported_version(constraints.constraint_version, label, "constraint_version")
+    {
+        return Some(result);
     }
     if let Some(not_before) = &constraints.not_before {
         if let Some(result) = validate_timestamp_shape(not_before, &format!("{label} not_before")) {
@@ -387,12 +414,8 @@ fn validate_scope_descriptor(
     scope: &edgerun_proto::edgerun::v0::trust::ScopeDescriptor,
     label: &str,
 ) -> Option<ValidationResult> {
-    if scope.scope_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!("{label} unsupported scope_version")),
-            empty_map(),
-        ));
+    if let Some(result) = validate_supported_version(scope.scope_version, label, "scope_version") {
+        return Some(result);
     }
     if edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(scope.scope_kind)
         .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::trust::ScopeKind::Unspecified)
@@ -491,12 +514,10 @@ fn validate_capability_descriptor(
     capability: &CapabilityDescriptor,
     label: &str,
 ) -> Option<ValidationResult> {
-    if capability.capability_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!("{label} unsupported capability_version")),
-            empty_map(),
-        ));
+    if let Some(result) =
+        validate_supported_version(capability.capability_version, label, "capability_version")
+    {
+        return Some(result);
     }
     if edgerun_proto::edgerun::v0::trust::CapabilityKind::from_i32(capability.capability_kind)
         .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::trust::CapabilityKind::Unspecified)
@@ -542,12 +563,12 @@ fn validate_capability_descriptor(
         return Some(result);
     }
     if let Some(assurance) = &capability.minimum_assurance {
-        if assurance.assurance_version != 1 {
-            return Some(reject(
-                ReasonCode::VersionUnsupported,
-                Value::String(format!("{label} assurance unsupported version")),
-                empty_map(),
-            ));
+        if let Some(result) = validate_supported_version(
+            assurance.assurance_version,
+            &format!("{label} assurance"),
+            "version",
+        ) {
+            return Some(result);
         }
         if edgerun_proto::edgerun::v0::common::AssuranceClass::from_i32(assurance.required_class)
             .is_none_or(|class| {
@@ -596,12 +617,10 @@ fn validate_delegation_record_structure(
     delegation: &DelegationRecord,
     label: &str,
 ) -> Option<ValidationResult> {
-    if delegation.record_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!("{label} unsupported record_version")),
-            empty_map(),
-        ));
+    if let Some(result) =
+        validate_supported_version(delegation.record_version, label, "record_version")
+    {
+        return Some(result);
     }
     if delegation.delegation_id.is_empty() {
         return Some(reject(
@@ -1128,39 +1147,14 @@ fn validate_identity_ref(identity: &IdentityRef, label: &str) -> Option<Validati
 }
 
 fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationResult> {
-    if command.envelope_version == 0 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("envelope_version is 0 (unspecified)".into()),
-            empty_map(),
-        ));
+    if let Some(result) =
+        validate_command_version_field(command.envelope_version, "envelope_version")
+    {
+        return Some(result);
     }
-    if command.command_version == 0 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("command_version is 0 (unspecified)".into()),
-            empty_map(),
-        ));
-    }
-    if command.envelope_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!(
-                "unsupported envelope_version: {}",
-                command.envelope_version
-            )),
-            empty_map(),
-        ));
-    }
-    if command.command_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!(
-                "unsupported command_version: {}",
-                command.command_version
-            )),
-            empty_map(),
-        ));
+    if let Some(result) = validate_command_version_field(command.command_version, "command_version")
+    {
+        return Some(result);
     }
 
     let Some(command_type) = CommandType::from_i32(command.command_type) else {
@@ -1455,15 +1449,10 @@ pub fn validate_command(
     if let Some(ref req) = command.requested_assurance {
         use edgerun_proto::edgerun::v0::common::AssuranceClass;
 
-        if req.assurance_version != 1 {
-            return reject(
-                ReasonCode::VersionUnsupported,
-                Value::String(format!(
-                    "unsupported assurance requirement version: {}",
-                    req.assurance_version
-                )),
-                empty_map(),
-            );
+        if let Some(result) =
+            validate_command_version_field(req.assurance_version, "assurance requirement version")
+        {
+            return result;
         }
 
         let Some(required_class) = AssuranceClass::from_i32(req.required_class) else {
