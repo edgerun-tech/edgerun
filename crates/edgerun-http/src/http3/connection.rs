@@ -804,13 +804,10 @@ impl Http3Connection {
         headers: &HeaderMap,
         encoder: &mut QpackEncoder,
     ) -> Result<Vec<u8>> {
-        // Collect pseudo-headers as owned Strings (needed for lifetime reasons)
-        let mut h3_headers: Vec<(String, String)> = Vec::new();
+        let mut h3_headers = Vec::new();
 
-        // :method
         h3_headers.push((":method".into(), method.as_str().into()));
 
-        // :scheme
         let scheme = match uri.scheme() {
             crate::uri::Scheme::Http => "http",
             crate::uri::Scheme::Https => "https",
@@ -818,7 +815,6 @@ impl Http3Connection {
         };
         h3_headers.push((":scheme".into(), scheme.into()));
 
-        // :authority (host:port)
         if let Some(host) = uri.host() {
             let authority = if let Some(port) = uri.port() {
                 format!("{}:{}", host, port)
@@ -837,21 +833,7 @@ impl Http3Connection {
         };
         h3_headers.push((":path".into(), path));
 
-        // Regular headers
-        for (name, value) in headers.iter() {
-            h3_headers.push((name.as_str().into(), value.as_str().into()));
-        }
-
-        // Convert to &[(&str, &str)] for encoder
-        let refs: Vec<(&str, &str)> = h3_headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let (header_block, _encoder_instructions) = encoder
-            .encode(&refs)
-            .map_err(|e| Http3Error::QpackError(e.to_string()))?;
-        Ok(header_block)
+        Self::encode_h3_headers(h3_headers, headers, encoder)
     }
 
     /// Encode a CONNECT request into a QPACK header block.
@@ -865,32 +847,16 @@ impl Http3Connection {
         headers: &HeaderMap,
         encoder: &mut QpackEncoder,
     ) -> Result<Vec<u8>> {
-        let mut h3_headers: Vec<(String, String)> = Vec::new();
+        let mut h3_headers = Vec::new();
 
-        // :method: CONNECT
         h3_headers.push((":method".into(), "CONNECT".into()));
-        // :authority
         h3_headers.push((":authority".into(), authority.into()));
 
-        // Optional :protocol for extended CONNECT (WebSocket, WebTransport)
         if let Some(proto) = protocol {
             h3_headers.push((":protocol".into(), proto.into()));
         }
 
-        // Regular headers
-        for (name, value) in headers.iter() {
-            h3_headers.push((name.as_str().into(), value.as_str().into()));
-        }
-
-        let refs: Vec<(&str, &str)> = h3_headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let (header_block, _encoder_instructions) = encoder
-            .encode(&refs)
-            .map_err(|e| Http3Error::QpackError(e.to_string()))?;
-        Ok(header_block)
+        Self::encode_h3_headers(h3_headers, headers, encoder)
     }
 
     /// Send a CONNECT request to establish a tunnel (RFC 9114 §4.4).
@@ -925,17 +891,33 @@ impl Http3Connection {
         headers: &HeaderMap,
         encoder: &mut QpackEncoder,
     ) -> Result<Vec<u8>> {
-        let mut h3_headers: Vec<(String, String)> = Vec::new();
+        let mut h3_headers = Vec::new();
 
-        // :status
         let status_str = status.as_str();
         h3_headers.push((":status".into(), status_str.into_owned()));
 
-        // Regular headers
+        Self::encode_h3_headers(h3_headers, headers, encoder)
+    }
+
+    fn encode_h3_headers(
+        mut h3_headers: Vec<(String, String)>,
+        headers: &HeaderMap,
+        encoder: &mut QpackEncoder,
+    ) -> Result<Vec<u8>> {
+        Self::append_regular_headers(&mut h3_headers, headers);
+        Self::encode_owned_headers(&h3_headers, encoder)
+    }
+
+    fn append_regular_headers(h3_headers: &mut Vec<(String, String)>, headers: &HeaderMap) {
         for (name, value) in headers.iter() {
             h3_headers.push((name.as_str().into(), value.as_str().into()));
         }
+    }
 
+    fn encode_owned_headers(
+        h3_headers: &[(String, String)],
+        encoder: &mut QpackEncoder,
+    ) -> Result<Vec<u8>> {
         let refs: Vec<(&str, &str)> = h3_headers
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
