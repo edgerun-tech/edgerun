@@ -1,4 +1,5 @@
-use edgerun_rt::{block_on, lines, BufReader, Cursor};
+use core::future::Future;
+use edgerun_rt::{block_on, io::lines, BufReader, Cursor};
 
 #[test]
 fn lines_handles_crlf_without_newline_tail() {

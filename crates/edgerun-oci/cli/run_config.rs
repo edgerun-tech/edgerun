@@ -452,8 +452,7 @@ pub(super) fn generate_container_id(image: &crate::ImageRef) -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+        .map_or(0, |duration| duration.as_millis());
     let short = image
         .repository
         .split('/')

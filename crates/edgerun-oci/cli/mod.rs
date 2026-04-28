@@ -314,8 +314,7 @@ pub fn first_command(args: &[String]) -> Option<&str> {
             continue;
         }
         if arg.starts_with('-') {
-            i += 1;
-            continue;
+            return None;
         }
         return Some(arg);
     }
@@ -360,14 +359,26 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
     while i < args.len() {
         let arg = args[i].as_str();
         if let Some(consumed) = parse_global_option_at(args, i, &mut opts) {
-            i = i.saturating_add(consumed);
-            continue;
+            match consumed {
+                Ok(consumed) => {
+                    i = i.saturating_add(consumed);
+                    continue;
+                }
+                Err(error) => {
+                    eprintln!("Invalid argument: {error}");
+                    return None;
+                }
+            }
         }
         if matches!(arg, "--help" | "-h") {
             print_usage();
             std::process::exit(0);
         }
         if command.is_none() {
+            if arg.starts_with('-') {
+                eprintln!("Invalid argument: unknown global option {arg}");
+                return None;
+            }
             if !arg.starts_with('-') {
                 command = Some(args[i].clone());
             }
@@ -388,18 +399,22 @@ fn global_option_consumed(arg: &str) -> Option<usize> {
     }
 }
 
-fn parse_global_option_at(args: &[String], index: usize, opts: &mut GlobalOpts) -> Option<usize> {
+fn parse_global_option_at(
+    args: &[String],
+    index: usize,
+    opts: &mut GlobalOpts,
+) -> Option<Result<usize, String>> {
     let arg = args.get(index)?;
     if let Some(kind) = GlobalOption::from_name(arg) {
         if let Some(value) = args.get(index + 1) {
             kind.apply(opts, value);
-            return Some(2);
+            return Some(Ok(2));
         }
-        return Some(1);
+        return Some(Err(format!("missing value for {arg}")));
     }
     if let Some((kind, value)) = global_option_inline_kind(arg) {
         kind.apply(opts, value);
-        return Some(1);
+        return Some(Ok(1));
     }
     None
 }

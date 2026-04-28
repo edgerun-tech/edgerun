@@ -45,6 +45,12 @@ pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     let (id, update_opts) = parse_update_args(args)?;
 
     let state = load_state(&id)?;
+    if state.status != "running" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("container {} is not running (status: {})", id, state.status),
+        ));
+    }
     let pid = state
         .pid
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;
@@ -93,94 +99,139 @@ pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 }
 
 fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<()> {
+    let format_limit = |value: i64, name: &str| -> io::Result<String> {
+        if value >= 0 {
+            return Ok(value.to_string());
+        }
+        if value == -1 {
+            return Ok("max".to_string());
+        }
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{name} must be -1 or a non-negative value"),
+        ))
+    };
+
     // Memory
     if let Some(limit) = opts.memory {
-        if limit >= 0 {
-            crate::cgroups::setup_container_cgroups_from_file(
-                cgroup_root,
-                "memory.max",
-                &limit.to_string(),
-            );
-        }
+        let value = format_limit(limit, "memory limit")?;
+        crate::cgroups::setup_container_cgroups_from_file_result(cgroup_root, "memory.max", &value)?;
     }
     if let Some(swap) = opts.memory_swap {
-        if swap >= 0 {
-            crate::cgroups::setup_container_cgroups_from_file(
-                cgroup_root,
-                "memory.swap.max",
-                &swap.to_string(),
-            );
-        }
+        let value = format_limit(swap, "memory swap limit")?;
+        crate::cgroups::setup_container_cgroups_from_file_result(
+            cgroup_root,
+            "memory.swap.max",
+            &value,
+        )?;
     }
 
     // CPU
     if let Some(shares) = opts.cpu_shares {
         let weight = crate::cgroups::shares_to_weight(shares);
-        crate::cgroups::setup_container_cgroups_from_file(
+        crate::cgroups::setup_container_cgroups_from_file_result(
             cgroup_root,
             "cpu.weight",
             &weight.to_string(),
-        );
+        )?;
     }
     if let Some(quota) = opts.cpu_quota {
         let period = opts.cpu_period.unwrap_or(100_000);
-        crate::cgroups::setup_container_cgroups_from_file(
+        if period == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpu period must be greater than zero",
+            ));
+        }
+        let quota = format_limit(quota, "cpu quota")?;
+        crate::cgroups::setup_container_cgroups_from_file_result(
             cgroup_root,
             "cpu.max",
             &format!("{} {}", quota, period),
-        );
+        )?;
     } else if let Some(period) = opts.cpu_period {
-        // If only period is set, read current quota
-        if let Ok(current) = fs::read_to_string(cgroup_root.join("cpu.max")) {
-            if let Some(quota_str) = current.split_whitespace().next() {
-                crate::cgroups::setup_container_cgroups_from_file(
-                    cgroup_root,
-                    "cpu.max",
-                    &format!("{} {}", quota_str.trim(), period),
-                );
-            }
+        if period == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpu period must be greater than zero",
+            ));
         }
+        // If only period is set, read current quota
+        let current = fs::read_to_string(cgroup_root.join("cpu.max")).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to read current cpu.max: {error}"),
+            )
+        })?;
+        let quota_str = current
+            .split_whitespace()
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "cpu.max is empty"))?
+            .trim();
+        if quota_str.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "failed to read current cpu.max quota",
+            ));
+        }
+        crate::cgroups::setup_container_cgroups_from_file_result(
+            cgroup_root,
+            "cpu.max",
+            &format!("{} {}", quota_str, period),
+        )?;
     }
     if let Some(rt_runtime) = opts.cpu_rt_runtime {
         if let Some(rt_period) = opts.cpu_rt_period {
-            crate::cgroups::setup_container_cgroups_from_file(
+            crate::cgroups::setup_container_cgroups_from_file_result(
                 cgroup_root,
                 "cpu.max.rt",
                 &format!("{} {}", rt_runtime, rt_period),
-            );
+            )?;
         }
     }
     if let Some(ref cpus) = opts.cpuset_cpus {
         if !cpus.is_empty() {
-            crate::cgroups::setup_container_cgroups_from_file(cgroup_root, "cpuset.cpus", cpus);
+            crate::cgroups::setup_container_cgroups_from_file_result(
+                cgroup_root,
+                "cpuset.cpus",
+                cpus,
+            )?;
         }
     }
     if let Some(ref mems) = opts.cpuset_mems {
         if !mems.is_empty() {
-            crate::cgroups::setup_container_cgroups_from_file(cgroup_root, "cpuset.mems", mems);
+            crate::cgroups::setup_container_cgroups_from_file_result(
+                cgroup_root,
+                "cpuset.mems",
+                mems,
+            )?;
         }
     }
 
     // PIDs
     if let Some(limit) = opts.pids_limit {
-        if limit > 0 {
-            crate::cgroups::setup_container_cgroups_from_file(
-                cgroup_root,
-                "pids.max",
-                &limit.to_string(),
-            );
-        }
+        let value = match limit {
+            -1 => "max".to_string(),
+            0 => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "pids limit must be -1 or greater than zero",
+                ))
+            }
+            _ => limit.to_string(),
+        };
+        crate::cgroups::setup_container_cgroups_from_file_result(cgroup_root, "pids.max", &value)?;
     }
 
     // Block I/O
     if let Some(weight) = opts.blkio_weight {
         if weight > 0 {
             let v2_weight = weight.saturating_mul(100).clamp(1, 10000);
-            crate::cgroups::setup_container_cgroups_from_file(
+            crate::cgroups::setup_container_cgroups_from_file_result(
                 cgroup_root,
                 "io.weight",
                 &v2_weight.to_string(),
-            );
+            )?;
         }
     }
 
@@ -274,37 +325,118 @@ fn parse_update_args(args: &[String]) -> io::Result<(String, UpdateOpts)> {
     let mut opts = UpdateOpts::default();
 
     if let Some(memory) = matches.get_one::<String>("memory") {
-        opts.memory = Some(parse_memory_arg(&memory)?);
+        let value = parse_memory_arg(&memory)?;
+        if value < -1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "memory limit must be -1 or a non-negative value",
+            ));
+        }
+        opts.memory = Some(value);
     }
     if let Some(memory_swap) = matches.get_one::<String>("memory-swap") {
-        opts.memory_swap = Some(parse_memory_arg(&memory_swap)?);
+        let value = parse_memory_arg(&memory_swap)?;
+        if value < -1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "memory swap limit must be -1 or a non-negative value",
+            ));
+        }
+        opts.memory_swap = Some(value);
     }
     if let Some(cpu_shares) = matches.get_one::<String>("cpu-shares") {
         opts.cpu_shares = Some(parse_u64_arg("cpu-shares", &cpu_shares)?);
     }
     if let Some(cpu_quota) = matches.get_one::<String>("cpu-quota") {
-        opts.cpu_quota = Some(parse_i64_arg("cpu-quota", &cpu_quota)?);
+        let value = parse_i64_arg("cpu-quota", &cpu_quota)?;
+        if value < -1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpu quota must be -1 or a non-negative value",
+            ));
+        }
+        opts.cpu_quota = Some(value);
     }
     if let Some(cpu_period) = matches.get_one::<String>("cpu-period") {
-        opts.cpu_period = Some(parse_u64_arg("cpu-period", &cpu_period)?);
+        let period = parse_u64_arg("cpu-period", &cpu_period)?;
+        if period == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpu period must be greater than zero",
+            ));
+        }
+        opts.cpu_period = Some(period);
     }
     if let Some(cpu_rt_runtime) = matches.get_one::<String>("cpu-rt-runtime") {
-        opts.cpu_rt_runtime = Some(parse_u64_arg("cpu-rt-runtime", &cpu_rt_runtime)?);
+        let runtime = parse_u64_arg("cpu-rt-runtime", &cpu_rt_runtime)?;
+        if runtime == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpu rt runtime must be greater than zero",
+            ));
+        }
+        opts.cpu_rt_runtime = Some(runtime);
     }
     if let Some(cpu_rt_period) = matches.get_one::<String>("cpu-rt-period") {
-        opts.cpu_rt_period = Some(parse_u64_arg("cpu-rt-period", &cpu_rt_period)?);
+        let period = parse_u64_arg("cpu-rt-period", &cpu_rt_period)?;
+        if period == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpu rt period must be greater than zero",
+            ));
+        }
+        opts.cpu_rt_period = Some(period);
     }
     if let Some(cpuset_cpus) = matches.get_one::<String>("cpuset-cpus") {
+        if cpuset_cpus.trim().is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpuset-cpus cannot be empty",
+            ));
+        }
         opts.cpuset_cpus = Some(cpuset_cpus);
     }
     if let Some(cpuset_mems) = matches.get_one::<String>("cpuset-mems") {
+        if cpuset_mems.trim().is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cpuset-mems cannot be empty",
+            ));
+        }
         opts.cpuset_mems = Some(cpuset_mems);
     }
     if let Some(pids_limit) = matches.get_one::<String>("pids-limit") {
-        opts.pids_limit = Some(parse_i64_arg("pids-limit", &pids_limit)?);
+        let limit = parse_i64_arg("pids-limit", &pids_limit)?;
+        if limit < -1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "pids limit must be -1 or greater than zero",
+            ));
+        }
+        opts.pids_limit = Some(limit);
+    }
+
+    if opts.cpu_rt_runtime.is_some() != opts.cpu_rt_period.is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cpu rt runtime and cpu rt period must be provided together",
+        ));
     }
     if let Some(blkio_weight) = matches.get_one::<String>("blkio-weight") {
-        opts.blkio_weight = Some(parse_u64_arg("blkio-weight", &blkio_weight)?);
+        let value = parse_u64_arg("blkio-weight", &blkio_weight)?;
+        if value == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "blkio-weight must be greater than zero",
+            ));
+        }
+        if value > 10_000 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "blkio-weight must be <= 10000",
+            ));
+        }
+        opts.blkio_weight = Some(value);
     }
 
     if opts.memory.is_none()
@@ -372,6 +504,10 @@ fn parse_memory_arg(s: &str) -> io::Result<i64> {
             format!("invalid memory value: {}", s),
         )
     })?;
-
-    Ok(num * multiplier)
+    num.checked_mul(multiplier).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("memory value overflow: {s}"),
+        )
+    })
 }

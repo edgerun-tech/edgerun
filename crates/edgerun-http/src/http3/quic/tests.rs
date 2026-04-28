@@ -66,6 +66,7 @@ fn test_initial_packet_handshake_timeout() {
             early_data_protection: None,
             early_data_sent: false,
             key_phase: false,
+            peer_key_phase: false,
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
@@ -855,15 +856,178 @@ fn test_integration_push_flow() {
 /// Test key update flow (no UDP needed).
 #[test]
 fn test_integration_key_update_flow() {
+    let hasher = edgerun_tls::prf::Hasher::Sha256;
+    let key_len = 16;
+    let iv_len = 12;
+    let client_secret = vec![0xAB; hasher.len()];
+    let server_secret = vec![0xCD; hasher.len()];
+
+    let client_key = hasher.quic_expand_label(&client_secret, "key", &[], key_len);
+    let client_iv = hasher.quic_expand_label(&client_secret, "iv", &[], iv_len);
+    let client_hp = hasher.quic_expand_label(&client_secret, "hp", &[], key_len);
+    let server_key = hasher.quic_expand_label(&server_secret, "key", &[], key_len);
+    let server_iv = hasher.quic_expand_label(&server_secret, "iv", &[], iv_len);
+    let server_hp = hasher.quic_expand_label(&server_secret, "hp", &[], key_len);
+
     let mut quic = QuicConnection::dummy();
     quic.established = true;
-    quic.client_app_traffic_secret = vec![0xAB; 32];
-    quic.cipher_suite_hash = edgerun_tls::prf::Hasher::Sha256;
+    quic.client_app_traffic_secret = client_secret.clone();
+    quic.server_app_traffic_secret = server_secret.clone();
+    quic.cipher_suite_hash = hasher.clone();
+    let current_keys = crypto::ProtectionKeys::new(
+        CipherSuite::TLS_AES_128_GCM_SHA256,
+        client_key,
+        client_iv,
+        server_key.clone(),
+        server_iv.clone(),
+    )
+    .with_header_protection(client_hp, server_hp.clone());
+    quic.protection = Some(crypto::PacketProtection::new(&current_keys));
 
     assert!(!quic.key_phase());
-    // Key update requires protection keys to be set, which dummy doesn't have
-    // Just verify the method exists and doesn't crash with empty secret
-    assert!(quic.client_app_traffic_secret.len() == 32);
+    quic.initiate_key_update().expect("initiate key update");
+    assert!(quic.key_phase());
+    assert!(!quic.peer_key_phase);
+    assert_ne!(quic.client_app_traffic_secret, client_secret);
+    assert_eq!(quic.server_app_traffic_secret, server_secret);
+    assert!(quic.prev_protection.is_some());
+
+    let aad = b"1rtt header";
+    let server_plaintext = b"peer data before peer update";
+    let server_write_keys = crypto::ProtectionKeys::new(
+        CipherSuite::TLS_AES_128_GCM_SHA256,
+        server_key,
+        server_iv,
+        vec![0; key_len],
+        vec![0; iv_len],
+    )
+    .with_header_protection(server_hp, vec![0; key_len]);
+    let mut server_writer = crypto::PacketProtection::new(&server_write_keys);
+    let ciphertext = server_writer
+        .protect_with_packet_number(7, aad, server_plaintext)
+        .expect("server encrypt");
+    let decrypted = quic
+        .protection
+        .as_mut()
+        .expect("current protection")
+        .unprotect(aad, 7, &ciphertext)
+        .expect("client still reads current server keys after self update");
+    assert_eq!(decrypted, server_plaintext);
+
+    let client_plaintext = b"client data after key update";
+    let client_ciphertext = quic
+        .protection
+        .as_mut()
+        .expect("current protection")
+        .protect_with_packet_number(8, aad, client_plaintext)
+        .expect("client encrypts with updated write keys");
+    let peer_read_keys = crypto::ProtectionKeys::new(
+        CipherSuite::TLS_AES_128_GCM_SHA256,
+        vec![0; key_len],
+        vec![0; iv_len],
+        hasher.quic_expand_label(&quic.client_app_traffic_secret, "key", &[], key_len),
+        hasher.quic_expand_label(&quic.client_app_traffic_secret, "iv", &[], iv_len),
+    )
+    .with_header_protection(
+        vec![0; key_len],
+        hasher.quic_expand_label(&quic.client_app_traffic_secret, "hp", &[], key_len),
+    );
+    let mut peer_reader = crypto::PacketProtection::new(&peer_read_keys);
+    let decrypted = peer_reader
+        .unprotect(aad, 8, &client_ciphertext)
+        .expect("peer reads updated client keys");
+    assert_eq!(decrypted, client_plaintext);
+}
+
+#[test]
+fn test_peer_key_update_advances_read_side_only() {
+    let hasher = edgerun_tls::prf::Hasher::Sha256;
+    let key_len = 16;
+    let iv_len = 12;
+    let client_secret = vec![0x33; hasher.len()];
+    let server_secret = vec![0x44; hasher.len()];
+    let next_server_secret =
+        hasher.expand_label(&server_secret, "traffic upd", &[], hasher.len());
+
+    let client_key = hasher.quic_expand_label(&client_secret, "key", &[], key_len);
+    let client_iv = hasher.quic_expand_label(&client_secret, "iv", &[], iv_len);
+    let client_hp = hasher.quic_expand_label(&client_secret, "hp", &[], key_len);
+    let server_key = hasher.quic_expand_label(&server_secret, "key", &[], key_len);
+    let server_iv = hasher.quic_expand_label(&server_secret, "iv", &[], iv_len);
+    let server_hp = hasher.quic_expand_label(&server_secret, "hp", &[], key_len);
+
+    let mut quic = QuicConnection::dummy();
+    quic.established = true;
+    quic.client_app_traffic_secret = client_secret.clone();
+    quic.server_app_traffic_secret = server_secret;
+    quic.cipher_suite_hash = hasher.clone();
+    quic.protection = Some(crypto::PacketProtection::new(
+        &crypto::ProtectionKeys::new(
+            CipherSuite::TLS_AES_128_GCM_SHA256,
+            client_key.clone(),
+            client_iv.clone(),
+            server_key,
+            server_iv,
+        )
+        .with_header_protection(client_hp.clone(), server_hp),
+    ));
+
+    quic.install_peer_key_update(true)
+        .expect("install peer key update");
+    assert!(!quic.key_phase());
+    assert!(quic.peer_key_phase);
+    assert_eq!(quic.client_app_traffic_secret, client_secret);
+    assert_eq!(quic.server_app_traffic_secret, next_server_secret);
+    assert!(quic.prev_protection.is_some());
+
+    let aad = b"1rtt peer update";
+    let client_plaintext = b"client still writes current keys";
+    let client_ciphertext = quic
+        .protection
+        .as_mut()
+        .expect("current protection")
+        .protect_with_packet_number(9, aad, client_plaintext)
+        .expect("client encrypt");
+    let peer_read_keys = crypto::ProtectionKeys::new(
+        CipherSuite::TLS_AES_128_GCM_SHA256,
+        vec![0; key_len],
+        vec![0; iv_len],
+        client_key,
+        client_iv,
+    )
+    .with_header_protection(vec![0; key_len], client_hp);
+    let mut peer_reader = crypto::PacketProtection::new(&peer_read_keys);
+    assert_eq!(
+        peer_reader
+            .unprotect(aad, 9, &client_ciphertext)
+            .expect("peer reads current client keys"),
+        client_plaintext
+    );
+
+    let server_plaintext = b"server writes updated keys";
+    let server_write_keys = crypto::ProtectionKeys::new(
+        CipherSuite::TLS_AES_128_GCM_SHA256,
+        hasher.quic_expand_label(&quic.server_app_traffic_secret, "key", &[], key_len),
+        hasher.quic_expand_label(&quic.server_app_traffic_secret, "iv", &[], iv_len),
+        vec![0; key_len],
+        vec![0; iv_len],
+    )
+    .with_header_protection(
+        hasher.quic_expand_label(&quic.server_app_traffic_secret, "hp", &[], key_len),
+        vec![0; key_len],
+    );
+    let mut server_writer = crypto::PacketProtection::new(&server_write_keys);
+    let ciphertext = server_writer
+        .protect_with_packet_number(10, aad, server_plaintext)
+        .expect("server encrypt");
+    assert_eq!(
+        quic.protection
+            .as_mut()
+            .expect("current protection")
+            .unprotect(aad, 10, &ciphertext)
+            .expect("client reads updated server keys"),
+        server_plaintext
+    );
 }
 
 /// Test stream fragmentation tracking (no UDP needed).

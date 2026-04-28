@@ -92,6 +92,8 @@ pub struct QuicConnection {
     server_dcid: ConnectionId,
     /// Current key phase (0 or 1, toggles on each update — RFC 9001 §6)
     key_phase: bool,
+    /// Current peer key phase for incoming 1-RTT packets.
+    peer_key_phase: bool,
     /// Previous protection keys (for decrypting in-flight packets during key transition)
     prev_protection: Option<crypto::PacketProtection>,
     /// Client application traffic secret (for key updates — RFC 9001 §6)
@@ -180,6 +182,7 @@ impl QuicConnection {
             recv_offset: 0,
             server_dcid: remote_cid.clone(),
             key_phase: false,
+            peer_key_phase: false,
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
@@ -521,6 +524,7 @@ impl QuicConnection {
             early_data_protection: None,
             early_data_sent: false,
             key_phase: false,
+            peer_key_phase: false,
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
@@ -566,6 +570,7 @@ impl QuicConnection {
             early_data_protection: None,
             early_data_sent: false,
             key_phase: false,
+            peer_key_phase: false,
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
@@ -626,6 +631,7 @@ impl QuicConnection {
             early_data_protection: None,
             early_data_sent: false,
             key_phase: false,
+            peer_key_phase: false,
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
@@ -912,27 +918,32 @@ impl QuicConnection {
                     );
                     packet.header.packet_number = packet_number;
 
-                    // Decrypt the packet payload
-                    let plaintext = if let Some(ref mut prot) = self.protection {
-                        // AAD = unprotected packet header (RFC 9001 §5.2)
-                        let aad = packet.header_to_bytes_aad();
-                        if packet.header.key_phase == self.key_phase {
+                    let aad = packet.header_to_bytes_aad();
+                    let plaintext = if packet.header.key_phase == self.peer_key_phase {
+                        if let Some(ref mut prot) = self.protection {
                             prot.unprotect(&aad, packet.header.packet_number, &packet.payload)
                                 .map_err(|e| format!("Packet decryption failed: {}", e))?
-                        } else if let Some(ref mut prev) = self.prev_protection {
-                            prev.unprotect(&aad, packet.header.packet_number, &packet.payload)
-                                .map_err(|e| {
-                                    format!("Packet decryption with previous keys failed: {}", e)
-                                })?
                         } else {
-                            return Err(
-                                "Peer changed QUIC key phase but no matching keys are available"
-                                    .to_string(),
-                            );
+                            packet.payload.clone()
                         }
                     } else {
-                        // No protection — use raw payload (for testing)
-                        packet.payload.clone()
+                        let previous_result = self.prev_protection.as_mut().and_then(|prev| {
+                            prev.unprotect(&aad, packet.header.packet_number, &packet.payload)
+                                .ok()
+                        });
+
+                        if let Some(plaintext) = previous_result {
+                            plaintext
+                        } else {
+                            self.install_peer_key_update(packet.header.key_phase)?;
+                            self.protection
+                                .as_mut()
+                                .ok_or_else(|| "No packet protection keys".to_string())?
+                                .unprotect(&aad, packet.header.packet_number, &packet.payload)
+                                .map_err(|e| {
+                                    format!("Packet decryption after peer key update failed: {}", e)
+                                })?
+                        }
                     };
 
                     self.transport.update_activity();
@@ -1187,6 +1198,11 @@ impl QuicConnection {
                 "Cannot initiate key update: no application traffic secret available".into(),
             );
         }
+        if self.server_app_traffic_secret.is_empty() {
+            return Err(
+                "Cannot initiate key update: no peer application traffic secret available".into(),
+            );
+        }
 
         // Derive next client application traffic secret (RFC 8446 §7.2)
         let next_secret = self.cipher_suite_hash.expand_label(
@@ -1199,15 +1215,33 @@ impl QuicConnection {
         // Derive new keys from the next secret
         let key_len = 16; // AES-128-GCM
         let iv_len = 12;
-        let next_key = self
-            .cipher_suite_hash
-            .expand_label(&next_secret, "quic key", &[], key_len);
-        let next_iv = self
-            .cipher_suite_hash
-            .expand_label(&next_secret, "quic iv", &[], iv_len);
-        let next_hp = self
-            .cipher_suite_hash
-            .quic_expand_label(&next_secret, "hp", &[], key_len);
+        let next_write_key =
+            self.cipher_suite_hash
+                .quic_expand_label(&next_secret, "key", &[], key_len);
+        let next_write_iv =
+            self.cipher_suite_hash
+                .quic_expand_label(&next_secret, "iv", &[], iv_len);
+        let next_write_hp =
+            self.cipher_suite_hash
+                .quic_expand_label(&next_secret, "hp", &[], key_len);
+        let current_read_key = self.cipher_suite_hash.quic_expand_label(
+            &self.server_app_traffic_secret,
+            "key",
+            &[],
+            key_len,
+        );
+        let current_read_iv = self.cipher_suite_hash.quic_expand_label(
+            &self.server_app_traffic_secret,
+            "iv",
+            &[],
+            iv_len,
+        );
+        let current_read_hp = self.cipher_suite_hash.quic_expand_label(
+            &self.server_app_traffic_secret,
+            "hp",
+            &[],
+            key_len,
+        );
 
         // Store old protection for in-flight packet decryption
         if let Some(old_protection) = self.protection.take() {
@@ -1217,12 +1251,12 @@ impl QuicConnection {
         // Create new protection with updated keys
         let new_keys = crypto::ProtectionKeys::new(
             CipherSuite::TLS_AES_128_GCM_SHA256,
-            next_key.clone(),
-            next_iv.clone(),
-            next_key,
-            next_iv,
+            next_write_key,
+            next_write_iv,
+            current_read_key,
+            current_read_iv,
         )
-        .with_header_protection(next_hp.clone(), next_hp);
+        .with_header_protection(next_write_hp, current_read_hp);
         self.protection = Some(crypto::PacketProtection::new(&new_keys));
 
         // Update the stored secret for future key updates
@@ -1230,6 +1264,67 @@ impl QuicConnection {
 
         // Toggle key phase bit
         self.key_phase = !self.key_phase;
+
+        Ok(())
+    }
+
+    fn install_peer_key_update(&mut self, peer_key_phase: bool) -> Result<(), String> {
+        if self.client_app_traffic_secret.is_empty() || self.server_app_traffic_secret.is_empty() {
+            return Err("Cannot process peer key update without application traffic secrets".into());
+        }
+
+        let key_len = 16;
+        let iv_len = 12;
+        let next_peer_secret = self.cipher_suite_hash.expand_label(
+            &self.server_app_traffic_secret,
+            "traffic upd",
+            &[],
+            self.cipher_suite_hash.len(),
+        );
+
+        let current_write_key = self.cipher_suite_hash.quic_expand_label(
+            &self.client_app_traffic_secret,
+            "key",
+            &[],
+            key_len,
+        );
+        let current_write_iv = self.cipher_suite_hash.quic_expand_label(
+            &self.client_app_traffic_secret,
+            "iv",
+            &[],
+            iv_len,
+        );
+        let current_write_hp = self.cipher_suite_hash.quic_expand_label(
+            &self.client_app_traffic_secret,
+            "hp",
+            &[],
+            key_len,
+        );
+        let next_read_key =
+            self.cipher_suite_hash
+                .quic_expand_label(&next_peer_secret, "key", &[], key_len);
+        let next_read_iv =
+            self.cipher_suite_hash
+                .quic_expand_label(&next_peer_secret, "iv", &[], iv_len);
+        let next_read_hp =
+            self.cipher_suite_hash
+                .quic_expand_label(&next_peer_secret, "hp", &[], key_len);
+
+        if let Some(old_protection) = self.protection.take() {
+            self.prev_protection = Some(old_protection);
+        }
+
+        let new_keys = crypto::ProtectionKeys::new(
+            CipherSuite::TLS_AES_128_GCM_SHA256,
+            current_write_key,
+            current_write_iv,
+            next_read_key,
+            next_read_iv,
+        )
+        .with_header_protection(current_write_hp, next_read_hp);
+        self.protection = Some(crypto::PacketProtection::new(&new_keys));
+        self.server_app_traffic_secret = next_peer_secret;
+        self.peer_key_phase = peer_key_phase;
 
         Ok(())
     }

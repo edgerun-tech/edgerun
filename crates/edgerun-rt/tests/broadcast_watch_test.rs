@@ -1,3 +1,4 @@
+use core::future::Future;
 use edgerun_rt::{broadcast, noop_waker};
 use core::pin::Pin;
 use core::task::{Context, Poll};

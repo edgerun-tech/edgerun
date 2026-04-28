@@ -39,6 +39,8 @@ const WIFI_MAC_ANT_CTRL_START: *mut u32 = 0x6003_4314 as *mut u32;
 const WIFI_MAC_ANT_CTRL_STRIDE_WORDS: usize = 76 / 4;
 const WIFI_MAC_ANT_CTRL_COUNT: usize = 8;
 const WIFI_MAC_ANT_CTRL_332A8: *mut u32 = 0x6003_32a8 as *mut u32;
+const WIFI_PHY_LOW_RATE_CTRL0: *mut u32 = 0x6001_c860 as *mut u32;
+const WIFI_PHY_LOW_RATE_CTRL1: *mut u32 = 0x6001_c87c as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -163,6 +165,12 @@ pub struct WifiMmioAntennaRegs {
     pub ant_aux: u32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiMmioPhyRegs {
+    pub low_rate_ctrl0: u32,
+    pub low_rate_ctrl1: u32,
+}
+
 pub struct Esp32s3WifiMmio;
 
 impl Esp32s3WifiMmio {
@@ -278,6 +286,15 @@ impl Esp32s3WifiMmio {
         }
     }
 
+    pub fn debug_phy_regs() -> WifiMmioPhyRegs {
+        unsafe {
+            WifiMmioPhyRegs {
+                low_rate_ctrl0: WIFI_PHY_LOW_RATE_CTRL0.read_volatile(),
+                low_rate_ctrl1: WIFI_PHY_LOW_RATE_CTRL1.read_volatile(),
+            }
+        }
+    }
+
     pub fn debug_step(step: u8) -> bool {
         unsafe {
             match step {
@@ -354,9 +371,24 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(1102, Ordering::Relaxed);
                     true
                 }
+                12 => {
+                    LAST_STATUS.store(1201, Ordering::Relaxed);
+                    init_phy_low_rate_slice();
+                    LAST_STATUS.store(1202, Ordering::Relaxed);
+                    true
+                }
                 _ => false,
             }
         }
+    }
+
+    pub fn init_known_good() -> bool {
+        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] {
+            if !Self::debug_step(step) {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -566,6 +598,11 @@ unsafe fn init_antenna_slice() {
         update(reg, |v| ((v & !0x7) & !0x8 | 0x20) & !0x10);
     }
     update(WIFI_MAC_ANT_CTRL_332A8, |v| (v & !0x7) | 0x20);
+}
+
+unsafe fn init_phy_low_rate_slice() {
+    update(WIFI_PHY_LOW_RATE_CTRL0, |v| (v & !0x400) & !0x800);
+    update(WIFI_PHY_LOW_RATE_CTRL1, |v| v & !0x800);
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {

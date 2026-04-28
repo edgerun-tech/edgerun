@@ -118,7 +118,6 @@ pub fn run_queue() {
     let mut pending = Vec::new();
 
     for mut task in tasks.drain(..) {
-
         match task.as_mut().poll(&mut cx) {
             Poll::Ready(()) => {
                 completed_count += 1;

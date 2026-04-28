@@ -14,7 +14,7 @@ use crate::spec::OciLinuxResources;
 
 /// Write to a cgroup file, logging errors to /dev/kmsg (best-effort).
 pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
-    if let Err(e) = fs::write(cgroup_root.join(file), content) {
+    if let Err(e) = cgroup_write_result(cgroup_root, file, content) {
         if let Ok(mut kmsg) = fs::OpenOptions::new().write(true).open("/dev/kmsg") {
             let _ = writeln!(
                 kmsg,
@@ -25,6 +25,24 @@ pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
             );
         }
     }
+}
+
+/// Write to a cgroup file, returning an error if write fails.
+pub fn cgroup_write_result(
+    cgroup_root: &Path,
+    file: &str,
+    content: &str,
+) -> io::Result<()> {
+    fs::write(cgroup_root.join(file), content)
+}
+
+/// Append to a cgroup file, returning an error if append fails.
+pub fn cgroup_append_result(cgroup_root: &Path, file: &str, content: &str) -> io::Result<()> {
+    let mut f = fs::OpenOptions::new()
+        .append(true)
+        .open(cgroup_root.join(file))?;
+    writeln!(f, "{}", content)?;
+    Ok(())
 }
 
 /// Append to a cgroup file (for per-device entries like io.weight).
@@ -38,9 +56,18 @@ pub fn cgroup_append(cgroup_root: &Path, file: &str, content: &str) {
     }
 }
 
-/// Write to a specific cgroup file (public for update command).
+/// Write to a specific cgroup file.
 pub fn setup_container_cgroups_from_file(cgroup_root: &Path, file: &str, content: &str) {
     cgroup_write(cgroup_root, file, content);
+}
+
+/// Write to a specific cgroup file and fail on errors.
+pub fn setup_container_cgroups_from_file_result(
+    cgroup_root: &Path,
+    file: &str,
+    content: &str,
+) -> io::Result<()> {
+    cgroup_write_result(cgroup_root, file, content)
 }
 
 /// Apply cgroup v2 resource limits by writing to /sys/fs/cgroup.
