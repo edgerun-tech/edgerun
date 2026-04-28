@@ -1216,6 +1216,13 @@ pub fn validate_delegation_chain(
                     empty_map(),
                 );
             }
+            if parent_cap.capability_kind != child_cap.capability_kind {
+                return reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("attenuation violated: child changes capability_kind".into()),
+                    empty_map(),
+                );
+            }
             let parent_actions: std::collections::HashSet<&String> =
                 parent_cap.actions.iter().collect();
             for action in &child_cap.actions {
@@ -1248,6 +1255,26 @@ pub fn validate_delegation_chain(
                 return reject(
                     ReasonCode::AuthorityDenied,
                     Value::String("attenuation violated: child expands scope".into()),
+                    empty_map(),
+                );
+            }
+            if !constraint_set_allows(
+                parent_cap.constraints.as_ref(),
+                child_cap.constraints.as_ref(),
+            ) {
+                return reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("attenuation violated: child loosens constraints".into()),
+                    empty_map(),
+                );
+            }
+            if !assurance_requirement_allows(
+                parent_cap.minimum_assurance.as_ref(),
+                child_cap.minimum_assurance.as_ref(),
+            ) {
+                return reject(
+                    ReasonCode::AssuranceInsufficient,
+                    Value::String("attenuation violated: child loosens assurance".into()),
                     empty_map(),
                 );
             }
@@ -1582,9 +1609,9 @@ fn scope_descriptor_allows(parent: &ScopeDescriptor, child: &ScopeDescriptor) ->
     let parent_kind = edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(parent.scope_kind);
     let child_kind = edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(child.scope_kind);
     if parent_kind == Some(edgerun_proto::edgerun::v0::trust::ScopeKind::GlobalWithConstraints) {
-        return time_window_allows(parent.time_bounds.as_ref(), child.time_bounds.as_ref());
-    }
-    if parent_kind != child_kind {
+        // A global-with-constraints parent may delegate to a narrower scope kind,
+        // but any populated target sets on the parent still constrain the child.
+    } else if parent_kind != child_kind {
         return false;
     }
 
@@ -1652,6 +1679,157 @@ fn time_window_allows(
         }
     }
     true
+}
+
+fn constraint_set_allows(parent: Option<&ConstraintSet>, child: Option<&ConstraintSet>) -> bool {
+    let Some(parent) = parent else {
+        return true;
+    };
+    let Some(child) = child else {
+        return false;
+    };
+
+    if let Some(parent_max) = parent.max_uses {
+        if child
+            .max_uses
+            .is_none_or(|child_max| child_max > parent_max)
+        {
+            return false;
+        }
+    }
+    if let Some(parent_not_before) = &parent.not_before {
+        let Some(child_not_before) = &child.not_before else {
+            return false;
+        };
+        if timestamp_ms(child_not_before) < timestamp_ms(parent_not_before) {
+            return false;
+        }
+    }
+    if let Some(parent_expires_at) = &parent.expires_at {
+        let Some(child_expires_at) = &child.expires_at else {
+            return false;
+        };
+        if timestamp_ms(child_expires_at) > timestamp_ms(parent_expires_at) {
+            return false;
+        }
+    }
+    if let Some(parent_rate_limit) = &parent.rate_limit {
+        let Some(child_rate_limit) = &child.rate_limit else {
+            return false;
+        };
+        if !rate_limit_allows(parent_rate_limit, child_rate_limit) {
+            return false;
+        }
+    }
+    if parent.requires_local_session == Some(true) && child.requires_local_session != Some(true) {
+        return false;
+    }
+    if parent.requires_user_presence == Some(true) && child.requires_user_presence != Some(true) {
+        return false;
+    }
+    if !scalar_targets_allow(
+        &parent.requires_transport_classes,
+        &child.requires_transport_classes,
+    ) || (!parent.requires_transport_classes.is_empty()
+        && child.requires_transport_classes.is_empty())
+    {
+        return false;
+    }
+    if !scalar_targets_allow(
+        &parent.requires_location_classes,
+        &child.requires_location_classes,
+    ) || (!parent.requires_location_classes.is_empty()
+        && child.requires_location_classes.is_empty())
+    {
+        return false;
+    }
+    if parent.export_policy != 0 && child.export_policy != parent.export_policy {
+        return false;
+    }
+    if !scalar_targets_allow(
+        &parent.execution_class_limits,
+        &child.execution_class_limits,
+    ) || (!parent.execution_class_limits.is_empty() && child.execution_class_limits.is_empty())
+    {
+        return false;
+    }
+    if !scalar_targets_allow(&parent.storage_class_limits, &child.storage_class_limits)
+        || (!parent.storage_class_limits.is_empty() && child.storage_class_limits.is_empty())
+    {
+        return false;
+    }
+
+    true
+}
+
+fn rate_limit_allows(
+    parent: &crate::protocol::RateLimit,
+    child: &crate::protocol::RateLimit,
+) -> bool {
+    if child.max_operations > parent.max_operations {
+        return false;
+    }
+    let Some(parent_ms) = parent.per.as_ref().and_then(duration_millis) else {
+        return false;
+    };
+    let Some(child_ms) = child.per.as_ref().and_then(duration_millis) else {
+        return false;
+    };
+    child_ms <= parent_ms
+}
+
+fn assurance_requirement_allows(
+    parent: Option<&AssuranceRequirement>,
+    child: Option<&AssuranceRequirement>,
+) -> bool {
+    let Some(parent) = parent else {
+        return true;
+    };
+    let Some(child) = child else {
+        return false;
+    };
+
+    if child.required_class < parent.required_class {
+        return false;
+    }
+    if !parent.acceptable_attesters.is_empty() {
+        if child.acceptable_attesters.is_empty() {
+            return false;
+        }
+        let parent_attesters: std::collections::HashSet<&[u8]> = parent
+            .acceptable_attesters
+            .iter()
+            .map(|attester| attester.identity_id.as_slice())
+            .collect();
+        for attester in &child.acceptable_attesters {
+            if !parent_attesters.contains(attester.identity_id.as_slice()) {
+                return false;
+            }
+        }
+    }
+    if let Some(parent_max_age) = &parent.max_evidence_age {
+        let Some(child_max_age) = &child.max_evidence_age else {
+            return false;
+        };
+        let Some(parent_ms) = duration_millis(parent_max_age) else {
+            return false;
+        };
+        let Some(child_ms) = duration_millis(child_max_age) else {
+            return false;
+        };
+        if child_ms > parent_ms {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn duration_millis(duration: &prost_types::Duration) -> Option<i128> {
+    if !is_valid_non_negative_duration(duration) {
+        return None;
+    }
+    Some(duration.seconds as i128 * 1000 + duration.nanos as i128 / 1_000_000)
 }
 
 fn verify_delegation_signature(delegation: &DelegationRecord) -> bool {
@@ -4711,6 +4889,127 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_capability_kind_expansion_is_rejected() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        child.capability.as_mut().unwrap().capability_kind =
+            edgerun_proto::edgerun::v0::trust::CapabilityKind::NodeControl as i32;
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_global_parent_domain_constraint_must_attenuate() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        let parent_scope = parent.capability.as_mut().unwrap().scope.as_mut().unwrap();
+        parent_scope.scope_kind =
+            edgerun_proto::edgerun::v0::trust::ScopeKind::GlobalWithConstraints as i32;
+        parent_scope.target_nodes.clear();
+        parent_scope.target_domains = vec!["secrets".into()];
+        sign_delegation(&mut parent, &root_key);
+
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        let child_scope = child.capability.as_mut().unwrap().scope.as_mut().unwrap();
+        child_scope.scope_kind = edgerun_proto::edgerun::v0::trust::ScopeKind::Domain as i32;
+        child_scope.target_nodes.clear();
+        child_scope.target_domains = vec!["metrics".into()];
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_dropping_parent_constraints_is_rejected() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        parent.capability.as_mut().unwrap().constraints = Some(ConstraintSet {
+            constraint_version: 1,
+            not_before: None,
+            expires_at: None,
+            max_uses: Some(1),
+            rate_limit: None,
+            requires_local_session: None,
+            requires_user_presence: None,
+            requires_transport_classes: vec![],
+            requires_location_classes: vec![],
+            export_policy: 0,
+            execution_class_limits: vec![],
+            storage_class_limits: vec![],
+            constraint_metadata: None,
+        });
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        child.capability.as_mut().unwrap().constraints = None;
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_dropping_parent_assurance_is_rejected() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        parent.capability.as_mut().unwrap().minimum_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: edgerun_proto::edgerun::v0::common::AssuranceClass::HardwareBacked
+                as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        child.capability.as_mut().unwrap().minimum_assurance = None;
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AssuranceInsufficient));
     }
 
     #[test]

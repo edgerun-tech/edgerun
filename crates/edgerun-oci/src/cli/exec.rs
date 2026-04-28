@@ -9,7 +9,9 @@ use std::ffi::CString;
 use std::fs::{self, File};
 use std::io;
 use std::os::unix::io::AsRawFd;
+use std::path::PathBuf;
 
+use crate::cli::user::{resolve_user, validate_user_spec};
 use crate::syscalls::{do_setns, ns};
 use crate::userns::{do_setgid, do_setuid};
 
@@ -281,7 +283,7 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     // Load the effective runtime spec first; the pulled image bundle config is
     // only a template and misses run-time overrides such as env, user, and rootfs.
     let spec = load_exec_spec(&state);
-    let root_fd = open_exec_root(pid, spec.as_ref())?;
+    let (root_fd, root_path) = open_exec_root(pid, spec.as_ref())?;
 
     // Determine final args, env, cwd, user
     let (exec_args, env_vars, cwd, uid, gid) =
@@ -320,16 +322,15 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
                 .clone()
                 .or(proc.cwd)
                 .unwrap_or_else(|| "/".into());
-            let uid = parsed
-                .user
-                .map(|(u, _g)| u)
-                .or_else(|| proc.user.as_ref().and_then(|u| u.uid))
-                .unwrap_or(0);
-            let gid = parsed
-                .user
-                .map(|(_u, g)| g)
-                .or_else(|| proc.user.as_ref().and_then(|u| u.gid))
-                .unwrap_or(0);
+            let (uid, gid) = if let Some(ref user) = parsed.user {
+                let user = resolve_user(&root_path, user)?;
+                (user.uid.unwrap_or(0), user.gid.unwrap_or(0))
+            } else {
+                (
+                    proc.user.as_ref().and_then(|u| u.uid).unwrap_or(0),
+                    proc.user.as_ref().and_then(|u| u.gid).unwrap_or(0),
+                )
+            };
 
             // Apply --env overrides
             for (k, v) in &parsed.extra_env {
@@ -571,19 +572,20 @@ fn load_exec_spec(state: &crate::state::ContainerState) -> Option<crate::json::O
         .and_then(|data| crate::json::parse_oci_spec(&data).ok())
 }
 
-fn open_exec_root(pid: u32, spec: Option<&crate::json::OciSpec>) -> io::Result<File> {
+fn open_exec_root(pid: u32, spec: Option<&crate::json::OciSpec>) -> io::Result<(File, PathBuf)> {
     if let Some(root_path) = spec
         .and_then(|spec| spec.root.as_ref())
         .map(|root| root.path.as_str())
         .filter(|path| !path.is_empty())
     {
         if let Ok(file) = File::open(root_path) {
-            return Ok(file);
+            return Ok((file, PathBuf::from(root_path)));
         }
     }
 
     let proc_root = format!("/proc/{pid}/root");
     File::open(&proc_root)
+        .map(|file| (file, PathBuf::from(&proc_root)))
         .map_err(|error| io::Error::new(error.kind(), format!("open {proc_root}: {error}")))
 }
 
@@ -654,7 +656,7 @@ struct ExecArgs {
     id: String,
     cwd: Option<String>,
     extra_env: Vec<(String, String)>,
-    user: Option<(u32, u32)>,
+    user: Option<String>,
     terminal: bool,
     process_json_path: Option<String>,
     process_json: Option<String>,
@@ -697,23 +699,7 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
                         "--user requires a value",
                     ));
                 }
-                if let Some((u, g)) = args[i].split_once(':') {
-                    let uid: u32 = u.parse().map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidInput, format!("invalid uid: {}", u))
-                    })?;
-                    let gid: u32 = g.parse().map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidInput, format!("invalid gid: {}", g))
-                    })?;
-                    result.user = Some((uid, gid));
-                } else {
-                    let uid: u32 = args[i].parse().map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("invalid user: {}", args[i]),
-                        )
-                    })?;
-                    result.user = Some((uid, 0));
-                }
+                result.user = Some(validate_user_spec(&args[i])?);
             }
             "--terminal" | "-t" => {
                 result.terminal = true;

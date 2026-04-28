@@ -20,6 +20,7 @@ mod start;
 mod state;
 mod stop;
 mod update;
+mod user;
 
 mod pull;
 mod push;
