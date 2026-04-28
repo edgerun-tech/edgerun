@@ -41,6 +41,12 @@ const WIFI_MAC_ANT_CTRL_COUNT: usize = 8;
 const WIFI_MAC_ANT_CTRL_332A8: *mut u32 = 0x6003_32a8 as *mut u32;
 const WIFI_PHY_LOW_RATE_CTRL0: *mut u32 = 0x6001_c860 as *mut u32;
 const WIFI_PHY_LOW_RATE_CTRL1: *mut u32 = 0x6001_c87c as *mut u32;
+const WIFI_PHY_TX_SEED: *mut u32 = 0x6001_c400 as *mut u32;
+const WIFI_PHY_RX_11B_CTRL0: *mut u32 = 0x6001_c044 as *mut u32;
+const WIFI_PHY_RX_11B_CTRL1: *mut u32 = 0x6001_c124 as *mut u32;
+const WIFI_PHY_RX_11B_CTRL2: *mut u32 = 0x6001_c804 as *mut u32;
+const WIFI_PHY_RX_11B_CTRL3: *mut u32 = 0x6001_c104 as *mut u32;
+const WIFI_MODEM_CTRL_26010: *mut u32 = 0x6002_6010 as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -169,6 +175,12 @@ pub struct WifiMmioAntennaRegs {
 pub struct WifiMmioPhyRegs {
     pub low_rate_ctrl0: u32,
     pub low_rate_ctrl1: u32,
+    pub tx_seed: u32,
+    pub rx_11b_ctrl0: u32,
+    pub rx_11b_ctrl1: u32,
+    pub rx_11b_ctrl2: u32,
+    pub rx_11b_ctrl3: u32,
+    pub modem_ctrl_26010: u32,
 }
 
 pub struct Esp32s3WifiMmio;
@@ -291,6 +303,12 @@ impl Esp32s3WifiMmio {
             WifiMmioPhyRegs {
                 low_rate_ctrl0: WIFI_PHY_LOW_RATE_CTRL0.read_volatile(),
                 low_rate_ctrl1: WIFI_PHY_LOW_RATE_CTRL1.read_volatile(),
+                tx_seed: WIFI_PHY_TX_SEED.read_volatile(),
+                rx_11b_ctrl0: WIFI_PHY_RX_11B_CTRL0.read_volatile(),
+                rx_11b_ctrl1: WIFI_PHY_RX_11B_CTRL1.read_volatile(),
+                rx_11b_ctrl2: WIFI_PHY_RX_11B_CTRL2.read_volatile(),
+                rx_11b_ctrl3: WIFI_PHY_RX_11B_CTRL3.read_volatile(),
+                modem_ctrl_26010: WIFI_MODEM_CTRL_26010.read_volatile(),
             }
         }
     }
@@ -375,6 +393,18 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(1201, Ordering::Relaxed);
                     init_phy_low_rate_slice();
                     LAST_STATUS.store(1202, Ordering::Relaxed);
+                    true
+                }
+                13 => {
+                    LAST_STATUS.store(1301, Ordering::Relaxed);
+                    set_phy_tx_seed(37);
+                    LAST_STATUS.store(1302, Ordering::Relaxed);
+                    true
+                }
+                14 => {
+                    LAST_STATUS.store(1401, Ordering::Relaxed);
+                    init_phy_rx_11b_opt_slice();
+                    LAST_STATUS.store(1402, Ordering::Relaxed);
                     true
                 }
                 _ => false,
@@ -603,6 +633,20 @@ unsafe fn init_antenna_slice() {
 unsafe fn init_phy_low_rate_slice() {
     update(WIFI_PHY_LOW_RATE_CTRL0, |v| (v & !0x400) & !0x800);
     update(WIFI_PHY_LOW_RATE_CTRL1, |v| v & !0x800);
+}
+
+unsafe fn set_phy_tx_seed(seed: u32) {
+    update(WIFI_PHY_TX_SEED, |v| (v & !0x7f) | (seed & 0x7f));
+}
+
+unsafe fn init_phy_rx_11b_opt_slice() {
+    update(WIFI_PHY_RX_11B_CTRL0, |v| v | 0x003f_0000);
+    update(WIFI_PHY_RX_11B_CTRL0, |v| (v & 0xffff_c0ff) | 0x2100);
+    update(WIFI_PHY_RX_11B_CTRL1, |v| (v & 0xffff_03ff) | 0x8400);
+    update(WIFI_PHY_RX_11B_CTRL1, |v| (v & !0xf) | 3);
+    update(WIFI_PHY_RX_11B_CTRL2, |v| (v & 0xffff_0fff) | 0x9000);
+    update(WIFI_PHY_RX_11B_CTRL3, |v| (v & 0xffff_fe00) | 0x1e2);
+    update(WIFI_MODEM_CTRL_26010, |v| v | 0x0002_0000);
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {

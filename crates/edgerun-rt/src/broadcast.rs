@@ -4,12 +4,13 @@ extern crate alloc;
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use core::cell::{Cell, RefCell};
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 
 pub fn broadcast<T: Clone + 'static>(cap: usize) -> (Publisher<T>, Subscriber<T>) {
     let inner = Arc::new(Inner {
@@ -17,6 +18,7 @@ pub fn broadcast<T: Clone + 'static>(cap: usize) -> (Publisher<T>, Subscriber<T>
         cap,
         start_seq: AtomicUsize::new(0),
         closed: AtomicBool::new(false),
+        waiters: RefCell::new(Vec::new()),
     });
     (
         Publisher {
@@ -34,6 +36,7 @@ struct Inner<T> {
     cap: usize,
     start_seq: AtomicUsize,
     closed: AtomicBool,
+    waiters: RefCell<Vec<Waker>>,
 }
 
 pub struct Publisher<T> {
@@ -51,6 +54,12 @@ impl<T: Clone> Publisher<T> {
             self.inner.start_seq.fetch_add(1, Ordering::AcqRel);
         }
         buffer.push_back(value);
+        drop(buffer);
+
+        let waiters = core::mem::take(&mut *self.inner.waiters.borrow_mut());
+        for waker in waiters {
+            waker.wake();
+        }
     }
 
     pub fn closed(&self) -> bool {
@@ -59,6 +68,10 @@ impl<T: Clone> Publisher<T> {
 
     pub fn close(&self) {
         self.inner.closed.store(true, Ordering::Release);
+        let waiters = core::mem::take(&mut *self.inner.waiters.borrow_mut());
+        for waker in waiters {
+            waker.wake();
+        }
     }
 }
 
@@ -66,6 +79,7 @@ impl<T: Clone> Publisher<T> {
 pub struct Subscriber<T> {
     inner: Arc<Inner<T>>,
     next_seq: Cell<usize>,
+    waker: Option<Waker>,
 }
 
 impl<T: Clone + 'static> Future for Subscriber<T> {
@@ -86,11 +100,33 @@ impl<T: Clone + 'static> Future for Subscriber<T> {
             let value = buffer[index].clone();
             next_seq += 1;
             this.next_seq.set(next_seq);
+            if let Some(waker) = this.waker.take() {
+                let mut waiters = this.inner.waiters.borrow_mut();
+                remove_waker(&mut waiters, &waker);
+            }
             return Poll::Ready(value);
         }
 
-        cx.waker().wake_by_ref();
+        let should_register = match this.waker.as_ref() {
+            Some(registered) => !registered.will_wake(cx.waker()),
+            None => true,
+        };
+        if should_register {
+            let mut waiters = this.inner.waiters.borrow_mut();
+            if let Some(previous) = this.waker.replace(cx.waker().clone()) {
+                remove_waker(&mut waiters, &previous);
+            }
+            register_waker(&mut waiters, this.waker.as_ref().expect("registered wakeup"));
+        }
         Poll::Pending
+    }
+}
+
+impl<T> Drop for Subscriber<T> {
+    fn drop(&mut self) {
+        if let Some(waker) = self.waker.take() {
+            remove_waker(&mut self.inner.waiters.borrow_mut(), &waker);
+        }
     }
 }
 
@@ -111,5 +147,17 @@ impl<T: Clone + 'static> Subscriber<T> {
         } else {
             return None;
         }
+    }
+}
+
+fn register_waker(waiters: &mut alloc::vec::Vec<Waker>, waker: &Waker) {
+    if !waiters.iter().any(|registered| registered.will_wake(waker)) {
+        waiters.push(waker.clone());
+    }
+}
+
+fn remove_waker(waiters: &mut alloc::vec::Vec<Waker>, waker: &Waker) {
+    if let Some(pos) = waiters.iter().position(|registered| registered.will_wake(waker)) {
+        waiters.remove(pos);
     }
 }
