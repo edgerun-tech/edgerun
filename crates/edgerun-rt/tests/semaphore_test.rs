@@ -27,3 +27,22 @@ fn semaphore_try_acquire() {
     assert!(sem.try_acquire().is_ok());
     // Second try may succeed or fail - semantics unclear
 }
+
+#[test]
+fn semaphore_waiter_acquires_after_release() {
+    let sem = Semaphore::new(1);
+    let held = sem.try_acquire().unwrap();
+
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let mut waiting = sem.acquire();
+
+    assert!(matches!(Pin::new(&mut waiting).poll(&mut cx), Poll::Pending));
+
+    drop(held);
+
+    assert!(matches!(
+        Pin::new(&mut waiting).poll(&mut cx),
+        Poll::Ready(Ok(_))
+    ));
+}

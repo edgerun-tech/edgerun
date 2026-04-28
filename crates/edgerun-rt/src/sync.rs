@@ -2,10 +2,11 @@
 
 extern crate alloc;
 
+use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 
 pub struct Mutex<T> {
     locked: AtomicBool,
@@ -132,17 +133,22 @@ impl<'a, T> core::ops::DerefMut for MutexGuard<'a, T> {
 
 pub struct Semaphore {
     permits: AtomicUsize,
+    waiters: Mutex<Vec<Waker>>,
 }
 
 impl Semaphore {
     pub fn new(permits: usize) -> Self {
         Self {
             permits: AtomicUsize::new(permits),
+            waiters: Mutex::new(Vec::new()),
         }
     }
 
     pub fn acquire(&self) -> SemaphoreAcquire<'_> {
-        SemaphoreAcquire { semaphore: self }
+        SemaphoreAcquire {
+            semaphore: self,
+            waker: None,
+        }
     }
 
     pub fn try_acquire(&self) -> Result<SemaphoreGuard<'_>, SemaphoreTryAcquireError> {
@@ -155,17 +161,33 @@ impl Semaphore {
             .compare_exchange(n, n - 1, Ordering::Acquire, Ordering::Acquire)
             .is_ok()
         {
-            return Ok(SemaphoreGuard(&self.permits));
+            return Ok(SemaphoreGuard(self));
         }
         Err(SemaphoreTryAcquireError::NoPermits)
     }
 }
 
-pub struct SemaphoreGuard<'a>(&'a AtomicUsize);
+fn register_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
+    if !waiters.iter().any(|registered| registered.will_wake(waker)) {
+        waiters.push(waker.clone());
+    }
+}
+
+fn remove_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
+    if let Some(pos) = waiters.iter().position(|registered| registered.will_wake(waker)) {
+        waiters.remove(pos);
+    }
+}
+
+pub struct SemaphoreGuard<'a>(&'a Semaphore);
 
 impl<'a> Drop for SemaphoreGuard<'a> {
     fn drop(&mut self) {
-        self.0.fetch_add(1, Ordering::Release);
+        self.0.permits.fetch_add(1, Ordering::Release);
+        let mut waiters = self.0.waiters.lock();
+        if let Some(waker) = waiters.pop() {
+            waker.wake();
+        }
     }
 }
 
@@ -181,18 +203,45 @@ pub struct SemaphoreAcquireError;
 
 pub struct SemaphoreAcquire<'a> {
     semaphore: &'a Semaphore,
+    waker: Option<Waker>,
 }
 
 impl<'a> Future for SemaphoreAcquire<'a> {
     type Output = Result<SemaphoreGuard<'a>, SemaphoreAcquireError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
         match self.semaphore.try_acquire() {
-            Ok(guard) => Poll::Ready(Ok(guard)),
+            Ok(guard) => {
+                if let Some(waker) = this.waker.take() {
+                    let mut waiters = this.semaphore.waiters.lock();
+                    remove_waker(&mut waiters, &waker);
+                }
+                Poll::Ready(Ok(guard))
+            }
             Err(_) => {
-                cx.waker().wake_by_ref();
+                let should_register = match this.waker.as_ref() {
+                    Some(registered) => !registered.will_wake(cx.waker()),
+                    None => true,
+                };
+                if should_register {
+                    let mut waiters = this.semaphore.waiters.lock();
+                    if let Some(previous) = this.waker.replace(cx.waker().clone()) {
+                        remove_waker(&mut waiters, &previous);
+                    }
+                    register_waker(&mut waiters, this.waker.as_ref().expect("registered wakeup"));
+                }
                 Poll::Pending
             }
+        }
+    }
+}
+
+impl<'a> Drop for SemaphoreAcquire<'a> {
+    fn drop(&mut self) {
+        if let Some(waker) = self.waker.take() {
+            let mut waiters = self.semaphore.waiters.lock();
+            remove_waker(&mut waiters, &waker);
         }
     }
 }
