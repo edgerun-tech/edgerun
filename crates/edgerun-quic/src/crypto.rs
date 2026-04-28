@@ -1,11 +1,12 @@
 //! QUIC packet protection (RFC 9001)
 //!
-//! Implements AEAD packet protection for QUIC using AES-GCM.
-//! The TLS 1.3 handshake for QUIC (CRYPTO frames, key schedule)
-//! requires a separate QUIC-TLS adapter that is not yet implemented.
+//! Implements QUIC packet payload protection with AES-GCM plus RFC 9001
+//! AES header protection. The QUIC-TLS handshake adapter lives in the
+//! handshake modules and HTTP/3 integration layer.
 //!
 //! This module provides:
-//! - `PacketProtection` — AEAD encrypt/decrypt with QUIC-specific nonce and AAD
+//! - `PacketProtection` — AEAD encrypt/decrypt with QUIC-specific nonce and AAD,
+//!   plus QUIC header protection mask/unmask
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
@@ -440,12 +441,12 @@ impl PacketProtection {
 
 /// QUIC crypto context — manages keys at different encryption levels.
 ///
-/// NOTE: The TLS 1.3 handshake for QUIC (deriving keys from ECDH via
-/// CRYPTO frames) is NOT yet implemented. This requires a QUIC-TLS adapter
-/// that drives the TLS 1.3 handshake without the record layer.
+/// NOTE: This is a low-level key container and packet-protection context. The
+/// QUIC-TLS adapter that derives real Initial, Handshake, 0-RTT, and 1-RTT
+/// keys is implemented in the handshake modules and wired by HTTP/3.
 ///
 /// What IS implemented:
-/// - `PacketProtection` — AEAD encrypt/decrypt with proper QUIC nonce
+/// - `PacketProtection` — AEAD encrypt/decrypt with proper QUIC nonce and header protection
 /// - `ProtectionKeys` — key storage for each encryption level
 /// - Test key material for unit testing the packet/transport layers
 pub struct QuicCrypto {
