@@ -48,18 +48,27 @@ use core::fmt;
 pub enum JsonValueError {
     /// Operation was attempted on a JSON value of the wrong type.
     WrongType(String),
+    /// The input was not valid JSON.
+    Parse(crate::JsonParseError),
 }
 
 impl fmt::Display for JsonValueError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             JsonValueError::WrongType(msg) => write!(f, "{}", msg),
+            JsonValueError::Parse(error) => write!(f, "{}", error),
         }
     }
 }
 
 #[cfg(all(feature = "std", not(target_os = "none")))]
 impl std::error::Error for JsonValueError {}
+
+impl From<crate::JsonParseError> for JsonValueError {
+    fn from(error: crate::JsonParseError) -> Self {
+        Self::Parse(error)
+    }
+}
 
 /// A JSON value that owns its data.
 ///
@@ -97,6 +106,32 @@ pub type Value = JsonValue;
 pub type Number = JsonNumber;
 
 impl Eq for JsonValue {}
+
+macro_rules! impl_try_from_json_number {
+    ($ty:ty, $method:ident) => {
+        impl TryFrom<JsonValue> for $ty {
+            type Error = JsonValueError;
+
+            fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+                (&value).try_into()
+            }
+        }
+
+        impl TryFrom<&JsonValue> for $ty {
+            type Error = JsonValueError;
+
+            fn try_from(value: &JsonValue) -> Result<Self, Self::Error> {
+                value.$method().ok_or_else(|| {
+                    JsonValueError::WrongType(format!(
+                        "expected {}, found {}",
+                        stringify!($ty),
+                        value.variant_name()
+                    ))
+                })
+            }
+        }
+    };
+}
 
 impl JsonValue {
     /// Returns the name of this JSON value's variant (for error messages).
@@ -347,6 +382,87 @@ impl JsonValue {
     }
 
     #[must_use]
+    pub fn object_entries(&self) -> Option<impl ExactSizeIterator<Item = (&str, &JsonValue)> + '_> {
+        self.as_object().map(Map::fields)
+    }
+
+    #[must_use]
+    pub fn array_items(&self) -> Option<impl ExactSizeIterator<Item = &JsonValue> + '_> {
+        self.as_array().map(|values| values.iter())
+    }
+
+    pub fn required(&self, key: &str) -> Result<&JsonValue, JsonValueError> {
+        self.as_object()
+            .ok_or_else(|| {
+                JsonValueError::WrongType(format!(
+                    "field lookup expected object, found {}",
+                    self.variant_name()
+                ))
+            })?
+            .required(key)
+    }
+
+    pub fn get_str(&self, key: &str) -> Option<&str> {
+        self.get(key).and_then(JsonValue::as_str)
+    }
+
+    pub fn required_str(&self, key: &str) -> Result<&str, JsonValueError> {
+        self.required(key)?
+            .as_str()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected string")))
+    }
+
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get(key).and_then(JsonValue::as_bool)
+    }
+
+    pub fn required_bool(&self, key: &str) -> Result<bool, JsonValueError> {
+        self.required(key)?
+            .as_bool()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected boolean")))
+    }
+
+    pub fn get_i64(&self, key: &str) -> Option<i64> {
+        self.get(key).and_then(JsonValue::as_i64)
+    }
+
+    pub fn required_i64(&self, key: &str) -> Result<i64, JsonValueError> {
+        self.required(key)?
+            .as_i64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i64")))
+    }
+
+    pub fn get_u64(&self, key: &str) -> Option<u64> {
+        self.get(key).and_then(JsonValue::as_u64)
+    }
+
+    pub fn required_u64(&self, key: &str) -> Result<u64, JsonValueError> {
+        self.required(key)?
+            .as_u64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
+    }
+
+    pub fn get_array(&self, key: &str) -> Option<&Vec<JsonValue>> {
+        self.get(key).and_then(JsonValue::as_array)
+    }
+
+    pub fn required_array(&self, key: &str) -> Result<&Vec<JsonValue>, JsonValueError> {
+        self.required(key)?
+            .as_array()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected array")))
+    }
+
+    pub fn get_object(&self, key: &str) -> Option<&Map> {
+        self.get(key).and_then(JsonValue::as_object)
+    }
+
+    pub fn required_object(&self, key: &str) -> Result<&Map, JsonValueError> {
+        self.required(key)?
+            .as_object()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected object")))
+    }
+
+    #[must_use]
     pub fn len(&self) -> usize {
         match self {
             Self::Array(values) => values.len(),
@@ -455,6 +571,14 @@ impl JsonValue {
             _ => {}
         }
     }
+
+    pub fn decode<T, E>(self) -> Result<T, JsonValueError>
+    where
+        T: TryFrom<JsonValue, Error = E>,
+        E: fmt::Display,
+    {
+        T::try_from(self).map_err(|error| JsonValueError::WrongType(error.to_string()))
+    }
 }
 
 impl fmt::Display for JsonValue {
@@ -471,6 +595,80 @@ impl From<bool> for JsonValue {
         Self::Bool(value)
     }
 }
+
+impl TryFrom<JsonValue> for bool {
+    type Error = JsonValueError;
+
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        (&value).try_into()
+    }
+}
+
+impl TryFrom<&JsonValue> for bool {
+    type Error = JsonValueError;
+
+    fn try_from(value: &JsonValue) -> Result<Self, Self::Error> {
+        value.as_bool().ok_or_else(|| {
+            JsonValueError::WrongType(format!("expected bool, found {}", value.variant_name()))
+        })
+    }
+}
+
+impl TryFrom<JsonValue> for String {
+    type Error = JsonValueError;
+
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        match value {
+            JsonValue::String(value) => Ok(value),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected string, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a JsonValue> for &'a str {
+    type Error = JsonValueError;
+
+    fn try_from(value: &'a JsonValue) -> Result<Self, Self::Error> {
+        value.as_str().ok_or_else(|| {
+            JsonValueError::WrongType(format!("expected string, found {}", value.variant_name()))
+        })
+    }
+}
+
+impl TryFrom<JsonValue> for Vec<JsonValue> {
+    type Error = JsonValueError;
+
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        match value {
+            JsonValue::Array(values) => Ok(values),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected array, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
+impl TryFrom<JsonValue> for Map {
+    type Error = JsonValueError;
+
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        match value {
+            JsonValue::Object(entries) => Ok(entries),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected object, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
+impl_try_from_json_number!(i64, as_i64);
+impl_try_from_json_number!(u64, as_u64);
+impl_try_from_json_number!(f64, as_f64);
 
 impl From<String> for JsonValue {
     fn from(value: String) -> Self {

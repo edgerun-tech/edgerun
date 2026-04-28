@@ -8,6 +8,7 @@ use alloc::string::String;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
+use crate::value::JsonValueError;
 use crate::JsonValue;
 use core::ops::{Deref, DerefMut};
 
@@ -39,6 +40,11 @@ impl Map {
         self.0.iter()
     }
 
+    #[must_use]
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = (&str, &JsonValue)> {
+        self.0.iter().map(|(key, value)| (key.as_str(), value))
+    }
+
     pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut (String, JsonValue)> {
         self.0.iter_mut()
     }
@@ -56,6 +62,71 @@ impl Map {
             .iter_mut()
             .find(|(candidate, _)| candidate == key)
             .map(|(_, value)| value)
+    }
+
+    pub fn required(&self, key: &str) -> Result<&JsonValue, JsonValueError> {
+        self.get(key)
+            .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))
+    }
+
+    pub fn get_str(&self, key: &str) -> Option<&str> {
+        self.get(key).and_then(JsonValue::as_str)
+    }
+
+    pub fn required_str(&self, key: &str) -> Result<&str, JsonValueError> {
+        self.required(key)?
+            .as_str()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected string")))
+    }
+
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get(key).and_then(JsonValue::as_bool)
+    }
+
+    pub fn required_bool(&self, key: &str) -> Result<bool, JsonValueError> {
+        self.required(key)?
+            .as_bool()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected boolean")))
+    }
+
+    pub fn get_i64(&self, key: &str) -> Option<i64> {
+        self.get(key).and_then(JsonValue::as_i64)
+    }
+
+    pub fn required_i64(&self, key: &str) -> Result<i64, JsonValueError> {
+        self.required(key)?
+            .as_i64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i64")))
+    }
+
+    pub fn get_u64(&self, key: &str) -> Option<u64> {
+        self.get(key).and_then(JsonValue::as_u64)
+    }
+
+    pub fn required_u64(&self, key: &str) -> Result<u64, JsonValueError> {
+        self.required(key)?
+            .as_u64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
+    }
+
+    pub fn get_array(&self, key: &str) -> Option<&Vec<JsonValue>> {
+        self.get(key).and_then(JsonValue::as_array)
+    }
+
+    pub fn required_array(&self, key: &str) -> Result<&Vec<JsonValue>, JsonValueError> {
+        self.required(key)?
+            .as_array()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected array")))
+    }
+
+    pub fn get_object(&self, key: &str) -> Option<&Map> {
+        self.get(key).and_then(JsonValue::as_object)
+    }
+
+    pub fn required_object(&self, key: &str) -> Result<&Map, JsonValueError> {
+        self.required(key)?
+            .as_object()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected object")))
     }
 
     #[must_use]

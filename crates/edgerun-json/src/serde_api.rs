@@ -34,7 +34,8 @@ use crate::error::JsonParseError;
 use crate::io::{Read, Write};
 use crate::prelude::*;
 use crate::util;
-use crate::JsonValue;
+use crate::{JsonValue, JsonValueError};
+use core::fmt;
 
 // ---------------------------------------------------------------------------
 // Parsing
@@ -143,6 +144,37 @@ pub fn parse_json_tape(input: &str) -> Result<crate::tape::JsonTape, JsonParseEr
     } else {
         Err(JsonParseError::UnexpectedTrailingCharacters(parser.index()))
     }
+}
+
+/// Converts an owned [`JsonValue`] into a caller-defined type without serde.
+///
+/// This uses [`TryFrom<JsonValue>`], so crates can implement small explicit
+/// mappers for their protocol structs while keeping `serde` disabled.
+pub fn from_value_as<T, E>(value: JsonValue) -> Result<T, JsonValueError>
+where
+    T: TryFrom<JsonValue, Error = E>,
+    E: fmt::Display,
+{
+    T::try_from(value).map_err(|error| JsonValueError::WrongType(error.to_string()))
+}
+
+/// Parses JSON and converts the owned value into a caller-defined type without serde.
+pub fn from_str_as<T, E>(input: &str) -> Result<T, JsonValueError>
+where
+    T: TryFrom<JsonValue, Error = E>,
+    E: fmt::Display,
+{
+    from_value_as(parse_json(input)?) 
+}
+
+/// Parses a UTF-8 JSON byte slice and converts it into a caller-defined type without serde.
+pub fn from_slice_as<T, E>(input: &[u8]) -> Result<T, JsonValueError>
+where
+    T: TryFrom<JsonValue, Error = E>,
+    E: fmt::Display,
+{
+    let input = core::str::from_utf8(input).map_err(|_| JsonParseError::InvalidUtf8)?;
+    from_str_as(input)
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 brief:
   kind: reachability_hint
 reachability_hint:
+  hint_version: 1
   subject_node: node_server
   transport_class: TRANSPORT_CLASS_QUIC
   locator_payload: quic://node_server.example

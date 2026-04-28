@@ -161,6 +161,40 @@ mod tests {
     }
 
     #[test]
+    fn extracts_required_typed_object_fields_without_serde() {
+        let value = parse_json(r#"{"name":"node-1","ok":true,"n":7,"items":[1,2]}"#).unwrap();
+        let object = value.as_object().unwrap();
+
+        assert_eq!(value.required_str("name").unwrap(), "node-1");
+        assert_eq!(value.required_bool("ok").unwrap(), true);
+        assert_eq!(value.required_u64("n").unwrap(), 7);
+        assert_eq!(value.required_array("items").unwrap().len(), 2);
+        assert_eq!(object.required_str("name").unwrap(), "node-1");
+        assert!(value.required("missing").is_err());
+        assert!(value.required_str("n").is_err());
+    }
+
+    #[test]
+    fn converts_json_values_into_common_rust_types_without_serde() {
+        let string_value = JsonValue::from("hello");
+        let text: &str = (&string_value).try_into().unwrap();
+        let owned: String = JsonValue::from("hello").try_into().unwrap();
+        let ok: bool = (&JsonValue::from(true)).try_into().unwrap();
+        let n: u64 = (&JsonValue::from(42u64)).try_into().unwrap();
+        let values: Vec<JsonValue> = JsonValue::array(vec![1u64.into()]).try_into().unwrap();
+        let object: Map = JsonValue::object(vec![("k", "v".into())])
+            .try_into()
+            .unwrap();
+
+        assert_eq!(text, "hello");
+        assert_eq!(owned, "hello");
+        assert!(ok);
+        assert_eq!(n, 42);
+        assert_eq!(values.len(), 1);
+        assert_eq!(object.required_str("k").unwrap(), "v");
+    }
+
+    #[test]
     fn rejects_non_finite_float() {
         let value = JsonValue::from(f64::NAN);
         assert_eq!(value.to_json_string(), Err(JsonError::NonFiniteNumber));

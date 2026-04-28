@@ -163,6 +163,54 @@ impl<'a> TapeValue<'a> {
     }
 
     #[must_use]
+    pub fn as_f64(&self) -> Option<f64> {
+        (self.kind() == TapeTokenKind::Number)
+            .then(|| self.raw().parse().ok())
+            .flatten()
+    }
+
+    #[must_use]
+    pub fn is_null(&self) -> bool {
+        self.kind() == TapeTokenKind::Null
+    }
+
+    #[must_use]
+    pub fn to_json_value(&self) -> Option<JsonValue> {
+        match self.kind() {
+            TapeTokenKind::Null => Some(JsonValue::Null),
+            TapeTokenKind::Bool => self.as_bool().map(JsonValue::Bool),
+            TapeTokenKind::Number => {
+                if let Some(value) = self.as_i64() {
+                    Some(JsonValue::from(value))
+                } else if let Some(value) = self.as_u64() {
+                    Some(JsonValue::from(value))
+                } else {
+                    self.as_f64().map(JsonValue::from)
+                }
+            }
+            TapeTokenKind::String | TapeTokenKind::Key => self.as_str().map(JsonValue::from),
+            TapeTokenKind::Array => self.array_items().map(|items| {
+                JsonValue::Array(
+                    items
+                        .into_iter()
+                        .filter_map(|v| v.to_json_value())
+                        .collect(),
+                )
+            }),
+            TapeTokenKind::Object => self.object_fields().map(|fields| {
+                JsonValue::Object(
+                    fields
+                        .into_iter()
+                        .filter_map(|(key, value)| {
+                            value.to_json_value().map(|value| (key.to_owned(), value))
+                        })
+                        .collect(),
+                )
+            }),
+        }
+    }
+
+    #[must_use]
     pub fn array_items(&self) -> Option<Vec<TapeValue<'a>>> {
         if self.kind() != TapeTokenKind::Array {
             return None;
@@ -565,5 +613,21 @@ mod tests {
             fields.iter().map(|(key, _)| *key).collect::<Vec<_>>(),
             vec!["items", "other"]
         );
+    }
+
+    #[test]
+    fn tape_value_converts_to_owned_json_value() {
+        let input = r#"{"items":[1,{"nested":true},3.5],"other":null}"#;
+        let tape = parse_json_tape(input).unwrap();
+        let root = tape.root(input).unwrap();
+        let value = root.to_json_value().unwrap();
+
+        assert_eq!(value.get_array("items").unwrap().len(), 3);
+        assert_eq!(
+            value.pointer("/items/1/nested").unwrap().as_bool(),
+            Some(true)
+        );
+        assert_eq!(value.pointer("/items/2").unwrap().as_f64(), Some(3.5));
+        assert!(value.required("other").unwrap().is_null());
     }
 }

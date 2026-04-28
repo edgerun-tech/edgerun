@@ -226,6 +226,174 @@ Initial binary notes:
 - It is not a mountable archive by `file` or `7z`; treat it as a Realtek Ameba firmware image until
   a specific unpacker is identified.
 
+## Firmware Container Analysis
+
+The outer OTA blob is a TCL `THOS` container around a Realtek/AmebaZII firmware payload.
+
+Top-level wrapper:
+
+- `0x00000000`: `THOS`
+- wrapper type/value bytes: `64 00`
+- version string length: `0x001b`
+- version string: `V8-R82CT04-LF1V206.180.3.52`
+- repeated version string: `V8-R82CT04-LF1V206.180.3.52`
+- `0x00000040`: little-endian payload length `0x000cee7a` (`847482` bytes)
+- following ASCII MD5: `5f1fd606f315dc90fc561adeaefd1237`
+
+That MD5 is the digest of `system.bin[0x100..]`, not the whole OTA file. The whole-file MD5 is the
+AWS IoT job checksum. This gives two validation layers:
+
+- AWS IoT/job checksum over the full `system.bin`.
+- TCL wrapper checksum over the payload starting at `0x100`.
+
+Observed hashes:
+
+- `md5(system.bin) = 63a75f9ed1579c1468673af4f293ec0b`
+- `md5(system.bin[0x100..]) = 5f1fd606f315dc90fc561adeaefd1237`
+
+The payload starts at `0x100` with additional non-archive metadata and a nested `THOS` marker at
+`0x10d`. A plausible Cortex-M style vector-table candidate appears at file offset `0x1b8`:
+
+- stack pointer candidate: `0x2000004c`
+- reset vector candidate: `0x080c007f`
+
+However, direct Thumb disassembly from that mapping does not produce clean code, and the standard
+`ltchiptool` AmebaZ2 parser does not accept the blob at offsets `0`, `0x100`, `0x10d`, `0x1b0`,
+`0x1b8`, `0x200`, `0x400`, or `0x1000`. The failures are structural: the parser interprets bytes as
+huge section sizes rather than valid AmebaZ2 image headers. Treat the current file as a TCL-packaged
+or otherwise transformed AmebaZII image, not a raw LibreTiny/Realtek SDK OTA image.
+
+Current extraction status:
+
+- `binwalk` only detects AES S-box and SHA-256 constants, not a filesystem or archive.
+- `7z` does not recognize it as a compressed archive.
+- No Realtek partition-table calibration pattern was found.
+- Entropy is high across most of the blob, with a much more ASCII-heavy region around
+  `0x0b0000..0x0c0000`, where most cloud/control strings are visible.
+- `ltchiptool` confirms the target family is supported as Realtek AmebaZ2/RTL8720C, but this TCL
+  OTA container needs a custom unpacking step before normal image parsing works.
+
+## Firmware Cloud, OTA, BLE, and LAN Clues
+
+The recovered firmware contains strings for the same flows observed dynamically in the APK and AWS
+IoT account:
+
+- AWS OTA/MQTT: `epi_aws_ota_mqtt_cli1`, `aws_ota`, `MQTT GET OTA JOB INFO`,
+  `AWS_OTA_STATUS`, `mqtt.publish`, `mqtt_recv`, `ota/notify`, `min/ota/job`.
+- Thing authorization/profile: `/v2/auth/thing_re`, `authorize/join`, `CLOUD_PROFILE`,
+  `dBalance`, `token`, `MQTTURL`, `MQTTEP`.
+- Shadow/TSL: `shadow/u`, `tcl_tsl`, `TSL_TABLE`, `tsl`, `TSL ERROR`, `cur tsl`.
+- LAN/local: `TCP_IP`, `UDP_RAW`, `udp peek`, `lan_send`, `socket fail`, `_mcu_local_`,
+  `HTTP`, `WEBSOCKET`.
+- BLE/provisioning/OTA: `AUTH_PASSKE`, `BLE_SCAN_DATA_UP`, `BLE IF SEND`,
+  `EN_LM_BLE_OTA`, `BLE_OTA_AVAILABLE`, `BLE_OTA_GET_VER`, `ota_ble_deinit`.
+- AC controls: `work_mode`, `WORK_MODE`, `temperature`, `windScan`, `eco`, `turbo`,
+  `beep`, `display`, `ElecStatus`, `filter`.
+
+The important conclusion is that cloud, OTA, BLE, LAN, and the AC TSL/control model are all present
+in the device firmware. The slow cloud behavior is not caused by the app simply relaying commands to
+a dumb module; the module itself runs the AWS IoT/MQTT/shadow client and has local network code.
+
+## Cloud Shadow Control Model
+
+The live AWS IoT shadow for `DSxvOivgAAE` exposes the AC command/state schema. Desired and reported
+state use the same field names, which means cloud control is a shadow desired-state update and the
+device reports convergence back through AWS IoT.
+
+Core controls:
+
+- `powerSwitch`
+- `workMode`
+- `targetTemperature`
+- `windSpeed`
+- `ECO`
+- `turbo`
+- `screen`
+- `beepSwitch`
+- `sleep`
+- `horizontalSwitch`
+- `verticalSwitch`
+- `horizontalWind`
+- `verticalWind`
+- `verticalDirection`
+- `horizontalDirection`
+- `currentTemperature`
+- `errorCode`
+
+Additional feature flags observed:
+
+- `PTC`
+- `3DAirSurply`
+- `antiMoldew`
+- `healthy`
+- `selfLearn`
+- `infrDirect`
+- `temperatureType`
+- `acType`
+- `eightAddHot`
+- `highTemperatureWind`
+- `feelTheWind`
+- `LRWideAngleFreeze`
+- `advancedECOMode`
+- `silenceSwitch`
+- `generatorMode`
+- `lightSense`
+- `filterBlockStatus`
+- `filterBlockSwitch`
+- `selfClean`
+- `softWind`
+- `targetElectric`
+- `constantTemp`
+- `rightHorizontalDirection`
+- `rightHorizontalSwitch`
+- `rightWindSpeed`
+- `temperatureHumidityControlling`
+- `constTemperatureDehumidification`
+- `aiFunction`
+- `rightTurbo`
+- `rightSilenceSwitch`
+- `infrPower`
+- `twoTemperature`
+- `polarityFreeze`
+- `surroundWind`
+- `twoTemperatureSkew`
+
+The same semantic fields appear, partially mangled by binary/string interleaving, in the firmware
+strings. That gives a concrete field list to use when implementing LAN/local control once the local
+transport is identified.
+
+## Custom Firmware Feasibility
+
+Custom firmware is not ruled out, but the OTA route is not yet a straightforward flashing path.
+
+What looks feasible:
+
+- The hardware family is Realtek AmebaZII/RTL8720C/RTL8720CF-class, for which UART flashing tools
+  and SDK-style image tooling exist.
+- The OTA blob contains a normal-looking TCL wrapper checksum and exposed platform strings, so it is
+  not opaque end-to-end encryption.
+- Physical access to the module UART/boot pins may allow full flash read/write independent of the
+  TCL cloud OTA path, subject to secure-boot/efuse state.
+
+What blocks OTA-based custom firmware today:
+
+- The app REST OTA API exposes job/version state, not a generic firmware-upload endpoint.
+- AWS IoT Streams allows block download of TCL's object but does not provide write access to install
+  arbitrary objects.
+- The retrieved `system.bin` is not accepted by the standard AmebaZ2 parser as a raw OTA image.
+- Realtek AmebaZ2 supports secure boot/root-of-trust features, and the firmware contains certificate
+  and crypto material. Without checking the module's efuse/secure-boot state or reverse-engineering
+  the TCL image transform/signature, arbitrary OTA replacement should be assumed rejected.
+
+Practical paths from here:
+
+1. Prefer local control first: finish commissioning, then exercise UDP/TCP/HTTP/WebSocket discovery
+   and map the `_mcu_local_`/TSL local transport.
+2. If local control remains locked to cloud auth, open the unit and identify the Wi-Fi module pins,
+   UART boot mode, flash size, and secure-boot state. Dump flash before writing anything.
+3. Build a TCL `THOS` unpacker: validate the `0x100` payload MD5, decode the nested payload layout,
+   then retry AmebaZ2 parsing and function/string cross-reference work on the decoded image.
+
 ## APK BLE OTA Protocol
 
 The APK contains a BLE OTA path aimed at a soundbar-style transport:

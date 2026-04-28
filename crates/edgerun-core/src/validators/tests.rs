@@ -407,7 +407,11 @@ fn network_reachability_hint_valid_accepts() {
     let semantic = match mapping([(
         "reachability_hint",
         mapping([
+            ("hint_version", Value::Int(1)),
+            ("subject_node", ystr("node-a")),
+            ("transport_class", ystr("TRANSPORT_CLASS_QUIC")),
             ("locator_payload", ystr("quic://127.0.0.1:443")),
+            ("directness", ystr("DIRECTNESS_DIRECT")),
             ("valid_after", ystr("2030-01-01T00:00:00Z")),
             ("valid_until", ystr("2030-01-01T00:05:00Z")),
             ("issuer", mapping([("fixture", ystr("node-a"))])),

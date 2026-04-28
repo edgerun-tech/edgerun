@@ -5,4 +5,9 @@ route_advertisement:
   advertiser: user_alice
   advertised_at: '2030-01-01T00:00:00Z'
   expires_at: '2029-12-31T23:59:59Z'
-  reachability: []
+  reachability:
+  - hint_version: 1
+    subject_node: node_server
+    transport_class: TRANSPORT_CLASS_QUIC
+    locator_payload: quic://node_server.example
+    directness: DIRECTNESS_DIRECT

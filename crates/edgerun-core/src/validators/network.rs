@@ -211,10 +211,14 @@ pub fn validate_network_case(
         if string_value(hello, "initiator", "").is_empty() {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-        let target = string_value(hello, "target_node", "");
-        if target.is_empty() {
+        if hello
+            .get("target_node")
+            .and_then(Value::as_str)
+            .is_some_and(str::is_empty)
+        {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
+        let target = string_value(hello, "target_node", "");
         if !target.is_empty() && target != string_value(local_state, "local_node", "") {
             return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
         }
@@ -235,6 +239,12 @@ pub fn validate_network_case(
         let supported: BTreeSet<i64> = get_seq(hello, "supported_protocol_versions")
             .map(|arr| arr.iter().filter_map(Value::as_i64).collect())
             .unwrap_or_default();
+        if supported.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if supported.contains(&0) {
+            return reject(ReasonCode::VersionUnsupported, empty_map(), empty_map());
+        }
         let local_supported: BTreeSet<i64> = local_state
             .get("supported_protocol_versions")
             .and_then(Value::as_seq)
@@ -338,7 +348,14 @@ pub fn validate_network_case(
     if let Some(route) = get_map(semantic_input, "route_advertisement") {
         if string_value(route, "target_node", "").is_empty()
             || string_value(route, "advertiser", "").is_empty()
-            || string_value(route, "next_hop_node", "").is_empty()
+            || string_value(route, "advertised_at", "").is_empty()
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if route
+            .get("next_hop_node")
+            .and_then(Value::as_str)
+            .is_some_and(str::is_empty)
         {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
@@ -347,15 +364,17 @@ pub fn validate_network_case(
         {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-        if let Some(at) = route.get("advertised_at").and_then(Value::as_str) {
-            if let Some(exp) = route.get("expires_at").and_then(Value::as_str) {
-                if parse_ts(exp)
-                    .ok()
-                    .zip(parse_ts(at).ok())
-                    .is_some_and(|(e, a)| e < a)
-                {
-                    return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
-                }
+        let at = string_value(route, "advertised_at", "");
+        if parse_ts(&at).is_err() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if let Some(exp) = route.get("expires_at").and_then(Value::as_str) {
+            if parse_ts(exp)
+                .ok()
+                .zip(parse_ts(&at).ok())
+                .is_some_and(|(e, a)| e < a)
+            {
+                return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
         if let (Some(now), Some(exp)) = (now, route.get("expires_at").and_then(Value::as_str)) {
@@ -364,7 +383,11 @@ pub fn validate_network_case(
             }
         }
         let target = string_value(route, "target_node", "");
-        for hint in get_seq(route, "reachability").unwrap_or(&[]) {
+        let reachability = get_seq(route, "reachability").unwrap_or(&[]);
+        if reachability.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        for hint in reachability {
             let Some(map) = hint.as_map() else {
                 return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
             };
