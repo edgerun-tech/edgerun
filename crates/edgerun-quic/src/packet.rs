@@ -7,6 +7,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
+use edgerun_encoding::byteorder::{read_u32_be, read_u64_be};
 use edgerun_encoding::quic_varint::{
     decode_varint as quic_decode_varint, encode_varint as quic_encode_varint,
 };
@@ -264,7 +265,7 @@ impl QuicPacket {
         let packet_type =
             PacketType::from_byte(data[0]).ok_or_else(|| "Invalid packet type".to_string())?;
 
-        let version = u32::from_be_bytes([data[1], data[2], data[3], data[4]]);
+        let version = read_u32_be(data, 1);
 
         let mut pos = 5;
 
@@ -315,7 +316,7 @@ impl QuicPacket {
         }
         let mut pn_bytes = [0u8; 8];
         pn_bytes[8 - pn_length..].copy_from_slice(&data[pos..pos + pn_length]);
-        let packet_number = u64::from_be_bytes(pn_bytes);
+        let packet_number = read_u64_be(&pn_bytes, 0);
         pos += pn_length;
 
         let payload_len = payload_len as usize - pn_length;
@@ -368,7 +369,7 @@ impl QuicPacket {
         }
         let mut pn_bytes = [0u8; 8];
         pn_bytes[8 - pn_length..].copy_from_slice(&data[pos..pos + pn_length]);
-        let packet_number = u64::from_be_bytes(pn_bytes);
+        let packet_number = read_u64_be(&pn_bytes, 0);
         pos += pn_length;
 
         let payload = data[pos..].to_vec();
@@ -606,9 +607,11 @@ mod tests {
         assert_eq!(parsed.payload, encrypted);
 
         let mut wrong_decryptor = PacketProtection::new(&keys);
-        assert!(wrong_decryptor
-            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
-            .is_err());
+        assert!(
+            wrong_decryptor
+                .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+                .is_err()
+        );
 
         let mut decryptor = PacketProtection::new(&keys);
         let plaintext = decryptor
@@ -686,9 +689,11 @@ mod tests {
         assert_eq!(parsed.header_to_bytes_aad(), aad);
 
         let mut wrong_decryptor = PacketProtection::new(&keys);
-        assert!(wrong_decryptor
-            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
-            .is_err());
+        assert!(
+            wrong_decryptor
+                .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+                .is_err()
+        );
 
         let mut decryptor = PacketProtection::new(&keys);
         let plaintext = decryptor

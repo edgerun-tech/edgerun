@@ -2,6 +2,8 @@
 
 #![allow(dead_code)]
 
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
+
 pub const ETH_TYPE_IPV4: u16 = 0x0800;
 pub const ETH_TYPE_ARP: u16 = 0x0806;
 
@@ -40,9 +42,9 @@ impl IcmpHeader {
         Self {
             icmp_type: data[0],
             code: data[1],
-            checksum: u16::from_be_bytes([data[2], data[3]]),
-            identifier: u16::from_be_bytes([data[4], data[5]]),
-            sequence: u16::from_be_bytes([data[6], data[7]]),
+            checksum: read_u16_be(data, 2),
+            identifier: read_u16_be(data, 4),
+            sequence: read_u16_be(data, 6),
         }
     }
 
@@ -107,14 +109,14 @@ pub struct TcpHeader {
 impl TcpHeader {
     pub fn from_slice(data: &[u8]) -> Self {
         Self {
-            src_port: u16::from_be_bytes([data[0], data[1]]),
-            dst_port: u16::from_be_bytes([data[2], data[3]]),
-            seq: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
-            ack: u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
+            src_port: read_u16_be(data, 0),
+            dst_port: read_u16_be(data, 2),
+            seq: read_u32_be(data, 4),
+            ack: read_u32_be(data, 8),
             flags: data[13],
-            window: u16::from_be_bytes([data[14], data[15]]),
-            checksum: u16::from_be_bytes([data[16], data[17]]),
-            urgent: u16::from_be_bytes([data[18], data[19]]),
+            window: read_u16_be(data, 14),
+            checksum: read_u16_be(data, 16),
+            urgent: read_u16_be(data, 18),
         }
     }
 
@@ -153,7 +155,7 @@ impl EthHeader {
         Self {
             dst,
             src,
-            ethertype: u16::from_be_bytes([data[12], data[13]]),
+            ethertype: read_u16_be(data, 12),
         }
     }
 
@@ -182,14 +184,14 @@ impl IpHeader {
         let mut dst = [0u8; 4];
         src.copy_from_slice(&data[12..16]);
         dst.copy_from_slice(&data[16..20]);
-        let len = u16::from_be_bytes([data[2], data[3]]);
+        let len = read_u16_be(data, 2);
         Self {
             ver_ihl: data[0],
             tos: data[1],
             len,
             ttl: data[8],
             proto: data[9],
-            checksum: u16::from_be_bytes([data[10], data[11]]),
+            checksum: read_u16_be(data, 10),
             src,
             dst,
         }
@@ -247,7 +249,7 @@ impl ArpHeader {
         tha.copy_from_slice(&data[18..24]);
         tpa.copy_from_slice(&data[24..28]);
         Self {
-            oper: u16::from_be_bytes([data[6], data[7]]),
+            oper: read_u16_be(data, 6),
             sha,
             spa,
             tha,
@@ -279,10 +281,10 @@ pub struct UdpHeader {
 impl UdpHeader {
     pub fn from_slice(data: &[u8]) -> Self {
         Self {
-            src_port: u16::from_be_bytes([data[0], data[1]]),
-            dst_port: u16::from_be_bytes([data[2], data[3]]),
-            len: u16::from_be_bytes([data[4], data[5]]),
-            checksum: u16::from_be_bytes([data[6], data[7]]),
+            src_port: read_u16_be(data, 0),
+            dst_port: read_u16_be(data, 2),
+            len: read_u16_be(data, 4),
+            checksum: read_u16_be(data, 6),
         }
     }
 

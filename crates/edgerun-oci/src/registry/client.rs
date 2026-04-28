@@ -178,6 +178,7 @@ impl RegistryClient {
 
     fn registry_url(&self, registry: &str, path: &str) -> String {
         let scheme = if self.insecure_http { "http" } else { "https" };
+        let registry = registry_api_host(registry);
         format!("{}://{}{}", scheme, registry, path)
     }
 
@@ -200,7 +201,7 @@ impl RegistryClient {
         }
         let request = builder.build()?;
 
-        let client = HttpClient::new().no_redirects();
+        let client = registry_http_client().no_redirects();
         let resp = client
             .execute(&request)
             .await
@@ -229,15 +230,60 @@ impl RegistryClient {
                 .execute(&request2)
                 .await
                 .map_err(|e| RegistryError::HttpError(e.to_string()))?;
-            if resp2.status().as_u16() >= 400 {
-                return Err(RegistryError::HttpStatus(resp2.status().as_u16()));
-            }
-            Ok(self.count_body(resp2.body()))
+            self.response_body_following_redirects(&client, resp2).await
         } else if resp.status().as_u16() >= 400 {
-            Err(RegistryError::HttpStatus(resp.status().as_u16()))
+            Err(RegistryError::HttpError(format!(
+                "GET {url} returned HTTP {}",
+                resp.status().as_u16()
+            )))
         } else {
-            Ok(self.count_body(resp.body()))
+            self.response_body_following_redirects(&client, resp).await
         }
+    }
+
+    async fn response_body_following_redirects(
+        &mut self,
+        client: &HttpClient,
+        mut resp: Response,
+    ) -> Result<Vec<u8>, RegistryError> {
+        let mut redirects = 0u8;
+        while (300..400).contains(&resp.status().as_u16()) {
+            if redirects >= 5 {
+                return Err(RegistryError::HttpError(
+                    "too many registry redirects".into(),
+                ));
+            }
+            let location = resp
+                .headers()
+                .get("location")
+                .or_else(|| resp.headers().get("Location"))
+                .map(|value| value.as_str().to_string())
+                .ok_or_else(|| {
+                    RegistryError::HttpError("registry redirect without Location".into())
+                })?;
+            let request = Request::builder()
+                .method(edgerun_http::Method::GET)
+                .uri(&location)
+                .build()?;
+            resp = client
+                .execute(&request)
+                .await
+                .map_err(|e| RegistryError::HttpError(e.to_string()))?;
+            if resp.status().as_u16() >= 400 {
+                return Err(RegistryError::HttpError(format!(
+                    "GET redirect {location} returned HTTP {}",
+                    resp.status().as_u16()
+                )));
+            }
+            redirects = redirects.saturating_add(1);
+        }
+        if resp.status().as_u16() >= 400 {
+            return Err(RegistryError::HttpError(format!(
+                "registry GET after redirect returned HTTP {}",
+                resp.status().as_u16()
+            )));
+        }
+        Ok(self.count_body(resp.body()))
     }
 
     fn count_body(&mut self, body: &[u8]) -> Vec<u8> {
@@ -292,7 +338,7 @@ impl RegistryClient {
             builder = builder.header("Authorization", &format!("Bearer {}", token));
         }
         let request = builder.build()?;
-        let client = HttpClient::new().no_redirects();
+        let client = registry_http_client().no_redirects();
         client
             .execute(&request)
             .await
@@ -346,7 +392,7 @@ impl RegistryClient {
             builder = builder.header("Authorization", &format!("Bearer {}", token));
         }
         let request = builder.build()?;
-        let client = HttpClient::new().no_redirects();
+        let client = registry_http_client().no_redirects();
         client
             .execute(&request)
             .await
@@ -392,13 +438,20 @@ impl RegistryClient {
         }
 
         let request = builder.build()?;
-        let client = HttpClient::new();
+        let client = registry_http_client();
         let resp = client
             .execute(&request)
             .await
             .map_err(|e| RegistryError::HttpError(e.to_string()))?;
 
-        let value = parse_json_bytes(resp.body()).map_err(RegistryError::ParseError)?;
+        let value = parse_json_bytes(resp.body()).map_err(|error| {
+            RegistryError::ParseError(format!(
+                "token response parse failed: status {}, body {} bytes: {}",
+                resp.status().as_u16(),
+                resp.body().len(),
+                error
+            ))
+        })?;
 
         self.token = if let edgerun_json::JsonValue::Object(fields) = &value {
             fields
@@ -449,7 +502,7 @@ impl RegistryClient {
             builder = builder.header("Authorization", &format!("Bearer {}", token));
         }
         let request = builder.build()?;
-        let client = HttpClient::new().no_redirects();
+        let client = registry_http_client().no_redirects();
         client
             .execute(&request)
             .await
@@ -479,7 +532,14 @@ impl RegistryClient {
         let body = self
             .authenticated_get(&image.registry, path.as_str(), &headers)
             .await?;
-        parse_manifest(&body).map_err(RegistryError::ParseError)
+        parse_manifest(&body).map_err(|error| {
+            RegistryError::ParseError(format!(
+                "manifest parse failed for {}: body {} bytes: {}",
+                image,
+                body.len(),
+                error
+            ))
+        })
     }
 
     /// Fetch a manifest by digest.
@@ -489,8 +549,30 @@ impl RegistryClient {
         repository: &str,
         digest: &str,
     ) -> Result<SingleManifest, RegistryError> {
-        let body = self.fetch_blob(registry, repository, digest).await?;
-        parse_single_manifest(&body).map_err(RegistryError::ParseError)
+        let path = format!("/v2/{}/manifests/{}", repository, digest);
+        let body = self
+            .authenticated_get(
+                registry,
+                &path,
+                &[
+                    (
+                        "Accept",
+                        "application/vnd.docker.distribution.manifest.v2+json",
+                    ),
+                    ("Accept", "application/vnd.oci.image.manifest.v1+json"),
+                ],
+            )
+            .await?;
+        parse_single_manifest(&body).map_err(|error| {
+            RegistryError::ParseError(format!(
+                "manifest digest parse failed for {}/{}@{}: body {} bytes: {}",
+                registry,
+                repository,
+                digest,
+                body.len(),
+                error
+            ))
+        })
     }
 
     /// Fetch a single blob by digest.
@@ -535,8 +617,14 @@ impl RegistryClient {
                 &manifest_data.config_digest,
             )
             .await?;
-        let image_config = parse_image_config(&config_blob)
-            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+        let image_config = parse_image_config(&config_blob).map_err(|error| {
+            RegistryError::ParseError(format!(
+                "image config parse failed for {}: body {} bytes: {}",
+                manifest_data.config_digest,
+                config_blob.len(),
+                error
+            ))
+        })?;
 
         let plan = BareImagePlan::from_manifest_config(&manifest_data, &image_config, rootfs)
             .map_err(|error| RegistryError::ParseError(error.to_string()))?;
@@ -731,8 +819,14 @@ impl RegistryClient {
                 &manifest_data.config_digest,
             )
             .await?;
-        let image_config = parse_image_config(&config_blob)
-            .map_err(|e| RegistryError::ParseError(e.to_string()))?;
+        let image_config = parse_image_config(&config_blob).map_err(|error| {
+            RegistryError::ParseError(format!(
+                "image config parse failed for {}: body {} bytes: {}",
+                manifest_data.config_digest,
+                config_blob.len(),
+                error
+            ))
+        })?;
 
         std::fs::create_dir_all(bundle_path)?;
         std::fs::create_dir_all(store_path)?;
@@ -946,6 +1040,18 @@ impl RegistryClient {
         )
         .await?;
         Ok(())
+    }
+}
+
+fn registry_http_client() -> HttpClient {
+    HttpClient::new().version(edgerun_http::HttpVersion::Http1)
+}
+
+fn registry_api_host(registry: &str) -> &str {
+    if registry == "docker.io" {
+        "registry-1.docker.io"
+    } else {
+        registry
     }
 }
 

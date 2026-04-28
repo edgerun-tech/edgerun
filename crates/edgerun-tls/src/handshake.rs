@@ -7,9 +7,9 @@
 //!
 //! All messages after ServerHello are encrypted.
 
-use crate::cipher::NamedGroup;
 use crate::Result;
 use crate::TlsError;
+use crate::cipher::NamedGroup;
 use alloc::{
     format,
     string::{String, ToString},
@@ -17,6 +17,7 @@ use alloc::{
     vec::Vec,
 };
 use edgerun_crypto::CipherSuite;
+use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
 /// ClientHello message builder
 pub struct ClientHelloBuilder {
@@ -208,7 +209,7 @@ impl ClientHelloBuilder {
             // PSK identities list
             let identities_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // identities length placeholder
-                                                  // Identity entry
+            // Identity entry
             psk_ext.extend_from_slice(&(ticket.len() as u16).to_be_bytes());
             psk_ext.extend_from_slice(ticket);
             psk_ext.extend_from_slice(&obfuscated_age.to_be_bytes());
@@ -220,7 +221,7 @@ impl ClientHelloBuilder {
             // PSK binders list
             let binders_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // binders length placeholder
-                                                  // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
+            // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
             let binder_len = 32; // SHA-256 output
             psk_ext.push(binder_len as u8);
             psk_ext.extend_from_slice(&vec![0u8; binder_len]);
@@ -284,7 +285,7 @@ impl ServerHello {
             )));
         }
 
-        let msg_len = u32::from_be_bytes([0, data[1], data[2], data[3]]) as usize;
+        let msg_len = read_u24_be(data, 1) as usize;
         if data.len() < 4 + msg_len {
             return Err(TlsError::HandshakeFailure("ServerHello truncated".into()));
         }
@@ -298,7 +299,7 @@ impl ServerHello {
                 "ServerHello: legacy_version truncated".into(),
             ));
         }
-        let legacy_version = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
+        let legacy_version = read_u16_be(msg, pos);
         pos += 2;
 
         // Random
@@ -333,7 +334,7 @@ impl ServerHello {
                 "ServerHello: cipher_suite truncated".into(),
             ));
         }
-        let cs = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
+        let cs = read_u16_be(msg, pos);
         let cipher_suite =
             CipherSuite::from_wire(cs).map_err(|e| TlsError::HandshakeFailure(e.to_string()))?;
         pos += 2;
@@ -357,7 +358,7 @@ impl ServerHello {
                     "ServerHello: ext_len truncated".into(),
                 ));
             }
-            let ext_len = u16::from_be_bytes([msg[pos], msg[pos + 1]]) as usize;
+            let ext_len = read_u16_be(msg, pos) as usize;
             pos += 2;
 
             let ext_end = pos + ext_len;
@@ -365,8 +366,8 @@ impl ServerHello {
                 if pos + 4 > ext_end {
                     break;
                 }
-                let ext_type = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
-                let ext_data_len = u16::from_be_bytes([msg[pos + 2], msg[pos + 3]]) as usize;
+                let ext_type = read_u16_be(msg, pos);
+                let ext_data_len = read_u16_be(msg, pos + 2) as usize;
                 pos += 4;
 
                 if pos + ext_data_len > ext_end {
@@ -379,8 +380,8 @@ impl ServerHello {
                     51
                         // key_share
                         if ext_data_len >= 4 => {
-                            let _group = u16::from_be_bytes([ext_data[0], ext_data[1]]);
-                            let ke_len = u16::from_be_bytes([ext_data[2], ext_data[3]]) as usize;
+                            let _group = read_u16_be(ext_data, 0);
+                            let ke_len = read_u16_be(ext_data, 2) as usize;
                             if ext_data_len >= 4 + ke_len {
                                 server_key_share = ext_data[4..4 + ke_len].to_vec();
                             }
@@ -388,7 +389,7 @@ impl ServerHello {
                     43
                         // supported_versions
                         if ext_data_len >= 2 => {
-                            supported_version = Some(u16::from_be_bytes([ext_data[0], ext_data[1]]));
+                            supported_version = Some(read_u16_be(ext_data, 0));
                         }
                     _ => {}
                 }
@@ -412,23 +413,22 @@ mod tests {
     use super::*;
 
     fn extension<'a>(client_hello: &'a [u8], extension_type: u16) -> Option<&'a [u8]> {
-        let body_len =
-            u32::from_be_bytes([0, client_hello[1], client_hello[2], client_hello[3]]) as usize;
+        let body_len = read_u24_be(client_hello, 1) as usize;
         let body = &client_hello[4..4 + body_len];
         let mut pos = 2 + 32;
         let session_id_len = body[pos] as usize;
         pos += 1 + session_id_len;
-        let cipher_suites_len = u16::from_be_bytes([body[pos], body[pos + 1]]) as usize;
+        let cipher_suites_len = read_u16_be(body, pos) as usize;
         pos += 2 + cipher_suites_len;
         let compression_methods_len = body[pos] as usize;
         pos += 1 + compression_methods_len;
-        let extensions_len = u16::from_be_bytes([body[pos], body[pos + 1]]) as usize;
+        let extensions_len = read_u16_be(body, pos) as usize;
         pos += 2;
         let extensions_end = pos + extensions_len;
 
         while pos + 4 <= extensions_end {
-            let current_type = u16::from_be_bytes([body[pos], body[pos + 1]]);
-            let len = u16::from_be_bytes([body[pos + 2], body[pos + 3]]) as usize;
+            let current_type = read_u16_be(body, pos);
+            let len = read_u16_be(body, pos + 2) as usize;
             pos += 4;
             let data = &body[pos..pos + len];
             pos += len;

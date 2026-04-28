@@ -3,7 +3,7 @@
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::middleware::Extensions;
-use crate::uri::Uri;
+use crate::uri::{Scheme, Uri};
 use crate::Result;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -290,10 +290,7 @@ impl RequestBuilder {
         let mut headers = self.headers;
         if !headers.contains_key("Host") {
             if let Some(host) = uri.host() {
-                let host_header = match uri.port() {
-                    Some(port) => format!("{host}:{port}"),
-                    None => host.to_string(),
-                };
+                let host_header = host_header_value(&uri, host);
                 let _ = headers.insert("Host", &host_header);
             }
         }
@@ -314,6 +311,19 @@ impl RequestBuilder {
             body: self.body,
             extensions: self.extensions,
         })
+    }
+}
+
+fn host_header_value(uri: &Uri, host: &str) -> String {
+    let host = if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
+
+    match (uri.scheme(), uri.port()) {
+        (Scheme::Http, Some(80)) | (Scheme::Https, Some(443)) | (_, None) => host,
+        (_, Some(port)) => format!("{host}:{port}"),
     }
 }
 

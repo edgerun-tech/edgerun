@@ -145,6 +145,38 @@ fn validate_object_ref(object: &ObjectRef, label: &str) -> Option<ValidationResu
             empty_map(),
         ));
     }
+    if object.object_kind.is_some_and(|object_kind| {
+        edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(object_kind)
+            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+    }) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} object_kind is invalid")),
+            empty_map(),
+        ));
+    }
+    None
+}
+
+fn validate_identity_ref(identity: &IdentityRef, label: &str) -> Option<ValidationResult> {
+    if identity.identity_id.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} identity_id is empty")),
+            empty_map(),
+        ));
+    }
+    if identity.identity_kind.is_some_and(|identity_kind| {
+        edgerun_proto::edgerun::v0::common::IdentityKind::from_i32(identity_kind).is_none_or(
+            |kind| kind == edgerun_proto::edgerun::v0::common::IdentityKind::Unspecified,
+        )
+    }) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} identity_kind is invalid")),
+            empty_map(),
+        ));
+    }
     None
 }
 
@@ -246,12 +278,8 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
             empty_map(),
         ));
     };
-    if issuer.identity_id.is_empty() {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("issuer identity_id is empty".into()),
-            empty_map(),
-        ));
+    if let Some(result) = validate_identity_ref(issuer, "issuer") {
+        return Some(result);
     }
 
     if let Some(not_before) = &command.not_before {
@@ -313,14 +341,10 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
 
     if let Some(req) = &command.requested_assurance {
         for attester in &req.acceptable_attesters {
-            if attester.identity_id.is_empty() {
-                return Some(reject(
-                    ReasonCode::StructuralInvalid,
-                    Value::String(
-                        "requested_assurance acceptable_attester identity_id is empty".into(),
-                    ),
-                    empty_map(),
-                ));
+            if let Some(result) =
+                validate_identity_ref(attester, "requested_assurance acceptable_attester")
+            {
+                return Some(result);
             }
         }
         if let Some(max_age) = &req.max_evidence_age {
@@ -1565,6 +1589,26 @@ mod tests {
     }
 
     #[test]
+    fn command_with_invalid_issuer_identity_kind_is_rejected_structurally() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint.clone()));
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(0),
+            key_hint: Some(hint),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn command_with_inverted_validity_window_is_rejected() {
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -1607,6 +1651,25 @@ mod tests {
     }
 
     #[test]
+    fn command_with_invalid_payload_object_kind_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.payload = Some(Payload::PayloadObject(ObjectRef {
+            object_id: vec![0x22; 32],
+            object_kind: Some(999_999),
+        }));
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn command_with_empty_inline_payload_is_rejected() {
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -1630,6 +1693,25 @@ mod tests {
         cmd.command_metadata = Some(ObjectRef {
             object_id: vec![],
             object_kind: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_invalid_metadata_object_kind_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.command_metadata = Some(ObjectRef {
+            object_id: vec![0x33; 32],
+            object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified as i32),
         });
         sign_command(&key, &mut cmd);
 
@@ -2102,6 +2184,35 @@ mod tests {
     }
 
     #[test]
+    fn command_with_invalid_requested_assurance_attester_kind_is_rejected() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![IdentityRef {
+                identity_id: vec![1, 2, 3],
+                identity_kind: Some(999_999),
+                key_hint: None,
+            }],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn command_with_empty_requested_assurance_metadata_is_rejected() {
         use edgerun_proto::edgerun::v0::common::AssuranceClass;
         use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
@@ -2117,6 +2228,34 @@ mod tests {
             assurance_metadata: Some(ObjectRef {
                 object_id: vec![],
                 object_kind: None,
+            }),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_with_invalid_requested_assurance_metadata_kind_is_rejected() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: Some(ObjectRef {
+                object_id: vec![0x44; 32],
+                object_kind: Some(999_999),
             }),
         });
         sign_command(&key, &mut cmd);

@@ -24,23 +24,24 @@ use alloc::{
     vec,
     vec::Vec,
 };
+use edgerun_crypto::CipherSuite;
 use edgerun_crypto::fill_random;
+use edgerun_crypto::p256::EncodedPoint;
 use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
 use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
-use edgerun_crypto::p256::EncodedPoint;
-use edgerun_crypto::CipherSuite;
+use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use edgerun_tls::prf::{
-    quic_hp_key, quic_initial_client_keys, quic_traffic_keys, Hasher, Tls13KeySchedule,
-    TrafficKeys, INITIAL_SALT_V1,
+    Hasher, INITIAL_SALT_V1, Tls13KeySchedule, TrafficKeys, quic_hp_key, quic_initial_client_keys,
+    quic_traffic_keys,
 };
 
 use super::crypto::{CryptoPhase, PacketProtection, ProtectionKeys};
 use super::frame::QuicFrame;
 use super::packet::QuicPacket;
-use crate::{ConnectionId, TransportParameters, QUIC_VERSION_V1};
+use crate::{ConnectionId, QUIC_VERSION_V1, TransportParameters};
 
 /// Certificate validation result.
 #[derive(Debug)]
@@ -436,8 +437,7 @@ impl QuicTlsHandshaker {
         // ServerHello bytes for the transcript. ServerHello::parse doesn't return
         // consumed bytes, so we re-serialize the length.
         let sh_msg_len = if crypto_data.len() >= 4 {
-            let msg_len =
-                u32::from_be_bytes([0, crypto_data[1], crypto_data[2], crypto_data[3]]) as usize;
+            let msg_len = read_u24_be(crypto_data, 1) as usize;
             4 + msg_len
         } else {
             crypto_data.len()
@@ -549,12 +549,7 @@ impl QuicTlsHandshaker {
             }
 
             let msg_type = crypto_data[pos];
-            let msg_len = u32::from_be_bytes([
-                0,
-                crypto_data[pos + 1],
-                crypto_data[pos + 2],
-                crypto_data[pos + 3],
-            ]) as usize;
+            let msg_len = read_u24_be(crypto_data, pos + 1) as usize;
 
             if pos + 4 + msg_len > crypto_data.len() {
                 break; // Partial message, wait for more data
@@ -574,22 +569,12 @@ impl QuicTlsHandshaker {
                         let context_len = msg[4] as usize;
                         let cert_list_start = 5 + context_len;
                         if cert_list_start + 3 <= msg.len() {
-                            let cert_list_len = u32::from_be_bytes([
-                                0,
-                                msg[cert_list_start],
-                                msg[cert_list_start + 1],
-                                msg[cert_list_start + 2],
-                            ]) as usize;
+                            let cert_list_len = read_u24_be(msg, cert_list_start) as usize;
                             let mut cert_pos = cert_list_start + 3;
                             let cert_end = cert_pos + cert_list_len.min(msg.len() - cert_pos);
 
                             while cert_pos + 3 <= cert_end {
-                                let cert_len = u32::from_be_bytes([
-                                    0,
-                                    msg[cert_pos],
-                                    msg[cert_pos + 1],
-                                    msg[cert_pos + 2],
-                                ]) as usize;
+                                let cert_len = read_u24_be(msg, cert_pos) as usize;
                                 cert_pos += 3;
                                 if cert_pos + cert_len <= cert_end && cert_len > 0 {
                                     let cert_der = msg[cert_pos..cert_pos + cert_len].to_vec();
@@ -598,9 +583,7 @@ impl QuicTlsHandshaker {
                                 cert_pos += cert_len;
                                 // Skip extensions (2-byte length + data)
                                 if cert_pos + 2 <= cert_end {
-                                    let ext_len =
-                                        u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]])
-                                            as usize;
+                                    let ext_len = read_u16_be(msg, cert_pos) as usize;
                                     cert_pos += 2 + ext_len;
                                 }
                             }
@@ -617,8 +600,8 @@ impl QuicTlsHandshaker {
                     // CertificateVerify — extract signature algorithm and signature
                     // Format: type(1) + len(3) + sig_alg(2) + sig_len(2) + signature
                     if msg_len >= 8 {
-                        let sig_alg = u16::from_be_bytes([msg[4], msg[5]]);
-                        let sig_len = u16::from_be_bytes([msg[6], msg[7]]) as usize;
+                        let sig_alg = read_u16_be(msg, 4);
+                        let sig_len = read_u16_be(msg, 6) as usize;
                         if 8 + sig_len <= msg.len() {
                             let signature = msg[8..8 + sig_len].to_vec();
                             self.cert_verify_signature = Some((sig_alg, signature));

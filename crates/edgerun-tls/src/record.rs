@@ -14,6 +14,7 @@ use alloc::{
 };
 use edgerun_crypto::aes_gcm::aead::generic_array::GenericArray;
 use edgerun_crypto::{AeadInPlace, Aes256GcmCipher as AeadCipher};
+use edgerun_encoding::byteorder::read_u16_be;
 
 /// TLS record layer for encryption/decryption
 pub struct RecordCipher {
@@ -182,8 +183,8 @@ impl TlsRecord {
             return Err("Record too short".into());
         }
         let content_type = data[0];
-        let version = u16::from_be_bytes([data[1], data[2]]);
-        let length = u16::from_be_bytes([data[3], data[4]]) as usize;
+        let version = read_u16_be(data, 1);
+        let length = read_u16_be(data, 3) as usize;
 
         if data.len() < 5 + length {
             return Err("Record fragment incomplete".into());

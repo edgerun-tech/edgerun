@@ -33,8 +33,8 @@ use crate::cipher::NamedGroup;
 use crate::handshake::{ClientHelloBuilder, ServerHello};
 use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::prf::{
-    client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384, server_app_write_keys,
-    server_write_keys, Hasher, Tls13KeySchedule,
+    Hasher, Tls13KeySchedule, client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384,
+    server_app_write_keys, server_write_keys,
 };
 use crate::record::RecordCipher;
 use crate::server::client_hello::ClientHello;
@@ -46,6 +46,7 @@ use crate::server::message_builder::{
 use crate::session_cache::SessionCache;
 use crate::{Result, TlsError};
 use edgerun_crypto::CipherSuite;
+use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
 use crate::compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -264,7 +265,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let ct = hdr[0];
         if ct != 22 {
             if ct == 21 {
-                let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+                let len = read_u16_be(&hdr, 3) as usize;
                 let mut fragment = vec![0u8; len];
                 stream.read_exact(&mut fragment).await?;
                 if fragment.len() >= 2 {
@@ -277,7 +278,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 "Expected handshake record, got content_type={ct}",
             )));
         }
-        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let len = read_u16_be(&hdr, 3) as usize;
         let mut fragment = vec![0u8; len];
         stream.read_exact(&mut fragment).await?;
         let sh = ServerHello::parse(&fragment)?;
@@ -415,7 +416,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             let mut pos = 0usize;
             while pos + 4 <= record.len() {
                 let msg_type = record[pos];
-                let len = read_u24(&record[pos + 1..pos + 4]);
+                let len = read_u24_be(&record, pos + 1) as usize;
                 let end = pos + 4 + len;
                 if end > record.len() {
                     return Err(TlsError::Protocol("TLS 1.2 handshake truncated".into()));
@@ -683,8 +684,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 }
             }
             let content_type = self.read_header[0];
-            let _version = u16::from_be_bytes([self.read_header[1], self.read_header[2]]);
-            let length = u16::from_be_bytes([self.read_header[3], self.read_header[4]]) as usize;
+            let _version = read_u16_be(&self.read_header, 1);
+            let length = read_u16_be(&self.read_header, 3) as usize;
 
             if self.read_fragment.len() != length {
                 self.read_fragment.resize(length, 0);
@@ -973,8 +974,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 }
             }
             let content_type = hdr[0];
-            let _version = u16::from_be_bytes([hdr[1], hdr[2]]);
-            let length = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+            let _version = read_u16_be(&hdr, 1);
+            let length = read_u16_be(&hdr, 3) as usize;
 
             // Read record fragment
             let mut fragment = vec![0u8; length];
@@ -1043,7 +1044,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
         let mut hdr = [0u8; 5];
         stream.read_exact(&mut hdr).await?;
         let content_type = hdr[0];
-        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let len = read_u16_be(&hdr, 3) as usize;
         let mut fragment = vec![0u8; len];
         stream.read_exact(&mut fragment).await?;
 
@@ -1069,10 +1070,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
 
         handshake_buf.extend_from_slice(&plaintext);
         while handshake_buf.len() >= 4 {
-            let msg_len =
-                u32::from_be_bytes([0, handshake_buf[1], handshake_buf[2], handshake_buf[3]])
-                    as usize
-                    + 4;
+            let msg_len = read_u24_be(&handshake_buf, 1) as usize + 4;
             if handshake_buf.len() < msg_len {
                 break;
             }
@@ -1086,28 +1084,21 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                     // Certificate
                     transcript.extend_from_slice(&msg);
                     if msg.len() >= 8 {
-                        let cert_list_len =
-                            u32::from_be_bytes([0, msg[5], msg[6], msg[7]]) as usize;
+                        let cert_list_len = read_u24_be(&msg, 5) as usize;
                         let cert_list_start = 8;
                         if cert_list_start + cert_list_len <= msg.len() {
                             let mut cert_pos = cert_list_start;
                             let cert_list_end = cert_list_start + cert_list_len;
                             let mut certs = Vec::new();
                             while cert_pos + 5 < cert_list_end {
-                                let cert_data_len = u32::from_be_bytes([
-                                    0,
-                                    msg[cert_pos],
-                                    msg[cert_pos + 1],
-                                    msg[cert_pos + 2],
-                                ]) as usize;
+                                let cert_data_len = read_u24_be(&msg, cert_pos) as usize;
                                 cert_pos += 3;
                                 if cert_pos + cert_data_len + 2 > cert_list_end {
                                     break;
                                 }
                                 let cert_der = &msg[cert_pos..cert_pos + cert_data_len];
                                 cert_pos += cert_data_len;
-                                let ext_len =
-                                    u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]]) as usize;
+                                let ext_len = read_u16_be(&msg, cert_pos) as usize;
                                 cert_pos += 2 + ext_len;
                                 let cert = Certificate::from_der(cert_der)?;
                                 certs.push(cert);
@@ -1291,7 +1282,7 @@ async fn read_plain_record<S: AsyncRead + AsyncWrite + Unpin>(
 ) -> Result<(u8, Vec<u8>)> {
     let mut hdr = [0u8; 5];
     stream.read_exact(&mut hdr).await?;
-    let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+    let len = read_u16_be(&hdr, 3) as usize;
     let mut fragment = vec![0u8; len];
     stream.read_exact(&mut fragment).await?;
     Ok((hdr[0], fragment))
@@ -1307,14 +1298,10 @@ fn parse_alert_record(fragment: &[u8]) -> TlsError {
     }
 }
 
-fn read_u24(bytes: &[u8]) -> usize {
-    ((bytes[0] as usize) << 16) | ((bytes[1] as usize) << 8) | bytes[2] as usize
-}
-
 fn record_handshake_has_type(record: &[u8], wanted: u8) -> bool {
     let mut pos = 0usize;
     while pos + 4 <= record.len() {
-        let len = read_u24(&record[pos + 1..pos + 4]);
+        let len = read_u24_be(record, pos + 1) as usize;
         if record[pos] == wanted {
             return true;
         }
@@ -1337,7 +1324,7 @@ fn parse_tls12_server_hello(
     if suite_pos + 3 > body.len() {
         return Err(TlsError::Protocol("TLS 1.2 ServerHello invalid".into()));
     }
-    *cipher_suite = u16::from_be_bytes([body[suite_pos], body[suite_pos + 1]]);
+    *cipher_suite = read_u16_be(body, suite_pos);
     if *cipher_suite != 0xC02F && *cipher_suite != 0xC030 {
         return Err(TlsError::Protocol(format!(
             "TLS 1.2 unsupported cipher suite 0x{cipher_suite:04x}",
@@ -1358,7 +1345,7 @@ fn parse_tls12_server_key_exchange(msg: &[u8]) -> Result<Vec<u8>> {
             "TLS 1.2 only named curves are supported".into(),
         ));
     }
-    let group = u16::from_be_bytes([body[1], body[2]]);
+    let group = read_u16_be(body, 1);
     let key_len = body[3] as usize;
     if body.len() < 4 + key_len {
         return Err(TlsError::Protocol("TLS 1.2 ECDHE key truncated".into()));
@@ -1378,7 +1365,7 @@ fn split_tls12_key_block(cipher_suite: u16, key_block: &[u8]) -> Result<Tls12Key
         _ => {
             return Err(TlsError::Protocol(
                 "TLS 1.2 unsupported cipher suite".into(),
-            ))
+            ));
         }
     };
     let mut pos = 0usize;
@@ -1450,7 +1437,7 @@ fn tls12_finished_verify_data(
         _ => {
             return Err(TlsError::Protocol(
                 "TLS 1.2 unsupported Finished suite".into(),
-            ))
+            ));
         }
     };
     tls12_prf(cipher_suite, master_secret, label, &hash, 12)
@@ -1554,7 +1541,7 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
         let mut hdr = [0u8; 5];
         stream.read_exact(&mut hdr).await?;
         let ct = hdr[0];
-        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let len = read_u16_be(&hdr, 3) as usize;
         if ct == 20 {
             // ChangeCipherSpec — skip
             let _fragment = {
@@ -1623,7 +1610,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
             "Expected handshake record, got content_type={ct}",
         )));
     }
-    let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+    let len = read_u16_be(&hdr, 3) as usize;
     let mut fragment = vec![0u8; len];
     stream.read_exact(&mut fragment).await?;
     let ch = ClientHello::parse(&fragment)?;

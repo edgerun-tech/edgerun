@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use prost::Message;
 
@@ -167,10 +168,7 @@ where
         }
     }
 
-    let frame_len = match <[u8; 8]>::try_from(&resp_buf[..8]) {
-        Ok(arr) => u64::from_be_bytes(arr) as usize,
-        Err(_) => return None,
-    };
+    let frame_len = read_u64_be(&resp_buf, 0) as usize;
     if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
         return None;
     }
@@ -241,10 +239,7 @@ where
         }
     }
 
-    let frame_len = match <[u8; 8]>::try_from(&read_buf[..8]) {
-        Ok(arr) => u64::from_be_bytes(arr) as usize,
-        Err(_) => return None,
-    };
+    let frame_len = read_u64_be(read_buf, 0) as usize;
     if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
         return None;
     }
@@ -356,13 +351,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             }
         }
 
-        let frame_len = match <[u8; 8]>::try_from(&read_buf[..8]) {
-            Ok(arr) => u64::from_be_bytes(arr) as usize,
-            Err(_) => {
-                edgerun_log::warn!("TCP frame length header invalid");
-                return;
-            }
-        };
+        let frame_len = read_u64_be(&read_buf, 0) as usize;
         if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
             edgerun_log::warn!("TCP frame length invalid or too large");
             return;

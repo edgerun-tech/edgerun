@@ -13,6 +13,7 @@ use alloc::{
 };
 use core::str;
 use edgerun_crypto::CipherSuite;
+use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
 /// Parsed ClientHello from the wire format (RFC 8446 §4.1.2).
 #[derive(Debug)]
@@ -61,7 +62,7 @@ impl ClientHello {
             )));
         }
 
-        let msg_len = u32::from_be_bytes([0, data[1], data[2], data[3]]) as usize;
+        let msg_len = read_u24_be(data, 1) as usize;
         if data.len() < 4 + msg_len {
             return Err(TlsError::HandshakeFailure("ClientHello truncated".into()));
         }
@@ -75,7 +76,7 @@ impl ClientHello {
                 "ClientHello: legacy_version truncated".into(),
             ));
         }
-        let legacy_version = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
+        let legacy_version = read_u16_be(msg, pos);
         pos += 2;
 
         // Random
@@ -113,7 +114,7 @@ impl ClientHello {
                 "ClientHello: cipher_suites length truncated".into(),
             ));
         }
-        let cs_len = u16::from_be_bytes([msg[pos], msg[pos + 1]]) as usize;
+        let cs_len = read_u16_be(msg, pos) as usize;
         pos += 2;
         if !cs_len.is_multiple_of(2) {
             return Err(TlsError::Protocol(
@@ -128,7 +129,7 @@ impl ClientHello {
         let mut cipher_suites = Vec::new();
         let cs_end = pos + cs_len;
         while pos + 1 < cs_end {
-            let cs = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
+            let cs = read_u16_be(msg, pos);
             if let Ok(suite) = CipherSuite::from_wire(cs) {
                 cipher_suites.push(suite);
             }
@@ -166,13 +167,13 @@ impl ClientHello {
             if pos + 2 > msg.len() {
                 return Err(TlsError::Protocol("ClientHello: ext_len truncated".into()));
             }
-            let ext_len = u16::from_be_bytes([msg[pos], msg[pos + 1]]) as usize;
+            let ext_len = read_u16_be(msg, pos) as usize;
             pos += 2;
 
             let ext_end = pos + ext_len;
             while pos + 4 <= ext_end {
-                let ext_type = u16::from_be_bytes([msg[pos], msg[pos + 1]]);
-                let ext_data_len = u16::from_be_bytes([msg[pos + 2], msg[pos + 3]]) as usize;
+                let ext_type = read_u16_be(msg, pos);
+                let ext_data_len = read_u16_be(msg, pos + 2) as usize;
                 pos += 4;
 
                 if pos + ext_data_len > ext_end {
@@ -185,11 +186,11 @@ impl ClientHello {
                     0
                         // server_name (SNI) - RFC 6066
                         if ext_data_len >= 2 => {
-                            let name_list_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
+                            let name_list_len = read_u16_be(ext_data, 0) as usize;
                             if ext_data.len() >= 2 + name_list_len && name_list_len >= 3 {
                                 let name_type = ext_data[2];
                                 if name_type == 0 {
-                                    let name_len = u16::from_be_bytes([ext_data[3], ext_data[4]]) as usize;
+                                    let name_len = read_u16_be(ext_data, 3) as usize;
                                     if 5 + name_len <= 2 + name_list_len {
                                         if let Ok(name) = str::from_utf8(&ext_data[5..5 + name_len]) {
                                             server_name = Some(name.to_string());
@@ -201,10 +202,10 @@ impl ClientHello {
                     10
                         // supported_groups
                         if ext_data_len >= 2 => {
-                            let groups_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
+                            let groups_len = read_u16_be(ext_data, 0) as usize;
                             let mut gpos = 2;
                             while gpos + 1 < groups_len && gpos + 1 < ext_data.len() {
-                                let g = u16::from_be_bytes([ext_data[gpos], ext_data[gpos + 1]]);
+                                let g = read_u16_be(ext_data, gpos);
                                 if let Ok(group) = NamedGroup::from_wire(g) {
                                     supported_groups.push(group);
                                 }
@@ -214,10 +215,10 @@ impl ClientHello {
                     13
                         // signature_algorithms
                         if ext_data_len >= 2 => {
-                            let sa_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
+                            let sa_len = read_u16_be(ext_data, 0) as usize;
                             let mut spos = 2;
                             while spos + 1 < sa_len && spos + 1 < ext_data.len() {
-                                let sa = u16::from_be_bytes([ext_data[spos], ext_data[spos + 1]]);
+                                let sa = read_u16_be(ext_data, spos);
                                 signature_algorithms.push(sa);
                                 spos += 2;
                             }
@@ -228,7 +229,7 @@ impl ClientHello {
                             let _versions_len = ext_data[0] as usize;
                             let mut vpos = 1;
                             while vpos + 1 < ext_data.len() {
-                                let v = u16::from_be_bytes([ext_data[vpos], ext_data[vpos + 1]]);
+                                let v = read_u16_be(ext_data, vpos);
                                 supported_versions.push(v);
                                 vpos += 2;
                             }
@@ -236,11 +237,11 @@ impl ClientHello {
                     51
                         // key_share
                         if ext_data_len >= 2 => {
-                            let ks_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
+                            let ks_len = read_u16_be(ext_data, 0) as usize;
                             let mut kpos = 2;
                             while kpos + 3 < ks_len && kpos + 3 < ext_data.len() {
-                                let group = u16::from_be_bytes([ext_data[kpos], ext_data[kpos + 1]]);
-                                let ke_len = u16::from_be_bytes([ext_data[kpos + 2], ext_data[kpos + 3]]) as usize;
+                                let group = read_u16_be(ext_data, kpos);
+                                let ke_len = read_u16_be(ext_data, kpos + 2) as usize;
                                 kpos += 4;
                                 if kpos + ke_len <= ext_data.len() {
                                     if let Ok(g) = NamedGroup::from_wire(group) {
@@ -259,7 +260,7 @@ impl ClientHello {
                     16
                         // application_layer_protocol_negotiation (ALPN) - RFC 7301
                         if ext_data_len >= 2 => {
-                            let proto_list_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
+                            let proto_list_len = read_u16_be(ext_data, 0) as usize;
                             let mut ppos = 2;
                             while ppos < ext_data.len() && ppos < 2 + proto_list_len {
                                 if ppos + 1 > ext_data.len() { break; }
@@ -346,9 +347,10 @@ mod tests {
         assert_eq!(ch.server_name, Some("example.com".to_string()));
         assert!(ch.client_key_share.is_some());
         assert_eq!(ch.client_key_share_group, Some(NamedGroup::SECP256R1));
-        assert!(ch
-            .cipher_suites
-            .contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
+        assert!(
+            ch.cipher_suites
+                .contains(&CipherSuite::TLS_AES_128_GCM_SHA256)
+        );
         assert!(ch.supported_versions.contains(&0x0304));
     }
 
@@ -437,11 +439,13 @@ mod tests {
             .unwrap();
 
         let ch = ClientHello::parse(&ch_bytes).unwrap();
-        assert!(ch
-            .cipher_suites
-            .contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
-        assert!(ch
-            .cipher_suites
-            .contains(&CipherSuite::TLS_AES_256_GCM_SHA384));
+        assert!(
+            ch.cipher_suites
+                .contains(&CipherSuite::TLS_AES_128_GCM_SHA256)
+        );
+        assert!(
+            ch.cipher_suites
+                .contains(&CipherSuite::TLS_AES_256_GCM_SHA384)
+        );
     }
 }

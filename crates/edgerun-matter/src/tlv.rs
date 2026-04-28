@@ -1,4 +1,5 @@
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::{read_i32_be, read_i64_be, read_u32_be, read_u64_be};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnonymousTag;
@@ -167,7 +168,7 @@ impl TlvReader {
     pub fn read_i32(&mut self) -> i32 {
         if let (Some(TAG_ANONYMOUS), Some(0x06)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(4) {
-                return i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                return read_i32_be(&bytes, 0);
             }
         }
         0
@@ -176,7 +177,7 @@ impl TlvReader {
     pub fn read_u32(&mut self) -> u32 {
         if let (Some(TAG_ANONYMOUS), Some(0x0A)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(4) {
-                return u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                return read_u32_be(&bytes, 0);
             }
         }
         0
@@ -185,9 +186,7 @@ impl TlvReader {
     pub fn read_i64(&mut self) -> i64 {
         if let (Some(TAG_ANONYMOUS), Some(0x07)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(8) {
-                return i64::from_be_bytes([
-                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                ]);
+                return read_i64_be(&bytes, 0);
             }
         }
         0
@@ -196,9 +195,7 @@ impl TlvReader {
     pub fn read_u64(&mut self) -> u64 {
         if let (Some(TAG_ANONYMOUS), Some(0x0B)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(8) {
-                return u64::from_be_bytes([
-                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                ]);
+                return read_u64_be(&bytes, 0);
             }
         }
         0

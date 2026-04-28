@@ -482,19 +482,49 @@ use crate::crypto::{
     verify_canonical_record, verify_canonical_record_hw, ECDSA_P256_PUBLIC_KEY_LEN,
     ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
 };
-use crate::protocol::{canonical_bytes, ObjectRef, ProtocolRecord};
-use edgerun_proto::edgerun::v0::common::{Directness, TransportClass};
+use crate::protocol::{canonical_bytes, IdentityRef, ObjectRef, ProtocolRecord};
+use edgerun_proto::edgerun::v0::common::{Directness, IdentityKind, ObjectKind, TransportClass};
+
+fn validate_identity_ref(
+    identity: &IdentityRef,
+    missing_reason: &'static str,
+    invalid_kind_reason: &'static str,
+) -> Option<ValidationResult> {
+    if identity.identity_id.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr(missing_reason))]),
+            empty_map(),
+        ));
+    }
+    if identity.identity_kind.is_some_and(|identity_kind| {
+        IdentityKind::from_i32(identity_kind).is_none_or(|kind| kind == IdentityKind::Unspecified)
+    }) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr(invalid_kind_reason))]),
+            empty_map(),
+        ));
+    }
+    None
+}
 
 fn validate_optional_object_ref(
     object: Option<&ObjectRef>,
     reason: &'static str,
 ) -> Option<ValidationResult> {
-    if object.is_some_and(|object| object.object_id.is_empty()) {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            mapping([("reason", ystr(reason))]),
-            empty_map(),
-        ));
+    if let Some(object) = object {
+        if object.object_id.is_empty()
+            || object.object_kind.is_some_and(|object_kind| {
+                ObjectKind::from_i32(object_kind).is_none_or(|kind| kind == ObjectKind::Unspecified)
+            })
+        {
+            return Some(reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr(reason))]),
+                empty_map(),
+            ));
+        }
     }
     None
 }
@@ -546,12 +576,12 @@ pub fn validate_route_advertisement(
             empty_map(),
         );
     };
-    if advertiser.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            mapping([("reason", ystr("missing_advertiser"))]),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(
+        advertiser,
+        "missing_advertiser",
+        "invalid_advertiser_identity_kind",
+    ) {
+        return result;
     }
     let Some(advertised_at) = adv.advertised_at.as_ref() else {
         return reject(
@@ -773,7 +803,7 @@ pub fn validate_route_advertisement(
 mod proto_tests {
     use super::*;
     use edgerun_proto::edgerun::v0::common::{
-        Directness, IdentityRef, NodeRef, ObjectRef, Signature, TransportClass,
+        Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass,
     };
     use edgerun_proto::edgerun::v0::network::{ReachabilityHint, RouteAdvertisement};
     use prost_types::Timestamp;
@@ -1034,6 +1064,21 @@ mod proto_tests {
     }
 
     #[test]
+    fn test_reject_invalid_metric_hint_object_kind() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.metric_hint = Some(ObjectRef {
+            object_id: vec![9],
+            object_kind: Some(ObjectKind::Unspecified as i32),
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn test_reject_empty_route_metadata_object() {
         let (_sk, pk) = make_test_keypair();
         let mut ad = make_valid_ad(pk);
@@ -1041,6 +1086,33 @@ mod proto_tests {
             object_id: vec![],
             object_kind: None,
         });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_unknown_route_metadata_object_kind() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.route_metadata = Some(ObjectRef {
+            object_id: vec![10],
+            object_kind: Some(999_999),
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_invalid_advertiser_identity_kind() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.advertiser.as_mut().unwrap().identity_kind = Some(0);
 
         let result = validate_route_advertisement(&ad);
 

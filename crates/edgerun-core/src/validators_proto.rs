@@ -994,15 +994,19 @@ fn validate_reachability_hint(
             empty_map(),
         ));
     }
-    if let (Some(valid_after), Some(valid_until)) = (&hint.valid_after, &hint.valid_until) {
+    if let Some(valid_after) = &hint.valid_after {
         if let Some(result) = validate_timestamp_shape(valid_after, &format!("{label} valid_after"))
         {
             return Some(result);
         }
+    }
+    if let Some(valid_until) = &hint.valid_until {
         if let Some(result) = validate_timestamp_shape(valid_until, &format!("{label} valid_until"))
         {
             return Some(result);
         }
+    }
+    if let (Some(valid_after), Some(valid_until)) = (&hint.valid_after, &hint.valid_until) {
         if timestamp_ms(valid_after) > timestamp_ms(valid_until) {
             return Some(reject(
                 ReasonCode::TimeInvalid,
@@ -1777,12 +1781,8 @@ pub fn validate_snapshot(
             empty_map(),
         );
     };
-    if payload_object.object_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("snapshot payload object_id is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_object_ref(payload_object, "snapshot payload") {
+        return result;
     }
 
     // Producer trust
@@ -2103,12 +2103,10 @@ pub fn validate_object_retrieval(
                 empty_map(),
             );
         };
-        if object_ref.object_id.is_empty() {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("representation header object_id is empty".into()),
-                empty_map(),
-            );
+        if let Some(result) =
+            validate_required_object_ref(object_ref, "representation header object")
+        {
+            return result;
         }
         let Some(representation_digest) = &header.representation_digest else {
             return reject(
@@ -2229,12 +2227,9 @@ pub fn validate_object_retrieval(
                 empty_map(),
             );
         };
-        if manifest_object.object_id.is_empty() {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("chunk manifest object_id is empty".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_required_object_ref(manifest_object, "chunk manifest object")
+        {
+            return result;
         }
         if let Some(descriptor) = descriptor {
             if manifest_object.object_id != descriptor.object_id {
@@ -5262,6 +5257,23 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_invalid_payload_object_kind_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut snapshot = valid_snapshot_for_tests(b"trusted".to_vec());
+        snapshot.payload_object = Some(ObjectRef {
+            object_id: vec![0x44; 32],
+            object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified as i32),
+        });
+        sign_snapshot(&mut snapshot, &signing_key);
+
+        let result = validate_snapshot(&snapshot, &[b"trusted".to_vec()]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn snapshot_supersedes_missing_snapshot_id_rejected() {
         let signing_key =
             edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
@@ -5584,6 +5596,36 @@ mod tests {
     }
 
     #[test]
+    fn object_retrieval_rejects_invalid_header_object_kind() {
+        let header = StoredRepresentationHeader {
+            header_version: 1,
+            representation_id: vec![0x11; 32],
+            object: Some(ObjectRef {
+                object_id: vec![0x22; 32],
+                object_kind: Some(999_999),
+            }),
+            representation_digest: Some(Digest {
+                algorithm: 1,
+                value: vec![0x33; 32],
+            }),
+            plaintext_size: None,
+            stored_size: 10,
+            encryption_scheme: String::new(),
+            compression_scheme: String::new(),
+            chunking_mode: edgerun_proto::edgerun::v0::object::ChunkingMode::None as i32,
+            chunk_manifest_object: None,
+            access_package_object: None,
+            created_at: None,
+            representation_metadata: None,
+        };
+
+        let result = validate_object_retrieval(None, Some(&header), None, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn object_retrieval_rejects_representation_digest_without_sha256_algorithm() {
         let mut header = StoredRepresentationHeader {
             header_version: 1,
@@ -5833,6 +5875,18 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::ObjectIdMismatch));
+    }
+
+    #[test]
+    fn object_retrieval_rejects_invalid_manifest_object_kind() {
+        let (header, mut manifest) = valid_manifest_header_and_manifest();
+        manifest.object.as_mut().unwrap().object_kind =
+            Some(edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified as i32);
+
+        let result = validate_object_retrieval(None, Some(&header), Some(&manifest), None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]
@@ -6779,6 +6833,37 @@ mod tests {
                 locator_payload: b"addr".to_vec(),
                 directness: edgerun_proto::edgerun::v0::common::Directness::Direct as i32,
                 valid_after: None,
+                valid_until: None,
+                cost_hint: None,
+                quality_hint: None,
+                issuer: None,
+                signature: None,
+            });
+
+        let result = validate_session_hello(&hello, Some(b"target-node"));
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn session_hello_invalid_locator_timestamp_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut hello = signed_session_hello(&key);
+        hello
+            .initiator_locators
+            .push(edgerun_proto::edgerun::v0::network::ReachabilityHint {
+                hint_version: 1,
+                subject_node: Some(NodeRef {
+                    node_id: b"node-a".to_vec(),
+                }),
+                transport_class: edgerun_proto::edgerun::v0::common::TransportClass::Quic as i32,
+                locator_payload: b"addr".to_vec(),
+                directness: edgerun_proto::edgerun::v0::common::Directness::Direct as i32,
+                valid_after: Some(prost_types::Timestamp {
+                    seconds: 10,
+                    nanos: 1_000_000_000,
+                }),
                 valid_until: None,
                 cost_hint: None,
                 quality_hint: None,

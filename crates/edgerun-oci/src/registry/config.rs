@@ -85,13 +85,13 @@ pub struct HistoryEntry {
 // ===========================================================================
 
 /// Parse an image config from JSON bytes.
-#[cfg(feature = "serde")]
+#[cfg(all(feature = "serde", not(feature = "json")))]
 pub fn parse_image_config(data: &[u8]) -> Result<ImageConfig, String> {
     from_slice(data).map_err(|e| e.to_string())
 }
 
 /// Parse an image config from JSON bytes without serde.
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 pub fn parse_image_config(data: &[u8]) -> Result<ImageConfig, String> {
     let value = parse_json_bytes(data)?;
     parse_image_config_value(&value)
@@ -151,7 +151,7 @@ pub fn parse_single_manifest(data: &[u8]) -> Result<SingleManifest, String> {
     parse_single_manifest_value(&value)
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_image_config_value(value: &JsonValue) -> Result<ImageConfig, String> {
     let obj = object(value, "image config")?;
     Ok(ImageConfig {
@@ -166,7 +166,7 @@ fn parse_image_config_value(value: &JsonValue) -> Result<ImageConfig, String> {
     })
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_image_config_inner(value: &JsonValue) -> Result<ImageConfigInner, String> {
     let obj = object(value, "image config.config")?;
     Ok(ImageConfigInner {
@@ -182,7 +182,7 @@ fn parse_image_config_inner(value: &JsonValue) -> Result<ImageConfigInner, Strin
     })
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_rootfs(value: &JsonValue) -> Result<RootFs, String> {
     let obj = object(value, "rootfs")?;
     Ok(RootFs {
@@ -191,7 +191,7 @@ fn parse_rootfs(value: &JsonValue) -> Result<RootFs, String> {
     })
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_history_entry(value: &JsonValue) -> Result<HistoryEntry, String> {
     let obj = object(value, "history entry")?;
     Ok(HistoryEntry {
@@ -277,7 +277,7 @@ fn optional_string(obj: &Map, key: &str) -> Option<String> {
     }
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn optional_string_any(obj: &Map, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| optional_string(obj, key))
 }
@@ -287,7 +287,7 @@ fn required_string(obj: &Map, key: &str) -> Result<String, String> {
     optional_string(obj, key).ok_or_else(|| format!("missing string field {key}"))
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn optional_bool(obj: &Map, key: &str) -> Option<bool> {
     match obj.get(key) {
         Some(JsonValue::Bool(value)) => Some(*value),
@@ -305,7 +305,7 @@ fn required_u64(obj: &Map, key: &str) -> Result<u64, String> {
     }
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_array<T>(
     value: Option<&JsonValue>,
     parse_item: fn(&JsonValue) -> Result<T, String>,
@@ -334,7 +334,7 @@ fn parse_array_required<T>(
     }
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_string_array_any(obj: &Map, keys: &[&str]) -> Result<Option<Vec<String>>, String> {
     for key in keys {
         if let Some(value) = obj.get(key) {
@@ -344,7 +344,7 @@ fn parse_string_array_any(obj: &Map, keys: &[&str]) -> Result<Option<Vec<String>
     Ok(None)
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_string_array_required(obj: &Map, key: &str) -> Result<Vec<String>, String> {
     match obj.get(key) {
         Some(value) => parse_string_array_value(value),
@@ -352,7 +352,7 @@ fn parse_string_array_required(obj: &Map, key: &str) -> Result<Vec<String>, Stri
     }
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_string_array_value(value: &JsonValue) -> Result<Vec<String>, String> {
     match value {
         JsonValue::Array(items) => items
@@ -366,7 +366,7 @@ fn parse_string_array_value(value: &JsonValue) -> Result<Vec<String>, String> {
     }
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_string_map_any(
     obj: &Map,
     keys: &[&str],
@@ -379,7 +379,7 @@ fn parse_string_map_any(
     Ok(None)
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_string_map_value(value: &JsonValue) -> Result<BTreeMap<String, String>, String> {
     let obj = object(value, "string map")?;
     let mut out = BTreeMap::new();
@@ -391,7 +391,7 @@ fn parse_string_map_value(value: &JsonValue) -> Result<BTreeMap<String, String>,
     Ok(out)
 }
 
-#[cfg(all(feature = "json", not(feature = "serde")))]
+#[cfg(feature = "json")]
 fn parse_json_object_map_any(
     obj: &Map,
     keys: &[&str],

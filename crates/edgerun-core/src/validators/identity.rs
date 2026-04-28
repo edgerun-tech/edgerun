@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 pub fn validate_identity_record(
     record: &edgerun_proto::edgerun::v0::identity::IdentityRecord,
 ) -> ValidationResult {
-    use edgerun_proto::edgerun::v0::common::IdentityKind;
+    use edgerun_proto::edgerun::v0::common::{IdentityKind, ObjectKind};
     use edgerun_proto::edgerun::v0::identity::{IdentityRecord, KeyAlgorithm};
 
     // --- Required field checks ---
@@ -96,23 +96,27 @@ pub fn validate_identity_record(
         );
     }
 
-    if record
-        .supersedes_identity
-        .as_ref()
-        .is_some_and(|identity| identity.identity_id.is_empty())
-    {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            mapping([("reason", ystr("supersedes_identity_missing_identity_id"))]),
-            empty_map(),
-        );
+    if let Some(identity) = &record.supersedes_identity {
+        if identity.identity_id.is_empty()
+            || identity.identity_kind.is_some_and(|identity_kind| {
+                IdentityKind::from_i32(identity_kind)
+                    .is_none_or(|kind| kind == IdentityKind::Unspecified)
+            })
+        {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("supersedes_identity_missing_identity_id"))]),
+                empty_map(),
+            );
+        }
     }
 
-    if record
-        .assurance_claim_objects
-        .iter()
-        .any(|object| object.object_id.is_empty())
-    {
+    if record.assurance_claim_objects.iter().any(|object| {
+        object.object_id.is_empty()
+            || object.object_kind.is_some_and(|object_kind| {
+                ObjectKind::from_i32(object_kind).is_none_or(|kind| kind == ObjectKind::Unspecified)
+            })
+    }) {
         return reject(
             ReasonCode::StructuralInvalid,
             mapping([("reason", ystr("assurance_claim_object_missing_object_id"))]),
@@ -120,16 +124,18 @@ pub fn validate_identity_record(
         );
     }
 
-    if record
-        .metadata_object
-        .as_ref()
-        .is_some_and(|object| object.object_id.is_empty())
-    {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            mapping([("reason", ystr("metadata_object_missing_object_id"))]),
-            empty_map(),
-        );
+    if let Some(object) = &record.metadata_object {
+        if object.object_id.is_empty()
+            || object.object_kind.is_some_and(|object_kind| {
+                ObjectKind::from_i32(object_kind).is_none_or(|kind| kind == ObjectKind::Unspecified)
+            })
+        {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                mapping([("reason", ystr("metadata_object_missing_object_id"))]),
+                empty_map(),
+            );
+        }
     }
 
     // signature must be present and correct length
@@ -203,7 +209,9 @@ pub fn validate_identity_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_proto::edgerun::v0::common::{IdentityKind, IdentityRef, ObjectRef, Signature};
+    use edgerun_proto::edgerun::v0::common::{
+        IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature,
+    };
     use edgerun_proto::edgerun::v0::identity::IdentityRecord;
 
     fn make_test_keypair() -> (
@@ -652,6 +660,36 @@ mod tests {
     }
 
     #[test]
+    fn test_reject_invalid_supersedes_identity_kind() {
+        let (sk, _vk, pk) = make_test_keypair();
+        let record = IdentityRecord {
+            record_version: 1,
+            identity_id: vec![1, 2, 3, 4, 5],
+            identity_kind: IdentityKind::Node as i32,
+            key_algorithm: 1,
+            public_key: pk,
+            created_at: Some(prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 0,
+            }),
+            supersedes_identity: Some(IdentityRef {
+                identity_id: vec![6, 7, 8],
+                identity_kind: Some(0),
+                key_hint: None,
+            }),
+            assurance_claim_objects: vec![],
+            metadata_object: None,
+            signature: None,
+        };
+        let signed = sign_record(&sk, &record);
+
+        let result = validate_identity_record(&signed);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn test_reject_empty_assurance_claim_object() {
         let (sk, _vk, pk) = make_test_keypair();
         let record = IdentityRecord {
@@ -668,6 +706,35 @@ mod tests {
             assurance_claim_objects: vec![ObjectRef {
                 object_id: vec![],
                 object_kind: None,
+            }],
+            metadata_object: None,
+            signature: None,
+        };
+        let signed = sign_record(&sk, &record);
+
+        let result = validate_identity_record(&signed);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_invalid_assurance_claim_object_kind() {
+        let (sk, _vk, pk) = make_test_keypair();
+        let record = IdentityRecord {
+            record_version: 1,
+            identity_id: vec![1, 2, 3, 4, 5],
+            identity_kind: IdentityKind::Node as i32,
+            key_algorithm: 1,
+            public_key: pk,
+            created_at: Some(prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 0,
+            }),
+            supersedes_identity: None,
+            assurance_claim_objects: vec![ObjectRef {
+                object_id: vec![9],
+                object_kind: Some(ObjectKind::Unspecified as i32),
             }],
             metadata_object: None,
             signature: None,
@@ -698,6 +765,35 @@ mod tests {
             metadata_object: Some(ObjectRef {
                 object_id: vec![],
                 object_kind: None,
+            }),
+            signature: None,
+        };
+        let signed = sign_record(&sk, &record);
+
+        let result = validate_identity_record(&signed);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn test_reject_unknown_metadata_object_kind() {
+        let (sk, _vk, pk) = make_test_keypair();
+        let record = IdentityRecord {
+            record_version: 1,
+            identity_id: vec![1, 2, 3, 4, 5],
+            identity_kind: IdentityKind::Node as i32,
+            key_algorithm: 1,
+            public_key: pk,
+            created_at: Some(prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 0,
+            }),
+            supersedes_identity: None,
+            assurance_claim_objects: vec![],
+            metadata_object: Some(ObjectRef {
+                object_id: vec![10],
+                object_kind: Some(999_999),
             }),
             signature: None,
         };

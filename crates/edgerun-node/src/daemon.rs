@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use edgerun_core::util::now_prost_timestamp;
+use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh_daemon::MeshDaemon;
 use edgerun_rt::CancellationToken;
@@ -15,17 +16,17 @@ use crate::capacity;
 use crate::command_dispatch;
 use crate::config::{self, BootstrapPeer, NodeConfig};
 use crate::config::{extract_private_key_bytes, parse_bootstrap_peers, parse_config};
-use crate::health::{run_health_server, HealthState};
+use crate::health::{HealthState, run_health_server};
 use crate::ingress;
-use crate::mesh_store_provider::{make_mesh_command_handler, MeshCommandBridge};
+use crate::mesh_store_provider::{MeshCommandBridge, make_mesh_command_handler};
 use crate::peer_reconnect::run_peer_reconnection;
 use crate::provisioning_listener::run_provisioning_listener;
 use crate::session;
 use crate::signer::load_signer_from_config;
 use crate::store_task::run_store_task;
 use crate::tcp_server::{
-    encode_tcp_frame, handle_tcp_connection, perform_session_handshake_as_initiator,
-    run_tcp_listener, SessionContext,
+    SessionContext, encode_tcp_frame, handle_tcp_connection,
+    perform_session_handshake_as_initiator, run_tcp_listener,
 };
 use crate::types::{StoreRequest, StoreResponse};
 use crate::workload_policy;
@@ -37,7 +38,7 @@ async fn run_fetch_queue_consumer(
     store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
     cancel: CancellationToken,
 ) {
-    use edgerun_core::protocol::{canonical_bytes, ProtocolRecord, Signature};
+    use edgerun_core::protocol::{ProtocolRecord, Signature, canonical_bytes};
     use edgerun_core::result::Verdict;
     use edgerun_core::validators_proto::validate_query_result_fragment;
     use edgerun_proto::edgerun::v0::access::{QueryClass, QueryRequest};
@@ -289,7 +290,7 @@ fn send_command_to_peer_blocking(
     let mut header = [0u8; 8];
     stream.read_exact(&mut header)?;
 
-    let payload_len = u64::from_be_bytes(header) as usize;
+    let payload_len = read_u64_be(&header, 0) as usize;
     let mut payload = vec![0u8; payload_len];
     stream.read_exact(&mut payload)?;
 
@@ -320,7 +321,7 @@ pub async fn send_command_to_peer_async(
     )
     .await??;
 
-    let payload_len = u64::from_be_bytes(header) as usize;
+    let payload_len = read_u64_be(&header, 0) as usize;
     let mut payload = vec![0u8; payload_len];
     edgerun_rt::timeout(
         std::time::Duration::from_secs(30),
@@ -356,7 +357,7 @@ pub async fn send_query_to_peer(
     )
     .await??;
 
-    let payload_len = u64::from_be_bytes(header) as usize;
+    let payload_len = read_u64_be(&header, 0) as usize;
     let mut payload = vec![0u8; payload_len];
     edgerun_rt::timeout(
         std::time::Duration::from_secs(30),

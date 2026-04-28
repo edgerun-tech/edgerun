@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_rt::{AsyncReadExt, AsyncWriteExt, CancellationToken};
 use prost::Message;
 
 use crate::session::{self, SessionState};
-use crate::tcp_server::{encode_tcp_frame, SessionContext, TCP_MAX_FRAME_SIZE};
+use crate::tcp_server::{SessionContext, TCP_MAX_FRAME_SIZE, encode_tcp_frame};
 use crate::types::StoreRequest;
 
 /// Periodically attempts to reconnect to unreachable peers.
@@ -222,7 +223,7 @@ where
         }
     }
 
-    let frame_len = u64::from_be_bytes(<[u8; 8]>::try_from(&resp_buf[..8])?) as usize;
+    let frame_len = read_u64_be(&resp_buf, 0) as usize;
     if frame_len == 0 || frame_len > crate::tcp_server::TCP_MAX_FRAME_SIZE {
         return Err("invalid frame length during handshake".into());
     }
@@ -290,13 +291,7 @@ async fn handle_peer_messages<R, W>(
             }
         }
 
-        let frame_len = match <[u8; 8]>::try_from(&read_buf[..8]) {
-            Ok(arr) => u64::from_be_bytes(arr) as usize,
-            Err(_) => {
-                edgerun_log::warn!("peer frame length header invalid");
-                return;
-            }
-        };
+        let frame_len = read_u64_be(&read_buf, 0) as usize;
         if frame_len == 0 || frame_len > crate::tcp_server::TCP_MAX_FRAME_SIZE {
             edgerun_log::warn!("peer frame length invalid or too large");
             return;

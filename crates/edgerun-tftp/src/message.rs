@@ -39,6 +39,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::str::FromStr;
+use edgerun_encoding::byteorder::read_u16_be;
 
 pub mod io {
     use alloc::string::{String, ToString};
@@ -394,7 +395,7 @@ impl TftpMessage {
             ));
         }
 
-        let opcode = u16::from_be_bytes([data[0], data[1]]);
+        let opcode = read_u16_be(data, 0);
 
         match TftpOpcode::from_u16(opcode) {
             Some(TftpOpcode::RRQ) => {
@@ -427,7 +428,7 @@ impl TftpMessage {
                 if data.len() < 4 {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "DATA too short"));
                 }
-                let block = u16::from_be_bytes([data[2], data[3]]);
+                let block = read_u16_be(data, 2);
                 let d = data[4..].to_vec();
                 Ok(Self::DATA { block, data: d })
             }
@@ -436,7 +437,7 @@ impl TftpMessage {
                 if data.len() < 4 {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "ACK too short"));
                 }
-                let block = u16::from_be_bytes([data[2], data[3]]);
+                let block = read_u16_be(data, 2);
                 Ok(Self::ACK { block })
             }
 
@@ -447,7 +448,7 @@ impl TftpMessage {
                         "ERROR too short",
                     ));
                 }
-                let code_val = u16::from_be_bytes([data[2], data[3]]);
+                let code_val = read_u16_be(data, 2);
                 let code = TftpError::from_u16(code_val).unwrap_or(TftpError::NotDefined);
                 let msg_end = data[4..]
                     .iter()

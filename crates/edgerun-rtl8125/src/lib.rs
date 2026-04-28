@@ -3,8 +3,6 @@
 
 #![no_std]
 
-use edgerun_rt::SpinLock;
-
 pub const VENDOR_ID: u16 = 0x10ec;
 pub const DEVICE_ID: u16 = 0x8125;
 
@@ -42,9 +40,6 @@ pub const TX_BUF_SIZE: usize = 8192;
 pub const NUM_TX_DESC: usize = 4;
 pub const NUM_RX_DESC: usize = 4;
 
-const TX_DESC_SIZE: usize = 16;
-const RX_DESC_SIZE: usize = 16;
-
 #[repr(C)]
 pub struct TxDesc {
     pub opts1: u32,
@@ -63,25 +58,13 @@ pub struct RxDesc {
 
 pub struct Rtl8125 {
     iobase: usize,
-    lock: SpinLock,
-    tx_cur: usize,
-    rx_cur: usize,
 }
 
 impl Rtl8125 {
     pub const fn new(iobase: usize) -> Self {
         Self {
             iobase,
-            lock: SpinLock::new(),
-            tx_cur: 0,
-            rx_cur: 0,
         }
-    }
-
-    #[inline]
-    fn read32(&self, reg: u16) -> u32 {
-        let addr = (self.iobase + reg as usize) as *const u32;
-        unsafe { addr.read_volatile() }
     }
 
     #[inline]

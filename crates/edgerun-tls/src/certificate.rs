@@ -5,6 +5,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
+use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
 /// Parsed X.509 certificate
 #[derive(Debug, Clone)]
@@ -60,12 +61,7 @@ impl Certificate {
         if data.len() < 1 + context_len + 3 {
             return Err("Certificate list truncated".into());
         }
-        let cert_list_len = u32::from_be_bytes([
-            0,
-            data[1 + context_len],
-            data[2 + context_len],
-            data[3 + context_len],
-        ]) as usize;
+        let cert_list_len = read_u24_be(data, 1 + context_len) as usize;
         let list_start = 4 + context_len;
         if data.len() < list_start + cert_list_len {
             return Err("Certificate list truncated".into());
@@ -75,16 +71,14 @@ impl Certificate {
         let mut certs = Vec::new();
         let mut pos = 0;
         while pos + 5 < list_data.len() {
-            let cert_data_len =
-                u32::from_be_bytes([0, list_data[pos], list_data[pos + 1], list_data[pos + 2]])
-                    as usize;
+            let cert_data_len = read_u24_be(list_data, pos) as usize;
             pos += 3;
             if pos + cert_data_len + 2 > list_data.len() {
                 break;
             }
             let cert_der = &list_data[pos..pos + cert_data_len];
             pos += cert_data_len;
-            let ext_len = u16::from_be_bytes([list_data[pos], list_data[pos + 1]]) as usize;
+            let ext_len = read_u16_be(list_data, pos) as usize;
             pos += 2 + ext_len;
 
             let cert = Self::from_der(cert_der)?;

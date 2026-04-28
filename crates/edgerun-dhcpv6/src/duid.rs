@@ -4,6 +4,7 @@ use crate::std::fmt;
 use crate::std::net::Ipv6Addr;
 use crate::std::prelude::v1::*;
 use crate::std::time::{SystemTime, UNIX_EPOCH};
+use edgerun_encoding::byteorder::read_u16_be;
 
 /// DHCPv6 Unique Identifier.
 ///
@@ -100,7 +101,7 @@ impl Duid {
         if data.len() < 4 {
             return None;
         } // min: 2 type + 2 data
-        let duid_type = u16::from_be_bytes([data[0], data[1]]);
+        let duid_type = read_u16_be(data, 0);
         let duid_type = match duid_type {
             1 => DuidType::Llt,
             2 => DuidType::En,
@@ -135,7 +136,7 @@ impl Duid {
     pub fn hardware_type(&self) -> Option<u16> {
         match self.duid_type {
             DuidType::Llt | DuidType::Ll if self.data.len() >= 2 => {
-                Some(u16::from_be_bytes([self.data[0], self.data[1]]))
+                Some(read_u16_be(&self.data, 0))
             }
             _ => None,
         }

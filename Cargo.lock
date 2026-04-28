@@ -489,6 +489,7 @@ name = "edgerun-dhcpv6"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-error",
  "edgerun-log",
  "edgerun-rt",
@@ -1297,6 +1298,7 @@ dependencies = [
 name = "edgerun-tftp"
 version = "0.1.0"
 dependencies = [
+ "edgerun-encoding",
  "edgerun-log",
  "edgerun-rt",
 ]
@@ -1306,6 +1308,7 @@ name = "edgerun-tls"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-rt",
 ]
 

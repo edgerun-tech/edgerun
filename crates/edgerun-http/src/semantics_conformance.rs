@@ -423,6 +423,37 @@ fn uri_explicit_port_overrides_default() {
 }
 
 #[test]
+fn request_host_header_omits_default_ports() {
+    let https = Request::builder()
+        .method(Method::GET)
+        .uri("https://example.com/path")
+        .build()
+        .unwrap();
+    assert_eq!(https.headers().get("Host").unwrap().as_str(), "example.com");
+
+    let http = Request::builder()
+        .method(Method::GET)
+        .uri("http://example.com/path")
+        .build()
+        .unwrap();
+    assert_eq!(http.headers().get("Host").unwrap().as_str(), "example.com");
+}
+
+#[test]
+fn request_host_header_keeps_non_default_port() {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("https://example.com:8443/path")
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        request.headers().get("Host").unwrap().as_str(),
+        "example.com:8443"
+    );
+}
+
+#[test]
 fn uri_with_fragment() {
     let uri: Uri = "http://example.com/page#section1".parse().unwrap();
     assert_eq!(uri.fragment().unwrap(), "section1");

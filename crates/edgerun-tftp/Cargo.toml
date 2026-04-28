@@ -11,5 +11,6 @@ default = []
 server = []
 
 [dependencies]
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
