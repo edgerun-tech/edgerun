@@ -392,6 +392,57 @@ mod tests {
     }
 
     #[test]
+    fn local_json_model_macro_maps_structs_without_serde() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct Device {
+            id: String,
+            online: bool,
+            labels: Vec<String>,
+            note: Option<String>,
+        }
+
+        impl_json_struct! {
+            Device {
+                required {
+                    id: "deviceId" => String,
+                    online: "online" => bool,
+                    labels: "labels" => Vec<String>,
+                }
+                optional {
+                    note: "note" => String,
+                }
+            }
+        }
+
+        let device = Device {
+            id: String::from("dev-1"),
+            online: true,
+            labels: vec![String::from("edge"), String::from("lab")],
+            note: None,
+        };
+        let json = to_json_value(&device);
+        assert_eq!(json.required_str("deviceId").unwrap(), "dev-1");
+        assert!(json.get("note").is_none());
+
+        let decoded = from_json_value::<Device>(json!({
+            "deviceId": "dev-2",
+            "online": false,
+            "labels": ["field"],
+            "note": "cold"
+        }))
+        .unwrap();
+        assert_eq!(
+            decoded,
+            Device {
+                id: String::from("dev-2"),
+                online: false,
+                labels: vec![String::from("field")],
+                note: Some(String::from("cold")),
+            }
+        );
+    }
+
+    #[test]
     fn rejects_non_finite_float() {
         let value = JsonValue::from(f64::NAN);
         assert_eq!(value.to_json_string(), Err(JsonError::NonFiniteNumber));
