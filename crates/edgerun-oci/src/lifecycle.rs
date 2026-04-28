@@ -485,12 +485,22 @@ pub fn run_poststop_and_cleanup(
 
 /// Delete a container and run poststop hooks.
 pub fn delete_container(container: RunningContainer) {
-    let _ = delete_container_internal(
+    if let Err(error) = delete_container_with_result(container) {
+        let _ = fs::write(
+            "/dev/kmsg",
+            format!("edgerun: failed to delete container: {}", error),
+        );
+    }
+}
+
+/// Delete a container and run poststop hooks, returning a detailed result.
+pub fn delete_container_with_result(container: RunningContainer) -> io::Result<()> {
+    delete_container_internal(
         container.pid,
         &container.bundle_path,
         &container.cgroup_path,
         &container.poststop_hooks,
-    );
+    )
 }
 
 fn delete_container_internal(
@@ -548,7 +558,9 @@ fn strip_sysfs_prefix(cgroup_path: &str) -> String {
         return "/edgerun".to_string();
     }
     normalized = normalized.trim_start_matches('/');
-    let normalized = normalized.strip_prefix("sys/fs/cgroup/").unwrap_or(normalized);
+    if let Some(trimmed) = normalized.strip_prefix("sys/fs/cgroup") {
+        normalized = trimmed.trim_start_matches('/');
+    }
     if normalized.is_empty() {
         "/edgerun".to_string()
     } else {

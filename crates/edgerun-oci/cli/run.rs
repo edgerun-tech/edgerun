@@ -203,20 +203,27 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
 
     // === CLEANUP phase ===
     if run_opts.rm {
+        let mut cleanup_err: Option<io::Error> = None;
         if let Ok(state) = load_state(&container_id) {
             if let Some(ref linux) = spec.linux {
                 let cgroup_path = linux.cgroups_path.clone().unwrap_or("/edgerun".into());
-                crate::lifecycle::run_poststop_and_cleanup(
+                if let Err(e) = crate::lifecycle::run_poststop_and_cleanup(
                     &container_id,
                     state.pid.unwrap_or(0),
                     &state.bundle,
                     &cgroup_path,
                     &spec,
-                )?;
+                ) {
+                    cleanup_err = Some(e);
+                }
             }
         }
         delete_state(&container_id);
         let _ = fs::remove_dir_all(&state_dir_for_cleanup);
+
+        if let Some(error) = cleanup_err {
+            return Err(error);
+        }
     }
 
     std::process::exit(exit_code as i32);

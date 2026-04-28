@@ -68,13 +68,16 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     };
 
     // Poststop hooks + cgroup cleanup
+    let mut cleanup_err: Option<io::Error> = None;
     if let Some(ref spec) = spec {
         let linux = spec.linux.clone().unwrap_or_default();
         let cgroup = linux
             .cgroups_path
             .clone()
             .unwrap_or_else(|| "/edgerun".into());
-        run_poststop_and_cleanup(id, pid, &bundle, &cgroup, spec)?;
+        if let Err(e) = run_poststop_and_cleanup(id, pid, &bundle, &cgroup, spec) {
+            cleanup_err = Some(e);
+        }
     }
 
     // Clean up state dir
@@ -82,6 +85,10 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
     // Clean up FIFO
     let _ = fs::remove_file(fifo_path(id));
+
+    if let Some(error) = cleanup_err {
+        return Err(error);
+    }
 
     Ok(())
 }

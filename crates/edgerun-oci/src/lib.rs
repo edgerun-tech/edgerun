@@ -202,7 +202,8 @@ pub use layer_pipeline::{
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use lifecycle::{
-    delete_container, fork_container_child, run_bundle, run_create_runtime_hooks,
+    delete_container, delete_container_with_result, fork_container_child, run_bundle,
+    run_create_runtime_hooks,
     run_poststart_hooks, run_poststop_and_cleanup, run_prestart_hooks, run_spec, run_spec_with_id,
     save_created_state, setup_container_cgroups, signal_start, start_bundle, start_spec,
     start_spec_with_id, update_state_running,
