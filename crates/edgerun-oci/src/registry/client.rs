@@ -372,7 +372,6 @@ impl RegistryClient {
             .method(edgerun_http::Method::GET)
             .uri(&url);
 
-        // Resolve credentials based on auth type
         let creds = match &self.auth {
             RegistryAuth::Basic { username, password } => {
                 Some((username.clone(), password.clone()))
@@ -382,7 +381,14 @@ impl RegistryClient {
                 data_root,
                 namespace,
                 registry_host,
-            } => super::auth::resolve_from_secret_service(data_root, namespace, registry_host),
+            } => Some(
+                super::auth::resolve_from_secret_service(data_root, namespace, registry_host)
+                    .ok_or_else(|| {
+                        RegistryError::AuthError(format!(
+                            "no usable secret-service credentials for registry {registry_host}"
+                        ))
+                    })?,
+            ),
             _ => None,
         };
 

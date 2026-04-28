@@ -37,7 +37,7 @@ pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     let bundle_path = matches.get_one::<PathBuf>("bundle");
 
     let bundle_path = bundle_path.unwrap_or_else(|| PathBuf::from("/var/lib/edgerun/bundle"));
-    let work_path = work_path.cloned().unwrap_or_else(|| image_path.join("work"));
+    let work_path = work_path.unwrap_or_else(|| image_path.join("work"));
 
     if !image_path.is_absolute() {
         return Err(io::Error::new(
@@ -52,7 +52,7 @@ pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
         ));
     }
 
-    if let Err(err) = crate::criu::validate_criu_image_path(image_path) {
+    if let Err(err) = crate::criu::validate_criu_image_path(&image_path) {
         return Err(err);
     }
     if let Err(err) = crate::criu::validate_criu_image_path(&work_path) {

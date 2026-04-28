@@ -31,7 +31,7 @@ use crate::lifecycle_child::{fork_with_setup_mode, ChildExecContext, ChildSetupM
 use crate::process::ContainerConfig;
 use crate::spec::{OciHook, OciLinuxResources, OciSpec};
 use crate::state::{
-    container_state_dir, fifo_path, is_root, save_runtime_spec, save_state,
+    container_state_dir, fifo_path, is_root, is_rootless_mode, save_runtime_spec, save_state,
     ContainerState as StateContainerState,
 };
 

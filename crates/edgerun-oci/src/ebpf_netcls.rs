@@ -129,7 +129,7 @@ pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8
         // if r2 != ifindex → skip to next rule/default
         sym.push(SymInsn::JmpNe {
             dst: R2,
-            imm: ifindex as i32,
+            imm: *ifindex as i32,
             target: skip_label,
         });
 

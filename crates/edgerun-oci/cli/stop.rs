@@ -40,7 +40,12 @@ pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
 
     if is_process_alive(pid) {
         signal_tree(pid, libc::SIGKILL);
-        let _ = wait_tree_dead(pid, Duration::from_secs(2));
+        if !wait_tree_dead(pid, Duration::from_secs(2)) {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("container {id} process tree did not exit after SIGKILL"),
+            ));
+        }
     }
     state.status = "stopped".to_string();
     save_state(&state, &id)

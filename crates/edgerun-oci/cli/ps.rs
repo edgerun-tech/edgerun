@@ -87,7 +87,7 @@ fn parse_ps_args(args: &[String]) -> io::Result<PsArgs> {
             .get_positional(0)
             .map(|id| {
                 crate::cli::validate_container_id(id)?;
-                Ok(id.to_string())
+                Ok::<String, io::Error>(id.to_string())
             })
             .transpose()?,
     })

@@ -78,8 +78,10 @@ fn broadcast_notifies_waiter_and_replaces_waker() {
     let (publisher, mut subscriber) = broadcast::<i32>(1);
     let first = Arc::new(Counter::default());
     let second = Arc::new(Counter::default());
-    let mut first_cx = Context::from_waker(&Waker::from(first.clone()));
-    let mut second_cx = Context::from_waker(&Waker::from(second.clone()));
+    let first_waker = Waker::from(first.clone());
+    let second_waker = Waker::from(second.clone());
+    let mut first_cx = Context::from_waker(&first_waker);
+    let mut second_cx = Context::from_waker(&second_waker);
 
     assert!(matches!(
         Pin::new(&mut subscriber).poll(&mut first_cx),

@@ -61,6 +61,10 @@ const WIFI_TXRATE_POWER0: *mut u32 = 0x6000_6180 as *mut u32;
 const WIFI_TXRATE_POWER15: *mut u32 = 0x6000_61bc as *mut u32;
 const WIFI_I2C_XPD_CTRL0: *mut u32 = 0x6000_8034 as *mut u32;
 const WIFI_I2C_XPD_CTRL1: *mut u32 = 0x6000_8000 as *mut u32;
+const WIFI_RF_CTRL: *mut u32 = 0x6000_e130 as *mut u32;
+const WIFI_TXRX_CTRL: *mut u32 = 0x6000_6110 as *mut u32;
+const WIFI_FREQ_HW_CTRL: *mut u32 = 0x6000_e0c4 as *mut u32;
+const WIFI_FREQ_MODE_CTRL: *mut u32 = 0x6003_509c as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -209,6 +213,10 @@ pub struct WifiMmioPhyRegs {
     pub txrate_power15: u32,
     pub i2c_xpd_ctrl0: u32,
     pub i2c_xpd_ctrl1: u32,
+    pub rf_ctrl: u32,
+    pub txrx_ctrl: u32,
+    pub freq_hw_ctrl: u32,
+    pub freq_mode_ctrl: u32,
 }
 
 pub struct Esp32s3WifiMmio;
@@ -351,6 +359,10 @@ impl Esp32s3WifiMmio {
                 txrate_power15: WIFI_TXRATE_POWER15.read_volatile(),
                 i2c_xpd_ctrl0: WIFI_I2C_XPD_CTRL0.read_volatile(),
                 i2c_xpd_ctrl1: WIFI_I2C_XPD_CTRL1.read_volatile(),
+                rf_ctrl: WIFI_RF_CTRL.read_volatile(),
+                txrx_ctrl: WIFI_TXRX_CTRL.read_volatile(),
+                freq_hw_ctrl: WIFI_FREQ_HW_CTRL.read_volatile(),
+                freq_mode_ctrl: WIFI_FREQ_MODE_CTRL.read_volatile(),
             }
         }
     }
@@ -479,13 +491,33 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(1902, Ordering::Relaxed);
                     true
                 }
+                20 => {
+                    LAST_STATUS.store(2001, Ordering::Relaxed);
+                    rf_init_direct_slice();
+                    LAST_STATUS.store(2002, Ordering::Relaxed);
+                    true
+                }
+                21 => {
+                    LAST_STATUS.store(2101, Ordering::Relaxed);
+                    force_txrx_off_slice(true);
+                    LAST_STATUS.store(2102, Ordering::Relaxed);
+                    true
+                }
+                22 => {
+                    LAST_STATUS.store(2201, Ordering::Relaxed);
+                    set_chan_freq_hw_init_direct_slice(2, 4);
+                    LAST_STATUS.store(2202, Ordering::Relaxed);
+                    true
+                }
                 _ => false,
             }
         }
     }
 
     pub fn init_known_good() -> bool {
-        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] {
+        for step in [
+            0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+        ] {
             if !Self::debug_step(step) {
                 return false;
             }
@@ -829,6 +861,40 @@ unsafe fn write_txrate_power_offset_slice() {
 unsafe fn open_i2c_xpd_slice() {
     update(WIFI_I2C_XPD_CTRL0, |v| v | 0xf800_0000);
     update(WIFI_I2C_XPD_CTRL1, |v| v | 0x0000_0080);
+}
+
+unsafe fn rf_init_direct_slice() {
+    update(WIFI_RF_CTRL, |v| v & !0x0002_0000);
+    update(WIFI_RF_CTRL, |v| v | 0x0002_0000);
+    update(WIFI_TXRX_CTRL, |v| v & !0x0000_0300);
+}
+
+unsafe fn force_txrx_off_slice(force_rx: bool) {
+    let first = if force_rx { 0x0000_0800 } else { 0x0000_0200 };
+    let second = if force_rx { 0x0000_0a00 } else { 0x0000_0200 };
+
+    update(WIFI_TXRX_CTRL, |v| (v & 0xffff_f0ff) | first);
+    delay_approx_us(1);
+    update(WIFI_TXRX_CTRL, |v| (v & 0xffff_f0ff) | second);
+    delay_approx_us(1);
+}
+
+unsafe fn set_chan_freq_hw_init_direct_slice(channel: u8, mode: u8) {
+    let channel = (channel as u32) & 0x0f;
+    let mode = (mode as u32) & 0x0f;
+
+    update(WIFI_FREQ_MODE_CTRL, |v| (v & 0x0000_ffff) | 0x0c80_0000);
+    update(WIFI_FREQ_HW_CTRL, |v| (v & 0xfff0_ffff) | (channel << 16));
+    update(WIFI_FREQ_HW_CTRL, |v| (v & 0xff0f_ffff) | (mode << 20));
+    update(WIFI_FREQ_HW_CTRL, |v| v | 0x0100_0000);
+    update(WIFI_FREQ_HW_CTRL, |v| v | 0x4000_0000);
+    update(WIFI_FREQ_HW_CTRL, |v| v & !0x2000_0000);
+}
+
+fn delay_approx_us(us: u32) {
+    for _ in 0..us.saturating_mul(320) {
+        core::hint::spin_loop();
+    }
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {

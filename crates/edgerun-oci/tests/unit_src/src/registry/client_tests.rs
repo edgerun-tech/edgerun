@@ -50,6 +50,24 @@ fn with_secret_service_auth_sets_variant() {
 }
 
 #[test]
+fn secret_service_auth_requires_usable_credentials() {
+    let root = tmp_root();
+    let mut client = RegistryClient::with_secret_service_auth(&root, "registry", "docker.io");
+
+    let result = edgerun_rt::block_on(client.handle_auth_challenge(
+        "docker.io",
+        "Bearer realm=\"https://auth.example/token\",service=\"registry.example\"",
+    ));
+
+    match result {
+        Err(RegistryError::AuthError(message)) => {
+            assert!(message.contains("no usable secret-service credentials"));
+        }
+        other => panic!("expected AuthError for missing secret-service credentials, got {other:?}"),
+    }
+}
+
+#[test]
 fn create_tar_from_dir_roundtrips_through_layer_extractor() {
     let tmp = tmp_root();
     let src = tmp.join("src");

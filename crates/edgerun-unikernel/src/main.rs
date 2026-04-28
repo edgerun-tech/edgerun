@@ -401,7 +401,7 @@ fn write_wifi_antenna_regs(seq: u16) {
 
 fn write_wifi_phy_regs(seq: u16) {
     display_console_log("ctl wifiphy");
-    let mut buf = [0u8; 448];
+    let mut buf = [0u8; 576];
     let mut len = 0;
     append_wifi_phy_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -675,6 +675,14 @@ fn append_wifi_phy_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.i2c_xpd_ctrl0);
     append_bytes(out, len, b" ix1=0x");
     append_hex_u32(out, len, regs.i2c_xpd_ctrl1);
+    append_bytes(out, len, b" rf=0x");
+    append_hex_u32(out, len, regs.rf_ctrl);
+    append_bytes(out, len, b" txrx=0x");
+    append_hex_u32(out, len, regs.txrx_ctrl);
+    append_bytes(out, len, b" fh=0x");
+    append_hex_u32(out, len, regs.freq_hw_ctrl);
+    append_bytes(out, len, b" fm=0x");
+    append_hex_u32(out, len, regs.freq_mode_ctrl);
     append_bytes(out, len, b"\n");
 }
 

@@ -52,7 +52,12 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
         // Kill if alive (force or non-stopped)
         if p > 0 && is_process_alive(p) && (force || st != "stopped") {
             signal_tree(p, libc::SIGKILL);
-            let _ = wait_tree_dead(p, Duration::from_secs(2));
+            if !wait_tree_dead(p, Duration::from_secs(2)) {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("container {id} process tree did not exit after SIGKILL"),
+                ));
+            }
         }
 
         (p, b, String::new())

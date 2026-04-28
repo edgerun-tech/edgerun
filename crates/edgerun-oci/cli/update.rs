@@ -265,7 +265,12 @@ fn update_spec_config(
         cpu.period = Some(period);
     }
     if let Some(rt_runtime) = opts.cpu_rt_runtime {
-        cpu.realtime_runtime = Some(rt_runtime);
+        cpu.realtime_runtime = Some(rt_runtime.try_into().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--cpu-rt-runtime exceeds supported signed 64-bit range",
+            )
+        })?);
     }
     if let Some(rt_period) = opts.cpu_rt_period {
         cpu.realtime_period = Some(rt_period);

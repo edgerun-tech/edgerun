@@ -557,7 +557,7 @@ pub fn parse_delete_args(args: &[String]) -> io::Result<(bool, Option<String>)> 
             .get_positional(0)
             .map(|id| {
                 validate_container_id(id)?;
-                Ok(id.to_string())
+                Ok::<String, io::Error>(id.to_string())
             })
             .transpose()?,
     ))
@@ -575,7 +575,7 @@ pub fn parse_container_id_args(args: &[String], command: &'static str) -> io::Re
     if matches.positional_count() > 1 {
         return Err(invalid_input(usage.clone()));
     }
-    let id = required_positional(&matches, 0, "container ID required").to_string();
+    let id = required_positional(&matches, 0, "container ID required")?.to_string();
     validate_container_id(&id)?;
     Ok(id)
 }

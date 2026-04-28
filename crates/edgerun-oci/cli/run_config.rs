@@ -104,7 +104,7 @@ pub(super) fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Ve
         name: matches
             .get_one::<String>("name")
             .map(|name| {
-                crate::cli::validate_container_id(name)?;
+                crate::cli::validate_container_id(&name)?;
                 Ok::<String, std::io::Error>(name.to_string())
             })
             .transpose()?,
