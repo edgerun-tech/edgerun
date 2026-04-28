@@ -74,6 +74,7 @@ mod index;
 pub mod io;
 mod json_macro;
 mod map;
+mod model;
 mod number;
 mod parse;
 mod partial_eq;
@@ -96,6 +97,7 @@ pub use borrowed_value::BorrowedJsonValue;
 pub use error::{JsonError, JsonParseError};
 pub use index::ValueIndex;
 pub use map::Map;
+pub use model::{from_json_slice, from_json_str, from_json_value, to_json_value, FromJson, ToJson};
 pub use number::JsonNumber;
 pub use serde_api::{
     escape_json_string, from_slice, from_slice_as, from_str, from_str_as, from_value_as,
@@ -129,6 +131,121 @@ pub use yaml::{
 
 #[cfg(feature = "serde")]
 pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+#[doc(hidden)]
+pub fn __json_error_message(message: &str) -> alloc::string::String {
+    alloc::string::String::from(message)
+}
+
+#[macro_export]
+macro_rules! impl_json_struct {
+    (
+        $ty:ty {
+            required { $($required_field:ident : $required_key:literal => $required_ty:ty),* $(,)? }
+            optional { $($optional_field:ident : $optional_key:literal => $optional_ty:ty),* $(,)? }
+        }
+    ) => {
+        impl $crate::ToJson for $ty {
+            fn to_json(&self) -> $crate::JsonValue {
+                let mut object = $crate::Map::new();
+                $(
+                    object.push_field($required_key, $crate::ToJson::to_json(&self.$required_field));
+                )*
+                $(
+                    object.push_opt_field(
+                        $optional_key,
+                        self.$optional_field
+                            .as_ref()
+                            .map($crate::ToJson::to_json),
+                    );
+                )*
+                object.into()
+            }
+        }
+
+        impl $crate::FromJson for $ty {
+            fn from_json(value: $crate::JsonValue) -> core::result::Result<Self, $crate::JsonValueError> {
+                let mut object = match value {
+                    $crate::JsonValue::Object(object) => object,
+                    other => {
+                        let _ = other;
+                        return Err($crate::JsonValueError::WrongType(
+                            $crate::__json_error_message("expected JSON object")
+                        ));
+                    }
+                };
+                Ok(Self {
+                    $(
+                        $required_field: <$required_ty as $crate::FromJson>::from_json(
+                            object.remove($required_key).ok_or_else(|| {
+                                $crate::JsonValueError::WrongType(
+                                    $crate::__json_error_message("missing required JSON field")
+                                )
+                            })?
+                        )?,
+                    )*
+                    $(
+                        $optional_field: object
+                            .remove($optional_key)
+                            .map(<$optional_ty as $crate::FromJson>::from_json)
+                            .transpose()?,
+                    )*
+                })
+            }
+        }
+    };
+    (
+        $ty:ty {
+            $($field:ident : $json_key:literal => $field_ty:ty),* $(,)?
+        }
+    ) => {
+        impl $crate::ToJson for $ty {
+            fn to_json(&self) -> $crate::JsonValue {
+                let mut object = $crate::Map::new();
+                $(
+                    object.push_field($json_key, $crate::ToJson::to_json(&self.$field));
+                )*
+                object.into()
+            }
+        }
+
+        impl $crate::FromJson for $ty {
+            fn from_json(value: $crate::JsonValue) -> core::result::Result<Self, $crate::JsonValueError> {
+                let mut object = match value {
+                    $crate::JsonValue::Object(object) => object,
+                    other => {
+                        let _ = other;
+                        return Err($crate::JsonValueError::WrongType(
+                            $crate::__json_error_message("expected JSON object")
+                        ));
+                    }
+                };
+                Ok(Self {
+                    $(
+                        $field: <$field_ty as $crate::FromJson>::from_json(
+                            object.remove($json_key).ok_or_else(|| {
+                                $crate::JsonValueError::WrongType(
+                                    $crate::__json_error_message("missing required JSON field")
+                                )
+                            })?
+                        )?,
+                    )*
+                })
+            }
+        }
+    };
+    (
+        $ty:ty {
+            $($field:ident : $field_ty:ty),* $(,)?
+        }
+    ) => {
+        $crate::impl_json_struct! {
+            $ty {
+                $($field : stringify!($field) => $field_ty),*
+            }
+        }
+    };
+}
 
 #[cfg(test)]
 mod tests {
