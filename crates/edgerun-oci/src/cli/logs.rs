@@ -9,14 +9,7 @@ use std::time::Duration;
 use crate::state::{container_state_dir, load_state};
 
 pub fn cmd_logs(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    if let Some(ref root) = opts.root {
-        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     let opts = parse_logs_args(args)?;
     let id = opts.id;

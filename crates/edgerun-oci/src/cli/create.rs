@@ -18,15 +18,7 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
     let id = crate::cli::require_container_id(args)?;
 
-    // Set state directory if --root is provided
-    if let Some(ref root) = opts.root {
-        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     // Chdir to bundle so relative root.path resolves correctly
     std::env::set_current_dir(bundle).map_err(|e| {

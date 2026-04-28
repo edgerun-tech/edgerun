@@ -10,14 +10,7 @@ use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use crate::state::{load_state, save_state};
 
 pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    if let Some(ref root) = opts.root {
-        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     let (timeout, id) = parse_stop_args(args)?;
     let mut state = load_state(id)?;

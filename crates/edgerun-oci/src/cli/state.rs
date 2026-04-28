@@ -8,14 +8,7 @@ use std::io;
 use crate::state::load_state;
 
 pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    if let Some(ref root) = opts.root {
-        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     let id = crate::cli::require_container_id(args)?;
 

@@ -9,19 +9,11 @@ use std::time::Duration;
 
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use crate::cli::{is_process_alive, parse_delete_args};
-use crate::json::parse_oci_spec;
 use crate::lifecycle::run_poststop_and_cleanup;
-use crate::state::{delete_state, fifo_path, load_state, runtime_spec_path};
+use crate::state::{delete_state, fifo_path, load_state};
 
 pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    if let Some(ref root) = opts.root {
-        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     let (force, id) = parse_delete_args(args);
     let id =
@@ -69,7 +61,7 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
     // Load spec for poststop hooks and cgroup path
     let spec = if !bundle.is_empty() {
-        load_runtime_or_bundle_spec(id, &bundle)
+        crate::cli::load_runtime_or_bundle_spec(id, &bundle)
     } else {
         None
     };
@@ -91,16 +83,4 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     let _ = fs::remove_file(fifo_path(id));
 
     Ok(())
-}
-
-fn load_runtime_or_bundle_spec(id: &str, bundle: &str) -> Option<crate::json::OciSpec> {
-    fs::read(runtime_spec_path(id))
-        .ok()
-        .and_then(|data| parse_oci_spec(&data).ok())
-        .or_else(|| {
-            let config_path = std::path::Path::new(bundle).join("config.json");
-            fs::read(config_path)
-                .ok()
-                .and_then(|data| parse_oci_spec(&data).ok())
-        })
 }

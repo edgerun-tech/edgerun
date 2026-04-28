@@ -10,15 +10,7 @@ use std::path::PathBuf;
 use crate::state::{save_state, ContainerState as StateContainerState};
 
 pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    if let Some(ref root) = opts.root {
-        let root_str = root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?;
-        crate::state::set_state_dir(root_str);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     let mut id = None;
     let mut image_path = None;

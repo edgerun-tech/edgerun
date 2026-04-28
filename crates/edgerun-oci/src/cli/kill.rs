@@ -13,14 +13,7 @@ use crate::cli::{is_process_alive, parse_kill_args};
 use crate::state::load_state;
 
 pub fn cmd_kill(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    if let Some(ref root) = opts.root {
-        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     let (sig_str, id) = parse_kill_args(args);
     let id = if id.is_empty() {

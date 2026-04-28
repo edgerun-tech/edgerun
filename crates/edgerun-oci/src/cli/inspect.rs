@@ -1,30 +1,18 @@
 //! Inspect command implementation.
 
 use crate::prelude::*;
-use std::fs;
 use std::io;
 
-use crate::json::{parse_oci_spec, OciSpec};
-use crate::state::{
-    container_state_dir, load_state, runtime_spec_path, save_state, ContainerState,
-};
+use crate::json::OciSpec;
+use crate::state::{container_state_dir, load_state, save_state, ContainerState};
 
 pub fn cmd_inspect(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    if let Some(ref root) = opts.root {
-        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--root path is not valid UTF-8",
-            )
-        })?);
-    }
+    crate::cli::apply_global_opts(opts)?;
 
     let id = crate::cli::require_container_id(args)?;
     let mut state = load_state(id)?;
     refresh_state(id, &mut state);
-    let spec = load_runtime_spec(&state.id)
-        .or_else(|_| load_bundle_spec(&state.bundle))
-        .ok();
+    let spec = crate::cli::load_runtime_or_bundle_spec(&state.id, &state.bundle);
     let output = inspect_json(&state, spec.as_ref());
     println!(
         "{}",
@@ -41,16 +29,6 @@ fn refresh_state(id: &str, state: &mut ContainerState) {
             let _ = save_state(state, id);
         }
     }
-}
-
-fn load_bundle_spec(bundle: &str) -> io::Result<OciSpec> {
-    let data = fs::read(std::path::Path::new(bundle).join("config.json"))?;
-    parse_oci_spec(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-}
-
-fn load_runtime_spec(id: &str) -> io::Result<OciSpec> {
-    let data = fs::read(runtime_spec_path(id))?;
-    parse_oci_spec(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 fn inspect_json(state: &ContainerState, spec: Option<&OciSpec>) -> edgerun_json::JsonValue {

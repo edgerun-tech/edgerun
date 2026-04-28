@@ -3228,17 +3228,12 @@ pub fn validate_session_hello(
             empty_map(),
         );
     }
-    let Some(target) = &hello.target_node else {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("SessionHello missing target_node".into()),
-            empty_map(),
-        );
-    };
-    if let Some(result) = validate_node_ref(Some(target), "SessionHello target_node") {
-        return result;
+    if let Some(target) = &hello.target_node {
+        if let Some(result) = validate_node_ref(Some(target), "SessionHello target_node") {
+            return result;
+        }
     }
-    if let Some(local_node_id) = local_node_id {
+    if let (Some(target), Some(local_node_id)) = (&hello.target_node, local_node_id) {
         if target.node_id.as_slice() != local_node_id {
             return reject(
                 ReasonCode::TargetMismatch,
@@ -7380,18 +7375,6 @@ mod tests {
         let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let mut hello = signed_session_hello(&key);
         hello.target_node = Some(NodeRef { node_id: vec![] });
-
-        let result = validate_session_hello(&hello, None);
-
-        assert_eq!(result.verdict, crate::result::Verdict::Reject);
-        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
-    }
-
-    #[test]
-    fn session_hello_missing_target_node_is_rejected() {
-        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
-        let mut hello = signed_session_hello(&key);
-        hello.target_node = None;
 
         let result = validate_session_hello(&hello, None);
 

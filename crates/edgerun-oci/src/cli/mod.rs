@@ -101,7 +101,10 @@ pub struct GlobalOpts {
 pub fn apply_global_opts(opts: &GlobalOpts) -> io::Result<()> {
     if let Some(ref root) = opts.root {
         crate::state::set_state_dir(root.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--root path is not valid UTF-8",
+            )
         })?);
     }
     Ok(())
@@ -138,10 +141,7 @@ pub(crate) fn load_runtime_spec(id: &str) -> io::Result<crate::json::OciSpec> {
     crate::json::parse_oci_spec(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
-pub(crate) fn load_runtime_or_bundle_spec(
-    id: &str,
-    bundle: &str,
-) -> Option<crate::json::OciSpec> {
+pub(crate) fn load_runtime_or_bundle_spec(id: &str, bundle: &str) -> Option<crate::json::OciSpec> {
     load_runtime_spec(id)
         .ok()
         .or_else(|| load_bundle_spec(bundle).ok())
