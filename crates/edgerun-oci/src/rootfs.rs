@@ -640,6 +640,45 @@ pub fn setup_rootfs(
     spec_devices: Option<&[OciLinuxDevice]>,
     mount_label: Option<&str>,
 ) -> io::Result<()> {
+    setup_rootfs_inner(
+        root,
+        mounts,
+        masked,
+        readonly,
+        spec_devices,
+        mount_label,
+        false,
+    )
+}
+
+pub fn setup_rootfs_rootless(
+    root: &OciRoot,
+    mounts: Option<&[OciMount]>,
+    masked: Option<&[String]>,
+    readonly: Option<&[String]>,
+    spec_devices: Option<&[OciLinuxDevice]>,
+    mount_label: Option<&str>,
+) -> io::Result<()> {
+    setup_rootfs_inner(
+        root,
+        mounts,
+        masked,
+        readonly,
+        spec_devices,
+        mount_label,
+        true,
+    )
+}
+
+fn setup_rootfs_inner(
+    root: &OciRoot,
+    mounts: Option<&[OciMount]>,
+    masked: Option<&[String]>,
+    readonly: Option<&[String]>,
+    spec_devices: Option<&[OciLinuxDevice]>,
+    mount_label: Option<&str>,
+    tolerate_kernel_mount_denial: bool,
+) -> io::Result<()> {
     let rootfs = Path::new(&root.path);
     if !rootfs.is_dir() {
         return Err(io::Error::new(
@@ -655,7 +694,16 @@ pub fn setup_rootfs(
             "rootfs path is not valid UTF-8",
         )
     })?;
-    do_mount(rootfs_cstr, rootfs_cstr, "bind", ms::BIND | ms::REC, "")?;
+    do_mount(rootfs_cstr, rootfs_cstr, "bind", ms::BIND | ms::REC, "").map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!(
+                "bind mount rootfs {} onto itself failed: {}",
+                rootfs.display(),
+                error
+            ),
+        )
+    })?;
 
     // Make / private BEFORE pivot_root so mounts don't propagate to host
     // This can fail on some systems (EBUSY), so we make it best-effort
@@ -670,37 +718,70 @@ pub fn setup_rootfs(
 
     // pivot_root (now with CWD inside rootfs, use relative paths)
     let old_root_cstr = ".oci-old-root";
-    do_pivot_root(".", old_root_cstr)?;
+    do_pivot_root(".", old_root_cstr).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!(
+                "pivot_root into {} with put_old {} failed: {}",
+                rootfs.display(),
+                old_root.display(),
+                error
+            ),
+        )
+    })?;
 
     // Detach and remove old root
-    do_umount2("/.oci-old-root", MNT_DETACH)?;
+    do_umount2("/.oci-old-root", MNT_DETACH).map_err(|error| {
+        io::Error::new(error.kind(), format!("detach old root failed: {error}"))
+    })?;
     let _ = fs::remove_dir("/.oci-old-root");
 
     // If root is readonly, remount the entire rootfs as read-only NOW,
     // before mounting writable filesystems on top.
     if root.readonly == Some(true) {
-        do_mount("", "/", "", ms::REMOUNT | ms::RDONLY, "")?;
+        do_mount("", "/", "", ms::REMOUNT | ms::RDONLY, "").map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("remount rootfs read-only failed: {error}"),
+            )
+        })?;
     }
 
     // Mount proc
     fs::create_dir_all("/proc")?;
-    do_mount(
+    let proc_result = do_mount(
         "proc",
         "/proc",
         "proc",
-        ms::NOSUID | ms::NODEV | ms::NOEXEC | ms::REC,
+        ms::NOSUID | ms::NODEV | ms::NOEXEC,
         "",
-    )?;
+    );
+    if let Err(error) = proc_result {
+        if !tolerate_mount_denial(tolerate_kernel_mount_denial, &error) {
+            return Err(io::Error::new(
+                error.kind(),
+                format!("mount proc failed: {error}"),
+            ));
+        }
+    }
 
     // Mount sys
     fs::create_dir_all("/sys")?;
-    do_mount(
+    let sys_result = do_mount(
         "sysfs",
         "/sys",
         "sysfs",
-        ms::NOSUID | ms::NODEV | ms::NOEXEC | ms::REC,
+        ms::NOSUID | ms::NODEV | ms::NOEXEC,
         "",
-    )?;
+    );
+    if let Err(error) = sys_result {
+        if !tolerate_mount_denial(tolerate_kernel_mount_denial, &error) {
+            return Err(io::Error::new(
+                error.kind(),
+                format!("mount sysfs failed: {error}"),
+            ));
+        }
+    }
 
     // Mount dev (tmpfs)
     fs::create_dir_all("/dev")?;
@@ -710,7 +791,10 @@ pub fn setup_rootfs(
         "tmpfs",
         ms::NOSUID | ms::STRICTATIME,
         "mode=755,size=65536k",
-    )?;
+    )
+    .map_err(|error| {
+        io::Error::new(error.kind(), format!("mount tmpfs on /dev failed: {error}"))
+    })?;
 
     // Essential device nodes
     create_essential_devices();
@@ -723,13 +807,21 @@ pub fn setup_rootfs(
     }
 
     // Mount devpts
-    do_mount(
+    let devpts_result = do_mount(
         "devpts",
         "/dev/pts",
         "devpts",
         ms::NOSUID | ms::NOEXEC,
         "newinstance,ptmxmode=0666,mode=0620",
-    )?;
+    );
+    if let Err(error) = devpts_result {
+        if !tolerate_mount_denial(tolerate_kernel_mount_denial, &error) {
+            return Err(io::Error::new(
+                error.kind(),
+                format!("mount devpts failed: {error}"),
+            ));
+        }
+    }
 
     // Mount tmpfs on /dev/shm
     do_mount(
@@ -738,7 +830,13 @@ pub fn setup_rootfs(
         "tmpfs",
         ms::NOSUID | ms::NODEV,
         "mode=1777,size=65536k",
-    )?;
+    )
+    .map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("mount tmpfs on /dev/shm failed: {error}"),
+        )
+    })?;
 
     // /dev/ptmx -> pts/ptmx
     let _ = fs::remove_file("/dev/ptmx");
@@ -752,7 +850,15 @@ pub fn setup_rootfs(
             if is_optional {
                 let _ = setup_mount(m, mount_label);
             } else {
-                setup_mount(m, mount_label)?;
+                setup_mount(m, mount_label).map_err(|error| {
+                    io::Error::new(
+                        error.kind(),
+                        format!(
+                            "mount spec entry {} type {:?} source {:?} failed: {}",
+                            m.destination, m.mount_type, m.source, error
+                        ),
+                    )
+                })?;
             }
         }
     }
@@ -760,14 +866,19 @@ pub fn setup_rootfs(
     // Masked paths — security-sensitive paths masked with /dev/null
     if let Some(paths) = masked {
         for p in paths {
-            do_mount("/dev/null", p, "", ms::BIND, "")
-                .map_err(|e| io::Error::other(format!("failed to mask path {}: {}", p, e)))?;
+            if Path::new(p).exists() {
+                do_mount("/dev/null", p, "", ms::BIND, "")
+                    .map_err(|e| io::Error::other(format!("failed to mask path {}: {}", p, e)))?;
+            }
         }
     }
 
     // Readonly Paths — bind mount and remount read-only
     if let Some(paths) = readonly {
         for p in paths {
+            if !Path::new(p).exists() {
+                continue;
+            }
             do_mount(p, p, "", ms::BIND | ms::REC, "").map_err(|e| {
                 io::Error::other(format!("failed to bind readonly path {}: {}", p, e))
             })?;
@@ -785,6 +896,10 @@ pub fn setup_rootfs(
     }
 
     Ok(())
+}
+
+fn tolerate_mount_denial(enabled: bool, error: &io::Error) -> bool {
+    enabled && matches!(error.kind(), io::ErrorKind::PermissionDenied)
 }
 
 // ===========================================================================

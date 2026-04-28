@@ -10,7 +10,7 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 
 use crate::json::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
-use crate::rootfs::{apply_sysctl, set_rootfs_propagation, setup_rootfs};
+use crate::rootfs::{apply_sysctl, set_rootfs_propagation, setup_rootfs, setup_rootfs_rootless};
 #[allow(unused_imports)]
 use crate::seccomp::apply_seccomp_from_spec;
 use crate::syscalls::{
@@ -339,7 +339,10 @@ pub fn setup_terminal() -> io::Result<i32> {
 /// - Security: no_new_privs, capabilities, seccomp, rlimits, OOM, AppArmor, umask
 /// - Rootfs: pivot_root, mounts, devices, sysctl, propagation
 /// - Drop privileges (gid, uid)
-pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
+pub fn setup_container_child(
+    cfg: &ContainerConfig,
+    terminal_socket_fd: Option<i32>,
+) -> io::Result<()> {
     // 1. Unshare namespaces
     do_unshare(cfg.ns_flags)?;
 
@@ -356,21 +359,9 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         let _ = do_set_domainname(domainname);
     }
 
-    // 5. Capabilities (MUST come before no_new_privs — capset can only reduce caps after nnp)
-    set_capabilities(
-        cfg.cap_effective.as_deref(),
-        cfg.cap_permitted.as_deref(),
-        cfg.cap_inheritable.as_deref(),
-        cfg.cap_bounding.as_deref(),
-        cfg.cap_ambient.as_deref(),
-    )?;
-
-    // 6. Security: no_new_privs + non-dumpable (after caps, before seccomp)
-    apply_security_hardening(cfg.no_new_privs)?;
-
-    // Seccomp is applied AFTER rootfs setup (step 13) because rootfs needs
+    // Security hardening and seccomp are applied AFTER rootfs setup because rootfs needs
     // mount/umount2/pivot_root syscalls that are NOT in the workload allow-list.
-    // It will be applied just before exec, after privilege drop.
+    // They will be applied just before exec, after runtime-only setup is done.
 
     // 8. Resource limits
     for rl in &cfg.rlimits {
@@ -437,10 +428,23 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     // 15b. Terminal / PTY allocation (must happen after /dev is mounted and
     // before privilege drop — posix_openpt and grantpt need root access)
     if cfg.terminal {
-        setup_terminal()?;
+        let master_fd = setup_terminal()?;
+        if let Some(socket_fd) = terminal_socket_fd {
+            send_fd(socket_fd, master_fd)?;
+            unsafe { libc::close(master_fd) };
+        }
     }
 
-    // 16. Supplementary groups
+    // 16. Security, capabilities, and supplementary groups.
+    apply_security_hardening(cfg.no_new_privs)?;
+    set_capabilities(
+        cfg.cap_effective.as_deref(),
+        cfg.cap_permitted.as_deref(),
+        cfg.cap_inheritable.as_deref(),
+        cfg.cap_bounding.as_deref(),
+        cfg.cap_ambient.as_deref(),
+    )?;
+
     if !cfg.additional_gids.is_empty() {
         set_supplementary_gids(&cfg.additional_gids);
     }
@@ -734,7 +738,10 @@ fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
 /// This is called AFTER the parent has written uid/gid maps for the child.
 /// It unshares remaining namespaces and does all the rootfs/caps/seccomp setup,
 /// but skips uid/gid map writing (the parent already did that).
-pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
+pub fn setup_container_child_rootless(
+    cfg: &ContainerConfig,
+    terminal_socket_fd: Option<i32>,
+) -> io::Result<()> {
     use crate::syscalls::ns;
 
     // 1. Unshare remaining namespaces (exclude user and mount — clone already created these)
@@ -746,6 +753,9 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
                 format!("unshare remaining namespaces 0x{remaining_flags:x} failed: {error}"),
             )
         })?;
+    }
+    if remaining_flags & ns::NEWPID != 0 {
+        fork_into_pid_namespace()?;
     }
 
     // 2. Join explicit namespace paths (skip user namespace — already joined via parent)
@@ -761,23 +771,8 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
         let _ = do_set_domainname(domainname);
     }
 
-    // 4. Capabilities
-    set_capabilities(
-        cfg.cap_effective.as_deref(),
-        cfg.cap_permitted.as_deref(),
-        cfg.cap_inheritable.as_deref(),
-        cfg.cap_bounding.as_deref(),
-        cfg.cap_ambient.as_deref(),
-    )
-    .map_err(|error| io::Error::new(error.kind(), format!("set capabilities failed: {error}")))?;
-
-    // 5. Security: no_new_privs + non-dumpable
-    apply_security_hardening(cfg.no_new_privs).map_err(|error| {
-        io::Error::new(
-            error.kind(),
-            format!("apply security hardening failed: {error}"),
-        )
-    })?;
+    // Security hardening is applied after rootfs setup because mounts and
+    // pivot_root still need the runtime's full namespace privileges.
 
     // 6. Resource limits
     for rl in &cfg.rlimits {
@@ -824,7 +819,7 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
     // 11. Rootfs
     let devices = deserialize_devices(&cfg.devices_json);
     let mount_label = cfg.mount_label.as_deref();
-    setup_rootfs(
+    setup_rootfs_rootless(
         &cfg.root,
         cfg.mounts.as_deref(),
         cfg.masked_paths.as_deref(),
@@ -852,12 +847,33 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
 
     // 13b. Terminal / PTY allocation
     if cfg.terminal {
-        setup_terminal().map_err(|error| {
+        let master_fd = setup_terminal().map_err(|error| {
             io::Error::new(error.kind(), format!("setup terminal failed: {error}"))
         })?;
+        if let Some(socket_fd) = terminal_socket_fd {
+            send_fd(socket_fd, master_fd).map_err(|error| {
+                io::Error::new(error.kind(), format!("send terminal fd failed: {error}"))
+            })?;
+            unsafe { libc::close(master_fd) };
+        }
     }
 
-    // 14. Supplementary groups
+    // 14. Security, capabilities, and supplementary groups.
+    apply_security_hardening(cfg.no_new_privs).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("apply security hardening failed: {error}"),
+        )
+    })?;
+    set_capabilities(
+        cfg.cap_effective.as_deref(),
+        cfg.cap_permitted.as_deref(),
+        cfg.cap_inheritable.as_deref(),
+        cfg.cap_bounding.as_deref(),
+        cfg.cap_ambient.as_deref(),
+    )
+    .map_err(|error| io::Error::new(error.kind(), format!("set capabilities failed: {error}")))?;
+
     if !cfg.additional_gids.is_empty() {
         set_supplementary_gids(&cfg.additional_gids);
     }
@@ -885,6 +901,66 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
         let _ = setup_intel_rdt(rdt);
     }
 
+    Ok(())
+}
+
+fn send_fd(sock_fd: i32, fd: i32) -> io::Result<()> {
+    let mut msg: libc::msghdr = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+    let cmsg_space = unsafe { libc::CMSG_SPACE(std::mem::size_of::<i32>() as u32) as usize };
+    let mut cmsg_buf = vec![0u8; cmsg_space];
+    let fd_to_send = fd;
+    let iov = libc::iovec {
+        iov_base: &fd_to_send as *const _ as *mut libc::c_void,
+        iov_len: std::mem::size_of::<i32>(),
+    };
+
+    msg.msg_iov = &iov as *const _ as *mut libc::iovec;
+    msg.msg_iovlen = 1;
+    msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
+    msg.msg_controllen = cmsg_space as _;
+
+    let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
+    if cmsg.is_null() {
+        return Err(io::Error::other(
+            "failed to allocate terminal fd control message",
+        ));
+    }
+    unsafe {
+        (*cmsg).cmsg_level = libc::SOL_SOCKET;
+        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
+        (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<i32>() as u32) as _;
+        std::ptr::copy_nonoverlapping(&fd as *const i32, libc::CMSG_DATA(cmsg) as *mut i32, 1);
+    }
+
+    let ret = unsafe { libc::sendmsg(sock_fd, &msg, 0) };
+    if ret < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+fn fork_into_pid_namespace() -> io::Result<()> {
+    let child_pid = unsafe { libc::fork() };
+    if child_pid < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    if child_pid > 0 {
+        let mut status = 0i32;
+        let waited = unsafe { libc::waitpid(child_pid, &mut status as *mut i32, 0) };
+        if waited < 0 {
+            unsafe { libc::_exit(1) };
+        }
+        let code = if libc::WIFEXITED(status) {
+            libc::WEXITSTATUS(status)
+        } else {
+            128
+        };
+        unsafe { libc::_exit(code) };
+    }
+
+    std::env::set_var("_ERT_PIDNS_READY", "1");
     Ok(())
 }
 

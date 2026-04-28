@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use super::errors::RegistryError;
 use crate::layer_pipeline::bytes_to_hex;
-use crate::oci_path::layer_path_safe;
+use crate::oci_path::{layer_path_safe, normalize_layer_path};
 use crate::tar_layer::{
     apply_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer, layer_compression,
     parse_oci_whiteout, OciLayerCompression, OciWhiteout, TarEntry, TarEntryKind, TarLayerSink,
@@ -111,7 +111,8 @@ struct FsLayerSink {
 
 impl FsLayerSink {
     fn entry_path(&self, entry: &TarEntry) -> Result<PathBuf, String> {
-        let path = Path::new(&entry.path);
+        let normalized = normalize_layer_path(&entry.path);
+        let path = Path::new(&normalized);
         if !path_safe_within_root(path) {
             return Err(format!(
                 "tar entry {:?} would escape destination",
@@ -129,6 +130,17 @@ impl FsLayerSink {
     }
 
     fn validate_link(&self, entry_path: &Path, target: &Path) -> Result<(), String> {
+        if target.is_absolute() {
+            let normalized = normalize_layer_path(target.to_str().unwrap_or_default());
+            if normalized.is_empty() || !layer_path_safe(&normalized) {
+                return Err(format!(
+                    "symlink {:?} -> {:?} would escape destination",
+                    entry_path, target
+                ));
+            }
+            return Ok(());
+        }
+
         let resolved = if target.is_absolute() {
             self.dest.join(target.strip_prefix("/").unwrap_or(target))
         } else {
@@ -142,11 +154,14 @@ impl FsLayerSink {
                     entry_path, target
                 ));
             }
-        } else if !path_safe_within_root(target) {
-            return Err(format!(
-                "symlink {:?} -> {:?} would escape destination",
-                entry_path, target
-            ));
+        } else {
+            let relative = resolved.strip_prefix(&self.dest).unwrap_or(&resolved);
+            if !path_safe_within_root(relative) {
+                return Err(format!(
+                    "symlink {:?} -> {:?} would escape destination",
+                    entry_path, target
+                ));
+            }
         }
 
         Ok(())
@@ -185,7 +200,7 @@ impl TarLayerSink for FsLayerSink {
                     .link_name
                     .as_deref()
                     .ok_or_else(|| format!("hardlink {:?} missing target", entry.path))?;
-                let target = self.dest.join(target);
+                let target = self.dest.join(normalize_layer_path(target));
                 Self::ensure_parent(&path)?;
                 let _ = fs::remove_file(&path);
                 fs::hard_link(target, &path).map_err(|error| error.to_string())?;

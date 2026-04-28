@@ -8,9 +8,9 @@ use std::time::Duration;
 
 const AF_BLUETOOTH: i32 = 31;
 const SOCK_SEQPACKET: i32 = 5;
-const BTPROTO_L2CAP: i32 = 2;
+const BTPROTO_L2CAP: i32 = 0;
 
-const ATT_PSM: u16 = 0x001F;
+const ATT_CID: u16 = 0x0004;
 const DEFAULT_MTU: u16 = 23;
 const MAX_MTU: u16 = 512;
 const LE_PSM: u16 = 0x002F;
@@ -28,25 +28,35 @@ const HCI_EV_DISCONN_COMPLETE: u8 = 0x05;
 #[derive(Clone, Copy)]
 struct SockAddrL2 {
     l2_family: u16,
+    l2_psm: u16,
+    l2_bdaddr: [u8; 6],
     l2_cid: u16,
     l2_bdaddr_type: u8,
-    l2_bdaddr: [u8; 6],
-    l2_psm: u16,
 }
 
 impl Default for SockAddrL2 {
     fn default() -> Self {
         Self {
             l2_family: AF_BLUETOOTH as u16,
+            l2_psm: 0,
+            l2_bdaddr: [0; 6],
             l2_cid: 0,
             l2_bdaddr_type: 0,
-            l2_bdaddr: [0; 6],
-            l2_psm: 0,
         }
     }
 }
 
 impl SockAddrL2 {
+    fn for_att_device(addr: &[u8; 6], addr_type: u8) -> Self {
+        Self {
+            l2_family: AF_BLUETOOTH as u16,
+            l2_cid: ATT_CID,
+            l2_bdaddr_type: addr_type,
+            l2_bdaddr: *addr,
+            l2_psm: 0,
+        }
+    }
+
     fn for_device(addr: &[u8; 6], addr_type: u8, psm: u16) -> Self {
         Self {
             l2_family: AF_BLUETOOTH as u16,
@@ -69,7 +79,6 @@ pub enum L2capChannelState {
     Disconnecting,
 }
 
-#[derive(Clone)]
 pub struct L2capSocket {
     fd: RawFd,
     local_addr_type: u8,
@@ -77,6 +86,20 @@ pub struct L2capSocket {
     state: L2capChannelState,
     mtu: u16,
     remote_mtu: u16,
+}
+
+impl Clone for L2capSocket {
+    fn clone(&self) -> Self {
+        let fd = unsafe { dup(self.fd) };
+        Self {
+            fd,
+            local_addr_type: self.local_addr_type,
+            peer_addr: self.peer_addr,
+            state: self.state,
+            mtu: self.mtu,
+            remote_mtu: self.remote_mtu,
+        }
+    }
 }
 
 impl L2capSocket {
@@ -136,18 +159,39 @@ impl L2capSocket {
         self.bind_with_addr_type(addr_type)
     }
 
+    pub fn bind_att_any(&self) -> GattResult<()> {
+        let l2cap_addr = SockAddrL2 {
+            l2_cid: ATT_CID,
+            ..Default::default()
+        };
+
+        let rc = unsafe {
+            bind(
+                self.fd,
+                (&l2cap_addr as *const SockAddrL2).cast(),
+                size_of::<SockAddrL2>() as u32,
+            )
+        };
+
+        if rc < 0 {
+            return Err(GattError::from(io::Error::last_os_error()));
+        }
+        Ok(())
+    }
+
     pub fn set_local_addr_type(&mut self, addr_type: u8) {
         self.local_addr_type = addr_type;
     }
 
     pub fn connect_to_device(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
+        self.bind_att_any()?;
         self.peer_addr = Some(bdaddr);
         self.state = L2capChannelState::Opening;
 
-        let l2cap_addr = SockAddrL2::for_device(&bdaddr, addr_type, ATT_PSM);
+        let l2cap_addr = SockAddrL2::for_att_device(&bdaddr, addr_type);
 
         let rc = unsafe {
             connect(
@@ -168,7 +212,7 @@ impl L2capSocket {
     }
 
     pub fn connect_with_le_psm(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
         self.peer_addr = Some(bdaddr);
@@ -195,10 +239,11 @@ impl L2capSocket {
     }
 
     pub fn connect_device(&self, device_addr: &str, addr_type: u8) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
-        let l2cap_addr = SockAddrL2::for_device(&bdaddr, addr_type, ATT_PSM);
+        self.bind_att_any()?;
+        let l2cap_addr = SockAddrL2::for_att_device(&bdaddr, addr_type);
 
         let rc = unsafe {
             connect(
@@ -229,7 +274,7 @@ impl L2capSocket {
         addr_type: u8,
         psm: u16,
     ) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
         let l2cap_addr = SockAddrL2::for_device(&bdaddr, addr_type, psm);
@@ -252,7 +297,7 @@ impl L2capSocket {
     pub fn send_data(&self, data: &[u8], timeout_ms: i32) -> GattResult<()> {
         let mut pollfd = PollFd {
             fd: self.fd,
-            events: 0x0001,
+            events: 0x0004,
             revents: 0,
         };
 
@@ -404,6 +449,7 @@ unsafe extern "C" {
     fn recv(fd: i32, buf: *mut core::ffi::c_void, len: usize, flags: i32) -> isize;
     fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
     fn close(fd: i32) -> i32;
+    fn dup(fd: i32) -> i32;
 }
 
 #[repr(C)]

@@ -4,7 +4,7 @@ use crate::layer_pipeline::{
     apply_layer_chunks, sha256_layer_digest, LayerApplyReport, LayerDigest, LayerPipelineError,
     LayerSink,
 };
-use crate::oci_path::layer_path_safe;
+use crate::oci_path::{layer_path_safe, normalize_layer_path};
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use core::fmt;
@@ -596,6 +596,12 @@ fn apply_overrides(entry: &mut TarEntry, global: &TarEntryOverrides, pending: &T
     if let Some(link_name) = pending.link_name.as_ref() {
         entry.link_name = Some(link_name.clone());
     }
+    entry.path = normalize_layer_path(&entry.path);
+    if matches!(entry.kind, TarEntryKind::Hardlink) {
+        if let Some(link_name) = entry.link_name.as_mut() {
+            *link_name = normalize_layer_path(link_name);
+        }
+    }
     entry.whiteout = parse_oci_whiteout(&entry.path);
 }
 
@@ -604,11 +610,36 @@ fn validate_entry_paths(entry: &TarEntry) -> Result<(), TarLayerError> {
         return Err(TarLayerError::InvalidPath(entry.path.clone()));
     }
     if let Some(link_name) = entry.link_name.as_ref() {
-        if !layer_path_safe(link_name) {
-            return Err(TarLayerError::InvalidPath(link_name.clone()));
+        match entry.kind {
+            TarEntryKind::Symlink => {
+                if !link_target_safe(&entry.path, link_name) {
+                    return Err(TarLayerError::InvalidPath(link_name.clone()));
+                }
+            }
+            _ if !layer_path_safe(link_name) => {
+                return Err(TarLayerError::InvalidPath(link_name.clone()));
+            }
+            _ => {}
         }
     }
     Ok(())
+}
+
+fn link_target_safe(entry_path: &str, link_name: &str) -> bool {
+    let resolved = if link_name.starts_with('/') {
+        normalize_layer_path(link_name)
+    } else {
+        let parent = entry_path
+            .rsplit_once('/')
+            .map(|(parent, _)| parent)
+            .unwrap_or("");
+        if parent.is_empty() {
+            normalize_layer_path(link_name)
+        } else {
+            normalize_layer_path(&format!("{parent}/{link_name}"))
+        }
+    };
+    !resolved.is_empty() && layer_path_safe(&resolved)
 }
 
 #[derive(Default)]

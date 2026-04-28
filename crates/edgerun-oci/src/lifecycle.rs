@@ -105,6 +105,7 @@ struct ChildExecContext {
     env: Vec<String>,
     cwd: String,
     workload_args: Vec<String>,
+    terminal_socket_fd: Option<i32>,
 }
 
 // ===========================================================================
@@ -159,7 +160,7 @@ fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
     }
 
     // 4. If PID namespace: fork so parent becomes PID 1 init, child exec's workload
-    if ctx.use_pid1_init {
+    if ctx.use_pid1_init && std::env::var_os("_ERT_PIDNS_READY").is_none() {
         if let Err(e) = crate::init::fork_and_init() {
             kmsg(&format!("child: fork_and_init failed: {}", e));
             unsafe { libc::_exit(1) };
@@ -245,7 +246,7 @@ fn fork_rooted(
         }
 
         // Standard container setup (all namespaces at once)
-        if let Err(e) = setup_container_child(cfg) {
+        if let Err(e) = setup_container_child(cfg, ctx.terminal_socket_fd) {
             kmsg(&format!("child: setup_container_child failed: {}", e));
             unsafe { libc::_exit(1) };
         }
@@ -283,7 +284,7 @@ fn fork_rootless(
         }
 
         // Rootless container setup (skips NEWUSER+NEWNS — already created by re-exec)
-        if let Err(e) = setup_container_child_rootless(cfg) {
+        if let Err(e) = setup_container_child_rootless(cfg, ctx.terminal_socket_fd) {
             kmsg(&format!(
                 "child: setup_container_child_rootless failed: {}",
                 e
@@ -315,6 +316,14 @@ fn fork_rootless(
 ///
 /// Returns the child PID and a reference to the spec-derived config.
 pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<ForkedChild> {
+    fork_container_child_with_terminal_socket(spec, container_id, None)
+}
+
+pub fn fork_container_child_with_terminal_socket(
+    spec: &OciSpec,
+    container_id: &str,
+    terminal_socket_fd: Option<i32>,
+) -> io::Result<ForkedChild> {
     // Validate platform compatibility before creating the container.
     // Per OCI spec: the runtime MUST reject bundles whose platform does not
     // match the host platform (unless no platform is specified).
@@ -392,6 +401,7 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         env: env.clone(),
         cwd: cwd.clone(),
         workload_args: args.clone(),
+        terminal_socket_fd,
     };
     let fifo_cstr_child = CString::new(fifo.to_string_lossy().as_bytes()).unwrap();
 

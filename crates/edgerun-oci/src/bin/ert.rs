@@ -12,34 +12,15 @@ fn main() {
     }
 
     // Rootless detection and re-exec (only for container commands)
-    let is_container_cmd = args
-        .first()
-        .map(|s| {
-            matches!(
-                s.as_str(),
-                "create"
-                    | "start"
-                    | "exec"
-                    | "delete"
-                    | "kill"
-                    | "pause"
-                    | "resume"
-                    | "update"
-                    | "state"
-                    | "ps"
-                    | "events"
-                    | "checkpoint"
-                    | "restore"
-                    | "run"
-            )
-        })
+    let is_container_cmd = first_command(&args)
+        .map(is_container_command)
         .unwrap_or(false);
 
     if is_container_cmd
         && unsafe { libc::geteuid() } != 0
         && std::env::var("_ERT_ROOTLESS_CHILD").is_err()
     {
-        if let Some(code) = become_rootless() {
+        if let Some(code) = become_rootless(&args) {
             std::process::exit(code);
         }
     }
@@ -53,9 +34,12 @@ fn main() {
         // Container lifecycle
         "create" => cli::cmd_create(&opts, &cmd_args),
         "start" => cli::cmd_start(&opts, &cmd_args),
+        "stop" => cli::cmd_stop(&opts, &cmd_args),
         "state" => cli::cmd_state(&opts, &cmd_args),
         "kill" => cli::cmd_kill(&opts, &cmd_args),
+        "logs" => cli::cmd_logs(&opts, &cmd_args),
         "delete" => cli::cmd_delete(&opts, &cmd_args),
+        "rm" => cli::cmd_delete(&opts, &cmd_args),
         "exec" => cli::cmd_exec(&opts, &cmd_args),
         "update" => cli::cmd_update(&opts, &cmd_args),
         "pause" => cli::cmd_pause(&opts, &cmd_args),
@@ -82,6 +66,47 @@ fn main() {
         eprintln!("ert: {}: {}", command, e);
         std::process::exit(1);
     }
+}
+
+fn first_command(args: &[String]) -> Option<&str> {
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--bundle" | "--pid-file" | "--root" => i = i.saturating_add(2),
+            arg if arg.starts_with("--bundle=")
+                || arg.starts_with("--pid-file=")
+                || arg.starts_with("--root=") =>
+            {
+                i += 1
+            }
+            arg if arg.starts_with('-') => i += 1,
+            arg => return Some(arg),
+        }
+    }
+    None
+}
+
+fn is_container_command(command: &str) -> bool {
+    matches!(
+        command,
+        "create"
+            | "start"
+            | "stop"
+            | "exec"
+            | "delete"
+            | "rm"
+            | "kill"
+            | "pause"
+            | "resume"
+            | "update"
+            | "state"
+            | "ps"
+            | "logs"
+            | "events"
+            | "checkpoint"
+            | "restore"
+            | "run"
+    )
 }
 
 fn dispatch_registry_command(_opts: &cli::GlobalOpts, cmd_args: &[String]) -> std::io::Result<()> {
@@ -221,7 +246,7 @@ fn write_gid_map_for_pid(pid: i32, host_gid: u32) -> std::io::Result<()> {
     })
 }
 
-fn become_rootless() -> Option<i32> {
+fn become_rootless(args: &[String]) -> Option<i32> {
     let host_uid = unsafe { libc::getuid() };
     let host_gid = unsafe { libc::getgid() };
     let username = get_current_username().unwrap_or_default();
@@ -296,7 +321,9 @@ fn become_rootless() -> Option<i32> {
             return Some(1);
         }
         if libc::WIFEXITED(status) {
-            Some(libc::WEXITSTATUS(status))
+            let code = libc::WEXITSTATUS(status);
+            cleanup_rootless_run_rm(args);
+            Some(code)
         } else {
             Some(128)
         }
@@ -372,4 +399,113 @@ fn become_rootless() -> Option<i32> {
             libc::_exit(127)
         }
     }
+}
+
+fn cleanup_rootless_run_rm(args: &[String]) {
+    if first_command(args) != Some("run") {
+        return;
+    }
+
+    let mut root = root_from_args(args).unwrap_or_else(default_rootless_state_dir);
+    let mut saw_run = false;
+    let mut rm = false;
+    let mut name = None::<String>;
+    let mut i = 0usize;
+    while i < args.len() {
+        let arg = args[i].as_str();
+        if !saw_run {
+            if arg == "run" {
+                saw_run = true;
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--rm" => {
+                rm = true;
+                i += 1;
+            }
+            "--name" if i + 1 < args.len() => {
+                name = Some(args[i + 1].clone());
+                i += 2;
+            }
+            arg if arg.starts_with("--name=") => {
+                name = Some(arg["--name=".len()..].to_string());
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+
+    if !rm {
+        return;
+    }
+
+    if let Some(name) = name {
+        let _ = std::fs::remove_dir_all(root.join(name));
+    } else {
+        cleanup_dead_run_states(&mut root);
+    }
+}
+
+fn root_from_args(args: &[String]) -> Option<std::path::PathBuf> {
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" if i + 1 < args.len() => return Some(std::path::PathBuf::from(&args[i + 1])),
+            arg if arg.starts_with("--root=") => {
+                return Some(std::path::PathBuf::from(&arg["--root=".len()..]))
+            }
+            "--bundle" | "--pid-file" => i += 2,
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+fn default_rootless_state_dir() -> std::path::PathBuf {
+    if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+        return std::path::Path::new(&xdg).join("edgerun-oci");
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return std::path::Path::new(&home)
+            .join(".local")
+            .join("state")
+            .join("edgerun-oci");
+    }
+    std::env::temp_dir().join("edgerun-oci")
+}
+
+fn cleanup_dead_run_states(root: &mut std::path::PathBuf) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let state = entry.path().join("state.json");
+        let Ok(data) = std::fs::read_to_string(state) else {
+            continue;
+        };
+        let Some(pid) = extract_json_pid(&data) else {
+            continue;
+        };
+        if !pid_alive(pid) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+fn extract_json_pid(data: &str) -> Option<i32> {
+    let marker = "\"pid\"";
+    let start = data.find(marker)?;
+    let after = &data[start + marker.len()..];
+    let colon = after.find(':')?;
+    let digits = after[colon + 1..].trim_start();
+    let end = digits
+        .find(|ch: char| !ch.is_ascii_digit())
+        .unwrap_or(digits.len());
+    digits[..end].parse().ok()
+}
+
+fn pid_alive(pid: i32) -> bool {
+    unsafe { libc::kill(pid, 0) == 0 }
 }

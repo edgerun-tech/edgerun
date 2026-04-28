@@ -1,9 +1,10 @@
-use edgerun_clap::Parser;
+use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, L2capSocket};
 use edgerun_mgmt_bluetooth::{MgmtBluetoothBackend, MgmtDiscoveryTransport};
 use edgerun_tcl_ac::{AcMode, AcState, FanSpeed, TclAcClient};
+use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::process;
+use std::process::{self, Command as ProcessCommand};
 
 const STATE_FILE: &str = "/tmp/tcl-ac-state.json";
 
@@ -21,8 +22,20 @@ enum Command {
     Connect {
         address: String,
     },
+    Inspect {
+        address: String,
+    },
     Pair {
         address: String,
+    },
+    Provision {
+        ssid: String,
+        password: String,
+        bind_code: String,
+    },
+    ProvisionFile {
+        path: String,
+        bind_code: String,
     },
     Status,
     Power {
@@ -55,64 +68,20 @@ enum Command {
     Disconnect,
 }
 
-impl Parser for Command {
-    fn command() -> edgerun_clap::cli::Command {
-        edgerun_clap::cli::Command::new("tcl-ac").about("TCL Air Conditioner Control CLI")
-    }
-
-    fn from(matches: &edgerun_clap::cli::ArgMatches) -> Self {
-        let sub = matches.positional.first().cloned().unwrap_or_default();
-        match sub.as_str() {
-            "scan" => Command::Scan {
-                timeout: matches.get_one::<u8>("timeout"),
-            },
-            "connect" => Command::Connect {
-                address: matches.get_one::<String>("address").unwrap_or_default(),
-            },
-            "pair" => Command::Pair {
-                address: matches.get_one::<String>("address").unwrap_or_default(),
-            },
-            "status" => Command::Status,
-            "power" => Command::Power {
-                power_on: matches.contains_id("on"),
-                power_off: matches.contains_id("off"),
-            },
-            "temp" => Command::Temp {
-                temperature: matches.get_one::<i8>("temperature").unwrap_or(25),
-            },
-            "mode" => Command::Mode {
-                mode: matches.get_one::<String>("mode").unwrap_or_default(),
-            },
-            "fan" => Command::Fan {
-                speed: matches.get_one::<String>("speed").unwrap_or_default(),
-            },
-            "swing" => Command::Swing {
-                swing_on: matches.contains_id("on"),
-                swing_off: matches.contains_id("off"),
-            },
-            "eco" => Command::Eco {
-                eco_on: matches.contains_id("on"),
-                eco_off: matches.contains_id("off"),
-            },
-            "full" => Command::Full {
-                power: matches.get_one::<bool>("power"),
-                temp: matches.get_one::<i8>("temp"),
-                mode: matches.get_one::<String>("mode"),
-                fan: matches.get_one::<String>("fan"),
-            },
-            "disconnect" => Command::Disconnect,
-            _ => Command::Status,
-        }
-    }
-}
-
 fn main() {
-    let cmd = Command::parse();
+    let cmd = parse_args();
 
     match cmd {
         Command::Scan { timeout } => do_scan(timeout.unwrap_or(10) as u64),
         Command::Connect { address } => do_connect(&address),
+        Command::Inspect { address } => do_inspect(&address),
         Command::Pair { address } => do_pair(&address),
+        Command::Provision {
+            ssid,
+            password,
+            bind_code,
+        } => do_provision(&ssid, &password, &bind_code),
+        Command::ProvisionFile { path, bind_code } => do_provision_file(&path, &bind_code),
         Command::Status => do_status(),
         Command::Power {
             power_on,
@@ -133,6 +102,106 @@ fn main() {
             fan,
         } => do_full(power, temp, mode.as_deref(), fan.as_deref()),
         Command::Disconnect => do_disconnect(),
+    }
+}
+
+fn parse_args() -> Command {
+    let args: Vec<String> = env::args().skip(1).collect();
+    let sub = args.first().map(String::as_str).unwrap_or("status");
+    match sub {
+        "scan" => Command::Scan {
+            timeout: args.get(1).and_then(|s| s.parse().ok()),
+        },
+        "connect" => Command::Connect {
+            address: args.get(1).cloned().unwrap_or_default(),
+        },
+        "inspect" => Command::Inspect {
+            address: args.get(1).cloned().unwrap_or_default(),
+        },
+        "pair" => Command::Pair {
+            address: args.get(1).cloned().unwrap_or_default(),
+        },
+        "provision" => Command::Provision {
+            ssid: args.get(1).cloned().unwrap_or_default(),
+            password: args.get(2).cloned().unwrap_or_default(),
+            bind_code: args.get(3).cloned().unwrap_or_default(),
+        },
+        "provision-file" => Command::ProvisionFile {
+            path: args
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| "~/wifi.txt".to_string()),
+            bind_code: args.get(2).cloned().unwrap_or_default(),
+        },
+        "status" => Command::Status,
+        "power" => Command::Power {
+            power_on: args.iter().any(|s| s == "on" || s == "--on"),
+            power_off: args.iter().any(|s| s == "off" || s == "--off"),
+        },
+        "temp" => Command::Temp {
+            temperature: args.get(1).and_then(|s| s.parse().ok()).unwrap_or(25),
+        },
+        "mode" => Command::Mode {
+            mode: args.get(1).cloned().unwrap_or_default(),
+        },
+        "fan" => Command::Fan {
+            speed: args.get(1).cloned().unwrap_or_default(),
+        },
+        "swing" => Command::Swing {
+            swing_on: args.iter().any(|s| s == "on" || s == "--on"),
+            swing_off: args.iter().any(|s| s == "off" || s == "--off"),
+        },
+        "eco" => Command::Eco {
+            eco_on: args.iter().any(|s| s == "on" || s == "--on"),
+            eco_off: args.iter().any(|s| s == "off" || s == "--off"),
+        },
+        "full" => parse_full_args(&args[1..]),
+        "disconnect" => Command::Disconnect,
+        _ => Command::Status,
+    }
+}
+
+fn parse_full_args(args: &[String]) -> Command {
+    let mut power = None;
+    let mut temp = None;
+    let mut mode = None;
+    let mut fan = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--power" | "power" => {
+                power = args.get(i + 1).and_then(|s| parse_bool(s));
+                i += 1;
+            }
+            "--temp" | "temp" => {
+                temp = args.get(i + 1).and_then(|s| s.parse().ok());
+                i += 1;
+            }
+            "--mode" | "mode" => {
+                mode = args.get(i + 1).cloned();
+                i += 1;
+            }
+            "--fan" | "fan" => {
+                fan = args.get(i + 1).cloned();
+                i += 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    Command::Full {
+        power,
+        temp,
+        mode,
+        fan,
+    }
+}
+
+fn parse_bool(value: &str) -> Option<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
     }
 }
 
@@ -183,8 +252,10 @@ fn do_scan(timeout_secs: u64) {
     ) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Scan failed: {}", e);
-            process::exit(1);
+            eprintln!("Kernel mgmt scan failed: {}", e);
+            eprintln!("Falling back to bluetoothctl LE scan.");
+            do_bluetoothctl_scan(timeout_secs);
+            return;
         }
     };
 
@@ -234,6 +305,28 @@ fn do_scan(timeout_secs: u64) {
     }
 }
 
+fn do_bluetoothctl_scan(timeout_secs: u64) {
+    let output = ProcessCommand::new("bluetoothctl")
+        .arg("--timeout")
+        .arg(timeout_secs.to_string())
+        .arg("scan")
+        .arg("le")
+        .output();
+    match output {
+        Ok(output) => {
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+            eprint!("{}", String::from_utf8_lossy(&output.stderr));
+            println!();
+            println!("Run `bluetoothctl info <address>` for candidates, then:");
+            println!("  cargo run -p edgerun-tcl-ac-cli --features std --bin tcl-ac -- connect <address>");
+        }
+        Err(err) => {
+            eprintln!("bluetoothctl scan failed: {}", err);
+            process::exit(1);
+        }
+    }
+}
+
 fn do_connect(address: &str) {
     let client = TclAcClient::new();
 
@@ -261,6 +354,104 @@ fn do_connect(address: &str) {
             eprintln!("Connection failed: {}", e);
             process::exit(1);
         }
+    }
+}
+
+fn do_inspect(address: &str) {
+    if address.is_empty() {
+        eprintln!("Usage: tcl-ac inspect <address>");
+        process::exit(2);
+    }
+
+    println!("Inspecting BLE GATT database at {}...", address);
+
+    let socket = match connect_ble_socket(address) {
+        Ok(socket) => socket,
+        Err(err) => {
+            eprintln!("Connection failed: {}", err);
+            process::exit(1);
+        }
+    };
+
+    let mut proto = AttProtocol::new(socket);
+    proto.set_mtu(512);
+
+    let primary_service_type = [0x00, 0x28];
+    let data = match proto.read_by_group_type(0x0001, 0xffff, &primary_service_type) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("Service discovery failed: {}", err);
+            process::exit(1);
+        }
+    };
+
+    let services = proto.parse_read_by_group_response(&data);
+    if services.is_empty() {
+        println!("No primary services discovered.");
+        return;
+    }
+
+    println!("Services:");
+    for (start, end, uuid) in services {
+        let service_uuid = format_gatt_uuid(&uuid);
+        println!("  0x{start:04x}-0x{end:04x}  {service_uuid}");
+
+        let char_type = [0x03, 0x28];
+        let chars = match proto.read_by_type(start, end, &char_type) {
+            Ok(data) => proto.parse_read_by_type_response(&data),
+            Err(err) => {
+                println!("    characteristic discovery failed: {}", err);
+                continue;
+            }
+        };
+
+        for (decl_handle, value) in chars {
+            if value.len() < 5 {
+                println!("    0x{decl_handle:04x}  malformed characteristic declaration");
+                continue;
+            }
+            let props = value[0];
+            let value_handle = u16::from_le_bytes([value[1], value[2]]);
+            let char_uuid = format_gatt_uuid(&value[3..]);
+            println!(
+                "    decl 0x{decl_handle:04x}, value 0x{value_handle:04x}, props 0x{props:02x}  {char_uuid}"
+            );
+
+            let desc_start = value_handle.saturating_add(1);
+            if desc_start <= end {
+                if let Ok(desc_data) = proto.find_information(desc_start, end) {
+                    for (handle, desc_uuid) in proto.parse_find_information_response(&desc_data) {
+                        println!(
+                            "      desc 0x{handle:04x}  {}",
+                            format_gatt_uuid(&desc_uuid)
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn connect_ble_socket(address: &str) -> Result<L2capSocket, String> {
+    let public = L2capSocket::new()
+        .and_then(|socket| {
+            socket.connect_device(address, 0x01)?;
+            Ok(socket)
+        })
+        .map_err(|err| err.to_string());
+    match public {
+        Ok(socket) => Ok(socket),
+        Err(public_err) => L2capSocket::new()
+            .and_then(|socket| {
+                socket.connect_device(address, 0x02)?;
+                Ok(socket)
+            })
+            .map_err(|random_err| {
+                format!(
+                    "failed as public ({}) and random ({})",
+                    public_err, random_err
+                )
+            }),
     }
 }
 
@@ -348,16 +539,70 @@ where
 }
 
 fn do_status() {
-    with_client(|client| match client.read_state() {
-        Ok(state) => {
-            print_state(&state);
+    with_client(|client| match client.get_device_info() {
+        Ok(info) => {
+            println!("{}", info);
             Ok(())
         }
         Err(e) => {
-            eprintln!("Failed to read state: {}", e);
+            eprintln!("Failed to read device info: {}", e);
             Err(e)
         }
     })
+}
+
+fn do_provision(ssid: &str, password: &str, bind_code: &str) {
+    if ssid.is_empty() || password.is_empty() {
+        eprintln!("Usage: tcl-ac provision <ssid> <password> [bind-code]");
+        process::exit(1);
+    }
+
+    with_client(|client| {
+        match client.provision_wifi_responses(ssid, password, bind_code, None, None, 60_000) {
+            Ok(responses) if responses.is_empty() => {
+                println!("Provisioning payload accepted; no indication response was received.");
+                Ok(())
+            }
+            Ok(responses) => {
+                for response in responses {
+                    println!("{}", response);
+                }
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("Provisioning failed: {}", e);
+                Err(e)
+            }
+        }
+    })
+}
+
+fn do_provision_file(path: &str, bind_code: &str) {
+    let path = expand_home(path);
+    let data = match fs::read_to_string(&path) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("Failed to read Wi-Fi credential file: {}", err);
+            process::exit(1);
+        }
+    };
+    let mut lines = data.lines().map(str::trim).filter(|line| !line.is_empty());
+    let ssid = lines.next().unwrap_or_default();
+    let password = lines.next().unwrap_or_default();
+    if ssid.is_empty() || password.is_empty() {
+        eprintln!("Wi-Fi credential file must contain SSID on line 1 and password on line 2");
+        process::exit(1);
+    }
+    do_provision(ssid, password, bind_code);
+}
+
+fn expand_home(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = env::var_os("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    PathBuf::from(path)
 }
 
 fn do_power(on: bool, off: bool) {
