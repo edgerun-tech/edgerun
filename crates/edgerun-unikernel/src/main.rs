@@ -10,9 +10,11 @@ extern crate edgerun_http;
 extern crate edgerun_oci;
 extern crate edgerun_platform;
 extern crate edgerun_rt as rt;
+#[cfg(target_arch = "x86_64")]
 extern crate edgerun_rtl8125;
 extern crate edgerun_tftp;
 extern crate edgerun_tpm;
+#[cfg(target_arch = "x86_64")]
 extern crate edgerun_virtio;
 
 use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
@@ -623,7 +625,7 @@ mod boot_config {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 #[allow(dead_code)]
 mod disk_boot {
     use super::boot_config::{BootConfig, BootConfigError, EdgeFsBootTarget};
@@ -1106,7 +1108,7 @@ mod disk_boot {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 core::arch::global_asm!(
     r#"
     .section .text.entry,"ax"
@@ -1129,21 +1131,50 @@ _start:
 "#
 );
 
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+core::arch::global_asm!(
+    r#"
+    .section .text.entry,"ax"
+    .global _start
+_start:
+    movi a1, _stack
+    movi a2, _bss_start
+    movi a3, _bss_end
+    sub a3, a3, a2
+    movi a4, 0
+1:
+    beqz a3, 2f
+    s8i a4, a2, 0
+    addi a2, a2, 1
+    addi a3, a3, -1
+    j 1b
+2:
+    call0 kernel_main
+3:
+    waiti 0
+    j 3b
+"#
+);
+
+#[cfg(target_arch = "x86_64")]
 struct PumpStats {
     arp_replies: u32,
     icmp_replies: u32,
 }
 
+#[cfg(target_arch = "x86_64")]
 enum BareNic {
     Rtl8125(edgerun_rtl8125::Rtl8125),
     Virtio(edgerun_virtio::VirtNet),
 }
 
+#[cfg(target_arch = "x86_64")]
 struct BareNicStats {
     tx_completed: u32,
     rx_received: u32,
 }
 
+#[cfg(target_arch = "x86_64")]
 impl BareNic {
     fn init(&mut self) -> bool {
         match self {
@@ -1200,6 +1231,7 @@ impl BareNic {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 struct NetPump<'net, 'stack> {
     net: &'net mut BareNic,
     network: Network<'stack>,
@@ -1223,7 +1255,7 @@ async fn run_http_smoke(url: &str) {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 async fn run_configured_oci_pull(config: &boot_config::BootConfig) {
     if !config.oci_pull {
         return;
@@ -1275,16 +1307,16 @@ async fn run_configured_oci_pull(config: &boot_config::BootConfig) {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 struct KernelBareNetDriver {
     net: AtomicPtr<BareNic>,
     stack: AtomicPtr<IpStack>,
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 unsafe impl Sync for KernelBareNetDriver {}
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 impl KernelBareNetDriver {
     const fn empty() -> Self {
         Self {
@@ -1307,7 +1339,7 @@ impl KernelBareNetDriver {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 impl rt::BareNetDriver for KernelBareNetDriver {
     fn local_ipv4(&self) -> [u8; 4] {
         unsafe { *(*self.stack()).ip.as_bytes() }
@@ -1347,9 +1379,10 @@ impl rt::BareNetDriver for KernelBareNetDriver {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 static BARE_NET_DRIVER: KernelBareNetDriver = KernelBareNetDriver::empty();
 
+#[cfg(target_arch = "x86_64")]
 fn poll_network(
     net: &mut BareNic,
     network: &mut Network<'_>,
@@ -1406,7 +1439,7 @@ fn dhcp_ipv4_to_rt(ip: edgerun_dhcp::Ipv4Addr) -> IpAddr {
     IpAddr::new(octets[0], octets[1], octets[2], octets[3])
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 unsafe fn probe_tpm2() -> Option<[u8; 32]> {
     rt::log::log(1, "Looking for TPM2 ACPI table...");
     match unsafe { edgerun_tpm::CrbTpmTransport::discover_acpi() } {
@@ -1427,7 +1460,7 @@ unsafe fn probe_tpm2() -> Option<[u8; 32]> {
     probe_tpm2_transport(transport.with_timeout_polls(100_000))
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 fn fill_bare_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> {
     if out.is_empty() {
         return Ok(());
@@ -1442,7 +1475,7 @@ fn fill_bare_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> 
     fill_tpm2_random_source(out)
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 fn fill_tpm2_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> {
     if out.is_empty() {
         return Ok(());
@@ -1462,7 +1495,7 @@ fn fill_tpm2_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> 
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 fn fill_tpm2_random_transport<T>(transport: T, out: &mut [u8]) -> bool
 where
     T: edgerun_tpm::FixedTpmTransport + edgerun_tpm::TpmTransport,
@@ -1486,7 +1519,7 @@ where
     true
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 fn probe_tpm2_transport<T>(transport: T) -> Option<[u8; 32]>
 where
     T: edgerun_tpm::FixedTpmTransport + edgerun_tpm::TpmTransport,
@@ -1547,6 +1580,7 @@ where
     Some(entropy)
 }
 
+#[cfg(target_arch = "x86_64")]
 impl Future for NetPump<'_, '_> {
     type Output = ();
 
@@ -1572,7 +1606,7 @@ impl Future for NetPump<'_, '_> {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 fn find_initialized_bare_nic() -> Option<BareNic> {
     if let Some(rtl8125) = edgerun_rtl8125::find_rtl8125() {
         rt::log::log(1, "RTL8125 found");
@@ -1605,19 +1639,34 @@ fn find_initialized_bare_nic() -> Option<BareNic> {
 #[panic_handler]
 unsafe fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {
+        #[cfg(target_arch = "x86_64")]
         core::arch::asm!("hlt");
+        #[cfg(target_arch = "xtensa")]
+        core::arch::asm!("waiti 0");
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
+        core::hint::spin_loop();
     }
 }
 
 #[used]
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 #[link_section = ".multiboot"]
 static MULTIBOOT_HEADER: [u32; 8] = [
     0x1BADB002, 0x00010000, 0xE4514FFE, 0x100000, 0x100000, 0, 0, 0,
 ];
 
 #[no_mangle]
-#[cfg(target_os = "none")]
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+pub unsafe extern "C" fn kernel_main() -> ! {
+    rt::timer::set_now(0);
+    rt::log::log(1, "Starting edgerun unikernel on Xtensa");
+    loop {
+        core::arch::asm!("waiti 0");
+    }
+}
+
+#[no_mangle]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");

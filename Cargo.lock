@@ -274,7 +274,6 @@ dependencies = [
  "edgerun-rt",
  "edgerun-secret-service",
  "edgerun-url",
- "serde",
  "sha2",
 ]
 
@@ -1285,7 +1284,6 @@ dependencies = [
  "edgerun-matter",
  "edgerun-mgmt-bluetooth",
  "edgerun-tcl-ac",
- "serde",
 ]
 
 [[package]]
@@ -1345,7 +1343,7 @@ dependencies = [
 name = "edgerun-url"
 version = "0.1.1"
 dependencies = [
- "serde",
+ "edgerun-json",
 ]
 
 [[package]]

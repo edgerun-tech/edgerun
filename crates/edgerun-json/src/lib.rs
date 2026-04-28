@@ -97,7 +97,10 @@ pub use borrowed_value::BorrowedJsonValue;
 pub use error::{JsonError, JsonParseError};
 pub use index::ValueIndex;
 pub use map::Map;
-pub use model::{from_json_slice, from_json_str, from_json_value, to_json_value, FromJson, ToJson};
+pub use model::{
+    from_json_slice, from_json_str, from_json_value, to_json_string, to_json_value, to_json_vec,
+    FromJson, ToJson,
+};
 pub use number::JsonNumber;
 pub use serde_api::{
     escape_json_string, from_slice, from_slice_as, from_str, from_str_as, from_value_as,

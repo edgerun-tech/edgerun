@@ -10,8 +10,6 @@ build = "build.rs"
 default = []
 
 [dependencies]
-edgerun-virtio = { path = "../edgerun-virtio" }
-edgerun-rtl8125 = { path = "../edgerun-rtl8125" }
 edgerun-platform = { path = "../edgerun-platform" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-dhcp = { path = "../edgerun-dhcp" }
@@ -22,3 +20,7 @@ edgerun-crypto = { path = "../edgerun-crypto", default-features = false }
 edgerun-oci = { path = "../edgerun-oci", default-features = false, features = ["json", "registry-client", "edgefs"] }
 edgerun-edgefs = { path = "../edgerun-edgefs" }
 edgerun-storage = { path = "../edgerun-storage" }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+edgerun-virtio = { path = "../edgerun-virtio" }
+edgerun-rtl8125 = { path = "../edgerun-rtl8125" }

@@ -1,4 +1,5 @@
 use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, L2capSocket};
+use edgerun_json::{FromJson, ToJson};
 use edgerun_mgmt_bluetooth::{MgmtBluetoothBackend, MgmtDiscoveryTransport};
 use edgerun_tcl_ac::{AcMode, AcState, FanSpeed, TclAcClient};
 use std::env;
@@ -21,7 +22,7 @@ const DEFAULT_TCL_ACCOUNT_HOST: &str = "https://sg.account.tcl.com";
 const DEFAULT_TCL_CLIENT_ID: &str = "54148614";
 const DEFAULT_TCL_IOT_CENTER: &str = "https://prod-center.aws.tcljd.com";
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone)]
 struct SavedState {
     address: String,
     service_handle: Option<u16>,
@@ -327,11 +328,11 @@ fn parse_bool(value: &str) -> Option<bool> {
 
 fn load_saved_state() -> Option<SavedState> {
     let data = fs::read_to_string(STATE_FILE).ok()?;
-    edgerun_json::from_str(&data).ok()
+    edgerun_json::from_json_str(&data).ok()
 }
 
 fn save_state(state: &SavedState) {
-    if let Ok(data) = edgerun_json::to_string(state) {
+    if let Ok(data) = edgerun_json::to_json_string(state) {
         let _ = fs::write(state_file(), data);
     }
 }
@@ -893,7 +894,7 @@ struct CommissioningData {
     server_host_v2: Option<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default, Clone)]
+#[derive(Default, Clone)]
 struct TclSession {
     account: String,
     country_code: String,
@@ -912,56 +913,131 @@ struct TclSession {
     saved_at_ms: u128,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone)]
 struct LoginRequest {
     channel: String,
     username: String,
     password: String,
-    #[serde(rename = "captchaRule")]
     captcha_rule: i32,
-    #[serde(rename = "osType")]
     os_type: i32,
-    #[serde(rename = "osVersion")]
     os_version: String,
     equipment: i32,
-    #[serde(rename = "clientVersion")]
     client_version: String,
-    #[serde(rename = "deviceModel")]
     device_model: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone)]
 struct IotHostRequest {
-    #[serde(rename = "ssoId")]
     sso_id: String,
-    #[serde(rename = "ssoToken")]
     sso_token: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone)]
 struct IotRefreshRequest {
-    #[serde(rename = "userId")]
     user_id: String,
-    #[serde(rename = "ssoToken")]
     sso_token: String,
-    #[serde(rename = "appId")]
     app_id: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone)]
 struct BindCodeRequest {
-    #[serde(rename = "jobId")]
     job_id: String,
     add_soure: String,
     entrance_id: String,
-    #[serde(rename = "productKey")]
     product_key: String,
-    #[serde(rename = "cloudType")]
     cloud_type: i32,
-    #[serde(rename = "channelType")]
     channel_type: i32,
-    #[serde(rename = "wifiMd5", skip_serializing_if = "Option::is_none")]
     wifi_md5: Option<String>,
+}
+
+edgerun_json::impl_json_struct! {
+    SavedState {
+        required {
+            address: "address" => String
+        }
+        optional {
+            service_handle: "service_handle" => u16,
+            char_handle: "char_handle" => u16
+        }
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    TclSession {
+        required {
+            account: "account" => String,
+            country_code: "country_code" => String,
+            account_host: "account_host" => String,
+            client_id: "client_id" => String,
+            iot_center_url: "iot_center_url" => String,
+            access_token: "access_token" => String,
+            saved_at_ms: "saved_at_ms" => u128
+        }
+        optional {
+            iot_cloud_url: "iot_cloud_url" => String,
+            iot_cloud_url_emq: "iot_cloud_url_emq" => String,
+            sso_id: "sso_id" => String,
+            refresh_token: "refresh_token" => String,
+            saas_token: "saas_token" => String,
+            iot_sso_token: "iot_sso_token" => String,
+            mqtt_endpoint: "mqtt_endpoint" => String,
+            mqtt_endpoint_emq: "mqtt_endpoint_emq" => String
+        }
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    LoginRequest {
+        required {
+            channel: "channel" => String,
+            username: "username" => String,
+            password: "password" => String,
+            captcha_rule: "captchaRule" => i32,
+            os_type: "osType" => i32,
+            os_version: "osVersion" => String,
+            equipment: "equipment" => i32,
+            client_version: "clientVersion" => String,
+            device_model: "deviceModel" => String
+        }
+        optional {}
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    IotHostRequest {
+        required {
+            sso_id: "ssoId" => String,
+            sso_token: "ssoToken" => String
+        }
+        optional {}
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    IotRefreshRequest {
+        required {
+            user_id: "userId" => String,
+            sso_token: "ssoToken" => String,
+            app_id: "appId" => String
+        }
+        optional {}
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    BindCodeRequest {
+        required {
+            job_id: "jobId" => String,
+            add_soure: "add_soure" => String,
+            entrance_id: "entrance_id" => String,
+            product_key: "productKey" => String,
+            cloud_type: "cloudType" => i32,
+            channel_type: "channelType" => i32
+        }
+        optional {
+            wifi_md5: "wifiMd5" => String
+        }
+    }
 }
 
 fn read_commissioning_data(bind_path: Option<&str>) -> CommissioningData {
@@ -1239,7 +1315,7 @@ fn do_fetch_bind_code(out_path: &str) {
         channel_type,
         wifi_md5,
     };
-    let body = match edgerun_json::to_string(&request) {
+    let body = match edgerun_json::to_json_string(&request) {
         Ok(body) => body,
         Err(err) => {
             eprintln!("Failed to build bind-code request JSON: {}", err);
@@ -1426,8 +1502,8 @@ fn env_i32(name: &str, default: i32) -> i32 {
         .unwrap_or(default)
 }
 
-fn json_or_exit<T: serde::Serialize>(value: &T, label: &str) -> String {
-    match edgerun_json::to_string(value) {
+fn json_or_exit<T: ToJson>(value: &T, label: &str) -> String {
+    match edgerun_json::to_json_string(value) {
         Ok(body) => body,
         Err(err) => {
             eprintln!("Failed to build {} JSON: {}", label, err);
@@ -1463,7 +1539,7 @@ fn load_tcl_session() -> Option<TclSession> {
         .map(|value| expand_home(&value))
         .unwrap_or_else(default_session_path);
     let data = fs::read_to_string(path).ok()?;
-    edgerun_json::from_str(&data).ok()
+    edgerun_json::from_json_str(&data).ok()
 }
 
 fn account_host_for_country(country_code: &str) -> String {
@@ -2092,4 +2168,50 @@ fn print_state(state: &AcState) {
     println!("│ Turbo:    {:<25} │", state.turbo_mode);
     println!("│ Quiet:    {:<25} │", state.quiet_mode);
     println!("└─────────────────────────────────────┘");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn login_request_uses_tcl_camel_case_fields_without_serde() {
+        let request = LoginRequest {
+            channel: "app".to_string(),
+            username: "user@example.test".to_string(),
+            password: "hash".to_string(),
+            captcha_rule: 2,
+            os_type: 1,
+            os_version: "Android 15".to_string(),
+            equipment: 1,
+            client_version: "6.1.1".to_string(),
+            device_model: "Linux laptop".to_string(),
+        };
+
+        let encoded = edgerun_json::to_json_string(&request).unwrap();
+        assert!(encoded.contains(r#""captchaRule":2"#));
+        assert!(encoded.contains(r#""osType":1"#));
+        assert!(encoded.contains(r#""clientVersion":"6.1.1""#));
+    }
+
+    #[test]
+    fn saved_session_roundtrips_without_serde() {
+        let session = TclSession {
+            account: "user@example.test".to_string(),
+            country_code: "TH".to_string(),
+            account_host: DEFAULT_TCL_ACCOUNT_HOST.to_string(),
+            client_id: DEFAULT_TCL_CLIENT_ID.to_string(),
+            iot_center_url: DEFAULT_TCL_IOT_CENTER.to_string(),
+            iot_cloud_url: Some(DEFAULT_TCL_IOT_CENTER.to_string()),
+            access_token: "access".to_string(),
+            saved_at_ms: 1_777_777_777_000,
+            ..TclSession::default()
+        };
+
+        let encoded = edgerun_json::to_json_string(&session).unwrap();
+        let decoded: TclSession = edgerun_json::from_json_str(&encoded).unwrap();
+        assert_eq!(decoded.account, session.account);
+        assert_eq!(decoded.saved_at_ms, session.saved_at_ms);
+        assert_eq!(decoded.iot_cloud_url, session.iot_cloud_url);
+    }
 }

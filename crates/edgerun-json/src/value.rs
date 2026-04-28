@@ -843,6 +843,8 @@ impl TryFrom<JsonValue> for Map {
 impl_try_from_json_number!(i64, as_i64);
 impl_try_from_json_number!(u64, as_u64);
 impl_try_from_json_number!(f64, as_f64);
+impl_try_from_json_number!(i128, as_i128);
+impl_try_from_json_number!(u128, as_u128);
 impl_try_from_json_number_cast!(i32, as_i32);
 impl_try_from_json_number_cast!(u32, as_u32);
 impl_try_from_json_number_cast!(usize, as_usize);

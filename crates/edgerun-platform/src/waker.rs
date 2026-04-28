@@ -1,6 +1,5 @@
 //! Waker implementation using IPI - no allocation version
 
-use crate::arch::x86_64::send_ipi;
 use crate::cpu::CpuId;
 use core::task::{RawWaker, RawWakerVTable, Waker};
 
@@ -13,21 +12,23 @@ unsafe fn ipi_clone(_d: *const ()) -> RawWaker {
 }
 
 unsafe fn ipi_wake(d: *const ()) {
-    let cpu = if d.is_null() {
+    let _cpu = if d.is_null() {
         WAKE_CPU
     } else {
         (*(d as *const IpiWakerCpu)).0
     };
-    send_ipi(cpu, 0xFEE0);
+    #[cfg(target_arch = "x86_64")]
+    crate::arch::x86_64::send_ipi(_cpu, 0xFEE0);
 }
 
 unsafe fn ipi_wake_by_ref(d: *const ()) {
-    let cpu = if d.is_null() {
+    let _cpu = if d.is_null() {
         WAKE_CPU
     } else {
         (*(d as *const IpiWakerCpu)).0
     };
-    send_ipi(cpu, 0xFEE0);
+    #[cfg(target_arch = "x86_64")]
+    crate::arch::x86_64::send_ipi(_cpu, 0xFEE0);
 }
 
 unsafe fn ipi_drop(_d: *const ()) {}

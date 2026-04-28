@@ -195,7 +195,6 @@ edgerun-crypto = { path = "crates/edgerun-crypto", default-features = false }
 # edgerun-json as drop-in replacement for serde_json
 edgerun-json = { path = "crates/edgerun-json", default-features = false, features = ["alloc"] }
 edgerun-error = { path = "crates/edgerun-error" }
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 # Browser deps
 edgerun-display = { path = "crates/edgerun-display" }
 edgerun-gpu = { path = "crates/edgerun-gpu" }

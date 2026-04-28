@@ -16,6 +16,17 @@ pub fn to_json_value<T: ToJson + ?Sized>(value: &T) -> JsonValue {
     value.to_json()
 }
 
+pub fn to_json_string<T: ToJson + ?Sized>(value: &T) -> Result<String, crate::JsonError> {
+    value.to_json().to_json_string()
+}
+
+pub fn to_json_vec<T: ToJson + ?Sized>(value: &T) -> Result<Vec<u8>, crate::JsonError> {
+    let value = value.to_json();
+    let mut out = Vec::with_capacity(crate::util::initial_json_capacity(&value));
+    crate::util::write_json_value(&mut out, &value)?;
+    Ok(out)
+}
+
 pub fn from_json_value<T: FromJson>(value: JsonValue) -> Result<T, JsonValueError> {
     T::from_json(value)
 }
@@ -173,6 +184,8 @@ impl_to_from_json_number!(u32);
 impl_to_from_json_number!(u64);
 impl_to_from_json_number!(usize);
 impl_to_from_json_number!(f64);
+impl_to_from_json_number!(i128);
+impl_to_from_json_number!(u128);
 impl_to_from_json_unsigned_cast!(u8);
 impl_to_from_json_unsigned_cast!(u16);
 impl_to_from_json_signed_cast!(i8);

@@ -1,6 +1,7 @@
 //! edgerun-platform: Bare-metal platform abstraction
 
 #![no_std]
+#![cfg_attr(target_arch = "xtensa", feature(asm_experimental_arch))]
 
 #[cfg(not(target_os = "none"))]
 extern crate std;
@@ -25,11 +26,20 @@ pub use waker::make_ipi_waker;
 pub unsafe fn halt() -> ! {
     #[cfg(target_arch = "x86_64")]
     core::arch::asm!("hlt", options(noreturn));
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "xtensa")]
+    loop {
+        core::arch::asm!("waiti 0");
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
     loop {}
 }
 
 #[inline]
 pub unsafe fn yield_cpu() {
+    #[cfg(target_arch = "x86_64")]
     core::arch::asm!("pause");
+    #[cfg(target_arch = "xtensa")]
+    core::arch::asm!("nop");
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
+    core::hint::spin_loop();
 }
