@@ -581,12 +581,32 @@ pub fn parse_container_id_args(args: &[String], command: &'static str) -> io::Re
 }
 
 pub(crate) fn cgroup_dir_path(cgroup_path: &str) -> io::Result<PathBuf> {
-    let raw = if cgroup_path.is_empty() { "/edgerun" } else { cgroup_path };
+    let normalized = if cgroup_path.is_empty() {
+        "/edgerun".to_string()
+    } else {
+        strip_sysfs_prefix(cgroup_path)
+    };
     let resolved = crate::rootless::resolve_container_cgroup_path(
         crate::state::is_rootless_mode(),
-        raw,
+        &normalized,
     )?;
     Ok(std::path::Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/')))
+}
+
+fn strip_sysfs_prefix(cgroup_path: &str) -> String {
+    let mut normalized = cgroup_path.trim();
+    if normalized.is_empty() {
+        return "/edgerun".to_string();
+    }
+    normalized = normalized.trim_start_matches('/');
+    if let Some(trimmed) = normalized.strip_prefix("sys/fs/cgroup") {
+        normalized = trimmed.trim_start_matches('/');
+    }
+    if normalized.is_empty() {
+        "/edgerun".to_string()
+    } else {
+        normalized.to_string()
+    }
 }
 
 fn validate_container_id(value: &str) -> io::Result<()> {

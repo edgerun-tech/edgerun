@@ -334,8 +334,13 @@ pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec) -> io::Result<()> {
     };
 
     let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
+    let normalized = if raw_cgroup_path.is_empty() {
+        "/edgerun".to_string()
+    } else {
+        strip_sysfs_prefix(raw_cgroup_path)
+    };
     let rootless = is_rootless_mode();
-    let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)?;
+    let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, &normalized)?;
     setup_container_cgroups(pid, resources, &cgroup_path)
 }
 
