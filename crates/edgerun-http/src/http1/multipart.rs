@@ -16,7 +16,6 @@
 //! ```
 
 use alloc::collections::BTreeMap;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
@@ -261,27 +260,20 @@ fn ascii_lowercase(value: &str) -> String {
 }
 
 fn extract_param(header_value: &str, param_name: &str) -> Option<String> {
-    // Try quoted value first: name="value"
-    let pattern = format!("{}=\"", param_name);
-    if let Some(start) = header_value.find(&pattern) {
-        let value_start = start + pattern.len();
-        if let Some(end) = header_value[value_start..].find('"') {
-            return Some(header_value[value_start..value_start + end].to_string());
+    header_value.split(';').find_map(|part| {
+        let (name, value) = part.trim().split_once('=')?;
+        if !name.trim().eq_ignore_ascii_case(param_name) {
+            return None;
         }
-    }
 
-    // Try unquoted value: name=value
-    let pattern = format!("{}=", param_name);
-    if let Some(start) = header_value.find(&pattern) {
-        let value_start = start + pattern.len();
-        let value_end = header_value[value_start..]
-            .find(|c: char| c.is_whitespace() || c == ';')
-            .map(|i| value_start + i)
-            .unwrap_or(header_value.len());
-        return Some(header_value[value_start..value_end].to_string());
-    }
+        let value = value.trim();
+        if let Some(quoted) = value.strip_prefix('"') {
+            return quoted.find('"').map(|end| quoted[..end].to_string());
+        }
 
-    None
+        let end = value.find(char::is_whitespace).unwrap_or(value.len());
+        Some(value[..end].to_string())
+    })
 }
 
 fn strip_trailing_crlf(data: &[u8]) -> &[u8] {
@@ -375,6 +367,16 @@ mod tests {
         assert_eq!(
             extract_param(header, "boundary"),
             Some("myboundary".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_param_case_insensitive_name() {
+        let header = r#"form-data; Name="myfield"; FILENAME="myfile.txt""#;
+        assert_eq!(extract_param(header, "name"), Some("myfield".to_string()));
+        assert_eq!(
+            extract_param(header, "filename"),
+            Some("myfile.txt".to_string())
         );
     }
 }
