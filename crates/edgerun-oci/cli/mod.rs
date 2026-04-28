@@ -582,11 +582,10 @@ pub fn parse_container_id_args(args: &[String], command: &'static str) -> io::Re
 
 pub(crate) fn cgroup_dir_path(cgroup_path: &str) -> io::Result<PathBuf> {
     let raw = if cgroup_path.is_empty() { "/edgerun" } else { cgroup_path };
-    let resolved = if crate::state::is_rootless_mode() {
-        crate::rootless::resolve_container_cgroup_path(true, raw)?
-    } else {
-        raw.to_string()
-    };
+    let resolved = crate::rootless::resolve_container_cgroup_path(
+        crate::state::is_rootless_mode(),
+        raw,
+    )?;
     Ok(std::path::Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/')))
 }
 
