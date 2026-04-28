@@ -7,7 +7,10 @@ descriptor:
   canonical_digest: digest_a
   canonical_size: 5
 header:
+  header_version: 1
   representation_id: rep_1
   object:
     object_id: obj_b
+  representation_digest: digest_rep_1
   stored_size: 5
+  chunking_mode: CHUNKING_MODE_NONE

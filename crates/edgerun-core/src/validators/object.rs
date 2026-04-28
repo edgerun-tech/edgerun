@@ -29,6 +29,12 @@ pub fn validate_object_case(
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if let Some(header) = header {
+            if number_value(header, "header_version", 0) != 1 {
+                return reject(ReasonCode::VersionUnsupported, empty_map(), empty_map());
+            }
+            if string_value(header, "representation_id", "").is_empty() {
+                return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
+            }
             let header_object = get_map(header, "object")
                 .map(|m| string_value(m, "object_id", ""))
                 .unwrap_or_default();
@@ -47,10 +53,21 @@ pub fn validate_object_case(
             {
                 return reject(ReasonCode::ObjectIdMismatch, empty_map(), empty_map());
             }
-            if string_value(header, "representation_id", "").is_empty() {
+            if !digest_value_is_present(header.get("representation_digest")) {
                 return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
             }
             let chunking_mode = string_value(header, "chunking_mode", "");
+            if chunking_mode.is_empty() || chunking_mode == "CHUNKING_MODE_UNSPECIFIED" {
+                return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
+            }
+            let stored_size = number_value(header, "stored_size", -1);
+            if stored_size <= 0 {
+                return reject(
+                    ReasonCode::RepresentationInvalid,
+                    mapping([("reason", ystr("stored_size_zero_or_negative"))]),
+                    empty_map(),
+                );
+            }
             if chunking_mode == "CHUNKING_MODE_MANIFEST" && manifest.is_none() {
                 return defer(
                     ReasonCode::MissingDependency,
@@ -59,6 +76,9 @@ pub fn validate_object_case(
             }
         }
         if let Some(manifest) = manifest {
+            if number_value(manifest, "manifest_version", 0) != 1 {
+                return reject(ReasonCode::VersionUnsupported, empty_map(), empty_map());
+            }
             let manifest_object = get_map(manifest, "object")
                 .map(|m| string_value(m, "object_id", ""))
                 .unwrap_or_default();
@@ -77,6 +97,16 @@ pub fn validate_object_case(
             let entries = get_seq(manifest, "entries")
                 .or_else(|| get_seq(manifest, "chunk_entries"))
                 .unwrap_or(&[]);
+            if entries.is_empty() {
+                return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
+            }
+            if !manifest.contains_key("chunk_count")
+                || !manifest.contains_key("total_stored_size")
+                || number_value(manifest, "chunk_count", 0) <= 0
+                || number_value(manifest, "total_stored_size", 0) <= 0
+            {
+                return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
+            }
             let claimed_count = manifest
                 .get("chunk_count")
                 .and_then(Value::as_i64)
@@ -97,11 +127,13 @@ pub fn validate_object_case(
                     if digest.is_empty() {
                         return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
                     }
-                }
-                if number_value(entry, "length", -1) <= 0 {
+                } else if !digest_value_is_present(entry.get("chunk_digest")) {
                     return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
                 }
-                if number_value(entry, "offset", 0) < 0 {
+                if !entry.contains_key("length") || number_value(entry, "length", -1) <= 0 {
+                    return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
+                }
+                if !entry.contains_key("offset") || number_value(entry, "offset", -1) < 0 {
                     return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
                 }
                 if let Some(entry_index) = entry.get("index").and_then(Value::as_i64) {
@@ -281,5 +313,16 @@ fn object_ref_is_valid(value: Option<&Value>) -> bool {
             .and_then(Value::as_str)
             .is_some_and(|object_id| !object_id.is_empty()),
         Some(_) => false,
+    }
+}
+
+fn digest_value_is_present(value: Option<&Value>) -> bool {
+    match value {
+        Some(Value::String(digest)) => !digest.is_empty(),
+        Some(Value::Map(map)) => map
+            .get("value")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty()),
+        _ => false,
     }
 }

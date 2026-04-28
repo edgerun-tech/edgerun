@@ -6,20 +6,9 @@ descriptor:
   canonicalization_id: raw-bytes-v0
   canonical_digest: digest_a
   canonical_size: 5
-header:
-  header_version: 1
-  representation_id: rep_1
-  object:
-    object_id: obj_a
-  representation_digest: digest_rep_1
-  chunking_mode: CHUNKING_MODE_MANIFEST
-  stored_size: 8
 chunk_manifest:
-  manifest_version: 1
   object:
     object_id: obj_a
-  representation:
-    representation_id: rep_1
   chunk_count: 1
   total_stored_size: 5
   entries:
@@ -27,3 +16,4 @@ chunk_manifest:
     chunk_digest: digest_chunk_1
     offset: 0
     length: 5
+

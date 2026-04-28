@@ -1,0 +1,10 @@
+id: object/25-manifest-missing-version-reject
+suite: object
+validator: validate_object
+version: 1
+priority: mandatory
+description: chunk manifests must carry manifest_version
+tags:
+- object
+- validate_object
+

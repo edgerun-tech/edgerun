@@ -9,11 +9,13 @@ descriptor:
   object_metadata:
     object_id: ''
 chunk_manifest:
+  manifest_version: 1
   object:
     object_id: obj_a
   chunk_count: 1
   total_stored_size: 10
   entries:
   - representation_id: rep_1
+    chunk_digest: digest_chunk_1
     offset: 0
     length: 10

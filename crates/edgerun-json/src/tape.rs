@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use crate::error::JsonError;
 use crate::util;
 use crate::JsonValue;
+use crate::JsonValueError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompiledObjectSchema {
@@ -163,6 +164,21 @@ impl<'a> TapeValue<'a> {
     }
 
     #[must_use]
+    pub fn as_i32(&self) -> Option<i32> {
+        self.as_i64().and_then(|value| i32::try_from(value).ok())
+    }
+
+    #[must_use]
+    pub fn as_u32(&self) -> Option<u32> {
+        self.as_u64().and_then(|value| u32::try_from(value).ok())
+    }
+
+    #[must_use]
+    pub fn as_usize(&self) -> Option<usize> {
+        self.as_u64().and_then(|value| usize::try_from(value).ok())
+    }
+
+    #[must_use]
     pub fn as_f64(&self) -> Option<f64> {
         (self.kind() == TapeTokenKind::Number)
             .then(|| self.raw().parse().ok())
@@ -273,6 +289,130 @@ impl<'a> TapeValue<'a> {
             return None;
         }
         self.get_linear(key)
+    }
+
+    pub fn required(&self, key: &str) -> Result<TapeValue<'a>, JsonValueError> {
+        if self.kind() != TapeTokenKind::Object {
+            return Err(JsonValueError::WrongType(format!(
+                "field lookup expected object, found {:?}",
+                self.kind()
+            )));
+        }
+        self.get(key)
+            .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))
+    }
+
+    #[must_use]
+    pub fn get_str(&self, key: &str) -> Option<&'a str> {
+        self.get(key).and_then(|value| value.as_str())
+    }
+
+    pub fn required_str(&self, key: &str) -> Result<&'a str, JsonValueError> {
+        self.required(key)?
+            .as_str()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected string")))
+    }
+
+    #[must_use]
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get(key).and_then(|value| value.as_bool())
+    }
+
+    pub fn required_bool(&self, key: &str) -> Result<bool, JsonValueError> {
+        self.required(key)?
+            .as_bool()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected boolean")))
+    }
+
+    #[must_use]
+    pub fn get_i64(&self, key: &str) -> Option<i64> {
+        self.get(key).and_then(|value| value.as_i64())
+    }
+
+    pub fn required_i64(&self, key: &str) -> Result<i64, JsonValueError> {
+        self.required(key)?
+            .as_i64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i64")))
+    }
+
+    #[must_use]
+    pub fn get_i32(&self, key: &str) -> Option<i32> {
+        self.get(key).and_then(|value| value.as_i32())
+    }
+
+    pub fn required_i32(&self, key: &str) -> Result<i32, JsonValueError> {
+        self.required(key)?
+            .as_i32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i32")))
+    }
+
+    #[must_use]
+    pub fn get_u64(&self, key: &str) -> Option<u64> {
+        self.get(key).and_then(|value| value.as_u64())
+    }
+
+    pub fn required_u64(&self, key: &str) -> Result<u64, JsonValueError> {
+        self.required(key)?
+            .as_u64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
+    }
+
+    #[must_use]
+    pub fn get_u32(&self, key: &str) -> Option<u32> {
+        self.get(key).and_then(|value| value.as_u32())
+    }
+
+    pub fn required_u32(&self, key: &str) -> Result<u32, JsonValueError> {
+        self.required(key)?
+            .as_u32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u32")))
+    }
+
+    #[must_use]
+    pub fn get_usize(&self, key: &str) -> Option<usize> {
+        self.get(key).and_then(|value| value.as_usize())
+    }
+
+    pub fn required_usize(&self, key: &str) -> Result<usize, JsonValueError> {
+        self.required(key)?
+            .as_usize()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected usize")))
+    }
+
+    #[must_use]
+    pub fn get_f64(&self, key: &str) -> Option<f64> {
+        self.get(key).and_then(|value| value.as_f64())
+    }
+
+    pub fn required_f64(&self, key: &str) -> Result<f64, JsonValueError> {
+        self.required(key)?
+            .as_f64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected f64")))
+    }
+
+    #[must_use]
+    pub fn get_array(&self, key: &str) -> Option<Vec<TapeValue<'a>>> {
+        self.get(key).and_then(|value| value.array_items())
+    }
+
+    pub fn required_array(&self, key: &str) -> Result<Vec<TapeValue<'a>>, JsonValueError> {
+        self.required(key)?
+            .array_items()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected array")))
+    }
+
+    #[must_use]
+    pub fn get_object_fields(&self, key: &str) -> Option<Vec<(&'a str, TapeValue<'a>)>> {
+        self.get(key).and_then(|value| value.object_fields())
+    }
+
+    pub fn required_object_fields(
+        &self,
+        key: &str,
+    ) -> Result<Vec<(&'a str, TapeValue<'a>)>, JsonValueError> {
+        self.required(key)?
+            .object_fields()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected object")))
     }
 
     #[must_use]
@@ -594,6 +734,13 @@ mod tests {
         assert_eq!(root.get("u").unwrap().as_u64(), Some(42));
         assert_eq!(root.get("float").unwrap().as_i64(), None);
         assert_eq!(root.get("float").unwrap().as_u64(), None);
+        assert_eq!(root.get_f64("float"), Some(1.5));
+        assert_eq!(root.required_bool("t").unwrap(), true);
+        assert_eq!(root.required_i64("i").unwrap(), -7);
+        assert_eq!(root.required_u64("u").unwrap(), 42);
+        assert_eq!(root.required_i32("i").unwrap(), -7);
+        assert_eq!(root.required_u32("u").unwrap(), 42);
+        assert_eq!(root.required_usize("u").unwrap(), 42);
     }
 
     #[test]
@@ -613,6 +760,8 @@ mod tests {
             fields.iter().map(|(key, _)| *key).collect::<Vec<_>>(),
             vec!["items", "other"]
         );
+        assert_eq!(root.required_array("items").unwrap().len(), 3);
+        assert!(root.required_object_fields("items").is_err());
     }
 
     #[test]

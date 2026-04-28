@@ -1,0 +1,10 @@
+id: object/24-header-missing-representation-digest-reject
+suite: object
+validator: validate_object
+version: 1
+priority: mandatory
+description: stored representation headers must carry a representation digest
+tags:
+- object
+- validate_object
+

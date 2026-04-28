@@ -1640,6 +1640,9 @@ fn search_lan_for_with_target(timeout: Duration, target_mac: Option<&str>) {
                     if text.is_empty()
                         || text == String::from_utf8_lossy(xml_search)
                         || text == String::from_utf8_lossy(json_search)
+                        || xml_target_search
+                            .as_deref()
+                            .is_some_and(|payload| payload == text)
                     {
                         continue;
                     }

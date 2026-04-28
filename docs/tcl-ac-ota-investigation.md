@@ -355,6 +355,19 @@ The important conclusion is that cloud, OTA, BLE, LAN, and the AC TSL/control mo
 in the device firmware. The slow cloud behavior is not caused by the app simply relaying commands to
 a dumb module; the module itself runs the AWS IoT/MQTT/shadow client and has local network code.
 
+The most useful local-control string neighborhood is around `_mcu_local_` near file offset
+`0x000baf59`. Nearby strings include fragments that look like local MCU output handling,
+notification/update status handling, `ws_frame`, `mqtt_pkt_destroy`, and `protocol_aes`. Another
+network cluster near `0x000bea70` contains `HTTP`, `UDP_RAW`, `WEBSOCKET`, socket/connect/listen
+failure strings, DNS cleanup strings, and command/parameter parsing fragments. This points to a
+local transport that is probably framed and authenticated/encrypted rather than plain unauthenticated
+JSON over UDP.
+
+The visible firmware strings are not cleanly laid out: many are interleaved with high-bit bytes and
+partial words. That matches the earlier parser result that this is not a raw, linker-layout firmware
+image. We can still use string neighborhoods as signposts, but function-level reversing needs the
+TCL/THOS transform decoded or a physical flash dump.
+
 ## Cloud Shadow Control Model
 
 The live AWS IoT shadow for `DSxvOivgAAE` exposes the AC command/state schema. Desired and reported

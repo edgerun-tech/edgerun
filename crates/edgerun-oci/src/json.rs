@@ -1299,8 +1299,9 @@ fn required_u64(value: Option<TapeValue<'_>>, name: &str) -> Result<u64, String>
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn i32_value(value: TapeValue<'_>, name: &str) -> Result<i32, String> {
-    let value = i64_value(value, name)?;
-    i32::try_from(value).map_err(|_| format!("{name} is out of range for i32"))
+    value
+        .as_i32()
+        .ok_or_else(|| format!("{name} must be an i32 integer"))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
@@ -1312,8 +1313,9 @@ fn i64_value(value: TapeValue<'_>, name: &str) -> Result<i64, String> {
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn u32_value(value: TapeValue<'_>, name: &str) -> Result<u32, String> {
-    let value = u64_value(value, name)?;
-    u32::try_from(value).map_err(|_| format!("{name} is out of range for u32"))
+    value
+        .as_u32()
+        .ok_or_else(|| format!("{name} must be a u32 integer"))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]

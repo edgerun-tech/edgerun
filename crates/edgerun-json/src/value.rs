@@ -628,9 +628,9 @@ impl JsonValue {
     }
 
     pub fn required_index_str(&self, index: usize) -> Result<&str, JsonValueError> {
-        self.required_index(index)?
-            .as_str()
-            .ok_or_else(|| JsonValueError::WrongType(format!("array index `{index}` expected string")))
+        self.required_index(index)?.as_str().ok_or_else(|| {
+            JsonValueError::WrongType(format!("array index `{index}` expected string"))
+        })
     }
 
     pub fn index_bool(&self, index: usize) -> Option<bool> {
@@ -638,9 +638,9 @@ impl JsonValue {
     }
 
     pub fn required_index_bool(&self, index: usize) -> Result<bool, JsonValueError> {
-        self.required_index(index)?
-            .as_bool()
-            .ok_or_else(|| JsonValueError::WrongType(format!("array index `{index}` expected boolean")))
+        self.required_index(index)?.as_bool().ok_or_else(|| {
+            JsonValueError::WrongType(format!("array index `{index}` expected boolean"))
+        })
     }
 
     pub fn index_i64(&self, index: usize) -> Option<i64> {

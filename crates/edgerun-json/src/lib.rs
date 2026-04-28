@@ -163,14 +163,20 @@ mod tests {
 
     #[test]
     fn extracts_required_typed_object_fields_without_serde() {
-        let value = parse_json(r#"{"name":"node-1","ok":true,"n":7,"items":[1,2]}"#).unwrap();
+        let value =
+            parse_json(r#"{"name":"node-1","ok":true,"n":7,"small":3,"ratio":1.5,"items":[1,2]}"#)
+                .unwrap();
         let object = value.as_object().unwrap();
 
         assert_eq!(value.required_str("name").unwrap(), "node-1");
         assert_eq!(value.required_bool("ok").unwrap(), true);
         assert_eq!(value.required_u64("n").unwrap(), 7);
+        assert_eq!(value.required_u32("small").unwrap(), 3);
+        assert_eq!(value.required_usize("small").unwrap(), 3);
+        assert_eq!(value.required_f64("ratio").unwrap(), 1.5);
         assert_eq!(value.required_array("items").unwrap().len(), 2);
         assert_eq!(object.required_str("name").unwrap(), "node-1");
+        assert_eq!(object.required_u32("small").unwrap(), 3);
         assert!(value.required("missing").is_err());
         assert!(value.required_str("n").is_err());
     }
@@ -193,6 +199,33 @@ mod tests {
         assert_eq!(n, 42);
         assert_eq!(values.len(), 1);
         assert_eq!(object.required_str("k").unwrap(), "v");
+    }
+
+    #[test]
+    fn builds_and_reads_arrays_and_objects_with_no_serde_helpers() {
+        let mut object = Map::with_capacity(3);
+        object.push_field("name", "edge");
+        object.push_field("n", 9u32);
+        object.push_field("items", JsonValue::array_from_iter([1u64, 2, 3]));
+        let value = JsonValue::Object(object);
+
+        assert_eq!(value.required_str("name").unwrap(), "edge");
+        assert_eq!(
+            value
+                .required("items")
+                .unwrap()
+                .required_index_u64(1)
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            JsonValue::object_from_iter([("ok", true)])
+                .required_bool("ok")
+                .unwrap(),
+            true
+        );
+        assert!(JsonValue::empty_object().is_empty());
+        assert!(JsonValue::empty_array().is_empty());
     }
 
     #[test]

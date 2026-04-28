@@ -150,7 +150,11 @@ fn object_descriptor_and_header_must_match_object_id() {
         (
             "header",
             mapping([
+                ("header_version", yi64(1)),
+                ("representation_id", ystr("rep-1")),
+                ("representation_digest", ystr("digest-rep-1")),
                 ("stored_size", yi64(5)),
+                ("chunking_mode", ystr("CHUNKING_MODE_NONE")),
                 ("object", mapping([("object_id", ystr("obj-b"))])),
             ]),
         ),
@@ -268,7 +272,9 @@ fn object_descriptor_header_manifest_consistent_accepts() {
         (
             "header",
             mapping([
+                ("header_version", yi64(1)),
                 ("representation_id", ystr("rep-1")),
+                ("representation_digest", ystr("digest-rep-1")),
                 ("stored_size", yi64(5)),
                 ("chunking_mode", ystr("CHUNKING_MODE_MANIFEST")),
                 ("object", mapping([("object_id", ystr("obj-a"))])),
@@ -277,6 +283,7 @@ fn object_descriptor_header_manifest_consistent_accepts() {
         (
             "chunk_manifest",
             mapping([
+                ("manifest_version", yi64(1)),
                 ("chunk_count", yi64(1)),
                 ("total_stored_size", yi64(5)),
                 ("object", mapping([("object_id", ystr("obj-a"))])),
@@ -288,6 +295,8 @@ fn object_descriptor_header_manifest_consistent_accepts() {
                     "entries",
                     seq([mapping([
                         ("representation_id", ystr("rep-1")),
+                        ("chunk_digest", ystr("digest-chunk-1")),
+                        ("offset", yi64(0)),
                         ("length", yi64(5)),
                     ])]),
                 ),
