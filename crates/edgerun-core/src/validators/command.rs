@@ -11,6 +11,11 @@ pub fn validate_command_case(
     let Some(command) = get_map(semantic_input, "command") else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     };
+    for field in ["envelope_version", "command_version"] {
+        if let Some(reason) = version_field_error(command, field) {
+            return reject(reason, empty_map(), empty_map());
+        }
+    }
     let command_id = string_value(command, "command_id", "");
     if command_id.is_empty() {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());

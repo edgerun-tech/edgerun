@@ -633,6 +633,8 @@ fn command_non_controller_without_delegation_is_rejected() {
     let semantic = match mapping([(
         "command",
         mapping([
+            ("envelope_version", yi64(1)),
+            ("command_version", yi64(1)),
             ("issuer", ystr("delegate-x")),
             ("target_node", ystr("node-a")),
             ("command_type", ystr("QUERY")),
@@ -661,6 +663,8 @@ fn command_replay_same_hash_is_duplicate() {
     let semantic = match mapping([(
         "command",
         mapping([
+            ("envelope_version", yi64(1)),
+            ("command_version", yi64(1)),
             ("issuer", ystr("controller-a")),
             ("target_node", ystr("node-a")),
             ("command_type", ystr("QUERY")),
@@ -693,6 +697,8 @@ fn command_different_hash_same_id_is_accepted() {
     let semantic = match mapping([(
         "command",
         mapping([
+            ("envelope_version", yi64(1)),
+            ("command_version", yi64(1)),
             ("issuer", ystr("controller-a")),
             ("target_node", ystr("node-a")),
             ("command_type", ystr("QUERY")),

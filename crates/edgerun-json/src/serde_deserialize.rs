@@ -1017,9 +1017,8 @@ impl<'de> SerdeDeserializer<'de> for JsonValueDeserializer {
             }
             JsonValue::Object(obj) => {
                 let len = obj.len();
-                let entries: Vec<(String, JsonValue)> = obj.0.into_iter().collect();
                 let mut map = JsonMapAccess {
-                    iter: entries.into_iter(),
+                    iter: obj.into_vec().into_iter(),
                     len,
                     pending_value: None,
                 };
@@ -1140,9 +1139,8 @@ impl<'de> SerdeDeserializer<'de> for JsonValueDeserializer {
         match self.value {
             JsonValue::Object(obj) => {
                 let len = obj.len();
-                let entries: Vec<(String, JsonValue)> = obj.0.into_iter().collect();
                 let mut map = JsonMapAccess {
-                    iter: entries.into_iter(),
+                    iter: obj.into_vec().into_iter(),
                     len,
                     pending_value: None,
                 };
@@ -1163,7 +1161,7 @@ impl<'de> SerdeDeserializer<'de> for JsonValueDeserializer {
     {
         match self.value {
             JsonValue::Object(obj) => {
-                let mut iter = obj.0.into_iter();
+                let mut iter = obj.into_vec().into_iter();
                 if let Some((key, value)) = iter.next() {
                     let seed = EnumVariantAccess2 {
                         variant: key,
@@ -1336,8 +1334,8 @@ impl<'de> Visitor<'de> for ValueVisitor {
         A: MapAccess<'de>,
     {
         let mut obj = Map::new();
-        while let Some((key, value)) = map.next_entry()? {
-            obj.insert(key, value);
+        while let Some((key, value)) = map.next_entry::<String, JsonValue>()? {
+            obj.push_field(key, value);
         }
         Ok(JsonValue::Object(obj))
     }

@@ -1,3 +1,2 @@
 verdict: REJECT
-reason_code: VERSION_UNSUPPORTED
-
+reason_code: STRUCTURAL_INVALID

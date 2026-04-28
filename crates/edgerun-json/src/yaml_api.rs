@@ -524,13 +524,12 @@ pub fn json_to_yaml(value: JsonValue) -> YamlValue {
         JsonValue::Number(n) => YamlValue::Number(n),
         JsonValue::String(s) => YamlValue::String(s),
         JsonValue::Array(arr) => YamlValue::Array(arr.into_iter().map(json_to_yaml).collect()),
-        JsonValue::Object(map) => {
-            let mut mapping: Vec<(String, YamlValue)> = Vec::new();
-            for (k, v) in map.0.iter() {
-                mapping.push((k.clone(), json_to_yaml(v.clone())));
-            }
-            YamlValue::Mapping(mapping)
-        }
+        JsonValue::Object(map) => YamlValue::Mapping(
+            map.into_vec()
+                .into_iter()
+                .map(|(key, value)| (key, json_to_yaml(value)))
+                .collect(),
+        ),
     }
 }
 
@@ -541,11 +540,11 @@ pub fn yaml_to_json(value: YamlValue) -> JsonValue {
         YamlValue::Bool(b) => JsonValue::Bool(b),
         YamlValue::Number(n) => JsonValue::Number(n),
         YamlValue::String(s) => JsonValue::String(s),
-        YamlValue::Array(arr) => JsonValue::Array(arr.into_iter().map(yaml_to_json).collect()),
+        YamlValue::Array(arr) => JsonValue::array_from_iter(arr.into_iter().map(yaml_to_json)),
         YamlValue::Mapping(map) => {
             let mut obj = crate::Map::new();
             for (k, v) in map {
-                obj.0.push((k.clone(), yaml_to_json(v)));
+                obj.push_field(k, yaml_to_json(v));
             }
             JsonValue::Object(obj)
         }

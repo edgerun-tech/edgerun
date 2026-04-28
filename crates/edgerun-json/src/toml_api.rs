@@ -352,13 +352,12 @@ pub fn json_to_toml(value: JsonValue) -> TomlValue {
         }
         JsonValue::String(s) => TomlValue::String(s),
         JsonValue::Array(arr) => TomlValue::Array(arr.into_iter().map(json_to_toml).collect()),
-        JsonValue::Object(map) => {
-            let mut table: Vec<(String, TomlValue)> = Vec::new();
-            for (k, v) in map.0 {
-                table.push((k, json_to_toml(v)));
-            }
-            TomlValue::Table(table)
-        }
+        JsonValue::Object(map) => TomlValue::Table(
+            map.into_vec()
+                .into_iter()
+                .map(|(key, value)| (key, json_to_toml(value)))
+                .collect(),
+        ),
     }
 }
 
@@ -376,11 +375,11 @@ pub fn toml_to_json(value: TomlValue) -> JsonValue {
         }
         TomlValue::Boolean(b) => JsonValue::Bool(b),
         TomlValue::Datetime(s) => JsonValue::String(s),
-        TomlValue::Array(arr) => JsonValue::Array(arr.into_iter().map(toml_to_json).collect()),
+        TomlValue::Array(arr) => JsonValue::array_from_iter(arr.into_iter().map(toml_to_json)),
         TomlValue::Table(table) => {
             let mut obj = Map::new();
             for (k, v) in table {
-                obj.0.push((k, toml_to_json(v)));
+                obj.push_field(k, toml_to_json(v));
             }
             JsonValue::Object(obj)
         }

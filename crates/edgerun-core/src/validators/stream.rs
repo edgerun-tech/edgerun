@@ -11,11 +11,12 @@ pub fn validate_stream_append_case(
     let Some(event) = get_map(semantic_input, "candidate_event") else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     };
-    if number_value(event, "envelope_version", 0) != 1
-        || number_value(event, "event_version", 0) == 0
-        || string_value(event, "recorded_at", "").is_empty()
-        || get_map(event, "signature").is_none()
-    {
+    for field in ["envelope_version", "event_version"] {
+        if let Some(reason) = version_field_error(event, field) {
+            return reject(reason, empty_map(), empty_map());
+        }
+    }
+    if string_value(event, "recorded_at", "").is_empty() || get_map(event, "signature").is_none() {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     }
     if string_value(event, "event_type", "").is_empty() {

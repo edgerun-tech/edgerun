@@ -42,6 +42,15 @@ pub fn string_value(m: &BTreeMap<String, Value>, key: &str, fallback: &str) -> S
 pub fn number_value(m: &BTreeMap<String, Value>, key: &str, fallback: i64) -> i64 {
     get(m, key).and_then(Value::as_i64).unwrap_or(fallback)
 }
+pub fn version_field_error(m: &BTreeMap<String, Value>, key: &str) -> Option<ReasonCode> {
+    if !m.contains_key(key) || number_value(m, key, 0) == 0 {
+        Some(ReasonCode::StructuralInvalid)
+    } else if number_value(m, key, 0) != 1 {
+        Some(ReasonCode::VersionUnsupported)
+    } else {
+        None
+    }
+}
 pub fn set_from_list(v: Option<&Value>) -> BTreeSet<String> {
     v.and_then(Value::as_seq)
         .map(|arr| {

@@ -29,8 +29,8 @@ pub fn validate_object_case(
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if let Some(header) = header {
-            if number_value(header, "header_version", 0) != 1 {
-                return reject(ReasonCode::VersionUnsupported, empty_map(), empty_map());
+            if let Some(reason) = version_field_error(header, "header_version") {
+                return reject(reason, empty_map(), empty_map());
             }
             if string_value(header, "representation_id", "").is_empty() {
                 return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
@@ -76,8 +76,8 @@ pub fn validate_object_case(
             }
         }
         if let Some(manifest) = manifest {
-            if number_value(manifest, "manifest_version", 0) != 1 {
-                return reject(ReasonCode::VersionUnsupported, empty_map(), empty_map());
+            if let Some(reason) = version_field_error(manifest, "manifest_version") {
+                return reject(reason, empty_map(), empty_map());
             }
             let manifest_object = get_map(manifest, "object")
                 .map(|m| string_value(m, "object_id", ""))

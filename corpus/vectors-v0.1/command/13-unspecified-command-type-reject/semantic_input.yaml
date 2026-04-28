@@ -2,6 +2,8 @@ brief:
   command_type: UNSPECIFIED
   target_node: node_server
 command:
+  envelope_version: 1
+  command_version: 1
   issuer: user_alice
   target_node: node_server
   command_type: UNSPECIFIED

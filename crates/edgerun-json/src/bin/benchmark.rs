@@ -44,17 +44,17 @@ fn large_array_json() -> String {
 }
 
 fn sample_value() -> JsonValue {
-    let mut metadata = JsonValue::Object(Map::new());
+    let mut metadata = JsonValue::empty_object();
     metadata.push_field("created", 1_234_567_890i64);
     metadata.push_field("updated", 9_876_543_210i64);
 
-    let mut user = JsonValue::Object(Map::new());
+    let mut user = JsonValue::empty_object();
     user.push_field("id", 12_345i64);
     user.push_field("name", "John Doe");
     user.push_field("email", "john@example.com");
     user.push_field("metadata", metadata);
 
-    let mut root = JsonValue::Object(Map::new());
+    let mut root = JsonValue::empty_object();
     root.push_field("user", user);
     root.push_field("status", "active");
     root.push_field("count", 100i64);

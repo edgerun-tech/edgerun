@@ -61,11 +61,11 @@ macro_rules! json_internal {
 
     (@object $object:ident () () ()) => {};
     (@object $object:ident [$($key:tt)+] ($value:expr) , $($rest:tt)*) => {
-        $object.push((($($key)+).into(), $value));
+        $object.push_field(($($key)+), $value);
         $crate::json_internal!(@object $object () ($($rest)*) ($($rest)*));
     };
     (@object $object:ident [$($key:tt)+] ($value:expr)) => {
-        $object.push((($($key)+).into(), $value));
+        $object.push_field(($($key)+), $value);
     };
     (@object $object:ident [$($key:tt)+] ($value:expr) $unexpected:tt $($rest:tt)*) => {
         $crate::json_unexpected!($unexpected)
@@ -110,9 +110,9 @@ macro_rules! json_internal {
     (null) => { $crate::JsonValue::Null };
     (true) => { $crate::JsonValue::Bool(true) };
     (false) => { $crate::JsonValue::Bool(false) };
-    ([]) => { $crate::JsonValue::Array(vec![]) };
-    ([ $($tt:tt)+ ]) => { $crate::JsonValue::Array($crate::json_internal!(@array [] $($tt)+)) };
-    ({}) => { $crate::JsonValue::Object($crate::Map::new()) };
+    ([]) => { $crate::JsonValue::empty_array() };
+    ([ $($tt:tt)+ ]) => { $crate::JsonValue::array($crate::json_internal!(@array [] $($tt)+)) };
+    ({}) => { $crate::JsonValue::empty_object() };
     ({ $($tt:tt)+ }) => {{
         let mut object = $crate::Map::new();
         $crate::json_internal!(@object object () ($($tt)+) ($($tt)+));
