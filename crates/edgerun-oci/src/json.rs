@@ -13,6 +13,16 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+trait StringResultExt<T> {
+    fn string_err(self) -> Result<T, String>;
+}
+
+impl<T, E: ToString> StringResultExt<T> for Result<T, E> {
+    fn string_err(self) -> Result<T, String> {
+        self.map_err(|error| error.to_string())
+    }
+}
+
 // ===========================================================================
 // Public API
 // ===========================================================================
@@ -20,19 +30,19 @@ use alloc::vec::Vec;
 /// Parse an OCI spec from JSON bytes.
 #[cfg(feature = "serde")]
 pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
-    from_slice(data).map_err(|e| e.to_string())
+    from_slice(data).string_err()
 }
 
 #[cfg(feature = "serde")]
 pub fn parse_oci_process(data: &[u8]) -> Result<OciProcess, String> {
-    from_slice(data).map_err(|e| e.to_string())
+    from_slice(data).string_err()
 }
 
 /// Parse an OCI spec from JSON bytes without serde.
 #[cfg(all(feature = "json", not(feature = "serde")))]
 pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
     let text = core::str::from_utf8(data).map_err(|_| "OCI spec is not UTF-8".to_string())?;
-    let tape = parse_json_tape(text).map_err(|error| error.to_string())?;
+    let tape = parse_json_tape(text).string_err()?;
     let root = tape
         .root(text)
         .ok_or_else(|| "OCI spec is empty".to_string())?;
@@ -42,7 +52,7 @@ pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 pub fn parse_oci_process(data: &[u8]) -> Result<OciProcess, String> {
     let text = core::str::from_utf8(data).map_err(|_| "OCI process is not UTF-8".to_string())?;
-    let tape = parse_json_tape(text).map_err(|error| error.to_string())?;
+    let tape = parse_json_tape(text).string_err()?;
     let root = tape
         .root(text)
         .ok_or_else(|| "OCI process is empty".to_string())?;
@@ -902,18 +912,12 @@ pub struct OciMount {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_oci_spec_tape(value: TapeValue<'_>) -> Result<OciSpec, String> {
     Ok(OciSpec {
-        version: value
-            .required_string("ociVersion")
-            .map_err(|e| e.to_string())?,
+        version: value.required_string("ociVersion").string_err()?,
         platform: value.get("platform").map(parse_platform).transpose()?,
         process: value.get("process").map(parse_process).transpose()?,
         root: value.get("root").map(parse_root).transpose()?,
-        hostname: value
-            .optional_string("hostname")
-            .map_err(|e| e.to_string())?,
-        domainname: value
-            .optional_string("domainname")
-            .map_err(|e| e.to_string())?,
+        hostname: value.optional_string("hostname").string_err()?,
+        domainname: value.optional_string("domainname").string_err()?,
         linux: value.get("linux").map(parse_linux).transpose()?,
         mounts: value.get("mounts").map(parse_mounts).transpose()?,
         annotations: value.get("annotations").map(parse_string_map).transpose()?,
@@ -923,11 +927,9 @@ fn parse_oci_spec_tape(value: TapeValue<'_>) -> Result<OciSpec, String> {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_platform(value: TapeValue<'_>) -> Result<OciPlatform, String> {
     Ok(OciPlatform {
-        os: value.optional_string("os").map_err(|e| e.to_string())?,
-        arch: value.optional_string("arch").map_err(|e| e.to_string())?,
-        os_version: value
-            .optional_string("os.version")
-            .map_err(|e| e.to_string())?,
+        os: value.optional_string("os").string_err()?,
+        arch: value.optional_string("arch").string_err()?,
+        os_version: value.optional_string("os.version").string_err()?,
         os_features: value
             .get("os.features")
             .map(parse_string_array)
@@ -938,29 +940,21 @@ fn parse_platform(value: TapeValue<'_>) -> Result<OciPlatform, String> {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_process(value: TapeValue<'_>) -> Result<OciProcess, String> {
     Ok(OciProcess {
-        terminal: value.optional_bool("terminal").map_err(|e| e.to_string())?,
+        terminal: value.optional_bool("terminal").string_err()?,
         user: value.get("user").map(parse_user).transpose()?,
         console_size: value.get("consoleSize").map(parse_box).transpose()?,
         args: value.get("args").map(parse_string_array).transpose()?,
         env: value.get("env").map(parse_string_array).transpose()?,
-        cwd: value.optional_string("cwd").map_err(|e| e.to_string())?,
+        cwd: value.optional_string("cwd").string_err()?,
         capabilities: value
             .get("capabilities")
             .map(parse_capabilities)
             .transpose()?,
         rlimits: value.get("rlimits").map(parse_rlimits).transpose()?,
-        no_new_privileges: value
-            .optional_bool("noNewPrivileges")
-            .map_err(|e| e.to_string())?,
-        oom_score_adj: value
-            .optional_i64("oomScoreAdj")
-            .map_err(|e| e.to_string())?,
-        apparmor_profile: value
-            .optional_string("apparmorProfile")
-            .map_err(|e| e.to_string())?,
-        selinux_label: value
-            .optional_string("selinuxLabel")
-            .map_err(|e| e.to_string())?,
+        no_new_privileges: value.optional_bool("noNewPrivileges").string_err()?,
+        oom_score_adj: value.optional_i64("oomScoreAdj").string_err()?,
+        apparmor_profile: value.optional_string("apparmorProfile").string_err()?,
+        selinux_label: value.optional_string("selinuxLabel").string_err()?,
         scheduler: value.get("scheduler").map(parse_scheduler).transpose()?,
         io_priority: value.get("ioPriority").map(parse_io_priority).transpose()?,
     })
@@ -969,21 +963,21 @@ fn parse_process(value: TapeValue<'_>) -> Result<OciProcess, String> {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_box(value: TapeValue<'_>) -> Result<OciBox, String> {
     Ok(OciBox {
-        width: value.required_u64("width").map_err(|e| e.to_string())?,
-        height: value.required_u64("height").map_err(|e| e.to_string())?,
+        width: value.required_u64("width").string_err()?,
+        height: value.required_u64("height").string_err()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_user(value: TapeValue<'_>) -> Result<OciUser, String> {
     Ok(OciUser {
-        uid: value.optional_u32("uid").map_err(|e| e.to_string())?,
-        gid: value.optional_u32("gid").map_err(|e| e.to_string())?,
+        uid: value.optional_u32("uid").string_err()?,
+        gid: value.optional_u32("gid").string_err()?,
         additional_gids: value
             .get("additionalGids")
             .map(parse_u32_array)
             .transpose()?,
-        umask: value.optional_u32("umask").map_err(|e| e.to_string())?,
+        umask: value.optional_u32("umask").string_err()?,
     })
 }
 
@@ -1005,9 +999,9 @@ fn parse_capabilities(value: TapeValue<'_>) -> Result<OciCapabilities, String> {
 fn parse_rlimits(value: TapeValue<'_>) -> Result<Vec<OciRlimit>, String> {
     parse_array(value, "rlimits", |item| {
         Ok(OciRlimit {
-            ns_type: item.required_string("type").map_err(|e| e.to_string())?,
-            hard: item.required_u64("hard").map_err(|e| e.to_string())?,
-            soft: item.required_u64("soft").map_err(|e| e.to_string())?,
+            ns_type: item.required_string("type").string_err()?,
+            hard: item.required_u64("hard").string_err()?,
+            soft: item.required_u64("soft").string_err()?,
         })
     })
 }
@@ -1015,9 +1009,9 @@ fn parse_rlimits(value: TapeValue<'_>) -> Result<Vec<OciRlimit>, String> {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_scheduler(value: TapeValue<'_>) -> Result<OciScheduler, String> {
     Ok(OciScheduler {
-        policy: value.required_string("policy").map_err(|e| e.to_string())?,
-        nice: value.optional_i32("nice").map_err(|e| e.to_string())?,
-        priority: value.optional_i32("priority").map_err(|e| e.to_string())?,
+        policy: value.required_string("policy").string_err()?,
+        nice: value.optional_i32("nice").string_err()?,
+        priority: value.optional_i32("priority").string_err()?,
         deadline: value
             .get("deadline")
             .map(parse_sched_deadline)
@@ -1028,25 +1022,25 @@ fn parse_scheduler(value: TapeValue<'_>) -> Result<OciScheduler, String> {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_sched_deadline(value: TapeValue<'_>) -> Result<OciSchedDeadline, String> {
     Ok(OciSchedDeadline {
-        runtime_ns: value.optional_u64("runtime").map_err(|e| e.to_string())?,
-        period_ns: value.optional_u64("period").map_err(|e| e.to_string())?,
-        deadline_ns: value.optional_u64("deadline").map_err(|e| e.to_string())?,
+        runtime_ns: value.optional_u64("runtime").string_err()?,
+        period_ns: value.optional_u64("period").string_err()?,
+        deadline_ns: value.optional_u64("deadline").string_err()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_io_priority(value: TapeValue<'_>) -> Result<OciIoPriority, String> {
     Ok(OciIoPriority {
-        class: value.required_u32("class").map_err(|e| e.to_string())?,
-        priority: value.optional_u32("priority").map_err(|e| e.to_string())?,
+        class: value.required_u32("class").string_err()?,
+        priority: value.optional_u32("priority").string_err()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_root(value: TapeValue<'_>) -> Result<OciRoot, String> {
     Ok(OciRoot {
-        path: value.required_string("path").map_err(|e| e.to_string())?,
-        readonly: value.optional_bool("readonly").map_err(|e| e.to_string())?,
+        path: value.required_string("path").string_err()?,
+        readonly: value.optional_bool("readonly").string_err()?,
     })
 }
 
@@ -1062,9 +1056,7 @@ fn parse_linux(value: TapeValue<'_>) -> Result<OciLinux, String> {
             .map(parse_id_mappings)
             .transpose()?,
         resources: value.get("resources").map(parse_resources).transpose()?,
-        cgroups_path: value
-            .optional_string("cgroupsPath")
-            .map_err(|e| e.to_string())?,
+        cgroups_path: value.optional_string("cgroupsPath").string_err()?,
         namespaces: value.get("namespaces").map(parse_namespaces).transpose()?,
         devices: value.get("devices").map(parse_devices).transpose()?,
         masked_paths: value
@@ -1075,12 +1067,8 @@ fn parse_linux(value: TapeValue<'_>) -> Result<OciLinux, String> {
             .get("readonlyPaths")
             .map(parse_string_array)
             .transpose()?,
-        mount_label: value
-            .optional_string("mountLabel")
-            .map_err(|e| e.to_string())?,
-        rootfs_propagation: value
-            .optional_string("rootfsPropagation")
-            .map_err(|e| e.to_string())?,
+        mount_label: value.optional_string("mountLabel").string_err()?,
+        rootfs_propagation: value.optional_string("rootfsPropagation").string_err()?,
         sysctl: value.get("sysctl").map(parse_string_map).transpose()?,
         hooks: None,
         seccomp: None,
@@ -1092,11 +1080,9 @@ fn parse_linux(value: TapeValue<'_>) -> Result<OciLinux, String> {
 fn parse_id_mappings(value: TapeValue<'_>) -> Result<Vec<OciIdMapping>, String> {
     parse_array(value, "idMappings", |item| {
         Ok(OciIdMapping {
-            container_id: item
-                .required_u32("containerID")
-                .map_err(|e| e.to_string())?,
-            host_id: item.required_u32("hostID").map_err(|e| e.to_string())?,
-            size: item.required_u32("size").map_err(|e| e.to_string())?,
+            container_id: item.required_u32("containerID").string_err()?,
+            host_id: item.required_u32("hostID").string_err()?,
+            size: item.required_u32("size").string_err()?,
         })
     })
 }
@@ -1105,8 +1091,8 @@ fn parse_id_mappings(value: TapeValue<'_>) -> Result<Vec<OciIdMapping>, String> 
 fn parse_namespaces(value: TapeValue<'_>) -> Result<Vec<OciNamespace>, String> {
     parse_array(value, "namespaces", |item| {
         Ok(OciNamespace {
-            ns_type: item.required_string("type").map_err(|e| e.to_string())?,
-            path: item.optional_string("path").map_err(|e| e.to_string())?,
+            ns_type: item.required_string("type").string_err()?,
+            path: item.optional_string("path").string_err()?,
         })
     })
 }
@@ -1115,13 +1101,13 @@ fn parse_namespaces(value: TapeValue<'_>) -> Result<Vec<OciNamespace>, String> {
 fn parse_devices(value: TapeValue<'_>) -> Result<Vec<OciLinuxDevice>, String> {
     parse_array(value, "devices", |item| {
         Ok(OciLinuxDevice {
-            ns_type: item.required_string("type").map_err(|e| e.to_string())?,
-            path: item.required_string("path").map_err(|e| e.to_string())?,
-            file_mode: item.optional_u32("fileMode").map_err(|e| e.to_string())?,
-            uid: item.optional_u32("uid").map_err(|e| e.to_string())?,
-            gid: item.optional_u32("gid").map_err(|e| e.to_string())?,
-            major: item.optional_i64("major").map_err(|e| e.to_string())?,
-            minor: item.optional_i64("minor").map_err(|e| e.to_string())?,
+            ns_type: item.required_string("type").string_err()?,
+            path: item.required_string("path").string_err()?,
+            file_mode: item.optional_u32("fileMode").string_err()?,
+            uid: item.optional_u32("uid").string_err()?,
+            gid: item.optional_u32("gid").string_err()?,
+            major: item.optional_i64("major").string_err()?,
+            minor: item.optional_i64("minor").string_err()?,
         })
     })
 }
@@ -1143,10 +1129,10 @@ fn parse_resources(value: TapeValue<'_>) -> Result<OciLinuxResources, String> {
 fn parse_device_cgroups(value: TapeValue<'_>) -> Result<Vec<OciLinuxDeviceCgroup>, String> {
     parse_array(value, "resources.devices", |item| {
         Ok(OciLinuxDeviceCgroup {
-            ns_type: item.required_string("type").map_err(|e| e.to_string())?,
-            major: item.optional_i64("major").map_err(|e| e.to_string())?,
-            minor: item.optional_i64("minor").map_err(|e| e.to_string())?,
-            access: item.optional_string("access").map_err(|e| e.to_string())?,
+            ns_type: item.required_string("type").string_err()?,
+            major: item.optional_i64("major").string_err()?,
+            minor: item.optional_i64("minor").string_err()?,
+            access: item.optional_string("access").string_err()?,
         })
     })
 }
@@ -1154,61 +1140,45 @@ fn parse_device_cgroups(value: TapeValue<'_>) -> Result<Vec<OciLinuxDeviceCgroup
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_memory(value: TapeValue<'_>) -> Result<OciLinuxMemory, String> {
     Ok(OciLinuxMemory {
-        limit: value.optional_i64("limit").map_err(|e| e.to_string())?,
-        reservation: value
-            .optional_i64("reservation")
-            .map_err(|e| e.to_string())?,
-        swap: value.optional_i64("swap").map_err(|e| e.to_string())?,
-        kernel: value.optional_i64("kernel").map_err(|e| e.to_string())?,
-        kernel_tcp: value.optional_i64("kernelTCP").map_err(|e| e.to_string())?,
-        check_before_update: value
-            .optional_bool("checkBeforeUpdate")
-            .map_err(|e| e.to_string())?,
+        limit: value.optional_i64("limit").string_err()?,
+        reservation: value.optional_i64("reservation").string_err()?,
+        swap: value.optional_i64("swap").string_err()?,
+        kernel: value.optional_i64("kernel").string_err()?,
+        kernel_tcp: value.optional_i64("kernelTCP").string_err()?,
+        check_before_update: value.optional_bool("checkBeforeUpdate").string_err()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_cpu(value: TapeValue<'_>) -> Result<OciLinuxCpu, String> {
     Ok(OciLinuxCpu {
-        shares: value.optional_u64("shares").map_err(|e| e.to_string())?,
-        quota: value.optional_i64("quota").map_err(|e| e.to_string())?,
-        period: value.optional_u64("period").map_err(|e| e.to_string())?,
-        realtime_runtime: value
-            .optional_i64("realtimeRuntime")
-            .map_err(|e| e.to_string())?,
-        realtime_period: value
-            .optional_u64("realtimePeriod")
-            .map_err(|e| e.to_string())?,
-        cpus: value.optional_string("cpus").map_err(|e| e.to_string())?,
-        mems: value.optional_string("mems").map_err(|e| e.to_string())?,
-        idle: value.optional_i64("idle").map_err(|e| e.to_string())?,
-        burst: value.optional_i64("burst").map_err(|e| e.to_string())?,
+        shares: value.optional_u64("shares").string_err()?,
+        quota: value.optional_i64("quota").string_err()?,
+        period: value.optional_u64("period").string_err()?,
+        realtime_runtime: value.optional_i64("realtimeRuntime").string_err()?,
+        realtime_period: value.optional_u64("realtimePeriod").string_err()?,
+        cpus: value.optional_string("cpus").string_err()?,
+        mems: value.optional_string("mems").string_err()?,
+        idle: value.optional_i64("idle").string_err()?,
+        burst: value.optional_i64("burst").string_err()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_pids(value: TapeValue<'_>) -> Result<OciLinuxPids, String> {
     Ok(OciLinuxPids {
-        limit: value.required_i64("limit").map_err(|e| e.to_string())?,
+        limit: value.required_i64("limit").string_err()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn parse_intel_rdt(value: TapeValue<'_>) -> Result<OciLinuxIntelRdt, String> {
     Ok(OciLinuxIntelRdt {
-        l3_cache_schema: value
-            .optional_string("l3CacheSchema")
-            .map_err(|e| e.to_string())?,
-        mem_bw_schema: value
-            .optional_string("memBwSchema")
-            .map_err(|e| e.to_string())?,
-        clos_id: value.optional_string("closID").map_err(|e| e.to_string())?,
-        enable_monitoring: value
-            .optional_bool("enableMonitoring")
-            .map_err(|e| e.to_string())?,
-        schemata: value
-            .optional_string("schemata")
-            .map_err(|e| e.to_string())?,
+        l3_cache_schema: value.optional_string("l3CacheSchema").string_err()?,
+        mem_bw_schema: value.optional_string("memBwSchema").string_err()?,
+        clos_id: value.optional_string("closID").string_err()?,
+        enable_monitoring: value.optional_bool("enableMonitoring").string_err()?,
+        schemata: value.optional_string("schemata").string_err()?,
     })
 }
 
@@ -1216,14 +1186,12 @@ fn parse_intel_rdt(value: TapeValue<'_>) -> Result<OciLinuxIntelRdt, String> {
 fn parse_mounts(value: TapeValue<'_>) -> Result<Vec<OciMount>, String> {
     parse_array(value, "mounts", |item| {
         Ok(OciMount {
-            destination: item
-                .required_string("destination")
-                .map_err(|e| e.to_string())?,
-            mount_type: item.optional_string("type").map_err(|e| e.to_string())?,
-            source: item.optional_string("source").map_err(|e| e.to_string())?,
+            destination: item.required_string("destination").string_err()?,
+            mount_type: item.optional_string("type").string_err()?,
+            source: item.optional_string("source").string_err()?,
             options: item.get("options").map(parse_string_array).transpose()?,
-            label: item.optional_string("label").map_err(|e| e.to_string())?,
-            recursive: item.optional_bool("recursive").map_err(|e| e.to_string())?,
+            label: item.optional_string("label").string_err()?,
+            recursive: item.optional_bool("recursive").string_err()?,
             uid_mappings: item.get("uidMappings").map(parse_id_mappings).transpose()?,
             gid_mappings: item.get("gidMappings").map(parse_id_mappings).transpose()?,
         })
