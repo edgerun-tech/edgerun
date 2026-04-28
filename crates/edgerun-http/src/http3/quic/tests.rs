@@ -564,12 +564,19 @@ fn test_protected_send_frame_preserves_parseable_header() {
 
     let mut buf = [0u8; 65536];
     let n = receiver.recv(&mut buf).expect("receive failed");
-    let (packet, consumed) = QuicPacket::from_bytes(&buf[..n]).expect("parse protected packet");
+    let mut packet_bytes = buf[..n].to_vec();
+    let mut protection = crypto::PacketProtection::new(&keys);
+    let pn_offset =
+        packet::get_packet_number_offset(&packet_bytes, 8).expect("packet number offset");
+    protection
+        .unprotect_header(&mut packet_bytes, pn_offset)
+        .expect("unprotect header");
+
+    let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse protected packet");
     assert_eq!(consumed, n);
     assert_eq!(packet.header.packet_type, PacketType::OneRtt);
     assert_eq!(packet.header.packet_number, 1);
 
-    let mut protection = crypto::PacketProtection::new(&keys);
     let plaintext = protection
         .unprotect(
             &packet.header_to_bytes_aad(),
@@ -601,11 +608,18 @@ fn test_early_data_uses_parseable_zero_rtt_packet() {
 
     let mut buf = [0u8; 65536];
     let n = receiver.recv(&mut buf).expect("receive failed");
-    let (packet, consumed) = QuicPacket::from_bytes(&buf[..n]).expect("parse 0-RTT packet");
+    let mut packet_bytes = buf[..n].to_vec();
+    let mut protection = crypto::PacketProtection::new(&keys);
+    let pn_offset =
+        packet::get_packet_number_offset(&packet_bytes, 8).expect("packet number offset");
+    protection
+        .unprotect_header(&mut packet_bytes, pn_offset)
+        .expect("unprotect header");
+
+    let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse 0-RTT packet");
     assert_eq!(consumed, n);
     assert_eq!(packet.header.packet_type, PacketType::ZeroRtt);
 
-    let mut protection = crypto::PacketProtection::new(&keys);
     let plaintext = protection
         .unprotect(
             &packet.header_to_bytes_aad(),

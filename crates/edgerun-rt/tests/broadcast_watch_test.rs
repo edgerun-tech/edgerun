@@ -36,3 +36,15 @@ fn broadcast_poll_registers_new_values() {
     publisher.send(7);
     assert!(matches!(Pin::new(&mut subscriber).poll(cx), Poll::Ready(7)));
 }
+
+#[test]
+fn broadcast_close_stops_further_sends() {
+    let (publisher, mut subscriber) = broadcast::<i32>(2);
+
+    publisher.send(1);
+    publisher.close();
+    publisher.send(2);
+
+    assert_eq!(subscriber.try_recv(), Some(1));
+    assert_eq!(subscriber.try_recv(), None);
+}

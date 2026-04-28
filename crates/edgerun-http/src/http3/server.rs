@@ -50,7 +50,7 @@ use edgerun_tls::certificate_gen::CertificateAndKey;
 use super::connection::Http3Connection;
 use super::quic::crypto::PacketProtection;
 use super::quic::frame::QuicFrame;
-use super::quic::packet::{PacketType, QuicPacket, QuicPacketHeader};
+use super::quic::packet::{self, PacketType, QuicPacket, QuicPacketHeader};
 use super::quic::ConnectionId;
 use super::quic::QuicConnection;
 use super::quic::QuicTlsServerHandshaker;
@@ -117,6 +117,26 @@ impl AddressValidationState {
     fn is_stale(&self) -> bool {
         self.last_activity.elapsed().as_secs() > 30
     }
+}
+
+fn parse_long_header_dcid(data: &[u8]) -> Result<Vec<u8>, String> {
+    if data.len() < 6 {
+        return Err("Packet too short for long header DCID".to_string());
+    }
+    if data[0] & 0x80 == 0 {
+        return Err("Expected long header packet".to_string());
+    }
+
+    let dcid_len = data[5] as usize;
+    if dcid_len > 20 {
+        return Err("DCID length exceeds QUIC maximum".to_string());
+    }
+    let start = 6;
+    let end = start + dcid_len;
+    if end > data.len() {
+        return Err("DCID exceeds packet length".to_string());
+    }
+    Ok(data[start..end].to_vec())
 }
 
 /// HTTP/3 server listening on a UDP socket.
@@ -219,19 +239,25 @@ impl Http3Server {
             return Err("Packet too short".to_string());
         }
 
+        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
+        let dst_cid = parse_long_header_dcid(data)?;
+        let initial_keys = handshaker.initial_keys(&dst_cid);
+        let mut initial_protection = PacketProtection::new(&initial_keys);
+        let mut packet_bytes = data.to_vec();
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+        initial_protection
+            .unprotect_header(&mut packet_bytes, pn_offset)
+            .map_err(|e| format!("Initial header protection failed: {}", e))?;
+
         // Parse packet to get header_to_bytes_aad()
-        let (pkt, _) =
-            QuicPacket::from_bytes(data).map_err(|e| format!("Parse packet failed: {}", e))?;
+        let (pkt, _) = QuicPacket::from_bytes(&packet_bytes)
+            .map_err(|e| format!("Parse packet failed: {}", e))?;
 
         // Use header_to_bytes_aad() - same method as client
         let aad = pkt.header_to_bytes_aad();
 
         let dst_cid = pkt.header.dst_cid.clone();
         let src_cid = pkt.header.src_cid.clone();
-
-        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
-        let initial_keys = handshaker.initial_keys(&dst_cid);
-        let mut initial_protection = PacketProtection::new(&initial_keys);
 
         let plaintext = initial_protection
             .unprotect(&aad, pkt.header.packet_number, &pkt.payload)
@@ -427,10 +453,14 @@ impl Http3Server {
             .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
             .map_err(|e| format!("Initial encrypt failed: {}", e))?;
 
-        let mut packet = aad;
-        packet.extend_from_slice(&encrypted);
+        let mut packet_bytes = aad;
+        packet_bytes.extend_from_slice(&encrypted);
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+        protection
+            .protect_header(&mut packet_bytes, pn_offset, packet.header.pn_length)
+            .map_err(|e| format!("Initial header protection failed: {}", e))?;
 
-        Ok(packet)
+        Ok(packet_bytes)
     }
 
     /// Build Handshake-level response packet (EE, Cert, CertVerify, Finished).
@@ -467,10 +497,14 @@ impl Http3Server {
             .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
             .map_err(|e| format!("Handshake encrypt failed: {}", e))?;
 
-        let mut packet = aad;
-        packet.extend_from_slice(&encrypted);
+        let mut packet_bytes = aad;
+        packet_bytes.extend_from_slice(&encrypted);
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+        protection
+            .protect_header(&mut packet_bytes, pn_offset, packet.header.pn_length)
+            .map_err(|e| format!("Handshake header protection failed: {}", e))?;
 
-        Ok(packet)
+        Ok(packet_bytes)
     }
 
     /// Wait for the client's Finished message in a Handshake packet.
@@ -499,7 +533,13 @@ impl Http3Server {
                 .await
                 .map_err(|e| format!("recv_from failed: {}", e))?;
 
-            let (pkt, _) = QuicPacket::from_bytes(&buf[..n])
+            let mut packet_bytes = buf[..n].to_vec();
+            let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+            hs_protection
+                .unprotect_header(&mut packet_bytes, pn_offset)
+                .map_err(|e| format!("Handshake header protection failed: {}", e))?;
+
+            let (pkt, _) = QuicPacket::from_bytes(&packet_bytes)
                 .map_err(|e| format!("Packet parse error: {}", e))?;
 
             // Client sends Finished in Handshake-level packets
@@ -666,6 +706,12 @@ mod tests {
         let packet_bytes = server
             .build_initial_response(&client_dcid, &client_scid, &frame, &server_hs)
             .expect("build initial response");
+        let mut packet_bytes = packet_bytes;
+        let mut protection = PacketProtection::new(&client_hs.initial_keys(&client_dcid));
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0).expect("pn offset");
+        protection
+            .unprotect_header(&mut packet_bytes, pn_offset)
+            .expect("unprotect header");
         let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
 
         assert_eq!(consumed, packet_bytes.len());
@@ -673,7 +719,6 @@ mod tests {
         assert_eq!(packet.header.dst_cid, client_scid);
         assert_eq!(packet.header.src_cid, client_dcid);
 
-        let mut protection = PacketProtection::new(&client_hs.initial_keys(&packet.header.src_cid));
         let plaintext = protection
             .unprotect(
                 &packet.header_to_bytes_aad(),
@@ -766,6 +811,13 @@ mod tests {
         let packet_bytes = server
             .build_handshake_response(&client_dcid, &client_scid, &frame, &server_hs)
             .expect("build handshake response");
+        let mut packet_bytes = packet_bytes;
+        let mut protection =
+            PacketProtection::new(&client_hs.handshake_keys().expect("client handshake keys"));
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0).expect("pn offset");
+        protection
+            .unprotect_header(&mut packet_bytes, pn_offset)
+            .expect("unprotect header");
         let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
 
         assert_eq!(consumed, packet_bytes.len());
@@ -773,8 +825,6 @@ mod tests {
         assert_eq!(packet.header.dst_cid, client_scid);
         assert_eq!(packet.header.src_cid, client_dcid);
 
-        let mut protection =
-            PacketProtection::new(&client_hs.handshake_keys().expect("client handshake keys"));
         let plaintext = protection
             .unprotect(
                 &packet.header_to_bytes_aad(),

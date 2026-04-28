@@ -733,7 +733,7 @@ impl QuicConnection {
             .next_packet_number(PacketNumberSpace::ApplicationData);
         let payload = frame.to_bytes();
 
-        let packet = if self.established {
+        let mut packet = if self.established {
             QuicPacket::one_rtt_with_key_phase(
                 self.transport.remote_cid.as_bytes().to_vec(),
                 pn,
@@ -750,6 +750,9 @@ impl QuicConnection {
                 payload,
             )
         };
+        if self.protection.is_some() {
+            packet.header.pn_length = 4;
+        }
 
         let send_bytes = if let Some(ref mut prot) = self.protection {
             let aad = packet.header_to_bytes_aad();

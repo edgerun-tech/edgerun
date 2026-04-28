@@ -23,6 +23,22 @@ const WIFI_MAC_TX_CTRL_33C18: *mut u32 = 0x6003_3c18 as *mut u32;
 const WIFI_MAC_TX_CTRL_33C54: *mut u32 = 0x6003_3c54 as *mut u32;
 const WIFI_MAC_TX_CTRL_33C88: *mut u32 = 0x6003_3c88 as *mut u32;
 const WIFI_MAC_TX_CTRL_33C94: *mut u32 = 0x6003_3c94 as *mut u32;
+const WIFI_MAC_RATE_CTRL_33404: *mut u32 = 0x6003_3404 as *mut u32;
+const WIFI_MAC_RATE_CTRL_33408: *mut u32 = 0x6003_3408 as *mut u32;
+const WIFI_MAC_RATE_CTRL_3340C: *mut u32 = 0x6003_340c as *mut u32;
+const WIFI_MAC_RATE_CTRL_33410: *mut u32 = 0x6003_3410 as *mut u32;
+const WIFI_MAC_RATE_CTRL_33414: *mut u32 = 0x6003_3414 as *mut u32;
+const WIFI_MAC_RATE_CTRL_33418: *mut u32 = 0x6003_3418 as *mut u32;
+const WIFI_MAC_CRYPTO_CTRL_33800: *mut u32 = 0x6003_3800 as *mut u32;
+const WIFI_MAC_CRYPTO_CTRL_33804: *mut u32 = 0x6003_3804 as *mut u32;
+const WIFI_MAC_CRYPTO_CTRL_33808: *mut u32 = 0x6003_3808 as *mut u32;
+const WIFI_MAC_CRYPTO_CTRL_3380C: *mut u32 = 0x6003_380c as *mut u32;
+const WIFI_MAC_CRYPTO_CTRL_33810: *mut u32 = 0x6003_3810 as *mut u32;
+const WIFI_MAC_CRYPTO_CTRL_33840: *mut u32 = 0x6003_3840 as *mut u32;
+const WIFI_MAC_ANT_CTRL_START: *mut u32 = 0x6003_4314 as *mut u32;
+const WIFI_MAC_ANT_CTRL_STRIDE_WORDS: usize = 76 / 4;
+const WIFI_MAC_ANT_CTRL_COUNT: usize = 8;
+const WIFI_MAC_ANT_CTRL_332A8: *mut u32 = 0x6003_32a8 as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -119,6 +135,34 @@ pub struct WifiMmioTxRegs {
     pub ctrl_33084: u32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiMmioRateRegs {
+    pub rate_33404: u32,
+    pub rate_33408: u32,
+    pub rate_3340c: u32,
+    pub rate_33410: u32,
+    pub rate_33414: u32,
+    pub rate_33418: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiMmioCryptoRegs {
+    pub crypto_33800: u32,
+    pub crypto_33804: u32,
+    pub crypto_33808: u32,
+    pub crypto_3380c: u32,
+    pub crypto_33810: u32,
+    pub crypto_33840: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiMmioAntennaRegs {
+    pub ant0: u32,
+    pub ant1: u32,
+    pub ant7: u32,
+    pub ant_aux: u32,
+}
+
 pub struct Esp32s3WifiMmio;
 
 impl Esp32s3WifiMmio {
@@ -193,6 +237,47 @@ impl Esp32s3WifiMmio {
         }
     }
 
+    pub fn debug_rate_regs() -> WifiMmioRateRegs {
+        unsafe {
+            WifiMmioRateRegs {
+                rate_33404: WIFI_MAC_RATE_CTRL_33404.read_volatile(),
+                rate_33408: WIFI_MAC_RATE_CTRL_33408.read_volatile(),
+                rate_3340c: WIFI_MAC_RATE_CTRL_3340C.read_volatile(),
+                rate_33410: WIFI_MAC_RATE_CTRL_33410.read_volatile(),
+                rate_33414: WIFI_MAC_RATE_CTRL_33414.read_volatile(),
+                rate_33418: WIFI_MAC_RATE_CTRL_33418.read_volatile(),
+            }
+        }
+    }
+
+    pub fn debug_crypto_regs() -> WifiMmioCryptoRegs {
+        unsafe {
+            WifiMmioCryptoRegs {
+                crypto_33800: WIFI_MAC_CRYPTO_CTRL_33800.read_volatile(),
+                crypto_33804: WIFI_MAC_CRYPTO_CTRL_33804.read_volatile(),
+                crypto_33808: WIFI_MAC_CRYPTO_CTRL_33808.read_volatile(),
+                crypto_3380c: WIFI_MAC_CRYPTO_CTRL_3380C.read_volatile(),
+                crypto_33810: WIFI_MAC_CRYPTO_CTRL_33810.read_volatile(),
+                crypto_33840: WIFI_MAC_CRYPTO_CTRL_33840.read_volatile(),
+            }
+        }
+    }
+
+    pub fn debug_antenna_regs() -> WifiMmioAntennaRegs {
+        unsafe {
+            WifiMmioAntennaRegs {
+                ant0: WIFI_MAC_ANT_CTRL_START.read_volatile(),
+                ant1: WIFI_MAC_ANT_CTRL_START
+                    .sub(WIFI_MAC_ANT_CTRL_STRIDE_WORDS)
+                    .read_volatile(),
+                ant7: WIFI_MAC_ANT_CTRL_START
+                    .sub(WIFI_MAC_ANT_CTRL_STRIDE_WORDS * 7)
+                    .read_volatile(),
+                ant_aux: WIFI_MAC_ANT_CTRL_332A8.read_volatile(),
+            }
+        }
+    }
+
     pub fn debug_step(step: u8) -> bool {
         unsafe {
             match step {
@@ -249,6 +334,24 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(801, Ordering::Relaxed);
                     init_mac_txrx_tail_slice();
                     LAST_STATUS.store(802, Ordering::Relaxed);
+                    true
+                }
+                9 => {
+                    LAST_STATUS.store(901, Ordering::Relaxed);
+                    init_mac_rate_slice();
+                    LAST_STATUS.store(902, Ordering::Relaxed);
+                    true
+                }
+                10 => {
+                    LAST_STATUS.store(1001, Ordering::Relaxed);
+                    init_crypto_slice();
+                    LAST_STATUS.store(1002, Ordering::Relaxed);
+                    true
+                }
+                11 => {
+                    LAST_STATUS.store(1101, Ordering::Relaxed);
+                    init_antenna_slice();
+                    LAST_STATUS.store(1102, Ordering::Relaxed);
                     true
                 }
                 _ => false,
@@ -433,6 +536,36 @@ unsafe fn init_mac_txrx_tail_slice() {
     update(WIFI_MAC_TX_CTRL_33C88, |v| v & 0xf0ff_ffff);
     update(WIFI_MAC_CTRL_332B8, |v| v | 2);
     update(WIFI_MAC_CTRL_33084, |v| v & 0x7fff_ffff);
+}
+
+unsafe fn init_mac_rate_slice() {
+    unsafe {
+        WIFI_MAC_RATE_CTRL_33418.write_volatile(0);
+        WIFI_MAC_RATE_CTRL_3340C.write_volatile(0x1919_1919);
+        WIFI_MAC_RATE_CTRL_33410.write_volatile(0x0009_0a0b);
+        WIFI_MAC_RATE_CTRL_33414.write_volatile(0x0005_0100);
+        WIFI_MAC_RATE_CTRL_33404.write_volatile(0x0009_0a0b);
+        WIFI_MAC_RATE_CTRL_33408.write_volatile(0x0005_0100);
+    }
+}
+
+unsafe fn init_crypto_slice() {
+    unsafe {
+        WIFI_MAC_CRYPTO_CTRL_33800.write_volatile(0x0003_0000);
+        WIFI_MAC_CRYPTO_CTRL_33804.write_volatile(0x0003_0000);
+        WIFI_MAC_CRYPTO_CTRL_33808.write_volatile(0);
+        WIFI_MAC_CRYPTO_CTRL_3380C.write_volatile(0);
+        WIFI_MAC_CRYPTO_CTRL_33810.write_volatile(0);
+    }
+    update(WIFI_MAC_CRYPTO_CTRL_33840, |v| v | 25);
+}
+
+unsafe fn init_antenna_slice() {
+    for index in 0..WIFI_MAC_ANT_CTRL_COUNT {
+        let reg = unsafe { WIFI_MAC_ANT_CTRL_START.sub(WIFI_MAC_ANT_CTRL_STRIDE_WORDS * index) };
+        update(reg, |v| ((v & !0x7) & !0x8 | 0x20) & !0x10);
+    }
+    update(WIFI_MAC_ANT_CTRL_332A8, |v| (v & !0x7) | 0x20);
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
