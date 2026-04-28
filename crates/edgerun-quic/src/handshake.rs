@@ -25,11 +25,9 @@ use alloc::{
     vec::Vec,
 };
 use edgerun_crypto::fill_random;
-use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
-use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
-use edgerun_crypto::p256::EncodedPoint;
 use edgerun_crypto::CipherSuite;
 use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
+use edgerun_tls::certificate::Certificate;
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
@@ -96,15 +94,6 @@ impl CertificateValidator {
     }
 
     /// Validate a certificate chain presented by the server.
-    ///
-    /// In a full implementation this would:
-    /// 1. Parse the DER-encoded certificates
-    /// 2. Build a chain from leaf to root
-    /// 3. Verify signatures at each level
-    /// 4. Check expiration dates
-    /// 5. Verify against system trust store
-    ///
-    /// For now, we perform basic structural checks.
     pub fn validate_chain(&self, cert_der_list: &[Vec<u8>]) -> CertValidationResult {
         if self.skip_chain_check {
             return CertValidationResult {
@@ -122,32 +111,71 @@ impl CertificateValidator {
             };
         }
 
-        // Basic structural validation:
-        // The leaf certificate must be present
-        let leaf = &cert_der_list[0];
-        if leaf.len() < 64 {
+        let certs = match cert_der_list
+            .iter()
+            .map(|cert| Certificate::from_der(cert))
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(certs) => certs,
+            Err(err) => {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid: false,
+                    error: Some(err),
+                };
+            }
+        };
+
+        let leaf = &certs[0];
+        let hostname_valid = self.check_hostname(leaf);
+        if !leaf.is_valid_now() {
             return CertValidationResult {
                 chain_valid: false,
-                hostname_valid: false,
-                error: Some("Leaf certificate too small".to_string()),
+                hostname_valid,
+                error: Some("Leaf certificate is expired or not yet valid".to_string()),
             };
         }
 
-        // Check for self-signed leaf (common in testing)
-        if cert_der_list.len() == 1 {
-            // Self-signed cert — accept if hostname check passes
+        if certs.len() == 1 {
             return CertValidationResult {
-                chain_valid: true, // Self-signed accepted
-                hostname_valid: self.check_hostname(leaf),
-                error: None,
+                chain_valid: false,
+                hostname_valid,
+                error: Some("Self-signed certificate is not trusted".to_string()),
             };
         }
 
-        // Multi-cert chain — basic acceptance
+        for pair in certs.windows(2) {
+            let cert = &pair[0];
+            let issuer = &pair[1];
+            if !issuer.is_valid_now() {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid,
+                    error: Some("Issuer certificate is expired or not yet valid".to_string()),
+                };
+            }
+            if let Err(err) = cert.verify_signature(issuer) {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid,
+                    error: Some(err),
+                };
+            }
+        }
+
+        let root = certs.last().expect("nonempty certificate chain");
+        if let Err(err) = root.verify_signature(root) {
+            return CertValidationResult {
+                chain_valid: false,
+                hostname_valid,
+                error: Some(format!("Root certificate is not self-signed: {err}")),
+            };
+        }
+
         CertValidationResult {
-            chain_valid: true,
-            hostname_valid: self.check_hostname(leaf),
-            error: None,
+            chain_valid: false,
+            hostname_valid,
+            error: Some("Certificate chain has no configured trusted root".to_string()),
         }
     }
 
@@ -158,15 +186,15 @@ impl CertificateValidator {
     /// 2. Extract the SAN extension (2.5.29.17)
     /// 3. Match against DNS names and IP addresses
     /// 4. Fall back to Common Name if no SAN
-    fn check_hostname(&self, _cert_der: &[u8]) -> bool {
+    fn check_hostname(&self, cert: &Certificate) -> bool {
         if self.skip_hostname_check {
             return true;
         }
 
-        // Without an X.509 parser, we can't validate hostname.
-        // In production, integrate with rustls or an X.509 parser.
-        // For now, accept if no hostname expected.
-        self.expected_hostname.is_none()
+        match self.expected_hostname.as_deref() {
+            Some(hostname) => cert.matches_hostname(hostname),
+            None => true,
+        }
     }
 
     /// Verify a CertificateVerify signature (RFC 8446 §4.4.3).
@@ -184,27 +212,34 @@ impl CertificateValidator {
         cert_der: &[u8],
         signature_algorithm: u16,
         signature: &[u8],
-        transcript_hash: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
     ) -> bool {
         match signature_algorithm {
             0x0403 => {
                 // ECDSA-SECP256R1-SHA256 (P-256)
-                self.verify_ecdsa_p256(cert_der, signature, transcript_hash)
+                self.verify_ecdsa_p256(cert_der, signature, transcript, hasher)
             }
             0x0804 => {
                 // ED25519
-                self.verify_ed25519(cert_der, signature, transcript_hash)
+                self.verify_ed25519(cert_der, signature, transcript, hasher)
             }
             0x0401 => {
                 // RSA-PSS-SHA256
-                self.verify_rsa_pss_sha256(cert_der, signature, transcript_hash)
+                self.verify_rsa_pss_sha256(cert_der, signature, transcript, hasher)
             }
             _ => false,
         }
     }
 
     /// Verify an ED25519 signature over the transcript hash.
-    fn verify_ed25519(&self, _cert_der: &[u8], _signature: &[u8], _transcript_hash: &[u8]) -> bool {
+    fn verify_ed25519(
+        &self,
+        _cert_der: &[u8],
+        _signature: &[u8],
+        _transcript: &[u8],
+        _hasher: &Hasher,
+    ) -> bool {
         false
     }
 
@@ -213,64 +248,42 @@ impl CertificateValidator {
         &self,
         _cert_der: &[u8],
         _signature: &[u8],
-        _transcript_hash: &[u8],
+        _transcript: &[u8],
+        _hasher: &Hasher,
     ) -> bool {
         false
     }
 
-    /// Find a byte subsequence in data.
-    fn find_subsequence(data: &[u8], needle: &[u8]) -> Option<usize> {
-        if needle.is_empty() || needle.len() > data.len() {
-            return None;
-        }
-        for i in 0..=data.len() - needle.len() {
-            if data[i..i + needle.len()] == *needle {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    /// Verify an ECDSA P-256 signature over the transcript hash.
-    fn verify_ecdsa_p256(&self, cert_der: &[u8], signature: &[u8], transcript_hash: &[u8]) -> bool {
-        use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-
-        // Minimal X.509 SubjectPublicKeyInfo parsing for P-256 keys.
-        // We scan for the 0x04 uncompressed point prefix in the cert.
-        let mut point_data = None;
-        for i in 0..cert_der.len().saturating_sub(64) {
-            if cert_der[i] == 0x04 && cert_der.len() >= i + 65 {
-                point_data = Some(&cert_der[i..i + 65]);
-                break;
-            }
-        }
-
-        let point_bytes = match point_data {
-            Some(p) => p,
-            None => return false,
+    /// Verify an ECDSA P-256 CertificateVerify signature.
+    fn verify_ecdsa_p256(
+        &self,
+        cert_der: &[u8],
+        signature: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
+    ) -> bool {
+        let cert = match Certificate::from_der(cert_der) {
+            Ok(cert) => cert,
+            Err(_) => return false,
         };
-
-        let encoded_point = match EncodedPoint::from_bytes(point_bytes) {
-            Ok(ep) => ep,
+        let verifying_key = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(
+            cert.subject_public_key.as_slice(),
+        ) {
+            Ok(key) => key,
+            Err(_) => return false,
+        };
+        let signature = match edgerun_crypto::p256::ecdsa::Signature::from_der(signature) {
+            Ok(signature) => signature,
             Err(_) => return false,
         };
 
-        let verifying_key = match VerifyingKey::from_encoded_point(&encoded_point) {
-            Ok(vk) => vk,
-            Err(_) => return false,
-        };
+        let mut signed_input = vec![0x20u8; 64];
+        signed_input.extend_from_slice(b"TLS 1.3, server CertificateVerify");
+        signed_input.push(0x00);
+        signed_input.extend_from_slice(&hasher.hash(transcript));
 
-        if signature.len() < 64 {
-            return false;
-        }
-
-        let sig = match Signature::from_slice(signature) {
-            Ok(s) => s,
-            Err(_) => return false,
-        };
-
-        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
-        verifying_key.verify_prehash(transcript_hash, &sig).is_ok()
+        use edgerun_crypto::p256::ecdsa::signature::Verifier;
+        verifying_key.verify(&signed_input, &signature).is_ok()
     }
 }
 

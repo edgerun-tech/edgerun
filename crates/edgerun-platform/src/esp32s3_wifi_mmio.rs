@@ -49,6 +49,16 @@ const WIFI_PHY_RX_11B_CTRL3: *mut u32 = 0x6001_c104 as *mut u32;
 const WIFI_PHY_BB_CTRL_1CC48: *mut u32 = 0x6001_cc48 as *mut u32;
 const WIFI_MODEM_WIFI_ENABLE: *mut u32 = 0x6002_600c as *mut u32;
 const WIFI_MODEM_CTRL_26010: *mut u32 = 0x6002_6010 as *mut u32;
+const WIFI_PBUS_ADDR_CTRL: *mut u32 = 0x6000_60c8 as *mut u32;
+const WIFI_PBUS_DATA: *mut u32 = 0x6000_60cc as *mut u32;
+const WIFI_PBUS_BANK0: *mut u32 = 0x6000_60e0 as *mut u32;
+const WIFI_PBUS_BANK1: *mut u32 = 0x6000_60e4 as *mut u32;
+const WIFI_PBUS_BANK2: *mut u32 = 0x6000_60e8 as *mut u32;
+const WIFI_PBUS_BANK3: *mut u32 = 0x6000_60ec as *mut u32;
+const WIFI_PBUS_BANK4: *mut u32 = 0x6000_60f0 as *mut u32;
+const WIFI_PBUS_BANK5: *mut u32 = 0x6000_60f4 as *mut u32;
+const WIFI_TXRATE_POWER0: *mut u32 = 0x6000_6180 as *mut u32;
+const WIFI_TXRATE_POWER15: *mut u32 = 0x6000_61bc as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -185,6 +195,16 @@ pub struct WifiMmioPhyRegs {
     pub bb_ctrl_1cc48: u32,
     pub modem_wifi_enable: u32,
     pub modem_ctrl_26010: u32,
+    pub pbus_addr_ctrl: u32,
+    pub pbus_data: u32,
+    pub pbus_bank0: u32,
+    pub pbus_bank1: u32,
+    pub pbus_bank2: u32,
+    pub pbus_bank3: u32,
+    pub pbus_bank4: u32,
+    pub pbus_bank5: u32,
+    pub txrate_power0: u32,
+    pub txrate_power15: u32,
 }
 
 pub struct Esp32s3WifiMmio;
@@ -315,6 +335,16 @@ impl Esp32s3WifiMmio {
                 bb_ctrl_1cc48: WIFI_PHY_BB_CTRL_1CC48.read_volatile(),
                 modem_wifi_enable: WIFI_MODEM_WIFI_ENABLE.read_volatile(),
                 modem_ctrl_26010: WIFI_MODEM_CTRL_26010.read_volatile(),
+                pbus_addr_ctrl: WIFI_PBUS_ADDR_CTRL.read_volatile(),
+                pbus_data: WIFI_PBUS_DATA.read_volatile(),
+                pbus_bank0: WIFI_PBUS_BANK0.read_volatile(),
+                pbus_bank1: WIFI_PBUS_BANK1.read_volatile(),
+                pbus_bank2: WIFI_PBUS_BANK2.read_volatile(),
+                pbus_bank3: WIFI_PBUS_BANK3.read_volatile(),
+                pbus_bank4: WIFI_PBUS_BANK4.read_volatile(),
+                pbus_bank5: WIFI_PBUS_BANK5.read_volatile(),
+                txrate_power0: WIFI_TXRATE_POWER0.read_volatile(),
+                txrate_power15: WIFI_TXRATE_POWER15.read_volatile(),
             }
         }
     }
@@ -425,13 +455,25 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(1602, Ordering::Relaxed);
                     true
                 }
+                17 => {
+                    LAST_STATUS.store(1701, Ordering::Relaxed);
+                    init_pbus_mem_slice();
+                    LAST_STATUS.store(1702, Ordering::Relaxed);
+                    true
+                }
+                18 => {
+                    LAST_STATUS.store(1801, Ordering::Relaxed);
+                    write_txrate_power_offset_slice();
+                    LAST_STATUS.store(1802, Ordering::Relaxed);
+                    true
+                }
                 _ => false,
             }
         }
     }
 
     pub fn init_known_good() -> bool {
-        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] {
+        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] {
             if !Self::debug_step(step) {
                 return false;
             }
@@ -679,6 +721,101 @@ unsafe fn set_phy_wifi_enable(enable: bool) {
         update(WIFI_MODEM_WIFI_ENABLE, |v| v | 2);
     } else {
         update(WIFI_MODEM_WIFI_ENABLE, |v| v & !2);
+    }
+}
+
+unsafe fn init_pbus_mem_slice() {
+    let pbus_bank0_low = [
+        0x0007_09ff,
+        0x0017_13ff,
+        0x00f5_0000,
+        0x00f6_0000,
+    ];
+    let pbus_bank0_high = [0x0004_01ff, 0x0018_01ff, 0x0014_01ff];
+    let pbus_bank1_low = [
+        0x0004_03ff,
+        0x0014_f9ff,
+        0x0018_01ff,
+        0x0048_01ff,
+        0x00f0_0000,
+        0x00f1_0000,
+        0x00f2_0000,
+        0x00f4_0000,
+    ];
+    let pbus_bank1_high = [0x0014_f9ff, 0x0044_ffff, 0x00f3_0000];
+    let pbus_bank2_low = [0x0014_f9ff, 0x0044_ffff, 0x00f3_0000];
+    let pbus_bank2_high = [0x0044_01ff, 0x0054_01ff];
+    let pbus_bank3_low = [
+        pbus_bank0_low[0],
+        0x0017_17ff,
+        pbus_bank0_low[2],
+        pbus_bank0_low[3],
+    ];
+    let pbus_bank3_high = [0x0004_01ff, 0x0018_01ff, 0x0014_01ff];
+    let pbus_bank4_low = pbus_bank1_low;
+    let pbus_bank4_high = [0x0004_01ff, 0x0018_01ff, 0x0014_01ff];
+    let pbus_bank5_low = [0x0014_fdff, 0x0044_ffff, 0x00f3_0000];
+    let pbus_bank5_high = [0x0044_01ff, 0x0054_01ff];
+
+    write_pbus_window(WIFI_PBUS_BANK0, 0, 0, &pbus_bank0_low);
+    write_pbus_window(WIFI_PBUS_BANK0, 4, 16, &pbus_bank0_high);
+    write_pbus_window(WIFI_PBUS_BANK1, 0, 0, &pbus_bank1_low);
+    write_pbus_window(WIFI_PBUS_BANK1, 8, 16, &pbus_bank1_high);
+    write_pbus_window(WIFI_PBUS_BANK2, 0, 0, &pbus_bank2_low);
+    write_pbus_window(WIFI_PBUS_BANK2, 3, 16, &pbus_bank2_high);
+    write_pbus_window(WIFI_PBUS_BANK3, 0, 0, &pbus_bank3_low);
+    write_pbus_window(WIFI_PBUS_BANK3, 4, 16, &pbus_bank3_high);
+    write_pbus_window(WIFI_PBUS_BANK4, 0, 0, &pbus_bank4_low);
+    write_pbus_window(WIFI_PBUS_BANK4, 8, 16, &pbus_bank4_high);
+    write_pbus_window(WIFI_PBUS_BANK5, 0, 0, &pbus_bank5_low);
+    write_pbus_window(WIFI_PBUS_BANK5, 3, 16, &pbus_bank5_high);
+}
+
+unsafe fn write_pbus_window(bank: *mut u32, start: u32, shift: u32, values: &[u32]) {
+    let end = start + values.len() as u32;
+    let selector = (((end - 1) << 8) | start) << shift;
+    let mask = !(0x0000_ffffu32 << shift);
+    update(bank, |v| (v & mask) | selector);
+
+    let mut addr = start;
+    for value in values {
+        unsafe {
+            WIFI_PBUS_DATA.write_volatile(*value);
+        }
+        update(WIFI_PBUS_ADDR_CTRL, |v| {
+            (v & 0xfffc_00ff) | ((addr & 0x3ff) << 8)
+        });
+        update(WIFI_PBUS_ADDR_CTRL, |v| v & 0xfffc_ffff);
+        addr += 1;
+    }
+}
+
+unsafe fn write_txrate_power_offset_slice() {
+    let offsets = [
+        0x0000_0000,
+        0x1111_1111,
+        0x0000_0000,
+        0x1111_1111,
+        0x4444_5555,
+        0x2222_3333,
+        0x4444_5555,
+        0x2222_3333,
+        0xa666_a666,
+        0xb777_b777,
+        0xc888_c888,
+        0xd999_d999,
+        0x7654_3210,
+        0xfedc_ba98,
+        0x7654_3210,
+        0xfedc_ba98,
+    ];
+
+    let mut reg = WIFI_TXRATE_POWER0;
+    for value in offsets {
+        unsafe {
+            reg.write_volatile(value);
+            reg = reg.add(1);
+        }
     }
 }
 

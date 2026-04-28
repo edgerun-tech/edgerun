@@ -190,8 +190,11 @@ pub struct SemaphoreGuard<'a>(&'a Semaphore);
 impl<'a> Drop for SemaphoreGuard<'a> {
     fn drop(&mut self) {
         self.0.permits.fetch_add(1, Ordering::Release);
-        let mut waiters = self.0.waiters.lock();
-        if let Some(waker) = waiters.pop() {
+        let waker_to_wake = {
+            let mut waiters = self.0.waiters.lock();
+            waiters.pop()
+        };
+        if let Some(waker) = waker_to_wake {
             waker.wake();
         }
     }
@@ -446,8 +449,11 @@ impl<'a, T> core::ops::DerefMut for AsyncMutexGuard<'a, T> {
 impl<'a, T> Drop for AsyncMutexGuard<'a, T> {
     fn drop(&mut self) {
         self.inner = None;
-        let mut waiters = self.mutex.waiters.lock();
-        if let Some(waker) = waiters.pop() {
+        let waker_to_wake = {
+            let mut waiters = self.mutex.waiters.lock();
+            waiters.pop()
+        };
+        if let Some(waker) = waker_to_wake {
             waker.wake();
         }
     }
