@@ -12,6 +12,7 @@ default = []
 html-ui = ["dep:edgerun-layout"]
 esp32s3-wifi-blob = ["edgerun-platform/esp32s3-wifi-blob", "dep:edgerun-wifi"]
 esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-phy-probe"]
+esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-ram-phy-patch"]
 
 [dependencies]
 edgerun-platform = { path = "../edgerun-platform" }

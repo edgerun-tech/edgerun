@@ -13,6 +13,7 @@ edgerun-wifi = { path = "../edgerun-wifi" }
 default = []
 esp32s3-wifi-blob = []
 esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob"]
+esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 
