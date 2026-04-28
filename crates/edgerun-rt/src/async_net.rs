@@ -24,7 +24,8 @@ fn map_io_error(error: std::io::Error) -> IoError {
 }
 
 fn register_and_wake_waker(slot: &mut Option<Waker>, cx: &Context<'_>) {
-    let needs_refresh = !matches!(slot.as_ref(), Some(registered) if registered.will_wake(cx.waker()));
+    let needs_refresh =
+        !matches!(slot.as_ref(), Some(registered) if registered.will_wake(cx.waker()));
     if needs_refresh {
         *slot = Some(cx.waker().clone());
     }

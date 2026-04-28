@@ -701,9 +701,11 @@ fn base64_decode(input: &str) -> Option<alloc::vec::Vec<u8>> {
     edgerun_encoding::base64::standard_decode(input).ok()
 }
 
-#[cfg(feature = "p256")]
+#[cfg(any(feature = "ed25519", feature = "p256", feature = "rsa"))]
 pub mod signature {
+    #[cfg(feature = "p256")]
     pub use p256::ecdsa::signature::{Signer, SignerMut, Verifier};
+    #[cfg(feature = "p256")]
     pub mod hazmat {
         pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
     }

@@ -30,6 +30,7 @@ use crate::state::{delete_state_with_result, load_state};
 use crate::terminal::{recv_fd, relay_pty_until_exit, wait_for_exit_code};
 
 use crate::ImageRef;
+use crate::ImageTrustPolicy;
 use crate::RegistryAuth;
 use crate::RegistryClient;
 
@@ -81,6 +82,7 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
                 &bundle_path,
                 &run_opts.store_path,
                 auth,
+                run_opts.image_trust_policy,
             )?;
         }
         PullPolicy::Missing if !has_local_image => {
@@ -90,6 +92,7 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
                 &bundle_path,
                 &run_opts.store_path,
                 auth,
+                run_opts.image_trust_policy,
             )?;
         }
         PullPolicy::Missing | PullPolicy::Never => {
@@ -236,6 +239,7 @@ fn pull_image(
     bundle_path: &Path,
     store_path: &Path,
     auth: RegistryAuth,
+    trust_policy: ImageTrustPolicy,
 ) -> io::Result<()> {
     eprintln!("Pulling {image_ref}...");
     eprintln!("  bundle: {}", bundle_path.display());
@@ -248,7 +252,9 @@ fn pull_image(
     let image = image.clone();
     let bundle_path = bundle_path.to_path_buf();
     let store_path = store_path.to_path_buf();
-    let mut client = RegistryClient::new().with_auth(auth);
+    let mut client = RegistryClient::new()
+        .with_auth(auth)
+        .with_image_trust_policy(trust_policy);
     let result = rt.block_on(async move {
         client
             .pull_with_progress(&image, &bundle_path, &store_path, |event| {

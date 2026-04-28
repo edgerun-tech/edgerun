@@ -767,7 +767,7 @@ impl SpeakerDevice for AlsaSpeakerBackend {
             default_sample_rate_hz: self.default_sample_rate_hz,
             channels: self.channels,
             supports_playback: true,
-            supports_output_level_control: self.preferred_volume_control()?.is_some(),
+            supports_output_level_control: self.preferred_volume_control().ok().flatten().is_some(),
         })
     }
 
@@ -952,7 +952,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires ALSA hardware"]
     fn speaker_info_descriptor_is_playback() {
         let backend = AlsaSpeakerBackend {
             card_index: 0,

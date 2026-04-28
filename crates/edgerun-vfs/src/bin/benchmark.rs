@@ -780,7 +780,7 @@ fn main() {
     for path in vfs.files().take(hash_count) {
         if let Some(content) = vfs.read(path) {
             let t = Instant::now();
-            use sha1::{Digest, Sha1};
+            use edgerun_crypto::sha1::{Digest, Sha1};
             let mut hasher = Sha1::new();
             hasher.update(&*content);
             let _ = hasher.finalize();

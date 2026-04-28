@@ -12,6 +12,7 @@ categories = ["filesystem", "caching", "development-tools"]
 [dependencies]
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
+edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["sha1"] }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 

@@ -70,6 +70,8 @@ impl CertValidationResult {
 pub struct CertificateValidator {
     /// Expected server hostname (for SNI verification)
     expected_hostname: Option<String>,
+    /// Trusted root certificates, parsed from configured DER roots.
+    trusted_roots: Vec<Certificate>,
     /// Whether to skip hostname verification (testing only)
     skip_hostname_check: bool,
     /// Whether to skip chain validation (testing only)
@@ -80,9 +82,24 @@ impl CertificateValidator {
     pub fn new(expected_hostname: Option<&str>) -> Self {
         CertificateValidator {
             expected_hostname: expected_hostname.map(|s| s.to_string()),
+            trusted_roots: Vec::new(),
             skip_hostname_check: false,
             skip_chain_check: false,
         }
+    }
+
+    /// Configure trust roots from DER-encoded X.509 certificates.
+    pub fn with_trusted_roots_der(
+        expected_hostname: Option<&str>,
+        roots: &[Vec<u8>],
+    ) -> Result<Self, String> {
+        let trusted_roots = parse_trusted_roots_der(roots);
+        Ok(CertificateValidator {
+            expected_hostname: expected_hostname.map(|s| s.to_string()),
+            trusted_roots,
+            skip_hostname_check: false,
+            skip_chain_check: false,
+        })
     }
 
     /// Skip hostname verification (testing only — DANGEROUS in production).
@@ -113,11 +130,7 @@ impl CertificateValidator {
             };
         }
 
-        let certs = match cert_der_list
-            .iter()
-            .map(|cert| Certificate::from_der(cert))
-            .collect::<Result<Vec<_>, _>>()
-        {
+        let certs = match parse_cert_der_list(cert_der_list) {
             Ok(certs) => certs,
             Err(err) => {
                 return CertValidationResult {
@@ -138,7 +151,7 @@ impl CertificateValidator {
             };
         }
 
-        if certs.len() == 1 {
+        if certs.len() == 1 && self.trusted_roots.is_empty() {
             return CertValidationResult {
                 chain_valid: false,
                 hostname_valid,
@@ -165,13 +178,32 @@ impl CertificateValidator {
             }
         }
 
-        let root = certs.last().expect("nonempty certificate chain");
-        if let Err(err) = root.verify_signature(root) {
-            return CertValidationResult {
-                chain_valid: false,
-                hostname_valid,
-                error: Some(format!("Root certificate is not self-signed: {err}")),
-            };
+        let chain_anchor = certs.last().expect("nonempty certificate chain");
+        for trusted_root in &self.trusted_roots {
+            if !trusted_root.is_valid_now() {
+                continue;
+            }
+            if chain_anchor.verify_signature(trusted_root).is_ok() {
+                return CertValidationResult {
+                    chain_valid: true,
+                    hostname_valid,
+                    error: if hostname_valid {
+                        None
+                    } else {
+                        Some("Hostname does not match certificate".to_string())
+                    },
+                };
+            }
+        }
+
+        if self.trusted_roots.is_empty() {
+            if let Err(err) = chain_anchor.verify_signature(chain_anchor) {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid,
+                    error: Some(format!("Root certificate is not self-signed: {err}")),
+                };
+            }
         }
 
         CertValidationResult {
@@ -208,8 +240,9 @@ impl CertificateValidator {
     ///
     /// Supported algorithms:
     /// - 0x0403: ECDSA-SECP256R1-SHA256 (P-256)
-    /// Unsupported algorithms return false until their X.509 SPKI parsing and
-    /// signature verification are implemented.
+    /// - 0x0804/0x0805/0x0806: RSA-PSS-RSAE with SHA-256/SHA-384/SHA-512
+    /// - 0x0807: Ed25519
+    /// - 0x0809/0x080a/0x080b: RSA-PSS-PSS with SHA-256/SHA-384/SHA-512
     pub fn verify_certificate_signature(
         &self,
         cert_der: &[u8],
@@ -223,13 +256,12 @@ impl CertificateValidator {
                 // ECDSA-SECP256R1-SHA256 (P-256)
                 self.verify_ecdsa_p256(cert_der, signature, transcript, hasher)
             }
-            0x0804 => {
-                // ED25519
+            0x0807 => {
+                // Ed25519
                 self.verify_ed25519(cert_der, signature, transcript, hasher)
             }
-            0x0401 => {
-                // RSA-PSS-SHA256
-                self.verify_rsa_pss_sha256(cert_der, signature, transcript, hasher)
+            0x0804 | 0x0805 | 0x0806 | 0x0809 | 0x080a | 0x080b => {
+                self.verify_rsa_pss(cert_der, signature_algorithm, signature, transcript, hasher)
             }
             _ => false,
         }
@@ -238,23 +270,87 @@ impl CertificateValidator {
     /// Verify an ED25519 signature over the transcript hash.
     fn verify_ed25519(
         &self,
-        _cert_der: &[u8],
-        _signature: &[u8],
-        _transcript: &[u8],
-        _hasher: &Hasher,
+        cert_der: &[u8],
+        signature: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
     ) -> bool {
-        false
+        let cert = match Certificate::from_der(cert_der) {
+            Ok(cert) => cert,
+            Err(_) => return false,
+        };
+        let public_key: [u8; 32] = match cert.subject_public_key.as_slice().try_into() {
+            Ok(public_key) => public_key,
+            Err(_) => return false,
+        };
+        let verifying_key =
+            match edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&public_key) {
+                Ok(key) => key,
+                Err(_) => return false,
+            };
+        let signature = match edgerun_crypto::ed25519_dalek::Signature::from_slice(signature) {
+            Ok(signature) => signature,
+            Err(_) => return false,
+        };
+        let signed_input = certificate_verify_signed_input(transcript, hasher);
+
+        use edgerun_crypto::ed25519_dalek::Verifier;
+        verifying_key.verify(&signed_input, &signature).is_ok()
     }
 
-    /// Verify an RSA-PSS-SHA256 signature over the transcript hash.
-    fn verify_rsa_pss_sha256(
+    /// Verify an RSA-PSS CertificateVerify signature.
+    fn verify_rsa_pss(
         &self,
-        _cert_der: &[u8],
-        _signature: &[u8],
-        _transcript: &[u8],
-        _hasher: &Hasher,
+        cert_der: &[u8],
+        signature_algorithm: u16,
+        signature: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
     ) -> bool {
-        false
+        use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
+
+        let cert = match Certificate::from_der(cert_der) {
+            Ok(cert) => cert,
+            Err(_) => return false,
+        };
+        let public_key =
+            match edgerun_crypto::rsa::RsaPublicKey::from_pkcs1_der(&cert.subject_public_key) {
+                Ok(key) => key,
+                Err(_) => return false,
+            };
+        let signature = match edgerun_crypto::rsa::pss::Signature::try_from(signature) {
+            Ok(signature) => signature,
+            Err(_) => return false,
+        };
+        let signed_input = certificate_verify_signed_input(transcript, hasher);
+
+        match signature_algorithm {
+            0x0804 | 0x0809 => {
+                let key =
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha256>::new(
+                        public_key,
+                    );
+                use edgerun_crypto::rsa::signature::Verifier;
+                key.verify(&signed_input, &signature).is_ok()
+            }
+            0x0805 | 0x080a => {
+                let key =
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha384>::new(
+                        public_key,
+                    );
+                use edgerun_crypto::rsa::signature::Verifier;
+                key.verify(&signed_input, &signature).is_ok()
+            }
+            0x0806 | 0x080b => {
+                let key =
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha512>::new(
+                        public_key,
+                    );
+                use edgerun_crypto::rsa::signature::Verifier;
+                key.verify(&signed_input, &signature).is_ok()
+            }
+            _ => false,
+        }
     }
 
     /// Verify an ECDSA P-256 CertificateVerify signature.
@@ -280,14 +376,88 @@ impl CertificateValidator {
             Err(_) => return false,
         };
 
-        let mut signed_input = vec![0x20u8; 64];
-        signed_input.extend_from_slice(b"TLS 1.3, server CertificateVerify");
-        signed_input.push(0x00);
-        signed_input.extend_from_slice(&hasher.hash(transcript));
+        let signed_input = certificate_verify_signed_input(transcript, hasher);
 
         use edgerun_crypto::p256::ecdsa::signature::Verifier;
         verifying_key.verify(&signed_input, &signature).is_ok()
     }
+}
+
+fn certificate_verify_signed_input(transcript: &[u8], hasher: &Hasher) -> Vec<u8> {
+    let mut signed_input = vec![0x20u8; 64];
+    signed_input.extend_from_slice(b"TLS 1.3, server CertificateVerify");
+    signed_input.push(0x00);
+    signed_input.extend_from_slice(&hasher.hash(transcript));
+    signed_input
+}
+
+fn parse_cert_der_list(cert_der_list: &[Vec<u8>]) -> Result<Vec<Certificate>, String> {
+    cert_der_list
+        .iter()
+        .map(|cert| Certificate::from_der(cert))
+        .collect::<Result<Vec<_>, _>>()
+}
+
+fn parse_trusted_roots_der(cert_der_list: &[Vec<u8>]) -> Vec<Certificate> {
+    cert_der_list
+        .iter()
+        .filter_map(|cert| Certificate::from_der(cert).ok())
+        .collect()
+}
+
+/// Common host CA bundle paths for Linux distributions.
+#[cfg(feature = "std")]
+pub const LINUX_CA_BUNDLE_PATHS: &[&str] = &[
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/ca-certificates/extracted/tls-ca-bundle.pem",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    "/etc/ssl/cert.pem",
+    "/etc/ssl/ca-bundle.pem",
+];
+
+/// Load DER-encoded trust roots from the host Linux CA bundle.
+///
+/// Implemented only for host builds with the `std` feature. Bare targets must
+/// supply roots explicitly with `QuicTlsHandshaker::set_trusted_roots_der`.
+#[cfg(feature = "std")]
+pub fn load_linux_trust_roots_der() -> Result<Vec<Vec<u8>>, String> {
+    for path in LINUX_CA_BUNDLE_PATHS {
+        let Ok(pem) = real_std::fs::read_to_string(path) else {
+            continue;
+        };
+        let roots = parse_pem_certificates(&pem);
+        if !roots.is_empty() {
+            return Ok(roots);
+        }
+    }
+    Err(format!(
+        "No readable Linux CA bundle found in {}",
+        LINUX_CA_BUNDLE_PATHS.join(", ")
+    ))
+}
+
+#[cfg(feature = "std")]
+fn parse_pem_certificates(pem: &str) -> Vec<Vec<u8>> {
+    let begin = "-----BEGIN CERTIFICATE-----";
+    let end = "-----END CERTIFICATE-----";
+    let mut roots = Vec::new();
+    let mut rest = pem;
+
+    while let Some(begin_pos) = rest.find(begin) {
+        let block_start = begin_pos;
+        let after_begin = begin_pos + begin.len();
+        let Some(end_rel) = rest[after_begin..].find(end) else {
+            break;
+        };
+        let block_end = after_begin + end_rel + end.len();
+        if let Some(der) = edgerun_crypto::x509_cert_from_pem(&rest[block_start..block_end]) {
+            roots.push(der);
+        }
+        rest = &rest[block_end..];
+    }
+
+    roots
 }
 
 /// QUIC-TLS handshake result.
@@ -349,6 +519,8 @@ pub struct QuicTlsHandshaker {
     cert_verify_signature: Option<(u16, Vec<u8>)>,
     /// Certificate validation result (set after processing Certificate)
     cert_validation: Option<CertValidationResult>,
+    /// Configured trusted root certificates, DER-encoded.
+    trusted_roots_der: Vec<Vec<u8>>,
     /// Explicit local-test mode for same-stack QUIC without X.509 trust.
     allow_unverified_certificates: bool,
 }
@@ -390,17 +562,33 @@ impl QuicTlsHandshaker {
             server_cert_chain: Vec::new(),
             cert_verify_signature: None,
             cert_validation: None,
+            trusted_roots_der: Vec::new(),
             allow_unverified_certificates: false,
         }
     }
 
     /// Allow unverified server certificates.
     ///
-    /// This is intended only for same-stack tests and local development until
-    /// the QUIC client has full X.509 chain, hostname, and CertificateVerify
-    /// verification. Production callers should leave this disabled.
+    /// This is intended only for same-stack tests and local development.
+    /// Production callers should leave this disabled and configure trust roots.
     pub fn allow_unverified_certificates(&mut self, allow: bool) {
         self.allow_unverified_certificates = allow;
+    }
+
+    /// Configure DER-encoded X.509 trust roots for strict certificate validation.
+    pub fn set_trusted_roots_der(&mut self, roots: Vec<Vec<u8>>) {
+        self.trusted_roots_der = roots;
+    }
+
+    /// Load trust roots from the host Linux CA bundle paths.
+    ///
+    /// This is available only for host builds with the `std` feature.
+    #[cfg(feature = "std")]
+    pub fn load_linux_trust_roots(&mut self) -> Result<usize, String> {
+        let roots = load_linux_trust_roots_der()?;
+        let count = roots.len();
+        self.set_trusted_roots_der(roots);
+        Ok(count)
     }
 
     /// Build the Initial packet payload: CRYPTO frame containing ClientHello.
@@ -630,7 +818,10 @@ impl QuicTlsHandshaker {
                             }
 
                             // Validate certificate chain
-                            let validator = CertificateValidator::new(Some(self.server_name()));
+                            let validator = CertificateValidator::with_trusted_roots_der(
+                                Some(self.server_name()),
+                                &self.trusted_roots_der,
+                            )?;
                             self.cert_validation =
                                 Some(validator.validate_chain(&self.server_cert_chain));
                             if !self.allow_unverified_certificates {
@@ -670,7 +861,10 @@ impl QuicTlsHandshaker {
                         let leaf_cert = self.server_cert_chain.first().ok_or_else(|| {
                             "CertificateVerify received before Certificate".to_string()
                         })?;
-                        let validator = CertificateValidator::new(Some(self.server_name()));
+                        let validator = CertificateValidator::with_trusted_roots_der(
+                            Some(self.server_name()),
+                            &self.trusted_roots_der,
+                        )?;
                         if !validator.verify_certificate_signature(
                             leaf_cert,
                             sig_alg,
@@ -1068,6 +1262,66 @@ mod tests {
         msg
     }
 
+    fn der_len(len: usize) -> Vec<u8> {
+        if len < 128 {
+            return vec![len as u8];
+        }
+        let mut bytes = Vec::new();
+        let mut value = len;
+        while value > 0 {
+            bytes.push(value as u8);
+            value >>= 8;
+        }
+        bytes.reverse();
+        let mut out = vec![0x80 | bytes.len() as u8];
+        out.extend_from_slice(&bytes);
+        out
+    }
+
+    fn der(tag: u8, value: &[u8]) -> Vec<u8> {
+        let mut out = vec![tag];
+        out.extend_from_slice(&der_len(value.len()));
+        out.extend_from_slice(value);
+        out
+    }
+
+    fn der_seq(parts: &[Vec<u8>]) -> Vec<u8> {
+        let mut value = Vec::new();
+        for part in parts {
+            value.extend_from_slice(part);
+        }
+        der(0x30, &value)
+    }
+
+    fn der_oid(value: &[u8]) -> Vec<u8> {
+        der(0x06, value)
+    }
+
+    fn der_bit_string(value: &[u8]) -> Vec<u8> {
+        let mut bit_string = vec![0];
+        bit_string.extend_from_slice(value);
+        der(0x03, &bit_string)
+    }
+
+    fn fake_certificate_with_spki(spki_algorithm: &[u8], public_key: &[u8]) -> Vec<u8> {
+        let tbs = der_seq(&[
+            der(0x02, &[1]),
+            der_seq(&[der_oid(&[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02])]),
+            der_seq(&[]),
+            der_seq(&[der(0x17, b"250101000000Z"), der(0x17, b"491231235959Z")]),
+            der_seq(&[]),
+            der_seq(&[
+                der_seq(&[der_oid(spki_algorithm)]),
+                der_bit_string(public_key),
+            ]),
+        ]);
+        der_seq(&[
+            tbs,
+            der_seq(&[der_oid(&[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02])]),
+            der_bit_string(&[0x30, 0x00]),
+        ])
+    }
+
     #[test]
     fn certificate_validator_rejects_untrusted_self_signed_chain() {
         let cert = edgerun_tls::generate_self_signed(&["example.com"]).unwrap();
@@ -1081,6 +1335,44 @@ mod tests {
             result.error.as_deref(),
             Some("Self-signed certificate is not trusted")
         );
+    }
+
+    #[test]
+    fn certificate_validator_accepts_configured_trusted_root() {
+        let cert = edgerun_tls::generate_self_signed(&["example.com"]).unwrap();
+        let validator = CertificateValidator::with_trusted_roots_der(
+            Some("example.com"),
+            &[cert.cert_der.clone()],
+        )
+        .unwrap();
+
+        let result = validator.validate_chain(&[cert.cert_der]);
+
+        assert!(result.is_valid(), "{result:?}");
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn linux_ca_bundle_paths_include_arch_bundle() {
+        assert!(LINUX_CA_BUNDLE_PATHS.contains(&"/etc/ca-certificates/extracted/tls-ca-bundle.pem"));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn parses_multiple_pem_certificates_from_linux_bundle() {
+        let first = edgerun_tls::generate_self_signed(&["first.example"]).unwrap();
+        let second = edgerun_tls::generate_self_signed(&["second.example"]).unwrap();
+        let bundle = format!(
+            "# generated test bundle\n{}\n\n{}\n",
+            first.cert_pem(),
+            second.cert_pem()
+        );
+
+        let roots = parse_pem_certificates(&bundle);
+
+        assert_eq!(roots.len(), 2);
+        assert_eq!(roots[0], first.cert_der);
+        assert_eq!(roots[1], second.cert_der);
     }
 
     #[test]
@@ -1109,6 +1401,70 @@ mod tests {
             &cert.cert_der,
             sig_alg,
             signature,
+            b"tampered transcript",
+            &Hasher::Sha256
+        ));
+    }
+
+    #[test]
+    fn certificate_verify_accepts_ed25519_signature() {
+        let mut rng = edgerun_crypto::rand_core::OsRng;
+        let signing_key = edgerun_crypto::ed25519_dalek::SigningKey::generate(&mut rng);
+        let verifying_key = signing_key.verifying_key();
+        let cert_der = fake_certificate_with_spki(&[0x2b, 0x65, 0x70], verifying_key.as_bytes());
+        let transcript = b"prior tls handshake messages";
+        let signed_input = certificate_verify_signed_input(transcript, &Hasher::Sha256);
+        use edgerun_crypto::ed25519_dalek::Signer;
+        let signature = signing_key.sign(&signed_input);
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        assert!(validator.verify_certificate_signature(
+            &cert_der,
+            0x0807,
+            signature.to_bytes().as_slice(),
+            transcript,
+            &Hasher::Sha256
+        ));
+        assert!(!validator.verify_certificate_signature(
+            &cert_der,
+            0x0807,
+            signature.to_bytes().as_slice(),
+            b"tampered transcript",
+            &Hasher::Sha256
+        ));
+    }
+
+    #[test]
+    fn certificate_verify_accepts_rsa_pss_signature() {
+        use edgerun_crypto::rsa::pkcs1::EncodeRsaPublicKey;
+        use edgerun_crypto::rsa::signature::{RandomizedSigner, SignatureEncoding};
+
+        let mut rng = edgerun_crypto::rand_core::OsRng;
+        let private_key = edgerun_crypto::rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let public_key = edgerun_crypto::rsa::RsaPublicKey::from(&private_key);
+        let public_key_der = public_key.to_pkcs1_der().unwrap();
+        let cert_der = fake_certificate_with_spki(
+            &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01],
+            public_key_der.as_bytes(),
+        );
+        let transcript = b"prior tls handshake messages";
+        let signed_input = certificate_verify_signed_input(transcript, &Hasher::Sha256);
+        let signing_key =
+            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::sha2::Sha256>::new(private_key);
+        let signature = signing_key.sign_with_rng(&mut rng, &signed_input);
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        assert!(validator.verify_certificate_signature(
+            &cert_der,
+            0x0804,
+            signature.to_vec().as_slice(),
+            transcript,
+            &Hasher::Sha256
+        ));
+        assert!(!validator.verify_certificate_signature(
+            &cert_der,
+            0x0804,
+            signature.to_vec().as_slice(),
             b"tampered transcript",
             &Hasher::Sha256
         ));

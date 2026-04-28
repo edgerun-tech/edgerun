@@ -19,7 +19,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // causes stack overflow in nested structure parsing
     fn parses_yaml_array() {
         let value = from_yaml_str("- item1\n- item2\n- 3").unwrap();
         assert_eq!(value[0].as_str(), Some("item1"));
@@ -28,7 +27,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // causes stack overflow in nested structure parsing
     fn roundtrips_yaml() {
         let original = r#"name: test
 items:

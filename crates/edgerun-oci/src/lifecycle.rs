@@ -603,7 +603,8 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
         .annotations
         .as_ref()
         .and_then(|a| a.get("org.edgerun.container.id"))
-        .cloned() else {
+        .cloned()
+    else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "container spec is missing required org.edgerun.container.id annotation",
@@ -629,7 +630,8 @@ pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
         .annotations
         .as_ref()
         .and_then(|a| a.get("org.edgerun.container.id"))
-        .cloned() else {
+        .cloned()
+    else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "container spec is missing required org.edgerun.container.id annotation",

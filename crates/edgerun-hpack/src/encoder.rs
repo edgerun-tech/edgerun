@@ -9,7 +9,7 @@
 //! Encodes a header using a literal encoding.
 //!
 //! ```rust
-//! use hpack::Encoder;
+//! use edgerun_hpack::Encoder;
 //!
 //! let mut encoder = Encoder::new();
 //!
@@ -32,7 +32,7 @@
 //! Encodes some pseudo-headers that are already found in the static table.
 //!
 //! ```rust
-//! use hpack::Encoder;
+//! use edgerun_hpack::Encoder;
 //!
 //! let mut encoder = Encoder::new();
 //! let headers = vec![
@@ -71,7 +71,7 @@ use super::STATIC_TABLE;
 /// # Example
 ///
 /// ```rust
-/// use hpack::encoder::encode_integer_into;
+/// use edgerun_hpack::encoder::encode_integer_into;
 ///
 /// {
 ///     // No bits specified in the 3 most significant bits of the first octet
@@ -153,7 +153,7 @@ pub fn encode_integer(value: usize, prefix_size: u8) -> Vec<u8> {
 /// representations, due to the utilization of HPACK compression.
 ///
 /// ```rust
-/// use hpack::Encoder;
+/// use edgerun_hpack::Encoder;
 ///
 /// let mut encoder = Encoder::new();
 ///

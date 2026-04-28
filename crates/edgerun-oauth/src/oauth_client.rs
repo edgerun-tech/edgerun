@@ -19,7 +19,7 @@
 //!
 //! // Requests automatically include the bearer token.
 //! // On 401, the client refreshes and retries once.
-//! let resp = client.get("https://api.example.com/data").await?;
+//! let _resp = client.get("https://api.example.com/data").await.unwrap();
 //! # });
 //! ```
 

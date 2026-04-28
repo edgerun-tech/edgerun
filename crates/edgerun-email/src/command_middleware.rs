@@ -16,7 +16,7 @@
 //! ```
 //!
 //! # Example — SMTP rate limiter
-//! ```ignore
+//! ```text
 //! use edgerun_email::command_middleware::{CommandMiddleware, NextCommand, SessionExtensions};
 //! use edgerun_email::smtp::types::SmtpCommand;
 //! use edgerun_email::smtp::server::SmtpResponse;
@@ -43,7 +43,7 @@
 //! First `.with()` = outermost (sees command first, response last).
 //! Last `.with()` = innermost (closest to protocol handler).
 //!
-//! ```ignore
+//! ```text
 //! let chain = CommandChain::new(smtp_handler)
 //!     .with(rate_limit(limiter))    // outermost
 //!     .with(require_tls())
@@ -72,7 +72,7 @@ use crate::rt::Mutex;
 /// Keyed by `TypeId` — only one value of each type can exist at a time.
 ///
 /// # Example
-/// ```ignore
+/// ```text
 /// // Auth middleware stores authenticated identity
 /// session.insert(AuthenticatedUser { username: "ken".into() }).await;
 ///
@@ -280,7 +280,7 @@ where
 /// Builder for composing command middleware into a single handler.
 ///
 /// # Example
-/// ```ignore
+/// ```text
 /// let handler = CommandChain::new(smtp_handler)
 ///     .with(rate_limit)
 ///     .with(require_auth)

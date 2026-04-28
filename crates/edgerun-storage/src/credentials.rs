@@ -14,7 +14,7 @@
 //!
 //! ## Example
 //!
-//! ```ignore
+//! ```text
 //! let store = CredentialStore::new(blobs, index);
 //!
 //! // Store a credential

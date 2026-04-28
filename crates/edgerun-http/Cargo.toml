@@ -8,7 +8,7 @@ description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 
 [features]
 default = []
-std = []
+std = ["edgerun-quic?/std"]
 client = ["http1", "http2", "runtime", "dep:edgerun-dns", "dep:edgerun-log"]
 connection-middleware = []
 http-compression = ["dep:brotli", "dep:miniz_oxide"]

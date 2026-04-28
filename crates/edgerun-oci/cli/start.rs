@@ -36,13 +36,12 @@ pub fn cmd_start(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
     })?;
     let bundle = state.bundle.clone();
 
-    let spec = crate::cli::load_runtime_or_bundle_spec(id, &bundle)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("container {id} has no readable OCI spec to start"),
-            )
-        })?;
+    let spec = crate::cli::load_runtime_or_bundle_spec(id, &bundle).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("container {id} has no readable OCI spec to start"),
+        )
+    })?;
 
     start_created_container(&spec, id, pid)?;
 

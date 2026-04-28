@@ -2,8 +2,8 @@
 //!
 //! ## Server example
 //! ```no_run
-//! use edgerun_smtp::server::{SmtpServer, SmtpServerConfig};
-//! use crate::rt::CancellationToken;
+//! use edgerun_email::rt::CancellationToken;
+//! use edgerun_email::smtp::server::{SmtpServer, SmtpServerConfig};
 //!
 //! # async fn example() -> std::io::Result<()> {
 //! let config = SmtpServerConfig::default();
@@ -15,7 +15,7 @@
 //!
 //! ## Client example
 //! ```no_run
-//! use edgerun_smtp::client::{SmtpClient, EmailBuilder};
+//! use edgerun_email::smtp::client::{EmailBuilder, SmtpClient};
 //!
 //! # async fn example() -> std::io::Result<()> {
 //! let mut client = SmtpClient::connect("mail.example.com:25").await?;

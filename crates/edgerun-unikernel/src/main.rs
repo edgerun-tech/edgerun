@@ -314,6 +314,7 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifi30" | b"wifi30\n" => write_wifi_debug_step(frame.seq, 30),
             b"wifi31" | b"wifi31\n" => write_wifi_debug_step(frame.seq, 31),
             b"wifi32" | b"wifi32\n" => write_wifi_debug_step(frame.seq, 32),
+            b"wifi33" | b"wifi33\n" => write_wifi_debug_step(frame.seq, 33),
             b"wifich1" | b"wifich1\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifich6" | b"wifich6\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifich11" | b"wifich11\n" => write_wifi_debug_step(frame.seq, 25),
@@ -392,7 +393,7 @@ fn write_wifi_tx_regs(seq: u16) {
 
 fn write_wifi_rx_scratch_regs(seq: u16) {
     display_console_log("ctl wifirx");
-    let mut buf = [0u8; 384];
+    let mut buf = [0u8; 640];
     let mut len = 0;
     append_wifi_rx_scratch_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -593,6 +594,24 @@ fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.last);
     append_bytes(out, len, b" reload=0x");
     append_hex_u32(out, len, regs.reload);
+    append_bytes(out, len, b" irq=0x");
+    append_hex_u32(out, len, regs.interrupt_status);
+    append_bytes(out, len, b" clr=0x");
+    append_hex_u32(out, len, regs.interrupt_clear);
+    append_bytes(out, len, b" dma=0x");
+    append_hex_u32(out, len, regs.dma_state);
+    append_bytes(out, len, b" end0=0x");
+    append_hex_u32(out, len, regs.rx_end0);
+    append_bytes(out, len, b" end1=0x");
+    append_hex_u32(out, len, regs.rx_end1);
+    append_bytes(out, len, b" est=0x");
+    append_hex_u32(out, len, regs.rx_end_state);
+    append_bytes(out, len, b" ri0=0x");
+    append_hex_u32(out, len, regs.rx_info0);
+    append_bytes(out, len, b" ri1=0x");
+    append_hex_u32(out, len, regs.rx_info1);
+    append_bytes(out, len, b" ri2=0x");
+    append_hex_u32(out, len, regs.rx_info2);
     append_bytes(out, len, b" desc");
     for word in regs.desc_words {
         append_bytes(out, len, b" ");

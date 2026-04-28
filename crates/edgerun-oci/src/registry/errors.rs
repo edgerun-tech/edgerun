@@ -9,6 +9,7 @@ pub enum RegistryError {
     HttpStatus(u16),
     HttpError(String),
     AuthError(String),
+    TrustPolicy(String),
     ManifestNotFound(String),
     NoManifests,
     DigestMismatch {
@@ -31,6 +32,7 @@ impl fmt::Display for RegistryError {
             RegistryError::HttpStatus(code) => write!(f, "HTTP {}", code),
             RegistryError::HttpError(e) => write!(f, "HTTP error: {}", e),
             RegistryError::AuthError(e) => write!(f, "Auth error: {}", e),
+            RegistryError::TrustPolicy(e) => write!(f, "Trust policy error: {}", e),
             RegistryError::ManifestNotFound(tag) => write!(f, "Manifest not found: {}", tag),
             RegistryError::NoManifests => write!(f, "No manifests in index"),
             RegistryError::DigestMismatch { expected, computed } => {

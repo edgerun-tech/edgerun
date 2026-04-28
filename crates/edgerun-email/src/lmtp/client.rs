@@ -1,7 +1,7 @@
 //! LMTP client for local mail delivery testing.
 //!
 //! # Example
-//! ```ignore
+//! ```text
 //! use edgerun_lmtp::client::LmtpClient;
 //!
 //! # async fn example() -> std::io::Result<()> {

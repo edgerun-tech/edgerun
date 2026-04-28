@@ -2,7 +2,7 @@
 //!
 //! Gate with `feature = "android-keystore"`.
 
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use edgerun_android_keystore::{
     sign_record_with_keystore_checked, AndroidKeystoreAssuranceLevel,
@@ -72,7 +72,13 @@ fn provider_requirements_for_keystore(
     requirements: &HardwareValidationRequirements,
 ) -> Result<Vec<AndroidKeystoreSignatureAlgorithm>, HardwareSigningError> {
     if requirements.allowed_algorithms.is_empty() {
-        return Ok(Vec::new());
+        return Ok(vec![
+            AndroidKeystoreSignatureAlgorithm::RsaPkcs1v15Sha256,
+            AndroidKeystoreSignatureAlgorithm::RsaPssSha256,
+            AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256,
+            AndroidKeystoreSignatureAlgorithm::EcdsaP384Sha384,
+            AndroidKeystoreSignatureAlgorithm::Eddsa,
+        ]);
     }
     requirements
         .allowed_algorithms
@@ -260,14 +266,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires Android hardware with Keystore"]
     fn sign_record_with_android_keystore_provider_success() {
         let key =
             FakeKeystoreKey::with_algorithm(AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256);
         let req = HardwareValidationRequirements::default();
         let sig =
             sign_record_with_android_keystore_provider(&key, &req, "test:v0:sig", b"hash").unwrap();
-        assert_eq!(sig, b"hash");
+        assert_eq!(sig, crate::signature_input_for_record("test:v0:sig", b"hash"));
     }
 
     #[test]

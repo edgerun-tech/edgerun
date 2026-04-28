@@ -297,7 +297,6 @@ impl From<ParseError> for EncoderError {
 mod tests {
     extern crate alloc;
     use alloc::{format, vec, vec::Vec};
-    use std::io::Cursor;
 
     use super::*;
 
@@ -320,7 +319,7 @@ mod tests {
         init_fields: &[HeaderField],
         field: &[HeaderField],
         stream_id: u64,
-        check: fn(&mut Cursor<&mut Vec<u8>>, &mut Cursor<&mut Vec<u8>>),
+        check: fn(&mut Cursor<Vec<u8>>, &mut Cursor<Vec<u8>>),
     ) {
         for field in init_fields {
             table.put(field.clone()).unwrap();
@@ -336,16 +335,16 @@ mod tests {
 
         enc_table.commit(field.len());
 
-        let mut read_block = Cursor::new(&mut block);
-        let mut read_encoder = Cursor::new(&mut encoder);
+        let mut read_block = Cursor::new(block);
+        let mut read_encoder = Cursor::new(encoder);
         check(&mut read_block, &mut read_encoder);
     }
 
     #[test]
     fn encode_static() {
         let field = HeaderField::new(":method", "GET");
-        check_encode_field(&[], &[field], &|b, e| {
-            assert_eq!(Indexed::decode(&mut b), Ok(Indexed::Static(17)));
+        check_encode_field(&[], &[field], |b, e| {
+            assert_eq!(Indexed::decode(b), Ok(Indexed::Static(17)));
             assert_eq!(e.get_ref().len(), 0);
         });
     }
@@ -353,13 +352,10 @@ mod tests {
     #[test]
     fn encode_static_nameref() {
         let field = HeaderField::new("location", "/bar");
-        check_encode_field(&[], &[field], &|b, e| {
+        check_encode_field(&[], &[field], |b, e| {
+            assert_eq!(IndexedWithPostBase::decode(b), Ok(IndexedWithPostBase(0)));
             assert_eq!(
-                IndexedWithPostBase::decode(&mut b),
-                Ok(IndexedWithPostBase(0))
-            );
-            assert_eq!(
-                InsertWithNameRef::decode(&mut e),
+                InsertWithNameRef::decode(e),
                 Ok(Some(InsertWithNameRef::new_static(12, "/bar")))
             );
         });
@@ -368,8 +364,8 @@ mod tests {
     #[test]
     fn encode_static_nameref_indexed_in_dynamic() {
         let field = HeaderField::new("location", "/bar");
-        check_encode_field(&[field.clone()], &[field], &|b, e| {
-            assert_eq!(Indexed::decode(&mut b), Ok(Indexed::Dynamic(0)));
+        check_encode_field(&[field.clone()], &[field], |b, e| {
+            assert_eq!(Indexed::decode(b), Ok(Indexed::Dynamic(0)));
             assert_eq!(e.get_ref().len(), 0);
         });
     }
@@ -377,13 +373,10 @@ mod tests {
     #[test]
     fn encode_dynamic_insert() {
         let field = HeaderField::new("foo", "bar");
-        check_encode_field(&[], &[field], &|b, e| {
+        check_encode_field(&[], &[field], |b, e| {
+            assert_eq!(IndexedWithPostBase::decode(b), Ok(IndexedWithPostBase(0)));
             assert_eq!(
-                IndexedWithPostBase::decode(&mut b),
-                Ok(IndexedWithPostBase(0))
-            );
-            assert_eq!(
-                InsertWithoutNameRef::decode(&mut e),
+                InsertWithoutNameRef::decode(e),
                 Ok(Some(InsertWithoutNameRef::new("foo", "bar")))
             );
         });
@@ -396,12 +389,9 @@ mod tests {
             &[field.clone(), HeaderField::new("baz", "bar")],
             &[field.with_value("quxx")],
             |b, e| {
+                assert_eq!(IndexedWithPostBase::decode(b), Ok(IndexedWithPostBase(0)));
                 assert_eq!(
-                    IndexedWithPostBase::decode(&mut b),
-                    Ok(IndexedWithPostBase(0))
-                );
-                assert_eq!(
-                    InsertWithNameRef::decode(&mut e),
+                    InsertWithNameRef::decode(e),
                     Ok(Some(InsertWithNameRef::new_dynamic(1, "quxx")))
                 );
             },
@@ -414,7 +404,7 @@ mod tests {
         table.set_max_size(0).unwrap();
         let field = HeaderField::new("foo", "bar");
         check_encode_field_table(&mut table, &[], &[field], 1, |b, e| {
-            assert_eq!(Literal::decode(&mut b), Ok(Literal::new("foo", "bar")));
+            assert_eq!(Literal::decode(b), Ok(Literal::new("foo", "bar")));
             assert_eq!(e.get_ref().len(), 0);
         });
     }
@@ -426,10 +416,7 @@ mod tests {
         let field = HeaderField::new("foo", "bar");
 
         check_encode_field_table(&mut table, &[], &[field.clone()], 1, |b, _| {
-            assert_eq!(
-                IndexedWithPostBase::decode(&mut b),
-                Ok(IndexedWithPostBase(0))
-            );
+            assert_eq!(IndexedWithPostBase::decode(b), Ok(IndexedWithPostBase(0)));
         });
         check_encode_field_table(
             &mut table,
@@ -438,7 +425,7 @@ mod tests {
             2,
             |b, e| {
                 assert_eq!(
-                    LiteralWithNameRef::decode(&mut b),
+                    LiteralWithNameRef::decode(b),
                     Ok(LiteralWithNameRef::new_dynamic(0, "quxx"))
                 );
                 assert_eq!(e.get_ref().len(), 0);
@@ -456,17 +443,14 @@ mod tests {
             &[],
             &[field.clone(), field.with_value("quxx")],
             1,
-            &|b, mut e| {
+            |b, e| {
+                assert_eq!(IndexedWithPostBase::decode(b), Ok(IndexedWithPostBase(0)));
                 assert_eq!(
-                    IndexedWithPostBase::decode(&mut b),
-                    Ok(IndexedWithPostBase(0))
-                );
-                assert_eq!(
-                    LiteralWithPostBaseNameRef::decode(&mut b),
+                    LiteralWithPostBaseNameRef::decode(b),
                     Ok(LiteralWithPostBaseNameRef::new(0, "quxx"))
                 );
                 assert_eq!(
-                    InsertWithoutNameRef::decode(&mut e),
+                    InsertWithoutNameRef::decode(e),
                     Ok(Some(InsertWithoutNameRef::new("foo", "bar")))
                 );
             },
@@ -504,8 +488,8 @@ mod tests {
             Ok(7)
         );
 
-        let mut read_block = Cursor::new(&mut block);
-        let mut read_encoder = Cursor::new(&mut encoder_buf);
+        let mut read_block = Cursor::new(block);
+        let mut read_encoder = Cursor::new(encoder_buf);
 
         assert_eq!(
             InsertWithNameRef::decode(&mut read_encoder),

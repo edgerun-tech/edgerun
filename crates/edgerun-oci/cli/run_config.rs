@@ -9,6 +9,7 @@ use crate::cli::{
     default_images_dir, default_store_dir, parse_cli_args, split_cli_prefix, RUN_VALUE_OPTIONS,
 };
 use crate::spec::{OciMount, OciSpec};
+use crate::ImageTrustPolicy;
 use edgerun_clap::cli::Action;
 use edgerun_clap::{Arg, Command};
 
@@ -29,6 +30,7 @@ pub(super) struct RunOpts {
     pub tty: bool,
     pub mounts: Vec<OciMount>,
     pub pull_policy: PullPolicy,
+    pub image_trust_policy: ImageTrustPolicy,
     pub images_dir: PathBuf,
     pub store_path: PathBuf,
 }
@@ -90,6 +92,11 @@ pub(super) fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Ve
             .arg(Arg::new("user").short('u').long("user"))
             .arg(Arg::new("entrypoint").long("entrypoint"))
             .arg(Arg::new("pull").long("pull"))
+            .arg(
+                Arg::new("allow-unverified-tags")
+                    .long("allow-unverified-tags")
+                    .action(Action::StoreTrue),
+            )
             .arg(Arg::new("hostname").short('h').long("hostname"))
             .arg(Arg::new("dns").long("dns").action(Action::Append))
             .arg(Arg::new("add-host").long("add-host").action(Action::Append))
@@ -133,6 +140,11 @@ pub(super) fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Ve
             .map(|pull| parse_pull_policy(&pull))
             .transpose()?
             .unwrap_or(PullPolicy::Missing),
+        image_trust_policy: if matches.get_flag("allow-unverified-tags") {
+            ImageTrustPolicy::AllowTagReference
+        } else {
+            ImageTrustPolicy::RequireDigestReference
+        },
         images_dir: matches
             .get_one::<PathBuf>("images-dir")
             .unwrap_or_else(default_images_dir),

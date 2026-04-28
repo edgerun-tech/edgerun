@@ -59,12 +59,14 @@ mod registry {
     pub(crate) mod layer;
     pub mod manifest;
     pub(crate) mod oci_spec;
+    pub mod provenance;
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod pull;
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod push_manifest;
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod tar_push;
+    pub mod trust;
 }
 
 pub mod bare_rootfs;
@@ -203,10 +205,9 @@ pub use layer_pipeline::{
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use lifecycle::{
     delete_container, delete_container_with_result, fork_container_child, run_bundle,
-    run_create_runtime_hooks,
-    run_poststart_hooks, run_poststop_and_cleanup, run_prestart_hooks, run_spec, run_spec_with_id,
-    save_created_state, setup_container_cgroups, signal_start, start_bundle, start_spec,
-    start_spec_with_id, update_state_running,
+    run_create_runtime_hooks, run_poststart_hooks, run_poststop_and_cleanup, run_prestart_hooks,
+    run_spec, run_spec_with_id, save_created_state, setup_container_cgroups, signal_start,
+    start_bundle, start_spec, start_spec_with_id, update_state_running,
 };
 pub use oci_path::{layer_path_safe, normalize_layer_path};
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -274,8 +275,10 @@ pub use registry::manifest::{
     ImageManifest, LayerDescriptor, ManifestDescriptor, PlatformDescriptor, SingleManifest,
 };
 pub use registry::oci_spec::{generate_oci_spec, generate_oci_spec_model};
+pub use registry::provenance::{ImageLayerProvenance, ImageProvenance};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::pull::{ImagePullReport, PullProgress};
+pub use registry::trust::ImageTrustPolicy;
 
 pub const DEFAULT_NAMESPACES: &[(&str, Option<&str>)] = &[
     ("mount", None),

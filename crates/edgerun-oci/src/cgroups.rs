@@ -28,11 +28,7 @@ pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
 }
 
 /// Write to a cgroup file, returning an error if write fails.
-pub fn cgroup_write_result(
-    cgroup_root: &Path,
-    file: &str,
-    content: &str,
-) -> io::Result<()> {
+pub fn cgroup_write_result(cgroup_root: &Path, file: &str, content: &str) -> io::Result<()> {
     fs::write(cgroup_root.join(file), content)
 }
 

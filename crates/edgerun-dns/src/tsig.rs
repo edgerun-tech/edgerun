@@ -7,7 +7,7 @@
 //! is appended to the additional section of the DNS message.
 //!
 //! # Usage
-//! ```ignore
+//! ```text
 //! use edgerun_dns::tsig::{TsigKey, TsigSigner, TsigVerifier};
 //!
 //! // Generate a shared secret key

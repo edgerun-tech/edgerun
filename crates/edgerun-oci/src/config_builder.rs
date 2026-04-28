@@ -5,7 +5,7 @@
 //!
 //! ## Usage
 //!
-//! ```ignore
+//! ```text
 //! let config = ContainerConfigBuilder::new("/var/lib/bundle/rootfs")
 //!     .args(vec!["/bin/sh".into()])
 //!     .cwd("/app".into())

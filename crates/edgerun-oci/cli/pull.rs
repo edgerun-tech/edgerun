@@ -9,18 +9,21 @@ use crate::cli::{
     resolve_registry_auth, GlobalOpts,
 };
 use crate::ImageRef;
-use crate::{PullProgress, RegistryClient};
+use crate::{ImageTrustPolicy, PullProgress, RegistryClient};
+use edgerun_clap::cli::Action;
 use edgerun_clap::{Arg, Command};
 
 pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
-    let (image_ref, images_dir, store_path) = parse_pull_args(args)?;
+    let (image_ref, images_dir, store_path, trust_policy) = parse_pull_args(args)?;
 
     let image: ImageRef = image_ref
         .parse()
         .map_err(|e: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
 
     let auth = resolve_registry_auth(&image.registry)?;
-    let mut client = RegistryClient::new().with_auth(auth);
+    let mut client = RegistryClient::new()
+        .with_auth(auth)
+        .with_image_trust_policy(trust_policy);
 
     let bundle_path = images_dir.join(&image.repository).join(&image.tag);
 
@@ -148,6 +151,9 @@ pub(crate) fn print_pull_progress(event: PullProgress) {
         PullProgress::WritingConfig { path } => {
             eprintln!("  -> writing {}", path.display());
         }
+        PullProgress::WritingProvenance { path } => {
+            eprintln!("  -> writing {}", path.display());
+        }
     }
 }
 
@@ -160,10 +166,18 @@ fn short_digest(digest: &str) -> String {
     }
 }
 
-fn parse_pull_args(args: &[String]) -> std::io::Result<(String, PathBuf, PathBuf)> {
-    const USAGE: &str = "Usage: ert pull [--images-dir DIR] [--store DIR] <image>";
+fn parse_pull_args(
+    args: &[String],
+) -> std::io::Result<(String, PathBuf, PathBuf, ImageTrustPolicy)> {
+    const USAGE: &str =
+        "Usage: ert pull [--allow-unverified-tags] [--images-dir DIR] [--store DIR] <image>";
     let matches = parse_cli_args(
         Command::new("pull")
+            .arg(
+                Arg::new("allow-unverified-tags")
+                    .long("allow-unverified-tags")
+                    .action(Action::StoreTrue),
+            )
             .arg(Arg::new("images-dir").long("images-dir"))
             .arg(Arg::new("store").long("store")),
         args,
@@ -179,5 +193,10 @@ fn parse_pull_args(args: &[String]) -> std::io::Result<(String, PathBuf, PathBuf
     let store_path = matches
         .get_one::<PathBuf>("store")
         .unwrap_or_else(default_store_dir);
-    Ok((image, images_dir, store_path))
+    let trust_policy = if matches.get_flag("allow-unverified-tags") {
+        ImageTrustPolicy::AllowTagReference
+    } else {
+        ImageTrustPolicy::RequireDigestReference
+    };
+    Ok((image, images_dir, store_path, trust_policy))
 }

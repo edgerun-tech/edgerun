@@ -143,8 +143,21 @@ impl ClientHelloBuilder {
 
         // 3. signature_algorithms (ext 13)
         {
-            // ecdsa_secp256r1_sha256 (0x0403), rsa_pss_rsae_sha256 (0x0804)
-            let data: Vec<u8> = vec![0x00, 0x04, 0x04, 0x03, 0x08, 0x04];
+            let schemes = [
+                0x0403u16, // ecdsa_secp256r1_sha256
+                0x0804,    // rsa_pss_rsae_sha256
+                0x0805,    // rsa_pss_rsae_sha384
+                0x0806,    // rsa_pss_rsae_sha512
+                0x0807,    // ed25519
+                0x0809,    // rsa_pss_pss_sha256
+                0x080a,    // rsa_pss_pss_sha384
+                0x080b,    // rsa_pss_pss_sha512
+            ];
+            let mut data = Vec::new();
+            data.extend_from_slice(&((schemes.len() * 2) as u16).to_be_bytes());
+            for scheme in schemes {
+                data.extend_from_slice(&scheme.to_be_bytes());
+            }
             msg.extend_from_slice(&13u16.to_be_bytes());
             msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
             msg.extend_from_slice(&data);

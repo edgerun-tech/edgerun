@@ -123,7 +123,12 @@ pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8
         };
 
         // Load skb->ifindex
-        sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R2, R6, SKB_IFINDEX_OFF)));
+        sym.push(SymInsn::Raw(ld_imm(
+            bpf_size::BPF_W,
+            R2,
+            R6,
+            SKB_IFINDEX_OFF,
+        )));
 
         // Compare with expected ifindex
         // if r2 != ifindex → skip to next rule/default
@@ -135,7 +140,12 @@ pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8
 
         // Set skb->priority = p.priority
         sym.push(SymInsn::Raw(mov_imm(R2, *priority as i32)));
-        sym.push(SymInsn::Raw(st_imm(bpf_size::BPF_W, R6, R2, SKB_PRIORITY_OFF)));
+        sym.push(SymInsn::Raw(st_imm(
+            bpf_size::BPF_W,
+            R6,
+            R2,
+            SKB_PRIORITY_OFF,
+        )));
         sym.push(SymInsn::Raw(mov_imm(R0, BPF_ALLOW)));
         sym.push(SymInsn::Raw(exit()));
 

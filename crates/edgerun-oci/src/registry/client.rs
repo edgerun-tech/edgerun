@@ -14,6 +14,7 @@ use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_
 use super::errors::RegistryError;
 use super::image_ref::ImageRef;
 use super::manifest::{ImageManifest, SingleManifest};
+use super::trust::ImageTrustPolicy;
 use edgerun_encoding::percent::{
     percent_encode, percent_encode_colon_pair, percent_encode_path_segments,
 };
@@ -37,6 +38,7 @@ pub struct RegistryClient {
     pub(crate) token: Option<String>,
     pub(crate) bytes_downloaded: u64,
     pub(crate) insecure_http: bool,
+    pub(crate) trust_policy: ImageTrustPolicy,
 }
 
 impl RegistryClient {
@@ -47,6 +49,7 @@ impl RegistryClient {
             token: None,
             bytes_downloaded: 0,
             insecure_http: false,
+            trust_policy: ImageTrustPolicy::default(),
         }
     }
 
@@ -72,6 +75,11 @@ impl RegistryClient {
         self
     }
 
+    pub fn with_image_trust_policy(mut self, trust_policy: ImageTrustPolicy) -> Self {
+        self.trust_policy = trust_policy;
+        self
+    }
+
     /// Read registry config.json for credentials.
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn with_registry_config(path: &Path) -> io::Result<Self> {
@@ -81,6 +89,7 @@ impl RegistryClient {
             token: None,
             bytes_downloaded: 0,
             insecure_http: false,
+            trust_policy: ImageTrustPolicy::default(),
         })
     }
 
@@ -100,6 +109,7 @@ impl RegistryClient {
             token: None,
             bytes_downloaded: 0,
             insecure_http: false,
+            trust_policy: ImageTrustPolicy::default(),
         }
     }
 
@@ -573,6 +583,7 @@ impl RegistryClient {
         image: &ImageRef,
         rootfs: &str,
     ) -> Result<BareImagePlan, RegistryError> {
+        self.trust_policy.enforce(image)?;
         let manifest = self.resolve_manifest(image).await?;
         let manifest_data = match manifest {
             ImageManifest::Single(manifest) => manifest,

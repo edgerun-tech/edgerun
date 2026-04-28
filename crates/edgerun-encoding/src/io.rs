@@ -111,6 +111,7 @@ pub trait Write {
     }
 }
 
+#[cfg(not(feature = "std"))]
 impl Read for &[u8] {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let n = buf.len().min(self.len());
@@ -120,6 +121,7 @@ impl Read for &[u8] {
     }
 }
 
+#[cfg(not(feature = "std"))]
 impl Write for Vec<u8> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.extend_from_slice(buf);

@@ -114,7 +114,11 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
     // Memory
     if let Some(limit) = opts.memory {
         let value = format_limit(limit, "memory limit")?;
-        crate::cgroups::setup_container_cgroups_from_file_result(cgroup_root, "memory.max", &value)?;
+        crate::cgroups::setup_container_cgroups_from_file_result(
+            cgroup_root,
+            "memory.max",
+            &value,
+        )?;
     }
     if let Some(swap) = opts.memory_swap {
         let value = format_limit(swap, "memory swap limit")?;

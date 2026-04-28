@@ -184,20 +184,17 @@ struct TokenEntry {
 /// # Example
 /// ```no_run
 /// use edgerun_oauth::{OAuthServer, ServerConfig};
-/// use edgerun_http::{HttpServer, Handler, Request, Response, StatusCode};
-/// use std::pin::Pin;
-/// use std::future::Future;
 ///
 /// # edgerun_rt::block_on(async {
 /// let config = ServerConfig::new("https://auth.example.com", "my-issuer");
 /// let oauth = OAuthServer::new(config).unwrap();
 ///
 /// // Register a client
-/// let client = oauth.register_client("my-app", vec!["openid".into(), "email".into()]).await;
+/// let client = oauth.register_client("my-app", vec!["openid".into(), "email".into()]);
 /// println!("client_id: {}", client.client_id);
 ///
-/// // Mount as an HttpServer handler
-/// HttpServer::new(oauth).bind("127.0.0.1:8080").await.unwrap().serve().await.unwrap();
+/// // `oauth` implements `edgerun_http::Handler` and can be mounted by
+/// // the HTTP server when the server feature is enabled.
 /// # });
 /// ```
 pub struct OAuthServer {
@@ -1086,7 +1083,7 @@ impl Handler for OAuthServer {
 ///     fn handle(&self, req: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
 ///         Box::pin(async move {
 ///             // Extract claims from request extensions
-///             let claims: Option<Claims> = req.extensions().get::<Claims>().cloned();
+///             let claims: Option<Claims> = req.extensions().get::<Claims>();
 ///             match claims {
 ///                 Some(c) => Response::text(StatusCode::new(200).unwrap(), &format!("Hello, {}", c.sub)),
 ///                 None => Response::text(StatusCode::new(401).unwrap(), "unauthenticated"),

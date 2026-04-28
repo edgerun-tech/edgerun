@@ -140,7 +140,10 @@ fn sign_session_accept(
 }
 
 /// Verify a SessionHello's signature and extract the peer's node ID.
-pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str> {
+pub fn verify_session_hello(
+    hello: &SessionHello,
+    expected_target: Option<&NodeID>,
+) -> Result<NodeID, &'static str> {
     let Some(ref initiator) = hello.initiator else {
         return Err("missing_initiator");
     };
@@ -148,7 +151,9 @@ pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str
         return Err("bad_identity_id_length");
     }
 
-    let validation = edgerun_core::validators_proto::validate_session_hello(hello, None);
+    let expected_target_bytes = expected_target.map(|target| target.0.as_slice());
+    let validation =
+        edgerun_core::validators_proto::validate_session_hello(hello, expected_target_bytes);
     if validation.verdict != edgerun_core::result::Verdict::Accept {
         return Err(match validation.reason_code {
             Some(edgerun_core::result::ReasonCode::CryptoInvalid) => "invalid_signature",
@@ -332,7 +337,7 @@ mod tests {
         let nonce = generate_nonce();
         let hello = build_session_hello(&signer.node_id(), None, &nonce, &signer).unwrap();
 
-        let result = verify_session_hello(&hello);
+        let result = verify_session_hello(&hello, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), signer.node_id());
     }

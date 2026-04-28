@@ -1450,6 +1450,7 @@ dependencies = [
 name = "edgerun-vfs"
 version = "0.1.1"
 dependencies = [
+ "edgerun-crypto",
  "edgerun-glob",
  "edgerun-inotify",
  "edgerun-log",

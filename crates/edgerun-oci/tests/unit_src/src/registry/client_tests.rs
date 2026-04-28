@@ -15,6 +15,10 @@ fn tmp_root() -> PathBuf {
 fn new_client_is_anonymous() {
     let client = RegistryClient::new();
     assert!(matches!(client.auth, RegistryAuth::Anonymous));
+    assert_eq!(
+        client.trust_policy,
+        ImageTrustPolicy::RequireDigestReference
+    );
 }
 
 #[test]

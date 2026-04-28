@@ -76,7 +76,7 @@ pub trait SignableMessage: CanonicalEncode {
 /// 3. Encode to protobuf bytes
 ///
 /// # Examples
-/// ```ignore
+/// ```text
 /// use edgerun_encoding::protobuf::canonical_bytes_for_signing;
 /// let canonical = canonical_bytes_for_signing(&message)?;
 /// let digest = edgerun_crypto::sha256(&canonical);
@@ -97,7 +97,7 @@ pub fn canonical_bytes_for_signing<M: SignableMessage>(
 /// The caller must provide a SHA-256 function, since `edgerun-encoding` has no crypto deps.
 ///
 /// # Examples
-/// ```ignore
+/// ```text
 /// use edgerun_encoding::protobuf::hash_canonical;
 /// let digest = hash_canonical(&message, |bytes| edgerun_crypto::sha256(bytes))?;
 /// ```
@@ -115,7 +115,7 @@ where
 /// Use this for non-signing purposes (storage, transmission, etc.).
 ///
 /// # Examples
-/// ```ignore
+/// ```text
 /// use edgerun_encoding::protobuf::encode_message;
 /// let bytes = encode_message(&message)?;
 /// ```
@@ -126,7 +126,7 @@ pub fn encode_message<M: CanonicalEncode>(message: &M) -> Result<Vec<u8>, Canoni
 /// Decode a message from protobuf bytes.
 ///
 /// # Examples
-/// ```ignore
+/// ```text
 /// use edgerun_encoding::protobuf::decode_message;
 /// let message: MyMessage = decode_message(&bytes)?;
 /// ```
@@ -140,7 +140,7 @@ pub fn decode_message<M: CanonicalEncode>(bytes: &[u8]) -> Result<M, CanonicalEr
 /// This is the standard pattern for length-delimited protobuf streams.
 ///
 /// # Examples
-/// ```ignore
+/// ```text
 /// use edgerun_encoding::protobuf::encode_length_prefixed;
 /// let framed = encode_length_prefixed(&message)?;
 /// ```
@@ -158,7 +158,7 @@ pub fn encode_length_prefixed<M: CanonicalEncode>(message: &M) -> Result<Vec<u8>
 /// Reads a varint length prefix, then decodes that many bytes as the message.
 ///
 /// # Examples
-/// ```ignore
+/// ```text
 /// use edgerun_encoding::protobuf::decode_length_prefixed;
 /// let (message, bytes_consumed) = decode_length_prefixed::<MyMessage>(&bytes)?;
 /// ```

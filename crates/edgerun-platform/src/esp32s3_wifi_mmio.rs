@@ -108,10 +108,14 @@ const WIFI_MAC_RX_RELOAD: *mut u32 = 0x6003_3084 as *mut u32;
 const WIFI_MAC_RX_BASE: *mut u32 = 0x6003_3088 as *mut u32;
 const WIFI_MAC_RX_NEXT: *mut u32 = 0x6003_308c as *mut u32;
 const WIFI_MAC_RX_LAST: *mut u32 = 0x6003_3090 as *mut u32;
+const WIFI_MAC_RX_END_STATE: *mut u32 = 0x6003_30a8 as *mut u32;
 const WIFI_MAC_RX_FILTER_COUNT: *mut u32 = 0x6003_311c as *mut u32;
 const WIFI_MAC_RX_FILTER_CTRL_BASE: *mut u32 = 0x6003_3120 as *mut u32;
 const WIFI_MAC_RX_FILTER_PATTERN_BASE: *mut u32 = 0x6003_313c as *mut u32;
 const WIFI_MAC_RX_FILTER_MASK_BASE: *mut u32 = 0x6003_3158 as *mut u32;
+const WIFI_MAC_RX_INFO2: *mut u32 = 0x6003_3314 as *mut u32;
+const WIFI_MAC_RX_INFO1: *mut u32 = 0x6003_3318 as *mut u32;
+const WIFI_MAC_RX_INFO0: *mut u32 = 0x6003_331c as *mut u32;
 const WIFI_MAC_CTRL_33114: *mut u32 = 0x6003_3114 as *mut u32;
 const WIFI_MAC_CTRL_33118: *mut u32 = 0x6003_3118 as *mut u32;
 const WIFI_MAC_SNIFFER_CTRL: *mut u32 = 0x6003_30e4 as *mut u32;
@@ -119,6 +123,11 @@ const WIFI_MAC_SNIFFER_MISC0: *mut u32 = 0x6003_30f4 as *mut u32;
 const WIFI_MAC_SNIFFER_MISC1: *mut u32 = 0x6003_30f8 as *mut u32;
 const WIFI_MAC_CTRL_332B8: *mut u32 = 0x6003_32b8 as *mut u32;
 const WIFI_MAC_CTRL_33084: *mut u32 = 0x6003_3084 as *mut u32;
+const WIFI_MAC_INTERRUPT_STATUS: *mut u32 = 0x6003_3c3c as *mut u32;
+const WIFI_MAC_INTERRUPT_CLEAR: *mut u32 = 0x6003_3c40 as *mut u32;
+const WIFI_MAC_RX_END0: *mut u32 = 0x6003_3d50 as *mut u32;
+const WIFI_MAC_RX_END1: *mut u32 = 0x6003_3d54 as *mut u32;
+const WIFI_MAC_DMA_STATE: *mut u32 = 0x6003_5128 as *mut u32;
 const WIFI_COEX_CTRL: *mut u32 = 0x6003_5084 as *mut u32;
 const WIFI_COEX_PTI: *mut u32 = 0x6003_32ac as *mut u32;
 const WIFI_COEX_DEFAULT_PTI: *mut u32 = 0x6003_5094 as *mut u32;
@@ -234,6 +243,15 @@ pub struct WifiMmioRxScratchRegs {
     pub next: u32,
     pub last: u32,
     pub reload: u32,
+    pub interrupt_status: u32,
+    pub interrupt_clear: u32,
+    pub dma_state: u32,
+    pub rx_end0: u32,
+    pub rx_end1: u32,
+    pub rx_end_state: u32,
+    pub rx_info0: u32,
+    pub rx_info1: u32,
+    pub rx_info2: u32,
     pub desc_words: [u32; RX_DESC_COUNT * 3],
     pub buffer_words: [u32; 8],
 }
@@ -411,6 +429,15 @@ impl Esp32s3WifiMmio {
                 next: WIFI_MAC_RX_NEXT.read_volatile(),
                 last: WIFI_MAC_RX_LAST.read_volatile(),
                 reload: WIFI_MAC_RX_RELOAD.read_volatile(),
+                interrupt_status: WIFI_MAC_INTERRUPT_STATUS.read_volatile(),
+                interrupt_clear: WIFI_MAC_INTERRUPT_CLEAR.read_volatile(),
+                dma_state: WIFI_MAC_DMA_STATE.read_volatile(),
+                rx_end0: WIFI_MAC_RX_END0.read_volatile(),
+                rx_end1: WIFI_MAC_RX_END1.read_volatile(),
+                rx_end_state: WIFI_MAC_RX_END_STATE.read_volatile(),
+                rx_info0: WIFI_MAC_RX_INFO0.read_volatile(),
+                rx_info1: WIFI_MAC_RX_INFO1.read_volatile(),
+                rx_info2: WIFI_MAC_RX_INFO2.read_volatile(),
                 desc_words: desc_snapshot,
                 buffer_words: buffer_snapshot,
             }
@@ -698,6 +725,12 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(3202, Ordering::Relaxed);
                     true
                 }
+                33 => {
+                    LAST_STATUS.store(3301, Ordering::Relaxed);
+                    poll_rx_event_direct_slice();
+                    LAST_STATUS.store(3302, Ordering::Relaxed);
+                    true
+                }
                 _ => false,
             }
         }
@@ -937,6 +970,16 @@ unsafe fn enable_sniffer_direct_slice() {
     update(WIFI_MAC_RX_CTRL1, |v| v | 4);
     update(WIFI_MAC_RX_CTRL3, |v| v | 4);
     update(WIFI_MAC_CTRL_33C34, |v| v | 4);
+}
+
+unsafe fn poll_rx_event_direct_slice() {
+    let pending = unsafe { WIFI_MAC_INTERRUPT_STATUS.read_volatile() };
+    if pending != 0 {
+        unsafe {
+            WIFI_MAC_INTERRUPT_CLEAR.write_volatile(pending);
+        }
+    }
+    update(WIFI_MAC_RX_RELOAD, |v| v | 1);
 }
 
 unsafe fn init_mac_txrx_tail_slice() {

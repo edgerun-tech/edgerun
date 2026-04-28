@@ -10,7 +10,7 @@
 //! A simple example of using the decoder that demonstrates its API:
 //!
 //! ```rust
-//! use hpack::Decoder;
+//! use edgerun_hpack::Decoder;
 //! let mut decoder = Decoder::new();
 //!
 //! let header_list = decoder.decode(&[0x82, 0x84]).unwrap();
@@ -25,7 +25,7 @@
 //! borrowed representation of each header, rather than an owned representation.
 //!
 //! ```rust
-//! use hpack::Decoder;
+//! use edgerun_hpack::Decoder;
 //! let mut decoder = Decoder::new();
 //!
 //! let mut count = 0;
@@ -1422,6 +1422,7 @@ mod tests {
 #[cfg(all(feature = "interop_tests", not(target_os = "none")))]
 #[cfg(test)]
 mod interop_tests {
+    use alloc::{string::String, vec, vec::Vec};
     use std::collections::HashMap;
     use std::fs::{self, File};
     use std::io::Read;
@@ -1442,9 +1443,18 @@ mod interop_tests {
 
     /// Defines the structure corresponding to a full story file. We only
     /// care about the cases for now.
-    #[derive(RustcDecodable)]
     struct TestStory {
         cases: Vec<TestFixture>,
+    }
+
+    impl Decodable for TestStory {
+        fn decode<D: JsonDecoder>(d: &mut D) -> Result<Self, D::Error> {
+            d.read_struct("root", 0, |d| {
+                Ok(TestStory {
+                    cases: d.read_struct_field("cases", 0, |d| Decodable::decode(d))?,
+                })
+            })
+        }
     }
 
     /// A custom implementation of the `rustc_serialize::Decodable` trait for
@@ -1593,7 +1603,17 @@ mod interop_tests {
     /// It calls the `test_story` function for each file found in the given
     /// directory.
     fn test_fixture_set(fixture_dir: &str) {
-        let files = fs::read_dir(&Path::new(fixture_dir)).unwrap();
+        let fixture_path = Path::new(fixture_dir);
+        let workspace_fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(fixture_dir);
+        let files = fs::read_dir(
+            fixture_path
+                .exists()
+                .then_some(fixture_path)
+                .unwrap_or(workspace_fixture_path.as_path()),
+        )
+        .unwrap();
 
         for fixture in files {
             let file_name = fixture.unwrap().path();

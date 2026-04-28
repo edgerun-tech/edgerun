@@ -5,16 +5,15 @@
 //! async `poll_read` / `poll_write` instead of `std::io::Read` / `Write`.
 //!
 //! # Example (client)
-//! ```ignore
-//! use edgerun_tls::async_tls::AsyncTlsStream;
-//! use alloc::sync::Arc;
+//! ```rust
+//! use edgerun_tls::{AsyncRead, AsyncTlsStream, AsyncWrite};
 //!
 //! // AsyncTlsStream works with any async read/write stream
-//! async fn tls_client_example() {
-//!     // let tcp_stream = ... // some async TCP connection
-//!     // let arc_stream = Arc::new(tcp_stream);
-//!     // let mut tls = AsyncTlsStream::client(arc_stream, "example.com").await.unwrap();
-//!     // tls.write_all(b"GET / HTTP/1.1\r\n").await.unwrap();
+//! async fn tls_client_example<S>(stream: S) -> edgerun_tls::Result<AsyncTlsStream<S>>
+//! where
+//!     S: AsyncRead + AsyncWrite + Unpin,
+//! {
+//!     AsyncTlsStream::client(stream, "example.com", &[], None).await
 //! }
 //! ```
 
@@ -843,12 +842,21 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     /// complete the TLS handshake on the same fd.
     ///
     /// # Example
-    /// ```ignore
-    /// let mut tls_stream = AsyncTlsServerStream::new(tcp_stream);
-    /// // ... read plaintext: EHLO, STARTTLS ...
-    /// // ... send "220 Ready to start TLS" ...
-    /// tls_stream.handshake(&cert).await?;
-    /// // ... continue reading encrypted SMTP commands ...
+    /// ```rust
+    /// use edgerun_tls::{AsyncRead, AsyncTlsServerStream, AsyncWrite};
+    /// use edgerun_tls::certificate_gen::CertificateAndKey;
+    ///
+    /// async fn starttls<S>(tcp_stream: S, cert: CertificateAndKey) -> edgerun_tls::Result<()>
+    /// where
+    ///     S: AsyncRead + AsyncWrite + Unpin,
+    /// {
+    ///     let mut tls_stream = AsyncTlsServerStream::new(tcp_stream);
+    ///     // ... read plaintext: EHLO, STARTTLS ...
+    ///     // ... send "220 Ready to start TLS" ...
+    ///     tls_stream.handshake(&cert).await?;
+    ///     // ... continue reading encrypted SMTP commands ...
+    ///     Ok(())
+    /// }
     /// ```
     pub async fn handshake(&mut self, cert_and_key: &CertificateAndKey) -> Result<()> {
         server_handshake_impl(&mut self.stream, cert_and_key)

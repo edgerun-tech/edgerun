@@ -6,6 +6,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use edgerun_json::ToJson;
+
 use super::client::RegistryClient;
 use super::config::parse_image_config;
 use super::errors::RegistryError;
@@ -13,6 +15,7 @@ use super::image_ref::ImageRef;
 use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest};
 use super::manifest::{ImageManifest, LayerDescriptor, SingleManifest};
 use super::oci_spec::generate_oci_spec;
+use super::provenance::ImageProvenance;
 use crate::tar_layer::{layer_compression, OciLayerCompression};
 use crate::{sha256_digest_reference, validate_digest_reference};
 
@@ -74,6 +77,9 @@ pub enum PullProgress {
     WritingConfig {
         path: PathBuf,
     },
+    WritingProvenance {
+        path: PathBuf,
+    },
 }
 
 pub(crate) async fn pull(
@@ -97,6 +103,7 @@ pub(crate) async fn pull_with_progress<F>(
 where
     F: FnMut(PullProgress),
 {
+    client.trust_policy.enforce(image)?;
     client.reset_byte_counter();
     progress(PullProgress::Resolving {
         image: image.to_string(),
@@ -174,6 +181,15 @@ where
         path: config_path.clone(),
     });
     atomic_write(&config_path, config_json.as_bytes())?;
+
+    let provenance = ImageProvenance::from_manifest(image, &manifest_data);
+    let provenance_path = bundle_path.join("edgerun-image-provenance.json");
+    progress(PullProgress::WritingProvenance {
+        path: provenance_path.clone(),
+    });
+    let provenance_json = edgerun_json::to_string_pretty(&provenance.to_json())
+        .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+    atomic_write(&provenance_path, provenance_json.as_bytes())?;
 
     Ok(ImagePullReport {
         path: bundle_path.to_path_buf(),

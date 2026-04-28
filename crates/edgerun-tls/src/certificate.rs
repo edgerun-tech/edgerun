@@ -7,6 +7,17 @@ use alloc::{
 };
 use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
+const OID_EC_PUBLIC_KEY: &[u8] = &[0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01];
+const OID_RSA_ENCRYPTION: &[u8] = &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01];
+const OID_ED25519: &[u8] = &[0x2B, 0x65, 0x70];
+const OID_ECDSA_SHA256: &[u8] = &[0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02];
+const OID_ECDSA_SHA384: &[u8] = &[0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x03];
+const OID_ECDSA_SHA512: &[u8] = &[0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x04];
+const OID_SHA256_WITH_RSA: &[u8] = &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0B];
+const OID_SHA384_WITH_RSA: &[u8] = &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0C];
+const OID_SHA512_WITH_RSA: &[u8] = &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0D];
+const OID_RSASSA_PSS: &[u8] = &[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0A];
+
 /// Parsed X.509 certificate
 #[derive(Debug, Clone)]
 pub struct Certificate {
@@ -22,6 +33,8 @@ pub struct Certificate {
     pub not_after: u64,
     /// Subject public key bytes (uncompressed point for EC keys)
     pub subject_public_key: Vec<u8>,
+    /// Subject public key algorithm OID
+    pub subject_public_key_algorithm: Vec<u8>,
     /// Subject Alternative Names (DNS entries)
     pub subject_alt_names: Vec<String>,
     /// Issuer DER bytes (for chain validation)
@@ -116,10 +129,9 @@ impl Certificate {
 
     /// Verify signature on the certificate against an issuer certificate.
     ///
-    /// This performs actual cryptographic signature verification:
-    /// 1. Extract the issuer's ECDSA public key
-    /// 2. Hash the TBS certificate with the appropriate digest
-    /// 3. Verify the signature using ECDSA
+    /// This performs actual cryptographic signature verification for supported
+    /// issuer key/signature combinations: P-256 ECDSA, RSA PKCS#1 v1.5,
+    /// RSA-PSS with SHA-256 defaults, and Ed25519.
     pub fn verify_signature(&self, issuer: &Certificate) -> Result<(), String> {
         if let Some(ref issuer_cn) = self.issuer_cn {
             if let Some(ref issuer_subject_cn) = issuer.subject_cn {
@@ -136,63 +148,11 @@ impl Certificate {
             return Err("Certificate has no issuer CN".into());
         }
 
-        // Determine the hash algorithm from the signature algorithm OID
-        // ecdsa-with-SHA256: 1.2.840.10045.4.3.2 -> [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02]
-        // ecdsa-with-SHA384: 1.2.840.10045.4.3.3 -> [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x03]
-        let (hash, hasher_name) = match self.signature_algorithm.as_slice() {
-            [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02] => {
-                use edgerun_crypto::sha2::Digest;
-                let mut hasher = edgerun_crypto::sha2::Sha256::new();
-                hasher.update(&self.tbs_certificate_der);
-                (hasher.finalize().to_vec(), "SHA-256")
-            }
-            [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x03] => {
-                use edgerun_crypto::sha2::Digest;
-                let mut hasher = edgerun_crypto::sha2::Sha384::new();
-                hasher.update(&self.tbs_certificate_der);
-                (hasher.finalize().to_vec(), "SHA-384")
-            }
-            _ => {
-                return Err(format!(
-                    "Unsupported signature algorithm: {:?}",
-                    self.signature_algorithm
-                ));
-            }
-        };
-
         if self.signature_value.is_empty() {
             return Err("Certificate signature value is empty".into());
         }
 
-        // Parse the issuer's P-256 public key
-        let issuer_pubkey = &issuer.subject_public_key;
-        if issuer_pubkey.is_empty() {
-            return Err("Issuer certificate has no public key".into());
-        }
-
-        // The issuer public key should be an uncompressed EC point (0x04 || X || Y)
-        // for P-256, that's 65 bytes total
-        let verifying_key =
-            edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(issuer_pubkey.as_slice())
-                .map_err(|e| format!("Failed to parse issuer public key: {e}"))?;
-
-        // Parse the signature from DER format
-        // ECDSA signatures in X.509 are DER-encoded ASN.1 SEQUENCE of two INTEGERs (r, s)
-        let signature = edgerun_crypto::p256::ecdsa::Signature::from_der(&self.signature_value)
-            .map_err(|e| format!("Failed to parse ECDSA signature: {e}"))?;
-
-        // Verify the signature over the TBS certificate hash
-        use edgerun_crypto::signature::hazmat::PrehashVerifier;
-        verifying_key
-            .verify_prehash(&hash, &signature)
-            .map_err(|e| {
-                format!(
-                    "ECDSA signature verification failed ({} over P-256): {e}",
-                    hasher_name
-                )
-            })?;
-
-        Ok(())
+        verify_certificate_signature_with_issuer(self, issuer)
     }
 
     /// Hostname matching with wildcard support (RFC 2818)
@@ -210,6 +170,185 @@ impl Certificate {
         }
         false
     }
+}
+
+fn verify_certificate_signature_with_issuer(
+    cert: &Certificate,
+    issuer: &Certificate,
+) -> Result<(), String> {
+    match issuer.subject_public_key_algorithm.as_slice() {
+        OID_EC_PUBLIC_KEY => verify_ecdsa_certificate_signature(cert, issuer),
+        OID_RSA_ENCRYPTION => verify_rsa_certificate_signature(cert, issuer),
+        OID_ED25519 => verify_ed25519_certificate_signature(cert, issuer),
+        alg => Err(format!("Unsupported issuer public key algorithm: {alg:?}")),
+    }
+}
+
+fn verify_ecdsa_certificate_signature(
+    cert: &Certificate,
+    issuer: &Certificate,
+) -> Result<(), String> {
+    let (hash, hasher_name) = match cert.signature_algorithm.as_slice() {
+        OID_ECDSA_SHA256 => {
+            use edgerun_crypto::sha2::Digest;
+            let mut hasher = edgerun_crypto::sha2::Sha256::new();
+            hasher.update(&cert.tbs_certificate_der);
+            (hasher.finalize().to_vec(), "SHA-256")
+        }
+        OID_ECDSA_SHA384 => {
+            use edgerun_crypto::sha2::Digest;
+            let mut hasher = edgerun_crypto::sha2::Sha384::new();
+            hasher.update(&cert.tbs_certificate_der);
+            (hasher.finalize().to_vec(), "SHA-384")
+        }
+        OID_ECDSA_SHA512 => {
+            use edgerun_crypto::sha2::Digest;
+            let mut hasher = edgerun_crypto::sha2::Sha512::new();
+            hasher.update(&cert.tbs_certificate_der);
+            (hasher.finalize().to_vec(), "SHA-512")
+        }
+        alg => return Err(format!("Unsupported ECDSA signature algorithm: {alg:?}")),
+    };
+
+    let verifying_key = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(
+        issuer.subject_public_key.as_slice(),
+    )
+    .map_err(|e| format!("Failed to parse issuer ECDSA public key: {e}"))?;
+    let signature = edgerun_crypto::p256::ecdsa::Signature::from_der(&cert.signature_value)
+        .map_err(|e| format!("Failed to parse ECDSA signature: {e}"))?;
+
+    use edgerun_crypto::signature::hazmat::PrehashVerifier;
+    verifying_key
+        .verify_prehash(&hash, &signature)
+        .map_err(|e| format!("ECDSA signature verification failed ({hasher_name} over P-256): {e}"))
+}
+
+fn verify_rsa_certificate_signature(
+    cert: &Certificate,
+    issuer: &Certificate,
+) -> Result<(), String> {
+    use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
+
+    let public_key = edgerun_crypto::rsa::RsaPublicKey::from_pkcs1_der(&issuer.subject_public_key)
+        .map_err(|e| format!("Failed to parse issuer RSA public key: {e}"))?;
+
+    match cert.signature_algorithm.as_slice() {
+        OID_SHA256_WITH_RSA => verify_rsa_pkcs1_sha256(
+            &public_key,
+            &cert.tbs_certificate_der,
+            &cert.signature_value,
+        ),
+        OID_SHA384_WITH_RSA => verify_rsa_pkcs1_sha384(
+            &public_key,
+            &cert.tbs_certificate_der,
+            &cert.signature_value,
+        ),
+        OID_SHA512_WITH_RSA => verify_rsa_pkcs1_sha512(
+            &public_key,
+            &cert.tbs_certificate_der,
+            &cert.signature_value,
+        ),
+        OID_RSASSA_PSS => verify_rsa_pss_sha256(
+            &public_key,
+            &cert.tbs_certificate_der,
+            &cert.signature_value,
+        ),
+        alg => Err(format!(
+            "Unsupported RSA certificate signature algorithm: {alg:?}"
+        )),
+    }
+}
+
+fn verify_rsa_pkcs1_sha256(
+    public_key: &edgerun_crypto::rsa::RsaPublicKey,
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), String> {
+    let verifying_key =
+        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::sha2::Sha256>::new(
+            public_key.clone(),
+        );
+    let signature = edgerun_crypto::rsa::pkcs1v15::Signature::try_from(signature)
+        .map_err(|e| format!("Failed to parse RSA PKCS#1 signature: {e}"))?;
+    use edgerun_crypto::rsa::signature::Verifier;
+    verifying_key
+        .verify(message, &signature)
+        .map_err(|e| format!("RSA PKCS#1 SHA-256 certificate signature verification failed: {e}"))
+}
+
+fn verify_rsa_pkcs1_sha384(
+    public_key: &edgerun_crypto::rsa::RsaPublicKey,
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), String> {
+    let verifying_key =
+        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::sha2::Sha384>::new(
+            public_key.clone(),
+        );
+    let signature = edgerun_crypto::rsa::pkcs1v15::Signature::try_from(signature)
+        .map_err(|e| format!("Failed to parse RSA PKCS#1 signature: {e}"))?;
+    use edgerun_crypto::rsa::signature::Verifier;
+    verifying_key
+        .verify(message, &signature)
+        .map_err(|e| format!("RSA PKCS#1 SHA-384 certificate signature verification failed: {e}"))
+}
+
+fn verify_rsa_pkcs1_sha512(
+    public_key: &edgerun_crypto::rsa::RsaPublicKey,
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), String> {
+    let verifying_key =
+        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::sha2::Sha512>::new(
+            public_key.clone(),
+        );
+    let signature = edgerun_crypto::rsa::pkcs1v15::Signature::try_from(signature)
+        .map_err(|e| format!("Failed to parse RSA PKCS#1 signature: {e}"))?;
+    use edgerun_crypto::rsa::signature::Verifier;
+    verifying_key
+        .verify(message, &signature)
+        .map_err(|e| format!("RSA PKCS#1 SHA-512 certificate signature verification failed: {e}"))
+}
+
+fn verify_rsa_pss_sha256(
+    public_key: &edgerun_crypto::rsa::RsaPublicKey,
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), String> {
+    let verifying_key = edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha256>::new(
+        public_key.clone(),
+    );
+    let signature = edgerun_crypto::rsa::pss::Signature::try_from(signature)
+        .map_err(|e| format!("Failed to parse RSA-PSS signature: {e}"))?;
+    use edgerun_crypto::rsa::signature::Verifier;
+    verifying_key
+        .verify(message, &signature)
+        .map_err(|e| format!("RSA-PSS SHA-256 certificate signature verification failed: {e}"))
+}
+
+fn verify_ed25519_certificate_signature(
+    cert: &Certificate,
+    issuer: &Certificate,
+) -> Result<(), String> {
+    if cert.signature_algorithm.as_slice() != OID_ED25519 {
+        return Err(format!(
+            "Unsupported Ed25519 certificate signature algorithm: {:?}",
+            cert.signature_algorithm
+        ));
+    }
+    let public_key: [u8; 32] = issuer
+        .subject_public_key
+        .as_slice()
+        .try_into()
+        .map_err(|_| "Invalid Ed25519 public key length".to_string())?;
+    let verifying_key = edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&public_key)
+        .map_err(|e| format!("Failed to parse issuer Ed25519 public key: {e}"))?;
+    let signature = edgerun_crypto::ed25519_dalek::Signature::from_slice(&cert.signature_value)
+        .map_err(|e| format!("Failed to parse Ed25519 signature: {e}"))?;
+    use edgerun_crypto::ed25519_dalek::Verifier;
+    verifying_key
+        .verify(&cert.tbs_certificate_der, &signature)
+        .map_err(|e| format!("Ed25519 certificate signature verification failed: {e}"))
 }
 
 #[derive(Clone, Copy)]
@@ -362,7 +501,7 @@ fn parse_tbs_after_serial(
     let issuer_cn = extract_cn(issuer.value);
     let subject_cn = extract_cn(subject.value);
     let (not_before, not_after) = parse_validity(validity.value)?;
-    let subject_public_key = parse_spki_public_key(spki.value)?;
+    let (subject_public_key_algorithm, subject_public_key) = parse_spki_public_key(spki.value)?;
 
     let mut subject_alt_names = Vec::new();
     while let Some(node) = tbs_reader.next()? {
@@ -378,6 +517,7 @@ fn parse_tbs_after_serial(
         not_before,
         not_after,
         subject_public_key,
+        subject_public_key_algorithm,
         subject_alt_names,
         issuer_der: issuer.full.to_vec(),
         subject_der: subject.full.to_vec(),
@@ -418,11 +558,14 @@ fn bit_string_bytes(value: &[u8]) -> Result<&[u8], String> {
     Ok(&value[1..])
 }
 
-fn parse_spki_public_key(data: &[u8]) -> Result<Vec<u8>, String> {
+fn parse_spki_public_key(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
     let mut reader = DerReader::new(data);
-    let _alg = reader.expect(0x30, "SPKI algorithm")?;
+    let alg = reader.expect(0x30, "SPKI algorithm")?;
     let public_key = reader.expect(0x03, "SPKI public key")?;
-    Ok(bit_string_bytes(public_key.value)?.to_vec())
+    let alg_oid = first_oid(alg.value).ok_or_else(|| {
+        "Failed to parse X.509 certificate: missing SPKI algorithm OID".to_string()
+    })?;
+    Ok((alg_oid, bit_string_bytes(public_key.value)?.to_vec()))
 }
 
 fn parse_validity(data: &[u8]) -> Result<(u64, u64), String> {

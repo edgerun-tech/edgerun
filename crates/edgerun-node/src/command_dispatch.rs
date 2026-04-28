@@ -1125,7 +1125,7 @@ fn dispatch_execute_workload(
     // === PHASE 2: Apply resource limits ===
     let cfg_path = bundle_dir.join("config.json");
     if let Ok(txt) = std::fs::read_to_string(&cfg_path) {
-        if let Ok(mut spec) = edgerun_oci::json::parse_oci_spec(txt.as_bytes()) {
+        if let Ok(mut spec) = edgerun_oci::spec::parse_oci_spec(txt.as_bytes()) {
             let shares = (allocated_cores as u64).saturating_mul(1024);
             if let Some(linux) = spec.linux.as_mut() {
                 linux.resources = Some(edgerun_oci::OciLinuxResources {
@@ -1812,34 +1812,34 @@ fn dispatch_custom_command(
 ) -> CommandDispatchResult {
     use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
 
-    // Try to decode payload as DelegationRecord first
     if let Some(ref payload) = command.payload {
-        match payload {
-            Payload::InlinePayload(bytes) => {
-                if let Ok(delegation) = ProtoDelegationRecord::decode(&bytes[..]) {
-                    return dispatch_create_delegation(
-                        command,
-                        store,
-                        stream_id,
-                        signer,
-                        controllers,
-                        &delegation,
-                    );
+        if let Payload::InlinePayload(bytes) = payload {
+            match CommandType::from_i32(command.command_type) {
+                Some(CommandType::CreateDelegation) => {
+                    if let Ok(delegation) = ProtoDelegationRecord::decode(&bytes[..]) {
+                        return dispatch_create_delegation(
+                            command,
+                            store,
+                            stream_id,
+                            signer,
+                            controllers,
+                            &delegation,
+                        );
+                    }
                 }
-                if let Ok(revocation) = ProtoRevocationRecord::decode(&bytes[..]) {
-                    return dispatch_create_revocation(
-                        command,
-                        store,
-                        stream_id,
-                        signer,
-                        controllers,
-                        &revocation,
-                    );
+                Some(CommandType::CreateRevocation) => {
+                    if let Ok(revocation) = ProtoRevocationRecord::decode(&bytes[..]) {
+                        return dispatch_create_revocation(
+                            command,
+                            store,
+                            stream_id,
+                            signer,
+                            controllers,
+                            &revocation,
+                        );
+                    }
                 }
-            }
-            Payload::PayloadObject(_) => {
-                // Payload is an object reference — would need to fetch and decode
-                // For now, skip
+                _ => {}
             }
         }
     }
@@ -2807,6 +2807,8 @@ mod tests {
     fn sign_command(command: &mut CommandEnvelope, signer: &TestSigner) {
         command.signature = None;
         if let Some(issuer) = &mut command.issuer {
+            issuer.identity_kind =
+                Some(edgerun_proto::edgerun::v0::common::IdentityKind::Node as i32);
             issuer.key_hint = Some(signer.node_id.0.to_vec());
         }
         let canonical = edgerun_core::protocol::canonical_bytes(
@@ -2831,6 +2833,8 @@ mod tests {
     ) {
         revocation.signature = None;
         if let Some(issuer) = &mut revocation.issuer {
+            issuer.identity_kind =
+                Some(edgerun_proto::edgerun::v0::common::IdentityKind::Node as i32);
             issuer.key_hint = Some(signer.node_id.0.to_vec());
         }
         let canonical = edgerun_core::protocol::canonical_bytes(
@@ -2855,6 +2859,8 @@ mod tests {
     ) {
         delegation.signature = None;
         if let Some(issuer) = &mut delegation.issuer {
+            issuer.identity_kind =
+                Some(edgerun_proto::edgerun::v0::common::IdentityKind::Node as i32);
             issuer.key_hint = Some(signer.node_id.0.to_vec());
         }
         let canonical = edgerun_core::protocol::canonical_bytes(

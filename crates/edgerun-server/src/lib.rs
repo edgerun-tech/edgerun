@@ -21,7 +21,6 @@
 //! let mut server = Server::new()
 //!     .with_http(handler, "127.0.0.1:8443")
 //!     .with_tls(cert)
-//!     .with_http3()
 //!     .build()
 //!     .await?;
 //!

@@ -187,7 +187,10 @@ fn validate_criu_request(
         if work_path.exists() && !work_path.is_dir() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("CRIU work path must be a directory: {}", work_path.display()),
+                format!(
+                    "CRIU work path must be a directory: {}",
+                    work_path.display()
+                ),
             ));
         }
     }

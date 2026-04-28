@@ -13,9 +13,9 @@ version:
 release:
 	./scripts/ci-local.sh release
 
-# Run all Rust tests
+# Run all Rust tests and print an aggregate pass/fail summary
 test:
-	cargo test --workspace
+	./scripts/test-summary.py
 
 # Build all workspace binaries
 build:

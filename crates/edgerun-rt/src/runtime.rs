@@ -97,33 +97,66 @@ where
 {
     let handle = JoinHandle::pending();
     let state = handle.state.clone();
-    enqueue_task(Box::pin(async move {
-        let value = f();
-        let mut result = state.result.lock();
-        let mut should_wake = false;
-        if state.aborted.load(Ordering::Acquire) {
-            if result.is_none() {
-                *result = Some(Err(JoinError));
-                should_wake = true;
-            }
-        } else {
-            if result.is_none() {
+
+    #[cfg(not(target_os = "none"))]
+    {
+        std::thread::spawn(move || {
+            let value = f();
+            let mut result = state.result.lock();
+            let mut should_wake = false;
+            if state.aborted.load(Ordering::Acquire) {
+                if result.is_none() {
+                    *result = Some(Err(JoinError));
+                    should_wake = true;
+                }
+            } else if result.is_none() {
                 *result = Some(Ok(value));
                 should_wake = true;
             }
-        }
 
-        if should_wake {
-            let waiters = {
-                let mut waiters = state.waiters.lock();
-                core::mem::take(&mut *waiters)
-            };
-            for waker in waiters {
-                waker.wake();
+            if should_wake {
+                let waiters = {
+                    let mut waiters = state.waiters.lock();
+                    core::mem::take(&mut *waiters)
+                };
+                for waker in waiters {
+                    waker.wake();
+                }
             }
-        }
-    }));
-    handle
+        });
+        handle
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        enqueue_task(Box::pin(async move {
+            let value = f();
+            let mut result = state.result.lock();
+            let mut should_wake = false;
+            if state.aborted.load(Ordering::Acquire) {
+                if result.is_none() {
+                    *result = Some(Err(JoinError));
+                    should_wake = true;
+                }
+            } else {
+                if result.is_none() {
+                    *result = Some(Ok(value));
+                    should_wake = true;
+                }
+            }
+
+            if should_wake {
+                let waiters = {
+                    let mut waiters = state.waiters.lock();
+                    core::mem::take(&mut *waiters)
+                };
+                for waker in waiters {
+                    waker.wake();
+                }
+            }
+        }));
+        handle
+    }
 }
 
 pub fn block_on<F>(f: F) -> F::Output

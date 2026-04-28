@@ -3,6 +3,10 @@ use std::sync::Mutex;
 
 static STATE_LOCK: Mutex<()> = Mutex::new(());
 
+fn state_lock() -> std::sync::MutexGuard<'static, ()> {
+    STATE_LOCK.lock().unwrap_or_else(|err| err.into_inner())
+}
+
 fn tmp_state_dir() -> std::path::PathBuf {
     static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -13,34 +17,37 @@ fn tmp_state_dir() -> std::path::PathBuf {
 }
 
 fn with_tmp_state_dir<F: FnOnce()>(f: F) {
-    let _lock = STATE_LOCK.lock().unwrap();
+    let _lock = state_lock();
     let dir = tmp_state_dir();
     let dir_str = dir.to_string_lossy().to_string();
     set_state_dir(&dir_str);
     f();
     let _ = std::fs::remove_dir_all(&dir);
-    set_state_dir(STATE_DIR);
+    clear_state_dir_override();
 }
 
 #[test]
 fn state_dir_default() {
-    let _lock = STATE_LOCK.lock().unwrap();
-    assert_eq!(state_dir_base().as_ref(), STATE_DIR);
+    let _lock = state_lock();
+    clear_state_dir_override();
+    assert_eq!(state_dir_base().as_ref(), default_state_dir());
 }
 
 #[test]
 fn state_dir_custom() {
-    let _lock = STATE_LOCK.lock().unwrap();
+    let _lock = state_lock();
     let dir = tmp_state_dir();
     let dir_str = dir.to_string_lossy().to_string();
     set_state_dir(&dir_str);
     assert_eq!(state_dir_base().as_ref(), dir_str);
-    set_state_dir(STATE_DIR);
+    clear_state_dir_override();
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn container_state_dir_path() {
+    let _lock = state_lock();
+    clear_state_dir_override();
     let expected = if is_root() {
         std::path::Path::new(STATE_DIR).join("my-container")
     } else {

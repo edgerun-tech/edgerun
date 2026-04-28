@@ -4,6 +4,8 @@
 
 #[macro_use]
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std as real_std;
 
 pub mod compat {
     pub use edgerun_rt::{sleep, spawn, timeout, Duration, Instant};

@@ -233,6 +233,10 @@ impl QuicConnection {
             .unwrap_or(&self.server_addr);
         let mut handshaker = handshake::QuicTlsHandshaker::new(server_name);
         handshaker.allow_unverified_certificates(options.accept_invalid_certs);
+        #[cfg(feature = "std")]
+        if !options.accept_invalid_certs {
+            handshaker.load_linux_trust_roots()?;
+        }
 
         // ── Step 1: Derive Initial keys ──────────────────────────────
         let dcid = self.server_dcid.as_bytes().to_vec();

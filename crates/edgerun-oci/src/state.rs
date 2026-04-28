@@ -70,6 +70,14 @@ pub fn set_state_dir(dir: &str) {
     }
 }
 
+#[cfg(test)]
+fn clear_state_dir_override() {
+    let old = CUSTOM_STATE_DIR.swap(std::ptr::null_mut(), Ordering::Relaxed);
+    if !old.is_null() {
+        drop(unsafe { Box::from_raw(old as *mut String) });
+    }
+}
+
 /// Resolve the state directory base path.
 fn state_dir_base() -> std::borrow::Cow<'static, str> {
     let ptr = CUSTOM_STATE_DIR.load(Ordering::Relaxed);
