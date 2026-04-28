@@ -15,7 +15,7 @@ use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
 #[cfg(feature = "http3")]
 use alloc::boxed::Box;
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "http3"))]
 use alloc::collections::BTreeSet;
 #[cfg(feature = "tls")]
 use alloc::string::String;
@@ -52,6 +52,8 @@ struct ClientInner {
     h2_pool: Arc<Mutex<Http2Pool>>,
     #[cfg(feature = "tls")]
     h2_fallback_disabled_hosts: Arc<Mutex<BTreeSet<String>>>,
+    #[cfg(feature = "http3")]
+    h3_fallback_disabled_hosts: Arc<Mutex<BTreeSet<String>>>,
 }
 
 /// Unified HTTP client.
@@ -77,6 +79,8 @@ impl HttpClient {
                 h2_pool: Arc::new(Mutex::new(Http2Pool::new())),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::new(Mutex::new(BTreeSet::new())),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::new(Mutex::new(BTreeSet::new())),
             }),
         }
     }
@@ -101,6 +105,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }
@@ -120,6 +126,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }
@@ -139,6 +147,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }
@@ -158,6 +168,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }
@@ -177,6 +189,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }
@@ -196,6 +210,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }
@@ -221,6 +237,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }
@@ -247,6 +265,8 @@ impl HttpClient {
                 h2_pool: Arc::clone(&self.inner.h2_pool),
                 #[cfg(feature = "tls")]
                 h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
             }),
         }
     }

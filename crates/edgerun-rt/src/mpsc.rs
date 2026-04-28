@@ -195,6 +195,9 @@ impl<T> Future for Receiver<T> {
             return Poll::Ready(value);
         }
         if self.queue.closed.load(Ordering::Acquire) != 0 {
+            if self.queue.closed.swap(1, Ordering::Relaxed) == 0 {
+                self.queue.closed.store(1, Ordering::Relaxed);
+            }
             return Poll::Pending;
         }
         *self.queue.waker.lock() = Some(cx.waker().clone());

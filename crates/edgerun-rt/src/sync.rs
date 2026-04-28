@@ -209,8 +209,7 @@ impl Condvar {
 
 pub struct RwLock<T> {
     data: core::cell::UnsafeCell<T>,
-    writer: AtomicBool,
-    readers: AtomicUsize,
+    state: AtomicUsize,
 }
 
 unsafe impl<T: Send> Send for RwLock<T> {}
@@ -220,40 +219,66 @@ impl<T> RwLock<T> {
     pub fn new(data: T) -> Self {
         Self {
             data: core::cell::UnsafeCell::new(data),
-            writer: AtomicBool::new(false),
-            readers: AtomicUsize::new(0),
+            state: AtomicUsize::new(0),
         }
     }
 
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
-        while self.writer.load(Ordering::Acquire) {
-            core::hint::spin_loop();
+        loop {
+            let state = self.state.load(Ordering::Acquire);
+            if state & 1 != 0 {
+                core::hint::spin_loop();
+                continue;
+            }
+
+            if self
+                .state
+                .compare_exchange_weak(state, state + 2, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
+                break;
+            }
         }
-        self.readers.fetch_add(1, Ordering::AcqRel);
         RwLockReadGuard { lock: self }
     }
 
     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
-        if self.writer.load(Ordering::Acquire) {
+        let state = self.state.load(Ordering::Acquire);
+        if state & 1 != 0 {
             return None;
         }
-        self.readers.fetch_add(1, Ordering::AcqRel);
+        if self
+            .state
+            .compare_exchange(state, state + 2, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            return None;
+        }
         Some(RwLockReadGuard { lock: self })
     }
 
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
-        while self.writer.load(Ordering::Acquire) {
+        loop {
+            if self
+                .state
+                .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
+                break;
+            }
             core::hint::spin_loop();
         }
-        self.writer.store(true, Ordering::Release);
         RwLockWriteGuard { lock: self }
     }
 
     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
-        if self.writer.load(Ordering::Acquire) {
+        if self
+            .state
+            .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
             return None;
         }
-        self.writer.store(true, Ordering::Release);
         Some(RwLockWriteGuard { lock: self })
     }
 }
@@ -264,7 +289,7 @@ pub struct RwLockReadGuard<'a, T> {
 
 impl<'a, T> Drop for RwLockReadGuard<'a, T> {
     fn drop(&mut self) {
-        self.lock.readers.fetch_sub(1, Ordering::Release);
+        self.lock.state.fetch_sub(2, Ordering::Release);
     }
 }
 
@@ -282,7 +307,7 @@ pub struct RwLockWriteGuard<'a, T> {
 
 impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
     fn drop(&mut self) {
-        self.lock.writer.store(false, Ordering::Release);
+        self.lock.state.fetch_and(!1, Ordering::Release);
     }
 }
 

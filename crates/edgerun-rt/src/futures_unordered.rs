@@ -37,6 +37,10 @@ impl<F: Future> Future for FuturesUnordered<F> {
     type Output = Option<F::Output>;
     
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.futures.is_empty() {
+            return Poll::Ready(None);
+        }
+
         for i in 0..self.futures.len() {
             match Pin::new(&mut self.futures[i]).poll(cx) {
                 Poll::Ready(v) => {
@@ -46,7 +50,8 @@ impl<F: Future> Future for FuturesUnordered<F> {
                 Poll::Pending => {}
             }
         }
-        Poll::Ready(None)
+
+        Poll::Pending
     }
 }
 

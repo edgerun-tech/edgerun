@@ -13,9 +13,9 @@ pub struct RingBuffer {
 
 impl RingBuffer {
     pub fn new(capacity: usize) -> Self {
-        let capacity = capacity.next_power_of_two();
+        let capacity = capacity.max(2).next_power_of_two();
         Self {
-            data: Vec::with_capacity(capacity),
+            data: vec![0; capacity],
             head: 0,
             tail: 0,
             capacity,
@@ -26,7 +26,7 @@ impl RingBuffer {
         if self.len() >= self.capacity - 1 {
             return false;
         }
-        self.data.push(byte);
+        self.data[self.tail] = byte;
         self.tail = (self.tail + 1) & (self.capacity - 1);
         true
     }

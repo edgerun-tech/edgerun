@@ -303,6 +303,9 @@ fn poll_serial_control(
             b"wifi20" | b"wifi20\n" => write_wifi_debug_step(frame.seq, 20),
             b"wifi21" | b"wifi21\n" => write_wifi_debug_step(frame.seq, 21),
             b"wifi22" | b"wifi22\n" => write_wifi_debug_step(frame.seq, 22),
+            b"wifi23" | b"wifi23\n" => write_wifi_debug_step(frame.seq, 23),
+            b"wifi24" | b"wifi24\n" => write_wifi_debug_step(frame.seq, 24),
+            b"wifi25" | b"wifi25\n" => write_wifi_debug_step(frame.seq, 25),
             b"wifiregs" | b"wifiregs\n" => write_wifi_debug_regs(frame.seq),
             b"wififuns" | b"wififuns\n" => write_wifi_phy_fun_slots(frame.seq),
             _ => {
