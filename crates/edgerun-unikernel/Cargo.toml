@@ -26,8 +26,5 @@ edgerun-storage = { path = "../edgerun-storage" }
 edgerun-virtio = { path = "../edgerun-virtio" }
 edgerun-rtl8125 = { path = "../edgerun-rtl8125" }
 
-[target.'cfg(target_arch = "xtensa")'.dependencies]
-edgerun-layout = { path = "../../../edgerun-browser/crates/edgerun-layout" }
-
 [lints]
 workspace = true

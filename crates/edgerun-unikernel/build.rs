@@ -15,5 +15,13 @@ fn main() {
     );
     if target_arch == "xtensa" {
         println!("cargo:rustc-link-arg-bin=edgerun-unikernel=-nostartfiles");
+        println!(
+            "cargo:rerun-if-changed={}",
+            manifest_dir.join("ui/display-debug.html").display()
+        );
+        println!(
+            "cargo:rerun-if-changed={}",
+            manifest_dir.join("ui/display-debug.css").display()
+        );
     }
 }

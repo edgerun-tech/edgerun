@@ -59,6 +59,7 @@ const GPIO_PIN_PAD_DRIVER: u32 = 1 << 2;
 
 const LCD_WIDTH: u16 = 320;
 const LCD_HEIGHT: u16 = 480;
+const LCD_MADCTL: u8 = 0x00;
 
 const PIN_BL: u8 = 1;
 const PIN_TOUCH_SDA: u8 = 4;
@@ -72,11 +73,15 @@ const PIN_DATA1: u8 = 48;
 
 const LCD_OPCODE_WRITE_CMD: u32 = 0x02;
 const LCD_OPCODE_WRITE_COLOR: u32 = 0x32;
+const LCD_COLOR_PAYLOAD_QUAD: bool = true;
 
 const SPI_USR: u32 = 1 << 24;
 const SPI_UPDATE: u32 = 1 << 23;
 const SPI_USR_MOSI: u32 = 1 << 27;
 const SPI_FWRITE_QUAD: u32 = 1 << 13;
+const SPI_FREAD_QUAD: u32 = 1 << 15;
+const SPI_CS_SETUP: u32 = 1 << 7;
+const SPI_CS_HOLD: u32 = 1 << 6;
 const SPI_CK_IDLE_EDGE: u32 = 1 << 29;
 const SPI_CS_KEEP_ACTIVE: u32 = 1 << 30;
 const SPI_CLK_EN: u32 = 1 << 0;
@@ -365,9 +370,11 @@ impl Jc3248w535Display {
         spi2_init();
         delay_ms(10);
 
+        tx_cmd(0x01, &[]);
+        delay_ms(150);
         tx_cmd(0x11, &[]);
         delay_ms(100);
-        tx_cmd(0x36, &[0x00]);
+        tx_cmd(0x36, &[LCD_MADCTL]);
         tx_cmd(0x3A, &[0x55]);
 
         for init in AXS15231B_INIT {
@@ -389,15 +396,7 @@ impl Jc3248w535Display {
 
     /// Fill the full 320x480 panel with one RGB565 color.
     pub unsafe fn fill_rgb565(color: u16) {
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_full_window();
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
         let hi = (color >> 8) as u8;
         let lo = color as u8;
@@ -417,7 +416,7 @@ impl Jc3248w535Display {
                 chunk.len()
             };
             let keep_cs = remaining > len;
-            spi2_write(&chunk[..len], true, keep_cs);
+            spi2_write(&chunk[..len], LCD_COLOR_PAYLOAD_QUAD, keep_cs);
             remaining -= len;
         }
     }
@@ -439,15 +438,7 @@ impl Jc3248w535Display {
         let x_end = min_u16(LCD_WIDTH - 1, x.saturating_add(radius * 2));
         let y_end = min_u16(LCD_HEIGHT - 1, y.saturating_add(radius * 2));
 
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_full_window();
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
 
         let mut chunk = [0u8; 64];
@@ -469,7 +460,7 @@ impl Jc3248w535Display {
                 offset += 2;
                 pixel += 1;
             }
-            spi2_write(&chunk[..offset], true, pixel < total_pixels);
+            spi2_write(&chunk[..offset], LCD_COLOR_PAYLOAD_QUAD, pixel < total_pixels);
         }
     }
 
@@ -479,15 +470,7 @@ impl Jc3248w535Display {
             return;
         }
 
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_full_window();
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
 
         let mut chunk = [0u8; 64];
@@ -513,7 +496,7 @@ impl Jc3248w535Display {
                     px += 1;
                 }
                 let keep_cs = py + 1 < height as usize || px < width as usize;
-                spi2_write(&chunk[..offset], true, keep_cs);
+                spi2_write(&chunk[..offset], LCD_COLOR_PAYLOAD_QUAD, keep_cs);
             }
             py += 1;
         }
@@ -528,15 +511,7 @@ impl Jc3248w535Display {
             return;
         }
 
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_full_window();
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
 
         let mut chunk = [0u8; 64];
@@ -553,7 +528,7 @@ impl Jc3248w535Display {
                     px += 1;
                 }
                 let keep_cs = py + 1 < height || px < width;
-                spi2_write(&chunk[..offset], true, keep_cs);
+                spi2_write(&chunk[..offset], LCD_COLOR_PAYLOAD_QUAD, keep_cs);
             }
             py += 1;
         }
@@ -653,7 +628,12 @@ unsafe fn spi2_write(data: &[u8], quad: bool, keep_cs: bool) {
     let mut written = 0;
     while written < data.len() {
         let remaining = data.len() - written;
-        let len = if remaining < 64 { remaining } else { 64 };
+        let max_len = if quad { 32 } else { 64 };
+        let len = if remaining < max_len {
+            remaining
+        } else {
+            max_len
+        };
         spi2_write_chunk(
             &data[written..written + len],
             quad,
@@ -661,6 +641,27 @@ unsafe fn spi2_write(data: &[u8], quad: bool, keep_cs: bool) {
         );
         written += len;
     }
+}
+
+unsafe fn set_full_window() {
+    tx_cmd(
+        0x2A,
+        &[
+            0x00,
+            0x00,
+            ((LCD_WIDTH - 1) >> 8) as u8,
+            (LCD_WIDTH - 1) as u8,
+        ],
+    );
+    tx_cmd(
+        0x2B,
+        &[
+            0x00,
+            0x00,
+            ((LCD_HEIGHT - 1) >> 8) as u8,
+            (LCD_HEIGHT - 1) as u8,
+        ],
+    );
 }
 
 unsafe fn spi2_write_chunk(data: &[u8], quad: bool, keep_cs: bool) {
@@ -685,15 +686,18 @@ unsafe fn spi2_write_chunk(data: &[u8], quad: bool, keep_cs: bool) {
     }
 
     write_volatile(SPI_MS_DLEN, data.len() as u32 * 8 - 1);
-    let mut user = SPI_USR_MOSI;
+    let mut user = SPI_USR_MOSI | SPI_CS_SETUP | SPI_CS_HOLD;
+    let mut ctrl = read_volatile(SPI_CTRL) & !SPI_FREAD_QUAD;
     if quad {
         user |= SPI_FWRITE_QUAD;
+        ctrl |= SPI_FREAD_QUAD;
     }
     let mut misc = read_volatile(SPI_MISC) & !SPI_CS_KEEP_ACTIVE;
     if keep_cs {
         misc |= SPI_CS_KEEP_ACTIVE;
     }
     write_volatile(SPI_MISC, misc);
+    write_volatile(SPI_CTRL, ctrl);
     write_volatile(SPI_USER, user);
     spi2_apply_config();
     write_volatile(SPI_CMD, read_volatile(SPI_CMD) | SPI_USR);
