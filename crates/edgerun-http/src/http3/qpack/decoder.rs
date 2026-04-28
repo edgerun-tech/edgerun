@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use edgerun_encoding::buf::Cursor;
 use edgerun_qpack::decoder::Decoder as QpackInnerDecoder;
 use edgerun_qpack::dynamic::DynamicTable;
-use edgerun_qpack::{decode_stateless, DecoderError, HeaderField};
+use edgerun_qpack::{decode_stateless, Decoded, DecoderError, HeaderField};
 
 /// QPACK decoder with dynamic table support.
 pub struct QpackDecoder {
@@ -54,37 +54,15 @@ impl QpackDecoder {
     /// If dynamic table is enabled (`max_capacity > 0`), uses the dynamic table
     /// for decoding. Otherwise falls back to stateless decoding.
     pub fn decode(&mut self, data: &[u8]) -> Result<Vec<(String, String)>, DecoderError> {
-        if self.max_capacity == 0 || self.inner.is_none() {
-            // Stateless decoding
+        if let Some(inner) = self.inner.as_ref().filter(|_| self.max_capacity > 0) {
+            // Dynamic table decoding
             let mut cursor = Cursor::new(data);
-            let decoded = decode_stateless(&mut cursor, 4096)?;
-            return Ok(decoded
-                .fields
-                .into_iter()
-                .map(|f| {
-                    (
-                        String::from_utf8_lossy(f.name.as_ref()).to_string(),
-                        String::from_utf8_lossy(f.value.as_ref()).to_string(),
-                    )
-                })
-                .collect());
+            return inner.decode_header(&mut cursor).map(header_block_to_pairs);
         }
 
-        // Dynamic table decoding
-        let inner = self.inner.as_ref().unwrap();
+        // Stateless decoding
         let mut cursor = Cursor::new(data);
-        let decoded = inner.decode_header(&mut cursor)?;
-
-        Ok(decoded
-            .fields
-            .into_iter()
-            .map(|f| {
-                (
-                    String::from_utf8_lossy(f.name.as_ref()).to_string(),
-                    String::from_utf8_lossy(f.value.as_ref()).to_string(),
-                )
-            })
-            .collect())
+        decode_stateless(&mut cursor, 4096).map(header_block_to_pairs)
     }
 
     /// Process data received on the QPACK encoder stream.
@@ -99,10 +77,27 @@ impl QpackDecoder {
             return Ok(0);
         }
 
-        let inner = self.inner.as_mut().unwrap();
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(0);
+        };
+
         let mut cursor = Cursor::new(data);
         let mut output = Vec::new();
-
         inner.on_encoder_recv(&mut cursor, &mut output)
     }
+}
+
+fn header_block_to_pairs(decoded: Decoded) -> Vec<(String, String)> {
+    decoded
+        .fields
+        .into_iter()
+        .map(header_field_to_pair)
+        .collect()
+}
+
+fn header_field_to_pair(field: HeaderField) -> (String, String) {
+    (
+        String::from_utf8_lossy(field.name.as_ref()).to_string(),
+        String::from_utf8_lossy(field.value.as_ref()).to_string(),
+    )
 }
