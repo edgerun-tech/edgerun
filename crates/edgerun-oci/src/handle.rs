@@ -46,6 +46,9 @@ impl RunningContainer {
             if result > 0 {
                 return Ok(std::process::ExitStatus::from_raw(status as i32));
             }
+            if result < 0 {
+                return Err(io::Error::last_os_error());
+            }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
@@ -53,7 +56,9 @@ impl RunningContainer {
 
         // Wait for final exit
         let mut status: c_int = 0;
-        unsafe { libc::waitpid(pid as i32, &mut status, 0) };
+        if unsafe { libc::waitpid(pid as i32, &mut status, 0) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
         Ok(std::process::ExitStatus::from_raw(status as i32))
     }
 
