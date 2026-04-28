@@ -247,11 +247,12 @@ pub use core::{mem, str};
 
 use crate::prelude::v1::*;
 use edgerun_bluetooth::{
-    default_bluetooth_descriptor, BluetoothAddressKind, BluetoothBeaconObservation,
-    BluetoothConnectionInfo, BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile,
-    BluetoothScanResult, BluetoothScanner, BluetoothTransportKind,
+    BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
+    BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,
+    BluetoothScanner, BluetoothTransportKind, default_bluetooth_descriptor,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
 #[cfg(not(target_os = "none"))]
 use std::fs;
 #[cfg(not(target_os = "none"))]
@@ -552,9 +553,9 @@ fn parse_mgmt_event(packet: &[u8]) -> Result<MgmtEvent, CapabilityError> {
     if packet.len() < 6 {
         return Err(CapabilityError::Provider("short management event".into()));
     }
-    let opcode = u16::from_le_bytes([packet[0], packet[1]]);
-    let index = u16::from_le_bytes([packet[2], packet[3]]);
-    let len = u16::from_le_bytes([packet[4], packet[5]]) as usize;
+    let opcode = read_u16_le(packet, 0);
+    let index = read_u16_le(packet, 2);
+    let len = read_u16_le(packet, 4) as usize;
     if packet.len() < 6 + len {
         return Err(CapabilityError::Provider(
             "truncated management event".into(),
@@ -606,7 +607,7 @@ fn wait_for_command_result(
             continue;
         };
         if event.opcode == MGMT_EV_CMD_COMPLETE && event.payload.len() >= 3 {
-            let cmd_opcode = u16::from_le_bytes([event.payload[0], event.payload[1]]);
+            let cmd_opcode = read_u16_le(&event.payload, 0);
             let status = event.payload[2];
             if cmd_opcode == expected_opcode && event.index == expected_index {
                 if status == 0 {
@@ -619,7 +620,7 @@ fn wait_for_command_result(
             }
         }
         if event.opcode == MGMT_EV_CMD_STATUS && event.payload.len() >= 3 {
-            let cmd_opcode = u16::from_le_bytes([event.payload[0], event.payload[1]]);
+            let cmd_opcode = read_u16_le(&event.payload, 0);
             let status = event.payload[2];
             if cmd_opcode == expected_opcode && event.index == expected_index {
                 if status == 0 {
@@ -676,11 +677,9 @@ fn parse_controller_info(
     }
     let address = format_bdaddr_le(&payload[0..6]);
     let bluetooth_version = payload[6];
-    let manufacturer = u16::from_le_bytes([payload[7], payload[8]]);
-    let supported_settings_raw =
-        u32::from_le_bytes([payload[9], payload[10], payload[11], payload[12]]);
-    let current_settings_raw =
-        u32::from_le_bytes([payload[13], payload[14], payload[15], payload[16]]);
+    let manufacturer = read_u16_le(payload, 7);
+    let supported_settings_raw = read_u32_le(payload, 9);
+    let current_settings_raw = read_u32_le(payload, 13);
     let class_of_device =
         u32::from(payload[17]) | (u32::from(payload[18]) << 8) | (u32::from(payload[19]) << 16);
     let name = edgerun_encoding::cstring::decode_c_string(&payload[20..269]).unwrap_or_default();
@@ -1019,13 +1018,13 @@ fn parse_eir_or_ad_data(data: &[u8]) -> ParsedDiscoveryData {
                     parse_uuid16_in_discovery_payload(
                         &mut out.service_uuids,
                         &mut out.profiles,
-                        u16::from_le_bytes([chunk[0], chunk[1]]),
+                        read_u16_le(chunk, 0),
                     );
                 }
             }
             0x04 | 0x05 => {
                 for chunk in value.chunks_exact(4) {
-                    let uuid = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                    let uuid = read_u32_le(chunk, 0);
                     out.service_uuids.push(format_32bit_service_uuid(uuid));
                     if let Some(profile_uuid) = map_profile_from_32bit_uuid(uuid) {
                         out.profiles.extend(profile_uuid);
@@ -1045,16 +1044,16 @@ fn parse_eir_or_ad_data(data: &[u8]) -> ParsedDiscoveryData {
                     parse_uuid16_in_discovery_payload(
                         &mut out.service_uuids,
                         &mut out.profiles,
-                        u16::from_le_bytes([chunk[0], chunk[1]]),
+                        read_u16_le(chunk, 0),
                     );
                 }
             }
             0x16 if value.len() >= 2 => {
-                let uuid = u16::from_le_bytes([value[0], value[1]]);
+                let uuid = read_u16_le(value, 0);
                 parse_uuid16_in_discovery_payload(&mut out.service_uuids, &mut out.profiles, uuid);
             }
             0x20 if value.len() >= 4 => {
-                let uuid = u32::from_le_bytes([value[0], value[1], value[2], value[3]]);
+                let uuid = read_u32_le(value, 0);
                 out.service_uuids.push(format_32bit_service_uuid(uuid));
                 if let Some(profile_uuid) = map_profile_from_32bit_uuid(uuid) {
                     out.profiles.extend(profile_uuid);
@@ -1130,12 +1129,7 @@ fn map_addr_type(value: u8) -> (BluetoothTransportKind, BluetoothAddressKind) {
 fn parse_mgmt_controller_event(event: &MgmtEvent) -> Option<MgmtControllerEvent> {
     match event.opcode {
         MGMT_EV_NEW_SETTINGS if event.payload.len() >= 4 => {
-            let settings_raw = u32::from_le_bytes([
-                event.payload[0],
-                event.payload[1],
-                event.payload[2],
-                event.payload[3],
-            ]);
+            let settings_raw = read_u32_le(&event.payload, 0);
             Some(MgmtControllerEvent::SettingsChanged {
                 index: event.index,
                 settings_raw,
@@ -1165,13 +1159,8 @@ fn parse_mgmt_controller_event(event: &MgmtEvent) -> Option<MgmtControllerEvent>
         MGMT_EV_DEVICE_CONNECTED if event.payload.len() >= 13 => {
             let device_id = format_bdaddr_le(&event.payload[0..6]);
             let addr_type = event.payload[6];
-            let flags = u32::from_le_bytes([
-                event.payload[7],
-                event.payload[8],
-                event.payload[9],
-                event.payload[10],
-            ]);
-            let eir_len = u16::from_le_bytes([event.payload[11], event.payload[12]]) as usize;
+            let flags = read_u32_le(&event.payload, 7);
+            let eir_len = read_u16_le(&event.payload, 11) as usize;
             let eir = if event.payload.len() >= 13 + eir_len {
                 event.payload[13..13 + eir_len].to_vec()
             } else {
@@ -1237,7 +1226,7 @@ pub fn read_management_version() -> Result<MgmtVersionInfo, CapabilityError> {
     }
     Ok(MgmtVersionInfo {
         version: payload[0],
-        revision: u16::from_le_bytes([payload[1], payload[2]]),
+        revision: read_u16_le(&payload, 1),
     })
 }
 
@@ -1249,10 +1238,10 @@ pub fn read_controller_indices() -> Result<Vec<u16>, CapabilityError> {
             "short mgmt index list payload".into(),
         ));
     }
-    let count = u16::from_le_bytes([payload[0], payload[1]]) as usize;
+    let count = read_u16_le(&payload, 0) as usize;
     let mut out = Vec::new();
     for chunk in payload[2..].chunks_exact(2).take(count) {
-        out.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+        out.push(read_u16_le(chunk, 0));
     }
     Ok(out)
 }
@@ -1283,7 +1272,7 @@ pub fn set_controller_powered(
             "short set-powered payload".into(),
         ));
     }
-    let settings_raw = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+    let settings_raw = read_u32_le(&payload, 0);
     let mut info = read_controller_info(index)?;
     info.current_settings_raw = settings_raw;
     info.current_settings = parse_settings(settings_raw);
@@ -1301,7 +1290,7 @@ pub fn set_controller_connectable(
             "short set-connectable payload".into(),
         ));
     }
-    let settings_raw = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+    let settings_raw = read_u32_le(&payload, 0);
     let mut info = read_controller_info(index)?;
     info.current_settings_raw = settings_raw;
     info.current_settings = parse_settings(settings_raw);
@@ -1323,7 +1312,7 @@ pub fn set_controller_discoverable(
             "short set-discoverable payload".into(),
         ));
     }
-    let settings_raw = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+    let settings_raw = read_u32_le(&payload, 0);
     let mut info = read_controller_info(index)?;
     info.current_settings_raw = settings_raw;
     info.current_settings = parse_settings(settings_raw);
@@ -1341,7 +1330,7 @@ pub fn set_controller_pairable(
             "short set-pairable payload".into(),
         ));
     }
-    let settings_raw = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+    let settings_raw = read_u32_le(&payload, 0);
     let mut info = read_controller_info(index)?;
     info.current_settings_raw = settings_raw;
     info.current_settings = parse_settings(settings_raw);
@@ -1468,7 +1457,7 @@ impl MgmtBluetoothBackend {
                 let address = format_bdaddr_le(&event.payload[0..6]);
                 let addr_type = event.payload[6];
                 let rssi = event.payload[7] as i8 as i16;
-                let eir_len = u16::from_le_bytes([event.payload[12], event.payload[13]]) as usize;
+                let eir_len = read_u16_le(&event.payload, 12) as usize;
                 if event.payload.len() >= 14 + eir_len {
                     let eir = event.payload[14..14 + eir_len].to_vec();
                     let parsed = parse_eir_or_ad_data(&eir);
@@ -1535,7 +1524,7 @@ impl MgmtBluetoothBackend {
                 "short get-connections payload".into(),
             ));
         }
-        let count = u16::from_le_bytes([payload[0], payload[1]]) as usize;
+        let count = read_u16_le(&payload, 0) as usize;
         let mut out = Vec::new();
         let mut offset = 2usize;
         for _ in 0..count {
@@ -1732,9 +1721,11 @@ mod tests {
     fn parses_eir_name_and_uuid() {
         let parsed = parse_eir_or_ad_data(&[3, 0x03, 0x0f, 0x18, 5, 0x09, b'T', b'e', b's', b't']);
         assert_eq!(parsed.local_name.as_deref(), Some("Test"));
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -1751,9 +1742,11 @@ mod tests {
         let parsed = parse_eir_or_ad_data(&[
             5, 0x05, 0x6f, 0x00, 0x00, 0x00, 3, 0x09, b'T', b'e', b's', b't',
         ]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000006f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000006f-0000-1000-8000-00805f9b34fb".to_string())
+        );
     }
 
     #[test]
@@ -1780,18 +1773,22 @@ mod tests {
     #[test]
     fn parses_service_data_16bit_profile() {
         let parsed = parse_eir_or_ad_data(&[4, 0x16, 0x0f, 0x18, 0x01, 0x02]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
     #[test]
     fn parses_16bit_service_uuid_solicitation() {
         let parsed = parse_eir_or_ad_data(&[3, 0x14, 0x0f, 0x18]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -1801,18 +1798,22 @@ mod tests {
             17, 0x21, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33,
             0x22, 0x11, 0x00,
         ]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"00112233-4455-6677-8899-aabbccddeeff".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"00112233-4455-6677-8899-aabbccddeeff".to_string())
+        );
     }
 
     #[test]
     fn parses_service_uuids_from_info_record_variants() {
         let text = "[General]\nServices=180f;{180D};0000180f\n";
         let record = parse_bluez_device_record("AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66", text);
-        assert!(record
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            record
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(record.profiles.contains(&BluetoothProfile::HeartRate));
         assert!(record.profiles.contains(&BluetoothProfile::BatteryService));
     }
@@ -1836,12 +1837,16 @@ mod tests {
     fn normalizes_0x_prefixed_service_uuids() {
         let text = "[General]\nServices=0x180f;0X180A\n";
         let record = parse_bluez_device_record("AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66", text);
-        assert!(record
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
-        assert!(record
-            .service_uuids
-            .contains(&"0000180a-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            record
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
+        assert!(
+            record
+                .service_uuids
+                .contains(&"0000180a-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(record.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -2385,7 +2390,7 @@ mod tests {
         payload[7] = 0x3f;
         payload[8] = 0x00; // manufacturer
         payload[9..13].copy_from_slice(&0x3ffu32.to_le_bytes()); // supported_settings
-                                                                 // current_settings: bits 0,1,9 = powered, connectable, low_energy (0x203)
+        // current_settings: bits 0,1,9 = powered, connectable, low_energy (0x203)
         payload[13..17].copy_from_slice(&0x203u32.to_le_bytes());
         // class_of_device is 3 bytes at offset 17-19
         payload[17] = 0x04;

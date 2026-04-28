@@ -212,9 +212,10 @@ pub use hci::{HciConnection, HciConnectionPool, LeConnParams};
 pub use linux::{AttProtocol, L2capSocket};
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
+use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GattAddressKind {
@@ -546,11 +547,8 @@ pub fn default_gatt_descriptor(provider: &str, instance_id: &str) -> CapabilityD
 
 pub fn format_gatt_uuid(bytes: &[u8]) -> String {
     match bytes.len() {
-        2 => format!("{:04x}", u16::from_le_bytes([bytes[0], bytes[1]])),
-        4 => format!(
-            "{:04x}-0000-1000-8000-00805f9b34fb",
-            u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
-        ),
+        2 => format!("{:04x}", read_u16_le(bytes, 0)),
+        4 => format!("{:04x}-0000-1000-8000-00805f9b34fb", read_u32_le(bytes, 0)),
         16 => {
             let mut b = bytes.to_vec();
             b.reverse();
