@@ -105,37 +105,68 @@ unsafe extern "C" {
     fn phy_wakeup_init();
     fn phy_change_channel(channel: u16, arg1: c_int, arg2: c_int, second: c_int) -> i32;
     fn phy_get_romfuncs() -> *mut c_void;
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn rom_phy_param_addr(param: *mut c_void);
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_temp_to_power();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_pll_vol_cal();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_wifi_set_tx_gain();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_wifi_get_tx_gain();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_bt_get_tx_gain();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_get_i2c_hostid();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_txpwr_cal_track();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_wifi_tx_dig_gain();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_disable_wifi_agc();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_enable_wifi_agc();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_read_sar2_code();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_fe_i2c_reg_renew();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_write_pll_cap();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_bt_track_tx_power();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_wifi_track_tx_power();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_tsens_code_read();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_tsens_temp_read();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_set_pbus_reg();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_phy_dis_hw_set_freq();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_phy_en_hw_set_freq();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_set_noise_floor();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_bt_set_tx_gain();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_chip_i2c_writeReg();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_chip_i2c_readReg();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_phy_i2c_init1();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_i2c_master_reset();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_set_chan_cal_interp();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn spur_coef_cfg_new();
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     fn ram_set_txcap_reg();
     static mut g_phyFuns: *mut c_void;
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
     static mut phy_param: u8;
     #[cfg(feature = "esp32s3-wifi-phy-probe")]
     fn phy_bbpll_en_usb(enable: bool);
@@ -146,6 +177,9 @@ unsafe extern "C" {
         cal_mode: c_int,
     ) -> c_int;
 }
+
+type PhyFunNoArgI32 = unsafe extern "C" fn() -> i32;
+type PhyFunGetU8 = unsafe extern "C" fn(c_int, *mut u8);
 
 #[derive(Clone, Copy)]
 struct RawRxFrame {
@@ -242,6 +276,26 @@ pub struct WifiDebugRegs {
     pub phy_funs: u32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiPhyFunSlots {
+    pub slot_008: u32,
+    pub slot_00c: u32,
+    pub slot_05c: u32,
+    pub slot_06c: u32,
+    pub slot_110: u32,
+    pub slot_148: u32,
+    pub slot_160: u32,
+    pub slot_164: u32,
+    pub slot_190: u32,
+    pub slot_1a8: u32,
+    pub slot_1d4: u32,
+    pub slot_200: u32,
+    pub slot_204: u32,
+    pub slot_208: u32,
+    pub slot_224: u32,
+    pub slot_234: u32,
+}
+
 impl EspressifPromiscRadio {
     pub const fn new() -> Self {
         Self
@@ -260,6 +314,29 @@ impl EspressifPromiscRadio {
                 wifi_rst_en: APB_CTRL_WIFI_RST_EN.read_volatile(),
                 mac_reset_ctrl: WIFI_MAC_RESET_CTRL.read_volatile(),
                 phy_funs: g_phyFuns as usize as u32,
+            }
+        }
+    }
+
+    pub fn debug_phy_fun_slots() -> WifiPhyFunSlots {
+        unsafe {
+            WifiPhyFunSlots {
+                slot_008: read_phy_fun_slot(0x008),
+                slot_00c: read_phy_fun_slot(0x00c),
+                slot_05c: read_phy_fun_slot(0x05c),
+                slot_06c: read_phy_fun_slot(0x06c),
+                slot_110: read_phy_fun_slot(0x110),
+                slot_148: read_phy_fun_slot(0x148),
+                slot_160: read_phy_fun_slot(0x160),
+                slot_164: read_phy_fun_slot(0x164),
+                slot_190: read_phy_fun_slot(0x190),
+                slot_1a8: read_phy_fun_slot(0x1a8),
+                slot_1d4: read_phy_fun_slot(0x1d4),
+                slot_200: read_phy_fun_slot(0x200),
+                slot_204: read_phy_fun_slot(0x204),
+                slot_208: read_phy_fun_slot(0x208),
+                slot_224: read_phy_fun_slot(0x224),
+                slot_234: read_phy_fun_slot(0x234),
             }
         }
     }
@@ -351,6 +428,18 @@ impl EspressifPromiscRadio {
                     LAST_START_STATUS.store(2202, Ordering::Relaxed);
                     !g_phyFuns.is_null()
                 }
+                23 => probe_phy_timer_ticks(),
+                24 => probe_phy_pti(3, 2400),
+                25 => probe_phy_pti(15, 2500),
+                26 => {
+                    LAST_START_STATUS.store(2601, Ordering::Relaxed);
+                    let Some(ticks) = read_phy_timer_ticks() else {
+                        return false;
+                    };
+                    hal_timer_update_by_rtc(1, ticks);
+                    LAST_START_STATUS.store(2602, Ordering::Relaxed);
+                    true
+                }
                 #[cfg(feature = "esp32s3-wifi-phy-probe")]
                 19 => {
                     LAST_START_STATUS.store(1901, Ordering::Relaxed);
@@ -368,6 +457,68 @@ impl EspressifPromiscRadio {
     }
 }
 
+unsafe fn read_phy_fun_slot(offset: usize) -> u32 {
+    let table = unsafe { g_phyFuns };
+    if table.is_null() {
+        return 0;
+    }
+    unsafe {
+        table
+            .cast::<u8>()
+            .add(offset)
+            .cast::<usize>()
+            .read_volatile() as u32
+    }
+}
+
+unsafe fn read_phy_fun_ptr(offset: usize) -> Option<usize> {
+    let table = unsafe { g_phyFuns };
+    if table.is_null() {
+        return None;
+    }
+    let ptr = unsafe {
+        table
+            .cast::<u8>()
+            .add(offset)
+            .cast::<usize>()
+            .read_volatile()
+    };
+    if ptr == 0 {
+        None
+    } else {
+        Some(ptr)
+    }
+}
+
+unsafe fn read_phy_timer_ticks() -> Option<c_int> {
+    let ptr = unsafe { read_phy_fun_ptr(0x148)? };
+    let f: PhyFunNoArgI32 = unsafe { core::mem::transmute(ptr) };
+    Some(unsafe { f() })
+}
+
+unsafe fn probe_phy_timer_ticks() -> bool {
+    LAST_START_STATUS.store(2301, Ordering::Relaxed);
+    let Some(ticks) = (unsafe { read_phy_timer_ticks() }) else {
+        LAST_START_STATUS.store(2300, Ordering::Relaxed);
+        return false;
+    };
+    LAST_START_STATUS.store(2300 + (ticks & 0xff), Ordering::Relaxed);
+    true
+}
+
+unsafe fn probe_phy_pti(which: c_int, base_status: i32) -> bool {
+    LAST_START_STATUS.store(base_status + 1, Ordering::Relaxed);
+    let Some(ptr) = (unsafe { read_phy_fun_ptr(0x1a8) }) else {
+        LAST_START_STATUS.store(base_status, Ordering::Relaxed);
+        return false;
+    };
+    let f: PhyFunGetU8 = unsafe { core::mem::transmute(ptr) };
+    let mut value = 0u8;
+    unsafe { f(which, core::ptr::addr_of_mut!(value)) };
+    LAST_START_STATUS.store(base_status + value as i32, Ordering::Relaxed);
+    true
+}
+
 unsafe fn run_noarg_step(before: i32, after: i32, f: unsafe extern "C" fn()) -> bool {
     LAST_START_STATUS.store(before, Ordering::Relaxed);
     unsafe { f() };
@@ -380,6 +531,14 @@ unsafe fn patch_phy_romfunc_table() {
     unsafe {
         g_phyFuns = table;
     }
+    #[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
+    unsafe {
+        patch_phy_ramfunc_table(table);
+    }
+}
+
+#[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
+unsafe fn patch_phy_ramfunc_table(table: *mut c_void) {
     if table.is_null() {
         return;
     }
@@ -417,6 +576,7 @@ unsafe fn patch_phy_romfunc_table() {
     }
 }
 
+#[cfg(feature = "esp32s3-wifi-ram-phy-patch")]
 unsafe fn patch_phy_func(table: *mut c_void, offset: usize, func: unsafe extern "C" fn()) {
     unsafe {
         table

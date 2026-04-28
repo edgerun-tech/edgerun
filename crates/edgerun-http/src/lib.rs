@@ -94,6 +94,7 @@ pub use std_compat::{collections, fs, io, net, path, sync, time};
 // ---------------------------------------------------------------------------
 // Shared HTTP types
 // ---------------------------------------------------------------------------
+pub mod auth;
 mod chunked;
 pub mod error;
 pub mod header;

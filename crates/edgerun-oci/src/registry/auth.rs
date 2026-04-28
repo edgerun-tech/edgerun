@@ -87,36 +87,6 @@ pub fn decode_basic_auth(auth: &str) -> Option<(String, String)> {
     Some((username.to_string(), password.to_string()))
 }
 
-/// Parse a WWW-Authenticate Bearer challenge header.
-///
-/// Returns (realm, service, scope).
-pub fn parse_bearer_auth(header: &str) -> Option<(String, String, Option<String>)> {
-    // Parse: Bearer realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:library/alpine:pull"
-    if !header.starts_with("Bearer ") && !header.starts_with("bearer ") {
-        return None;
-    }
-
-    let params = &header[7..];
-    let mut realm = None;
-    let mut service = None;
-    let mut scope = None;
-
-    for part in params.split(',') {
-        let part = part.trim();
-        if let Some((key, val)) = part.split_once('=') {
-            let val = val.trim_matches('"');
-            match key {
-                "realm" => realm = Some(val.to_string()),
-                "service" => service = Some(val.to_string()),
-                "scope" => scope = Some(val.to_string()),
-                _ => {}
-            }
-        }
-    }
-
-    Some((realm?, service.unwrap_or_else(|| "registry".into()), scope))
-}
-
 /// Resolve credentials from the secret service for a given registry host.
 ///
 /// The secret is stored as `username:password` (basic auth format) in the

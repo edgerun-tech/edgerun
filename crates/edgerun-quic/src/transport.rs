@@ -51,6 +51,7 @@ impl PacketNumberState {
 /// Sent packet metadata for loss detection (RFC 9002).
 #[derive(Debug, Clone)]
 pub struct SentPacket {
+    pub space: PacketNumberSpace,
     pub packet_number: u64,
     pub time_sent: std::time::Instant,
     pub size: usize,
@@ -385,12 +386,13 @@ impl QuicTransport {
 
     pub fn record_packet_sent(
         &mut self,
-        _space: PacketNumberSpace,
+        space: PacketNumberSpace,
         packet_number: u64,
         size: usize,
         has_crypto: bool,
     ) {
         let packet = SentPacket {
+            space,
             packet_number,
             time_sent: std::time::Instant::now(),
             size,
@@ -402,17 +404,6 @@ impl QuicTransport {
 
         self.congestion.bytes_in_flight += size as u64;
         self.sent_packets.push(packet);
-    }
-
-    /// Get the packet number range for a given space.
-    ///
-    /// Since each space starts at 0 and uses independent counters, we can
-    /// filter by checking which space's counter each PN belongs to.
-    fn pn_range_for_space(&self, space: PacketNumberSpace) -> (u64, u64) {
-        let idx = space as usize;
-        let max_pn = self.pn_state[idx].next;
-        // Floor is 0, ceiling is current next PN for this space
-        (0, max_pn)
     }
 
     pub fn on_ack_received(
@@ -457,7 +448,7 @@ impl QuicTransport {
             if pkt.lost {
                 continue;
             }
-            if !pkt.acked && acked_pns.contains(&pkt.packet_number) {
+            if pkt.space == space && !pkt.acked && acked_pns.contains(&pkt.packet_number) {
                 pkt.acked = true;
                 newly_acked_size += pkt.size as u64;
                 newly_acked_count += 1;
@@ -484,7 +475,7 @@ impl QuicTransport {
         // Exit recovery if we've acked past recovery start
         if let Some(recovery_start) = self.congestion.recovery_start_time {
             for pkt in &self.sent_packets {
-                if pkt.acked && pkt.time_sent > recovery_start {
+                if pkt.space == space && pkt.acked && pkt.time_sent > recovery_start {
                     self.congestion.recovery_start_time = None;
                     break;
                 }
@@ -495,7 +486,7 @@ impl QuicTransport {
         if let Some(acked_pkt) = self
             .sent_packets
             .iter()
-            .find(|p| p.packet_number == largest_acknowledged && p.acked)
+            .find(|p| p.space == space && p.packet_number == largest_acknowledged && p.acked)
         {
             let latest_rtt = acked_pkt.time_sent.elapsed();
             self.update_rtt(latest_rtt, ack_delay);
@@ -507,22 +498,12 @@ impl QuicTransport {
     }
 
     fn detect_lost_packets(&mut self, space: PacketNumberSpace) {
-        let idx = space as usize;
         let now = std::time::Instant::now();
 
         let time_threshold = self
             .smoothed_rtt
             .unwrap_or(self.rtt_estimate)
             .mul_f64(1.125);
-
-        // Only consider packets in this packet number space.
-        // Packets in the same space have contiguous packet numbers, so we can
-        // filter by checking the range: Initial [0, handshake_start),
-        // Handshake [handshake_start, app_start), AppData [app_start, ∞).
-        // For simplicity, we use the space index to filter — packets recorded
-        // with `record_packet_sent` for a given space have their PN tracked.
-        // Since we track all sent_packets in one flat list, filter by PN range.
-        let (pn_min, pn_max) = self.pn_range_for_space(space);
 
         let lost_pns: Vec<u64> = self
             .sent_packets
@@ -531,16 +512,14 @@ impl QuicTransport {
                 if pkt.acked || pkt.lost {
                     return None;
                 }
-                // Filter by packet number space
-                if pkt.packet_number < pn_min || pkt.packet_number >= pn_max {
+                if pkt.space != space {
                     return None;
                 }
 
                 let larger_acked = self.sent_packets.iter().any(|other| {
                     other.acked
+                        && other.space == space
                         && other.packet_number > pkt.packet_number
-                        && other.packet_number >= pn_min
-                        && other.packet_number < pn_max
                 });
 
                 let time_expired = now - pkt.time_sent > time_threshold;
@@ -556,7 +535,7 @@ impl QuicTransport {
         let mut lost_size = 0u64;
         for pn in &lost_pns {
             for pkt in &mut self.sent_packets {
-                if pkt.packet_number == *pn && !pkt.lost {
+                if pkt.space == space && pkt.packet_number == *pn && !pkt.lost {
                     pkt.lost = true;
                     lost_size += pkt.size as u64;
 

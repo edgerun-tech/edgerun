@@ -53,27 +53,3 @@ fn decode_basic_auth_roundtrip() {
     assert_eq!(user, "myuser");
     assert_eq!(pass, "mypass");
 }
-
-#[test]
-fn parse_bearer_auth_full() {
-    let header = "Bearer realm=\"https://auth.docker.io/token\",service=\"registry.docker.io\",scope=\"repository:library/alpine:pull\"";
-    let (realm, service, scope) = parse_bearer_auth(header).unwrap();
-    assert_eq!(realm, "https://auth.docker.io/token");
-    assert_eq!(service, "registry.docker.io");
-    assert_eq!(scope, Some("repository:library/alpine:pull".into()));
-}
-
-#[test]
-fn parse_bearer_auth_no_scope() {
-    let header = "Bearer realm=\"https://auth.example.com/token\",service=\"registry\"";
-    let (realm, service, scope) = parse_bearer_auth(header).unwrap();
-    assert_eq!(realm, "https://auth.example.com/token");
-    assert_eq!(service, "registry");
-    assert!(scope.is_none());
-}
-
-#[test]
-fn parse_bearer_auth_invalid_prefix() {
-    assert!(parse_bearer_auth("Basic abc").is_none());
-    assert!(parse_bearer_auth("").is_none());
-}

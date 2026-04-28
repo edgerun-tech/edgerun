@@ -304,6 +304,7 @@ fn poll_serial_control(
             b"wifi21" | b"wifi21\n" => write_wifi_debug_step(frame.seq, 21),
             b"wifi22" | b"wifi22\n" => write_wifi_debug_step(frame.seq, 22),
             b"wifiregs" | b"wifiregs\n" => write_wifi_debug_regs(frame.seq),
+            b"wififuns" | b"wififuns\n" => write_wifi_phy_fun_slots(frame.seq),
             _ => {
                 display_console_log("ctl unknown");
                 rt::serial_mux::write_with_seq(
@@ -322,6 +323,15 @@ fn write_wifi_debug_regs(seq: u16) {
     let mut buf = [0u8; 160];
     let mut len = 0;
     append_wifi_debug_regs(&mut buf, &mut len);
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_wifi_phy_fun_slots(seq: u16) {
+    display_console_log("ctl wififuns");
+    let mut buf = [0u8; 320];
+    let mut len = 0;
+    append_wifi_phy_fun_slots(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
@@ -359,6 +369,49 @@ fn append_wifi_debug_regs(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b" funs=0x");
     append_hex_u32(out, len, regs.phy_funs);
     append_bytes(out, len, b"\n");
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob"))]
+fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
+    let slots = edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio::debug_phy_fun_slots();
+    append_bytes(out, len, b"wifi funs 008=0x");
+    append_hex_u32(out, len, slots.slot_008);
+    append_bytes(out, len, b" 00c=0x");
+    append_hex_u32(out, len, slots.slot_00c);
+    append_bytes(out, len, b" 05c=0x");
+    append_hex_u32(out, len, slots.slot_05c);
+    append_bytes(out, len, b" 06c=0x");
+    append_hex_u32(out, len, slots.slot_06c);
+    append_bytes(out, len, b" 110=0x");
+    append_hex_u32(out, len, slots.slot_110);
+    append_bytes(out, len, b" 148=0x");
+    append_hex_u32(out, len, slots.slot_148);
+    append_bytes(out, len, b" 160=0x");
+    append_hex_u32(out, len, slots.slot_160);
+    append_bytes(out, len, b" 164=0x");
+    append_hex_u32(out, len, slots.slot_164);
+    append_bytes(out, len, b" 190=0x");
+    append_hex_u32(out, len, slots.slot_190);
+    append_bytes(out, len, b" 1a8=0x");
+    append_hex_u32(out, len, slots.slot_1a8);
+    append_bytes(out, len, b" 1d4=0x");
+    append_hex_u32(out, len, slots.slot_1d4);
+    append_bytes(out, len, b" 200=0x");
+    append_hex_u32(out, len, slots.slot_200);
+    append_bytes(out, len, b" 204=0x");
+    append_hex_u32(out, len, slots.slot_204);
+    append_bytes(out, len, b" 208=0x");
+    append_hex_u32(out, len, slots.slot_208);
+    append_bytes(out, len, b" 224=0x");
+    append_hex_u32(out, len, slots.slot_224);
+    append_bytes(out, len, b" 234=0x");
+    append_hex_u32(out, len, slots.slot_234);
+    append_bytes(out, len, b"\n");
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob")))]
+fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
+    append_bytes(out, len, b"wifi funs unavailable\n");
 }
 
 #[cfg(not(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob")))]
@@ -425,17 +478,23 @@ fn append_hex_u32(out: &mut [u8], len: &mut usize, value: u32) {
     let mut shift = 28;
     loop {
         let nibble = ((value >> shift) & 0x0f) as u8;
-        let byte = if nibble < 10 {
-            b'0' + nibble
-        } else {
-            b'a' + (nibble - 10)
-        };
-        append_bytes(out, len, &[byte]);
+        append_hex_nibble(out, len, nibble);
         if shift == 0 {
             break;
         }
         shift -= 4;
     }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn append_hex_nibble(out: &mut [u8], len: &mut usize, nibble: u8) {
+    let nibble = nibble & 0x0f;
+    let byte = if nibble < 10 {
+        b'0' + nibble
+    } else {
+        b'a' + (nibble - 10)
+    };
+    append_bytes(out, len, &[byte]);
 }
 
 #[cfg(all(

@@ -65,11 +65,6 @@ mod registry {
     pub(crate) mod push_manifest;
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod tar_push;
-    #[cfg(any(
-        feature = "registry-client",
-        all(feature = "std", not(target_os = "none"))
-    ))]
-    pub(crate) mod urlencoding;
 }
 
 pub mod bare_rootfs;
@@ -245,7 +240,12 @@ pub use tar_layer::{
 pub use userns::drop_capabilities;
 pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
 
-pub use registry::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
+#[cfg(any(
+    feature = "registry-client",
+    all(feature = "std", not(target_os = "none"))
+))]
+pub use edgerun_http::auth::parse_bearer_auth;
+pub use registry::auth::{decode_basic_auth, RegistryAuth};
 #[cfg(any(
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))

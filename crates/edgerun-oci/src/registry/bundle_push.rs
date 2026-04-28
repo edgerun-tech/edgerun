@@ -10,6 +10,9 @@ use super::image_ref::ImageRef;
 use super::push_manifest::push_manifest_json;
 use super::tar_push::create_tar_from_dir;
 use crate::layer_pipeline::sha256_digest_reference;
+use edgerun_encoding::percent::{
+    percent_encode, percent_encode_colon_pair, percent_encode_path_segments,
+};
 use edgerun_http::Response;
 
 const OCI_MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
@@ -88,7 +91,10 @@ async fn push_blob_raw(
     data: &[u8],
     digest: &str,
 ) -> Result<(), RegistryError> {
-    let init_path = format!("/v2/{}/blobs/uploads/", repository);
+    let init_path = format!(
+        "/v2/{}/blobs/uploads/",
+        percent_encode_path_segments(repository)
+    );
     let upload = client
         .authenticated_post_response(registry, &init_path, &[], &[])
         .await?;
@@ -97,7 +103,7 @@ async fn push_blob_raw(
         "{}{}digest={}",
         upload_path,
         if upload_path.contains('?') { "&" } else { "?" },
-        super::urlencoding::encode(digest)
+        percent_encode(digest)
     );
     client
         .authenticated_put(
@@ -137,8 +143,8 @@ fn upload_location_path(response: &Response, repository: &str) -> Result<String,
 
     Ok(format!(
         "/v2/{}/blobs/uploads/{}",
-        repository,
-        super::urlencoding::encode(location)
+        percent_encode_path_segments(repository),
+        percent_encode(location)
     ))
 }
 
@@ -149,7 +155,11 @@ async fn push_manifest(
     manifest: &[u8],
     tag: &str,
 ) -> Result<(), RegistryError> {
-    let path = format!("/v2/{}/manifests/{}", repository, tag);
+    let path = format!(
+        "/v2/{}/manifests/{}",
+        percent_encode_path_segments(repository),
+        percent_encode_colon_pair(tag)
+    );
     client
         .authenticated_put(
             registry,
@@ -168,7 +178,11 @@ async fn push_manifest_by_digest(
     manifest: &[u8],
     digest: &str,
 ) -> Result<(), RegistryError> {
-    let path = format!("/v2/{}/manifests/{}", repository, digest);
+    let path = format!(
+        "/v2/{}/manifests/{}",
+        percent_encode_path_segments(repository),
+        percent_encode_colon_pair(digest)
+    );
     client
         .authenticated_put(
             registry,

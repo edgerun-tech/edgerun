@@ -9,12 +9,15 @@ use std::path::Path;
 
 use edgerun_http::{HttpClient, Request, Response};
 
-use super::auth::{parse_bearer_auth, RegistryAuth};
+use super::auth::RegistryAuth;
 use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest};
 use super::errors::RegistryError;
 use super::image_ref::ImageRef;
 use super::manifest::{ImageManifest, SingleManifest};
-use super::urlencoding;
+use edgerun_encoding::percent::{
+    percent_encode, percent_encode_colon_pair, percent_encode_path_segments,
+};
+use edgerun_http::auth::parse_bearer_auth;
 
 #[derive(Debug, Clone)]
 struct RegistryTokenResponse {
@@ -360,9 +363,9 @@ impl RegistryClient {
         let (realm, service, scope) = parse_bearer_auth(www_auth)
             .ok_or_else(|| RegistryError::AuthError("Invalid Bearer challenge".into()))?;
 
-        let mut url = format!("{}?service={}", realm, urlencoding::encode(&service));
+        let mut url = format!("{}?service={}", realm, percent_encode(&service));
         if let Some(sc) = scope {
-            url.push_str(&format!("&scope={}", urlencoding::encode(&sc)));
+            url.push_str(&format!("&scope={}", percent_encode(&sc)));
         }
 
         let mut builder = Request::builder()
@@ -472,7 +475,11 @@ impl RegistryClient {
     ) -> Result<ImageManifest, RegistryError> {
         self.ensure_auth(&image.registry).await?;
 
-        let path = format!("/v2/{}/manifests/{}", image.repository, image.reference());
+        let path = format!(
+            "/v2/{}/manifests/{}",
+            percent_encode_path_segments(&image.repository),
+            percent_encode_colon_pair(image.reference())
+        );
         let headers = [
             (
                 "Accept",
@@ -505,7 +512,11 @@ impl RegistryClient {
         repository: &str,
         digest: &str,
     ) -> Result<SingleManifest, RegistryError> {
-        let path = format!("/v2/{}/manifests/{}", repository, digest);
+        let path = format!(
+            "/v2/{}/manifests/{}",
+            percent_encode_path_segments(repository),
+            percent_encode_colon_pair(digest)
+        );
         let body = self
             .authenticated_get(
                 registry,
@@ -538,7 +549,11 @@ impl RegistryClient {
         repository: &str,
         digest: &str,
     ) -> Result<Vec<u8>, RegistryError> {
-        let url = format!("/v2/{}/blobs/{}", repository, digest);
+        let url = format!(
+            "/v2/{}/blobs/{}",
+            percent_encode_path_segments(repository),
+            percent_encode_colon_pair(digest)
+        );
         self.authenticated_get(registry, &url, &[]).await
     }
 

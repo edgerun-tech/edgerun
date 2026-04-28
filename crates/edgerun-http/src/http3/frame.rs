@@ -210,8 +210,8 @@ impl Http3Frame {
             }
             Some(Http3FrameType::Reserved) | Some(Http3FrameType::Reserved2) | None => {
                 Http3Frame::Unknown {
-                frame_type,
-                payload: payload.to_vec(),
+                    frame_type,
+                    payload: payload.to_vec(),
                 }
             }
         };
