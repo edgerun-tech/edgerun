@@ -135,7 +135,18 @@ fn stream_action_completed_requires_result_object() {
 #[test]
 fn object_descriptor_and_header_must_match_object_id() {
     let semantic = match mapping([
-        ("descriptor", mapping([("object_id", ystr("obj-a"))])),
+        (
+            "descriptor",
+            mapping([
+                ("descriptor_version", yi64(1)),
+                ("object_id", ystr("obj-a")),
+                ("object_kind", ystr("OBJECT_KIND_PAYLOAD")),
+                ("object_schema_version", yi64(1)),
+                ("canonicalization_id", ystr("raw-bytes-v0")),
+                ("canonical_digest", ystr("digest-a")),
+                ("canonical_size", yi64(5)),
+            ]),
+        ),
         (
             "header",
             mapping([
@@ -242,7 +253,18 @@ fn network_session_accept_nonce_mismatch_rejected() {
 #[test]
 fn object_descriptor_header_manifest_consistent_accepts() {
     let semantic = match mapping([
-        ("descriptor", mapping([("object_id", ystr("obj-a"))])),
+        (
+            "descriptor",
+            mapping([
+                ("descriptor_version", yi64(1)),
+                ("object_id", ystr("obj-a")),
+                ("object_kind", ystr("OBJECT_KIND_PAYLOAD")),
+                ("object_schema_version", yi64(1)),
+                ("canonicalization_id", ystr("raw-bytes-v0")),
+                ("canonical_digest", ystr("digest-a")),
+                ("canonical_size", yi64(5)),
+            ]),
+        ),
         (
             "header",
             mapping([

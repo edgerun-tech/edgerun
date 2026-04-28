@@ -9,7 +9,18 @@ pub fn validate_object_case(
         let header = get_map(semantic_input, "header");
         let manifest = get_map(semantic_input, "chunk_manifest");
         let descriptor_object_id = string_value(descriptor, "object_id", "");
-        if descriptor_object_id.is_empty() {
+        if descriptor_object_id.is_empty()
+            || number_value(descriptor, "descriptor_version", 0) != 1
+            || matches!(
+                descriptor.get("object_kind").and_then(Value::as_str),
+                None | Some("") | Some("OBJECT_KIND_UNSPECIFIED")
+            )
+            || number_value(descriptor, "object_schema_version", 0) <= 0
+            || string_value(descriptor, "canonicalization_id", "").is_empty()
+            || string_value(descriptor, "canonical_digest", "").is_empty()
+            || !descriptor.contains_key("canonical_size")
+            || number_value(descriptor, "canonical_size", -1) < 0
+        {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if !object_ref_is_valid(descriptor.get("describes_object"))

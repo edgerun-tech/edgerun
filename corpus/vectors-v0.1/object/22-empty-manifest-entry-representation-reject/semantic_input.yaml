@@ -1,5 +1,11 @@
 descriptor:
+  descriptor_version: 1
   object_id: obj_a
+  object_kind: OBJECT_KIND_PAYLOAD
+  object_schema_version: 1
+  canonicalization_id: raw-bytes-v0
+  canonical_digest: digest_a
+  canonical_size: 10
 chunk_manifest:
   object:
     object_id: obj_a

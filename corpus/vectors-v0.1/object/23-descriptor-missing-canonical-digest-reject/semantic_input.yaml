@@ -4,10 +4,4 @@ descriptor:
   object_kind: OBJECT_KIND_PAYLOAD
   object_schema_version: 1
   canonicalization_id: raw-bytes-v0
-  canonical_digest: digest_a
-  canonical_size: 5
-header:
-  representation_id: rep_1
-  object:
-    object_id: obj_b
-  stored_size: 5
+  canonical_size: 10
