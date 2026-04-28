@@ -72,6 +72,8 @@ pub struct QuicPacketHeader {
     pub pn_length: usize,
     /// Packet number
     pub packet_number: u64,
+    /// QUIC short-header key phase bit.
+    pub key_phase: bool,
     /// Payload length
     pub payload_length: usize,
 }
@@ -104,6 +106,7 @@ impl QuicPacket {
                 token,
                 pn_length: 4,
                 packet_number,
+                key_phase: false,
                 payload_length: payload.len(),
             },
             payload,
@@ -150,6 +153,16 @@ impl QuicPacket {
 
     /// Create a 1-RTT packet
     pub fn one_rtt(dst_cid: Vec<u8>, packet_number: u64, payload: Vec<u8>) -> Self {
+        Self::one_rtt_with_key_phase(dst_cid, packet_number, false, payload)
+    }
+
+    /// Create a 1-RTT packet with an explicit key phase bit.
+    pub fn one_rtt_with_key_phase(
+        dst_cid: Vec<u8>,
+        packet_number: u64,
+        key_phase: bool,
+        payload: Vec<u8>,
+    ) -> Self {
         QuicPacket {
             header: QuicPacketHeader {
                 packet_type: PacketType::OneRtt,
@@ -159,6 +172,7 @@ impl QuicPacket {
                 token: Vec::new(),
                 pn_length: 1,
                 packet_number,
+                key_phase,
                 payload_length: payload.len(),
             },
             payload,
@@ -215,7 +229,8 @@ impl QuicPacket {
                 output.extend_from_slice(&pn_bytes[8 - pn_length..]);
             }
             PacketType::OneRtt => {
-                let first_byte = 0x40 | (self.header.pn_length as u8 - 1);
+                let key_phase = if self.header.key_phase { 0x04 } else { 0x00 };
+                let first_byte = 0x40 | key_phase | (self.header.pn_length as u8 - 1);
                 output.push(first_byte);
                 output.extend_from_slice(&self.header.dst_cid);
                 let pn_bytes = self.header.packet_number.to_be_bytes();
@@ -339,6 +354,7 @@ impl QuicPacket {
                     token,
                     pn_length,
                     packet_number,
+                    key_phase: false,
                     payload_length: payload_len,
                 },
                 payload,
@@ -354,6 +370,7 @@ impl QuicPacket {
         }
 
         let pn_length = ((data[0] & 0x03) + 1) as usize;
+        let key_phase = data[0] & 0x04 != 0;
         let mut pos = 1;
 
         // Assume 8-byte CID for simplicity
@@ -384,6 +401,7 @@ impl QuicPacket {
                     token: Vec::new(),
                     pn_length,
                     packet_number,
+                    key_phase,
                     payload_length: payload.len(),
                 },
                 payload,
@@ -572,6 +590,7 @@ mod tests {
                 token: Vec::new(),
                 pn_length: 2,
                 packet_number: 0x1234,
+                key_phase: false,
                 payload_length: 3,
             },
             payload: vec![0xaa, 0xbb, 0xcc],
@@ -645,6 +664,7 @@ mod tests {
                 token: Vec::new(),
                 pn_length: 2,
                 packet_number: 7,
+                key_phase: false,
                 payload_length: 3,
             },
             payload: vec![0xaa, 0xbb, 0xcc],
@@ -662,6 +682,7 @@ mod tests {
                 token: Vec::new(),
                 pn_length: 4,
                 packet_number: 7,
+                key_phase: false,
                 payload_length: 3,
             },
             payload: vec![0x08, 0xaa, 0xbb],
@@ -684,6 +705,7 @@ mod tests {
         assert_eq!(consumed, packet_bytes.len());
         assert_eq!(parsed.header.packet_type, PacketType::OneRtt);
         assert_eq!(parsed.header.packet_number, 7);
+        assert!(!parsed.header.key_phase);
         assert_eq!(parsed.header_to_bytes_aad(), aad);
 
         let mut wrong_decryptor = PacketProtection::new(&keys);
@@ -700,5 +722,21 @@ mod tests {
             )
             .expect("decrypt packet");
         assert_eq!(plaintext, packet.payload);
+    }
+
+    #[test]
+    fn test_one_rtt_key_phase_roundtrip() {
+        let packet =
+            QuicPacket::one_rtt_with_key_phase(vec![1, 2, 3, 4, 5, 6, 7, 8], 9, true, vec![0x01]);
+        let bytes = packet.to_bytes();
+        assert_ne!(bytes[0] & 0x04, 0);
+
+        let (parsed, consumed) = QuicPacket::from_bytes(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(parsed.header.packet_type, PacketType::OneRtt);
+        assert_eq!(parsed.header.packet_number, 9);
+        assert!(parsed.header.key_phase);
+        assert_eq!(parsed.header_to_bytes_aad(), packet.header_to_bytes_aad());
+        assert_eq!(parsed.payload, packet.payload);
     }
 }

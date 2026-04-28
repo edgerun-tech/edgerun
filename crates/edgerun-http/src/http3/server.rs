@@ -456,6 +456,7 @@ impl Http3Server {
                 token: Vec::new(),
                 pn_length: 4,
                 packet_number: 0,
+                key_phase: false,
                 payload_length: payload.len(),
             },
             payload,

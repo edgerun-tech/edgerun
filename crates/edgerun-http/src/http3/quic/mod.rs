@@ -390,6 +390,7 @@ impl QuicConnection {
                 token: Vec::new(),
                 pn_length: 4,
                 packet_number: pn,
+                key_phase: false,
                 payload_length: payload.len(),
             },
             payload,
@@ -699,7 +700,12 @@ impl QuicConnection {
         let payload = frame.to_bytes();
 
         let packet = if self.established {
-            QuicPacket::one_rtt(self.transport.remote_cid.as_bytes().to_vec(), pn, payload)
+            QuicPacket::one_rtt_with_key_phase(
+                self.transport.remote_cid.as_bytes().to_vec(),
+                pn,
+                self.key_phase,
+                payload,
+            )
         } else {
             QuicPacket::initial(
                 QUIC_VERSION_V1,
@@ -821,8 +827,17 @@ impl QuicConnection {
                     let plaintext = if let Some(ref mut prot) = self.protection {
                         // AAD = unprotected packet header (RFC 9001 §5.2)
                         let aad = packet.header_to_bytes_aad();
-                        prot.unprotect(&aad, packet.header.packet_number, &packet.payload)
-                            .map_err(|e| format!("Packet decryption failed: {}", e))?
+                        if packet.header.key_phase == self.key_phase {
+                            prot.unprotect(&aad, packet.header.packet_number, &packet.payload)
+                                .map_err(|e| format!("Packet decryption failed: {}", e))?
+                        } else if let Some(ref mut prev) = self.prev_protection {
+                            prev.unprotect(&aad, packet.header.packet_number, &packet.payload)
+                                .map_err(|e| {
+                                    format!("Packet decryption with previous keys failed: {}", e)
+                                })?
+                        } else {
+                            return Err("Peer changed QUIC key phase but no matching keys are available".to_string());
+                        }
                     } else {
                         // No protection — use raw payload (for testing)
                         packet.payload.clone()
@@ -936,6 +951,7 @@ impl QuicConnection {
                 token: Vec::new(),
                 pn_length: 4,
                 packet_number: pn,
+                key_phase: false,
                 payload_length: payload.len(),
             },
             payload,
