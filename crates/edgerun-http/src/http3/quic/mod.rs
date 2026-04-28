@@ -369,6 +369,12 @@ impl QuicConnection {
             .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
+        self.transport.record_packet_sent(
+            PacketNumberSpace::Initial,
+            pkt.header.packet_number,
+            full_packet.len(),
+            true,
+        );
         self.sent_packets_buffer.push(full_packet);
         self.transport.update_activity();
         Ok(())
@@ -417,6 +423,12 @@ impl QuicConnection {
             .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
+        self.transport.record_packet_sent(
+            PacketNumberSpace::Handshake,
+            pkt.header.packet_number,
+            full_packet.len(),
+            true,
+        );
         self.sent_packets_buffer.push(full_packet);
         self.transport.update_activity();
         Ok(())
@@ -741,6 +753,12 @@ impl QuicConnection {
             .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
+        self.transport.record_packet_sent(
+            packet_number_space(packet.header.packet_type),
+            packet.header.packet_number,
+            send_bytes.len(),
+            false,
+        );
         self.transport.update_activity();
         Ok(())
     }
@@ -815,10 +833,7 @@ impl QuicConnection {
         while self.recv_offset < self.recv_buffer.len() {
             let data = &self.recv_buffer[self.recv_offset..];
 
-            match QuicPacket::from_bytes_with_short_dcid_len(
-                data,
-                self.transport.local_cid.len(),
-            ) {
+            match QuicPacket::from_bytes_with_short_dcid_len(data, self.transport.local_cid.len()) {
                 Ok((packet, consumed)) => {
                     self.recv_offset += consumed;
 
@@ -839,7 +854,10 @@ impl QuicConnection {
                                     format!("Packet decryption with previous keys failed: {}", e)
                                 })?
                         } else {
-                            return Err("Peer changed QUIC key phase but no matching keys are available".to_string());
+                            return Err(
+                                "Peer changed QUIC key phase but no matching keys are available"
+                                    .to_string(),
+                            );
                         }
                     } else {
                         // No protection — use raw payload (for testing)
@@ -847,9 +865,13 @@ impl QuicConnection {
                     };
 
                     self.transport.update_activity();
+                    self.transport.record_received_packet(
+                        PacketNumberSpace::ApplicationData,
+                        packet.header.packet_number,
+                    );
 
                     // Parse frames from the decrypted payload
-                    if let Some(stream_data) = Self::parse_stream_frames(&plaintext) {
+                    if let Some(stream_data) = self.parse_stream_frames(&plaintext) {
                         return Ok(Some(stream_data));
                     }
                 }
@@ -864,12 +886,13 @@ impl QuicConnection {
     }
 
     /// Parse QUIC frames from decrypted payload, returning the first STREAM frame.
-    fn parse_stream_frames(data: &[u8]) -> Option<(u64, Vec<u8>, bool)> {
+    fn parse_stream_frames(&mut self, data: &[u8]) -> Option<(u64, Vec<u8>, bool)> {
         let mut pos = 0;
         while pos < data.len() {
             match QuicFrame::from_bytes(&data[pos..]) {
                 Ok((frame, consumed)) => {
                     pos += consumed;
+                    self.transport.process_frame(&frame);
                     if let QuicFrame::Stream {
                         stream_id,
                         offset: _,
@@ -1186,6 +1209,16 @@ fn pad_initial_datagram(pkt: &mut QuicPacket) {
             break;
         }
         pkt.payload.push(0);
+    }
+}
+
+fn packet_number_space(packet_type: PacketType) -> PacketNumberSpace {
+    match packet_type {
+        PacketType::Initial => PacketNumberSpace::Initial,
+        PacketType::Handshake => PacketNumberSpace::Handshake,
+        PacketType::OneRtt | PacketType::ZeroRtt | PacketType::Retry => {
+            PacketNumberSpace::ApplicationData
+        }
     }
 }
 

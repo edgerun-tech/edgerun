@@ -30,6 +30,13 @@ impl PacketNumberState {
     }
 
     fn record_received(&mut self, pn: u64) {
+        if self
+            .received_packets
+            .iter()
+            .any(|&(recorded_pn, _)| recorded_pn == pn)
+        {
+            return;
+        }
         self.received_packets.push((pn, std::time::Instant::now()));
         if self.received_packets.len() > 256 {
             self.received_packets.drain(..128);
@@ -200,12 +207,19 @@ impl QuicTransport {
     /// Record that we received a packet in the given space.
     pub fn record_received_packet(&mut self, space: PacketNumberSpace, packet_number: u64) -> bool {
         let idx = space as usize;
-        if let Some(largest) = self.pn_state[idx].largest_received {
-            if packet_number <= largest {
-                return false;
-            }
+        if self.pn_state[idx]
+            .received_packets
+            .iter()
+            .any(|&(recorded_pn, _)| recorded_pn == packet_number)
+        {
+            return false;
         }
-        self.pn_state[idx].largest_received = Some(packet_number);
+        if self.pn_state[idx]
+            .largest_received
+            .map_or(true, |largest| packet_number > largest)
+        {
+            self.pn_state[idx].largest_received = Some(packet_number);
+        }
         self.pn_state[idx].record_received(packet_number);
         true
     }
@@ -267,7 +281,21 @@ impl QuicTransport {
             return None;
         }
 
-        let largest_acknowledged = sorted.last().unwrap().0;
+        let mut ranges = Vec::new();
+        let mut range_end = sorted.last().unwrap().0;
+        let mut range_start = range_end;
+        for &(pn, _) in sorted[..sorted.len() - 1].iter().rev() {
+            if pn + 1 == range_start {
+                range_start = pn;
+            } else {
+                ranges.push((range_start, range_end));
+                range_start = pn;
+                range_end = pn;
+            }
+        }
+        ranges.push((range_start, range_end));
+
+        let largest_acknowledged = ranges[0].1;
         let now = std::time::Instant::now();
 
         let ack_delay = sorted
@@ -279,20 +307,13 @@ impl QuicTransport {
         let ack_delay_us = ack_delay.as_micros() as u64;
         let ack_delay_encoded = ack_delay_us >> self.params.ack_delay_exponent;
 
+        let first_ack_range = ranges[0].1 - ranges[0].0;
         let mut ack_ranges = Vec::new();
-        let mut first_ack_range = 0;
-        let mut prev_pn = largest_acknowledged;
-
-        for i in (0..sorted.len() - 1).rev() {
-            let pn = sorted[i].0;
-            if prev_pn == pn + 1 {
-                first_ack_range += 1;
-            } else {
-                let gap = prev_pn - pn - 1;
-                ack_ranges.push((gap, first_ack_range));
-                first_ack_range = 0;
-            }
-            prev_pn = pn;
+        let mut previous_range_start = ranges[0].0;
+        for &(start, end) in ranges.iter().skip(1) {
+            let gap = previous_range_start.saturating_sub(end).saturating_sub(2);
+            ack_ranges.push((gap, end - start));
+            previous_range_start = start;
         }
 
         Some(QuicFrame::Ack {
@@ -364,7 +385,7 @@ impl QuicTransport {
 
     pub fn record_packet_sent(
         &mut self,
-        space: PacketNumberSpace,
+        _space: PacketNumberSpace,
         packet_number: u64,
         size: usize,
         has_crypto: bool,
@@ -381,9 +402,6 @@ impl QuicTransport {
 
         self.congestion.bytes_in_flight += size as u64;
         self.sent_packets.push(packet);
-
-        let idx = space as usize;
-        self.pn_state[idx].packets_sent += 1;
     }
 
     /// Get the packet number range for a given space.
@@ -789,6 +807,67 @@ mod tests {
         assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 0);
         assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 1);
         assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 2);
+    }
+
+    #[test]
+    fn test_ack_generation_tracks_out_of_order_packets() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 10));
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 8));
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 9));
+        assert!(!transport.record_received_packet(PacketNumberSpace::ApplicationData, 8));
+
+        let ack = transport
+            .generate_ack_frame(PacketNumberSpace::ApplicationData)
+            .expect("ack frame");
+        match ack {
+            QuicFrame::Ack {
+                largest_acknowledged,
+                first_ack_range,
+                ack_range_count,
+                ack_ranges,
+                ..
+            } => {
+                assert_eq!(largest_acknowledged, 10);
+                assert_eq!(first_ack_range, 2);
+                assert_eq!(ack_range_count, 0);
+                assert!(ack_ranges.is_empty());
+            }
+            _ => panic!("expected ACK frame"),
+        }
+    }
+
+    #[test]
+    fn test_ack_generation_encodes_gapped_ranges() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        for pn in [1, 2, 5, 9, 10] {
+            assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, pn));
+        }
+
+        let ack = transport
+            .generate_ack_frame(PacketNumberSpace::ApplicationData)
+            .expect("ack frame");
+        match ack {
+            QuicFrame::Ack {
+                largest_acknowledged,
+                first_ack_range,
+                ack_range_count,
+                ack_ranges,
+                ..
+            } => {
+                assert_eq!(largest_acknowledged, 10);
+                assert_eq!(first_ack_range, 1);
+                assert_eq!(ack_range_count, 2);
+                assert_eq!(ack_ranges, vec![(2, 0), (1, 1)]);
+            }
+            _ => panic!("expected ACK frame"),
+        }
     }
 
     #[test]

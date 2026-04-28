@@ -238,6 +238,33 @@ fn test_stream_frame_receive_path() {
     assert!(fin);
 }
 
+#[test]
+fn test_recv_path_records_received_packets_and_processes_ack() {
+    let mut conn = QuicConnection::dummy();
+    conn.established = true;
+    conn.transport
+        .record_packet_sent(PacketNumberSpace::ApplicationData, 3, 1200, false);
+    assert_eq!(conn.transport.bytes_in_flight(), 1200);
+
+    let ack_payload = QuicFrame::Ack {
+        largest_acknowledged: 3,
+        ack_delay: 0,
+        ack_range_count: 0,
+        first_ack_range: 0,
+        ack_ranges: Vec::new(),
+    }
+    .to_bytes();
+    let ack_packet =
+        QuicPacket::one_rtt(conn.transport.local_cid.as_bytes().to_vec(), 4, ack_payload);
+    conn.inject_packet(ack_packet.to_bytes());
+
+    assert_eq!(conn.recv_from_buffer().unwrap(), None);
+    assert_eq!(conn.transport.bytes_in_flight(), 0);
+    assert!(conn
+        .transport
+        .should_send_ack(PacketNumberSpace::ApplicationData));
+}
+
 /// Test server-side `accept_stream()` + QPACK request decoding.
 ///
 /// Simulates: client sends request → server accepts stream → decodes request.

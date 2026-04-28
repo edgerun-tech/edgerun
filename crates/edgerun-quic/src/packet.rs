@@ -781,8 +781,7 @@ mod tests {
         let packet = QuicPacket::one_rtt(vec![1, 2, 3, 4], 9, vec![0x01, 0x02]);
         let bytes = packet.to_bytes();
 
-        let (parsed, consumed) =
-            QuicPacket::from_bytes_with_short_dcid_len(&bytes, 4).unwrap();
+        let (parsed, consumed) = QuicPacket::from_bytes_with_short_dcid_len(&bytes, 4).unwrap();
         assert_eq!(consumed, bytes.len());
         assert_eq!(parsed.header.dst_cid, vec![1, 2, 3, 4]);
         assert_eq!(parsed.header.packet_number, 9);

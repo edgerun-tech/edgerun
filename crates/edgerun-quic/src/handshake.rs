@@ -611,9 +611,10 @@ impl QuicTlsHandshaker {
                             self.cert_validation =
                                 Some(validator.validate_chain(&self.server_cert_chain));
                             if !self.allow_unverified_certificates {
-                                let validation = self.cert_validation.as_ref().ok_or_else(|| {
-                                    "Server certificate validation was not recorded".to_string()
-                                })?;
+                                let validation =
+                                    self.cert_validation.as_ref().ok_or_else(|| {
+                                        "Server certificate validation was not recorded".to_string()
+                                    })?;
                                 if !validation.is_valid() {
                                     return Err(format!(
                                         "Server certificate validation failed: {}",
@@ -1025,7 +1026,9 @@ mod tests {
     fn strict_handshake_rejects_unvalidated_certificate() {
         let mut hs = QuicTlsHandshaker::new("example.com");
         let cert = vec![0x30; 128];
-        let err = hs.process_handshake_crypto(&certificate_message(&cert)).unwrap_err();
+        let err = hs
+            .process_handshake_crypto(&certificate_message(&cert))
+            .unwrap_err();
 
         assert!(err.contains("Server certificate validation failed"));
     }
@@ -1035,7 +1038,9 @@ mod tests {
         let mut hs = QuicTlsHandshaker::new("example.com");
         hs.allow_unverified_certificates(true);
         let cert = vec![0x30; 128];
-        let err = hs.process_handshake_crypto(&certificate_message(&cert)).unwrap_err();
+        let err = hs
+            .process_handshake_crypto(&certificate_message(&cert))
+            .unwrap_err();
 
         assert!(err.contains("Server Finished not found"));
         assert!(hs.cert_validation().is_some());
