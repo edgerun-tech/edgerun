@@ -26,7 +26,7 @@ use crate::lifecycle::{
 use crate::process::validate_spec;
 use crate::rootfs_copy::copy_rootfs_tree;
 use crate::spec::{parse_oci_spec, OciSpec};
-use crate::state::{delete_state, load_state};
+use crate::state::{delete_state_with_result, load_state};
 use crate::terminal::{recv_fd, relay_pty_until_exit, wait_for_exit_code};
 
 use crate::ImageRef;
@@ -218,8 +218,9 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
                 }
             }
         }
-        delete_state(&container_id);
-        let _ = fs::remove_dir_all(&state_dir_for_cleanup);
+        if let Err(e) = delete_state_with_result(&container_id) {
+            cleanup_err.get_or_insert(e);
+        }
 
         if let Some(error) = cleanup_err {
             return Err(error);

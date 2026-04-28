@@ -6,11 +6,9 @@
 //! Poststop and cleanup only happen in the `delete` command.
 
 use crate::prelude::*;
-use std::fs;
 use std::io;
 
 use crate::lifecycle::start_created_container;
-use crate::spec::parse_oci_spec;
 use crate::state::load_state;
 
 pub fn cmd_start(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -30,23 +28,23 @@ pub fn cmd_start(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
         ));
     }
 
-    let pid = state.pid.unwrap_or(0);
+    let pid = state.pid.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("container {id} state missing pid"),
+        )
+    })?;
     let bundle = state.bundle.clone();
 
-    // Load spec for cgroups and poststart hooks
-    let config_path = std::path::Path::new(&bundle).join("config.json");
-    let spec = if let Ok(data) = fs::read(&config_path) {
-        parse_oci_spec(&data).ok()
-    } else {
-        None
-    };
+    let spec = crate::cli::load_runtime_or_bundle_spec(id, &bundle)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("container {id} has no readable OCI spec to start"),
+            )
+        })?;
 
-    if let Some(ref spec) = spec {
-        start_created_container(spec, id, pid)?;
-    } else {
-        crate::lifecycle::signal_start(id)?;
-        crate::lifecycle::update_state_running(id, pid)?;
-    }
+    start_created_container(&spec, id, pid)?;
 
     // Return immediately — the container runs in the background.
     // Poststop and cleanup happen in `delete`.

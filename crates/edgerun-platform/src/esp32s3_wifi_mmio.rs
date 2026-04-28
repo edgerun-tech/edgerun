@@ -59,6 +59,8 @@ const WIFI_PBUS_BANK4: *mut u32 = 0x6000_60f0 as *mut u32;
 const WIFI_PBUS_BANK5: *mut u32 = 0x6000_60f4 as *mut u32;
 const WIFI_TXRATE_POWER0: *mut u32 = 0x6000_6180 as *mut u32;
 const WIFI_TXRATE_POWER15: *mut u32 = 0x6000_61bc as *mut u32;
+const WIFI_I2C_XPD_CTRL0: *mut u32 = 0x6000_8034 as *mut u32;
+const WIFI_I2C_XPD_CTRL1: *mut u32 = 0x6000_8000 as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -205,6 +207,8 @@ pub struct WifiMmioPhyRegs {
     pub pbus_bank5: u32,
     pub txrate_power0: u32,
     pub txrate_power15: u32,
+    pub i2c_xpd_ctrl0: u32,
+    pub i2c_xpd_ctrl1: u32,
 }
 
 pub struct Esp32s3WifiMmio;
@@ -345,6 +349,8 @@ impl Esp32s3WifiMmio {
                 pbus_bank5: WIFI_PBUS_BANK5.read_volatile(),
                 txrate_power0: WIFI_TXRATE_POWER0.read_volatile(),
                 txrate_power15: WIFI_TXRATE_POWER15.read_volatile(),
+                i2c_xpd_ctrl0: WIFI_I2C_XPD_CTRL0.read_volatile(),
+                i2c_xpd_ctrl1: WIFI_I2C_XPD_CTRL1.read_volatile(),
             }
         }
     }
@@ -467,13 +473,19 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(1802, Ordering::Relaxed);
                     true
                 }
+                19 => {
+                    LAST_STATUS.store(1901, Ordering::Relaxed);
+                    open_i2c_xpd_slice();
+                    LAST_STATUS.store(1902, Ordering::Relaxed);
+                    true
+                }
                 _ => false,
             }
         }
     }
 
     pub fn init_known_good() -> bool {
-        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] {
+        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] {
             if !Self::debug_step(step) {
                 return false;
             }
@@ -725,12 +737,7 @@ unsafe fn set_phy_wifi_enable(enable: bool) {
 }
 
 unsafe fn init_pbus_mem_slice() {
-    let pbus_bank0_low = [
-        0x0007_09ff,
-        0x0017_13ff,
-        0x00f5_0000,
-        0x00f6_0000,
-    ];
+    let pbus_bank0_low = [0x0007_09ff, 0x0017_13ff, 0x00f5_0000, 0x00f6_0000];
     let pbus_bank0_high = [0x0004_01ff, 0x0018_01ff, 0x0014_01ff];
     let pbus_bank1_low = [
         0x0004_03ff,
@@ -817,6 +824,11 @@ unsafe fn write_txrate_power_offset_slice() {
             reg = reg.add(1);
         }
     }
+}
+
+unsafe fn open_i2c_xpd_slice() {
+    update(WIFI_I2C_XPD_CTRL0, |v| v | 0xf800_0000);
+    update(WIFI_I2C_XPD_CTRL1, |v| v | 0x0000_0080);
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {

@@ -122,9 +122,15 @@ impl StreamState {
     fn enqueue_rx(&mut self, bytes: &[u8]) -> usize {
         let free = self.rx.len().saturating_sub(self.rx_len);
         let copy_len = core::cmp::min(free, bytes.len());
-        for (index, byte) in bytes.iter().take(copy_len).enumerate() {
-            let pos = (self.rx_start + self.rx_len + index) % self.rx.len();
-            self.rx[pos] = *byte;
+        if copy_len == 0 {
+            return 0;
+        }
+        let write_start = (self.rx_start + self.rx_len) % self.rx.len();
+        let first = core::cmp::min(copy_len, self.rx.len() - write_start);
+        let second = copy_len - first;
+        self.rx[write_start..write_start + first].copy_from_slice(&bytes[..first]);
+        if second > 0 {
+            self.rx[..second].copy_from_slice(&bytes[first..copy_len]);
         }
         self.rx_len += copy_len;
         copy_len
@@ -132,8 +138,14 @@ impl StreamState {
 
     fn read_rx(&mut self, out: &mut [u8]) -> usize {
         let copy_len = core::cmp::min(out.len(), self.rx_len);
-        for (index, slot) in out.iter_mut().take(copy_len).enumerate() {
-            *slot = self.rx[(self.rx_start + index) % self.rx.len()];
+        if copy_len == 0 {
+            return 0;
+        }
+        let first = core::cmp::min(copy_len, self.rx.len() - self.rx_start);
+        let second = copy_len - first;
+        out[..first].copy_from_slice(&self.rx[self.rx_start..self.rx_start + first]);
+        if second > 0 {
+            out[first..copy_len].copy_from_slice(&self.rx[..second]);
         }
         self.rx_start = (self.rx_start + copy_len) % self.rx.len();
         self.rx_len -= copy_len;
@@ -172,6 +184,16 @@ impl AsyncTcpStream {
 
     pub fn split(self: Arc<Self>) -> (Arc<Self>, Arc<Self>) {
         (self.clone(), self)
+    }
+}
+
+impl Drop for AsyncTcpStream {
+    fn drop(&mut self) {
+        let mut streams = STREAMS.lock();
+        let Some(stream) = streams.get_mut(self.id) else {
+            return;
+        };
+        *stream = StreamState::empty();
     }
 }
 
@@ -225,12 +247,18 @@ impl AsyncWrite for AsyncTcpStream {
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         let Some(driver) = *DRIVER.lock() else {
+            let mut streams = STREAMS.lock();
+            if let Some(stream) = streams.get_mut(self.id) {
+                stream.closed = true;
+                stream.active = false;
+            }
             return Poll::Ready(Ok(()));
         };
         let mut streams = STREAMS.lock();
         if let Some(stream) = streams.get_mut(self.id) {
             let _ = send_tcp_segment(driver, stream, TCP_FLAG_FIN | TCP_FLAG_ACK, &[]);
             stream.closed = true;
+            stream.active = false;
         }
         Poll::Ready(Ok(()))
     }
@@ -286,12 +314,18 @@ impl AsyncWrite for Arc<AsyncTcpStream> {
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<IoResult<()>> {
         let Some(driver) = *DRIVER.lock() else {
+            let mut streams = STREAMS.lock();
+            if let Some(stream) = streams.get_mut(self.id) {
+                stream.closed = true;
+                stream.active = false;
+            }
             return Poll::Ready(Ok(()));
         };
         let mut streams = STREAMS.lock();
         if let Some(stream) = streams.get_mut(self.id) {
             let _ = send_tcp_segment(driver, stream, TCP_FLAG_FIN | TCP_FLAG_ACK, &[]);
             stream.closed = true;
+            stream.active = false;
         }
         Poll::Ready(Ok(()))
     }
@@ -314,6 +348,7 @@ fn poll_read_stream(id: usize, buf: &mut [u8]) -> Poll<IoResult<usize>> {
         return Poll::Ready(Ok(read));
     }
     if stream.closed {
+        *stream = StreamState::empty();
         return Poll::Ready(Ok(0));
     }
     Poll::Pending
@@ -370,13 +405,17 @@ impl Future for ConnectFuture {
             self.stream_id = Some(id);
         }
 
-        let id = self.stream_id.unwrap_or(0);
+        let Some(id) = self.stream_id else {
+            return Poll::Ready(Err(unavailable()));
+        };
         if !self.sent_syn {
             let mut streams = STREAMS.lock();
             let Some(stream) = streams.get_mut(id) else {
                 return Poll::Ready(Err(unavailable()));
             };
             if !send_tcp_segment(driver, stream, TCP_FLAG_SYN, &[]) {
+                stream.active = false;
+                self.stream_id = None;
                 return Poll::Ready(Err(IoError::WriteZero));
             }
             stream.seq = stream.seq.wrapping_add(1);
@@ -395,6 +434,21 @@ impl Future for ConnectFuture {
             }
         }
         Poll::Pending
+    }
+}
+
+impl Drop for ConnectFuture {
+    fn drop(&mut self) {
+        let Some(id) = self.stream_id.take() else {
+            return;
+        };
+        let mut streams = STREAMS.lock();
+        let Some(stream) = streams.get_mut(id) else {
+            return;
+        };
+        if !stream.established {
+            *stream = StreamState::empty();
+        }
     }
 }
 
@@ -571,6 +625,7 @@ fn handle_frame(driver: &dyn BareNetDriver, frame: &[u8]) {
 
     if tcp.flags & TCP_FLAG_RST != 0 {
         stream.closed = true;
+        stream.active = false;
         return;
     }
     if tcp.flags & TCP_FLAG_SYN != 0 && tcp.flags & TCP_FLAG_ACK != 0 && !stream.established {
@@ -593,6 +648,7 @@ fn handle_frame(driver: &dyn BareNetDriver, frame: &[u8]) {
     {
         stream.ack = stream.ack.wrapping_add(1);
         stream.closed = true;
+        stream.active = false;
         let _ = send_tcp_segment(driver, stream, TCP_FLAG_ACK, &[]);
     }
 }
@@ -618,8 +674,7 @@ fn handle_udp_frame(ip: &IpHeader, frame: &[u8], ip_header_len: usize, ip_total_
     }
 
     let mut packets = UDP_PACKETS.lock();
-    let slot_index = packets.iter().position(|packet| !packet.used).unwrap_or(0);
-    let Some(packet) = packets.get_mut(slot_index) else {
+    let Some(packet) = packets.iter_mut().find(|packet| !packet.used) else {
         return;
     };
     packet.used = true;

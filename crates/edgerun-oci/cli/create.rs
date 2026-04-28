@@ -3,9 +3,11 @@
 //! Uses the library lifecycle to run hooks with full OCI spec compliance.
 
 use crate::prelude::*;
+use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::time::Duration;
 
 use crate::cli::GlobalOpts;
 use crate::lifecycle::{
@@ -13,6 +15,7 @@ use crate::lifecycle::{
 };
 use crate::process::validate_spec;
 use crate::spec::{parse_oci_spec, OciSpec};
+use crate::state::delete_state_with_result;
 
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
@@ -76,22 +79,18 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     // Step 2: createRuntime hooks (runtime namespace)
     run_create_runtime_hooks(&spec, id)?;
 
-    // Step 3: fork child (runs setup + createContainer + FIFO wait + startContainer in container namespace)
-    let forked = fork_container_child(&spec, id)?;
-    let child_pid = forked.pid();
-
-    // Drop the ForkedChild handle — the child is running in the background, blocked on FIFO
-    // We don't hold the Child handle; start will signal the FIFO
-    std::mem::forget(forked);
-
-    // Step 4: save state as "created"
     let bundle_abs = bundle.canonicalize().map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("cannot resolve bundle path: {}", e),
         )
     })?;
-    save_created_state(
+
+    // Step 3: fork child (runs setup + createContainer + FIFO wait + startContainer in container namespace)
+    let forked = fork_container_child(&spec, id)?;
+    let child_pid = forked.pid();
+
+    if let Err(error) = save_created_state(
         &spec,
         id,
         child_pid,
@@ -101,7 +100,18 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
                 "bundle path is not valid UTF-8",
             )
         })?,
-    )?;
+    ) {
+        signal_tree(child_pid, libc::SIGKILL);
+        let _ = wait_tree_dead(child_pid, Duration::from_secs(2));
+        let _ = delete_state_with_result(id);
+        return Err(error);
+    }
+
+    // Drop the ForkedChild handle — the child is running in the background, blocked on FIFO
+    // We don't hold the Child handle; start will signal the FIFO
+    std::mem::forget(forked);
+
+    // Step 4: state is persisted as "created" and runtime spec snapshot is recorded.
 
     // Write PID to pid-file if requested
     if let Some(ref pid_file) = opts.pid_file {

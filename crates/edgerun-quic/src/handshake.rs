@@ -61,10 +61,12 @@ impl CertValidationResult {
 /// Certificate validator for TLS 1.3 (RFC 8446 §4.4.2).
 ///
 /// Validates:
-/// 1. Certificate chain (leaf → intermediates → root)
+/// 1. Certificate chain signatures and validity periods
 /// 2. Hostname/SNI matching (RFC 2818)
-/// 3. Certificate expiration
-/// 4. CertificateVerify signature
+/// 3. CertificateVerify signature
+///
+/// Production root trust is intentionally not faked: chains without a
+/// configured trusted root are rejected by strict validation.
 pub struct CertificateValidator {
     /// Expected server hostname (for SNI verification)
     expected_hostname: Option<String>,
@@ -199,14 +201,15 @@ impl CertificateValidator {
 
     /// Verify a CertificateVerify signature (RFC 8446 §4.4.3).
     ///
-    /// The server signs the transcript hash with its private key.
+    /// The server signs the RFC 8446 context string plus transcript hash with
+    /// its private key.
     /// The client verifies this signature using the server's public key from
     /// the leaf certificate.
     ///
     /// Supported algorithms:
     /// - 0x0403: ECDSA-SECP256R1-SHA256 (P-256)
-    /// - 0x0804: ED25519 (Curve25519)
-    /// - 0x0401: RSA-PSS-SHA256
+    /// Unsupported algorithms return false until their X.509 SPKI parsing and
+    /// signature verification are implemented.
     pub fn verify_certificate_signature(
         &self,
         cert_der: &[u8],
@@ -652,19 +655,33 @@ impl QuicTlsHandshaker {
                 15 => {
                     // CertificateVerify — extract signature algorithm and signature
                     // Format: type(1) + len(3) + sig_alg(2) + sig_len(2) + signature
-                    if msg_len >= 8 {
-                        let sig_alg = read_u16_be(msg, 4);
-                        let sig_len = read_u16_be(msg, 6) as usize;
-                        if 8 + sig_len <= msg.len() {
-                            let signature = msg[8..8 + sig_len].to_vec();
-                            self.cert_verify_signature = Some((sig_alg, signature));
-                        }
+                    if msg_len < 8 {
+                        return Err("Malformed CertificateVerify message".to_string());
                     }
+                    let sig_alg = read_u16_be(msg, 4);
+                    let sig_len = read_u16_be(msg, 6) as usize;
+                    if 8 + sig_len > msg.len() {
+                        return Err("Malformed CertificateVerify signature length".to_string());
+                    }
+                    let signature = msg[8..8 + sig_len].to_vec();
+                    self.cert_verify_signature = Some((sig_alg, signature.clone()));
+
                     if !self.allow_unverified_certificates {
-                        return Err(
-                            "Strict QUIC CertificateVerify validation is not implemented"
-                                .to_string(),
-                        );
+                        let leaf_cert = self.server_cert_chain.first().ok_or_else(|| {
+                            "CertificateVerify received before Certificate".to_string()
+                        })?;
+                        let validator = CertificateValidator::new(Some(self.server_name()));
+                        if !validator.verify_certificate_signature(
+                            leaf_cert,
+                            sig_alg,
+                            &signature,
+                            &self.transcript,
+                            &self.hasher,
+                        ) {
+                            return Err(
+                                "Server CertificateVerify signature validation failed".to_string()
+                            );
+                        }
                     }
                     self.transcript.extend_from_slice(msg);
                 }
@@ -1049,6 +1066,52 @@ mod tests {
         msg.extend_from_slice(&(body.len() as u32).to_be_bytes()[1..]);
         msg.extend_from_slice(&body);
         msg
+    }
+
+    #[test]
+    fn certificate_validator_rejects_untrusted_self_signed_chain() {
+        let cert = edgerun_tls::generate_self_signed(&["example.com"]).unwrap();
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        let result = validator.validate_chain(&[cert.cert_der]);
+
+        assert!(!result.is_valid());
+        assert!(result.hostname_valid);
+        assert_eq!(
+            result.error.as_deref(),
+            Some("Self-signed certificate is not trusted")
+        );
+    }
+
+    #[test]
+    fn certificate_verify_signature_validates_tls13_context() {
+        let cert = edgerun_tls::generate_self_signed(&["example.com"]).unwrap();
+        let transcript = b"prior tls handshake messages";
+        let cv = edgerun_tls::server::build_certificate_verify(
+            transcript,
+            &cert.signing_key,
+            &Hasher::Sha256,
+        )
+        .unwrap();
+        let sig_alg = read_u16_be(&cv, 4);
+        let sig_len = read_u16_be(&cv, 6) as usize;
+        let signature = &cv[8..8 + sig_len];
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        assert!(validator.verify_certificate_signature(
+            &cert.cert_der,
+            sig_alg,
+            signature,
+            transcript,
+            &Hasher::Sha256
+        ));
+        assert!(!validator.verify_certificate_signature(
+            &cert.cert_der,
+            sig_alg,
+            signature,
+            b"tampered transcript",
+            &Hasher::Sha256
+        ));
     }
 
     #[test]

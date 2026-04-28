@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use crate::cli::{is_process_alive, parse_delete_args};
 use crate::lifecycle::run_poststop_and_cleanup;
-use crate::state::{delete_state, fifo_path, load_state};
+use crate::state::{delete_state_with_result, fifo_path, load_state};
 
 pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
@@ -81,10 +81,16 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     }
 
     // Clean up state dir
-    delete_state(id);
+    if let Err(e) = delete_state_with_result(id) {
+        cleanup_err.get_or_insert(e);
+    }
 
     // Clean up FIFO
-    let _ = fs::remove_file(fifo_path(id));
+    if let Err(e) = fs::remove_file(fifo_path(id)) {
+        if e.kind() != io::ErrorKind::NotFound {
+            cleanup_err.get_or_insert(e);
+        }
+    }
 
     if let Some(error) = cleanup_err {
         return Err(error);

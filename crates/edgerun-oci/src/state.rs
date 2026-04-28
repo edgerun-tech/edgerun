@@ -168,7 +168,21 @@ edgerun_json::impl_json_struct! {
 
 /// Delete container state directory and all contents.
 pub fn delete_state(id: &str) {
-    let _ = fs::remove_dir_all(container_state_dir(id));
+    let _ = delete_state_with_result(id);
+}
+
+/// Delete container state directory and all contents, returning I/O errors.
+pub fn delete_state_with_result(id: &str) -> io::Result<()> {
+    let state_dir = container_state_dir(id);
+    if !state_dir.exists() {
+        return Ok(());
+    }
+    fs::remove_dir_all(state_dir).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!("failed to delete container state directory: {}", e),
+        )
+    })
 }
 
 /// Check if a container state exists.
