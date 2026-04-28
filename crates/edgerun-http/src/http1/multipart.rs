@@ -49,10 +49,10 @@ impl MultipartField {
 /// `boundary` is the boundary string from the Content-Type header
 ///   (e.g., "----WebKitFormBoundary7MA4YWxkTrZu0gW" — without the leading `--`)
 pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField>, MultipartError> {
-    let delimiter = format!("--{}", boundary);
-    let delimiter_bytes = delimiter.as_bytes();
-    let end_delimiter = format!("--{}--", boundary);
-    let end_delimiter_bytes = end_delimiter.as_bytes();
+    let mut delimiter = Vec::with_capacity(boundary.len() + 2);
+    delimiter.extend_from_slice(b"--");
+    delimiter.extend_from_slice(boundary.as_bytes());
+    let delimiter_bytes = delimiter.as_slice();
 
     let mut fields = Vec::new();
     let mut pos = 0;
@@ -70,7 +70,7 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
         }
 
         // Check for end delimiter
-        if body[pos..].starts_with(end_delimiter_bytes) {
+        if is_end_boundary(body, delimiter_bytes, pos) {
             break;
         }
 
@@ -93,7 +93,7 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
         let data_start = pos;
 
         // Look for \r\n--boundary or --boundary-- pattern
-        let next_boundary = find_next_boundary(body, delimiter_bytes, end_delimiter_bytes, pos)?;
+        let next_boundary = find_next_boundary(body, delimiter_bytes, pos)?;
         let data = body[data_start..next_boundary].to_vec();
 
         // Remove trailing CRLF from data if present
@@ -115,7 +115,7 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
         }
 
         // Check for end delimiter
-        if body[pos..].starts_with(end_delimiter_bytes) {
+        if is_end_boundary(body, delimiter_bytes, pos) {
             break;
         }
 
@@ -138,8 +138,8 @@ pub fn extract_boundary(content_type: &str) -> Option<String> {
 /// Check if Content-Type is multipart/form-data
 pub fn is_multipart(content_type: &str) -> bool {
     content_type
-        .to_lowercase()
-        .starts_with("multipart/form-data")
+        .get(..19)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("multipart/form-data"))
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,6 @@ fn skip_to_boundary(body: &[u8], delimiter: &[u8], start: usize) -> Result<usize
 fn find_next_boundary(
     body: &[u8],
     delimiter: &[u8],
-    end_delimiter: &[u8],
     start: usize,
 ) -> Result<usize, MultipartError> {
     // Search for regular delimiter first: \r\n--boundary
@@ -197,25 +196,13 @@ fn find_next_boundary(
         }
     }
 
-    // Then check for end delimiter: \r\n--boundary--
-    let crlf_end = b"\r\n";
-    for i in start
-        ..body
-            .len()
-            .saturating_sub(crlf_end.len() + end_delimiter.len() - 1)
-    {
-        if body[i..i + crlf_end.len()] == *crlf_end {
-            let after_crlf = i + crlf_end.len();
-            if body.len() >= after_crlf + end_delimiter.len()
-                && body[after_crlf..after_crlf + end_delimiter.len()] == *end_delimiter
-            {
-                return Ok(i);
-            }
-        }
-    }
-
     // Fallback: take rest of body
     Ok(body.len())
+}
+
+fn is_end_boundary(body: &[u8], delimiter: &[u8], pos: usize) -> bool {
+    body[pos..].starts_with(delimiter)
+        && body.get(pos + delimiter.len()..pos + delimiter.len() + 2) == Some(b"--")
 }
 
 fn skip_crlf(body: &[u8], start: usize) -> usize {
@@ -255,7 +242,7 @@ fn parse_headers(body: &[u8]) -> Result<(BTreeMap<String, String>, usize), Multi
             core::str::from_utf8(&body[pos..line_end]).map_err(|_| MultipartError::InvalidUtf8)?;
 
         if let Some(colon) = line.find(':') {
-            let name = line[..colon].trim().to_lowercase();
+            let name = ascii_lowercase(line[..colon].trim());
             let value = line[colon + 1..].trim().to_string();
             headers.insert(name, value);
         }
@@ -264,6 +251,13 @@ fn parse_headers(body: &[u8]) -> Result<(BTreeMap<String, String>, usize), Multi
     }
 
     Ok((headers, pos))
+}
+
+fn ascii_lowercase(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| b.to_ascii_lowercase() as char)
+        .collect()
 }
 
 fn extract_param(header_value: &str, param_name: &str) -> Option<String> {
