@@ -268,9 +268,11 @@ impl Http2Pool {
         headers.push((b":path".to_vec(), path.as_bytes().to_vec()));
         for (name, value) in request.headers().iter() {
             // HTTP/2 requires lowercase header field names (RFC 9113 §8.2.1)
-            let name_lower = name.as_str().to_lowercase();
             headers.push((
-                name_lower.as_bytes().to_vec(),
+                name.as_str()
+                    .bytes()
+                    .map(|b| b.to_ascii_lowercase())
+                    .collect(),
                 value.as_str().as_bytes().to_vec(),
             ));
         }

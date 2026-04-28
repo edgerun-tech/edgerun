@@ -36,7 +36,6 @@
 
 use crate::http2::ErrorCode;
 use alloc::collections::BTreeSet;
-use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -65,9 +64,7 @@ pub fn validate_request_headers(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationRes
     let mut saw_regular_header = false;
 
     for (name, value) in headers {
-        let name_str = String::from_utf8_lossy(name);
-
-        if name_str.starts_with(':') {
+        if name.starts_with(b":") {
             // Pseudo-header field
             if saw_regular_header {
                 return Err((
@@ -75,12 +72,12 @@ pub fn validate_request_headers(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationRes
                     "pseudo-header after regular header",
                 ));
             }
-            match name_str.as_ref() {
-                ":method" => method_count += 1,
-                ":scheme" => scheme_count += 1,
-                ":path" => path_count += 1,
-                ":authority" => {} // optional for CONNECT, harmless otherwise
-                ":status" => {
+            match name.as_slice() {
+                b":method" => method_count += 1,
+                b":scheme" => scheme_count += 1,
+                b":path" => path_count += 1,
+                b":authority" => {} // optional for CONNECT, harmless otherwise
+                b":status" => {
                     return Err((
                         ErrorCode::PROTOCOL_ERROR.to_u32(),
                         "response pseudo-header in request",
@@ -92,12 +89,10 @@ pub fn validate_request_headers(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationRes
             }
         } else {
             // Regular header — check for connection-specific headers
-            let name_lower = name_str.to_lowercase();
-            if is_connection_specific_header(&name_lower) {
+            if is_connection_specific_header_bytes(name) {
                 // Exception: "te" with value "trailers" is allowed
-                if name_lower == "te" {
-                    let value_str = String::from_utf8_lossy(value).to_lowercase();
-                    if value_str != "trailers" {
+                if name.eq_ignore_ascii_case(b"te") {
+                    if !value.eq_ignore_ascii_case(b"trailers") {
                         return Err((
                             ErrorCode::PROTOCOL_ERROR.to_u32(),
                             "TE header with non-trailers value",
@@ -138,8 +133,7 @@ pub fn validate_request_headers(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationRes
 
     // :path MUST NOT be empty for non-CONNECT requests (RFC 9113 §8.3.1)
     for (name, value) in headers {
-        let name_str = String::from_utf8_lossy(name);
-        if name_str == ":path" && value.is_empty() {
+        if name == b":path" && value.is_empty() {
             return Err((ErrorCode::PROTOCOL_ERROR.to_u32(), "empty :path"));
         }
     }
@@ -162,13 +156,22 @@ pub fn is_connection_specific_header(name_lower: &str) -> bool {
     )
 }
 
+fn is_connection_specific_header_bytes(name: &[u8]) -> bool {
+    name.eq_ignore_ascii_case(b"connection")
+        || name.eq_ignore_ascii_case(b"keep-alive")
+        || name.eq_ignore_ascii_case(b"proxy-connection")
+        || name.eq_ignore_ascii_case(b"transfer-encoding")
+        || name.eq_ignore_ascii_case(b"upgrade")
+        || name.eq_ignore_ascii_case(b"http2-settings")
+        || name.eq_ignore_ascii_case(b"te")
+}
+
 /// Validate that all header field names are lowercase (RFC 9113 §8.2).
 /// HTTP/2 requires all header names to be lowercase.
 pub fn validate_header_name_case(headers: &[(Vec<u8>, Vec<u8>)]) -> ValidationResult {
     for (name, _) in headers {
-        let name_str = String::from_utf8_lossy(name);
         // Pseudo-headers always start with ':' and are lowercase by definition
-        if !name_str.starts_with(':') && name_str.to_lowercase() != name_str {
+        if !name.starts_with(b":") && name.iter().any(u8::is_ascii_uppercase) {
             return Err((
                 ErrorCode::PROTOCOL_ERROR.to_u32(),
                 "header field name not lowercase",
