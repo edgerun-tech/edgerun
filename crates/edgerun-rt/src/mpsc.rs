@@ -76,17 +76,22 @@ impl<T> Sender<T> {
         self.queue.closed.load(Ordering::Acquire) != 0
     }
 
+    pub fn is_closed(&self) -> bool {
+        self.closed()
+    }
+
     pub fn try_send(&self, value: T) -> Result<(), TrySendError<T>> {
-        if self.closed() {
+        let mut data = self.queue.data.lock();
+        if self.queue.closed.load(Ordering::Acquire) != 0 {
             return Err(TrySendError::Closed(value));
         }
-        {
-            let mut data = self.queue.data.lock();
-            if self.cap > 0 && data.len() >= self.cap {
-                return Err(TrySendError::Full(value));
-            }
-            data.push_back(value);
+
+        if self.cap > 0 && data.len() >= self.cap {
+            return Err(TrySendError::Full(value));
         }
+
+        data.push_back(value);
+        drop(data);
         wake_receiver(&self.queue);
         Ok(())
     }
@@ -125,15 +130,17 @@ impl<T: Unpin> Future for Send<T> {
         if let Some(result) = this.result.take() {
             return Poll::Ready(result);
         }
+
         let Some(value) = this.value.take() else {
             return Poll::Ready(Ok(()));
         };
+
         match this.sender.try_send(value) {
             Ok(()) => Poll::Ready(Ok(())),
             Err(TrySendError::Closed(value)) => Poll::Ready(Err(SendError(value))),
             Err(TrySendError::Full(value)) => {
-                this.value = Some(value);
                 *this.sender.queue.waker.lock() = Some(cx.waker().clone());
+                this.value = Some(value);
                 Poll::Pending
             }
         }
@@ -190,17 +197,12 @@ impl<T> Future for Receiver<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if let Some(value) = self.queue.data.lock().pop_front() {
-            wake_receiver(&self.queue);
+        if let Ok(value) = self.try_recv() {
             return Poll::Ready(value);
         }
-        if self.queue.closed.load(Ordering::Acquire) != 0 {
-            if self.queue.closed.swap(1, Ordering::Relaxed) == 0 {
-                self.queue.closed.store(1, Ordering::Relaxed);
-            }
-            return Poll::Pending;
+        if self.queue.closed.load(Ordering::Acquire) == 0 {
+            *self.queue.waker.lock() = Some(cx.waker().clone());
         }
-        *self.queue.waker.lock() = Some(cx.waker().clone());
         Poll::Pending
     }
 }
@@ -213,8 +215,10 @@ impl<T> Receiver<T> {
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         if let Some(value) = self.queue.data.lock().pop_front() {
             wake_receiver(&self.queue);
-            Ok(value)
-        } else if self.queue.closed.load(Ordering::Acquire) != 0 {
+            return Ok(value);
+        }
+
+        if self.queue.closed.load(Ordering::Acquire) != 0 {
             Err(TryRecvError::Disconnected)
         } else {
             Err(TryRecvError::Empty)

@@ -46,11 +46,12 @@ where
     handle
 }
 
-pub fn spawn_local<F>(_f: F) -> JoinHandle<F::Output>
+pub fn spawn_local<F>(f: F) -> JoinHandle<F::Output>
 where
-    F: Future + 'static,
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
 {
-    JoinHandle::pending()
+    spawn(f)
 }
 
 pub fn spawn_blocking<F, R>(f: F) -> JoinHandle<R>
@@ -71,10 +72,10 @@ where
     loop {
         match f.as_mut().poll(&mut cx) {
             Poll::Ready(v) => return v,
-            Poll::Pending => unsafe {
+            Poll::Pending => {
                 run_queue();
-                edgerun_platform::yield_cpu();
-            },
+                unsafe { edgerun_platform::yield_cpu() };
+            }
         }
     }
 }
@@ -90,7 +91,7 @@ pub fn run_queue() {
     let initial_len = TASK_QUEUE.lock().len();
 
     for _ in 0..initial_len {
-        let Some(mut task) = TASK_QUEUE.lock().pop_front() else {
+        let Some(mut task) = (TASK_QUEUE.lock().pop_front()) else {
             break;
         };
 
@@ -166,7 +167,8 @@ impl Runtime {
     }
     pub fn spawn_local<F>(&self, f: F) -> JoinHandle<F::Output>
     where
-        F: Future + 'static,
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
     {
         spawn_local(f)
     }
@@ -256,6 +258,7 @@ impl<T> JoinHandle<T> {
             if let Some(result) = self.state.result.lock().take() {
                 return result;
             }
+            unsafe { edgerun_platform::yield_cpu() };
             core::hint::spin_loop();
         }
     }
@@ -295,34 +298,47 @@ impl RuntimeHandle {
 }
 
 pub struct JoinSet<F> {
-    _phantom: core::marker::PhantomData<F>,
+    tasks: crate::sync::Mutex<alloc::collections::VecDeque<JoinHandle<F>>>,
     closed: AtomicBool,
 }
 
 impl<F> JoinSet<F> {
     pub fn new() -> Self {
         Self {
-            _phantom: core::marker::PhantomData,
+            tasks: crate::sync::Mutex::new(alloc::collections::VecDeque::new()),
             closed: AtomicBool::new(false),
         }
     }
 
-    pub fn spawn(&mut self, _f: F) -> Option<JoinHandle<F>>
+    pub fn spawn<F2>(&mut self, f: F2) -> Option<JoinHandle<F>>
     where
-        F: Future + Send + 'static,
+        F2: Future<Output = F> + Send + 'static,
+        F: Send + 'static,
     {
         if self.closed.load(Ordering::Acquire) {
             return None;
         }
-        Some(JoinHandle::pending())
+        let handle = spawn(f);
+        self.tasks.lock().push_back(handle.clone());
+        Some(handle)
     }
 
     pub fn abort(&self) {
         self.closed.store(true, Ordering::Release);
+        let mut tasks = self.tasks.lock();
+        for task in tasks.iter() {
+            task.abort();
+        }
     }
 
     pub fn len(&self) -> usize {
-        0
+        let mut tasks = self.tasks.lock();
+        tasks.retain(|task| !task.is_finished());
+        tasks.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

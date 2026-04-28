@@ -2,45 +2,48 @@
 
 use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicU8, Ordering};
 
 const UNINITIALIZED: u8 = 0;
 const INITIALIZING: u8 = 1;
 const INITIALIZED: u8 = 2;
 
+unsafe impl<T: Sync> Sync for LazyStatic<T> {}
+unsafe impl<T: Send> Send for LazyStatic<T> {}
+
 pub struct LazyStatic<T> {
     data: UnsafeCell<MaybeUninit<T>>,
-    state: AtomicBool,
+    state: AtomicU8,
 }
 
 impl<T> LazyStatic<T> {
     pub const fn new() -> Self {
         Self {
             data: UnsafeCell::new(MaybeUninit::uninit()),
-            state: AtomicBool::new(false),
+            state: AtomicU8::new(UNINITIALIZED),
         }
     }
 
     pub fn get(&self, init: impl FnOnce() -> T) -> &T {
-        while !self.state.load(Ordering::Acquire) {
-            if self
-                .state
-                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-                .is_ok()
-            {
-                let value = init();
-                unsafe { (*self.data.get()).write(value) };
-                self.state.store(true, Ordering::Release);
-                break;
+        loop {
+            if self.state.load(Ordering::Acquire) == INITIALIZED {
+                return unsafe { &*self.data.get().cast::<T>() };
             }
-            core::hint::spin_loop();
+            match self.state.compare_exchange(
+                UNINITIALIZED,
+                INITIALIZING,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => {
+                    let value = init();
+                    unsafe { (*self.data.get()).write(value) };
+                    self.state.store(INITIALIZED, Ordering::Release);
+                    return unsafe { &*self.data.get().cast::<T>() };
+                }
+                Err(_) => core::hint::spin_loop(),
+            }
         }
-
-        while !self.state.load(Ordering::Acquire) {
-            core::hint::spin_loop();
-        }
-
-        unsafe { &*self.data.get().cast::<T>() }
     }
 }
 
@@ -50,9 +53,12 @@ impl<T: 'static> Default for LazyStatic<T> {
     }
 }
 
+unsafe impl<T: Sync> Sync for OnceCell<T> {}
+unsafe impl<T: Send> Send for OnceCell<T> {}
+
 pub struct OnceCell<T> {
     data: UnsafeCell<MaybeUninit<T>>,
-    state: core::sync::atomic::AtomicU8,
+    state: AtomicU8,
 }
 
 impl<T> OnceCell<T> {
@@ -71,32 +77,39 @@ impl<T> OnceCell<T> {
     }
 
     pub fn set(&self, value: T) -> Result<(), T> {
-        match self
+        if self
             .state
-            .compare_exchange(UNINITIALIZED, INITIALIZING, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(
+                UNINITIALIZED,
+                INITIALIZING,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
         {
-            Ok(_) => {
-                unsafe { self.data.get().write(MaybeUninit::new(value)); }
-                self.state.store(INITIALIZED, Ordering::Release);
-                Ok(())
+            unsafe {
+                self.data.get().write(MaybeUninit::new(value));
             }
-            Err(_) => Err(value),
+            self.state.store(INITIALIZED, Ordering::Release);
+            Ok(())
+        } else {
+            Err(value)
         }
     }
 
     pub fn try_insert(&self, value: T) -> Result<&T, (&T, T)> {
-        if let Some(existing) = self.get() {
-            return Err((existing, value));
+        if self.state.load(Ordering::Acquire) == INITIALIZED {
+            return Err((self.get().expect("cell is initialized"), value));
         }
 
-        match self
-            .set(value)
-        {
+        match self.set(value) {
             Ok(()) => Ok(self.get().unwrap()),
-            Err(value) => self
-                .get()
-                .map(|v| (v, value))
-                .unwrap_or((unsafe { self.data.get().as_ref().unwrap() }, value)),
+            Err(value) => {
+                while self.state.load(Ordering::Acquire) == INITIALIZING {
+                    core::hint::spin_loop();
+                }
+                Err((self.get().expect("cell is initialized"), value))
+            }
         }
     }
 
@@ -108,11 +121,18 @@ impl<T> OnceCell<T> {
 
             if self
                 .state
-                .compare_exchange(UNINITIALIZED, INITIALIZING, Ordering::AcqRel, Ordering::Acquire)
+                .compare_exchange(
+                    UNINITIALIZED,
+                    INITIALIZING,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
                 .is_ok()
             {
                 let value = init();
-                unsafe { self.data.get().write(MaybeUninit::new(value)); }
+                unsafe {
+                    self.data.get().write(MaybeUninit::new(value));
+                }
                 self.state.store(INITIALIZED, Ordering::Release);
                 return unsafe { &*self.data.get().cast::<T>() };
             }
@@ -121,68 +141,6 @@ impl<T> OnceCell<T> {
                 core::hint::spin_loop();
             }
         }
-    }
-}
-
-impl<T> Default for OnceCell<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-            let value = init();
-            unsafe { *self.data.get() = Some(value) };
-            self.done.store(true, Ordering::Release);
-        }
-        unsafe { (*self.data.get()).as_ref().unwrap() }
-    }
-}
-
-impl<T> Default for LazyStatic<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub struct OnceCell<T> {
-    data: UnsafeCell<Option<T>>,
-}
-
-impl<T> OnceCell<T> {
-    pub const fn new() -> Self {
-        Self {
-            data: UnsafeCell::new(None),
-        }
-    }
-
-    pub fn get(&self) -> Option<&T> {
-        unsafe { (*self.data.get()).as_ref() }
-    }
-
-    pub fn set(&self, value: T) -> Result<(), T> {
-        unsafe {
-            if (*self.data.get()).is_some() {
-                Err(value)
-            } else {
-                *self.data.get() = Some(value);
-                Ok(())
-            }
-        }
-    }
-
-    pub fn try_insert(&self, value: T) -> Result<&T, (&T, T)> {
-        if let Some(existing) = self.get() {
-            return Err((existing, value));
-        }
-        let _ = self.set(value);
-        Ok(self.get().unwrap())
-    }
-
-    pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
-        if let Some(v) = self.get() {
-            return v;
-        }
-        self.set(init()).ok();
-        self.get().unwrap()
     }
 }
 

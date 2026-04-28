@@ -27,3 +27,12 @@ fn runtime_join_handles_work() {
 
     assert_eq!(result, 3);
 }
+
+#[test]
+fn runtime_spawn_local_runs() {
+    let rt = Builder::new_multi_thread().build().unwrap();
+
+    let result = rt.block_on(async { rt.spawn_local(async { 7 + 1 }).await.unwrap() });
+
+    assert_eq!(result, 8);
+}

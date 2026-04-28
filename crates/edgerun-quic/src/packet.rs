@@ -274,6 +274,9 @@ impl QuicPacket {
         }
 
         let first_byte = data[0];
+        if first_byte & 0x40 == 0 {
+            return Err("QUIC fixed bit is not set".to_string());
+        }
 
         if first_byte & 0x80 != 0 {
             // Long header
@@ -453,6 +456,9 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     }
 
     let first_byte = data[0];
+    if first_byte & 0x40 == 0 {
+        return Err("QUIC fixed bit is not set".to_string());
+    }
     let packet_type = PacketType::from_byte(first_byte).ok_or("Invalid packet type")?;
 
     // Start after first byte and version.
@@ -585,6 +591,31 @@ mod tests {
         // Just verify offset is valid (within packet bounds)
         assert!(offset >= 5, "Offset should be >= 5");
         assert!(offset < packet.len(), "Offset should be < packet len");
+    }
+
+    #[test]
+    fn test_rejects_long_header_without_fixed_bit() {
+        let mut bytes = QuicPacket::initial(
+            1,
+            vec![1, 2, 3, 4, 5, 6, 7, 8],
+            vec![9, 10, 11, 12],
+            Vec::new(),
+            0,
+            vec![0x06, 0x00],
+        )
+        .to_bytes();
+        bytes[0] &= !0x40;
+
+        assert!(QuicPacket::from_bytes(&bytes).is_err());
+        assert!(get_long_header_payload_offset(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_rejects_short_header_without_fixed_bit() {
+        let mut bytes = QuicPacket::one_rtt(vec![1, 2, 3, 4], 0, vec![0x01]).to_bytes();
+        bytes[0] &= !0x40;
+
+        assert!(QuicPacket::from_bytes_with_short_dcid_len(&bytes, 4).is_err());
     }
 
     #[test]
