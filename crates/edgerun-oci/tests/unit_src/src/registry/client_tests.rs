@@ -106,3 +106,38 @@ fn image_ref_display() {
     };
     assert_eq!(img.to_string(), "ghcr.io/owner/repo:v1");
 }
+
+#[test]
+fn image_ref_digest_reference_uses_digest_as_registry_reference() {
+    let digest = "sha256:0123456789abcdef";
+    let img: ImageRef = format!("alpine@{digest}").parse().unwrap();
+
+    assert_eq!(img.registry, "docker.io");
+    assert_eq!(img.repository, "library/alpine");
+    assert_eq!(img.tag, digest);
+    assert_eq!(img.reference(), digest);
+    assert!(img.is_digest_reference());
+    assert_eq!(
+        img.to_string(),
+        format!("docker.io/library/alpine@{digest}")
+    );
+}
+
+#[test]
+fn image_ref_digest_reference_ignores_optional_tag_for_manifest_lookup() {
+    let digest = "sha256:fedcba9876543210";
+    let img: ImageRef = format!("ghcr.io/owner/repo:v1@{digest}").parse().unwrap();
+
+    assert_eq!(img.registry, "ghcr.io");
+    assert_eq!(img.repository, "owner/repo");
+    assert_eq!(img.reference(), digest);
+    assert_eq!(img.to_string(), format!("ghcr.io/owner/repo@{digest}"));
+}
+
+#[test]
+fn image_ref_rejects_empty_and_malformed_digest_references() {
+    assert!("".parse::<ImageRef>().is_err());
+    assert!("alpine@".parse::<ImageRef>().is_err());
+    assert!("@sha256:abc".parse::<ImageRef>().is_err());
+    assert!("alpine:".parse::<ImageRef>().is_err());
+}

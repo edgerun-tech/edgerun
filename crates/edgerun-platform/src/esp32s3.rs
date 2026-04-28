@@ -1013,7 +1013,11 @@ unsafe fn i2c_scl_release() {
 }
 
 fn min_u16(a: u16, b: u16) -> u16 {
-    if a < b { a } else { b }
+    if a < b {
+        a
+    } else {
+        b
+    }
 }
 
 fn dot_origin(coord: u16, radius: u16, limit: u16) -> u16 {

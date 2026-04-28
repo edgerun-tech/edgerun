@@ -4,8 +4,9 @@ use crate::prelude::*;
 use std::io;
 use std::path::Path;
 
-use super::client::{ImageRef, RegistryClient};
+use super::client::RegistryClient;
 use super::errors::RegistryError;
+use super::image_ref::ImageRef;
 use super::push_manifest::push_manifest_json;
 use super::tar_push::create_tar_from_dir;
 use crate::layer_pipeline::sha256_digest_reference;

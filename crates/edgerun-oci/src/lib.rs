@@ -51,7 +51,10 @@ mod registry {
     pub mod config;
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod dbus_client;
+    #[cfg(feature = "edgefs")]
+    pub(crate) mod edgefs_pull;
     pub mod errors;
+    pub(crate) mod image_ref;
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod layer;
     pub mod manifest;
@@ -100,6 +103,8 @@ pub mod hooks;
 pub mod init;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod lifecycle;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub(crate) mod lifecycle_child;
 mod linux_catalog;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod process;
@@ -253,14 +258,21 @@ pub use registry::client::EdgeFsImagePullReport;
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))
 ))]
-pub use registry::client::{ImageRef, RegistryClient};
+pub use registry::client::RegistryClient;
 pub use registry::config::{
     parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest, HistoryEntry,
     ImageConfig, ImageConfigInner, RootFs,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::dbus_client::SecretClient;
+#[cfg(feature = "edgefs")]
+pub use registry::edgefs_pull::EdgeFsImagePullReport;
 pub use registry::errors::RegistryError;
+#[cfg(any(
+    feature = "registry-client",
+    all(feature = "std", not(target_os = "none"))
+))]
+pub use registry::image_ref::ImageRef;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::layer::{
     build_rootfs as registry_build_rootfs, extract_layer, verify_blob_digest,

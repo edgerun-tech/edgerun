@@ -32,6 +32,7 @@ mod registry_login;
 mod registry_logout;
 mod rmi;
 mod run;
+mod run_config;
 
 pub use checkpoint::cmd_checkpoint;
 pub use create::cmd_create;

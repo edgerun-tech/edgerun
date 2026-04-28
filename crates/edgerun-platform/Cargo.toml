@@ -7,6 +7,11 @@ publish.workspace = true
 description = "Bare-metal and host platform primitives for Edgerun runtimes"
 
 [dependencies]
+edgerun-wifi = { path = "../edgerun-wifi" }
+
+[features]
+default = []
+esp32s3-wifi-blob = []
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 

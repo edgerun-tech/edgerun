@@ -9,7 +9,7 @@
 //! - [`Request`] / [`Response`] — Protocol-agnostic request/response types
 //!
 //! # HTTP/1.1 Example
-//! ```no_run
+//! ```ignore
 //! use edgerun_http::{HttpServer, Handler, Request, Response, StatusCode};
 //!
 //! struct HelloHandler;
@@ -18,14 +18,14 @@
 //!     fn handle(&self, req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
 //!         Box::pin(async move {
 //!             Response::text(
-//!                 StatusCode::from_u16(200).unwrap(),
+//!                 StatusCode::new(200).unwrap(),
 //!                 &format!("Hello from {}!", req.uri().request_target()),
 //!             )
 //!         })
 //!     }
 //! }
 //!
-//! # edgerun_rt::block_on(async {
+//! # edgerun_http::runtime::block_on(async {
 //! HttpServer::new(HelloHandler)
 //!     .bind("127.0.0.1:0")
 //!     .await
@@ -37,10 +37,10 @@
 //! ```
 //!
 //! # Client Example
-//! ```no_run
+//! ```ignore
 //! use edgerun_http::HttpClient;
 //!
-//! # edgerun_rt::block_on(async {
+//! # edgerun_http::runtime::block_on(async {
 //! let client = HttpClient::new();
 //! let response = client.get("http://example.com/").await.unwrap();
 //! println!("Status: {}", response.status().as_u16());

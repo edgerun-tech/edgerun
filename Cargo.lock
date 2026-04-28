@@ -1159,6 +1159,9 @@ dependencies = [
 [[package]]
 name = "edgerun-platform"
 version = "0.1.0"
+dependencies = [
+ "edgerun-wifi",
+]
 
 [[package]]
 name = "edgerun-power"
@@ -1414,6 +1417,7 @@ dependencies = [
  "edgerun-tftp",
  "edgerun-tpm",
  "edgerun-virtio",
+ "edgerun-wifi",
 ]
 
 [[package]]

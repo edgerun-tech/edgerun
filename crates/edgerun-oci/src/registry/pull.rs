@@ -3,9 +3,10 @@
 use crate::prelude::*;
 use std::path::{Path, PathBuf};
 
-use super::client::{ImageRef, RegistryClient};
+use super::client::RegistryClient;
 use super::config::parse_image_config;
 use super::errors::RegistryError;
+use super::image_ref::ImageRef;
 use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest};
 use super::manifest::{ImageManifest, LayerDescriptor, SingleManifest};
 use super::oci_spec::generate_oci_spec;

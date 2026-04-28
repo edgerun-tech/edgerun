@@ -19,6 +19,12 @@ extern crate edgerun_tftp;
 extern crate edgerun_tpm;
 #[cfg(target_arch = "x86_64")]
 extern crate edgerun_virtio;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+extern crate edgerun_wifi;
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 #[repr(C, packed)]
@@ -83,6 +89,43 @@ fn render_touch_ui(touch: (u16, u16)) {
     #[cfg(not(feature = "html-ui"))]
     render_debug_pattern(Some(touch));
 }
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+fn try_start_esp32s3_wifi_ap() {
+    use edgerun_platform::esp32s3_wifi::Esp32s3WifiOpenAp;
+    use edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio;
+    use edgerun_wifi::ieee80211::{MacAddr, OpenApConfig};
+
+    let config = match OpenApConfig::new(
+        MacAddr::new([0x02, 0xed, 0x67, 0x75, 0x6e, 0x01]),
+        b"edgerun-ac",
+        6,
+    ) {
+        Ok(config) => config,
+        Err(_) => {
+            rt::log::info!("ESP32-S3 WiFi AP config failed");
+            return;
+        }
+    };
+
+    let mut ap =
+        Esp32s3WifiOpenAp::<EspressifPromiscRadio, 4>::new(EspressifPromiscRadio::new(), config);
+    match ap.start() {
+        Ok(()) => rt::log::info!("ESP32-S3 WiFi AP start queued"),
+        Err(error) => rt::log::info!("ESP32-S3 WiFi AP start failed: {:?}", error),
+    }
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+)))]
+fn try_start_esp32s3_wifi_ap() {}
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
 fn render_html_ui(touch: Option<(u16, u16)>) {
@@ -617,11 +660,11 @@ use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 #[cfg(target_arch = "x86_64")]
 use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
 #[cfg(target_arch = "x86_64")]
-use edgerun_tftp::message::{TFTP_PORT, TftpMessage};
+use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
 #[cfg(target_arch = "x86_64")]
-use rt::ip::{ARP_OP_REQUEST, ICMP_ECHO_REQUEST, ParsedPacket};
+use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
 #[cfg(target_arch = "x86_64")]
-use rt::{IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket, block_on, crc32};
+use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
 
 #[cfg(target_arch = "x86_64")]
 use core::future::Future;
@@ -639,12 +682,12 @@ mod oci_syscall {
     use edgerun_oci::prelude::String;
     use edgerun_oci::rootfs_access::OciRootfs;
     use edgerun_oci::{
+        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
         OciElfError, OciElfLoadBias, OciElfUnsafeIdentityMapper, OciPreparedLaunchState,
         OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink, OciX86_64SyscallFrame,
-        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
     };
     use edgerun_platform::arch::x86_64::{
-        self, KERNEL_CODE_SELECTOR, SyscallFrame, USER_COMPAT_CODE_SELECTOR,
+        self, SyscallFrame, KERNEL_CODE_SELECTOR, USER_COMPAT_CODE_SELECTOR,
     };
 
     struct DirectMemory;
@@ -1235,9 +1278,9 @@ mod disk_boot {
     use super::boot_config::{BootConfig, BootConfigError, EdgeFsBootTarget};
     use edgerun_edgefs::{EdgeFs, EdgeFsError, EdgeFsInfo};
     use edgerun_storage::{
-        BlockStorage, FatError, FatReadOnly, FileSystemKind, FileSystemProbe, FileSystemProbeError,
-        PartitionBlockDevice, PartitionEntry, PartitionError, PartitionTable, StorageError,
-        detect_partitions, probe_filesystem,
+        detect_partitions, probe_filesystem, BlockStorage, FatError, FatReadOnly, FileSystemKind,
+        FileSystemProbe, FileSystemProbeError, PartitionBlockDevice, PartitionEntry,
+        PartitionError, PartitionTable, StorageError,
     };
 
     pub const DEFAULT_BOOT_CONFIG_PATHS: &[&str] =
@@ -2372,6 +2415,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     render_initial_ui();
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
     rt::log::info!("Display UI rendered");
+    try_start_esp32s3_wifi_ap();
     rt::log::info!("JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;

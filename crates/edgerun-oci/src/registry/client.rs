@@ -2,7 +2,6 @@
 
 use crate::prelude::*;
 use crate::BareImagePlan;
-use core::{fmt, str::FromStr};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use std::io;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -13,25 +12,9 @@ use edgerun_http::{HttpClient, Request, Response};
 use super::auth::{parse_bearer_auth, RegistryAuth};
 use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest};
 use super::errors::RegistryError;
+use super::image_ref::ImageRef;
 use super::manifest::{ImageManifest, SingleManifest};
 use super::urlencoding;
-#[cfg(feature = "edgefs")]
-use crate::image_apply::{
-    apply_bare_image_layer_blob_sha256, validate_bare_image_layer_set, BareImageApplyReport,
-};
-#[cfg(feature = "edgefs")]
-use crate::layer_pipeline::{
-    format_digest, sha256_layer_digest, validate_layer_descriptor, LayerApplyReport, LayerDigest,
-};
-#[cfg(feature = "edgefs")]
-use crate::tar_layer::{
-    layer_compression, OciLayerCompression, TarLayerApplyReport, TarLayerSink,
-    UncompressedTarStream,
-};
-#[cfg(feature = "edgefs")]
-use edgerun_edgefs::EdgeFs;
-#[cfg(feature = "edgefs")]
-use edgerun_storage::BlockStorage;
 
 #[derive(Debug, Clone)]
 struct RegistryTokenResponse {
@@ -45,79 +28,12 @@ edgerun_json::impl_json_struct! {
     }
 }
 
-/// An OCI image reference (e.g., `docker.io/library/alpine:latest`).
-#[derive(Clone, Debug)]
-pub struct ImageRef {
-    pub registry: String,
-    pub repository: String,
-    pub tag: String,
-}
-
-impl FromStr for ImageRef {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut registry = "docker.io".to_string();
-        let mut rest = s;
-
-        // Detect registry: if the first path component contains '.', ':', or is 'localhost'
-        if let Some((prefix, remaining)) = s.split_once('/') {
-            if prefix.contains('.') || prefix.contains(':') || prefix == "localhost" {
-                registry = prefix.to_string();
-                rest = remaining;
-            }
-        }
-
-        // Split tag/digest from repository — handle both tag (:) and digest (@) references
-        // Digest references take precedence: repo@sha256:abc...
-        let (mut repository, tag) = if let Some((repo, _digest)) = rest.rsplit_once('@') {
-            // Digest reference — store digest in tag field for downstream use
-            // Repository must not contain ':' which would be confused with tag
-            (repo.to_string(), String::new())
-        } else if let Some((repo, tag)) = rest.rsplit_once(':') {
-            // Check if the ':' is part of a registry port (e.g., "myregistry:5000")
-            // If repo contains ':', it's likely a port number, not a tag
-            if repo.contains(':') {
-                (rest.to_string(), "latest".to_string())
-            } else {
-                (repo.to_string(), tag.to_string())
-            }
-        } else {
-            (rest.to_string(), "latest".to_string())
-        };
-
-        if registry == "docker.io" && !repository.contains('/') {
-            repository = format!("library/{}", repository);
-        }
-
-        Ok(ImageRef {
-            registry,
-            repository,
-            tag,
-        })
-    }
-}
-
-impl fmt::Display for ImageRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}:{}", self.registry, self.repository, self.tag)
-    }
-}
-
 /// The main registry client.
 pub struct RegistryClient {
-    auth: RegistryAuth,
-    token: Option<String>,
-    bytes_downloaded: u64,
-    insecure_http: bool,
-}
-
-#[cfg(feature = "edgefs")]
-#[derive(Debug, Clone)]
-pub struct EdgeFsImagePullReport {
-    pub plan: BareImagePlan,
-    pub apply: BareImageApplyReport,
-    pub bytes_downloaded: u64,
+    pub(crate) auth: RegistryAuth,
+    pub(crate) token: Option<String>,
+    pub(crate) bytes_downloaded: u64,
+    pub(crate) insecure_http: bool,
 }
 
 impl RegistryClient {
@@ -184,7 +100,7 @@ impl RegistryClient {
         }
     }
 
-    fn registry_url(&self, registry: &str, path: &str) -> String {
+    pub(crate) fn registry_url(&self, registry: &str, path: &str) -> String {
         let scheme = if self.insecure_http { "http" } else { "https" };
         let registry = registry_api_host(registry);
         format!("{}://{}{}", scheme, registry, path)
@@ -483,8 +399,18 @@ impl RegistryClient {
     /// Ping the registry to verify connectivity and obtain auth challenge.
     pub async fn ping(&mut self, registry: &str) -> Result<(), RegistryError> {
         let resp = self.do_get_raw(registry, "/v2/").await?;
-        // 200 = no auth needed, 401 = auth needed (success for token flow), 4xx/5xx = error
-        if resp.status().as_u16() >= 400 && resp.status().as_u16() != 401 {
+        if resp.status().as_u16() == 401 {
+            let www_auth = resp
+                .headers()
+                .get("www-authenticate")
+                .or_else(|| resp.headers().get("WWW-Authenticate"))
+                .map(|v| v.as_str())
+                .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
+            self.handle_auth_challenge(registry, www_auth).await?;
+            return Ok(());
+        }
+        // 200 = no auth needed, 401 = token challenge handled above, 4xx/5xx = error.
+        if resp.status().as_u16() >= 400 {
             return Err(RegistryError::HttpStatus(resp.status().as_u16()));
         }
         Ok(())
@@ -513,7 +439,7 @@ impl RegistryClient {
     ) -> Result<ImageManifest, RegistryError> {
         self.ensure_auth(&image.registry).await?;
 
-        let path = format!("/v2/{}/manifests/{}", image.repository, image.tag);
+        let path = format!("/v2/{}/manifests/{}", image.repository, image.reference());
         let headers = [
             (
                 "Accept",
@@ -628,148 +554,6 @@ impl RegistryClient {
         plan.validate_descriptors()
             .map_err(|error| RegistryError::ParseError(error.to_string()))?;
         Ok(plan)
-    }
-
-    /// Pull an image through `edgerun-http` and apply its rootfs layers into EdgeFS.
-    ///
-    /// The registry manifest/config and all layer blobs are fetched with the
-    /// same authenticated registry path used by [`Self::fetch_bare_image_plan`].
-    /// Layers are then validated, decompressed, whiteouts are applied, and final
-    /// file contents are written into the provided encrypted EdgeFS instance.
-    #[cfg(feature = "edgefs")]
-    pub async fn pull_into_edgefs<S: BlockStorage>(
-        &mut self,
-        image: &ImageRef,
-        rootfs: &str,
-        fs: &mut EdgeFs<S>,
-    ) -> Result<EdgeFsImagePullReport, RegistryError> {
-        let plan = self.fetch_bare_image_plan(image, rootfs).await?;
-        validate_bare_image_layer_set(&plan)
-            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
-
-        let mut layer_reports = Vec::with_capacity(plan.layers.len());
-        let mut entries_applied = 0usize;
-        for (index, layer) in plan.layers.iter().enumerate() {
-            let (report, entries) = if layer_compression(layer.media_type.as_deref())
-                == OciLayerCompression::Uncompressed
-            {
-                self.fetch_uncompressed_layer_into_edgefs(
-                    &image.registry,
-                    &image.repository,
-                    &plan,
-                    index,
-                    fs,
-                )
-                .await?
-            } else {
-                let blob = self
-                    .fetch_blob(&image.registry, &image.repository, &layer.digest)
-                    .await?;
-                apply_bare_image_layer_blob_sha256(&plan, index, &blob, fs)
-                    .map_err(|error| RegistryError::ParseError(error.to_string()))?
-            };
-            entries_applied = entries_applied.saturating_add(entries);
-            layer_reports.push(report);
-        }
-
-        let apply = BareImageApplyReport {
-            layers_applied: layer_reports.len(),
-            entries_applied,
-            layer_reports,
-        };
-
-        Ok(EdgeFsImagePullReport {
-            plan,
-            apply,
-            bytes_downloaded: self.bytes_downloaded,
-        })
-    }
-
-    #[cfg(feature = "edgefs")]
-    async fn fetch_uncompressed_layer_into_edgefs<S: BlockStorage>(
-        &mut self,
-        registry: &str,
-        repository: &str,
-        plan: &BareImagePlan,
-        index: usize,
-        fs: &mut EdgeFs<S>,
-    ) -> Result<(TarLayerApplyReport, usize), RegistryError> {
-        let descriptor = plan
-            .layers
-            .get(index)
-            .ok_or_else(|| RegistryError::ParseError("layer index out of range".into()))?;
-        validate_layer_descriptor(descriptor, "sha256")
-            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
-
-        let path = format!("/v2/{}/blobs/{}", repository, descriptor.digest);
-        let url = self.registry_url(registry, &path);
-        let mut builder = Request::builder()
-            .method(edgerun_http::Method::GET)
-            .uri(&url);
-        if let Some(ref token) = self.token {
-            builder = builder.header("Authorization", &format!("Bearer {}", token));
-        }
-        let request = builder.build()?;
-
-        let mut digest = sha256_layer_digest();
-        let mut bytes_written = 0u64;
-        let mut stream = UncompressedTarStream::new(fs);
-        let response = HttpClient::new()
-            .version(edgerun_http::HttpVersion::Http1)
-            .no_redirects()
-            .no_decompress()
-            .execute_http1_body_chunks(&request, |chunk| {
-                bytes_written = bytes_written.saturating_add(chunk.len() as u64);
-                digest.update(chunk);
-                stream
-                    .push(chunk)
-                    .map(|_| ())
-                    .map_err(|error| edgerun_http::Error::InvalidResponse(error.to_string()))
-            })
-            .await
-            .map_err(|error| RegistryError::HttpError(error.to_string()))?;
-
-        if response.status().as_u16() >= 400 {
-            return Err(RegistryError::HttpStatus(response.status().as_u16()));
-        }
-        self.bytes_downloaded = self.bytes_downloaded.saturating_add(bytes_written);
-        if bytes_written != descriptor.size {
-            return Err(RegistryError::ParseError(format!(
-                "layer size mismatch: expected {}, got {}",
-                descriptor.size, bytes_written
-            )));
-        }
-        let actual_digest = format_digest(digest.algorithm(), &digest.finish());
-        if actual_digest != descriptor.digest {
-            return Err(RegistryError::DigestMismatch {
-                expected: descriptor.digest.clone(),
-                computed: actual_digest,
-            });
-        }
-        if let Some(expected_diff_id) = plan.diff_ids.get(index) {
-            if expected_diff_id != &descriptor.digest {
-                return Err(RegistryError::ParseError(format!(
-                    "uncompressed diff_id mismatch for layer {index}: expected {expected_diff_id}, got {}",
-                    descriptor.digest
-                )));
-            }
-        }
-
-        let entries_applied = stream
-            .finish()
-            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
-        let layer = LayerApplyReport {
-            digest: descriptor.digest.clone(),
-            bytes_written,
-            media_type: descriptor.media_type.clone(),
-        };
-        Ok((
-            TarLayerApplyReport {
-                layer,
-                entries_applied,
-            },
-            entries_applied,
-        ))
     }
 
     /// Pull an image to a local bundle directory.
