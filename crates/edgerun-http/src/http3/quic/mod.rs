@@ -367,7 +367,8 @@ impl QuicConnection {
 
         let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
-        let pn_offset = packet::get_packet_number_offset(&full_packet, self.transport.remote_cid.len())?;
+        let pn_offset =
+            packet::get_packet_number_offset(&full_packet, self.transport.remote_cid.len())?;
         if let Some(ref prot) = self.initial_protection {
             prot.protect_header(&mut full_packet, pn_offset, pkt.header.pn_length)
                 .map_err(|e| format!("Initial header protection failed: {}", e))?;
@@ -426,7 +427,8 @@ impl QuicConnection {
 
         let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
-        let pn_offset = packet::get_packet_number_offset(&full_packet, self.transport.remote_cid.len())?;
+        let pn_offset =
+            packet::get_packet_number_offset(&full_packet, self.transport.remote_cid.len())?;
         if let Some(ref prot) = self.hs_protection {
             prot.protect_header(&mut full_packet, pn_offset, pkt.header.pn_length)
                 .map_err(|e| format!("Handshake header protection failed: {}", e))?;
