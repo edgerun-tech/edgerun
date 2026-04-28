@@ -1004,6 +1004,13 @@ impl ConnectionPool {
             return Ok(Response::from_parts(status, headers, Vec::new()));
         }
 
+        if status_code_val >= 400 {
+            let body =
+                Self::read_body_bytes_from_framing(conn, read_timeout, is_chunked, content_length)
+                    .await?;
+            return Ok(Response::from_parts(status, headers, body));
+        }
+
         if is_chunked {
             Self::read_chunked_body_chunks(conn, read_timeout, on_chunk).await?;
         } else if let Some(len) = content_length {
@@ -1034,6 +1041,45 @@ impl ConnectionPool {
         }
 
         Ok(Response::from_parts(status, headers, Vec::new()))
+    }
+
+    async fn read_body_bytes_from_framing(
+        conn: &mut PooledConn,
+        read_timeout: Duration,
+        is_chunked: bool,
+        content_length: Option<usize>,
+    ) -> Result<Vec<u8>> {
+        if is_chunked {
+            return Self::read_chunked_body(conn, read_timeout).await;
+        }
+        if let Some(len) = content_length {
+            let mut buf = vec![0u8; len];
+            let mut total = 0;
+            while total < len {
+                let n = Self::read_with_timeout(conn, &mut buf[total..], read_timeout).await?;
+                if n == 0 {
+                    break;
+                }
+                total += n;
+            }
+            buf.truncate(total);
+            return Ok(buf);
+        }
+
+        let mut body = Vec::new();
+        let mut buf = [0u8; 8192];
+        loop {
+            let n = match Self::read_with_timeout(conn, &mut buf, read_timeout).await {
+                Ok(n) => n,
+                Err(Error::Timeout) if !body.is_empty() => break,
+                Err(e) => return Err(e),
+            };
+            if n == 0 {
+                break;
+            }
+            body.extend_from_slice(&buf[..n]);
+        }
+        Ok(body)
     }
 
     /// Read a chunked transfer-encoded body.

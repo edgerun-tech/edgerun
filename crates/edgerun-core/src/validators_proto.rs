@@ -89,6 +89,11 @@ pub fn validate_stream_append(
     if let Some(result) = validate_timestamp_shape(recorded_at, "EventEnvelope recorded_at") {
         return result;
     }
+    if let Some(effective_at) = &candidate.effective_at {
+        if let Some(result) = validate_timestamp_shape(effective_at, "EventEnvelope effective_at") {
+            return result;
+        }
+    }
     if let Some(result) = validate_optional_object_ref(
         candidate.payload_object.as_ref(),
         "EventEnvelope payload_object",
@@ -2023,6 +2028,11 @@ pub fn validate_object_retrieval(
         {
             return result;
         }
+        if let Some(created_at) = &descriptor.created_at {
+            if let Some(result) = validate_timestamp_shape(created_at, "descriptor created_at") {
+                return result;
+            }
+        }
         if let Some(producer) = &descriptor.producer {
             if let Some(result) = validate_identity_ref(Some(producer), "descriptor producer") {
                 return result;
@@ -2149,6 +2159,12 @@ pub fn validate_object_retrieval(
                 Value::String("representation stored_size is zero".into()),
                 empty_map(),
             );
+        }
+        if let Some(created_at) = &header.created_at {
+            if let Some(result) = validate_timestamp_shape(created_at, "representation created_at")
+            {
+                return result;
+            }
         }
         if let Some(result) = validate_optional_object_ref(
             header.chunk_manifest_object.as_ref(),
@@ -4037,6 +4053,20 @@ mod tests {
     }
 
     #[test]
+    fn stream_append_rejects_invalid_effective_at_timestamp() {
+        let mut genesis = make_genesis_event();
+        genesis.effective_at = Some(prost_types::Timestamp {
+            seconds: 1_700_000_000,
+            nanos: -1,
+        });
+
+        let result = validate_stream_append(&genesis, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn stream_append_rejects_genesis_with_prev_hash() {
         let mut genesis = make_genesis_event();
         genesis.prev_event_hash = Some(crate::protocol::Digest {
@@ -5468,6 +5498,34 @@ mod tests {
     }
 
     #[test]
+    fn object_retrieval_rejects_invalid_descriptor_created_at_timestamp() {
+        let descriptor = LogicalObjectDescriptor {
+            descriptor_version: 1,
+            object_id: vec![0x22; 32],
+            object_kind: edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+            object_schema_version: 1,
+            canonicalization_id: "raw-bytes-v0".into(),
+            canonical_digest: Some(Digest {
+                algorithm: 1,
+                value: vec![0x33; 32],
+            }),
+            canonical_size: 10,
+            created_at: Some(prost_types::Timestamp {
+                seconds: 1,
+                nanos: 1_000_000_000,
+            }),
+            producer: None,
+            describes_object: None,
+            object_metadata: None,
+        };
+
+        let result = validate_object_retrieval(Some(&descriptor), None, None, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn object_retrieval_rejects_descriptor_empty_metadata_ref() {
         let descriptor = LogicalObjectDescriptor {
             descriptor_version: 1,
@@ -5558,6 +5616,39 @@ mod tests {
         let result = validate_object_retrieval(None, Some(&header), None, None, None);
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::RepresentationInvalid));
+    }
+
+    #[test]
+    fn object_retrieval_rejects_invalid_header_created_at_timestamp() {
+        let header = StoredRepresentationHeader {
+            header_version: 1,
+            representation_id: vec![0x11; 32],
+            object: Some(ObjectRef {
+                object_id: vec![0x22; 32],
+                object_kind: Some(1),
+            }),
+            representation_digest: Some(Digest {
+                algorithm: 1,
+                value: vec![0x33; 32],
+            }),
+            plaintext_size: None,
+            stored_size: 10,
+            encryption_scheme: String::new(),
+            compression_scheme: String::new(),
+            chunking_mode: edgerun_proto::edgerun::v0::object::ChunkingMode::None as i32,
+            chunk_manifest_object: None,
+            access_package_object: None,
+            created_at: Some(prost_types::Timestamp {
+                seconds: 1,
+                nanos: -1,
+            }),
+            representation_metadata: None,
+        };
+
+        let result = validate_object_retrieval(None, Some(&header), None, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]

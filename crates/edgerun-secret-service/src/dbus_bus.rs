@@ -2,6 +2,7 @@
 //! and registers `org.freedesktop.secrets` so desktop apps find us.
 
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::read_u32_le;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -220,8 +221,8 @@ pub fn read_one_message(stream: &mut UnixStream) -> io::Result<Option<Vec<u8>>> 
         ));
     }
 
-    let body_len = u32::from_le_bytes([fixed[4], fixed[5], fixed[6], fixed[7]]) as usize;
-    let hf_len = u32::from_le_bytes([fixed[12], fixed[13], fixed[14], fixed[15]]) as usize;
+    let body_len = read_u32_le(&fixed, 4) as usize;
+    let hf_len = read_u32_le(&fixed, 12) as usize;
 
     let total_hf = 16 + hf_len;
     let aligned_hf = (total_hf + 7) & !7;
@@ -241,7 +242,7 @@ fn extract_sender_from_raw(raw: &[u8]) -> Option<String> {
     if raw.len() < 16 {
         return None;
     }
-    let hf_len = u32::from_le_bytes([raw[12], raw[13], raw[14], raw[15]]) as usize;
+    let hf_len = read_u32_le(raw, 12) as usize;
     if hf_len == 0 {
         return None;
     }
@@ -258,8 +259,7 @@ fn extract_sender_from_raw(raw: &[u8]) -> Option<String> {
             if pos + 4 > end {
                 break;
             }
-            let str_len =
-                u32::from_le_bytes([raw[pos], raw[pos + 1], raw[pos + 2], raw[pos + 3]]) as usize;
+            let str_len = read_u32_le(raw, pos) as usize;
             pos += 4;
             if pos + str_len > end {
                 break;
@@ -273,8 +273,7 @@ fn extract_sender_from_raw(raw: &[u8]) -> Option<String> {
             if pos + 4 > end {
                 break;
             }
-            let str_len =
-                u32::from_le_bytes([raw[pos], raw[pos + 1], raw[pos + 2], raw[pos + 3]]) as usize;
+            let str_len = read_u32_le(raw, pos) as usize;
             pos += 4 + str_len + 1;
         } else if field_type == b'u' {
             pos += 4;
@@ -434,12 +433,12 @@ fn parse_hello_reply(msg: &[u8]) -> Option<String> {
         return None;
     }
 
-    let body_len = u32::from_le_bytes([msg[4], msg[5], msg[6], msg[7]]) as usize;
+    let body_len = read_u32_le(msg, 4) as usize;
     if body_len == 0 {
         return None;
     }
 
-    let hf_len = u32::from_le_bytes([msg[12], msg[13], msg[14], msg[15]]) as usize;
+    let hf_len = read_u32_le(msg, 12) as usize;
     let total_hf = 16 + hf_len;
     let aligned_hf = (total_hf + 7) & !7;
     let body_start = aligned_hf;
@@ -448,12 +447,7 @@ fn parse_hello_reply(msg: &[u8]) -> Option<String> {
         return None;
     }
 
-    let str_len = u32::from_le_bytes([
-        msg[body_start],
-        msg[body_start + 1],
-        msg[body_start + 2],
-        msg[body_start + 3],
-    ]) as usize;
+    let str_len = read_u32_le(msg, body_start) as usize;
 
     if body_start + 4 + str_len + 1 > msg.len() {
         return None;
@@ -468,12 +462,12 @@ fn parse_u32_reply(msg: &[u8]) -> Option<u32> {
         return None;
     }
 
-    let body_len = u32::from_le_bytes([msg[4], msg[5], msg[6], msg[7]]) as usize;
+    let body_len = read_u32_le(msg, 4) as usize;
     if body_len < 4 {
         return None;
     }
 
-    let hf_len = u32::from_le_bytes([msg[12], msg[13], msg[14], msg[15]]) as usize;
+    let hf_len = read_u32_le(msg, 12) as usize;
     let total_hf = 16 + hf_len;
     let aligned_hf = (total_hf + 7) & !7;
     let body_start = aligned_hf;
@@ -488,12 +482,7 @@ fn parse_u32_reply(msg: &[u8]) -> Option<u32> {
         return None;
     }
 
-    Some(u32::from_le_bytes([
-        msg[aligned_body],
-        msg[aligned_body + 1],
-        msg[aligned_body + 2],
-        msg[aligned_body + 3],
-    ]))
+    Some(read_u32_le(msg, aligned_body))
 }
 
 // ===========================================================================

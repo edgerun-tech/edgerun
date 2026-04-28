@@ -475,7 +475,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         stream.write_all(&[20, 0x03, 0x03, 0, 1, 1]).await?;
         stream.flush().await?;
 
-        let verify_data = tls12_finished_verify_data(cipher_suite, &master_secret, b"client finished", &transcript)?;
+        let verify_data = tls12_finished_verify_data(
+            cipher_suite,
+            &master_secret,
+            b"client finished",
+            &transcript,
+        )?;
         let client_finished = build_tls12_finished(&verify_data);
         transcript.extend_from_slice(&client_finished);
         let mut write_cipher = Tls12RecordCipher::new(&keys.client_key, &keys.client_iv)?;
@@ -486,18 +491,24 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
 
         let (content_type, ccs) = read_plain_record(&mut stream).await?;
         if content_type != 20 || ccs != [1] {
-            return Err(TlsError::Protocol("TLS 1.2 expected ChangeCipherSpec".into()));
+            return Err(TlsError::Protocol(
+                "TLS 1.2 expected ChangeCipherSpec".into(),
+            ));
         }
         let (content_type, encrypted) = read_plain_record(&mut stream).await?;
         if content_type != 22 {
-            return Err(TlsError::Protocol("TLS 1.2 expected encrypted Finished".into()));
+            return Err(TlsError::Protocol(
+                "TLS 1.2 expected encrypted Finished".into(),
+            ));
         }
         let (inner_type, server_finished) = read_cipher.decrypt_record(22, &encrypted)?;
         if inner_type != 23 && inner_type != 22 {
             return Err(TlsError::Protocol("TLS 1.2 invalid Finished record".into()));
         }
         if server_finished.len() < 16 || server_finished[0] != 20 {
-            return Err(TlsError::Protocol("TLS 1.2 invalid Finished message".into()));
+            return Err(TlsError::Protocol(
+                "TLS 1.2 invalid Finished message".into(),
+            ));
         }
         let expected = tls12_finished_verify_data(
             cipher_suite,
@@ -1206,7 +1217,11 @@ fn build_tls12_client_hello(client_random: [u8; 32], server_name: &str) -> Vec<u
     body.extend_from_slice(&0x0303u16.to_be_bytes());
     body.extend_from_slice(&client_random);
     body.push(0);
-    for bytes in [&4u16.to_be_bytes(), &0xC030u16.to_be_bytes(), &0xC02Fu16.to_be_bytes()] {
+    for bytes in [
+        &4u16.to_be_bytes(),
+        &0xC030u16.to_be_bytes(),
+        &0xC02Fu16.to_be_bytes(),
+    ] {
         body.extend_from_slice(bytes);
     }
     body.push(1);
@@ -1333,11 +1348,15 @@ fn parse_tls12_server_hello(
 
 fn parse_tls12_server_key_exchange(msg: &[u8]) -> Result<Vec<u8>> {
     if msg.len() < 12 || msg[0] != 12 {
-        return Err(TlsError::Protocol("TLS 1.2 ServerKeyExchange missing".into()));
+        return Err(TlsError::Protocol(
+            "TLS 1.2 ServerKeyExchange missing".into(),
+        ));
     }
     let body = &msg[4..];
     if body[0] != 3 {
-        return Err(TlsError::Protocol("TLS 1.2 only named curves are supported".into()));
+        return Err(TlsError::Protocol(
+            "TLS 1.2 only named curves are supported".into(),
+        ));
     }
     let group = u16::from_be_bytes([body[1], body[2]]);
     let key_len = body[3] as usize;
@@ -1356,7 +1375,11 @@ fn split_tls12_key_block(cipher_suite: u16, key_block: &[u8]) -> Result<Tls12Key
     let key_len = match cipher_suite {
         0xC02F => 16,
         0xC030 => 32,
-        _ => return Err(TlsError::Protocol("TLS 1.2 unsupported cipher suite".into())),
+        _ => {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 unsupported cipher suite".into(),
+            ))
+        }
     };
     let mut pos = 0usize;
     let client_key = key_block[pos..pos + key_len].to_vec();
@@ -1378,7 +1401,9 @@ fn tls12_key_block_len(cipher_suite: u16) -> Result<usize> {
     match cipher_suite {
         0xC02F => Ok(40),
         0xC030 => Ok(72),
-        _ => Err(TlsError::Protocol("TLS 1.2 unsupported cipher suite".into())),
+        _ => Err(TlsError::Protocol(
+            "TLS 1.2 unsupported cipher suite".into(),
+        )),
     }
 }
 
@@ -1422,7 +1447,11 @@ fn tls12_finished_verify_data(
     let hash = match cipher_suite {
         0xC02F => Hasher::Sha256.hash(transcript),
         0xC030 => Hasher::Sha384.hash(transcript),
-        _ => return Err(TlsError::Protocol("TLS 1.2 unsupported Finished suite".into())),
+        _ => {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 unsupported Finished suite".into(),
+            ))
+        }
     };
     tls12_prf(cipher_suite, master_secret, label, &hash, 12)
 }

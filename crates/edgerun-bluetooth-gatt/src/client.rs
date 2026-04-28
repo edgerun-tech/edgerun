@@ -100,10 +100,8 @@ impl LinuxGattClient {
                     .ok_or_else(|| GattError::InvalidUuid(uuid.0.clone()))?;
                 Ok(val.to_le_bytes().to_vec())
             }
-            32 => {
-                edgerun_encoding::hex::hex_to_bytes(&cleaned)
-                    .map_err(|_| GattError::InvalidUuid(uuid.0.clone()))
-            }
+            32 => edgerun_encoding::hex::hex_to_bytes(&cleaned)
+                .map_err(|_| GattError::InvalidUuid(uuid.0.clone())),
             _ => Err(GattError::InvalidUuid(uuid.0.clone())),
         }
     }

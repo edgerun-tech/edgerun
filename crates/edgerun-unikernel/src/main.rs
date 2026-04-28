@@ -1176,8 +1176,9 @@ async fn run_configured_oci_pull(config: &boot_config::BootConfig) {
     let edgefs_fs_id = [0x24u8; 16];
     match disk_boot::open_configured_edgefs(&mut storage, config, edgefs_key, edgefs_fs_id) {
         Ok(disk_boot::OpenedEdgeFs::Partition(mut fs)) => {
-            match unsafe { oci_image_boot::pull_configured_image_into_edgefs(&mut fs, config).await }
-            {
+            match unsafe {
+                oci_image_boot::pull_configured_image_into_edgefs(&mut fs, config).await
+            } {
                 Ok(_) => rt::log::log(1, "Bare OCI pull into EdgeFS ok"),
                 Err(error) => {
                     rt::log::log(1, "Bare OCI pull into EdgeFS failed");
@@ -1189,8 +1190,9 @@ async fn run_configured_oci_pull(config: &boot_config::BootConfig) {
             }
         }
         Ok(disk_boot::OpenedEdgeFs::WholeDisk(mut fs)) => {
-            match unsafe { oci_image_boot::pull_configured_image_into_edgefs(&mut fs, config).await }
-            {
+            match unsafe {
+                oci_image_boot::pull_configured_image_into_edgefs(&mut fs, config).await
+            } {
                 Ok(_) => rt::log::log(1, "Bare OCI pull into EdgeFS ok"),
                 Err(error) => {
                     rt::log::log(1, "Bare OCI pull into EdgeFS failed");

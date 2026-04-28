@@ -108,6 +108,21 @@ pub fn read_u32_be(input: &[u8], offset: usize) -> u32 {
     ])
 }
 
+/// Read a big-endian `u64` from `input[offset..]`.
+#[inline]
+pub fn read_u64_be(input: &[u8], offset: usize) -> u64 {
+    u64::from_be_bytes([
+        input[offset],
+        input[offset + 1],
+        input[offset + 2],
+        input[offset + 3],
+        input[offset + 4],
+        input[offset + 5],
+        input[offset + 6],
+        input[offset + 7],
+    ])
+}
+
 /// Checked big-endian `u16` read from `input[offset..]`.
 #[inline]
 pub fn try_read_u16_be(input: &[u8], offset: usize) -> Option<u16> {
@@ -124,6 +139,15 @@ pub fn try_read_u32_be(input: &[u8], offset: usize) -> Option<u32> {
         return None;
     }
     Some(read_u32_be(input, offset))
+}
+
+/// Checked big-endian `u64` read from `input[offset..]`.
+#[inline]
+pub fn try_read_u64_be(input: &[u8], offset: usize) -> Option<u64> {
+    if input.len().saturating_sub(offset) < 8 {
+        return None;
+    }
+    Some(read_u64_be(input, offset))
 }
 
 #[cfg(test)]
@@ -146,9 +170,10 @@ mod tests {
 
     #[test]
     fn reads_big_endian_values() {
-        let data = [0x12, 0x34, 0x56, 0x78];
+        let data = [0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef];
         assert_eq!(read_u16_be(&data, 0), 0x1234);
         assert_eq!(read_u32_be(&data, 0), 0x1234_5678);
+        assert_eq!(read_u64_be(&data, 0), 0x1234_5678_90ab_cdef);
     }
 
     #[test]
@@ -159,6 +184,7 @@ mod tests {
         assert_eq!(try_read_u64_le(&data, 0), None);
         assert_eq!(try_read_u16_be(&data, 3), None);
         assert_eq!(try_read_u32_be(&data, 1), None);
+        assert_eq!(try_read_u64_be(&data, 0), None);
     }
 
     #[test]
@@ -169,5 +195,6 @@ mod tests {
         assert_eq!(try_read_u64_le(&data, 0), Some(0x90ab_cdef_1234_5678));
         assert_eq!(try_read_u16_be(&data, 0), Some(0x7856));
         assert_eq!(try_read_u32_be(&data, 0), Some(0x7856_3412));
+        assert_eq!(try_read_u64_be(&data, 0), Some(0x7856_3412_efcd_ab90));
     }
 }

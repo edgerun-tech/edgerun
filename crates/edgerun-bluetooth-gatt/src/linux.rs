@@ -1,5 +1,6 @@
 use crate::error::{GattError, GattResult};
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::read_u16_le;
 use std::io;
 use std::mem::size_of;
 use std::os::fd::{AsRawFd, RawFd};
@@ -466,7 +467,7 @@ impl AttProtocol {
             return Err(GattError::MtuExchangeFailed);
         }
 
-        let server_mtu = u16::from_le_bytes([resp[1], resp[2]]);
+        let server_mtu = read_u16_le(&resp, 1);
         self.mtu = std::cmp::min(client_mtu, server_mtu);
         Ok(self.mtu)
     }
@@ -556,7 +557,7 @@ impl AttProtocol {
         if data.len() < 3 || data[0] != 0x1b {
             return None;
         }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
+        let handle = read_u16_le(data, 1);
         Some((handle, data[3..].to_vec()))
     }
 
@@ -564,7 +565,7 @@ impl AttProtocol {
         if data.len() < 3 || data[0] != 0x1d {
             return None;
         }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
+        let handle = read_u16_le(data, 1);
         Some((handle, data[3..].to_vec()))
     }
 
@@ -584,8 +585,8 @@ impl AttProtocol {
         let entry_size = format;
         let mut offset = 2;
         while offset + entry_size <= data.len() {
-            let start = u16::from_le_bytes([data[offset], data[offset + 1]]);
-            let end = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
+            let start = read_u16_le(data, offset);
+            let end = read_u16_le(data, offset + 2);
             let uuid = data[offset + 4..offset + entry_size].to_vec();
             results.push((start, end, uuid));
             offset += entry_size;
@@ -604,7 +605,7 @@ impl AttProtocol {
         }
         let mut offset = 2;
         while offset + format <= data.len() {
-            let handle = u16::from_le_bytes([data[offset], data[offset + 1]]);
+            let handle = read_u16_le(data, offset);
             let value = data[offset + 2..offset + format].to_vec();
             results.push((handle, value));
             offset += format;
@@ -626,7 +627,7 @@ impl AttProtocol {
         let entry_size = 2 + uuid_size; // 2 bytes handle + uuid_size bytes
         let mut offset = 2;
         while offset + entry_size <= data.len() {
-            let handle = u16::from_le_bytes([data[offset], data[offset + 1]]);
+            let handle = read_u16_le(data, offset);
             let uuid = data[offset + 2..offset + entry_size].to_vec();
             results.push((handle, uuid));
             offset += entry_size;
@@ -638,7 +639,7 @@ impl AttProtocol {
         if data.len() < 4 || data[0] != 0x01 {
             return None;
         }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
+        let handle = read_u16_le(data, 1);
         let error_code = data[3];
         Some((handle, error_code))
     }
@@ -647,7 +648,7 @@ impl AttProtocol {
         if data.len() < 3 || data[0] != 0x03 {
             return None;
         }
-        Some(u16::from_le_bytes([data[1], data[2]]))
+        Some(read_u16_le(data, 1))
     }
 }
 

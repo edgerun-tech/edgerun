@@ -18,6 +18,7 @@ required-features = ["std"]
 edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-storage = { path = "../edgerun-storage" }
 edgerun-core = { path = "../edgerun-core" }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-proto = { path = "../edgerun-proto" }

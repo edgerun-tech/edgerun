@@ -20,6 +20,7 @@
 
 use crate::prelude::v1::*;
 
+use edgerun_encoding::byteorder::read_u64_le;
 use edgerun_rt::RwLock;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
@@ -38,7 +39,7 @@ fn write_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
 fn read_u64(r: &mut impl Read) -> io::Result<u64> {
     let mut buf = [0u8; 8];
     r.read_exact(&mut buf)?;
-    Ok(u64::from_le_bytes(buf))
+    Ok(read_u64_le(&buf, 0))
 }
 
 fn write_str(w: &mut impl Write, s: &str) -> io::Result<()> {

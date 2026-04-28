@@ -499,6 +499,20 @@ fn validate_optional_object_ref(
     None
 }
 
+fn validate_timestamp_shape(
+    timestamp: &prost_types::Timestamp,
+    reason: &'static str,
+) -> Option<ValidationResult> {
+    if !(0..1_000_000_000).contains(&timestamp.nanos) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr(reason))]),
+            empty_map(),
+        ));
+    }
+    None
+}
+
 /// Validates the structural integrity and signature of a RouteAdvertisement
 /// at the proto type level (spec §14.24).
 pub fn validate_route_advertisement(
@@ -539,12 +553,21 @@ pub fn validate_route_advertisement(
             empty_map(),
         );
     }
-    if adv.advertised_at.is_none() {
+    let Some(advertised_at) = adv.advertised_at.as_ref() else {
         return reject(
             ReasonCode::StructuralInvalid,
             mapping([("reason", ystr("missing_advertised_at"))]),
             empty_map(),
         );
+    };
+    if let Some(result) = validate_timestamp_shape(advertised_at, "invalid_advertised_at_timestamp")
+    {
+        return result;
+    }
+    if let Some(expires_at) = adv.expires_at.as_ref() {
+        if let Some(result) = validate_timestamp_shape(expires_at, "invalid_expires_at_timestamp") {
+            return result;
+        }
     }
     if adv.reachability.is_empty() {
         return reject(
@@ -615,6 +638,20 @@ pub fn validate_route_advertisement(
                 mapping([("reason", ystr("invalid_reachability_directness"))]),
                 empty_map(),
             );
+        }
+        if let Some(valid_after) = hint.valid_after.as_ref() {
+            if let Some(result) =
+                validate_timestamp_shape(valid_after, "invalid_reachability_valid_after")
+            {
+                return result;
+            }
+        }
+        if let Some(valid_until) = hint.valid_until.as_ref() {
+            if let Some(result) =
+                validate_timestamp_shape(valid_until, "invalid_reachability_valid_until")
+            {
+                return result;
+            }
         }
         if let (Some(valid_after), Some(valid_until)) = (&hint.valid_after, &hint.valid_until) {
             if valid_after.seconds > valid_until.seconds
@@ -955,6 +992,21 @@ mod proto_tests {
     }
 
     #[test]
+    fn test_reject_invalid_reachability_timestamp_shape() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.reachability[0].valid_after = Some(Timestamp {
+            seconds: 1000,
+            nanos: 1_000_000_000,
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn test_reject_empty_next_hop_node() {
         let (_sk, pk) = make_test_keypair();
         let mut ad = make_valid_ad(pk);
@@ -1013,6 +1065,21 @@ mod proto_tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn test_reject_invalid_route_advertisement_timestamp_shape() {
+        let (_sk, pk) = make_test_keypair();
+        let mut ad = make_valid_ad(pk);
+        ad.advertised_at = Some(Timestamp {
+            seconds: 1000,
+            nanos: -1,
+        });
+
+        let result = validate_route_advertisement(&ad);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]

@@ -926,10 +926,7 @@ impl VirtBlk {
     }
 
     pub fn write_sector(&mut self, sector: u64, data: &[u8]) -> bool {
-        if self.read_only
-            || data.len() != SECTOR_SIZE
-            || sector >= self.sectors
-        {
+        if self.read_only || data.len() != SECTOR_SIZE || sector >= self.sectors {
             return false;
         }
 

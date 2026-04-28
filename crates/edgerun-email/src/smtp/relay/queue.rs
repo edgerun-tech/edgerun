@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use super::now_secs;
 use crate::rt::{spawn_blocking, RwLock};
+use edgerun_encoding::byteorder::{read_i32_le, read_i64_le};
 use edgerun_encoding::string_field::{
     decode_bytes_u64, decode_string_field_u64, encode_bytes_u64, encode_string_field_u64,
     StringFieldError,
@@ -155,7 +156,7 @@ fn write_i64(w: &mut Vec<u8>, v: i64) {
 fn read_i64(r: &mut Cursor<&[u8]>) -> io::Result<i64> {
     let mut buf = [0u8; 8];
     r.read_exact(&mut buf)?;
-    Ok(i64::from_le_bytes(buf))
+    Ok(read_i64_le(&buf, 0))
 }
 
 fn write_i32(w: &mut Vec<u8>, v: i32) {
@@ -165,7 +166,7 @@ fn write_i32(w: &mut Vec<u8>, v: i32) {
 fn read_i32(r: &mut Cursor<&[u8]>) -> io::Result<i32> {
     let mut buf = [0u8; 4];
     r.read_exact(&mut buf)?;
-    Ok(i32::from_le_bytes(buf))
+    Ok(read_i32_le(&buf, 0))
 }
 
 fn write_option_str(w: &mut Vec<u8>, s: &Option<String>) {
