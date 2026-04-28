@@ -304,6 +304,7 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifi24" | b"wifi24\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifi25" | b"wifi25\n" => write_wifi_debug_step(frame.seq, 25),
             b"wifimmio" | b"wifimmio\n" => write_wifi_mmio_regs(frame.seq),
+            b"wifitx" | b"wifitx\n" => write_wifi_tx_regs(frame.seq),
             b"wifiregs" | b"wifiregs\n" => write_wifi_debug_regs(frame.seq),
             b"wififuns" | b"wififuns\n" => write_wifi_phy_fun_slots(frame.seq),
             _ => {
@@ -342,6 +343,14 @@ fn write_wifi_mmio_regs(seq: u16) {
     let mut buf = [0u8; 512];
     let mut len = 0;
     append_wifi_mmio_regs(&mut buf, &mut len);
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+fn write_wifi_tx_regs(seq: u16) {
+    display_console_log("ctl wifitx");
+    let mut buf = [0u8; 256];
+    let mut len = 0;
+    append_wifi_tx_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
@@ -453,6 +462,47 @@ fn append_wifi_mmio_regs(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b" dpti=0x");
     append_hex_u32(out, len, regs.coex_default_pti);
     append_bytes(out, len, b"\n");
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn append_wifi_tx_regs(out: &mut [u8], len: &mut usize) {
+    let regs = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_tx_regs();
+    append_bytes(out, len, b"wifi tx c118=0x");
+    append_hex_u32(out, len, regs.ctrl_33118);
+    append_bytes(out, len, b" c78=0x");
+    append_hex_u32(out, len, regs.ctrl_33c78);
+    append_bytes(out, len, b" t10=0x");
+    append_hex_u32(out, len, regs.tx_ctrl_33c10);
+    append_bytes(out, len, b" t14=0x");
+    append_hex_u32(out, len, regs.tx_ctrl_33c14);
+    append_bytes(out, len, b" t18=0x");
+    append_hex_u32(out, len, regs.tx_ctrl_33c18);
+    append_bytes(out, len, b" t54=0x");
+    append_hex_u32(out, len, regs.tx_ctrl_33c54);
+    append_bytes(out, len, b" t88=0x");
+    append_hex_u32(out, len, regs.tx_ctrl_33c88);
+    append_bytes(out, len, b" t94=0x");
+    append_hex_u32(out, len, regs.tx_ctrl_33c94);
+    append_bytes(out, len, b" b8=0x");
+    append_hex_u32(out, len, regs.ctrl_332b8);
+    append_bytes(out, len, b" c84=0x");
+    append_hex_u32(out, len, regs.ctrl_33084);
+    append_bytes(out, len, b"\n");
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+)))]
+fn append_wifi_tx_regs(out: &mut [u8], len: &mut usize) {
+    append_bytes(out, len, b"wifi tx unavailable\n");
 }
 
 #[cfg(not(all(
