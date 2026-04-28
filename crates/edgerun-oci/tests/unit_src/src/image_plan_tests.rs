@@ -27,6 +27,8 @@ fn image_config() -> ImageConfig {
 fn manifest() -> SingleManifest {
     SingleManifest {
         config_digest: "sha256:config".into(),
+        config_size: None,
+        config_media_type: None,
         layers: vec![LayerDescriptor {
             media_type: Some("application/vnd.oci.image.layer.v1.tar".into()),
             digest: "sha256:layer".into(),

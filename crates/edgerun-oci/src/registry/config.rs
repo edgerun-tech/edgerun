@@ -188,17 +188,27 @@ edgerun_json::impl_json_struct! {
 impl FromJson for SingleManifest {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
         let mut object = value.into_object("single manifest")?;
+        let (config_digest, config_size, config_media_type) = take_config_descriptor(&mut object)?;
         Ok(Self {
-            config_digest: take_config_digest(&mut object)?,
+            config_digest,
+            config_size,
+            config_media_type,
             layers: object.take_required("layers")?,
         })
     }
 }
 
-fn take_config_digest(object: &mut Map) -> Result<String, JsonValueError> {
+fn take_config_descriptor(
+    object: &mut Map,
+) -> Result<(String, Option<u64>, Option<String>), JsonValueError> {
     match object.remove("config") {
-        Some(JsonValue::Object(mut object)) => object.take_required("digest"),
-        Some(JsonValue::String(value)) => Ok(value),
+        Some(JsonValue::Object(mut object)) => {
+            let digest = object.take_required("digest")?;
+            let size = object.take_optional("size")?;
+            let media_type = object.take_optional("mediaType")?;
+            Ok((digest, size, media_type))
+        }
+        Some(JsonValue::String(value)) => Ok((value, None, None)),
         Some(other) => Err(JsonValueError::WrongType(format!(
             "manifest config must be an object or string, found {other:?}"
         ))),

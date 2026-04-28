@@ -13,6 +13,8 @@ use crate::runtime::timeout as rt_timeout;
 use crate::runtime::Mutex;
 use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
+#[cfg(feature = "http3")]
+use alloc::boxed::Box;
 #[cfg(feature = "tls")]
 use alloc::collections::BTreeSet;
 #[cfg(feature = "tls")]
@@ -20,6 +22,8 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, string::ToString};
+#[cfg(all(feature = "http3", feature = "std"))]
+use core::future::Future;
 
 /// HTTP protocol preference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -313,17 +317,7 @@ impl HttpClient {
             }
             HttpVersion::Http2OrHttp1 => {
                 edgerun_log::debug!("CLIENT: using HTTP/2");
-                if self.is_h2_fallback_disabled(request) {
-                    return self.execute_http1(request).await;
-                }
-                match self.execute_http2_with_timeout(request).await {
-                    Ok(r) => Ok(r),
-                    Err(err) => {
-                        timing_log_http2_fallback(request, &err);
-                        self.disable_h2_fallback_for(request);
-                        self.execute_http1(request).await
-                    }
-                }
+                self.execute_http2_or_http1(request).await
             }
             HttpVersion::Http3 => {
                 edgerun_log::debug!("CLIENT: using HTTP/3");
@@ -331,19 +325,109 @@ impl HttpClient {
             }
             HttpVersion::Best => {
                 edgerun_log::debug!("CLIENT: using Best");
-                if self.is_h2_fallback_disabled(request) {
-                    return self.execute_http1(request).await;
-                }
-                match self.execute_http2_with_timeout(request).await {
-                    Ok(r) => Ok(r),
-                    Err(err) => {
-                        timing_log_http2_fallback(request, &err);
-                        self.disable_h2_fallback_for(request);
-                        self.execute_http1(request).await
-                    }
-                }
+                self.execute_best(request).await
             }
         }
+    }
+
+    async fn execute_http2_or_http1(&self, request: &Request) -> Result<Response> {
+        if self.is_h2_fallback_disabled(request) {
+            return self.execute_http1(request).await;
+        }
+        match self.execute_http2_with_timeout(request).await {
+            Ok(r) => Ok(r),
+            Err(err) => {
+                timing_log_http2_fallback(request, &err);
+                self.disable_h2_fallback_for(request);
+                self.execute_http1(request).await
+            }
+        }
+    }
+
+    #[cfg(all(feature = "http3", feature = "std"))]
+    async fn execute_best(&self, request: &Request) -> Result<Response> {
+        enum BestRace {
+            Http3(Response),
+            Tcp(Response),
+            TcpFailed(Error),
+        }
+
+        if !request.uri().is_https() {
+            return self.execute_http2_or_http1(request).await;
+        }
+
+        let h3_client = self.clone().version(HttpVersion::Http3);
+        let h3_request = request.clone();
+        let h3_timeout = h3_client.inner.read_timeout;
+        let (h3_tx, h3_rx) = std::sync::mpsc::channel();
+        let h3_rx = std::sync::Arc::new(std::sync::Mutex::new(h3_rx));
+        std::thread::spawn(move || {
+            let result = edgerun_rt::block_on(async move {
+                match rt_timeout(h3_timeout, h3_client.execute_http3(&h3_request)).await {
+                    Ok(result) => result,
+                    Err(_) => Err(Error::Timeout),
+                }
+            });
+            let _ = h3_tx.send(result);
+        });
+
+        let tcp_client = self.clone().version(HttpVersion::Http2OrHttp1);
+        let mut tcp = Box::pin(async move { tcp_client.execute_http2_or_http1(request).await });
+        let mut h3_done = false;
+        let mut tcp_error = None;
+
+        match edgerun_rt::poll_fn(|cx| {
+            if tcp_error.is_none() {
+                match tcp.as_mut().poll(cx) {
+                    core::task::Poll::Ready(Ok(response)) => {
+                        return core::task::Poll::Ready(BestRace::Tcp(response));
+                    }
+                    core::task::Poll::Ready(Err(err)) => tcp_error = Some(err),
+                    core::task::Poll::Pending => {}
+                }
+            }
+
+            if !h3_done {
+                let h3_result = h3_rx
+                    .lock()
+                    .map(|receiver| receiver.try_recv())
+                    .unwrap_or(Err(std::sync::mpsc::TryRecvError::Disconnected));
+                match h3_result {
+                    Ok(Ok(response)) => {
+                        return core::task::Poll::Ready(BestRace::Http3(response));
+                    }
+                    Ok(Err(err)) => {
+                        timing_log_http3_fallback(request, &err);
+                        h3_done = true;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => h3_done = true,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+            }
+
+            if let Some(err) = tcp_error.take() {
+                return core::task::Poll::Ready(BestRace::TcpFailed(err));
+            }
+
+            core::task::Poll::Pending
+        })
+        .await
+        {
+            BestRace::Http3(response) => {
+                timing_log_best_winner(request, "http3");
+                Ok(response)
+            }
+            BestRace::Tcp(response) => {
+                timing_log_best_winner(request, "tcp");
+                Ok(response)
+            }
+            BestRace::TcpFailed(err) => Err(err),
+        }
+    }
+
+    #[cfg(any(not(feature = "http3"), not(feature = "std")))]
+    async fn execute_best(&self, request: &Request) -> Result<Response> {
+        self.execute_http2_or_http1(request).await
     }
 
     fn h2_fallback_key(request: &Request) -> Option<String> {
@@ -645,6 +729,20 @@ fn timing_log_http2_fallback(request: &Request, err: &Error) {
     #[cfg(feature = "std")]
     if std::env::var_os("EDGERUN_TIMING").is_some() {
         eprintln!("http2.fallback url={} error={}", request.uri(), err);
+    }
+}
+
+fn timing_log_http3_fallback(request: &Request, err: &Error) {
+    #[cfg(feature = "std")]
+    if std::env::var_os("EDGERUN_TIMING").is_some() {
+        eprintln!("http3.fallback url={} error={}", request.uri(), err);
+    }
+}
+
+fn timing_log_best_winner(request: &Request, protocol: &str) {
+    #[cfg(feature = "std")]
+    if std::env::var_os("EDGERUN_TIMING").is_some() {
+        eprintln!("best.winner protocol={} url={}", protocol, request.uri());
     }
 }
 

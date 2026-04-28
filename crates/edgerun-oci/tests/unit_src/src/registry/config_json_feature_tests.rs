@@ -44,6 +44,11 @@ fn parses_single_manifest_descriptor_config_with_edgerun_json() {
         .unwrap();
 
     assert_eq!(manifest.config_digest, "sha256:cfg");
+    assert_eq!(manifest.config_size, Some(42));
+    assert_eq!(
+        manifest.config_media_type.as_deref(),
+        Some("application/vnd.oci.image.config.v1+json")
+    );
     assert_eq!(manifest.layers[0].digest, "sha256:layer");
 }
 

@@ -16,6 +16,8 @@ pub enum ImageManifest {
 #[derive(Debug, Clone)]
 pub struct SingleManifest {
     pub config_digest: String,
+    pub config_size: Option<u64>,
+    pub config_media_type: Option<String>,
     pub layers: Vec<LayerDescriptor>,
 }
 

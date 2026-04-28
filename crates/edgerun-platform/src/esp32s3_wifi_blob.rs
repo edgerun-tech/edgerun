@@ -425,6 +425,28 @@ impl EspressifPromiscRadio {
                     LAST_START_STATUS.store(2202, Ordering::Relaxed);
                     !g_phyFuns.is_null()
                 }
+                23 => {
+                    LAST_START_STATUS.store(2301, Ordering::Relaxed);
+                    crate::esp32s3_wifi_blob_init::install_osi_funcs_only();
+                    LAST_START_STATUS.store(2302, Ordering::Relaxed);
+                    true
+                }
+                24 => {
+                    LAST_START_STATUS.store(2401, Ordering::Relaxed);
+                    let current = WIFI_MAC_RESET_CTRL.read_volatile();
+                    WIFI_MAC_RESET_CTRL.write_volatile(current | 1);
+                    LAST_START_STATUS.store(2402, Ordering::Relaxed);
+                    true
+                }
+                25 => {
+                    LAST_START_STATUS.store(2501, Ordering::Relaxed);
+                    crate::esp32s3_wifi_blob_init::install_osi_funcs_only();
+                    let current = WIFI_MAC_RESET_CTRL.read_volatile();
+                    WIFI_MAC_RESET_CTRL.write_volatile(current | 1);
+                    hal_init();
+                    LAST_START_STATUS.store(2502, Ordering::Relaxed);
+                    true
+                }
                 #[cfg(feature = "esp32s3-wifi-phy-probe")]
                 19 => {
                     LAST_START_STATUS.store(1901, Ordering::Relaxed);

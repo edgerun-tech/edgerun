@@ -15,6 +15,11 @@ pub enum RegistryError {
         expected: String,
         computed: String,
     },
+    DescriptorSizeMismatch {
+        digest: String,
+        expected: u64,
+        actual: u64,
+    },
     #[cfg(all(feature = "std", not(target_os = "none")))]
     IoError(std::io::Error),
     ParseError(String),
@@ -33,6 +38,16 @@ impl fmt::Display for RegistryError {
                     f,
                     "Digest mismatch:\n  expected: {}\n  computed: {}",
                     expected, computed
+                )
+            }
+            RegistryError::DescriptorSizeMismatch {
+                digest,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Descriptor size mismatch for {digest}: expected {expected}, got {actual}"
                 )
             }
             #[cfg(all(feature = "std", not(target_os = "none")))]

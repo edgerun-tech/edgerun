@@ -1,7 +1,10 @@
 //! Local OCI bundle pull workflow.
 
 use crate::prelude::*;
+use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::client::RegistryClient;
 use super::config::parse_image_config;
@@ -10,6 +13,7 @@ use super::image_ref::ImageRef;
 use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest};
 use super::manifest::{ImageManifest, LayerDescriptor, SingleManifest};
 use super::oci_spec::generate_oci_spec;
+use crate::{sha256_digest_reference, validate_digest_reference};
 
 #[derive(Debug, Clone)]
 pub struct ImagePullReport {
@@ -98,6 +102,7 @@ where
     });
     let manifest = client.resolve_manifest(image).await?;
     let manifest_data = select_manifest(client, image, manifest).await?;
+    validate_manifest_descriptors(&manifest_data)?;
 
     let total_layers = manifest_data.layers.len();
     progress(PullProgress::ManifestResolved {
@@ -114,6 +119,11 @@ where
             &manifest_data.config_digest,
         )
         .await?;
+    verify_descriptor_bytes(
+        &config_blob,
+        &manifest_data.config_digest,
+        manifest_data.config_size,
+    )?;
     progress(PullProgress::ConfigFetched {
         bytes: config_blob.len() as u64,
     });
@@ -189,10 +199,31 @@ async fn select_manifest(
                     crate::host_arch()
                 ))
             })?;
+            validate_registry_digest("index.manifests[].digest", &best.digest)?;
             client
                 .fetch_manifest_by_digest(&image.registry, &image.repository, &best.digest)
                 .await
         }
+    }
+}
+
+fn validate_manifest_descriptors(manifest: &SingleManifest) -> Result<(), RegistryError> {
+    validate_registry_digest("manifest.config.digest", &manifest.config_digest)?;
+    for (index, layer) in manifest.layers.iter().enumerate() {
+        validate_registry_digest(format!("manifest.layers[{index}].digest"), &layer.digest)?;
+    }
+    Ok(())
+}
+
+fn validate_registry_digest(field: impl Into<String>, digest: &str) -> Result<(), RegistryError> {
+    if validate_digest_reference(digest) {
+        Ok(())
+    } else {
+        Err(RegistryError::ParseError(format!(
+            "invalid digest in {}: {}",
+            field.into(),
+            digest
+        )))
     }
 }
 
@@ -230,7 +261,7 @@ where
         let _ = std::fs::remove_file(&cache_marker);
 
         let blob_path = store_path.join(format!("{}.{}", &cache_key, layer_extension(layer)));
-        if blob_path.exists() && !cached_blob_valid(&blob_path, &layer.digest) {
+        if blob_path.exists() && !cached_blob_valid(&blob_path, &layer.digest, Some(layer.size)) {
             std::fs::remove_file(&blob_path).map_err(RegistryError::IoError)?;
         }
         if !blob_path.exists() {
@@ -256,7 +287,7 @@ where
             });
         }
 
-        verify_blob_digest(&blob_path, &layer.digest)?;
+        verify_descriptor_file(&blob_path, &layer.digest, Some(layer.size))?;
 
         std::fs::create_dir_all(&cached_layer)?;
         progress(PullProgress::LayerExtracting {
@@ -276,8 +307,58 @@ where
     Ok(layer_dirs)
 }
 
-fn cached_blob_valid(blob_path: &Path, digest: &str) -> bool {
-    verify_blob_digest(blob_path, digest).is_ok()
+fn cached_blob_valid(blob_path: &Path, digest: &str, expected_size: Option<u64>) -> bool {
+    verify_descriptor_file(blob_path, digest, expected_size).is_ok()
+}
+
+fn verify_descriptor_file(
+    path: &Path,
+    expected_digest: &str,
+    expected_size: Option<u64>,
+) -> Result<(), RegistryError> {
+    if let Some(size) = expected_size {
+        let actual = std::fs::metadata(path)
+            .map_err(RegistryError::IoError)?
+            .len();
+        verify_descriptor_size(expected_digest, size, actual)?;
+    }
+
+    verify_blob_digest(path, expected_digest)
+}
+
+fn verify_descriptor_bytes(
+    data: &[u8],
+    expected_digest: &str,
+    expected_size: Option<u64>,
+) -> Result<(), RegistryError> {
+    if let Some(size) = expected_size {
+        verify_descriptor_size(expected_digest, size, data.len() as u64)?;
+    }
+
+    let computed = sha256_digest_reference(data);
+    if computed != expected_digest {
+        return Err(RegistryError::DigestMismatch {
+            expected: expected_digest.to_string(),
+            computed,
+        });
+    }
+    Ok(())
+}
+
+fn verify_descriptor_size(
+    expected_digest: &str,
+    expected_size: u64,
+    actual_size: u64,
+) -> Result<(), RegistryError> {
+    if actual_size == expected_size {
+        Ok(())
+    } else {
+        Err(RegistryError::DescriptorSizeMismatch {
+            digest: expected_digest.to_string(),
+            expected: expected_size,
+            actual: actual_size,
+        })
+    }
 }
 
 fn layer_cache_complete(marker: &Path, digest: &str) -> bool {
@@ -296,8 +377,42 @@ async fn download_blob(
     let body = client.fetch_blob(registry, repository, digest).await?;
     let bytes = body.len() as u64;
 
-    std::fs::write(dest, &body).map_err(RegistryError::IoError)?;
+    atomic_write(dest, &body)?;
     Ok(bytes)
+}
+
+fn atomic_write(dest: &Path, data: &[u8]) -> Result<(), RegistryError> {
+    let tmp = temporary_write_path(dest);
+    if let Some(parent) = tmp.parent() {
+        std::fs::create_dir_all(parent).map_err(RegistryError::IoError)?;
+    }
+    let write_result = (|| {
+        let mut file = File::create(&tmp)?;
+        file.write_all(data)?;
+        file.sync_all()?;
+        std::fs::rename(&tmp, dest)?;
+        Ok::<(), std::io::Error>(())
+    })();
+
+    if let Err(error) = write_result {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(RegistryError::IoError(error));
+    }
+    Ok(())
+}
+
+fn temporary_write_path(dest: &Path) -> PathBuf {
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let file_name = dest
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("blob");
+    dest.with_file_name(format!(
+        ".{file_name}.tmp.{}.{}",
+        std::process::id(),
+        counter
+    ))
 }
 
 fn layer_extension(layer: &LayerDescriptor) -> &'static str {
@@ -346,10 +461,105 @@ mod tests {
         let digest = crate::sha256_digest_reference(data);
         std::fs::write(&blob, data).unwrap();
 
-        assert!(cached_blob_valid(&blob, &digest));
+        assert!(cached_blob_valid(&blob, &digest, Some(data.len() as u64)));
 
         std::fs::write(&blob, b"corrupt").unwrap();
-        assert!(!cached_blob_valid(&blob, &digest));
+        assert!(!cached_blob_valid(&blob, &digest, Some(data.len() as u64)));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cached_blob_valid_rejects_size_mismatch() {
+        let root = tmp_root();
+        let blob = root.join("layer.tar");
+        let data = b"cached layer";
+        let digest = crate::sha256_digest_reference(data);
+        std::fs::write(&blob, data).unwrap();
+
+        assert!(!cached_blob_valid(
+            &blob,
+            &digest,
+            Some(data.len() as u64 + 1)
+        ));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn manifest_with_digests(config_digest: &str, layer_digest: &str) -> SingleManifest {
+        SingleManifest {
+            config_digest: config_digest.into(),
+            config_size: Some(1),
+            config_media_type: Some("application/vnd.oci.image.config.v1+json".into()),
+            layers: vec![LayerDescriptor {
+                media_type: Some("application/vnd.oci.image.layer.v1.tar".into()),
+                digest: layer_digest.into(),
+                size: 1,
+            }],
+        }
+    }
+
+    #[test]
+    fn validate_manifest_descriptors_rejects_invalid_config_digest() {
+        let layer = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+        let manifest = manifest_with_digests("sha256:not-hex", layer);
+
+        let error = validate_manifest_descriptors(&manifest).unwrap_err();
+
+        assert!(matches!(error, RegistryError::ParseError(_)));
+        assert!(error.to_string().contains("manifest.config.digest"));
+    }
+
+    #[test]
+    fn validate_manifest_descriptors_rejects_invalid_layer_digest() {
+        let config = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
+        let manifest = manifest_with_digests(config, "sha256:not-hex");
+
+        let error = validate_manifest_descriptors(&manifest).unwrap_err();
+
+        assert!(matches!(error, RegistryError::ParseError(_)));
+        assert!(error.to_string().contains("manifest.layers[0].digest"));
+    }
+
+    #[test]
+    fn verify_descriptor_bytes_checks_digest_and_size() {
+        let data = b"config bytes";
+        let digest = crate::sha256_digest_reference(data);
+
+        assert!(verify_descriptor_bytes(data, &digest, Some(data.len() as u64)).is_ok());
+
+        assert!(matches!(
+            verify_descriptor_bytes(b"corrupt", &digest, Some(data.len() as u64)),
+            Err(RegistryError::DescriptorSizeMismatch { .. })
+        ));
+
+        assert!(matches!(
+            verify_descriptor_bytes(b"corrupt", &digest, Some(7)),
+            Err(RegistryError::DigestMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn atomic_write_replaces_dest_and_cleans_temp_name() {
+        let root = tmp_root();
+        let dest = root.join("layer.tar.gz");
+        std::fs::write(&dest, b"old").unwrap();
+
+        atomic_write(&dest, b"new").unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
+        let temp_files = std::fs::read_dir(&root)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .map(|name| name.contains(".tmp."))
+                    .unwrap_or(false)
+            })
+            .count();
+        assert_eq!(temp_files, 0);
 
         let _ = std::fs::remove_dir_all(root);
     }

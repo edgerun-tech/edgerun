@@ -98,7 +98,7 @@ async fn push_blob_raw(
     let upload = client
         .authenticated_post_response(registry, &init_path, &[], &[])
         .await?;
-    let upload_path = upload_location_path(&upload, repository)?;
+    let upload_path = upload_location_path(&upload, repository, &init_path)?;
     let put_path = format!(
         "{}{}digest={}",
         upload_path,
@@ -116,7 +116,11 @@ async fn push_blob_raw(
     Ok(())
 }
 
-fn upload_location_path(response: &Response, repository: &str) -> Result<String, RegistryError> {
+fn upload_location_path(
+    response: &Response,
+    repository: &str,
+    base_path: &str,
+) -> Result<String, RegistryError> {
     let location = response
         .headers()
         .get("location")
@@ -137,8 +141,17 @@ fn upload_location_path(response: &Response, repository: &str) -> Result<String,
         }
     }
 
-    if location.contains('/') || location.contains('?') {
+    if location.contains('/') {
         return Ok(format!("/{}", location.trim_start_matches('/')));
+    }
+
+    if let Some((upload_id, query)) = location.split_once('?') {
+        return Ok(format!(
+            "{}{}?{}",
+            base_path,
+            percent_encode(upload_id),
+            query
+        ));
     }
 
     Ok(format!(
@@ -209,7 +222,8 @@ mod tests {
     fn upload_location_path_uses_registry_location_header() {
         let response = upload_response("/v2/owner/repo/blobs/uploads/uuid-123?_state=opaque");
 
-        let path = upload_location_path(&response, "owner/repo").unwrap();
+        let path =
+            upload_location_path(&response, "owner/repo", "/v2/owner/repo/blobs/uploads/").unwrap();
 
         assert_eq!(path, "/v2/owner/repo/blobs/uploads/uuid-123?_state=opaque");
     }
@@ -219,8 +233,32 @@ mod tests {
         let response =
             upload_response("https://registry.example/v2/owner/repo/blobs/uploads/uuid-123");
 
-        let path = upload_location_path(&response, "owner/repo").unwrap();
+        let path =
+            upload_location_path(&response, "owner/repo", "/v2/owner/repo/blobs/uploads/").unwrap();
 
         assert_eq!(path, "/v2/owner/repo/blobs/uploads/uuid-123");
+    }
+
+    #[test]
+    fn upload_location_path_resolves_relative_upload_id_with_query() {
+        let response = upload_response("uuid 123?_state=opaque");
+
+        let path =
+            upload_location_path(&response, "owner/repo", "/v2/owner/repo/blobs/uploads/").unwrap();
+
+        assert_eq!(
+            path,
+            "/v2/owner/repo/blobs/uploads/uuid%20123?_state=opaque"
+        );
+    }
+
+    #[test]
+    fn upload_location_path_resolves_query_only_relative_location() {
+        let response = upload_response("?_state=opaque");
+
+        let path =
+            upload_location_path(&response, "owner/repo", "/v2/owner/repo/blobs/uploads/").unwrap();
+
+        assert_eq!(path, "/v2/owner/repo/blobs/uploads/?_state=opaque");
     }
 }

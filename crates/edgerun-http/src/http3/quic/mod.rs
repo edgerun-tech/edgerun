@@ -163,9 +163,11 @@ impl QuicConnection {
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
         let crypto = QuicCrypto::new();
 
+        let remote_addr = SocketAddr::new(server_host, server_port);
+
         let mut conn = QuicConnection {
             socket,
-            server_addr: format!("{}:{}", server_host, server_port),
+            server_addr: remote_addr.to_string(),
             transport,
             crypto,
             protection: None,
@@ -192,9 +194,7 @@ impl QuicConnection {
 
         // Initialize active path
         if let Ok(local) = conn.socket.local_addr() {
-            if let Ok(remote) = format!("{}:{}", server_host, server_port).parse() {
-                conn.active_path = Some((local, remote));
-            }
+            conn.active_path = Some((local, remote_addr));
         }
 
         Ok(conn)
@@ -205,9 +205,17 @@ impl QuicConnection {
         if let Ok(ip) = host.parse::<IpAddr>() {
             return Ok(ip);
         }
-        if let Ok(mut addrs) = host.to_socket_addrs() {
-            if let Some(addr) = addrs.next() {
-                return Ok(addr.ip());
+        if let Ok(addrs) = (host, 443).to_socket_addrs() {
+            let mut first_ip = None;
+            for addr in addrs {
+                let ip = addr.ip();
+                if ip.is_ipv4() {
+                    return Ok(ip);
+                }
+                first_ip.get_or_insert(ip);
+            }
+            if let Some(ip) = first_ip {
+                return Ok(ip);
             }
         }
         Err(format!("DNS resolution failed for {}", host))

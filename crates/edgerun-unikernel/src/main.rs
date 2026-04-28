@@ -2458,22 +2458,6 @@ _start:
     addi a3, a3, -1
     j 1b
 2:
-    l32r a5, .Lusb_ep1_ptr
-    l32r a7, .Lusb_ep1_conf_ptr
-    movi a6, 69
-    s32i a6, a5, 0
-    movi a6, 67
-    s32i a6, a5, 0
-    movi a6, 10
-    s32i a6, a5, 0
-    l32i a6, a7, 0
-    movi a8, 1
-    or a6, a6, a8
-    s32i a6, a7, 0
-    movi a6, 100
-5:
-    addi a6, a6, -1
-    bnez a6, 5b
     call8 kernel_main
 3:
     waiti 0

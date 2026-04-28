@@ -196,6 +196,13 @@ unsafe extern "C" {
     fn esp_wifi_init_internal(config: *const WifiInitConfig) -> i32;
     fn esp_wifi_set_mode(mode: c_int) -> i32;
     fn esp_wifi_start() -> i32;
+    static mut g_osi_funcs_p: *mut c_void;
+}
+
+pub(crate) fn install_osi_funcs_only() {
+    unsafe {
+        g_osi_funcs_p = ptr::addr_of!(WIFI_OSI_FUNCS).cast_mut().cast::<c_void>();
+    }
 }
 
 pub fn ensure_started_ap() -> i32 {
