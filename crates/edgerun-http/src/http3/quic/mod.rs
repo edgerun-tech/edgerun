@@ -1270,7 +1270,9 @@ impl QuicConnection {
 
     fn install_peer_key_update(&mut self, peer_key_phase: bool) -> Result<(), String> {
         if self.client_app_traffic_secret.is_empty() || self.server_app_traffic_secret.is_empty() {
-            return Err("Cannot process peer key update without application traffic secrets".into());
+            return Err(
+                "Cannot process peer key update without application traffic secrets".into(),
+            );
         }
 
         let key_len = 16;

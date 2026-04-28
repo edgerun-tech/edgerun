@@ -946,8 +946,7 @@ fn test_peer_key_update_advances_read_side_only() {
     let iv_len = 12;
     let client_secret = vec![0x33; hasher.len()];
     let server_secret = vec![0x44; hasher.len()];
-    let next_server_secret =
-        hasher.expand_label(&server_secret, "traffic upd", &[], hasher.len());
+    let next_server_secret = hasher.expand_label(&server_secret, "traffic upd", &[], hasher.len());
 
     let client_key = hasher.quic_expand_label(&client_secret, "key", &[], key_len);
     let client_iv = hasher.quic_expand_label(&client_secret, "iv", &[], iv_len);
