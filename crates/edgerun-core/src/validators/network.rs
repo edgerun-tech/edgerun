@@ -225,7 +225,9 @@ pub fn validate_network_case(
         if !network_object_ref_is_valid(hello.get("hello_metadata")) {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-        if has_empty_string_item(get_seq(hello, "transport_features")) {
+        if has_empty_string_item(get_seq(hello, "supported_transport_features"))
+            || has_empty_string_item(get_seq(hello, "transport_features"))
+        {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         let nonce = hello
@@ -292,7 +294,9 @@ pub fn validate_network_case(
         if !network_object_ref_is_valid(accept_msg.get("accept_metadata")) {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-        if has_empty_string_item(get_seq(accept_msg, "transport_features")) {
+        if has_empty_string_item(get_seq(accept_msg, "selected_transport_features"))
+            || has_empty_string_item(get_seq(accept_msg, "transport_features"))
+        {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         let expected_nonce = local_state
@@ -430,6 +434,15 @@ pub fn validate_network_case(
         }
         if !target.is_empty() && target != string_value(local_state, "local_node", "") {
             return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
+        }
+        if matches!(
+            relay.get("payload_kind").and_then(Value::as_str),
+            None | Some("") | Some("PAYLOAD_KIND_UNSPECIFIED")
+        ) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if has_empty_string_item(get_seq(relay, "relay_chain")) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         let has_payload_object = relay.contains_key("payload_object");
         let has_inline_payload = relay.contains_key("inline_payload");
