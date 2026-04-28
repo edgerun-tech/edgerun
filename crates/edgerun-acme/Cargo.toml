@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "ACME certificate automation for Edgerun services"
 
 [dependencies]
 edgerun-rt.workspace = true
@@ -25,3 +26,6 @@ default = ["client"]
 client = []
 http_challenge = ["client"]
 dns_challenge = ["client"]
+
+[lints]
+workspace = true

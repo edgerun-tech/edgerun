@@ -14,3 +14,6 @@ edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 default = []
 std = ["edgerun-encoding/std"]
 http-headers = []
+
+[lints]
+workspace = true

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 description = "In-memory virtual filesystem with git-aware write-back for transparent RAM acceleration"
 license = "MIT"
+publish.workspace = true
 readme = "README.md"
 keywords = ["vfs", "filesystem", "in-memory", "copy-on-write", "ram"]
 categories = ["filesystem", "caching", "development-tools"]

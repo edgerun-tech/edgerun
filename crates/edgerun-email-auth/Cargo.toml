@@ -11,3 +11,6 @@ edgerun-dns = { path = "../edgerun-dns", default-features = false }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["rsa"] }
+
+[lints]
+workspace = true
