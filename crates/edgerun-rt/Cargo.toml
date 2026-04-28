@@ -3,8 +3,13 @@ name = "edgerun-rt"
 version = "0.1.0"
 edition.workspace = true
 license = "MIT"
+publish.workspace = true
+description = "no_std-first async runtime, synchronization, and I/O primitives for Edgerun"
 
 [dependencies]
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 edgerun-platform = { path = "../edgerun-platform" }
 edgerun-log = { path = "../edgerun-log" }
+
+[lints]
+workspace = true

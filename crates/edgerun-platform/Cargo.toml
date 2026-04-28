@@ -3,6 +3,8 @@ name = "edgerun-platform"
 version = "0.1.0"
 edition.workspace = true
 license = "MIT"
+publish.workspace = true
+description = "Bare-metal and host platform primitives for Edgerun runtimes"
 
 [dependencies]
 
@@ -11,3 +13,6 @@ license = "MIT"
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
+
+[lints]
+workspace = true
