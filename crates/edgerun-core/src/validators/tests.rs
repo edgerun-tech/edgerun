@@ -189,6 +189,7 @@ fn query_proof_bundle_allowed_is_advisory_accept() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
             ("source_query_id", ystr("q-current")),
             ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
             ("payload_object", mapping([("object_id", ystr("obj-1"))])),
@@ -934,6 +935,7 @@ fn query_proof_bundle_mismatched_query_id_rejected() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
             ("source_query_id", ystr("q-other")),
             ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
             ("payload_object", mapping([("object_id", ystr("obj-1"))])),
@@ -962,6 +964,7 @@ fn query_proof_bundle_missing_local_payload_is_deferred() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
             ("source_query_id", ystr("q-current")),
             ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
             (
@@ -997,6 +1000,7 @@ fn query_proof_bundle_missing_source_query_id_is_rejected() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
             ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
             ("payload_object", mapping([("object_id", ystr("obj-1"))])),
         ]),
@@ -1021,6 +1025,7 @@ fn query_proof_bundle_missing_payload_type_is_rejected() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
             ("source_query_id", ystr("q-current")),
             ("payload_object", mapping([("object_id", ystr("obj-1"))])),
         ]),
@@ -1035,6 +1040,29 @@ fn query_proof_bundle_missing_payload_type_is_rejected() {
     let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
     assert_eq!(result.verdict, Verdict::Reject);
     assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_proof_bundle_unsupported_version_is_rejected() {
+    let semantic = match mapping([(
+        "proof_bundle",
+        mapping([
+            ("bundle_version", yi64(2)),
+            ("source_query_id", ystr("q-current")),
+            ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
+            ("payload_object", mapping([("object_id", ystr("obj-1"))])),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::VersionUnsupported));
 }
 
 #[test]

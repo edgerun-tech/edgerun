@@ -350,6 +350,9 @@ pub fn validate_query_case(
         );
     }
     if let Some(bundle) = get_map(semantic_input, "proof_bundle") {
+        if number_value(bundle, "bundle_version", 0) != 1 {
+            return reject(ReasonCode::VersionUnsupported, empty_map(), empty_map());
+        }
         if let Some(result) = validate_source_query_id(
             bundle,
             local_state.get("current_query_id").and_then(Value::as_str),
