@@ -686,6 +686,8 @@ impl Esp32s3WifiMmio {
                 26 => {
                     LAST_STATUS.store(2601, Ordering::Relaxed);
                     set_chan_freq_sw_start_direct_slice(11);
+                    release_txrx_force_direct_slice();
+                    enable_rx_direct_slice();
                     LAST_STATUS.store(2602, Ordering::Relaxed);
                     true
                 }
@@ -729,6 +731,42 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(3301, Ordering::Relaxed);
                     poll_rx_event_direct_slice();
                     LAST_STATUS.store(3302, Ordering::Relaxed);
+                    true
+                }
+                34 => {
+                    LAST_STATUS.store(3401, Ordering::Relaxed);
+                    set_chan_freq_sw_start_direct_slice(1);
+                    release_txrx_force_direct_slice();
+                    enable_rx_direct_slice();
+                    LAST_STATUS.store(3402, Ordering::Relaxed);
+                    true
+                }
+                35 => {
+                    LAST_STATUS.store(3501, Ordering::Relaxed);
+                    set_chan_freq_sw_start_direct_slice(6);
+                    release_txrx_force_direct_slice();
+                    enable_rx_direct_slice();
+                    LAST_STATUS.store(3502, Ordering::Relaxed);
+                    true
+                }
+                36 => {
+                    LAST_STATUS.store(3601, Ordering::Relaxed);
+                    set_chan_freq_sw_start_direct_slice(11);
+                    release_txrx_force_direct_slice();
+                    enable_rx_direct_slice();
+                    LAST_STATUS.store(3602, Ordering::Relaxed);
+                    true
+                }
+                37 => {
+                    LAST_STATUS.store(3701, Ordering::Relaxed);
+                    enable_rx_direct_slice();
+                    LAST_STATUS.store(3702, Ordering::Relaxed);
+                    true
+                }
+                38 => {
+                    LAST_STATUS.store(3801, Ordering::Relaxed);
+                    release_txrx_force_direct_slice();
+                    LAST_STATUS.store(3802, Ordering::Relaxed);
                     true
                 }
                 _ => false,
@@ -980,6 +1018,14 @@ unsafe fn poll_rx_event_direct_slice() {
         }
     }
     update(WIFI_MAC_RX_RELOAD, |v| v | 1);
+}
+
+unsafe fn enable_rx_direct_slice() {
+    update(WIFI_MAC_RX_RELOAD, |v| v | 0x8000_0000);
+}
+
+unsafe fn release_txrx_force_direct_slice() {
+    update(WIFI_TXRX_CTRL, |v| v & 0xffff_f0ff);
 }
 
 unsafe fn init_mac_txrx_tail_slice() {
