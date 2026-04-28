@@ -421,28 +421,11 @@ spec:
   sni_hostnames: [example.com]
 "#;
 
-    const SIMPLE_ROUNDTRIP_RESOURCE_KINDS: &str = r#"
-kind: DnsServer
-spec:
-  bind_address: "0.0.0.0:53"
----
-kind: TlsConfig
-spec:
-  dot_enabled: true
----
-kind: RateLimit
-spec:
-  qps: 25
----
-kind: TftpServer
-spec:
-  root_dir: /srv/tftp
-"#;
-
     #[test]
     fn parses_all_native_config_resource_kinds_without_serde() {
         let resources = parse_config_file(ALL_NATIVE_RESOURCE_KINDS).unwrap();
-        assert_eq!(resources.len(), 23);
+        let parsed_kinds: Vec<&str> = resources.iter().map(ConfigResource::kind).collect();
+        assert_eq!(resources.len(), 23, "parsed kinds: {parsed_kinds:?}");
 
         assert!(matches!(resources[0], ConfigResource::DnsServer(_)));
         assert!(matches!(resources[1], ConfigResource::DnsZone(_)));
@@ -471,7 +454,7 @@ spec:
 
     #[test]
     fn native_config_resources_roundtrip_through_yaml_envelopes() {
-        let resources = parse_config_file(SIMPLE_ROUNDTRIP_RESOURCE_KINDS).unwrap();
+        let resources = parse_config_file(ALL_NATIVE_RESOURCE_KINDS).unwrap();
         let yaml = to_yaml_all(&resources).unwrap();
         assert!(yaml.contains("kind: DnsServer"));
         assert!(yaml.contains("spec:"));
