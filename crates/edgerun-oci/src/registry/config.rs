@@ -49,6 +49,11 @@ pub struct HistoryEntry {
     pub empty_layer: Option<bool>,
 }
 
+#[derive(Debug, Clone)]
+struct ManifestProbe {
+    manifests: Option<Vec<JsonValue>>,
+}
+
 // ===========================================================================
 // Public API
 // ===========================================================================
@@ -70,15 +75,15 @@ pub fn parse_json_bytes(data: &[u8]) -> Result<edgerun_json::JsonValue, String> 
 /// Parse a raw JSON blob into an ImageManifest (index or single).
 pub fn parse_manifest(data: &[u8]) -> Result<ImageManifest, String> {
     let value = parse_json_bytes(data)?;
-    if let Some(manifests) = value
-        .as_object()
-        .and_then(|object| object.get_array("manifests"))
-    {
-        if !manifests.is_empty() {
-            return ImageIndex::from_json(value)
-                .map(ImageManifest::Index)
-                .string_err();
-        }
+    let has_index_manifests = ManifestProbe::from_json(value.clone())
+        .ok()
+        .and_then(|probe| probe.manifests)
+        .is_some_and(|manifests| !manifests.is_empty());
+
+    if has_index_manifests {
+        return ImageIndex::from_json(value)
+            .map(ImageManifest::Index)
+            .string_err();
     }
 
     SingleManifest::from_json(value)
@@ -91,87 +96,92 @@ pub fn parse_single_manifest(data: &[u8]) -> Result<SingleManifest, String> {
     from_json_slice(data).string_err()
 }
 
-impl FromJson for ImageConfig {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("image config")?;
-        Ok(Self {
-            architecture: object.take_optional("architecture")?,
-            os: object.take_optional("os")?,
-            config: object.take_optional("config")?,
-            rootfs: object.take_optional("rootfs")?,
-            history: object.take_optional("history")?,
-        })
+edgerun_json::impl_json_struct! {
+    ManifestProbe {
+        required {}
+        optional { manifests: "manifests" => Vec<JsonValue> }
     }
 }
 
-impl FromJson for ImageConfigInner {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("image config.config")?;
-        Ok(Self {
-            user: object.take_optional_any(&["User", "user"])?,
-            env: object.take_optional_any(&["Env", "env"])?,
-            entrypoint: object.take_optional_any(&["Entrypoint", "entrypoint"])?,
-            cmd: object.take_optional_any(&["Cmd", "cmd"])?,
-            working_dir: object.take_optional_any(&["WorkingDir", "workingDir", "working_dir"])?,
-            exposed_ports: object.take_optional_any(&["ExposedPorts", "exposedPorts"])?,
-            volumes: object.take_optional_any(&["Volumes", "volumes"])?,
-            labels: object.take_optional_any(&["Labels", "labels"])?,
-            stop_signal: object.take_optional_any(&["StopSignal", "stopSignal", "stop_signal"])?,
-        })
+edgerun_json::impl_json_struct! {
+    ImageConfig {
+        required {}
+        optional {
+            architecture: "architecture" => String,
+            os: "os" => String,
+            config: "config" => ImageConfigInner,
+            rootfs: "rootfs" => RootFs,
+            history: "history" => Vec<HistoryEntry>,
+        }
     }
 }
 
-impl FromJson for RootFs {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("rootfs")?;
-        Ok(Self {
-            r#type: object.take_required("type")?,
-            diff_ids: object.take_required("diff_ids")?,
-        })
+edgerun_json::impl_json_struct! {
+    ImageConfigInner {
+        required {}
+        optional {
+            user: ["User", "user"] => String,
+            env: ["Env", "env"] => Vec<String>,
+            entrypoint: ["Entrypoint", "entrypoint"] => Vec<String>,
+            cmd: ["Cmd", "cmd"] => Vec<String>,
+            working_dir: ["WorkingDir", "workingDir", "working_dir"] => String,
+            exposed_ports: ["ExposedPorts", "exposedPorts"] => BTreeMap<String, edgerun_json::JsonValue>,
+            volumes: ["Volumes", "volumes"] => BTreeMap<String, edgerun_json::JsonValue>,
+            labels: ["Labels", "labels"] => BTreeMap<String, String>,
+            stop_signal: ["StopSignal", "stopSignal", "stop_signal"] => String,
+        }
     }
 }
 
-impl FromJson for HistoryEntry {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("history entry")?;
-        Ok(Self {
-            created: object.take_optional("created")?,
-            created_by: object.take_optional("created_by")?,
-            comment: object.take_optional("comment")?,
-            empty_layer: object.take_optional("empty_layer")?,
-        })
+edgerun_json::impl_json_struct! {
+    RootFs {
+        required {
+            r#type: "type" => String,
+            diff_ids: "diff_ids" => Vec<String>,
+        }
+        optional {}
     }
 }
 
-impl FromJson for ImageIndex {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("image index")?;
-        Ok(Self {
-            media_type: object.take_optional("mediaType")?,
-            manifests: object.take_required("manifests")?,
-        })
+edgerun_json::impl_json_struct! {
+    HistoryEntry {
+        required {}
+        optional {
+            created: "created" => String,
+            created_by: "created_by" => String,
+            comment: "comment" => String,
+            empty_layer: "empty_layer" => bool,
+        }
     }
 }
 
-impl FromJson for super::manifest::ManifestDescriptor {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("manifest descriptor")?;
-        Ok(Self {
-            media_type: object.take_optional("mediaType")?,
-            digest: object.take_required("digest")?,
-            size: object.take_required("size")?,
-            platform: object.take_optional("platform")?,
-        })
+edgerun_json::impl_json_struct! {
+    ImageIndex {
+        required { manifests: "manifests" => Vec<super::manifest::ManifestDescriptor> }
+        optional { media_type: "mediaType" => String }
     }
 }
 
-impl FromJson for super::manifest::PlatformDescriptor {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("platform")?;
-        Ok(Self {
-            architecture: object.take_optional("architecture")?,
-            os: object.take_optional("os")?,
-        })
+edgerun_json::impl_json_struct! {
+    super::manifest::ManifestDescriptor {
+        required {
+            digest: "digest" => String,
+            size: "size" => u64,
+        }
+        optional {
+            media_type: "mediaType" => String,
+            platform: "platform" => super::manifest::PlatformDescriptor,
+        }
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    super::manifest::PlatformDescriptor {
+        required {}
+        optional {
+            architecture: "architecture" => String,
+            os: "os" => String,
+        }
     }
 }
 
@@ -198,14 +208,13 @@ fn take_config_digest(object: &mut Map) -> Result<String, JsonValueError> {
     }
 }
 
-impl FromJson for super::manifest::LayerDescriptor {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("layer descriptor")?;
-        Ok(Self {
-            media_type: object.take_optional("mediaType")?,
-            digest: object.take_required("digest")?,
-            size: object.take_required("size")?,
-        })
+edgerun_json::impl_json_struct! {
+    super::manifest::LayerDescriptor {
+        required {
+            digest: "digest" => String,
+            size: "size" => u64,
+        }
+        optional { media_type: "mediaType" => String }
     }
 }
 

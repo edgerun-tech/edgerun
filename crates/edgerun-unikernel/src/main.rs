@@ -1768,6 +1768,10 @@ fn find_initialized_bare_nic() -> Option<BareNic> {
 #[cfg(target_os = "none")]
 #[panic_handler]
 unsafe fn panic(_info: &core::panic::PanicInfo) -> ! {
+    #[cfg(target_arch = "xtensa")]
+    {
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"PANIC\n");
+    }
     loop {
         #[cfg(target_arch = "x86_64")]
         core::arch::asm!("hlt");
@@ -1789,72 +1793,22 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 pub unsafe extern "C" fn kernel_main() -> ! {
     unsafe {
-        xtensa_disable_watchdogs();
-        let mut i = 0;
-        while i < 1_000_000 {
-            core::arch::asm!("nop");
-            i += 1;
-        }
-        xtensa_usb_serial_write_rust_banner();
+        edgerun_platform::arch::xtensa::esp32s3_disable_watchdogs();
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_init();
     }
+    rt::timer::set_now(0);
+    rt::log::log(1, "Starting edgerun unikernel on Xtensa");
+    rt::log::init_serial_logger();
+    rt::log::info!("Xtensa formatted logger online");
 
     loop {
-        unsafe {
-            xtensa_usb_serial_write_byte(b'.');
-        }
         let mut i = 0;
-        while i < 10_000_000 {
+        while i < 50_000_000 {
             core::arch::asm!("nop");
             i += 1;
         }
+        rt::log::info!("Xtensa idle heartbeat");
     }
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-unsafe fn xtensa_usb_serial_write_byte(byte: u8) {
-    const USB_EP1: *mut u32 = 0x6003_8000 as *mut u32;
-    const USB_EP1_CONF: *mut u32 = 0x6003_8004 as *mut u32;
-
-    core::ptr::write_volatile(USB_EP1, byte as u32);
-    let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
-    core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | 1);
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-unsafe fn xtensa_usb_serial_write_rust_banner() {
-    const USB_EP1: *mut u32 = 0x6003_8000 as *mut u32;
-    const USB_EP1_CONF: *mut u32 = 0x6003_8004 as *mut u32;
-
-    core::ptr::write_volatile(USB_EP1, b'R' as u32);
-    core::ptr::write_volatile(USB_EP1, b'U' as u32);
-    core::ptr::write_volatile(USB_EP1, b'S' as u32);
-    core::ptr::write_volatile(USB_EP1, b'T' as u32);
-    core::ptr::write_volatile(USB_EP1, b'\n' as u32);
-    let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
-    core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | 1);
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-unsafe fn xtensa_disable_watchdogs() {
-    const WDT_WKEY: u32 = 0x50D8_3AA1;
-    const TIMG0_WDT_CONFIG0: *mut u32 = (0x6001_F000 + 0x48) as *mut u32;
-    const TIMG0_WDT_WPROTECT: *mut u32 = (0x6001_F000 + 0x64) as *mut u32;
-    const TIMG1_WDT_CONFIG0: *mut u32 = (0x6002_0000 + 0x48) as *mut u32;
-    const TIMG1_WDT_WPROTECT: *mut u32 = (0x6002_0000 + 0x64) as *mut u32;
-    const RTC_WDT_CONFIG0: *mut u32 = (0x6000_8000 + 0x98) as *mut u32;
-    const RTC_WDT_WPROTECT: *mut u32 = (0x6000_8000 + 0xb0) as *mut u32;
-
-    core::ptr::write_volatile(TIMG0_WDT_WPROTECT, WDT_WKEY);
-    core::ptr::write_volatile(TIMG0_WDT_CONFIG0, 0);
-    core::ptr::write_volatile(TIMG0_WDT_WPROTECT, 0);
-
-    core::ptr::write_volatile(TIMG1_WDT_WPROTECT, WDT_WKEY);
-    core::ptr::write_volatile(TIMG1_WDT_CONFIG0, 0);
-    core::ptr::write_volatile(TIMG1_WDT_WPROTECT, 0);
-
-    core::ptr::write_volatile(RTC_WDT_WPROTECT, WDT_WKEY);
-    core::ptr::write_volatile(RTC_WDT_CONFIG0, 0);
-    core::ptr::write_volatile(RTC_WDT_WPROTECT, 0);
 }
 
 #[no_mangle]

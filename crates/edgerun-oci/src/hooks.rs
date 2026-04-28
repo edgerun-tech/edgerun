@@ -24,7 +24,6 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::spec::OciHook;
-use edgerun_json::{JsonValue, Map};
 
 /// Container state passed to hooks via stdin.
 #[derive(Debug, Clone)]
@@ -39,23 +38,21 @@ pub struct ContainerState {
 
 impl ContainerState {
     pub fn to_json(&self) -> String {
-        edgerun_json::to_string(&self.to_json_value()).unwrap_or_default()
+        edgerun_json::to_json_string(self).unwrap_or_default()
     }
+}
 
-    fn to_json_value(&self) -> JsonValue {
-        let annotations = Map::from_iter(
-            self.annotations
-                .iter()
-                .map(|(key, value)| (key.as_str(), value.as_str())),
-        );
-        let mut object = Map::new();
-        object.push_field("ociVersion", self.version.as_str());
-        object.push_field("id", self.id.as_str());
-        object.push_field("status", self.status.as_str());
-        object.push_field("pid", self.pid);
-        object.push_field("bundle", self.bundle.as_str());
-        object.push_field("annotations", JsonValue::Object(annotations));
-        JsonValue::Object(object)
+edgerun_json::impl_json_struct! {
+    ContainerState {
+        required {
+            version: "ociVersion" => String,
+            id: "id" => String,
+            status: "status" => String,
+            pid: "pid" => u32,
+            bundle: "bundle" => String,
+            annotations: "annotations" => BTreeMap<String, String>,
+        }
+        optional {}
     }
 }
 

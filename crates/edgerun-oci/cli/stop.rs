@@ -5,8 +5,8 @@ use std::io;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::cli::is_process_alive;
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
+use crate::cli::{inline_value, invalid_input, is_process_alive, CliArgs};
 use crate::state::{load_state, save_state};
 
 pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -48,38 +48,30 @@ pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
 fn parse_stop_args(args: &[String]) -> io::Result<(u64, &str)> {
     let mut timeout = 10u64;
     let mut id = None;
-    let mut i = 0usize;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-t" | "--time" if i + 1 < args.len() => {
-                timeout = args[i + 1].parse::<u64>().map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "stop timeout must be seconds")
-                })?;
-                i += 2;
+    let mut args = CliArgs::new(args);
+    while let Some(arg) = args.next() {
+        match arg {
+            "-t" | "--time" => {
+                timeout = parse_timeout(args.value("stop timeout must be seconds")?)?;
             }
-            arg if arg.starts_with("--time=") => {
-                timeout = arg["--time=".len()..].parse::<u64>().map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "stop timeout must be seconds")
-                })?;
-                i += 1;
+            arg if inline_value(arg, "--time").is_some() => {
+                timeout = parse_timeout(inline_value(arg, "--time").unwrap())?;
             }
             arg if id.is_none() => {
                 id = Some(arg);
-                i += 1;
             }
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Usage: ert stop [-t seconds] <container-id>",
-                ))
+                return Err(invalid_input("Usage: ert stop [-t seconds] <container-id>"));
             }
         }
     }
 
-    id.map(|id| (timeout, id)).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Usage: ert stop [-t seconds] <container-id>",
-        )
-    })
+    id.map(|id| (timeout, id))
+        .ok_or_else(|| invalid_input("Usage: ert stop [-t seconds] <container-id>"))
+}
+
+fn parse_timeout(value: &str) -> io::Result<u64> {
+    value
+        .parse::<u64>()
+        .map_err(|_| invalid_input("stop timeout must be seconds"))
 }

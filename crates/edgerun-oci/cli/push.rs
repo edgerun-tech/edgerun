@@ -3,7 +3,9 @@
 use crate::prelude::*;
 use std::path::PathBuf;
 
-use crate::cli::{default_images_dir, resolve_registry_auth, GlobalOpts};
+use crate::cli::{
+    default_images_dir, inline_value, invalid_input, resolve_registry_auth, CliArgs, GlobalOpts,
+};
 use crate::ImageRef;
 use crate::RegistryClient;
 
@@ -43,39 +45,25 @@ fn parse_push_args(args: &[String]) -> std::io::Result<(String, PathBuf)> {
     let mut images_dir = default_images_dir();
     let mut image: Option<String> = None;
 
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
+    let mut args = CliArgs::new(args);
+    while let Some(arg) = args.next() {
+        match arg {
             "--images-dir" => {
-                if i + 1 < args.len() {
-                    images_dir = PathBuf::from(&args[i + 1]);
-                    i += 2;
-                } else {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "--images-dir requires a path",
-                    ));
-                }
+                images_dir = PathBuf::from(args.value("--images-dir requires a path")?);
             }
-            _ if !args[i].starts_with('-') => {
-                image = Some(args[i].clone());
-                i += 1;
+            arg if inline_value(arg, "--images-dir").is_some() => {
+                images_dir = PathBuf::from(inline_value(arg, "--images-dir").unwrap());
+            }
+            arg if !arg.starts_with('-') => {
+                image = Some(arg.to_string());
             }
             _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("unknown flag: {}", args[i]),
-                ));
+                return Err(invalid_input(format!("unknown flag: {}", arg)));
             }
         }
     }
 
-    let image = image.ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Usage: ert push [--images-dir DIR] <image>",
-        )
-    })?;
+    let image = image.ok_or_else(|| invalid_input("Usage: ert push [--images-dir DIR] <image>"))?;
 
     Ok((image, images_dir))
 }

@@ -172,3 +172,83 @@ pub fn timer_init() {
 pub fn tls() -> usize {
     dispatch_handler()
 }
+
+const USB_EP1: *mut u32 = 0x6003_8000 as *mut u32;
+const USB_EP1_CONF: *mut u32 = 0x6003_8004 as *mut u32;
+const USB_CONF0: *mut u32 = 0x6003_8018 as *mut u32;
+const SYSTEM_PERIP_CLK_EN1: *mut u32 = 0x600c_001c as *mut u32;
+const SYSTEM_PERIP_RST_EN1: *mut u32 = 0x600c_0024 as *mut u32;
+const USB_DEVICE_CLK_RST_BIT: u32 = 1 << 10;
+const USB_CONF0_DEFAULT: u32 = 0x4200;
+const USB_EP1_CONF_WR_DONE: u32 = 1 << 0;
+const USB_EP1_CONF_DATA_FREE: u32 = 1 << 1;
+const WDT_WKEY: u32 = 0x50D8_3AA1;
+
+const TIMG0_WDT_CONFIG0: *mut u32 = (0x6001_F000 + 0x48) as *mut u32;
+const TIMG0_WDT_WPROTECT: *mut u32 = (0x6001_F000 + 0x64) as *mut u32;
+const TIMG1_WDT_CONFIG0: *mut u32 = (0x6002_0000 + 0x48) as *mut u32;
+const TIMG1_WDT_WPROTECT: *mut u32 = (0x6002_0000 + 0x64) as *mut u32;
+const RTC_WDT_CONFIG0: *mut u32 = (0x6000_8000 + 0x98) as *mut u32;
+const RTC_WDT_WPROTECT: *mut u32 = (0x6000_8000 + 0xb0) as *mut u32;
+
+/// Enable the ESP32-S3 USB Serial/JTAG peripheral without resetting the USB link.
+///
+/// The ROM/second-stage bootloader already leaves this peripheral usable on
+/// USB-connected boards. We only make the clock/reset state explicit and keep
+/// the default internal-pad configuration.
+#[inline]
+pub unsafe fn esp32s3_usb_serial_jtag_init() {
+    let clk = core::ptr::read_volatile(SYSTEM_PERIP_CLK_EN1);
+    core::ptr::write_volatile(SYSTEM_PERIP_CLK_EN1, clk | USB_DEVICE_CLK_RST_BIT);
+
+    let rst = core::ptr::read_volatile(SYSTEM_PERIP_RST_EN1);
+    core::ptr::write_volatile(SYSTEM_PERIP_RST_EN1, rst & !USB_DEVICE_CLK_RST_BIT);
+
+    core::ptr::write_volatile(USB_CONF0, USB_CONF0_DEFAULT);
+}
+
+/// Write one byte to ESP32-S3 USB Serial/JTAG.
+#[inline]
+pub unsafe fn esp32s3_usb_serial_jtag_write_byte(byte: u8) {
+    wait_usb_serial_jtag_data_free();
+    core::ptr::write_volatile(USB_EP1, byte as u32);
+    let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
+    core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | USB_EP1_CONF_WR_DONE);
+}
+
+/// Write bytes to ESP32-S3 USB Serial/JTAG in endpoint-sized chunks.
+#[inline]
+pub unsafe fn esp32s3_usb_serial_jtag_write(bytes: &[u8]) {
+    for chunk in bytes.chunks(64) {
+        wait_usb_serial_jtag_data_free();
+        for &byte in chunk {
+            core::ptr::write_volatile(USB_EP1, byte as u32);
+        }
+        let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
+        core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | USB_EP1_CONF_WR_DONE);
+    }
+}
+
+#[inline]
+unsafe fn wait_usb_serial_jtag_data_free() {
+    let mut spins = 100_000;
+    while core::ptr::read_volatile(USB_EP1_CONF) & USB_EP1_CONF_DATA_FREE == 0 && spins != 0 {
+        core::arch::asm!("nop");
+        spins -= 1;
+    }
+}
+
+/// Disable ESP32-S3 watchdogs left armed by the ROM/bootloader.
+#[inline]
+pub unsafe fn esp32s3_disable_watchdogs() {
+    disable_wdt(TIMG0_WDT_WPROTECT, TIMG0_WDT_CONFIG0);
+    disable_wdt(TIMG1_WDT_WPROTECT, TIMG1_WDT_CONFIG0);
+    disable_wdt(RTC_WDT_WPROTECT, RTC_WDT_CONFIG0);
+}
+
+#[inline]
+unsafe fn disable_wdt(wprotect: *mut u32, config0: *mut u32) {
+    core::ptr::write_volatile(wprotect, WDT_WKEY);
+    core::ptr::write_volatile(config0, 0);
+    core::ptr::write_volatile(wprotect, 0);
+}

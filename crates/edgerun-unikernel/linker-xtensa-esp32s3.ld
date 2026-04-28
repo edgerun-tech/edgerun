@@ -26,7 +26,6 @@ SECTIONS
 
     .rodata : ALIGN(4) {
         KEEP(*(.flash.appdesc))
-        *(.rodata .rodata.*)
     } > drom_seg
 
     .irom_dummy : ALIGN(4) {
@@ -34,6 +33,7 @@ SECTIONS
     } > irom_seg
 
     .data : ALIGN(4) {
+        *(.rodata .rodata.*)
         *(.data .data.*)
     } > dram_seg
 

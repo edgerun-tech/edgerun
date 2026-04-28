@@ -62,31 +62,9 @@ fn serial_write_str(s: &str) {
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn serial_write_str(s: &str) {
-    const UART0_FIFO: *mut u32 = 0x6000_0000 as *mut u32;
-    const UART0_STATUS: *const u32 = 0x6000_001c as *const u32;
-    const UART_FIFO_LEN: u32 = 128;
-    const USB_EP1: *mut u32 = 0x6003_8000 as *mut u32;
-    const USB_EP1_CONF: *mut u32 = 0x6003_8004 as *mut u32;
-    const USB_EP1_CONF_WR_DONE: u32 = 1 << 0;
-    const USB_EP1_CONF_DATA_FREE: u32 = 1 << 1;
-
     for chunk in s.as_bytes().chunks(64) {
-        let mut usb_bytes = 0;
-        for &byte in chunk {
-            unsafe {
-                if core::ptr::read_volatile(USB_EP1_CONF) & USB_EP1_CONF_DATA_FREE != 0 {
-                    core::ptr::write_volatile(USB_EP1, byte as u32);
-                    usb_bytes += 1;
-                }
-                while ((core::ptr::read_volatile(UART0_STATUS) >> 16) & 0x03ff) >= UART_FIFO_LEN {}
-                core::ptr::write_volatile(UART0_FIFO, byte as u32);
-            }
-        }
-        if usb_bytes != 0 {
-            unsafe {
-                let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
-                core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | USB_EP1_CONF_WR_DONE);
-            }
+        unsafe {
+            edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(chunk);
         }
     }
 }

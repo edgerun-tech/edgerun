@@ -82,7 +82,8 @@ pub fn state_root_dir() -> PathBuf {
     PathBuf::from(base.as_ref())
 }
 
-use edgerun_json::{FromJson, JsonValue, JsonValueError, Map, ToJson};
+use alloc::collections::BTreeMap;
+use edgerun_json::ToJson;
 
 /// Container state matching the OCI runtime spec JSON format.
 #[derive(Debug, Clone)]
@@ -92,7 +93,7 @@ pub struct ContainerState {
     pub status: String, // "creating" | "created" | "running" | "stopped"
     pub pid: Option<u32>,
     pub bundle: String,
-    pub annotations: Option<alloc::collections::BTreeMap<String, String>>,
+    pub annotations: Option<BTreeMap<String, String>>,
 }
 
 /// Return the state directory for a container.
@@ -145,38 +146,18 @@ pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
     edgerun_json::from_json_str(data).string_err()
 }
 
-impl ToJson for ContainerState {
-    fn to_json(&self) -> JsonValue {
-        let mut fields = Map::new();
-        fields.push_field("ociVersion", self.oci_version.as_str());
-        fields.push_field("id", self.id.as_str());
-        fields.push_field("status", self.status.as_str());
-        if let Some(pid) = self.pid {
-            fields.push_field("pid", pid);
+edgerun_json::impl_json_struct! {
+    ContainerState {
+        required {
+            oci_version: "ociVersion" => String,
+            id: "id" => String,
+            status: "status" => String,
+            bundle: "bundle" => String,
         }
-        fields.push_field("bundle", self.bundle.as_str());
-        if let Some(annotations) = &self.annotations {
-            fields.push_field("annotations", annotations.to_json());
+        optional {
+            pid: "pid" => u32,
+            annotations: "annotations" => BTreeMap<String, String>,
         }
-        JsonValue::Object(fields)
-    }
-}
-
-impl FromJson for ContainerState {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("container state")?;
-        let pid = match object.remove("pid") {
-            Some(JsonValue::Null) | None => None,
-            Some(value) => Some(u32::from_json(value)?),
-        };
-        Ok(Self {
-            oci_version: object.take_required("ociVersion")?,
-            id: object.take_required("id")?,
-            status: object.take_required("status")?,
-            pid,
-            bundle: object.take_required("bundle")?,
-            annotations: object.take_optional("annotations")?,
-        })
     }
 }
 

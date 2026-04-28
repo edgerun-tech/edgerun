@@ -4,7 +4,7 @@ use crate::prelude::*;
 use std::io;
 use std::path::PathBuf;
 
-use crate::cli::default_images_dir;
+use crate::cli::{default_images_dir, inline_value, invalid_input, CliArgs};
 use crate::state::state_root_dir;
 use crate::ImageRef;
 
@@ -40,32 +40,29 @@ fn parse_rmi_args(args: &[String]) -> io::Result<(String, PathBuf, bool)> {
     let mut images_dir = default_images_dir();
     let mut force = false;
     let mut image = None;
-    let mut i = 0usize;
-    while i < args.len() {
-        match args[i].as_str() {
+    let mut args = CliArgs::new(args);
+    while let Some(arg) = args.next() {
+        match arg {
             "--force" | "-f" => {
                 force = true;
-                i += 1;
             }
-            "--images-dir" if i + 1 < args.len() => {
-                images_dir = PathBuf::from(&args[i + 1]);
-                i += 2;
+            "--images-dir" => {
+                images_dir = PathBuf::from(args.value("--images-dir requires a path")?);
             }
-            _ if !args[i].starts_with('-') && image.is_none() => {
-                image = Some(args[i].clone());
-                i += 1;
+            arg if inline_value(arg, "--images-dir").is_some() => {
+                images_dir = PathBuf::from(inline_value(arg, "--images-dir").unwrap());
+            }
+            arg if !arg.starts_with('-') && image.is_none() => {
+                image = Some(arg.to_string());
             }
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Usage: ert rmi [--images-dir DIR] <image>",
-                ))
+                return Err(invalid_input("Usage: ert rmi [--images-dir DIR] <image>"));
             }
         }
     }
     image
         .map(|image| (image, images_dir, force))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "image is required"))
+        .ok_or_else(|| invalid_input("image is required"))
 }
 
 fn referencing_container(bundle: &std::path::Path) -> io::Result<Option<String>> {

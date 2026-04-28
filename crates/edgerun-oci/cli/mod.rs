@@ -58,6 +58,142 @@ pub use registry_logout::cmd_logout;
 pub use rmi::cmd_rmi;
 pub use run::cmd_run;
 
+type CommandHandler = fn(&GlobalOpts, &[String]) -> io::Result<()>;
+
+struct CommandSpec {
+    name: &'static str,
+    handler: CommandHandler,
+    container: bool,
+}
+
+const COMMANDS: &[CommandSpec] = &[
+    CommandSpec {
+        name: "create",
+        handler: cmd_create,
+        container: true,
+    },
+    CommandSpec {
+        name: "start",
+        handler: cmd_start,
+        container: true,
+    },
+    CommandSpec {
+        name: "stop",
+        handler: cmd_stop,
+        container: true,
+    },
+    CommandSpec {
+        name: "state",
+        handler: cmd_state,
+        container: true,
+    },
+    CommandSpec {
+        name: "inspect",
+        handler: cmd_inspect,
+        container: true,
+    },
+    CommandSpec {
+        name: "kill",
+        handler: cmd_kill,
+        container: true,
+    },
+    CommandSpec {
+        name: "logs",
+        handler: cmd_logs,
+        container: true,
+    },
+    CommandSpec {
+        name: "delete",
+        handler: cmd_delete,
+        container: true,
+    },
+    CommandSpec {
+        name: "rm",
+        handler: cmd_delete,
+        container: true,
+    },
+    CommandSpec {
+        name: "exec",
+        handler: cmd_exec,
+        container: true,
+    },
+    CommandSpec {
+        name: "update",
+        handler: cmd_update,
+        container: true,
+    },
+    CommandSpec {
+        name: "pause",
+        handler: cmd_pause,
+        container: true,
+    },
+    CommandSpec {
+        name: "resume",
+        handler: cmd_resume,
+        container: true,
+    },
+    CommandSpec {
+        name: "checkpoint",
+        handler: cmd_checkpoint,
+        container: true,
+    },
+    CommandSpec {
+        name: "restore",
+        handler: cmd_restore,
+        container: true,
+    },
+    CommandSpec {
+        name: "events",
+        handler: cmd_events,
+        container: true,
+    },
+    CommandSpec {
+        name: "ps",
+        handler: cmd_ps,
+        container: true,
+    },
+    CommandSpec {
+        name: "features",
+        handler: cmd_features,
+        container: false,
+    },
+    CommandSpec {
+        name: "spec",
+        handler: cmd_spec,
+        container: false,
+    },
+    CommandSpec {
+        name: "pull",
+        handler: cmd_pull,
+        container: false,
+    },
+    CommandSpec {
+        name: "push",
+        handler: cmd_push,
+        container: false,
+    },
+    CommandSpec {
+        name: "images",
+        handler: cmd_images,
+        container: false,
+    },
+    CommandSpec {
+        name: "rmi",
+        handler: cmd_rmi,
+        container: false,
+    },
+    CommandSpec {
+        name: "run",
+        handler: cmd_run,
+        container: true,
+    },
+    CommandSpec {
+        name: "registry",
+        handler: dispatch_registry_command,
+        container: false,
+    },
+];
+
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub fn default_images_dir() -> std::path::PathBuf {
     edgerun_data_dir().join("images")
@@ -143,6 +279,118 @@ pub(crate) fn load_runtime_or_bundle_spec(id: &str, bundle: &str) -> Option<crat
         .or_else(|| load_bundle_spec(bundle).ok())
 }
 
+pub(crate) fn invalid_input(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, message.into())
+}
+
+pub(crate) struct CliArgs<'a> {
+    args: &'a [String],
+    index: usize,
+}
+
+impl<'a> CliArgs<'a> {
+    pub(crate) fn new(args: &'a [String]) -> Self {
+        Self { args, index: 0 }
+    }
+
+    pub(crate) fn next(&mut self) -> Option<&'a str> {
+        let arg = self.args.get(self.index)?;
+        self.index += 1;
+        Some(arg.as_str())
+    }
+
+    pub(crate) fn value(&mut self, message: &'static str) -> io::Result<&'a str> {
+        self.next().ok_or_else(|| invalid_input(message))
+    }
+}
+
+pub(crate) fn inline_value<'a>(arg: &'a str, flag: &str) -> Option<&'a str> {
+    arg.strip_prefix(flag)?.strip_prefix('=')
+}
+
+fn command_spec(command: &str) -> Option<&'static CommandSpec> {
+    COMMANDS.iter().find(|candidate| candidate.name == command)
+}
+
+pub fn dispatch_command(opts: &GlobalOpts, command: &str, args: &[String]) -> io::Result<()> {
+    let spec = command_spec(command).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("unknown command: {command}"),
+        )
+    })?;
+    (spec.handler)(opts, args)
+}
+
+pub fn is_container_command(command: &str) -> bool {
+    command_spec(command).is_some_and(|spec| spec.container)
+}
+
+pub fn first_command(args: &[String]) -> Option<&str> {
+    let mut i = 0usize;
+    while i < args.len() {
+        let arg = args[i].as_str();
+        if global_option_takes_value(arg) {
+            i = i.saturating_add(2);
+            continue;
+        }
+        if global_option_inline_value(arg) || arg.starts_with('-') {
+            i += 1;
+            continue;
+        }
+        return Some(arg);
+    }
+    None
+}
+
+fn dispatch_registry_command(opts: &GlobalOpts, cmd_args: &[String]) -> io::Result<()> {
+    let Some((subcommand, sub_args)) = cmd_args.split_first() else {
+        eprintln!("Usage: ert registry <subcommand> [options]");
+        eprintln!("Subcommands: login, logout");
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "registry subcommand required",
+        ));
+    };
+
+    match subcommand.as_str() {
+        "login" => cmd_login(opts, sub_args),
+        "logout" => cmd_logout(opts, sub_args),
+        _ => {
+            eprintln!("Unknown registry subcommand: {}", subcommand);
+            eprintln!("Available: login, logout");
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("unknown registry subcommand: {}", subcommand),
+            ))
+        }
+    }
+}
+
+fn global_option_takes_value(arg: &str) -> bool {
+    matches!(arg, "--bundle" | "--pid-file" | "--root")
+}
+
+fn global_option_inline_value(arg: &str) -> bool {
+    arg.starts_with("--bundle=") || arg.starts_with("--pid-file=") || arg.starts_with("--root=")
+}
+
+fn global_option_value<'a>(arg: &'a str, next: Option<&'a String>) -> Option<Option<&'a str>> {
+    if global_option_takes_value(arg) {
+        return Some(next.map(String::as_str));
+    }
+    if let Some(value) = arg.strip_prefix("--bundle=") {
+        return Some(Some(value));
+    }
+    if let Some(value) = arg.strip_prefix("--pid-file=") {
+        return Some(Some(value));
+    }
+    if let Some(value) = arg.strip_prefix("--root=") {
+        return Some(Some(value));
+    }
+    None
+}
+
 /// Parse global options and identify the command from raw arguments.
 pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> {
     if args.is_empty() {
@@ -155,41 +403,28 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
     let mut found_command = false;
 
     while i < args.len() {
-        match args[i].as_str() {
-            "--bundle" => {
-                if i + 1 < args.len() {
-                    opts.bundle = Some(std::path::PathBuf::from(&args[i + 1]));
+        let arg = args[i].as_str();
+        match arg {
+            "--bundle" | "--pid-file" | "--root" => {
+                if let Some(value) = args.get(i + 1) {
+                    match arg {
+                        "--bundle" => opts.bundle = Some(std::path::PathBuf::from(value)),
+                        "--pid-file" => opts.pid_file = Some(std::path::PathBuf::from(value)),
+                        "--root" => opts.root = Some(std::path::PathBuf::from(value)),
+                        _ => {}
+                    }
                     i += 2;
                     continue;
-                } else {
-                    i += 1;
                 }
+                i += 1;
             }
             s if s.starts_with("--bundle=") => {
                 opts.bundle = Some(std::path::PathBuf::from(&s["--bundle=".len()..]));
                 i += 1;
             }
-            "--pid-file" => {
-                if i + 1 < args.len() {
-                    opts.pid_file = Some(std::path::PathBuf::from(&args[i + 1]));
-                    i += 2;
-                    continue;
-                } else {
-                    i += 1;
-                }
-            }
             s if s.starts_with("--pid-file=") => {
                 opts.pid_file = Some(std::path::PathBuf::from(&s["--pid-file=".len()..]));
                 i += 1;
-            }
-            "--root" => {
-                if i + 1 < args.len() {
-                    opts.root = Some(std::path::PathBuf::from(&args[i + 1]));
-                    i += 2;
-                    continue;
-                } else {
-                    i += 1;
-                }
             }
             s if s.starts_with("--root=") => {
                 opts.root = Some(std::path::PathBuf::from(&s["--root=".len()..]));
@@ -215,24 +450,18 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
     let command = args[cmd_idx].clone();
 
     let mut command_args = Vec::new();
-    for (j, arg) in args.iter().enumerate().skip(cmd_idx + 1) {
-        match arg.as_str() {
-            "--bundle" | "--pid-file" => {
-                continue;
-            }
-            _ => {
-                if j > 0 {
-                    let prev = &args[j - 1];
-                    if prev == "--bundle"
-                        || prev == "--pid-file"
-                        || prev.starts_with("--bundle=")
-                        || prev.starts_with("--pid-file=")
-                    {
-                        continue;
-                    }
-                }
-                command_args.push(arg.clone());
-            }
+    let mut j = cmd_idx + 1;
+    while j < args.len() {
+        let arg = args[j].as_str();
+        if let Some(value) = global_option_value(arg, args.get(j + 1)) {
+            j += if value.is_some() && global_option_takes_value(arg) {
+                2
+            } else {
+                1
+            };
+        } else {
+            command_args.push(args[j].clone());
+            j += 1;
         }
     }
 
@@ -379,5 +608,64 @@ pub fn resolve_registry_auth(registry: &str) -> std::io::Result<crate::RegistryA
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(crate::RegistryAuth::Anonymous),
         Err(_) => Ok(crate::RegistryAuth::Anonymous),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_args_strips_global_options_before_and_after_command() {
+        let parsed = parse_args(&args(&[
+            "--root",
+            "/tmp/state",
+            "run",
+            "alpine",
+            "--bundle=/tmp/bundle",
+            "--pid-file",
+            "/tmp/pid",
+            "echo",
+        ]))
+        .unwrap();
+
+        assert_eq!(parsed.1, "run");
+        assert_eq!(
+            parsed.0.root.unwrap(),
+            std::path::PathBuf::from("/tmp/state")
+        );
+        assert_eq!(
+            parsed.0.bundle.unwrap(),
+            std::path::PathBuf::from("/tmp/bundle")
+        );
+        assert_eq!(
+            parsed.0.pid_file.unwrap(),
+            std::path::PathBuf::from("/tmp/pid")
+        );
+        assert_eq!(parsed.2, args(&["alpine", "echo"]));
+    }
+
+    #[test]
+    fn first_command_uses_same_global_option_rules_as_parser() {
+        let values = args(&[
+            "--bundle",
+            "/tmp/bundle",
+            "--root=/tmp/state",
+            "create",
+            "container-id",
+        ]);
+        assert_eq!(first_command(&values), Some("create"));
+        assert!(is_container_command("create"));
+        assert!(!is_container_command("pull"));
+    }
+
+    #[test]
+    fn dispatch_unknown_command_reports_not_found() {
+        let err = dispatch_command(&GlobalOpts::default(), "nope", &[]).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
 }

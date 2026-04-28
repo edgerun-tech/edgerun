@@ -5,7 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::cli::default_images_dir;
+use crate::cli::{default_images_dir, inline_value, invalid_input, CliArgs};
 
 pub fn cmd_images(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     let (images_dir, json) = parse_images_args(args)?;
@@ -32,26 +32,28 @@ struct LocalImage {
 fn parse_images_args(args: &[String]) -> io::Result<(PathBuf, bool)> {
     let mut images_dir = default_images_dir();
     let mut json = false;
-    let mut i = 0usize;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--images-dir" if i + 1 < args.len() => {
-                images_dir = PathBuf::from(&args[i + 1]);
-                i += 2;
+    let mut args = CliArgs::new(args);
+    while let Some(arg) = args.next() {
+        match arg {
+            "--images-dir" => {
+                images_dir = PathBuf::from(args.value("--images-dir requires a path")?);
             }
-            "--format" if i + 1 < args.len() => {
-                json = args[i + 1] == "json";
-                i += 2;
+            "--format" => {
+                json = args.value("--format requires a value")? == "json";
+            }
+            arg if inline_value(arg, "--images-dir").is_some() => {
+                images_dir = PathBuf::from(inline_value(arg, "--images-dir").unwrap());
+            }
+            arg if inline_value(arg, "--format").is_some() => {
+                json = inline_value(arg, "--format").unwrap() == "json";
             }
             "--format=json" | "--json" => {
                 json = true;
-                i += 1;
             }
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
+                return Err(invalid_input(
                     "Usage: ert images [--images-dir DIR] [--format json]",
-                ))
+                ));
             }
         }
     }

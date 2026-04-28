@@ -6,6 +6,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::cli::{inline_value, invalid_input, CliArgs};
 use crate::state::{container_state_dir, load_state};
 
 pub fn cmd_logs(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -37,40 +38,27 @@ fn parse_logs_args(args: &[String]) -> io::Result<LogsArgs<'_>> {
     let mut follow = false;
     let mut tail = None;
     let mut id = None;
-    let mut i = 0usize;
-    while i < args.len() {
-        match args[i].as_str() {
+    let mut args = CliArgs::new(args);
+    while let Some(arg) = args.next() {
+        match arg {
             "-f" | "--follow" => follow = true,
-            "--tail" if i + 1 < args.len() => {
-                tail = Some(parse_tail(&args[i + 1])?);
-                i += 1;
-            }
             "--tail" => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "--tail requires a number",
+                tail = Some(parse_tail(args.value("--tail requires a number")?)?);
+            }
+            arg if inline_value(arg, "--tail").is_some() => {
+                tail = Some(parse_tail(inline_value(arg, "--tail").unwrap())?);
+            }
+            arg if id.is_none() => id = Some(arg),
+            _ => {
+                return Err(invalid_input(
+                    "Usage: ert logs [-f] [--tail N] <container-id>",
                 ));
             }
-            arg if arg.starts_with("--tail=") => {
-                tail = Some(parse_tail(&arg["--tail=".len()..])?);
-            }
-            _ if id.is_none() => id = Some(args[i].as_str()),
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Usage: ert logs [-f] [--tail N] <container-id>",
-                ))
-            }
         }
-        i += 1;
     }
 
-    id.map(|id| LogsArgs { follow, tail, id }).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Usage: ert logs [-f] [--tail N] <container-id>",
-        )
-    })
+    id.map(|id| LogsArgs { follow, tail, id })
+        .ok_or_else(|| invalid_input("Usage: ert logs [-f] [--tail N] <container-id>"))
 }
 
 fn parse_tail(value: &str) -> io::Result<usize> {

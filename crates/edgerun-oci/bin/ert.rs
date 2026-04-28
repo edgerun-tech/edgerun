@@ -2,7 +2,9 @@
 
 use std::os::raw::c_char;
 
-use edgerun_oci::cli::{self, parse_args, print_usage};
+use edgerun_oci::cli::{
+    dispatch_command, first_command, is_container_command, parse_args, print_usage,
+};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -30,113 +32,16 @@ fn main() {
         std::process::exit(1);
     };
 
-    let result = match command.as_str() {
-        // Container lifecycle
-        "create" => cli::cmd_create(&opts, &cmd_args),
-        "start" => cli::cmd_start(&opts, &cmd_args),
-        "stop" => cli::cmd_stop(&opts, &cmd_args),
-        "state" => cli::cmd_state(&opts, &cmd_args),
-        "inspect" => cli::cmd_inspect(&opts, &cmd_args),
-        "kill" => cli::cmd_kill(&opts, &cmd_args),
-        "logs" => cli::cmd_logs(&opts, &cmd_args),
-        "delete" => cli::cmd_delete(&opts, &cmd_args),
-        "rm" => cli::cmd_delete(&opts, &cmd_args),
-        "exec" => cli::cmd_exec(&opts, &cmd_args),
-        "update" => cli::cmd_update(&opts, &cmd_args),
-        "pause" => cli::cmd_pause(&opts, &cmd_args),
-        "resume" => cli::cmd_resume(&opts, &cmd_args),
-        "checkpoint" => cli::cmd_checkpoint(&opts, &cmd_args),
-        "restore" => cli::cmd_restore(&opts, &cmd_args),
-        "events" => cli::cmd_events(&opts, &cmd_args),
-        "ps" => cli::cmd_ps(&opts, &cmd_args),
-        "features" => cli::cmd_features(&opts, &cmd_args),
-        "spec" => cli::cmd_spec(&opts, &cmd_args),
-        // Registry
-        "pull" => cli::cmd_pull(&opts, &cmd_args),
-        "push" => cli::cmd_push(&opts, &cmd_args),
-        "images" => cli::cmd_images(&opts, &cmd_args),
-        "rmi" => cli::cmd_rmi(&opts, &cmd_args),
-        "run" => cli::cmd_run(&opts, &cmd_args),
-        "registry" => dispatch_registry_command(&opts, &cmd_args),
-        _ => {
+    let result = dispatch_command(&opts, &command, &cmd_args);
+
+    if let Err(e) = result {
+        if e.kind() == std::io::ErrorKind::NotFound {
             eprintln!("Unknown command: {}", command);
             print_usage();
             std::process::exit(127);
         }
-    };
-
-    if let Err(e) = result {
         eprintln!("ert: {}: {}", command, e);
         std::process::exit(1);
-    }
-}
-
-fn first_command(args: &[String]) -> Option<&str> {
-    let mut i = 0usize;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--bundle" | "--pid-file" | "--root" => i = i.saturating_add(2),
-            arg if arg.starts_with("--bundle=")
-                || arg.starts_with("--pid-file=")
-                || arg.starts_with("--root=") =>
-            {
-                i += 1
-            }
-            arg if arg.starts_with('-') => i += 1,
-            arg => return Some(arg),
-        }
-    }
-    None
-}
-
-fn is_container_command(command: &str) -> bool {
-    matches!(
-        command,
-        "create"
-            | "start"
-            | "stop"
-            | "exec"
-            | "delete"
-            | "rm"
-            | "kill"
-            | "pause"
-            | "resume"
-            | "update"
-            | "state"
-            | "inspect"
-            | "ps"
-            | "logs"
-            | "events"
-            | "checkpoint"
-            | "restore"
-            | "run"
-    )
-}
-
-fn dispatch_registry_command(_opts: &cli::GlobalOpts, cmd_args: &[String]) -> std::io::Result<()> {
-    if cmd_args.is_empty() {
-        eprintln!("Usage: ert registry <subcommand> [options]");
-        eprintln!("Subcommands: login, logout");
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "registry subcommand required",
-        ));
-    }
-
-    let subcommand = &cmd_args[0];
-    let sub_args = &cmd_args[1..];
-
-    match subcommand.as_str() {
-        "login" => cli::cmd_login(_opts, sub_args),
-        "logout" => cli::cmd_logout(_opts, sub_args),
-        _ => {
-            eprintln!("Unknown registry subcommand: {}", subcommand);
-            eprintln!("Available: login, logout");
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("unknown registry subcommand: {}", subcommand),
-            ))
-        }
     }
 }
 

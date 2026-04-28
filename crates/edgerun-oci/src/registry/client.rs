@@ -37,6 +37,74 @@ use edgerun_edgefs::EdgeFs;
 #[cfg(feature = "edgefs")]
 use edgerun_storage::BlockStorage;
 
+#[derive(Debug, Clone)]
+struct RegistryTokenResponse {
+    token: Option<String>,
+}
+
+edgerun_json::impl_json_struct! {
+    RegistryTokenResponse {
+        required {}
+        optional { token: ["token", "access_token"] => String }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PushManifestConfig {
+    media_type: String,
+    digest: String,
+    size: usize,
+}
+
+#[derive(Debug, Clone)]
+struct PushManifestLayer {
+    media_type: String,
+    digest: String,
+    size: usize,
+}
+
+#[derive(Debug, Clone)]
+struct PushManifest {
+    schema_version: u32,
+    media_type: String,
+    config: PushManifestConfig,
+    layers: Vec<PushManifestLayer>,
+}
+
+edgerun_json::impl_json_struct! {
+    PushManifestConfig {
+        required {
+            media_type: "mediaType" => String,
+            digest: "digest" => String,
+            size: "size" => usize,
+        }
+        optional {}
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    PushManifestLayer {
+        required {
+            media_type: "mediaType" => String,
+            digest: "digest" => String,
+            size: "size" => usize,
+        }
+        optional {}
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    PushManifest {
+        required {
+            schema_version: "schemaVersion" => u32,
+            media_type: "mediaType" => String,
+            config: "config" => PushManifestConfig,
+            layers: "layers" => Vec<PushManifestLayer>,
+        }
+        optional {}
+    }
+}
+
 /// An OCI image reference (e.g., `docker.io/library/alpine:latest`).
 #[derive(Clone, Debug)]
 pub struct ImageRef {
@@ -515,20 +583,9 @@ impl RegistryClient {
             ))
         })?;
 
-        self.token = if let edgerun_json::JsonValue::Object(fields) = &value {
-            fields
-                .iter()
-                .find(|(k, _)| k == "token" || k == "access_token")
-                .and_then(|(_, v)| {
-                    if let edgerun_json::JsonValue::String(s) = v {
-                        Some(s.clone())
-                    } else {
-                        None
-                    }
-                })
-        } else {
-            None
-        };
+        self.token = edgerun_json::from_json_value::<RegistryTokenResponse>(value)
+            .ok()
+            .and_then(|response| response.token);
 
         if self.token.is_some() {
             Ok(())
@@ -1083,20 +1140,20 @@ impl RegistryClient {
         )
         .await?;
 
-        let manifest = edgerun_json::to_string(&edgerun_json::json!({
-            "schemaVersion": 2,
-            "mediaType": "application/vnd.oci.image.manifest.v1+json",
-            "config": {
-                "mediaType": "application/vnd.oci.image.config.v1+json",
-                "digest": config_digest.as_str(),
-                "size": config_blob.len()
+        let manifest = edgerun_json::to_json_string(&PushManifest {
+            schema_version: 2,
+            media_type: "application/vnd.oci.image.manifest.v1+json".into(),
+            config: PushManifestConfig {
+                media_type: "application/vnd.oci.image.config.v1+json".into(),
+                digest: config_digest.clone(),
+                size: config_blob.len(),
             },
-            "layers": [{
-                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-                "digest": layer_digest.as_str(),
-                "size": layer_data.len()
-            }]
-        }))
+            layers: vec![PushManifestLayer {
+                media_type: "application/vnd.oci.image.layer.v1.tar+gzip".into(),
+                digest: layer_digest.clone(),
+                size: layer_data.len(),
+            }],
+        })
         .map_err(|error| RegistryError::ParseError(error.to_string()))?;
 
         self.push_manifest(

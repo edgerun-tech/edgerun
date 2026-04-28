@@ -6,6 +6,34 @@ use alloc::string::{String, ToString};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use std::path::PathBuf;
 
+#[cfg(all(feature = "std", not(target_os = "none")))]
+#[derive(Clone, Debug)]
+struct RegistryAuthConfig {
+    auths: Option<alloc::collections::BTreeMap<String, RegistryAuthEntry>>,
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+#[derive(Clone, Debug)]
+struct RegistryAuthEntry {
+    auth: Option<String>,
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+edgerun_json::impl_json_struct! {
+    RegistryAuthConfig {
+        required {}
+        optional { auths: "auths" => alloc::collections::BTreeMap<String, RegistryAuthEntry> }
+    }
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+edgerun_json::impl_json_struct! {
+    RegistryAuthEntry {
+        required {}
+        optional { auth: "auth" => String }
+    }
+}
+
 /// Authentication credentials for a registry.
 #[derive(Clone, Debug)]
 pub enum RegistryAuth {
@@ -34,15 +62,13 @@ pub enum RegistryAuth {
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub fn load_registry_auth(path: &std::path::Path) -> std::io::Result<RegistryAuth> {
     let data = std::fs::read_to_string(path)?;
-    let value = edgerun_json::parse_json(&data)
+    let config: RegistryAuthConfig = edgerun_json::from_json_str(&data)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string()))?;
-    if let Some(auths) = value
-        .as_object()
-        .and_then(|object| object.get_object("auths"))
-    {
-        for (_, entry) in auths.fields() {
-            if let Some(auth) = entry.as_object().and_then(|object| object.get_str("auth")) {
-                if let Some((username, password)) = decode_basic_auth(auth) {
+
+    if let Some(auths) = config.auths {
+        for entry in auths.into_values() {
+            if let Some(auth) = entry.auth {
+                if let Some((username, password)) = decode_basic_auth(&auth) {
                     return Ok(RegistryAuth::Basic { username, password });
                 }
             }
