@@ -367,6 +367,11 @@ impl QuicConnection {
 
         let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
+        let pn_offset = packet::get_packet_number_offset(&full_packet, self.transport.remote_cid.len())?;
+        if let Some(ref prot) = self.initial_protection {
+            prot.protect_header(&mut full_packet, pn_offset, pkt.header.pn_length)
+                .map_err(|e| format!("Initial header protection failed: {}", e))?;
+        }
 
         let addr: SocketAddr = self
             .server_addr
@@ -421,6 +426,11 @@ impl QuicConnection {
 
         let mut full_packet = aad;
         full_packet.extend_from_slice(&send_bytes);
+        let pn_offset = packet::get_packet_number_offset(&full_packet, self.transport.remote_cid.len())?;
+        if let Some(ref prot) = self.hs_protection {
+            prot.protect_header(&mut full_packet, pn_offset, pkt.header.pn_length)
+                .map_err(|e| format!("Handshake header protection failed: {}", e))?;
+        }
 
         let addr: SocketAddr = self
             .server_addr
@@ -453,7 +463,9 @@ impl QuicConnection {
         self.recv_buffer = buf[..n].to_vec();
         self.recv_offset = 0;
 
-        let (packet, _consumed) = QuicPacket::from_bytes(&self.recv_buffer)
+        let recv_buffer = self.recv_buffer.clone();
+        let packet_bytes = self.unprotect_received_header(&recv_buffer)?;
+        let (packet, _consumed) = QuicPacket::from_bytes(&packet_bytes)
             .map_err(|e| format!("Packet parse error: {}", e))?;
 
         Ok(packet)
@@ -744,6 +756,10 @@ impl QuicConnection {
                 .map_err(|e| format!("Packet protection failed: {}", e))?;
             let mut packet_bytes = aad;
             packet_bytes.extend_from_slice(&encrypted);
+            let pn_offset =
+                packet::get_packet_number_offset(&packet_bytes, self.transport.remote_cid.len())?;
+            prot.protect_header(&mut packet_bytes, pn_offset, packet.header.pn_length)
+                .map_err(|e| format!("Header protection failed: {}", e))?;
             packet_bytes
         } else {
             packet.to_bytes()
@@ -835,13 +851,48 @@ impl QuicConnection {
         self.sent_packets_buffer.clear();
     }
 
+    fn unprotect_received_header(&self, data: &[u8]) -> Result<Vec<u8>, String> {
+        if data.is_empty() {
+            return Err("Empty packet".to_string());
+        }
+
+        let packet_type =
+            PacketType::from_byte(data[0]).ok_or_else(|| "Invalid packet type".to_string())?;
+        if packet_type == PacketType::Retry {
+            return Ok(data.to_vec());
+        }
+
+        let mut packet = data.to_vec();
+        let pn_offset = packet::get_packet_number_offset(&packet, self.transport.local_cid.len())?;
+
+        let protection = match packet_type {
+            PacketType::Initial => self.initial_protection.as_ref(),
+            PacketType::Handshake => self.hs_protection.as_ref(),
+            PacketType::ZeroRtt => self.early_data_protection.as_ref(),
+            PacketType::OneRtt => self.protection.as_ref(),
+            PacketType::Retry => None,
+        };
+
+        if let Some(protection) = protection {
+            protection
+                .unprotect_header(&mut packet, pn_offset)
+                .map_err(|e| format!("Header protection removal failed: {}", e))?;
+        }
+
+        Ok(packet)
+    }
+
     /// Parse and decrypt packets from the receive buffer.
     /// Returns the first STREAM frame found.
     fn recv_from_buffer(&mut self) -> Result<Option<(u64, Vec<u8>, bool)>, String> {
         while self.recv_offset < self.recv_buffer.len() {
-            let data = &self.recv_buffer[self.recv_offset..];
+            let data = self.recv_buffer[self.recv_offset..].to_vec();
+            let packet_bytes = self.unprotect_received_header(&data)?;
 
-            match QuicPacket::from_bytes_with_short_dcid_len(data, self.transport.local_cid.len()) {
+            match QuicPacket::from_bytes_with_short_dcid_len(
+                &packet_bytes,
+                self.transport.local_cid.len(),
+            ) {
                 Ok((mut packet, consumed)) => {
                     self.recv_offset += consumed;
 
@@ -1004,6 +1055,10 @@ impl QuicConnection {
 
             let mut packet_bytes = aad;
             packet_bytes.extend_from_slice(&encrypted);
+            let pn_offset =
+                packet::get_packet_number_offset(&packet_bytes, self.transport.remote_cid.len())?;
+            prot.protect_header(&mut packet_bytes, pn_offset, packet.header.pn_length)
+                .map_err(|e| format!("0-RTT header protection failed: {}", e))?;
 
             let addr: SocketAddr = self.server_addr.parse().unwrap_or_else(|_| {
                 format!("{}:443", self.server_addr)
@@ -1145,6 +1200,9 @@ impl QuicConnection {
         let next_iv = self
             .cipher_suite_hash
             .expand_label(&next_secret, "quic iv", &[], iv_len);
+        let next_hp = self
+            .cipher_suite_hash
+            .quic_expand_label(&next_secret, "hp", &[], key_len);
 
         // Store old protection for in-flight packet decryption
         if let Some(old_protection) = self.protection.take() {
@@ -1158,7 +1216,8 @@ impl QuicConnection {
             next_iv.clone(),
             next_key,
             next_iv,
-        );
+        )
+        .with_header_protection(next_hp.clone(), next_hp);
         self.protection = Some(crypto::PacketProtection::new(&new_keys));
 
         // Update the stored secret for future key updates

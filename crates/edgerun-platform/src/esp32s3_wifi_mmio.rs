@@ -16,6 +16,13 @@ const WIFI_MAC_RX_POLICY_BASE: *mut u32 = 0x6003_30d8 as *mut u32;
 const WIFI_MAC_CTRL_33C34: *mut u32 = 0x6003_3c34 as *mut u32;
 const WIFI_MAC_CTRL_33C40: *mut u32 = 0x6003_3c40 as *mut u32;
 const WIFI_MAC_CTRL_33C74: *mut u32 = 0x6003_3c74 as *mut u32;
+const WIFI_MAC_CTRL_33C78: *mut u32 = 0x6003_3c78 as *mut u32;
+const WIFI_MAC_TX_CTRL_33C10: *mut u32 = 0x6003_3c10 as *mut u32;
+const WIFI_MAC_TX_CTRL_33C14: *mut u32 = 0x6003_3c14 as *mut u32;
+const WIFI_MAC_TX_CTRL_33C18: *mut u32 = 0x6003_3c18 as *mut u32;
+const WIFI_MAC_TX_CTRL_33C54: *mut u32 = 0x6003_3c54 as *mut u32;
+const WIFI_MAC_TX_CTRL_33C88: *mut u32 = 0x6003_3c88 as *mut u32;
+const WIFI_MAC_TX_CTRL_33C94: *mut u32 = 0x6003_3c94 as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -32,6 +39,8 @@ const WIFI_MAC_RX_FILTER_PATTERN_BASE: *mut u32 = 0x6003_313c as *mut u32;
 const WIFI_MAC_RX_FILTER_MASK_BASE: *mut u32 = 0x6003_3158 as *mut u32;
 const WIFI_MAC_CTRL_33114: *mut u32 = 0x6003_3114 as *mut u32;
 const WIFI_MAC_CTRL_33118: *mut u32 = 0x6003_3118 as *mut u32;
+const WIFI_MAC_CTRL_332B8: *mut u32 = 0x6003_32b8 as *mut u32;
+const WIFI_MAC_CTRL_33084: *mut u32 = 0x6003_3084 as *mut u32;
 const WIFI_COEX_CTRL: *mut u32 = 0x6003_5084 as *mut u32;
 const WIFI_COEX_PTI: *mut u32 = 0x6003_32ac as *mut u32;
 const WIFI_COEX_DEFAULT_PTI: *mut u32 = 0x6003_5094 as *mut u32;
@@ -96,6 +105,20 @@ pub struct WifiMmioMacRegs {
     pub coex_default_pti: u32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiMmioTxRegs {
+    pub ctrl_33118: u32,
+    pub ctrl_33c78: u32,
+    pub tx_ctrl_33c10: u32,
+    pub tx_ctrl_33c14: u32,
+    pub tx_ctrl_33c18: u32,
+    pub tx_ctrl_33c54: u32,
+    pub tx_ctrl_33c88: u32,
+    pub tx_ctrl_33c94: u32,
+    pub ctrl_332b8: u32,
+    pub ctrl_33084: u32,
+}
+
 pub struct Esp32s3WifiMmio;
 
 impl Esp32s3WifiMmio {
@@ -153,6 +176,23 @@ impl Esp32s3WifiMmio {
         }
     }
 
+    pub fn debug_tx_regs() -> WifiMmioTxRegs {
+        unsafe {
+            WifiMmioTxRegs {
+                ctrl_33118: WIFI_MAC_CTRL_33118.read_volatile(),
+                ctrl_33c78: WIFI_MAC_CTRL_33C78.read_volatile(),
+                tx_ctrl_33c10: WIFI_MAC_TX_CTRL_33C10.read_volatile(),
+                tx_ctrl_33c14: WIFI_MAC_TX_CTRL_33C14.read_volatile(),
+                tx_ctrl_33c18: WIFI_MAC_TX_CTRL_33C18.read_volatile(),
+                tx_ctrl_33c54: WIFI_MAC_TX_CTRL_33C54.read_volatile(),
+                tx_ctrl_33c88: WIFI_MAC_TX_CTRL_33C88.read_volatile(),
+                tx_ctrl_33c94: WIFI_MAC_TX_CTRL_33C94.read_volatile(),
+                ctrl_332b8: WIFI_MAC_CTRL_332B8.read_volatile(),
+                ctrl_33084: WIFI_MAC_CTRL_33084.read_volatile(),
+            }
+        }
+    }
+
     pub fn debug_step(step: u8) -> bool {
         unsafe {
             match step {
@@ -203,6 +243,12 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(701, Ordering::Relaxed);
                     init_rx_filter_slice();
                     LAST_STATUS.store(702, Ordering::Relaxed);
+                    true
+                }
+                8 => {
+                    LAST_STATUS.store(801, Ordering::Relaxed);
+                    init_mac_txrx_tail_slice();
+                    LAST_STATUS.store(802, Ordering::Relaxed);
                     true
                 }
                 _ => false,
@@ -372,6 +418,23 @@ unsafe fn init_rx_filter_slice() {
     update(WIFI_MAC_RX_FILTER_COUNT, |v| v | (63 << 8));
     update(WIFI_MAC_RX_FILTER_COUNT, |v| v | 126);
     update(WIFI_MAC_RX_GLOBAL, |v| v | (1 << 27));
+}
+
+unsafe fn init_mac_txrx_tail_slice() {
+    update(WIFI_MAC_CTRL_33118, |v| {
+        (v & 0xf00f_ffff) | (27 << 20)
+    });
+    update(WIFI_MAC_CTRL_33C78, |v| v | 3);
+    update(WIFI_MAC_TX_CTRL_33C10, |v| {
+        ((v & 0xffff_f000) | 0xf0) | 0xc000_0000
+    });
+    update(WIFI_MAC_TX_CTRL_33C14, |v| (v & 0xffff_f000) | 0xf0);
+    update(WIFI_MAC_TX_CTRL_33C18, |v| (v & 0xffff_f000) | 0xf0);
+    update(WIFI_MAC_TX_CTRL_33C94, |v| (v & !0xf0) | 0x40);
+    update(WIFI_MAC_TX_CTRL_33C54, |v| v | 0xffff_0000);
+    update(WIFI_MAC_TX_CTRL_33C88, |v| v & 0xf0ff_ffff);
+    update(WIFI_MAC_CTRL_332B8, |v| v | 2);
+    update(WIFI_MAC_CTRL_33084, |v| v & 0x7fff_ffff);
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
