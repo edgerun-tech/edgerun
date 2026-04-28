@@ -82,9 +82,7 @@ pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError>
                 _ => continue,
             };
 
-        if let Ok(r) = res {
-            resources.push(r);
-        }
+        resources.push(res.map_err(|err| ConfigError::ParseError(format!("{kind}: {err}")))?);
     }
 
     if resources.is_empty() {
@@ -123,6 +121,9 @@ pub fn to_yaml_all(resources: &[ConfigResource]) -> Result<String, ConfigError> 
     let mut out = String::new();
     for (i, res) in resources.iter().enumerate() {
         if i > 0 {
+            if !out.ends_with('\n') {
+                out.push('\n');
+            }
             out.push_str("---\n");
         }
 
@@ -308,4 +309,200 @@ pub enum ConfigError {
     EmptyFile,
     ParseError(String),
     ValidationError(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ALL_NATIVE_RESOURCE_KINDS: &str = r#"
+kind: DnsServer
+spec:
+  bind_address: "0.0.0.0:53"
+---
+kind: DnsZone
+spec:
+  origin: example.com
+  soa:
+    mname: ns1.example.com
+    rname: admin.example.com
+---
+kind: DnsForwarder
+spec:
+  upstreams: [1.1.1.1:53, 8.8.8.8:53]
+---
+kind: ForwardingRule
+spec:
+  zone: cluster.local
+  upstreams: [10.0.0.10:53]
+---
+kind: TlsConfig
+spec:
+  dot_enabled: true
+---
+kind: RateLimit
+spec:
+  qps: 25
+---
+kind: DhcpServer
+spec:
+  interface: eth0
+  pools: [lan]
+---
+kind: DhcpPool
+spec:
+  name: lan
+  range_start: 192.168.1.10
+  range_end: 192.168.1.100
+  subnet_mask: 255.255.255.0
+---
+kind: Dhcpv6Server
+spec:
+  interface: eth0
+  pools: [lan6]
+---
+kind: Dhcpv6Pool
+spec:
+  name: lan6
+  range_start: "fd00::10"
+  range_end: "fd00::ff"
+  prefix_length: 64
+---
+kind: TftpServer
+spec:
+  root_dir: /srv/tftp
+---
+kind: SmtpServer
+spec:
+  hostname: mail.example.com
+---
+kind: ImapServer
+spec:
+  hostname: mail.example.com
+---
+kind: Node
+spec:
+  roles: [worker]
+---
+kind: Container
+spec:
+  image: hello-world:latest
+---
+kind: Deployment
+spec:
+  name: hello
+---
+kind: Secret
+spec:
+  secret_type: Opaque
+---
+kind: Peer
+spec:
+  node_id: node-1
+---
+kind: Gateway
+spec:
+  listeners: []
+---
+kind: Service
+spec:
+  ports: []
+---
+kind: HttpRoute
+spec:
+  hostnames: [example.com]
+---
+kind: TcpRoute
+spec:
+  port: 443
+---
+kind: TlsRoute
+spec:
+  sni_hostnames: [example.com]
+"#;
+
+    const SIMPLE_ROUNDTRIP_RESOURCE_KINDS: &str = r#"
+kind: DnsServer
+spec:
+  bind_address: "0.0.0.0:53"
+---
+kind: TlsConfig
+spec:
+  dot_enabled: true
+---
+kind: RateLimit
+spec:
+  qps: 25
+---
+kind: TftpServer
+spec:
+  root_dir: /srv/tftp
+"#;
+
+    #[test]
+    fn parses_all_native_config_resource_kinds_without_serde() {
+        let resources = parse_config_file(ALL_NATIVE_RESOURCE_KINDS).unwrap();
+        assert_eq!(resources.len(), 23);
+
+        assert!(matches!(resources[0], ConfigResource::DnsServer(_)));
+        assert!(matches!(resources[1], ConfigResource::DnsZone(_)));
+        assert!(matches!(resources[2], ConfigResource::DnsForwarder(_)));
+        assert!(matches!(resources[3], ConfigResource::ForwardingRule(_)));
+        assert!(matches!(resources[4], ConfigResource::TlsConfig(_)));
+        assert!(matches!(resources[5], ConfigResource::RateLimit(_)));
+        assert!(matches!(resources[6], ConfigResource::DhcpServer(_)));
+        assert!(matches!(resources[7], ConfigResource::DhcpPool(_)));
+        assert!(matches!(resources[8], ConfigResource::Dhcpv6Server(_)));
+        assert!(matches!(resources[9], ConfigResource::Dhcpv6Pool(_)));
+        assert!(matches!(resources[10], ConfigResource::TftpServer(_)));
+        assert!(matches!(resources[11], ConfigResource::SmtpServer(_)));
+        assert!(matches!(resources[12], ConfigResource::ImapServer(_)));
+        assert!(matches!(resources[13], ConfigResource::Node(_)));
+        assert!(matches!(resources[14], ConfigResource::Container(_)));
+        assert!(matches!(resources[15], ConfigResource::Deployment(_)));
+        assert!(matches!(resources[16], ConfigResource::Secret(_)));
+        assert!(matches!(resources[17], ConfigResource::Peer(_)));
+        assert!(matches!(resources[18], ConfigResource::Gateway(_)));
+        assert!(matches!(resources[19], ConfigResource::Service(_)));
+        assert!(matches!(resources[20], ConfigResource::HttpRoute(_)));
+        assert!(matches!(resources[21], ConfigResource::TcpRoute(_)));
+        assert!(matches!(resources[22], ConfigResource::TlsRoute(_)));
+    }
+
+    #[test]
+    fn native_config_resources_roundtrip_through_yaml_envelopes() {
+        let resources = parse_config_file(SIMPLE_ROUNDTRIP_RESOURCE_KINDS).unwrap();
+        let yaml = to_yaml_all(&resources).unwrap();
+        assert!(yaml.contains("kind: DnsServer"));
+        assert!(yaml.contains("spec:"));
+
+        let reparsed = parse_config_file(&yaml).unwrap();
+        assert_eq!(reparsed.len(), resources.len());
+        for (original, roundtripped) in resources.iter().zip(reparsed.iter()) {
+            assert_eq!(original.kind(), roundtripped.kind());
+        }
+    }
+
+    #[test]
+    fn parse_and_validate_uses_native_models_without_serde() {
+        let state = parse_and_validate(
+            r#"
+kind: DhcpPool
+spec:
+  name: lan
+  range_start: 192.168.1.10
+  range_end: 192.168.1.100
+  subnet_mask: 255.255.255.0
+---
+kind: DhcpServer
+spec:
+  interface: eth0
+  pools: [lan]
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(state.dhcp_pools.len(), 1);
+        assert_eq!(state.dhcp_servers.len(), 1);
+    }
 }
