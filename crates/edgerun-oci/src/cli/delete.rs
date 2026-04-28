@@ -5,12 +5,13 @@
 use crate::prelude::*;
 use std::fs;
 use std::io;
-use std::os::raw::c_int;
+use std::time::Duration;
 
+use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use crate::cli::{is_process_alive, parse_delete_args};
 use crate::json::parse_oci_spec;
 use crate::lifecycle::run_poststop_and_cleanup;
-use crate::state::{delete_state, fifo_path, load_state};
+use crate::state::{delete_state, fifo_path, load_state, runtime_spec_path};
 
 pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
@@ -57,8 +58,8 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
         // Kill if alive (force or non-stopped)
         if p > 0 && is_process_alive(p) && (force || st != "stopped") {
-            unsafe { libc::kill(p as c_int, libc::SIGKILL) };
-            unsafe { libc::usleep(50000) };
+            signal_tree(p, libc::SIGKILL);
+            let _ = wait_tree_dead(p, Duration::from_secs(2));
         }
 
         (p, b, String::new())
@@ -68,10 +69,7 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
     // Load spec for poststop hooks and cgroup path
     let spec = if !bundle.is_empty() {
-        let config_path = std::path::Path::new(&bundle).join("config.json");
-        fs::read(&config_path)
-            .ok()
-            .and_then(|data| parse_oci_spec(&data).ok())
+        load_runtime_or_bundle_spec(id, &bundle)
     } else {
         None
     };
@@ -93,4 +91,16 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     let _ = fs::remove_file(fifo_path(id));
 
     Ok(())
+}
+
+fn load_runtime_or_bundle_spec(id: &str, bundle: &str) -> Option<crate::json::OciSpec> {
+    fs::read(runtime_spec_path(id))
+        .ok()
+        .and_then(|data| parse_oci_spec(&data).ok())
+        .or_else(|| {
+            let config_path = std::path::Path::new(bundle).join("config.json");
+            fs::read(config_path)
+                .ok()
+                .and_then(|data| parse_oci_spec(&data).ok())
+        })
 }

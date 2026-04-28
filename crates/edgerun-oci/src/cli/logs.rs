@@ -26,7 +26,7 @@ pub fn cmd_logs(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     let stderr = state_dir.join("stderr.log");
 
     if opts.follow {
-        follow_logs(&stdout, &stderr, opts.tail)
+        follow_logs(id, &stdout, &stderr, opts.tail)
     } else {
         print_file(&stdout, io::stdout(), opts.tail)?;
         print_file(&stderr, io::stderr(), opts.tail)
@@ -51,6 +51,12 @@ fn parse_logs_args(args: &[String]) -> io::Result<LogsArgs<'_>> {
             "--tail" if i + 1 < args.len() => {
                 tail = Some(parse_tail(&args[i + 1])?);
                 i += 1;
+            }
+            "--tail" => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--tail requires a number",
+                ));
             }
             arg if arg.starts_with("--tail=") => {
                 tail = Some(parse_tail(&arg["--tail=".len()..])?);
@@ -97,7 +103,12 @@ fn print_file<W: Write>(path: &PathBuf, mut writer: W, tail: Option<usize>) -> i
     }
 }
 
-fn follow_logs(stdout: &PathBuf, stderr: &PathBuf, tail: Option<usize>) -> io::Result<()> {
+fn follow_logs(
+    id: &str,
+    stdout: &PathBuf,
+    stderr: &PathBuf,
+    tail: Option<usize>,
+) -> io::Result<()> {
     let out_start = tail
         .map(|lines| tail_start_offset(stdout, lines))
         .transpose()?
@@ -111,10 +122,23 @@ fn follow_logs(stdout: &PathBuf, stderr: &PathBuf, tail: Option<usize>) -> io::R
     loop {
         let next_out = print_file_from(stdout, out_pos, libc::STDOUT_FILENO)?;
         let next_err = print_file_from(stderr, err_pos, libc::STDERR_FILENO)?;
+        let changed = next_out != out_pos || next_err != err_pos;
         out_pos = next_out;
         err_pos = next_err;
+        if !changed && !container_running(id) {
+            return Ok(());
+        }
         std::thread::sleep(Duration::from_millis(250));
     }
+}
+
+fn container_running(id: &str) -> bool {
+    let Ok(state) = load_state(id) else {
+        return false;
+    };
+    state
+        .pid
+        .is_some_and(|pid| state.status == "running" && crate::cli::is_process_alive(pid))
 }
 
 fn tail_start_offset(path: &PathBuf, lines: usize) -> io::Result<u64> {
@@ -203,5 +227,11 @@ mod tests {
         assert_eq!(tail_lines(b"a\nb\nc\n", 10), b"a\nb\nc\n");
         assert_eq!(tail_lines(b"a\nb\nc\n", 0), b"");
         assert_eq!(tail_lines(b"", 2), b"");
+    }
+
+    #[test]
+    fn parse_logs_rejects_missing_tail_value() {
+        let args = vec!["--tail".to_string(), "container".to_string()];
+        assert!(parse_logs_args(&args).is_err());
     }
 }

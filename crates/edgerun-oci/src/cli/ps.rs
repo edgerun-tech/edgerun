@@ -9,6 +9,7 @@ use std::os::unix::io::AsRawFd;
 use crate::cli::exec::{
     enter_container_root, join_container_namespaces, load_exec_spec, open_exec_root,
 };
+use crate::cli::process_tree;
 use crate::state::{load_state, save_state, state_root_dir, ContainerState};
 
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -25,9 +26,8 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
         return list_containers(args);
     }
 
-    let id = container_id_arg(args).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container ID required")
-    })?;
+    let id = container_id_arg(args)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
 
     let state = load_state(id)?;
     let pid = state
@@ -42,10 +42,19 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
     }
 
     let spec = load_exec_spec(&state);
-    let (root_fd, _) = open_exec_root(pid, spec.as_ref())?;
+    let (root_fd, root_path) = open_exec_root(pid, spec.as_ref())?;
     let json = args
         .iter()
         .any(|arg| arg == "--format=json" || arg == "json");
+    if !root_path.join("proc/self").exists() {
+        let processes = read_host_process_tree(pid);
+        if json {
+            print_processes_json(&processes);
+        } else {
+            print_processes_table(&processes);
+        }
+        return Ok(());
+    }
     print_container_processes(pid, root_fd.as_raw_fd(), json)
 }
 
@@ -207,6 +216,22 @@ fn read_proc_processes() -> Vec<ProcEntry> {
             if let Ok(content) = fs::read_to_string(status_path) {
                 processes.push(parse_proc_status(pid, &content));
             }
+        }
+    }
+    processes.sort_by_key(|process| process.pid);
+    processes
+}
+
+fn read_host_process_tree(init_pid: u32) -> Vec<ProcEntry> {
+    let mut pids = process_tree::descendants(init_pid);
+    pids.push(init_pid);
+    pids.sort_unstable();
+    pids.dedup();
+    let mut processes = Vec::new();
+    for pid in pids {
+        let status_path = format!("/proc/{pid}/status");
+        if let Ok(content) = fs::read_to_string(status_path) {
+            processes.push(parse_proc_status(pid, &content));
         }
     }
     processes.sort_by_key(|process| process.pid);

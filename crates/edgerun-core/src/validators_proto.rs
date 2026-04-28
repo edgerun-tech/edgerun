@@ -10,12 +10,13 @@
 use crate::prelude::v1::*;
 
 use crate::protocol::{
-    canonical_bytes, ActionLifecyclePayload, AssuranceClaim, AssuranceRequirement,
-    CapabilityDescriptor, ChunkManifest, CommandEnvelope, CommandResultPayload, CommandSentPayload,
-    CommandType, ConstraintSet, DelegationRecord, EventEnvelope, LogicalObjectDescriptor,
-    NodeGenesisPayload, ProtocolRecord, QueryRequest, QueryResultFragment, RelayEnvelope,
-    RevocationRecord, ScopeDescriptor, SecretDeletePayload, SecretPutPayload, SessionAccept,
-    SessionHello, SnapshotDescriptor, StoredRepresentationHeader,
+    canonical_bytes, ActionLifecyclePayload, AggregateTrustPolicy, AssuranceClaim,
+    AssuranceRequirement, CapabilityDescriptor, ChunkManifest, CommandEnvelope,
+    CommandResultPayload, CommandSentPayload, CommandType, ConstraintSet, DelegationRecord,
+    EventEnvelope, LogicalObjectDescriptor, NodeGenesisPayload, ProtocolRecord, QueryRequest,
+    QueryResultFragment, RelayEnvelope, RevocationRecord, RouteSelectionPolicy,
+    RouteTrustAssignment, RouteTrustAssignments, ScopeDescriptor, SecretDeletePayload,
+    SecretPutPayload, SessionAccept, SessionHello, SnapshotDescriptor, StoredRepresentationHeader,
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
@@ -3979,6 +3980,156 @@ fn revocation_kind_matches_target(
     }
 }
 
+/// Validates protobuf-native route aggregate trust policy records.
+///
+/// Route policy artifacts are advisory inputs, but their structural validity is
+/// a deterministic core rule under the v0 protocol.
+pub fn validate_aggregate_trust_policy(policy: &AggregateTrustPolicy) -> ValidationResult {
+    if policy.policy_version != 1 {
+        return reject(
+            ReasonCode::VersionUnsupported,
+            Value::String("unsupported AggregateTrustPolicy version".into()),
+            empty_map(),
+        );
+    }
+    for (index, aggregator) in policy.preferred_aggregators.iter().enumerate() {
+        if let Some(result) = validate_identity_ref(
+            Some(aggregator),
+            &format!("AggregateTrustPolicy preferred_aggregators[{index}]"),
+        ) {
+            return result;
+        }
+    }
+    for (index, responder) in policy.allowed_responders.iter().enumerate() {
+        if let Some(result) = validate_identity_ref(
+            Some(responder),
+            &format!("AggregateTrustPolicy allowed_responders[{index}]"),
+        ) {
+            return result;
+        }
+    }
+    if let Some(result) = validate_optional_object_ref(
+        policy.policy_metadata.as_ref(),
+        "AggregateTrustPolicy policy_metadata",
+    ) {
+        return result;
+    }
+
+    accept(
+        Value::Map(std::collections::BTreeMap::from([
+            (
+                "validation_level".into(),
+                Value::String("aggregate_trust_policy_valid".into()),
+            ),
+            ("advisory_only".into(), Value::Bool(true)),
+        ])),
+        empty_map(),
+    )
+}
+
+/// Validates a single route trust assignment.
+pub fn validate_route_trust_assignment(assignment: &RouteTrustAssignment) -> ValidationResult {
+    let Some(subject) = &assignment.subject else {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("RouteTrustAssignment subject is missing".into()),
+            empty_map(),
+        );
+    };
+    if let Some(result) = validate_identity_ref(Some(subject), "RouteTrustAssignment subject") {
+        return result;
+    }
+
+    accept(
+        Value::Map(std::collections::BTreeMap::from([
+            (
+                "validation_level".into(),
+                Value::String("route_trust_assignment_valid".into()),
+            ),
+            ("advisory_only".into(), Value::Bool(true)),
+        ])),
+        empty_map(),
+    )
+}
+
+/// Validates a route trust assignment set.
+pub fn validate_route_trust_assignments(assignments: &RouteTrustAssignments) -> ValidationResult {
+    if assignments.assignments.is_empty() {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("RouteTrustAssignments assignments is empty".into()),
+            empty_map(),
+        );
+    }
+    for (index, assignment) in assignments.assignments.iter().enumerate() {
+        let result = validate_route_trust_assignment(assignment);
+        if result.verdict != crate::result::Verdict::Accept {
+            return reject(
+                result.reason_code.unwrap_or(ReasonCode::StructuralInvalid),
+                Value::String(format!(
+                    "RouteTrustAssignments assignments[{index}] is invalid"
+                )),
+                empty_map(),
+            );
+        }
+    }
+
+    accept(
+        Value::Map(std::collections::BTreeMap::from([
+            (
+                "validation_level".into(),
+                Value::String("route_trust_assignments_valid".into()),
+            ),
+            ("advisory_only".into(), Value::Bool(true)),
+        ])),
+        empty_map(),
+    )
+}
+
+/// Validates protobuf-native route selection policy records.
+pub fn validate_route_selection_policy(policy: &RouteSelectionPolicy) -> ValidationResult {
+    if policy.policy_version != 1 {
+        return reject(
+            ReasonCode::VersionUnsupported,
+            Value::String("unsupported RouteSelectionPolicy version".into()),
+            empty_map(),
+        );
+    }
+    for (index, advertiser) in policy.preferred_advertisers.iter().enumerate() {
+        if let Some(result) = validate_identity_ref(
+            Some(advertiser),
+            &format!("RouteSelectionPolicy preferred_advertisers[{index}]"),
+        ) {
+            return result;
+        }
+    }
+    for (index, next_hop) in policy.preferred_next_hops.iter().enumerate() {
+        if let Some(result) = validate_node_ref(
+            Some(next_hop),
+            &format!("RouteSelectionPolicy preferred_next_hops[{index}]"),
+        ) {
+            return result;
+        }
+    }
+    if let Some(result) = validate_optional_object_ref(
+        policy.policy_metadata.as_ref(),
+        "RouteSelectionPolicy policy_metadata",
+    ) {
+        return result;
+    }
+
+    accept(
+        Value::Map(std::collections::BTreeMap::from([
+            (
+                "validation_level".into(),
+                Value::String("route_selection_policy_valid".into()),
+            ),
+            ("advisory_only".into(), Value::Bool(true)),
+        ])),
+        empty_map(),
+    )
+}
+
 fn timestamp_ms(timestamp: &prost_types::Timestamp) -> i64 {
     timestamp.seconds * 1000 + (timestamp.nanos as i64) / 1_000_000
 }
@@ -4062,9 +4213,10 @@ pub use crate::command::{
 mod tests {
     use super::*;
     use crate::protocol::{
-        ActionLifecyclePayload, CheckpointRef, ChunkEntry, ChunkManifest, CommandRef,
-        CommandResultPayload, CommandSentPayload, CostLimit, Digest, EventEnvelope, EventRef,
-        EventType, HeadRef, IdentityRef, NodeGenesisPayload, NodeRef, ObjectRef, RepresentationRef,
+        ActionLifecyclePayload, AggregateTrustPolicy, CheckpointRef, ChunkEntry, ChunkManifest,
+        CommandRef, CommandResultPayload, CommandSentPayload, CostLimit, Digest, EventEnvelope,
+        EventRef, EventType, HeadRef, IdentityRef, NodeGenesisPayload, NodeRef, ObjectRef,
+        RepresentationRef, RouteSelectionPolicy, RouteTrustAssignment, RouteTrustAssignments,
         SecretDeletePayload, SecretPutPayload, SnapshotRef, TimeWindow,
     };
     use edgerun_proto::edgerun::v0::stream::{CollectionCreatedPayload, CollectionDeletedPayload};
@@ -7698,6 +7850,126 @@ mod tests {
         };
         sign_revocation_record(&mut revocation, key);
         revocation
+    }
+
+    #[test]
+    fn aggregate_trust_policy_valid_is_advisory_accept() {
+        let policy = AggregateTrustPolicy {
+            policy_version: 1,
+            minimum_trust_score: Some(4),
+            preferred_aggregators: vec![IdentityRef {
+                identity_id: b"agg-a".to_vec(),
+                identity_kind: Some(1),
+                key_hint: None,
+            }],
+            allowed_responders: vec![IdentityRef {
+                identity_id: b"resp-a".to_vec(),
+                identity_kind: Some(1),
+                key_hint: None,
+            }],
+            policy_metadata: None,
+        };
+
+        let result = validate_aggregate_trust_policy(&policy);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+        assert_eq!(
+            result.derived.as_map().unwrap().get("advisory_only"),
+            Some(&Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn aggregate_trust_policy_rejects_empty_responder_identity() {
+        let policy = AggregateTrustPolicy {
+            policy_version: 1,
+            minimum_trust_score: None,
+            preferred_aggregators: vec![],
+            allowed_responders: vec![IdentityRef {
+                identity_id: vec![],
+                identity_kind: Some(1),
+                key_hint: None,
+            }],
+            policy_metadata: None,
+        };
+
+        let result = validate_aggregate_trust_policy(&policy);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn route_trust_assignments_reject_empty_assignment_set() {
+        let assignments = RouteTrustAssignments {
+            assignments: vec![],
+        };
+
+        let result = validate_route_trust_assignments(&assignments);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn route_trust_assignments_reject_missing_subject() {
+        let assignments = RouteTrustAssignments {
+            assignments: vec![RouteTrustAssignment {
+                subject: None,
+                trust_score: 1,
+                source: "local".into(),
+            }],
+        };
+
+        let result = validate_route_trust_assignments(&assignments);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn route_selection_policy_validates_preferred_refs() {
+        let policy = RouteSelectionPolicy {
+            policy_version: 1,
+            minimum_quality_hint: Some(1),
+            maximum_cost_hint: Some(9),
+            preferred_advertisers: vec![IdentityRef {
+                identity_id: b"adv-a".to_vec(),
+                identity_kind: Some(1),
+                key_hint: None,
+            }],
+            preferred_next_hops: vec![NodeRef {
+                node_id: b"hop-a".to_vec(),
+            }],
+            require_active_session: Some(true),
+            policy_metadata: None,
+        };
+
+        let result = validate_route_selection_policy(&policy);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+        assert_eq!(
+            result.derived.as_map().unwrap().get("advisory_only"),
+            Some(&Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn route_selection_policy_rejects_empty_preferred_next_hop() {
+        let policy = RouteSelectionPolicy {
+            policy_version: 1,
+            minimum_quality_hint: None,
+            maximum_cost_hint: None,
+            preferred_advertisers: vec![],
+            preferred_next_hops: vec![NodeRef { node_id: vec![] }],
+            require_active_session: None,
+            policy_metadata: None,
+        };
+
+        let result = validate_route_selection_policy(&policy);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]

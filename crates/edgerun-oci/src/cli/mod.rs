@@ -12,6 +12,7 @@ mod inspect;
 mod kill;
 mod logs;
 mod pause;
+mod process_tree;
 mod ps;
 mod restore;
 mod resume;
@@ -202,7 +203,7 @@ pub fn print_usage() {
     eprintln!("  state <container-id>      Output state of a container");
     eprintln!("  inspect <container-id>    Output state and config details");
     eprintln!("  kill <container-id>       Send signal to container");
-    eprintln!("  logs <container-id>       Print container stdout/stderr logs");
+    eprintln!("  logs [--tail N] <id>      Print container stdout/stderr logs");
     eprintln!("  delete <container-id>     Delete container resources");
     eprintln!("  rm <container-id>         Alias for delete");
     eprintln!("  exec <container-id>       Run additional process in container");

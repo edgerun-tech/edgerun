@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::cli::is_process_alive;
+use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use crate::state::{load_state, save_state};
 
 pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -45,6 +46,7 @@ pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
 
     if is_process_alive(pid) {
         signal_tree(pid, libc::SIGKILL);
+        let _ = wait_tree_dead(pid, Duration::from_secs(2));
     }
     state.status = "stopped".to_string();
     save_state(&state, id)
@@ -87,69 +89,4 @@ fn parse_stop_args(args: &[String]) -> io::Result<(u64, &str)> {
             "Usage: ert stop [-t seconds] <container-id>",
         )
     })
-}
-
-fn signal(pid: u32, signal: libc::c_int) -> io::Result<()> {
-    if unsafe { libc::kill(pid as libc::c_int, signal) } == 0 {
-        return Ok(());
-    }
-    let error = io::Error::last_os_error();
-    if error.kind() == io::ErrorKind::NotFound {
-        Ok(())
-    } else {
-        Err(error)
-    }
-}
-
-fn signal_tree(root_pid: u32, signal_number: libc::c_int) {
-    let mut pids = descendants(root_pid);
-    pids.push(root_pid);
-    pids.sort_unstable();
-    pids.dedup();
-    for pid in pids.into_iter().rev() {
-        let _ = signal(pid, signal_number);
-    }
-}
-
-fn descendants(root_pid: u32) -> Vec<u32> {
-    let mut out = Vec::new();
-    let mut changed = true;
-    while changed {
-        changed = false;
-        let Ok(entries) = std::fs::read_dir("/proc") else {
-            break;
-        };
-        for entry in entries.flatten() {
-            let Ok(name) = entry.file_name().into_string() else {
-                continue;
-            };
-            let Ok(pid) = name.parse::<u32>() else {
-                continue;
-            };
-            if pid == root_pid || out.contains(&pid) {
-                continue;
-            }
-            let status = format!("/proc/{pid}/status");
-            let Ok(content) = std::fs::read_to_string(status) else {
-                continue;
-            };
-            let Some(ppid) = parent_pid(&content) else {
-                continue;
-            };
-            if ppid == root_pid || out.contains(&ppid) {
-                out.push(pid);
-                changed = true;
-            }
-        }
-    }
-    out
-}
-
-fn parent_pid(status: &str) -> Option<u32> {
-    for line in status.lines() {
-        if let Some(rest) = line.strip_prefix("PPid:") {
-            return rest.trim().parse().ok();
-        }
-    }
-    None
 }
