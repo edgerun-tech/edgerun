@@ -859,6 +859,12 @@ impl From<&str> for JsonValue {
     }
 }
 
+impl From<&String> for JsonValue {
+    fn from(value: &String) -> Self {
+        Self::String(value.clone())
+    }
+}
+
 impl From<i8> for JsonValue {
     fn from(value: i8) -> Self {
         Self::Number(JsonNumber::from(i64::from(value)))

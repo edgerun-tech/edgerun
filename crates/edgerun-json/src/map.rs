@@ -278,9 +278,30 @@ impl From<Vec<(String, JsonValue)>> for Map {
     }
 }
 
-impl core::iter::FromIterator<(String, JsonValue)> for Map {
-    fn from_iter<T: IntoIterator<Item = (String, JsonValue)>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
+impl<K, V> FromIterator<(K, V)> for Map
+where
+    K: Into<String>,
+    V: Into<JsonValue>,
+{
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        Self(
+            iter.into_iter()
+                .map(|(key, value)| (key.into(), value.into()))
+                .collect(),
+        )
+    }
+}
+
+impl<K, V> Extend<(K, V)> for Map
+where
+    K: Into<String>,
+    V: Into<JsonValue>,
+{
+    fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
+        self.0.extend(
+            iter.into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+        );
     }
 }
 

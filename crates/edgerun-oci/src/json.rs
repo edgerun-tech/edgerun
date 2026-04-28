@@ -1261,9 +1261,7 @@ fn oci_spec_to_value(spec: &OciSpec) -> edgerun_json::JsonValue {
     object.push_opt_field("linux", spec.linux.as_ref().map(linux_to_value));
     object.push_opt_field(
         "mounts",
-        spec.mounts.as_ref().map(|mounts| {
-            edgerun_json::JsonValue::array_from_iter(mounts.iter().map(mount_to_value))
-        }),
+        spec.mounts.as_ref().map(array_to_value(mount_to_value)),
     );
     object.push_opt_field(
         "annotations",
@@ -1303,9 +1301,10 @@ fn process_to_value(process: &OciProcess) -> edgerun_json::JsonValue {
     );
     object.push_opt_field(
         "rlimits",
-        process.rlimits.as_ref().map(|rlimits| {
-            edgerun_json::JsonValue::array_from_iter(rlimits.iter().map(rlimit_to_value))
-        }),
+        process
+            .rlimits
+            .as_ref()
+            .map(array_to_value(rlimit_to_value)),
     );
     object.push_opt_field("noNewPrivileges", process.no_new_privileges);
     object.push_opt_field("oomScoreAdj", process.oom_score_adj);
@@ -1337,11 +1336,9 @@ fn user_to_value(user: &OciUser) -> edgerun_json::JsonValue {
     object.push_opt_field("gid", user.gid);
     object.push_opt_field(
         "additionalGids",
-        user.additional_gids.as_ref().map(|values| {
-            edgerun_json::JsonValue::array_from_iter(
-                values.iter().copied().map(edgerun_json::JsonValue::from),
-            )
-        }),
+        user.additional_gids
+            .as_ref()
+            .map(array_to_value(|value| *value)),
     );
     object.push_opt_field("umask", user.umask);
     object.into()
@@ -1410,15 +1407,17 @@ fn linux_to_value(linux: &OciLinux) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
     object.push_opt_field(
         "uidMappings",
-        linux.uid_mappings.as_ref().map(|mappings| {
-            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
-        }),
+        linux
+            .uid_mappings
+            .as_ref()
+            .map(array_to_value(id_mapping_to_value)),
     );
     object.push_opt_field(
         "gidMappings",
-        linux.gid_mappings.as_ref().map(|mappings| {
-            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
-        }),
+        linux
+            .gid_mappings
+            .as_ref()
+            .map(array_to_value(id_mapping_to_value)),
     );
     object.push_opt_field(
         "resources",
@@ -1427,15 +1426,14 @@ fn linux_to_value(linux: &OciLinux) -> edgerun_json::JsonValue {
     object.push_opt_field("cgroupsPath", linux.cgroups_path.as_deref());
     object.push_opt_field(
         "namespaces",
-        linux.namespaces.as_ref().map(|namespaces| {
-            edgerun_json::JsonValue::array_from_iter(namespaces.iter().map(namespace_to_value))
-        }),
+        linux
+            .namespaces
+            .as_ref()
+            .map(array_to_value(namespace_to_value)),
     );
     object.push_opt_field(
         "devices",
-        linux.devices.as_ref().map(|devices| {
-            edgerun_json::JsonValue::array_from_iter(devices.iter().map(device_to_value))
-        }),
+        linux.devices.as_ref().map(array_to_value(device_to_value)),
     );
     object.push_opt_field(
         "maskedPaths",
@@ -1487,9 +1485,10 @@ fn resources_to_value(resources: &OciLinuxResources) -> edgerun_json::JsonValue 
     let mut object = edgerun_json::Map::new();
     object.push_opt_field(
         "devices",
-        resources.devices.as_ref().map(|devices| {
-            edgerun_json::JsonValue::array_from_iter(devices.iter().map(device_cgroup_to_value))
-        }),
+        resources
+            .devices
+            .as_ref()
+            .map(array_to_value(device_cgroup_to_value)),
     );
     object.push_opt_field("memory", resources.memory.as_ref().map(memory_to_value));
     object.push_opt_field("cpu", resources.cpu.as_ref().map(cpu_to_value));
@@ -1563,33 +1562,44 @@ fn mount_to_value(mount: &OciMount) -> edgerun_json::JsonValue {
     object.push_opt_field("recursive", mount.recursive);
     object.push_opt_field(
         "uidMappings",
-        mount.uid_mappings.as_ref().map(|mappings| {
-            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
-        }),
+        mount
+            .uid_mappings
+            .as_ref()
+            .map(array_to_value(id_mapping_to_value)),
     );
     object.push_opt_field(
         "gidMappings",
-        mount.gid_mappings.as_ref().map(|mappings| {
-            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
-        }),
+        mount
+            .gid_mappings
+            .as_ref()
+            .map(array_to_value(id_mapping_to_value)),
     );
     object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn strings_to_value(values: &Vec<String>) -> edgerun_json::JsonValue {
-    edgerun_json::JsonValue::array_from_iter(
-        values.iter().cloned().map(edgerun_json::JsonValue::String),
-    )
+    edgerun_json::JsonValue::array_from_iter(values.iter())
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn string_map_to_value(values: &BTreeMap<String, String>) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    for (key, value) in values {
-        object.push_field(key.clone(), value.clone());
-    }
-    object.into()
+    edgerun_json::Map::from_iter(
+        values
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str())),
+    )
+    .into()
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn array_to_value<T, V>(
+    mut to_value: impl FnMut(&T) -> V,
+) -> impl FnMut(&Vec<T>) -> edgerun_json::JsonValue
+where
+    V: Into<edgerun_json::JsonValue>,
+{
+    move |values| edgerun_json::JsonValue::array_from_iter(values.iter().map(&mut to_value))
 }
 
 #[cfg(all(

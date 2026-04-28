@@ -228,6 +228,15 @@ mod tests {
                 .unwrap(),
             true
         );
+        let owner = String::from("owner");
+        assert_eq!(JsonValue::from(&owner).as_str(), Some("owner"));
+        let collected: Map = [("owner", owner.as_str()), ("mode", "manual")]
+            .into_iter()
+            .collect();
+        let mut extended = Map::new();
+        extended.extend([("count", 2u64), ("enabled", 1u64)]);
+        assert_eq!(collected.required_str("owner").unwrap(), "owner");
+        assert_eq!(extended.required_u64("count").unwrap(), 2);
         assert!(JsonValue::empty_object().is_empty());
         assert!(JsonValue::empty_array().is_empty());
     }
