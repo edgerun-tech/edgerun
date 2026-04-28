@@ -49,6 +49,8 @@ pub struct Http3Connection {
     pending_crypto: Vec<u8>,
     /// Receive buffers for streams (leftover bytes after HTTP/3 frame parsing)
     recv_buffers: BTreeMap<u64, Vec<u8>>,
+    /// Streams where the peer has sent FIN.
+    recv_fin_streams: BTreeMap<u64, bool>,
     /// Tracks which streams have already received HEADERS frames
     /// Key = stream_id, Value = true if HEADERS received
     stream_headers_received: BTreeMap<u64, bool>,
@@ -127,6 +129,7 @@ impl Http3Connection {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,
@@ -163,6 +166,7 @@ impl Http3Connection {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,
@@ -200,6 +204,7 @@ impl Http3Connection {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,
@@ -368,6 +373,10 @@ impl Http3Connection {
 
         // Then collect any additional DATA frames
         loop {
+            if self.recv_fin_streams.contains_key(&stream_id) {
+                break;
+            }
+
             match self.poll_stream(stream_id).await? {
                 Some(Http3Frame::Data { payload }) => {
                     body.extend_from_slice(&payload);
@@ -426,10 +435,8 @@ impl Http3Connection {
         // Read from QUIC connection
         match self.quic.recv_stream_data().await {
             Ok(Some((stream_id, data, fin))) => {
-                // Handle stream closure
                 if fin {
-                    self.on_stream_closed(stream_id);
-                    return Ok(None);
+                    self.recv_fin_streams.insert(stream_id, true);
                 }
 
                 if data.is_empty() {
@@ -702,6 +709,10 @@ impl Http3Connection {
         };
 
         loop {
+            if self.recv_fin_streams.contains_key(&stream_id) {
+                break;
+            }
+
             match self.poll_stream(stream_id).await? {
                 Some(Http3Frame::Data { payload }) => {
                     body.extend_from_slice(&payload);
@@ -1186,12 +1197,24 @@ impl Http3Connection {
             }
         }
 
-        match self.quic.recv_stream_data().await {
-            Ok(Some((recv_stream_id, data, _fin))) => {
-                let buf = self.recv_buffers.entry(recv_stream_id).or_default();
-                buf.extend_from_slice(&data);
+        loop {
+            if self.recv_fin_streams.contains_key(&stream_id) {
+                return Ok(None);
+            }
 
-                if recv_stream_id == stream_id {
+            match self.quic.recv_stream_data().await {
+                Ok(Some((recv_stream_id, data, fin))) => {
+                    if fin {
+                        self.recv_fin_streams.insert(recv_stream_id, true);
+                    }
+
+                    let buf = self.recv_buffers.entry(recv_stream_id).or_default();
+                    buf.extend_from_slice(&data);
+
+                    if recv_stream_id != stream_id {
+                        continue;
+                    }
+
                     match Http3Frame::from_bytes(buf) {
                         Ok((frame, consumed)) => {
                             buf.drain(..consumed);
@@ -1200,14 +1223,12 @@ impl Http3Connection {
                             }
                             return Ok(Some(frame));
                         }
-                        Err(_) => return Ok(None),
+                        Err(_) => continue,
                     }
                 }
-
-                Ok(None)
+                Ok(None) => return Ok(None),
+                Err(e) => return Err(Http3Error::QuicError(e)),
             }
-            Ok(None) => Ok(None),
-            Err(e) => Err(Http3Error::QuicError(e)),
         }
     }
 
@@ -1586,6 +1607,7 @@ impl Http3Connection {
 
         // Remove from receive buffers
         self.recv_buffers.remove(&stream_id);
+        self.recv_fin_streams.remove(&stream_id);
 
         // Remove from headers received tracking
         self.stream_headers_received.remove(&stream_id);
@@ -1678,6 +1700,7 @@ mod tests {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,

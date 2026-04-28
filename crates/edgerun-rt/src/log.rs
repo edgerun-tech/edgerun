@@ -1,7 +1,7 @@
 //! Bare-metal adapter for the central `edgerun-log` crate.
 
 use core::fmt::{self, Write};
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 pub use edgerun_log::{
     clear_format_logger, clear_logger, debug, enabled, error, info, level, set_format_logger,
@@ -9,6 +9,13 @@ pub use edgerun_log::{
 };
 
 static SERIAL_LOGGER_INSTALLED: AtomicBool = AtomicBool::new(false);
+static MIRROR_LOGGER: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
+
+pub type MirrorLogger = fn(&str);
+
+pub fn set_mirror_logger(logger: MirrorLogger) {
+    MIRROR_LOGGER.store(logger as *mut (), Ordering::Relaxed);
+}
 
 #[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
 pub fn init_serial_logger() {
@@ -27,6 +34,7 @@ pub fn init_serial_logger() {
 #[inline]
 pub fn log(level: u8, message: &str) {
     init_serial_logger();
+    mirror_log(message);
     edgerun_log::log(level_from_legacy(level), "edgerun_rt", message);
 }
 
@@ -34,11 +42,12 @@ pub fn log(level: u8, message: &str) {
 #[inline]
 pub fn log(level: u8, message: &str) {
     let level = level_from_legacy(level);
-    serial_write_str("[");
-    serial_write_str(level.as_str());
-    serial_write_str("] edgerun_rt: ");
-    serial_write_str(message);
-    serial_write_str("\n");
+    mirror_log(message);
+    mux_log("[");
+    mux_log(level.as_str());
+    mux_log("] edgerun_rt: ");
+    mux_log(message);
+    mux_log("\n");
 }
 
 fn level_from_legacy(level: u8) -> Level {
@@ -50,6 +59,15 @@ fn level_from_legacy(level: u8) -> Level {
         4 => Level::Debug,
         _ => Level::Trace,
     }
+}
+
+fn mirror_log(message: &str) {
+    let logger = MIRROR_LOGGER.load(Ordering::Relaxed);
+    if logger.is_null() {
+        return;
+    }
+    let logger: MirrorLogger = unsafe { core::mem::transmute(logger) };
+    logger(message);
 }
 
 #[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
@@ -66,13 +84,13 @@ fn serial_logger(level: Level, module: &str, args: fmt::Arguments<'_>) {
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn serial_logger(level: Level, module: &str, args: fmt::Arguments<'_>) {
-    serial_write_str("[");
-    serial_write_str(level.as_str());
-    serial_write_str("] ");
-    serial_write_str(module);
-    serial_write_str(": ");
-    serial_write_str(args.as_str().unwrap_or("<fmt>"));
-    serial_write_str("\n");
+    mux_log("[");
+    mux_log(level.as_str());
+    mux_log("] ");
+    mux_log(module);
+    mux_log(": ");
+    mux_log(args.as_str().unwrap_or("<fmt>"));
+    mux_log("\n");
 }
 
 struct SerialWriter;
@@ -101,6 +119,11 @@ fn serial_write_str(s: &str) {
             edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(chunk);
         }
     }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn mux_log(s: &str) {
+    crate::serial_mux::write(crate::serial_mux::CHANNEL_LOG, s.as_bytes());
 }
 
 #[cfg(not(any(

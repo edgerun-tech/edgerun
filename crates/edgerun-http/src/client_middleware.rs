@@ -5,7 +5,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```text
 //! use edgerun_http::client_middleware::{Chain, ClientMiddleware, ClientNext};
 //! use edgerun_http::{HttpClient, Request, Response, Result};
 //! use std::future::Future;
@@ -284,7 +284,7 @@ where
 
 /// Builder for stacking client middleware on top of an [`HttpClient`].
 ///
-/// ```no_run
+/// ```text
 /// let client = edgerun_http::client_middleware::Chain::new(edgerun_http::HttpClient::new())
 ///     .with(logging())
 ///     .with(retry(3))

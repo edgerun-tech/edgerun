@@ -123,7 +123,7 @@ impl PendingRequest {
 /// HPACK encoding/decoding, flow control, and stream multiplexing.
 ///
 /// # Example
-/// ```no_run
+/// ```text
 /// let client = AsyncClient::new(tls_stream).await?;
 /// let mut headers = HeaderMap::new();
 /// headers.insert(":method", "GET")?;
@@ -266,7 +266,7 @@ impl AsyncClient {
     /// chunk is sent, the caller should drop the sender to signal end-of-stream.
     ///
     /// # Example
-    /// ```no_run
+    /// ```text
     /// let (body_tx, body_rx) = mpsc::channel(8);
     /// let pending = client.request_stream(&headers, body_rx).await?;
     /// // Send body chunks concurrently:

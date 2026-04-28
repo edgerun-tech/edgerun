@@ -23,7 +23,7 @@ use crate::runtime::{
     timeout as rt_timeout, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
     BufReader, ConnectFuture,
 };
-use alloc::collections::BTreeMap as HashMap;
+use alloc::collections::{BTreeMap as HashMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -126,7 +126,7 @@ impl PooledConn {
 /// eliminating connect + TLS handshake overhead for keep-alive servers.
 ///
 /// # Example
-/// ```no_run
+/// ```text
 /// let pool = ConnectionPool::new()
 ///     .with_max_connections_per_host(6)
 ///     .with_idle_timeout(Duration::from_secs(30));
@@ -158,6 +158,10 @@ pub struct ConnectionPool {
     auto_decompress: bool,
     /// TLS session ticket cache for session resumption.
     session_cache: SessionCache,
+    /// Prefer TLS 1.2 for new HTTPS connections.
+    tls12_first: bool,
+    #[cfg(feature = "tls")]
+    tls12_fallback_hosts: BTreeSet<String>,
 }
 
 impl ConnectionPool {
@@ -174,6 +178,9 @@ impl ConnectionPool {
             max_redirects: 10,
             auto_decompress: true,
             session_cache: SessionCache::new(),
+            tls12_first: false,
+            #[cfg(feature = "tls")]
+            tls12_fallback_hosts: BTreeSet::new(),
         }
     }
 
@@ -205,6 +212,12 @@ impl ConnectionPool {
     /// Set read timeout.
     pub fn with_read_timeout(mut self, t: Duration) -> Self {
         self.read_timeout = t;
+        self
+    }
+
+    /// Prefer TLS 1.2 for new HTTPS connections.
+    pub fn with_tls12_first(mut self, enabled: bool) -> Self {
+        self.tls12_first = enabled;
         self
     }
 
@@ -258,6 +271,11 @@ impl ConnectionPool {
     /// Set auto_decompress (for runtime configuration).
     pub fn set_auto_decompress(&mut self, v: bool) {
         self.auto_decompress = v;
+    }
+
+    /// Set whether new HTTPS connections should try TLS 1.2 first.
+    pub fn set_tls12_first(&mut self, enabled: bool) {
+        self.tls12_first = enabled;
     }
 
     /// Execute an HTTP/1.1 request, reusing pooled connections when available.
@@ -426,16 +444,18 @@ impl ConnectionPool {
             .host()
             .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
         let port = uri.port().unwrap_or(if is_https { 443 } else { 80 });
-        let (ct, dt, rt, sc) = {
+        let (ct, dt, rt, sc, tls12_first) = {
             let p = pool.lock();
             (
                 p.connect_timeout,
                 p.dns_timeout,
                 p.read_timeout,
                 p.session_cache.clone(),
+                p.tls12_first,
             )
         };
-        let mut conn = Self::create_connection_static(ct, dt, host, port, is_https, &sc).await?;
+        let (mut conn, _) =
+            Self::create_connection_static(ct, dt, host, port, is_https, &sc, tls12_first).await?;
         Self::write_request_on_conn(&mut conn, request, false).await?;
         Self::read_response_body_chunks(&mut conn, is_head, rt, &mut on_chunk).await
     }
@@ -476,21 +496,24 @@ impl ConnectionPool {
         }
 
         if let Ok((response, conn)) = result {
-            // Return working connection to pool
-            self.connections
-                .entry(key)
-                .or_default()
-                .push((conn, Instant::now()));
+            if Self::response_allows_reuse(&response) {
+                self.connections
+                    .entry(key)
+                    .or_default()
+                    .push((conn, Instant::now()));
+            }
             return Ok(response);
         }
 
         // All pooled connections failed — create a new one
         let pooled = self.create_connection(host, port, is_https).await?;
         let (response, conn) = self.try_request_on_conn(pooled, request, is_head).await?;
-        self.connections
-            .entry(key)
-            .or_default()
-            .push((conn, Instant::now()));
+        if Self::response_allows_reuse(&response) {
+            self.connections
+                .entry(key)
+                .or_default()
+                .push((conn, Instant::now()));
+        }
         Ok(response)
     }
 
@@ -524,6 +547,16 @@ impl ConnectionPool {
             let mut p = pool.lock();
             p.connections.remove(&key).unwrap_or_default()
         };
+        timing_log(
+            "http1.pool",
+            format!(
+                "host={} port={} tls={} pooled={}",
+                host,
+                port,
+                is_https,
+                conns.len()
+            ),
+        );
 
         // Try pooled (no lock)
         let (result, leftover_conns) =
@@ -537,30 +570,48 @@ impl ConnectionPool {
         }
 
         if let Ok((response, conn)) = result {
-            let mut p = pool.lock();
-            p.connections
-                .entry(key)
-                .or_default()
-                .push((conn, Instant::now()));
+            if Self::response_allows_reuse(&response) {
+                let mut p = pool.lock();
+                p.connections
+                    .entry(key)
+                    .or_default()
+                    .push((conn, Instant::now()));
+            }
             return Ok(response);
         }
 
         // Create new connection (no lock)
-        let (ct, dt, rt, sc) = {
+        let (ct, dt, rt, sc, prefer_tls12) = {
             let p = pool.lock();
             (
                 p.connect_timeout,
                 p.dns_timeout,
                 p.read_timeout,
                 p.session_cache.clone(),
+                p.tls12_first || {
+                    #[cfg(feature = "tls")]
+                    {
+                        p.tls12_fallback_hosts.contains(host)
+                    }
+                    #[cfg(not(feature = "tls"))]
+                    {
+                        false
+                    }
+                },
             )
         };
-        let pooled = Self::create_connection_static(ct, dt, host, port, is_https, &sc).await?;
+        let (pooled, used_tls12_fallback) =
+            Self::create_connection_static(ct, dt, host, port, is_https, &sc, prefer_tls12).await?;
+        if used_tls12_fallback {
+            let mut p = pool.lock();
+            #[cfg(feature = "tls")]
+            p.tls12_fallback_hosts.insert(host.to_string());
+        }
         let (response, conn) =
             Self::try_request_on_conn_static(pooled, request, is_head, auto_decompress, rt).await?;
 
         // Return to pool (brief lock)
-        {
+        if Self::response_allows_reuse(&response) {
             let mut p = pool.lock();
             p.connections
                 .entry(key)
@@ -613,10 +664,21 @@ impl ConnectionPool {
         auto_decompress: bool,
         read_timeout: Duration,
     ) -> Result<(Response, PooledConn)> {
+        let write_started = Instant::now();
         Self::write_request_on_conn(&mut conn, request, auto_decompress).await?;
+        timing_log_elapsed(
+            "http1.write_request",
+            request.uri().to_string(),
+            write_started.elapsed(),
+        );
 
-        // Read response
+        let read_started = Instant::now();
         let response = Self::read_response(&mut conn, is_head, read_timeout).await?;
+        timing_log_elapsed(
+            "http1.read_response",
+            format!("{} status={}", request.uri(), response.status().as_u16()),
+            read_started.elapsed(),
+        );
 
         // Connection is still alive
         Ok((response, conn))
@@ -675,60 +737,128 @@ impl ConnectionPool {
         port: u16,
         is_https: bool,
         session_cache: &SessionCache,
-    ) -> Result<PooledConn> {
+        prefer_tls12: bool,
+    ) -> Result<(PooledConn, bool)> {
         if is_https {
             #[cfg(not(feature = "tls"))]
             {
-                let _ = (connect_timeout, dns_timeout, host, port, session_cache);
+                let _ = (
+                    connect_timeout,
+                    dns_timeout,
+                    host,
+                    port,
+                    session_cache,
+                    prefer_tls12,
+                );
                 return Err(Error::ProtocolError(
                     "HTTPS requires edgerun-http tls feature".into(),
                 ));
             }
             #[cfg(feature = "tls")]
             {
+                let connect_started = Instant::now();
                 let stream =
                     Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port)
                         .await?;
-                let tls = match AsyncTlsStream::client(stream, host, &[], Some(session_cache)).await
-                {
-                    Ok(tls) => tls,
-                    Err(first_err) => {
-                        let stream = Self::resolve_and_connect_static(
-                            connect_timeout,
-                            dns_timeout,
-                            host,
-                            port,
-                        )
-                        .await?;
-                        AsyncTlsStream::client_tls12(stream, host).await.map_err(|second_err| {
+                timing_log_elapsed(
+                    "http1.connect",
+                    format!("{}:{}", host, port),
+                    connect_started.elapsed(),
+                );
+                let tls_started = Instant::now();
+                let (tls, used_tls12_fallback) = if prefer_tls12 {
+                    let tls = AsyncTlsStream::client_tls12(stream, host)
+                        .await
+                        .map_err(|err| {
+                            Error::ProtocolError(format!("TLS 1.2 handshake failed: {err}"))
+                        })?;
+                    timing_log_elapsed(
+                        "http1.tls12_first",
+                        host.to_string(),
+                        tls_started.elapsed(),
+                    );
+                    (tls, false)
+                } else {
+                    match AsyncTlsStream::client(stream, host, &[], Some(session_cache)).await {
+                        Ok(tls) => {
+                            timing_log_elapsed(
+                                "http1.tls13",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, false)
+                        }
+                        Err(first_err) => {
+                            let stream = Self::resolve_and_connect_static(
+                                connect_timeout,
+                                dns_timeout,
+                                host,
+                                port,
+                            )
+                            .await?;
+                            let tls = AsyncTlsStream::client_tls12(stream, host).await.map_err(|second_err| {
                             Error::ProtocolError(format!(
                                 "TLS handshake failed: {first_err}; TLS 1.2 fallback failed: {second_err}"
                             ))
-                        })?
+                        })?;
+                            timing_log_elapsed(
+                                "http1.tls12",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, true)
+                        }
                     }
                 };
                 let reader = BufReader::new(tls);
-                Ok(PooledConn::Tls(reader))
+                Ok((PooledConn::Tls(reader), used_tls12_fallback))
             }
         } else {
+            let connect_started = Instant::now();
             let stream =
                 Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port).await?;
+            timing_log_elapsed(
+                "http1.connect",
+                format!("{}:{}", host, port),
+                connect_started.elapsed(),
+            );
             let reader = BufReader::new(stream);
-            Ok(PooledConn::Plain(reader))
+            Ok((PooledConn::Plain(reader), false))
         }
     }
 
     /// Create a new connection (instance method for non-async use).
-    async fn create_connection(&self, host: &str, port: u16, is_https: bool) -> Result<PooledConn> {
-        Self::create_connection_static(
+    async fn create_connection(
+        &mut self,
+        host: &str,
+        port: u16,
+        is_https: bool,
+    ) -> Result<PooledConn> {
+        let prefer_tls12 = self.tls12_first || {
+            #[cfg(feature = "tls")]
+            {
+                self.tls12_fallback_hosts.contains(host)
+            }
+            #[cfg(not(feature = "tls"))]
+            {
+                false
+            }
+        };
+        let (conn, used_tls12_fallback) = Self::create_connection_static(
             self.connect_timeout,
             self.dns_timeout,
             host,
             port,
             is_https,
             &self.session_cache,
+            prefer_tls12,
         )
-        .await
+        .await?;
+        if used_tls12_fallback {
+            #[cfg(feature = "tls")]
+            self.tls12_fallback_hosts.insert(host.to_string());
+        }
+        Ok(conn)
     }
 
     /// Resolve hostname and connect TCP — static version.
@@ -1224,10 +1354,31 @@ impl ConnectionPool {
         }
         location.to_string()
     }
+
+    fn response_allows_reuse(response: &Response) -> bool {
+        response
+            .headers()
+            .get("connection")
+            .is_none_or(|value| !value.as_str().eq_ignore_ascii_case("close"))
+    }
 }
 
 impl Default for ConnectionPool {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(feature = "std")]
+fn timing_log(label: &str, detail: String) {
+    if std::env::var_os("EDGERUN_TIMING").is_some() {
+        std::eprintln!("{label}: {detail}");
+    }
+}
+
+#[cfg(not(feature = "std"))]
+fn timing_log(_label: &str, _detail: String) {}
+
+fn timing_log_elapsed(label: &str, detail: String, elapsed: Duration) {
+    timing_log(label, format!("{:.3}s {}", elapsed.as_secs_f64(), detail));
 }

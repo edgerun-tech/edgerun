@@ -375,6 +375,8 @@ impl Http3Server {
 
         // Build the transcript including client Finished
         let mut transcript_after = handshaker.transcript().to_vec();
+        transcript_after.extend_from_slice(&handshake_crypto);
+        transcript_after.extend_from_slice(&client_finished_data);
 
         // Derive application keys and build the handshake result
         // The server uses the client's DCID (our SCID) as the dcid for key derivation
@@ -570,18 +572,24 @@ impl Http3Server {
                 return Ok(());
             }
 
-            match self.accept().await {
-                Ok((mut conn, client_addr)) => {
+            match runtime::timeout(
+                crate::runtime::time::Duration::from_millis(100),
+                self.accept(),
+            )
+            .await
+            {
+                Ok(Ok((mut conn, client_addr))) => {
                     if let Err(e) =
                         Self::handle_connection(&mut conn, Arc::clone(&handler), client_addr).await
                     {
                         edgerun_log::warn!("HTTP/3 connection error from {}: {}", client_addr, e);
                     }
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     edgerun_log::warn!("HTTP/3 accept error: {}", e);
                     crate::runtime::sleep(crate::runtime::time::Duration::from_millis(100)).await;
                 }
+                Err(_) => {}
             }
         }
     }

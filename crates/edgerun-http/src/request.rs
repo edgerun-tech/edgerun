@@ -290,7 +290,7 @@ impl RequestBuilder {
             }
         }
         if !headers.contains_key("Connection") {
-            let _ = headers.insert("Connection", "close");
+            let _ = headers.insert("Connection", "keep-alive");
         }
         if !headers.contains_key("User-Agent") {
             let _ = headers.insert("User-Agent", "edgerun-browser/0.1");

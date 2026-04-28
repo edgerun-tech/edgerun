@@ -182,6 +182,7 @@ const USB_DEVICE_CLK_RST_BIT: u32 = 1 << 10;
 const USB_CONF0_DEFAULT: u32 = 0x4200;
 const USB_EP1_CONF_WR_DONE: u32 = 1 << 0;
 const USB_EP1_CONF_DATA_FREE: u32 = 1 << 1;
+const USB_EP1_CONF_DATA_AVAIL: u32 = 1 << 2;
 const WDT_WKEY: u32 = 0x50D8_3AA1;
 
 const TIMG0_WDT_CONFIG0: *mut u32 = (0x6001_F000 + 0x48) as *mut u32;
@@ -227,6 +228,15 @@ pub unsafe fn esp32s3_usb_serial_jtag_write(bytes: &[u8]) {
         let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
         core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | USB_EP1_CONF_WR_DONE);
     }
+}
+
+/// Read one byte from ESP32-S3 USB Serial/JTAG if host data is available.
+#[inline]
+pub unsafe fn esp32s3_usb_serial_jtag_read_byte() -> Option<u8> {
+    if core::ptr::read_volatile(USB_EP1_CONF) & USB_EP1_CONF_DATA_AVAIL == 0 {
+        return None;
+    }
+    Some((core::ptr::read_volatile(USB_EP1) & 0xff) as u8)
 }
 
 #[inline]

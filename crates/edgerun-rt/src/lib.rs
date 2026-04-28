@@ -113,6 +113,8 @@ pub use error::Error;
 pub mod signal;
 pub use signal::{alarm, ctrl_c, usr1, usr2, CtrlC, Signal, SignalHandler, SignalKind};
 
+pub mod serial_mux;
+
 pub mod udp;
 pub use udp::{SocketAddr, UdpError, UdpSocket};
 pub type UdpAddr = SocketAddr;

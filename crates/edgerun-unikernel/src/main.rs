@@ -27,6 +27,113 @@ extern crate edgerun_virtio;
 extern crate edgerun_wifi;
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const DISPLAY_CONSOLE_LINES: usize = 8;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const DISPLAY_CONSOLE_COLS: usize = 38;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+struct DisplayConsole {
+    lines: [[u8; DISPLAY_CONSOLE_COLS]; DISPLAY_CONSOLE_LINES],
+    lens: [usize; DISPLAY_CONSOLE_LINES],
+    next: usize,
+    count: usize,
+    dirty: bool,
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl DisplayConsole {
+    const fn new() -> Self {
+        Self {
+            lines: [[0; DISPLAY_CONSOLE_COLS]; DISPLAY_CONSOLE_LINES],
+            lens: [0; DISPLAY_CONSOLE_LINES],
+            next: 0,
+            count: 0,
+            dirty: true,
+        }
+    }
+
+    fn push(&mut self, message: &str) {
+        let bytes = message.as_bytes();
+        let mut offset = 0;
+        while offset < bytes.len() {
+            let end = next_line_end(bytes, offset);
+            self.push_bytes(&bytes[offset..end]);
+            offset = end;
+            while offset < bytes.len() && (bytes[offset] == b'\n' || bytes[offset] == b'\r') {
+                offset += 1;
+            }
+        }
+        if bytes.is_empty() {
+            self.push_bytes(b"");
+        }
+    }
+
+    fn push_bytes(&mut self, bytes: &[u8]) {
+        let line = &mut self.lines[self.next];
+        let len = bytes.len().min(DISPLAY_CONSOLE_COLS);
+        let mut i = 0;
+        while i < len {
+            line[i] = sanitize_console_byte(bytes[i]);
+            i += 1;
+        }
+        while i < DISPLAY_CONSOLE_COLS {
+            line[i] = 0;
+            i += 1;
+        }
+        self.lens[self.next] = len;
+        self.next = (self.next + 1) % DISPLAY_CONSOLE_LINES;
+        self.count = (self.count + 1).min(DISPLAY_CONSOLE_LINES);
+        self.dirty = true;
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+struct DisplayConsoleCell(core::cell::UnsafeCell<DisplayConsole>);
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe impl Sync for DisplayConsoleCell {}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl DisplayConsoleCell {
+    const fn new() -> Self {
+        Self(core::cell::UnsafeCell::new(DisplayConsole::new()))
+    }
+
+    fn with<R>(&self, f: impl FnOnce(&mut DisplayConsole) -> R) -> R {
+        unsafe { f(&mut *self.0.get()) }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+static DISPLAY_CONSOLE: DisplayConsoleCell = DisplayConsoleCell::new();
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn display_console_log(message: &str) {
+    DISPLAY_CONSOLE.with(|console| console.push(message));
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn next_line_end(bytes: &[u8], offset: usize) -> usize {
+    let mut end = offset;
+    while end < bytes.len() && end - offset < DISPLAY_CONSOLE_COLS {
+        if bytes[end] == b'\n' || bytes[end] == b'\r' {
+            break;
+        }
+        end += 1;
+    }
+    end
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn sanitize_console_byte(byte: u8) -> u8 {
+    if (0x20..=0x7e).contains(&byte) {
+        byte
+    } else {
+        b'?'
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 #[repr(C, packed)]
 struct EspAppDesc {
     magic_word: u32,
@@ -83,11 +190,144 @@ fn render_initial_ui() {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_console_if_dirty(touch: Option<(u16, u16)>) {
+    let dirty = DISPLAY_CONSOLE.with(|console| {
+        let dirty = console.dirty;
+        console.dirty = false;
+        dirty
+    });
+    if dirty {
+        match touch {
+            Some(touch) => render_touch_ui(touch),
+            None => render_initial_ui(),
+        }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn render_touch_ui(touch: (u16, u16)) {
     #[cfg(feature = "html-ui")]
     render_html_ui(Some(touch));
     #[cfg(not(feature = "html-ui"))]
     render_debug_pattern(Some(touch));
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn poll_serial_control(
+    rx: &mut rt::serial_mux::Receiver<256>,
+    last_touch: Option<(u16, u16)>,
+) {
+    let mut processed = 0;
+    while processed < 8 {
+        let frame = match rx.poll() {
+            Ok(Some(frame)) => frame,
+            Ok(None) => break,
+            Err(_) => {
+                rt::serial_mux::write(rt::serial_mux::CHANNEL_CONTROL, b"err decode\n");
+                break;
+            }
+        };
+        processed += 1;
+        if frame.channel != rt::serial_mux::CHANNEL_CONTROL {
+            continue;
+        }
+        match frame.payload() {
+            b"ping" | b"ping\n" => {
+                display_console_log("ctl ping");
+                rt::serial_mux::write_with_seq(
+                    rt::serial_mux::CHANNEL_CONTROL,
+                    frame.seq,
+                    b"pong\n",
+                );
+            }
+            b"status" | b"status\n" => {
+                display_console_log("ctl status");
+                rt::serial_mux::write_with_seq(
+                    rt::serial_mux::CHANNEL_CONTROL,
+                    frame.seq,
+                    b"ok board=jc3248w535 display=up touch=up transport=usb-serial-jtag\n",
+                );
+                if let Some((x, y)) = last_touch {
+                    write_touch_status(frame.seq, x, y);
+                }
+            }
+            b"repaint" | b"repaint\n" => {
+                display_console_log("ctl repaint");
+                if let Some(touch) = last_touch {
+                    render_touch_ui(touch);
+                } else {
+                    render_initial_ui();
+                }
+                rt::serial_mux::write_with_seq(
+                    rt::serial_mux::CHANNEL_CONTROL,
+                    frame.seq,
+                    b"ok repaint\n",
+                );
+            }
+            _ => {
+                display_console_log("ctl unknown");
+                rt::serial_mux::write_with_seq(
+                    rt::serial_mux::CHANNEL_CONTROL,
+                    frame.seq,
+                    b"err unknown-command\n",
+                );
+            }
+        }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_touch_status(seq: u16, x: u16, y: u16) {
+    let mut buf = [0u8; 32];
+    let mut len = 0;
+    append_bytes(&mut buf, &mut len, b"touch x=");
+    append_u16(&mut buf, &mut len, x);
+    append_bytes(&mut buf, &mut len, b" y=");
+    append_u16(&mut buf, &mut len, y);
+    append_bytes(&mut buf, &mut len, b"\n");
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn display_touch_status(x: u16, y: u16) {
+    let mut buf = [0u8; 32];
+    let mut len = 0;
+    append_bytes(&mut buf, &mut len, b"touch x=");
+    append_u16(&mut buf, &mut len, x);
+    append_bytes(&mut buf, &mut len, b" y=");
+    append_u16(&mut buf, &mut len, y);
+    if let Ok(text) = core::str::from_utf8(&buf[..len]) {
+        display_console_log(text);
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn append_bytes(out: &mut [u8], len: &mut usize, bytes: &[u8]) {
+    for &byte in bytes {
+        if *len == out.len() {
+            return;
+        }
+        out[*len] = byte;
+        *len += 1;
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn append_u16(out: &mut [u8], len: &mut usize, mut value: u16) {
+    let mut digits = [0u8; 5];
+    let mut count = 0;
+    loop {
+        digits[count] = b'0' + (value % 10) as u8;
+        count += 1;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    while count > 0 {
+        count -= 1;
+        append_bytes(out, len, &digits[count..count + 1]);
+    }
 }
 
 #[cfg(all(
@@ -192,9 +432,74 @@ fn render_html_ui(touch: Option<(u16, u16)>) {
                     return 0xf800;
                 }
             }
+            if let Some(color) = console_pixel(x, y) {
+                return color;
+            }
             html_ui_pixel(x, y)
         });
     }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn console_pixel(x: u16, y: u16) -> Option<u16> {
+    let x = x as u32;
+    let y = y as u32;
+    if y < 366 {
+        return None;
+    }
+    if y == 366 {
+        return Some(rgb565(20, 184, 166));
+    }
+    if y < 480 {
+        if console_text_pixel(x, y) {
+            return Some(rgb565(226, 232, 240));
+        }
+        let shade = if ((x / 12) + (y / 12)) & 1 == 0 { 0 } else { 3 };
+        return Some(rgb565(3 + shade, 7 + shade, 18 + shade));
+    }
+    None
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn console_text_pixel(px: u32, py: u32) -> bool {
+    const LEFT: u32 = 8;
+    const TOP: u32 = 374;
+    const SCALE: u32 = 1;
+    const GLYPH_W: u32 = 5;
+    const GLYPH_H: u32 = 7;
+    const ROW_H: u32 = 12;
+    if px < LEFT || py < TOP {
+        return false;
+    }
+    let row = ((py - TOP) / ROW_H) as usize;
+    if row >= DISPLAY_CONSOLE_LINES {
+        return false;
+    }
+    let local_y = (py - TOP) % ROW_H;
+    if local_y >= GLYPH_H {
+        return false;
+    }
+    let col = ((px - LEFT) / (GLYPH_W + SCALE)) as usize;
+    if col >= DISPLAY_CONSOLE_COLS {
+        return false;
+    }
+    let local_x = (px - LEFT) % (GLYPH_W + SCALE);
+    if local_x >= GLYPH_W {
+        return false;
+    }
+
+    DISPLAY_CONSOLE.with(|console| {
+        if row >= console.count {
+            return false;
+        }
+        let line_index =
+            (console.next + DISPLAY_CONSOLE_LINES - console.count + row) % DISPLAY_CONSOLE_LINES;
+        if col >= console.lens[line_index] {
+            return false;
+        }
+        let glyph = glyph_5x7(console.lines[line_index][col]);
+        (glyph[local_y as usize] & (1 << (4 - local_x))) != 0
+    })
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
@@ -517,7 +822,7 @@ fn draw_glyph_bgra(
     }
 }
 
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn glyph_5x7(byte: u8) -> [u8; 7] {
     match byte {
         b'0' => [0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e],
@@ -531,24 +836,39 @@ fn glyph_5x7(byte: u8) -> [u8; 7] {
         b'8' => [0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e],
         b'9' => [0x0e, 0x11, 0x11, 0x0f, 0x01, 0x01, 0x0e],
         b'A' | b'a' => [0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
+        b'B' | b'b' => [0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e],
         b'C' | b'c' => [0x0f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0f],
         b'D' | b'd' => [0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e],
         b'E' | b'e' => [0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f],
         b'F' | b'f' => [0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x10],
         b'G' | b'g' => [0x0f, 0x10, 0x10, 0x13, 0x11, 0x11, 0x0f],
+        b'H' | b'h' => [0x11, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
         b'I' | b'i' => [0x0e, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0e],
+        b'J' | b'j' => [0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0e],
+        b'K' | b'k' => [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
         b'L' | b'l' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f],
         b'M' | b'm' => [0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11],
         b'N' | b'n' => [0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11],
         b'O' | b'o' => [0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
         b'P' | b'p' => [0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10],
+        b'Q' | b'q' => [0x0e, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0d],
         b'R' | b'r' => [0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11],
         b'S' | b's' => [0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e],
         b'T' | b't' => [0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
         b'U' | b'u' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
+        b'V' | b'v' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x0a, 0x04],
         b'W' | b'w' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x1b, 0x11],
+        b'X' | b'x' => [0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11],
         b'Y' | b'y' => [0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04],
+        b'Z' | b'z' => [0x1f, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1f],
         b'-' => [0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00],
+        b':' => [0x00, 0x04, 0x04, 0x00, 0x04, 0x04, 0x00],
+        b'=' => [0x00, 0x00, 0x1f, 0x00, 0x1f, 0x00, 0x00],
+        b'.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x0c],
+        b'/' => [0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10],
+        b'_' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f],
+        b'[' => [0x0e, 0x08, 0x08, 0x08, 0x08, 0x08, 0x0e],
+        b']' => [0x0e, 0x02, 0x02, 0x02, 0x02, 0x02, 0x0e],
         b' ' => [0x00; 7],
         _ => [0x1f, 0x11, 0x15, 0x15, 0x15, 0x11, 0x1f],
     }
@@ -611,6 +931,9 @@ fn render_debug_pattern(touch: Option<(u16, u16)>) {
                 if dx <= 5 && dy <= 5 {
                     return 0xf800;
                 }
+            }
+            if let Some(color) = console_pixel(x, y) {
+                return color;
             }
             debug_pixel(x, y)
         });
@@ -2455,35 +2778,39 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM0\n");
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1\n");
     rt::timer::set_now(0);
+    rt::log::set_mirror_logger(display_console_log);
     rt::log::log(1, "Starting edgerun unikernel on Xtensa");
     rt::log::init_serial_logger();
-    rt::log::info!("Xtensa formatted logger online");
-    rt::log::info!("Initializing JC3248W535 display");
+    rt::log::log(1, "Xtensa serial mux online");
+    rt::log::log(1, "Initializing JC3248W535 display");
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::init();
         edgerun_platform::esp32s3::Jc3248w535Touch::init();
     }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
-    rt::log::info!("JC3248W535 display init complete");
-    rt::log::info!("Rendering display UI");
+    rt::log::log(1, "JC3248W535 display init complete");
+    rt::log::log(1, "Rendering display UI");
     render_initial_ui();
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
-    rt::log::info!("Display UI rendered");
+    rt::log::log(1, "Display UI rendered");
     try_start_esp32s3_wifi_ap();
-    rt::log::info!("JC3248W535 touch polling enabled");
+    rt::log::log(1, "JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;
+    let mut serial_rx = rt::serial_mux::Receiver::<256>::new();
     loop {
+        poll_serial_control(&mut serial_rx, last_touch);
         unsafe {
             if let Some(point) = edgerun_platform::esp32s3::Jc3248w535Touch::read_point() {
                 let touch = (point.x, point.y);
                 if last_touch != Some(touch) {
                     render_touch_ui(touch);
-                    rt::log::info!("Touch point x={} y={}", point.x, point.y);
+                    display_touch_status(point.x, point.y);
                     last_touch = Some(touch);
                 }
             }
         }
+        render_console_if_dirty(last_touch);
 
         let mut i = 0;
         while i < 1_000_000 {

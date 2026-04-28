@@ -15,6 +15,8 @@ use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
 #[cfg(feature = "tls")]
 use alloc::collections::BTreeSet;
+#[cfg(feature = "tls")]
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, string::ToString};
@@ -39,6 +41,7 @@ struct ClientInner {
     max_redirects: u8,
     follow_redirects: bool,
     auto_decompress: bool,
+    tls12_first: bool,
     pool: Arc<Mutex<ConnectionPool>>,
     #[cfg(feature = "tls")]
     h2_pool: Arc<Mutex<Http2Pool>>,
@@ -62,6 +65,7 @@ impl HttpClient {
                 max_redirects: 10,
                 follow_redirects: true,
                 auto_decompress: true,
+                tls12_first: false,
                 pool: Arc::new(Mutex::new(ConnectionPool::new())),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::new(Mutex::new(Http2Pool::new())),
@@ -84,6 +88,7 @@ impl HttpClient {
                 max_redirects: self.inner.max_redirects,
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
+                tls12_first: self.inner.tls12_first,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -101,6 +106,7 @@ impl HttpClient {
                 max_redirects: self.inner.max_redirects,
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
+                tls12_first: self.inner.tls12_first,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -118,6 +124,7 @@ impl HttpClient {
                 max_redirects: self.inner.max_redirects,
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
+                tls12_first: self.inner.tls12_first,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -135,6 +142,7 @@ impl HttpClient {
                 max_redirects: max,
                 follow_redirects: max > 0,
                 auto_decompress: self.inner.auto_decompress,
+                tls12_first: self.inner.tls12_first,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -152,6 +160,7 @@ impl HttpClient {
                 max_redirects: 0,
                 follow_redirects: false,
                 auto_decompress: self.inner.auto_decompress,
+                tls12_first: self.inner.tls12_first,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -169,6 +178,31 @@ impl HttpClient {
                 max_redirects: self.inner.max_redirects,
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: false,
+                tls12_first: self.inner.tls12_first,
+                pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
+                h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+            }),
+        }
+    }
+
+    /// Prefer TLS 1.2 for HTTP/1.1 HTTPS connections.
+    ///
+    /// This is useful for compatibility-heavy navigation paths where a failed
+    /// TLS 1.3 attempt would otherwise require a second TCP connection before
+    /// falling back to TLS 1.2. HTTP/2 still uses the HTTP/2 TLS path.
+    pub fn with_tls12_first(self, enabled: bool) -> Self {
+        Self {
+            inner: Arc::new(ClientInner {
+                version: self.inner.version,
+                connect_timeout: self.inner.connect_timeout,
+                read_timeout: self.inner.read_timeout,
+                max_redirects: self.inner.max_redirects,
+                follow_redirects: self.inner.follow_redirects,
+                auto_decompress: self.inner.auto_decompress,
+                tls12_first: enabled,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -343,6 +377,7 @@ impl HttpClient {
             pool.set_max_redirects(0);
             pool.set_follow_redirects(false);
             pool.set_auto_decompress(false);
+            pool.set_tls12_first(self.inner.tls12_first);
         }
 
         let h1_resp =
@@ -381,6 +416,7 @@ impl HttpClient {
             pool.set_max_redirects(self.inner.max_redirects);
             pool.set_follow_redirects(self.inner.follow_redirects);
             pool.set_auto_decompress(self.inner.auto_decompress);
+            pool.set_tls12_first(self.inner.tls12_first);
         }
 
         let h1_resp = ConnectionPool::execute_async(&self.inner.pool, &h1_req).await?;

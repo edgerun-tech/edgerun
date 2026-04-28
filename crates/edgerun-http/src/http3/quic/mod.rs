@@ -253,6 +253,7 @@ impl QuicConnection {
                     let decrypted = self.decrypt_packet_handshake(&pkt)?;
                     if let Some((data, _)) = super::crypto_frame::parse_crypto_frame(&decrypted) {
                         all_handshake_crypto.extend_from_slice(&data);
+                        break;
                     }
                 }
                 Err(e) if e.contains("would block") || e.contains("no data") => {
@@ -317,7 +318,7 @@ impl QuicConnection {
             .transport
             .next_packet_number(PacketNumberSpace::Initial);
 
-        let pkt = QuicPacket::initial(
+        let mut pkt = QuicPacket::initial(
             QUIC_VERSION_V1,
             self.transport.remote_cid.as_bytes().to_vec(),
             self.transport.local_cid.as_bytes().to_vec(),
@@ -325,6 +326,8 @@ impl QuicConnection {
             pn,
             payload,
         );
+
+        pad_initial_datagram(&mut pkt);
 
         let encrypted = pkt.payload.clone();
         let aad = pkt.header_to_bytes_aad_with_payload_len(encrypted.len() + 16);
@@ -723,19 +726,26 @@ impl QuicConnection {
     /// Reads from the UDP socket, decrypts 1-RTT packets, parses QUIC frames,
     /// and returns the first STREAM frame found.
     pub async fn recv_stream_data(&mut self) -> Result<Option<(u64, Vec<u8>, bool)>, String> {
-        if self.recv_buffer.is_empty() || self.recv_offset >= self.recv_buffer.len() {
-            let mut buf = [0u8; 65536];
-            let (n, _) = self
-                .socket
-                .recv_from(&mut buf)
-                .await
-                .map_err(|e| format!("UDP recv failed: {}", e))?;
-            self.recv_buffer = buf[..n].to_vec();
-            self.recv_offset = 0;
-            self.transport.update_activity();
-        }
+        loop {
+            if self.recv_buffer.is_empty() || self.recv_offset >= self.recv_buffer.len() {
+                let mut buf = [0u8; 65536];
+                let (n, _) = self
+                    .socket
+                    .recv_from(&mut buf)
+                    .await
+                    .map_err(|e| format!("UDP recv failed: {}", e))?;
+                self.recv_buffer = buf[..n].to_vec();
+                self.recv_offset = 0;
+                self.transport.update_activity();
+            }
 
-        self.recv_from_buffer()
+            if let Some(stream_data) = self.recv_from_buffer()? {
+                return Ok(Some(stream_data));
+            }
+
+            self.recv_buffer.clear();
+            self.recv_offset = 0;
+        }
     }
 
     /// Inject a raw received packet (for testing without UDP sockets).
@@ -784,6 +794,10 @@ impl QuicConnection {
             match QuicPacket::from_bytes(data) {
                 Ok((packet, consumed)) => {
                     self.recv_offset += consumed;
+
+                    if packet.header.packet_type != PacketType::OneRtt {
+                        continue;
+                    }
 
                     // Decrypt the packet payload
                     let plaintext = if let Some(ref mut prot) = self.protection {
@@ -1120,6 +1134,21 @@ impl QuicConnection {
         } else {
             timeout - elapsed
         }
+    }
+}
+
+fn pad_initial_datagram(pkt: &mut QuicPacket) {
+    const MIN_INITIAL_DATAGRAM: usize = 1200;
+    loop {
+        let datagram_len = pkt
+            .header_to_bytes_aad_with_payload_len(pkt.payload.len() + 16)
+            .len()
+            + pkt.payload.len()
+            + 16;
+        if datagram_len >= MIN_INITIAL_DATAGRAM {
+            break;
+        }
+        pkt.payload.push(0);
     }
 }
 

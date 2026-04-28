@@ -4,14 +4,15 @@
 //! and file uploads.
 //!
 //! # Usage
-//! ```no_run
-//! use edgerun_http::http1::multipart::MultipartParser;
+//! ```rust
+//! use edgerun_http::http1::multipart::parse_multipart;
 //!
-//! let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+//! let boundary = "boundary";
 //! let body = b"--boundary\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--boundary--\r\n";
-//! let parts = MultipartParser::parse(body, boundary).unwrap();
+//! let parts = parse_multipart(body, boundary).unwrap();
 //! for part in parts {
-//!     println!("{}: {}", part.name, String::from_utf8_lossy(&part.data));
+//!     assert_eq!(part.name, "field");
+//!     assert_eq!(part.text(), Some("value"));
 //! }
 //! ```
 
