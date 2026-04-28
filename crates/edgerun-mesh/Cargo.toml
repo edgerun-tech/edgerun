@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Identity-routed mesh primitives for Edgerun"
 
 [dependencies]
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }

@@ -3,6 +3,8 @@ name = "edgerun-edit"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
+description = "Collaborative editing service and CLI for Edgerun"
 
 [[bin]]
 name = "edgerun-edit"
