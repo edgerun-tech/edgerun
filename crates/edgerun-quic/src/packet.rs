@@ -318,6 +318,32 @@ impl QuicPacket {
         let src_cid = data[pos..pos + src_cid_len].to_vec();
         pos += src_cid_len;
 
+        if packet_type == PacketType::Retry {
+            if data.len().saturating_sub(pos) < 16 {
+                return Err("Retry packet missing integrity tag".to_string());
+            }
+            let token_end = data.len() - 16;
+            let token = data[pos..token_end].to_vec();
+            let payload = data[token_end..].to_vec();
+            return Ok((
+                QuicPacket {
+                    header: QuicPacketHeader {
+                        packet_type,
+                        version,
+                        dst_cid,
+                        src_cid,
+                        token,
+                        pn_length: 0,
+                        packet_number: 0,
+                        key_phase: false,
+                        payload_length: payload.len(),
+                    },
+                    payload,
+                },
+                data.len(),
+            ));
+        }
+
         // Token (Initial only)
         let mut token = Vec::new();
         if packet_type == PacketType::Initial {
@@ -460,6 +486,9 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
         return Err("QUIC fixed bit is not set".to_string());
     }
     let packet_type = PacketType::from_byte(first_byte).ok_or("Invalid packet type")?;
+    if packet_type == PacketType::Retry {
+        return Err("Retry packets do not have a protected payload offset".to_string());
+    }
 
     // Start after first byte and version.
     let mut pos = 5;
@@ -616,6 +645,39 @@ mod tests {
         bytes[0] &= !0x40;
 
         assert!(QuicPacket::from_bytes_with_short_dcid_len(&bytes, 4).is_err());
+    }
+
+    #[test]
+    fn test_retry_packet_roundtrip() {
+        let token = vec![0xaa, 0xbb, 0xcc, 0xdd];
+        let tag = [0x11; 16];
+        let bytes = QuicPacket::retry(1, vec![1, 2, 3, 4], vec![5, 6, 7, 8], token.clone(), tag);
+
+        assert!(QuicPacket::is_retry(&bytes));
+        let (parsed, consumed) = QuicPacket::from_bytes(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(parsed.header.packet_type, PacketType::Retry);
+        assert_eq!(parsed.header.version, 1);
+        assert_eq!(parsed.header.dst_cid, vec![1, 2, 3, 4]);
+        assert_eq!(parsed.header.src_cid, vec![5, 6, 7, 8]);
+        assert_eq!(parsed.header.token, token);
+        assert_eq!(parsed.header.pn_length, 0);
+        assert_eq!(parsed.header.packet_number, 0);
+        assert_eq!(parsed.payload, tag.to_vec());
+        assert_eq!(parsed.to_bytes(), bytes);
+        assert!(get_long_header_payload_offset(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_retry_packet_rejects_missing_integrity_tag() {
+        let bytes = vec![
+            0xf1, 0, 0, 0, 1, // first byte + version
+            4, 1, 2, 3, 4, // dcid
+            4, 5, 6, 7, 8, // scid
+            0xaa, 0xbb, // token, but no 16-byte tag
+        ];
+
+        assert!(QuicPacket::from_bytes(&bytes).is_err());
     }
 
     #[test]
