@@ -250,71 +250,7 @@ fn required<T: FromJson>(object: &mut Map, key: &str) -> Result<T, JsonValueErro
     )
 }
 
-fn optional<T: FromJson>(object: &mut Map, key: &str) -> Result<Option<T>, JsonValueError> {
-    match object.remove(key) {
-        Some(JsonValue::Null) | None => Ok(None),
-        Some(value) => T::from_json(value).map(Some),
-    }
-}
-
-macro_rules! impl_acme_struct_json {
-    (
-        $ty:ty {
-            required { $($required_field:ident : $required_key:expr => $required_ty:ty),* $(,)? }
-            optional { $($optional_field:ident : $optional_key:expr => $optional_ty:ty),* $(,)? }
-        }
-    ) => {
-        impl ToJson for $ty {
-            fn to_json(&self) -> JsonValue {
-                let mut object = Map::new();
-                $(
-                    object.push_field($required_key, self.$required_field.to_json());
-                )*
-                $(
-                    object.push_opt_field(
-                        $optional_key,
-                        self.$optional_field.as_ref().map(ToJson::to_json),
-                    );
-                )*
-                object.into()
-            }
-        }
-
-        impl FromJson for $ty {
-            fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-                let mut object = object_from_json(value)?;
-                Ok(Self {
-                    $($required_field: required::<$required_ty>(&mut object, $required_key)?,)*
-                    $($optional_field: optional::<$optional_ty>(&mut object, $optional_key)?,)*
-                })
-            }
-        }
-    };
-}
-
-macro_rules! impl_string_enum_json {
-    ($ty:ty { $($variant:ident => $value:expr),* $(,)? }) => {
-        impl ToJson for $ty {
-            fn to_json(&self) -> JsonValue {
-                JsonValue::String(match self {
-                    $(Self::$variant => $value,)*
-                }.to_string())
-            }
-        }
-
-        impl FromJson for $ty {
-            fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-                let value = String::from_json(value)?;
-                match value.as_str() {
-                    $($value => Ok(Self::$variant),)*
-                    _ => Err(expected(format!("unknown {} value `{value}`", stringify!($ty)))),
-                }
-            }
-        }
-    };
-}
-
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     Directory {
         required {
             new_nonce: "newNonce" => Url,
@@ -329,7 +265,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     DirectoryMeta {
         required {}
         optional {
@@ -364,7 +300,7 @@ impl FromJson for DirectoryUrl {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     Account {
         required {
             id: "id" => String,
@@ -379,7 +315,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_string_enum_json! {
+edgerun_json::impl_json_string_enum! {
     AccountStatus {
         Valid => "valid",
         Deactivated => "deactivated",
@@ -423,7 +359,7 @@ impl FromJson for Jwk {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     NewAccountRequest {
         required {
             jwk: "jwk" => Jwk
@@ -435,7 +371,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     NewAccountRequestWithNonce {
         required {
             jwk: "jwk" => Jwk
@@ -448,7 +384,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     ExternalAccountBinding {
         required {
             protected: "protected" => String,
@@ -459,7 +395,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     AccountResponse {
         required {
             id: "id" => String,
@@ -476,7 +412,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     NewOrderRequest {
         required {
             identifiers: "identifiers" => Vec<Identifier>
@@ -488,7 +424,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     Identifier {
         required {
             id_type: "type" => String,
@@ -498,7 +434,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     Order {
         required {
             id: "id" => Url,
@@ -517,7 +453,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_string_enum_json! {
+edgerun_json::impl_json_string_enum! {
     OrderStatus {
         Pending => "pending",
         Ready => "ready",
@@ -527,7 +463,7 @@ impl_string_enum_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     Authorization {
         required {
             id: "id" => Url,
@@ -542,7 +478,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_string_enum_json! {
+edgerun_json::impl_json_string_enum! {
     AuthorizationStatus {
         Pending => "pending",
         Valid => "valid",
@@ -553,7 +489,7 @@ impl_string_enum_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     Challenge {
         required {
             id: "id" => String,
@@ -570,7 +506,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_string_enum_json! {
+edgerun_json::impl_json_string_enum! {
     ChallengeType {
         Http01 => "http-01",
         Dns01 => "dns-01",
@@ -578,7 +514,7 @@ impl_string_enum_json! {
     }
 }
 
-impl_string_enum_json! {
+edgerun_json::impl_json_string_enum! {
     ChallengeStatus {
         Pending => "pending",
         Processing => "processing",
@@ -587,7 +523,7 @@ impl_string_enum_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     AcmeErrorDetail {
         required {
             error_type: "type" => String,
@@ -599,7 +535,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     CSRRequest {
         required {
             csr: "csr" => String
@@ -608,7 +544,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     CertificateResponse {
         required {
             certificate: "certificate" => String
@@ -617,7 +553,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     RevokeCertRequest {
         required {
             certificate: "certificate" => String
@@ -628,7 +564,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     SignedJws {
         required {
             protected: "protected" => String,
@@ -639,7 +575,7 @@ impl_acme_struct_json! {
     }
 }
 
-impl_acme_struct_json! {
+edgerun_json::impl_json_struct! {
     JwsHeader {
         required {
             alg: "alg" => String,

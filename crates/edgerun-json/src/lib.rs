@@ -190,7 +190,10 @@ macro_rules! impl_json_struct {
                     $(
                         $optional_field: object
                             .remove($optional_key)
-                            .map(<$optional_ty as $crate::FromJson>::from_json)
+                            .and_then(|value| match value {
+                                $crate::JsonValue::Null => None,
+                                other => Some(<$optional_ty as $crate::FromJson>::from_json(other)),
+                            })
                             .transpose()?,
                     )*
                 })
@@ -245,6 +248,34 @@ macro_rules! impl_json_struct {
                         )?,
                     )*
                 })
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! impl_json_string_enum {
+    ($ty:ty { $($variant:ident => $value:expr),* $(,)? }) => {
+        impl $crate::ToJson for $ty {
+            fn to_json(&self) -> $crate::JsonValue {
+                $crate::JsonValue::String(
+                    match self {
+                        $(Self::$variant => $value,)*
+                    }
+                    .into(),
+                )
+            }
+        }
+
+        impl $crate::FromJson for $ty {
+            fn from_json(value: $crate::JsonValue) -> core::result::Result<Self, $crate::JsonValueError> {
+                let value = <alloc::string::String as $crate::FromJson>::from_json(value)?;
+                match value.as_str() {
+                    $($value => Ok(Self::$variant),)*
+                    _ => Err($crate::JsonValueError::WrongType(
+                        alloc::format!("unknown {} value `{value}`", stringify!($ty)),
+                    )),
+                }
             }
         }
     };
