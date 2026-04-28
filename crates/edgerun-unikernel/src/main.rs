@@ -338,19 +338,16 @@ fn write_wifi_phy_fun_slots(seq: u16) {
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn write_wifi_debug_step(seq: u16, step: u8) {
     display_console_log("ctl wifi step");
+    let mut buf = [0u8; 48];
+    let mut len = 0;
     if try_wifi_debug_step(step) {
-        rt::serial_mux::write_with_seq(
-            rt::serial_mux::CHANNEL_CONTROL,
-            seq,
-            b"ok wifi-step\n",
-        );
+        append_bytes(&mut buf, &mut len, b"ok wifi-step status=");
     } else {
-        rt::serial_mux::write_with_seq(
-            rt::serial_mux::CHANNEL_CONTROL,
-            seq,
-            b"err wifi-step\n",
-        );
+        append_bytes(&mut buf, &mut len, b"err wifi-step status=");
     }
+    append_u16(&mut buf, &mut len, wifi_debug_status() as u16);
+    append_bytes(&mut buf, &mut len, b"\n");
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob"))]
@@ -444,7 +441,6 @@ fn display_touch_status(x: u16, y: u16) {
     }
 }
 
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn append_bytes(out: &mut [u8], len: &mut usize, bytes: &[u8]) {
     for &byte in bytes {
         if *len == out.len() {
@@ -605,6 +601,15 @@ fn try_wifi_debug_step(step: u8) -> bool {
     edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio::debug_step(step)
 }
 
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+fn wifi_debug_status() -> i32 {
+    edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio::last_start_status()
+}
+
 #[cfg(not(all(
     target_arch = "xtensa",
     target_os = "none",
@@ -623,6 +628,15 @@ fn try_start_esp32s3_wifi_ap() -> bool {
 fn try_wifi_debug_step(_step: u8) -> bool {
     rt::log::log(3, "ESP32-S3 WiFi debug blob feature disabled");
     false
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+)))]
+fn wifi_debug_status() -> i32 {
+    0
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]

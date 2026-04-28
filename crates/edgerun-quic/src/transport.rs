@@ -517,9 +517,7 @@ impl QuicTransport {
                 }
 
                 let larger_acked = self.sent_packets.iter().any(|other| {
-                    other.acked
-                        && other.space == space
-                        && other.packet_number > pkt.packet_number
+                    other.acked && other.space == space && other.packet_number > pkt.packet_number
                 });
 
                 let time_expired = now - pkt.time_sent > time_threshold;
@@ -847,6 +845,30 @@ mod tests {
             }
             _ => panic!("expected ACK frame"),
         }
+    }
+
+    #[test]
+    fn test_ack_received_only_acks_matching_packet_number_space() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        transport.record_packet_sent(PacketNumberSpace::Initial, 0, 100, true);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 0, 300, false);
+        assert_eq!(transport.bytes_in_flight(), 400);
+
+        transport.on_ack_received(
+            PacketNumberSpace::ApplicationData,
+            0,
+            0,
+            &[],
+            std::time::Duration::ZERO,
+        );
+
+        assert_eq!(transport.bytes_in_flight(), 100);
+        assert_eq!(transport.sent_packets.len(), 1);
+        assert_eq!(transport.sent_packets[0].space, PacketNumberSpace::Initial);
+        assert_eq!(transport.sent_packets[0].packet_number, 0);
     }
 
     #[test]

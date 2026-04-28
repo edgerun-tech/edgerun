@@ -178,9 +178,6 @@ unsafe extern "C" {
     ) -> c_int;
 }
 
-type PhyFunNoArgI32 = unsafe extern "C" fn() -> i32;
-type PhyFunGetU8 = unsafe extern "C" fn(c_int, *mut u8);
-
 #[derive(Clone, Copy)]
 struct RawRxFrame {
     used: bool,
@@ -428,18 +425,6 @@ impl EspressifPromiscRadio {
                     LAST_START_STATUS.store(2202, Ordering::Relaxed);
                     !g_phyFuns.is_null()
                 }
-                23 => probe_phy_timer_ticks(),
-                24 => probe_phy_pti(3, 2400),
-                25 => probe_phy_pti(15, 2500),
-                26 => {
-                    LAST_START_STATUS.store(2601, Ordering::Relaxed);
-                    let Some(ticks) = read_phy_timer_ticks() else {
-                        return false;
-                    };
-                    hal_timer_update_by_rtc(1, ticks);
-                    LAST_START_STATUS.store(2602, Ordering::Relaxed);
-                    true
-                }
                 #[cfg(feature = "esp32s3-wifi-phy-probe")]
                 19 => {
                     LAST_START_STATUS.store(1901, Ordering::Relaxed);
@@ -469,54 +454,6 @@ unsafe fn read_phy_fun_slot(offset: usize) -> u32 {
             .cast::<usize>()
             .read_volatile() as u32
     }
-}
-
-unsafe fn read_phy_fun_ptr(offset: usize) -> Option<usize> {
-    let table = unsafe { g_phyFuns };
-    if table.is_null() {
-        return None;
-    }
-    let ptr = unsafe {
-        table
-            .cast::<u8>()
-            .add(offset)
-            .cast::<usize>()
-            .read_volatile()
-    };
-    if ptr == 0 {
-        None
-    } else {
-        Some(ptr)
-    }
-}
-
-unsafe fn read_phy_timer_ticks() -> Option<c_int> {
-    let ptr = unsafe { read_phy_fun_ptr(0x148)? };
-    let f: PhyFunNoArgI32 = unsafe { core::mem::transmute(ptr) };
-    Some(unsafe { f() })
-}
-
-unsafe fn probe_phy_timer_ticks() -> bool {
-    LAST_START_STATUS.store(2301, Ordering::Relaxed);
-    let Some(ticks) = (unsafe { read_phy_timer_ticks() }) else {
-        LAST_START_STATUS.store(2300, Ordering::Relaxed);
-        return false;
-    };
-    LAST_START_STATUS.store(2300 + (ticks & 0xff), Ordering::Relaxed);
-    true
-}
-
-unsafe fn probe_phy_pti(which: c_int, base_status: i32) -> bool {
-    LAST_START_STATUS.store(base_status + 1, Ordering::Relaxed);
-    let Some(ptr) = (unsafe { read_phy_fun_ptr(0x1a8) }) else {
-        LAST_START_STATUS.store(base_status, Ordering::Relaxed);
-        return false;
-    };
-    let f: PhyFunGetU8 = unsafe { core::mem::transmute(ptr) };
-    let mut value = 0u8;
-    unsafe { f(which, core::ptr::addr_of_mut!(value)) };
-    LAST_START_STATUS.store(base_status + value as i32, Ordering::Relaxed);
-    true
 }
 
 unsafe fn run_noarg_step(before: i32, after: i32, f: unsafe extern "C" fn()) -> bool {
