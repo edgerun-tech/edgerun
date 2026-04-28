@@ -13,6 +13,8 @@ use crate::runtime::timeout as rt_timeout;
 use crate::runtime::Mutex;
 use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
+#[cfg(feature = "tls")]
+use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, string::ToString};
@@ -40,6 +42,8 @@ struct ClientInner {
     pool: Arc<Mutex<ConnectionPool>>,
     #[cfg(feature = "tls")]
     h2_pool: Arc<Mutex<Http2Pool>>,
+    #[cfg(feature = "tls")]
+    h2_fallback_disabled_hosts: Arc<Mutex<BTreeSet<String>>>,
 }
 
 /// Unified HTTP client.
@@ -61,6 +65,8 @@ impl HttpClient {
                 pool: Arc::new(Mutex::new(ConnectionPool::new())),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::new(Mutex::new(Http2Pool::new())),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::new(Mutex::new(BTreeSet::new())),
             }),
         }
     }
@@ -81,6 +87,8 @@ impl HttpClient {
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
             }),
         }
     }
@@ -96,6 +104,8 @@ impl HttpClient {
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
             }),
         }
     }
@@ -111,6 +121,8 @@ impl HttpClient {
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
             }),
         }
     }
@@ -126,6 +138,8 @@ impl HttpClient {
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
             }),
         }
     }
@@ -141,6 +155,8 @@ impl HttpClient {
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
             }),
         }
     }
@@ -156,6 +172,8 @@ impl HttpClient {
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
             }),
         }
     }
@@ -226,9 +244,15 @@ impl HttpClient {
             }
             HttpVersion::Http2OrHttp1 => {
                 edgerun_log::debug!("CLIENT: using HTTP/2");
+                if self.is_h2_fallback_disabled(request) {
+                    return self.execute_http1(request).await;
+                }
                 match self.execute_http2_with_timeout(request).await {
                     Ok(r) => Ok(r),
-                    Err(_) => self.execute_http1(request).await,
+                    Err(_) => {
+                        self.disable_h2_fallback_for(request);
+                        self.execute_http1(request).await
+                    }
                 }
             }
             HttpVersion::Http3 => {
@@ -237,13 +261,52 @@ impl HttpClient {
             }
             HttpVersion::Best => {
                 edgerun_log::debug!("CLIENT: using Best");
+                if self.is_h2_fallback_disabled(request) {
+                    return self.execute_http1(request).await;
+                }
                 match self.execute_http2_with_timeout(request).await {
                     Ok(r) => Ok(r),
-                    Err(_) => self.execute_http1(request).await,
+                    Err(_) => {
+                        self.disable_h2_fallback_for(request);
+                        self.execute_http1(request).await
+                    }
                 }
             }
         }
     }
+
+    fn h2_fallback_key(request: &Request) -> Option<String> {
+        let uri = request.uri();
+        if !uri.is_https() {
+            return None;
+        }
+        let host = uri.host()?;
+        let port = uri.port().unwrap_or(443);
+        Some(format!("{host}:{port}"))
+    }
+
+    #[cfg(feature = "tls")]
+    fn is_h2_fallback_disabled(&self, request: &Request) -> bool {
+        let Some(key) = Self::h2_fallback_key(request) else {
+            return false;
+        };
+        self.inner.h2_fallback_disabled_hosts.lock().contains(&key)
+    }
+
+    #[cfg(not(feature = "tls"))]
+    fn is_h2_fallback_disabled(&self, _request: &Request) -> bool {
+        false
+    }
+
+    #[cfg(feature = "tls")]
+    fn disable_h2_fallback_for(&self, request: &Request) {
+        if let Some(key) = Self::h2_fallback_key(request) {
+            self.inner.h2_fallback_disabled_hosts.lock().insert(key);
+        }
+    }
+
+    #[cfg(not(feature = "tls"))]
+    fn disable_h2_fallback_for(&self, _request: &Request) {}
 
     /// Execute an HTTP/1.1 request and pass response body chunks to `on_chunk`.
     ///
