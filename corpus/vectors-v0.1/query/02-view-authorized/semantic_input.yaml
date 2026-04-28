@@ -1,5 +1,6 @@
 query:
   requester: node_server
+  query_id: query_02
   query_class: QUERY_CLASS_VIEW
   target_scope:
     scope_kind: view

@@ -333,6 +333,74 @@ fn query_result_fragment_with_backing_is_advisory_accept() {
 }
 
 #[test]
+fn query_request_missing_query_id_is_rejected() {
+    let semantic = match mapping([(
+        "query",
+        mapping([
+            ("requester", ystr("node-a")),
+            ("query_class", ystr("QUERY_CLASS_HEAD")),
+            ("target_scope", ystr("node:node-a")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_controller_set", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_request_missing_target_scope_is_rejected() {
+    let semantic = match mapping([(
+        "query",
+        mapping([
+            ("requester", ystr("node-a")),
+            ("query_id", ystr("query-1")),
+            ("query_class", ystr("QUERY_CLASS_HEAD")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_controller_set", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_request_zero_result_limit_is_rejected() {
+    let semantic = match mapping([(
+        "query",
+        mapping([
+            ("requester", ystr("node-a")),
+            ("query_id", ystr("query-1")),
+            ("query_class", ystr("QUERY_CLASS_HEAD")),
+            ("target_scope", ystr("node:node-a")),
+            ("result_limit", yi64(0)),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_controller_set", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
 fn network_reachability_hint_valid_accepts() {
     let semantic = match mapping([(
         "reachability_hint",

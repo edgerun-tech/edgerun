@@ -379,6 +379,9 @@ pub fn validate_query_case(
     let Some(query) = get_map(semantic_input, "query") else {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     };
+    if !query_required_fields_are_present(query) {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
     if !has_any_query_bound(query) {
         return reject(ReasonCode::PolicyDenied, empty_map(), empty_map());
     }
@@ -399,6 +402,21 @@ pub fn validate_query_case(
     if !allowed_classes.is_empty() && !allowed_classes.contains(&query_class) {
         return reject(ReasonCode::PolicyDenied, empty_map(), empty_map());
     }
+    if query
+        .get("result_limit")
+        .and_then(Value::as_i64)
+        .is_some_and(|v| v <= 0)
+    {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
+    if let Some(required_proof_classes) = get_seq(query, "required_proof_classes") {
+        if required_proof_classes
+            .iter()
+            .any(|proof_class| proof_class.as_str().is_none_or(str::is_empty))
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+    }
     if let Some(max) = local_state
         .get("max_query_result_limit")
         .and_then(Value::as_i64)
@@ -412,6 +430,16 @@ pub fn validate_query_case(
         }
     }
     if let Some(cost) = get_map(query, "cost_limit") {
+        if ["max_results", "max_total_bytes", "max_federated_responders"]
+            .iter()
+            .any(|key| {
+                cost.get(*key)
+                    .and_then(Value::as_i64)
+                    .is_some_and(|v| v <= 0)
+            })
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         if let Some(max) = local_state
             .get("max_query_total_bytes")
             .and_then(Value::as_i64)
@@ -515,6 +543,15 @@ fn event_ref_is_valid(event: &BTreeMap<String, Value>) -> bool {
             || event.contains_key("event_hash_hex")
             || event.contains_key("hash_hex")
             || event.contains_key("hash_fixture"))
+}
+
+fn query_required_fields_are_present(query: &BTreeMap<String, Value>) -> bool {
+    !string_value(query, "query_id", "").is_empty()
+        && !string_value(query, "requester", "").is_empty()
+        && !string_value(query, "query_class", "").is_empty()
+        && query
+            .get("target_scope")
+            .is_some_and(|scope| !matches!(scope, Value::Null))
 }
 
 fn validate_source_query_id(
