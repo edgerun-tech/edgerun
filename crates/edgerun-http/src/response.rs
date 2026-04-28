@@ -174,11 +174,7 @@ impl Response {
             || status.as_u16() == 304
         {
             Vec::new()
-        } else if headers
-            .get("transfer-encoding")
-            .map(|v| v.as_str().to_ascii_lowercase().contains("chunked"))
-            .unwrap_or(false)
-        {
+        } else if crate::chunked::has_chunked_transfer_coding(&headers) {
             let (body, parsed_trailers) =
                 crate::chunked::parse_body_with_trailers(raw_body.as_bytes())
                     .map_err(|err| crate::Error::InvalidResponse(err.to_string()))?;

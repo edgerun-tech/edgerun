@@ -108,11 +108,7 @@ impl Request {
         let body_start = terminator + 4;
         let body = if body_start < raw.len() {
             let body_str = &raw[body_start..];
-            if headers
-                .get("transfer-encoding")
-                .map(|v| v.as_str().to_ascii_lowercase().contains("chunked"))
-                .unwrap_or(false)
-            {
+            if crate::chunked::has_chunked_transfer_coding(&headers) {
                 Some(
                     crate::chunked::parse_body(body_str.as_bytes())
                         .map_err(|err| crate::Error::InvalidRequest(err.to_string()))?,

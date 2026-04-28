@@ -897,10 +897,7 @@ impl ConnectionPool {
         }
 
         // Read body
-        let is_chunked = headers
-            .get("transfer-encoding")
-            .map(|v| v.as_str().to_lowercase())
-            .is_some_and(|v| v.contains("chunked"));
+        let is_chunked = crate::chunked::has_chunked_transfer_coding(&headers);
 
         let content_length = headers
             .get("content-length")
@@ -992,10 +989,7 @@ impl ConnectionPool {
             return Ok(Response::from_parts(status, headers, Vec::new()));
         }
 
-        let is_chunked = headers
-            .get("transfer-encoding")
-            .map(|v| v.as_str().to_lowercase())
-            .is_some_and(|v| v.contains("chunked"));
+        let is_chunked = crate::chunked::has_chunked_transfer_coding(&headers);
         let content_length = headers
             .get("content-length")
             .and_then(|v| v.as_str().parse::<usize>().ok());

@@ -9,7 +9,7 @@
 //! 3. Server sends `101 Switching Protocols` response
 //! 4. Connection transitions to the new protocol
 
-use crate::HeaderMap;
+use crate::{header::header_value_has_token, HeaderMap};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -64,8 +64,7 @@ pub fn parse_upgrade_header(value: &str) -> Vec<UpgradeProtocol> {
 pub fn parse_upgrade_request(headers: &HeaderMap) -> Option<Vec<UpgradeProtocol>> {
     // First check if Connection header includes "upgrade"
     let conn = headers.get("connection")?;
-    let conn_lower = conn.as_str().to_lowercase();
-    if !conn_lower.contains("upgrade") {
+    if !header_value_has_token(conn.as_str(), "upgrade") {
         return None;
     }
 
@@ -235,6 +234,15 @@ mod tests {
     fn test_parse_upgrade_request_missing_upgrade() {
         let mut headers = HeaderMap::new();
         headers.insert("connection", "upgrade").unwrap();
+
+        assert!(parse_upgrade_request(&headers).is_none());
+    }
+
+    #[test]
+    fn test_parse_upgrade_request_requires_exact_connection_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert("connection", "xupgrade").unwrap();
+        headers.insert("upgrade", "websocket").unwrap();
 
         assert!(parse_upgrade_request(&headers).is_none());
     }

@@ -37,12 +37,16 @@ pub enum ContentEncoding {
 impl ContentEncoding {
     /// Parse from Content-Encoding header value
     pub fn from_str(value: &str) -> Self {
-        match value.to_lowercase().as_str() {
-            "gzip" => ContentEncoding::Gzip,
-            "deflate" => ContentEncoding::Deflate,
-            "br" => ContentEncoding::Brotli,
-            "identity" => ContentEncoding::Identity,
-            _ => ContentEncoding::Unknown,
+        if value.eq_ignore_ascii_case("gzip") {
+            ContentEncoding::Gzip
+        } else if value.eq_ignore_ascii_case("deflate") {
+            ContentEncoding::Deflate
+        } else if value.eq_ignore_ascii_case("br") {
+            ContentEncoding::Brotli
+        } else if value.eq_ignore_ascii_case("identity") {
+            ContentEncoding::Identity
+        } else {
+            ContentEncoding::Unknown
         }
     }
 
