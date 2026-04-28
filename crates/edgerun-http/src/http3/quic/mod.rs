@@ -834,12 +834,19 @@ impl QuicConnection {
             let data = &self.recv_buffer[self.recv_offset..];
 
             match QuicPacket::from_bytes_with_short_dcid_len(data, self.transport.local_cid.len()) {
-                Ok((packet, consumed)) => {
+                Ok((mut packet, consumed)) => {
                     self.recv_offset += consumed;
 
                     if packet.header.packet_type != PacketType::OneRtt {
                         continue;
                     }
+
+                    let packet_number = self.transport.expand_packet_number(
+                        PacketNumberSpace::ApplicationData,
+                        packet.header.packet_number,
+                        packet.header.pn_length,
+                    );
+                    packet.header.packet_number = packet_number;
 
                     // Decrypt the packet payload
                     let plaintext = if let Some(ref mut prot) = self.protection {
@@ -867,7 +874,7 @@ impl QuicConnection {
                     self.transport.update_activity();
                     self.transport.record_received_packet(
                         PacketNumberSpace::ApplicationData,
-                        packet.header.packet_number,
+                        packet_number,
                     );
 
                     // Parse frames from the decrypted payload
