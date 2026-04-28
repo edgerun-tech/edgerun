@@ -1284,494 +1284,344 @@ fn u32_value(value: TapeValue<'_>, name: &str) -> Result<u32, String> {
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn oci_spec_to_value(spec: &OciSpec) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "ociVersion", spec.version.clone());
-    push_opt(
-        &mut object,
-        "platform",
-        spec.platform.as_ref().map(platform_to_value),
-    );
-    push_opt(
-        &mut object,
-        "process",
-        spec.process.as_ref().map(process_to_value),
-    );
-    push_opt(&mut object, "root", spec.root.as_ref().map(root_to_value));
-    push_opt_string(&mut object, "hostname", spec.hostname.as_deref());
-    push_opt_string(&mut object, "domainname", spec.domainname.as_deref());
-    push_opt(
-        &mut object,
-        "linux",
-        spec.linux.as_ref().map(linux_to_value),
-    );
-    push_opt(
-        &mut object,
+    object.push_field("ociVersion", spec.version.clone());
+    object.push_opt_field("platform", spec.platform.as_ref().map(platform_to_value));
+    object.push_opt_field("process", spec.process.as_ref().map(process_to_value));
+    object.push_opt_field("root", spec.root.as_ref().map(root_to_value));
+    object.push_opt_field("hostname", spec.hostname.as_deref());
+    object.push_opt_field("domainname", spec.domainname.as_deref());
+    object.push_opt_field("linux", spec.linux.as_ref().map(linux_to_value));
+    object.push_opt_field(
         "mounts",
-        spec.mounts
-            .as_ref()
-            .map(|mounts| array(mounts.iter().map(mount_to_value))),
+        spec.mounts.as_ref().map(|mounts| {
+            edgerun_json::JsonValue::array_from_iter(mounts.iter().map(mount_to_value))
+        }),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "annotations",
         spec.annotations.as_ref().map(string_map_to_value),
     );
-    edgerun_json::JsonValue::Object(object)
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn platform_to_value(platform: &OciPlatform) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt_string(&mut object, "os", platform.os.as_deref());
-    push_opt_string(&mut object, "arch", platform.arch.as_deref());
-    push_opt_string(&mut object, "os.version", platform.os_version.as_deref());
-    push_opt(
-        &mut object,
+    object.push_opt_field("os", platform.os.as_deref());
+    object.push_opt_field("arch", platform.arch.as_deref());
+    object.push_opt_field("os.version", platform.os_version.as_deref());
+    object.push_opt_field(
         "os.features",
         platform.os_features.as_ref().map(strings_to_value),
     );
-    edgerun_json::JsonValue::Object(object)
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn process_to_value(process: &OciProcess) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt_bool(&mut object, "terminal", process.terminal);
-    push_opt(
-        &mut object,
-        "user",
-        process.user.as_ref().map(user_to_value),
-    );
-    push_opt(
-        &mut object,
+    object.push_opt_field("terminal", process.terminal);
+    object.push_opt_field("user", process.user.as_ref().map(user_to_value));
+    object.push_opt_field(
         "consoleSize",
         process.console_size.as_ref().map(box_to_value),
     );
-    push_opt(
-        &mut object,
-        "args",
-        process.args.as_ref().map(strings_to_value),
-    );
-    push_opt(
-        &mut object,
-        "env",
-        process.env.as_ref().map(strings_to_value),
-    );
-    push_opt_string(&mut object, "cwd", process.cwd.as_deref());
-    push_opt(
-        &mut object,
+    object.push_opt_field("args", process.args.as_ref().map(strings_to_value));
+    object.push_opt_field("env", process.env.as_ref().map(strings_to_value));
+    object.push_opt_field("cwd", process.cwd.as_deref());
+    object.push_opt_field(
         "capabilities",
         process.capabilities.as_ref().map(capabilities_to_value),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "rlimits",
-        process
-            .rlimits
-            .as_ref()
-            .map(|rlimits| array(rlimits.iter().map(rlimit_to_value))),
+        process.rlimits.as_ref().map(|rlimits| {
+            edgerun_json::JsonValue::array_from_iter(rlimits.iter().map(rlimit_to_value))
+        }),
     );
-    push_opt_bool(&mut object, "noNewPrivileges", process.no_new_privileges);
-    push_opt_i64(&mut object, "oomScoreAdj", process.oom_score_adj);
-    push_opt_string(
-        &mut object,
-        "apparmorProfile",
-        process.apparmor_profile.as_deref(),
-    );
-    push_opt_string(
-        &mut object,
-        "selinuxLabel",
-        process.selinux_label.as_deref(),
-    );
-    push_opt(
-        &mut object,
+    object.push_opt_field("noNewPrivileges", process.no_new_privileges);
+    object.push_opt_field("oomScoreAdj", process.oom_score_adj);
+    object.push_opt_field("apparmorProfile", process.apparmor_profile.as_deref());
+    object.push_opt_field("selinuxLabel", process.selinux_label.as_deref());
+    object.push_opt_field(
         "scheduler",
         process.scheduler.as_ref().map(scheduler_to_value),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "ioPriority",
         process.io_priority.as_ref().map(io_priority_to_value),
     );
-    edgerun_json::JsonValue::Object(object)
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn box_to_value(value: &OciBox) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "width", value.width);
-    push(&mut object, "height", value.height);
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("width", value.width);
+    object.push_field("height", value.height);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn user_to_value(user: &OciUser) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt_u32(&mut object, "uid", user.uid);
-    push_opt_u32(&mut object, "gid", user.gid);
-    push_opt(
-        &mut object,
+    object.push_opt_field("uid", user.uid);
+    object.push_opt_field("gid", user.gid);
+    object.push_opt_field(
         "additionalGids",
-        user.additional_gids
-            .as_ref()
-            .map(|values| array(values.iter().copied().map(edgerun_json::JsonValue::from))),
+        user.additional_gids.as_ref().map(|values| {
+            edgerun_json::JsonValue::array_from_iter(
+                values.iter().copied().map(edgerun_json::JsonValue::from),
+            )
+        }),
     );
-    push_opt_u32(&mut object, "umask", user.umask);
-    edgerun_json::JsonValue::Object(object)
+    object.push_opt_field("umask", user.umask);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn capabilities_to_value(caps: &OciCapabilities) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt(
-        &mut object,
-        "bounding",
-        caps.bounding.as_ref().map(strings_to_value),
-    );
-    push_opt(
-        &mut object,
-        "effective",
-        caps.effective.as_ref().map(strings_to_value),
-    );
-    push_opt(
-        &mut object,
+    object.push_opt_field("bounding", caps.bounding.as_ref().map(strings_to_value));
+    object.push_opt_field("effective", caps.effective.as_ref().map(strings_to_value));
+    object.push_opt_field(
         "inheritable",
         caps.inheritable.as_ref().map(strings_to_value),
     );
-    push_opt(
-        &mut object,
-        "permitted",
-        caps.permitted.as_ref().map(strings_to_value),
-    );
-    push_opt(
-        &mut object,
-        "ambient",
-        caps.ambient.as_ref().map(strings_to_value),
-    );
-    edgerun_json::JsonValue::Object(object)
+    object.push_opt_field("permitted", caps.permitted.as_ref().map(strings_to_value));
+    object.push_opt_field("ambient", caps.ambient.as_ref().map(strings_to_value));
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn rlimit_to_value(rlimit: &OciRlimit) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "type", rlimit.ns_type.clone());
-    push(&mut object, "hard", rlimit.hard);
-    push(&mut object, "soft", rlimit.soft);
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("type", rlimit.ns_type.clone());
+    object.push_field("hard", rlimit.hard);
+    object.push_field("soft", rlimit.soft);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn scheduler_to_value(scheduler: &OciScheduler) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "policy", scheduler.policy.clone());
-    push_opt_i32(&mut object, "nice", scheduler.nice);
-    push_opt_i32(&mut object, "priority", scheduler.priority);
-    push_opt(
-        &mut object,
+    object.push_field("policy", scheduler.policy.clone());
+    object.push_opt_field("nice", scheduler.nice);
+    object.push_opt_field("priority", scheduler.priority);
+    object.push_opt_field(
         "deadline",
         scheduler.deadline.as_ref().map(|deadline| {
             let mut object = edgerun_json::Map::new();
-            push_opt_u64(&mut object, "runtime", deadline.runtime_ns);
-            push_opt_u64(&mut object, "period", deadline.period_ns);
-            push_opt_u64(&mut object, "deadline", deadline.deadline_ns);
-            edgerun_json::JsonValue::Object(object)
+            object.push_opt_field("runtime", deadline.runtime_ns);
+            object.push_opt_field("period", deadline.period_ns);
+            object.push_opt_field("deadline", deadline.deadline_ns);
+            edgerun_json::JsonValue::from(object)
         }),
     );
-    edgerun_json::JsonValue::Object(object)
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn io_priority_to_value(ioprio: &OciIoPriority) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "class", ioprio.class);
-    push_opt_u32(&mut object, "priority", ioprio.priority);
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("class", ioprio.class);
+    object.push_opt_field("priority", ioprio.priority);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn root_to_value(root: &OciRoot) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "path", root.path.clone());
-    push_opt_bool(&mut object, "readonly", root.readonly);
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("path", root.path.clone());
+    object.push_opt_field("readonly", root.readonly);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn linux_to_value(linux: &OciLinux) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "uidMappings",
-        linux
-            .uid_mappings
-            .as_ref()
-            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+        linux.uid_mappings.as_ref().map(|mappings| {
+            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
+        }),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "gidMappings",
-        linux
-            .gid_mappings
-            .as_ref()
-            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+        linux.gid_mappings.as_ref().map(|mappings| {
+            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
+        }),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "resources",
         linux.resources.as_ref().map(resources_to_value),
     );
-    push_opt_string(&mut object, "cgroupsPath", linux.cgroups_path.as_deref());
-    push_opt(
-        &mut object,
+    object.push_opt_field("cgroupsPath", linux.cgroups_path.as_deref());
+    object.push_opt_field(
         "namespaces",
-        linux
-            .namespaces
-            .as_ref()
-            .map(|namespaces| array(namespaces.iter().map(namespace_to_value))),
+        linux.namespaces.as_ref().map(|namespaces| {
+            edgerun_json::JsonValue::array_from_iter(namespaces.iter().map(namespace_to_value))
+        }),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "devices",
-        linux
-            .devices
-            .as_ref()
-            .map(|devices| array(devices.iter().map(device_to_value))),
+        linux.devices.as_ref().map(|devices| {
+            edgerun_json::JsonValue::array_from_iter(devices.iter().map(device_to_value))
+        }),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "maskedPaths",
         linux.masked_paths.as_ref().map(strings_to_value),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "readonlyPaths",
         linux.readonly_paths.as_ref().map(strings_to_value),
     );
-    push_opt_string(&mut object, "mountLabel", linux.mount_label.as_deref());
-    push_opt_string(
-        &mut object,
-        "rootfsPropagation",
-        linux.rootfs_propagation.as_deref(),
-    );
-    push_opt(
-        &mut object,
-        "sysctl",
-        linux.sysctl.as_ref().map(string_map_to_value),
-    );
-    push_opt(
-        &mut object,
-        "intelRdt",
-        linux.intel_rdt.as_ref().map(intel_rdt_to_value),
-    );
-    edgerun_json::JsonValue::Object(object)
+    object.push_opt_field("mountLabel", linux.mount_label.as_deref());
+    object.push_opt_field("rootfsPropagation", linux.rootfs_propagation.as_deref());
+    object.push_opt_field("sysctl", linux.sysctl.as_ref().map(string_map_to_value));
+    object.push_opt_field("intelRdt", linux.intel_rdt.as_ref().map(intel_rdt_to_value));
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn id_mapping_to_value(mapping: &OciIdMapping) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "containerID", mapping.container_id);
-    push(&mut object, "hostID", mapping.host_id);
-    push(&mut object, "size", mapping.size);
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("containerID", mapping.container_id);
+    object.push_field("hostID", mapping.host_id);
+    object.push_field("size", mapping.size);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn namespace_to_value(namespace: &OciNamespace) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "type", namespace.ns_type.clone());
-    push_opt_string(&mut object, "path", namespace.path.as_deref());
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("type", namespace.ns_type.clone());
+    object.push_opt_field("path", namespace.path.as_deref());
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn device_to_value(device: &OciLinuxDevice) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "type", device.ns_type.clone());
-    push(&mut object, "path", device.path.clone());
-    push_opt_u32(&mut object, "fileMode", device.file_mode);
-    push_opt_u32(&mut object, "uid", device.uid);
-    push_opt_u32(&mut object, "gid", device.gid);
-    push_opt_i64(&mut object, "major", device.major);
-    push_opt_i64(&mut object, "minor", device.minor);
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("type", device.ns_type.clone());
+    object.push_field("path", device.path.clone());
+    object.push_opt_field("fileMode", device.file_mode);
+    object.push_opt_field("uid", device.uid);
+    object.push_opt_field("gid", device.gid);
+    object.push_opt_field("major", device.major);
+    object.push_opt_field("minor", device.minor);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn resources_to_value(resources: &OciLinuxResources) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "devices",
-        resources
-            .devices
-            .as_ref()
-            .map(|devices| array(devices.iter().map(device_cgroup_to_value))),
+        resources.devices.as_ref().map(|devices| {
+            edgerun_json::JsonValue::array_from_iter(devices.iter().map(device_cgroup_to_value))
+        }),
     );
-    push_opt(
-        &mut object,
-        "memory",
-        resources.memory.as_ref().map(memory_to_value),
-    );
-    push_opt(&mut object, "cpu", resources.cpu.as_ref().map(cpu_to_value));
-    push_opt(
-        &mut object,
-        "pids",
-        resources.pids.as_ref().map(pids_to_value),
-    );
-    edgerun_json::JsonValue::Object(object)
+    object.push_opt_field("memory", resources.memory.as_ref().map(memory_to_value));
+    object.push_opt_field("cpu", resources.cpu.as_ref().map(cpu_to_value));
+    object.push_opt_field("pids", resources.pids.as_ref().map(pids_to_value));
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn device_cgroup_to_value(device: &OciLinuxDeviceCgroup) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "type", device.ns_type.clone());
-    push_opt_i64(&mut object, "major", device.major);
-    push_opt_i64(&mut object, "minor", device.minor);
-    push_opt_string(&mut object, "access", device.access.as_deref());
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("type", device.ns_type.clone());
+    object.push_opt_field("major", device.major);
+    object.push_opt_field("minor", device.minor);
+    object.push_opt_field("access", device.access.as_deref());
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn memory_to_value(memory: &OciLinuxMemory) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt_i64(&mut object, "limit", memory.limit);
-    push_opt_i64(&mut object, "reservation", memory.reservation);
-    push_opt_i64(&mut object, "swap", memory.swap);
-    push_opt_i64(&mut object, "kernel", memory.kernel);
-    push_opt_i64(&mut object, "kernelTCP", memory.kernel_tcp);
-    push_opt_bool(&mut object, "checkBeforeUpdate", memory.check_before_update);
-    edgerun_json::JsonValue::Object(object)
+    object.push_opt_field("limit", memory.limit);
+    object.push_opt_field("reservation", memory.reservation);
+    object.push_opt_field("swap", memory.swap);
+    object.push_opt_field("kernel", memory.kernel);
+    object.push_opt_field("kernelTCP", memory.kernel_tcp);
+    object.push_opt_field("checkBeforeUpdate", memory.check_before_update);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn cpu_to_value(cpu: &OciLinuxCpu) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt_u64(&mut object, "shares", cpu.shares);
-    push_opt_i64(&mut object, "quota", cpu.quota);
-    push_opt_u64(&mut object, "period", cpu.period);
-    push_opt_i64(&mut object, "realtimeRuntime", cpu.realtime_runtime);
-    push_opt_u64(&mut object, "realtimePeriod", cpu.realtime_period);
-    push_opt_string(&mut object, "cpus", cpu.cpus.as_deref());
-    push_opt_string(&mut object, "mems", cpu.mems.as_deref());
-    push_opt_i64(&mut object, "idle", cpu.idle);
-    push_opt_i64(&mut object, "burst", cpu.burst);
-    edgerun_json::JsonValue::Object(object)
+    object.push_opt_field("shares", cpu.shares);
+    object.push_opt_field("quota", cpu.quota);
+    object.push_opt_field("period", cpu.period);
+    object.push_opt_field("realtimeRuntime", cpu.realtime_runtime);
+    object.push_opt_field("realtimePeriod", cpu.realtime_period);
+    object.push_opt_field("cpus", cpu.cpus.as_deref());
+    object.push_opt_field("mems", cpu.mems.as_deref());
+    object.push_opt_field("idle", cpu.idle);
+    object.push_opt_field("burst", cpu.burst);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn pids_to_value(pids: &OciLinuxPids) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "limit", pids.limit);
-    edgerun_json::JsonValue::Object(object)
+    object.push_field("limit", pids.limit);
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn intel_rdt_to_value(rdt: &OciLinuxIntelRdt) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push_opt_string(&mut object, "l3CacheSchema", rdt.l3_cache_schema.as_deref());
-    push_opt_string(&mut object, "memBwSchema", rdt.mem_bw_schema.as_deref());
-    push_opt_string(&mut object, "closID", rdt.clos_id.as_deref());
-    push_opt_bool(&mut object, "enableMonitoring", rdt.enable_monitoring);
-    push_opt_string(&mut object, "schemata", rdt.schemata.as_deref());
-    edgerun_json::JsonValue::Object(object)
+    object.push_opt_field("l3CacheSchema", rdt.l3_cache_schema.as_deref());
+    object.push_opt_field("memBwSchema", rdt.mem_bw_schema.as_deref());
+    object.push_opt_field("closID", rdt.clos_id.as_deref());
+    object.push_opt_field("enableMonitoring", rdt.enable_monitoring);
+    object.push_opt_field("schemata", rdt.schemata.as_deref());
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn mount_to_value(mount: &OciMount) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
-    push(&mut object, "destination", mount.destination.clone());
-    push_opt_string(&mut object, "type", mount.mount_type.as_deref());
-    push_opt_string(&mut object, "source", mount.source.as_deref());
-    push_opt(
-        &mut object,
-        "options",
-        mount.options.as_ref().map(strings_to_value),
-    );
-    push_opt_string(&mut object, "label", mount.label.as_deref());
-    push_opt_bool(&mut object, "recursive", mount.recursive);
-    push_opt(
-        &mut object,
+    object.push_field("destination", mount.destination.clone());
+    object.push_opt_field("type", mount.mount_type.as_deref());
+    object.push_opt_field("source", mount.source.as_deref());
+    object.push_opt_field("options", mount.options.as_ref().map(strings_to_value));
+    object.push_opt_field("label", mount.label.as_deref());
+    object.push_opt_field("recursive", mount.recursive);
+    object.push_opt_field(
         "uidMappings",
-        mount
-            .uid_mappings
-            .as_ref()
-            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+        mount.uid_mappings.as_ref().map(|mappings| {
+            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
+        }),
     );
-    push_opt(
-        &mut object,
+    object.push_opt_field(
         "gidMappings",
-        mount
-            .gid_mappings
-            .as_ref()
-            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+        mount.gid_mappings.as_ref().map(|mappings| {
+            edgerun_json::JsonValue::array_from_iter(mappings.iter().map(id_mapping_to_value))
+        }),
     );
-    edgerun_json::JsonValue::Object(object)
+    object.into()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn strings_to_value(values: &Vec<String>) -> edgerun_json::JsonValue {
-    array(values.iter().cloned().map(edgerun_json::JsonValue::String))
+    edgerun_json::JsonValue::array_from_iter(
+        values.iter().cloned().map(edgerun_json::JsonValue::String),
+    )
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn string_map_to_value(values: &BTreeMap<String, String>) -> edgerun_json::JsonValue {
     let mut object = edgerun_json::Map::new();
     for (key, value) in values {
-        push(&mut object, key.clone(), value.clone());
+        object.push_field(key.clone(), value.clone());
     }
-    edgerun_json::JsonValue::Object(object)
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn array(values: impl IntoIterator<Item = edgerun_json::JsonValue>) -> edgerun_json::JsonValue {
-    edgerun_json::JsonValue::Array(values.into_iter().collect())
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push(
-    object: &mut edgerun_json::Map,
-    key: impl Into<String>,
-    value: impl Into<edgerun_json::JsonValue>,
-) {
-    object.push_field(key, value);
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push_opt(
-    object: &mut edgerun_json::Map,
-    key: &'static str,
-    value: Option<edgerun_json::JsonValue>,
-) {
-    object.push_opt_field(key, value);
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push_opt_string(object: &mut edgerun_json::Map, key: &'static str, value: Option<&str>) {
-    object.push_opt_field(key, value);
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push_opt_bool(object: &mut edgerun_json::Map, key: &'static str, value: Option<bool>) {
-    object.push_opt_field(key, value);
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push_opt_i32(object: &mut edgerun_json::Map, key: &'static str, value: Option<i32>) {
-    object.push_opt_field(key, value);
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push_opt_i64(object: &mut edgerun_json::Map, key: &'static str, value: Option<i64>) {
-    object.push_opt_field(key, value);
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push_opt_u32(object: &mut edgerun_json::Map, key: &'static str, value: Option<u32>) {
-    object.push_opt_field(key, value);
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn push_opt_u64(object: &mut edgerun_json::Map, key: &'static str, value: Option<u64>) {
-    object.push_opt_field(key, value);
+    object.into()
 }
 
 #[cfg(all(

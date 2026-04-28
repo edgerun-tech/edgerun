@@ -302,19 +302,28 @@ impl<'a> TapeValue<'a> {
             .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))
     }
 
+    fn optional_field<T>(
+        &self,
+        key: &str,
+        expected: &str,
+        convert: impl FnOnce(TapeValue<'a>) -> Option<T>,
+    ) -> Result<Option<T>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                convert(value).ok_or_else(|| {
+                    JsonValueError::WrongType(format!("field `{key}` expected {expected}"))
+                })
+            })
+            .transpose()
+    }
+
     #[must_use]
     pub fn get_str(&self, key: &str) -> Option<&'a str> {
         self.get(key).and_then(|value| value.as_str())
     }
 
     pub fn optional_str(&self, key: &str) -> Result<Option<&'a str>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value.as_str().ok_or_else(|| {
-                    JsonValueError::WrongType(format!("field `{key}` expected string"))
-                })
-            })
-            .transpose()
+        self.optional_field(key, "string", |value| value.as_str())
     }
 
     pub fn required_str(&self, key: &str) -> Result<&'a str, JsonValueError> {
@@ -343,13 +352,7 @@ impl<'a> TapeValue<'a> {
     }
 
     pub fn optional_bool(&self, key: &str) -> Result<Option<bool>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value.as_bool().ok_or_else(|| {
-                    JsonValueError::WrongType(format!("field `{key}` expected boolean"))
-                })
-            })
-            .transpose()
+        self.optional_field(key, "boolean", |value| value.as_bool())
     }
 
     pub fn required_bool(&self, key: &str) -> Result<bool, JsonValueError> {
@@ -364,13 +367,7 @@ impl<'a> TapeValue<'a> {
     }
 
     pub fn optional_i64(&self, key: &str) -> Result<Option<i64>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value
-                    .as_i64()
-                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i64")))
-            })
-            .transpose()
+        self.optional_field(key, "i64", |value| value.as_i64())
     }
 
     pub fn required_i64(&self, key: &str) -> Result<i64, JsonValueError> {
@@ -385,13 +382,7 @@ impl<'a> TapeValue<'a> {
     }
 
     pub fn optional_i32(&self, key: &str) -> Result<Option<i32>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value
-                    .as_i32()
-                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i32")))
-            })
-            .transpose()
+        self.optional_field(key, "i32", |value| value.as_i32())
     }
 
     pub fn required_i32(&self, key: &str) -> Result<i32, JsonValueError> {
@@ -406,13 +397,7 @@ impl<'a> TapeValue<'a> {
     }
 
     pub fn optional_u64(&self, key: &str) -> Result<Option<u64>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value
-                    .as_u64()
-                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
-            })
-            .transpose()
+        self.optional_field(key, "u64", |value| value.as_u64())
     }
 
     pub fn required_u64(&self, key: &str) -> Result<u64, JsonValueError> {
@@ -427,13 +412,7 @@ impl<'a> TapeValue<'a> {
     }
 
     pub fn optional_u32(&self, key: &str) -> Result<Option<u32>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value
-                    .as_u32()
-                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u32")))
-            })
-            .transpose()
+        self.optional_field(key, "u32", |value| value.as_u32())
     }
 
     pub fn required_u32(&self, key: &str) -> Result<u32, JsonValueError> {
@@ -448,13 +427,7 @@ impl<'a> TapeValue<'a> {
     }
 
     pub fn optional_usize(&self, key: &str) -> Result<Option<usize>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value.as_usize().ok_or_else(|| {
-                    JsonValueError::WrongType(format!("field `{key}` expected usize"))
-                })
-            })
-            .transpose()
+        self.optional_field(key, "usize", |value| value.as_usize())
     }
 
     pub fn required_usize(&self, key: &str) -> Result<usize, JsonValueError> {
@@ -469,13 +442,7 @@ impl<'a> TapeValue<'a> {
     }
 
     pub fn optional_f64(&self, key: &str) -> Result<Option<f64>, JsonValueError> {
-        self.get(key)
-            .map(|value| {
-                value
-                    .as_f64()
-                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected f64")))
-            })
-            .transpose()
+        self.optional_field(key, "f64", |value| value.as_f64())
     }
 
     pub fn required_f64(&self, key: &str) -> Result<f64, JsonValueError> {
