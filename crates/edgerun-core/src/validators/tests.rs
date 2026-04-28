@@ -310,6 +310,7 @@ fn query_result_fragment_with_backing_is_advisory_accept() {
         mapping([
             ("query_id", ystr("q1")),
             ("responder", ystr("node-a")),
+            ("completeness", ystr("RESULT_COMPLETENESS_PARTIAL")),
             (
                 "object_refs",
                 seq([mapping([("object_id", ystr("obj-1"))])]),
@@ -1106,6 +1107,60 @@ fn query_result_fragment_missing_query_id_is_rejected() {
         _ => unreachable!(),
     };
     let state = BTreeMap::new();
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_result_fragment_missing_completeness_is_rejected() {
+    let semantic = match mapping([(
+        "result_fragment",
+        mapping([
+            ("query_id", ystr("q-current")),
+            ("responder", ystr("node-a")),
+            (
+                "object_refs",
+                seq([mapping([("object_id", ystr("obj-1"))])]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_result_fragment_event_ref_missing_seq_is_rejected() {
+    let semantic = match mapping([(
+        "result_fragment",
+        mapping([
+            ("query_id", ystr("q-current")),
+            ("responder", ystr("node-a")),
+            ("completeness", ystr("RESULT_COMPLETENESS_PARTIAL")),
+            (
+                "event_refs",
+                seq([mapping([
+                    ("stream_id", ystr("stream-a")),
+                    ("event_hash_hex", ystr("hash-1")),
+                ])]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
     let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
     assert_eq!(result.verdict, Verdict::Reject);
     assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));

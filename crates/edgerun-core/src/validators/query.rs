@@ -231,6 +231,11 @@ pub fn validate_query_case(
                 return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
             }
         }
+        if string_value(fragment, "responder", "").is_empty()
+            || string_value(fragment, "completeness", "").is_empty()
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         let expected = fragment
             .get("signature_fixture")
             .and_then(Value::as_str)
@@ -539,6 +544,7 @@ pub fn validate_query_case(
 
 fn event_ref_is_valid(event: &BTreeMap<String, Value>) -> bool {
     !string_value(event, "stream_id", "").is_empty()
+        && number_value(event, "seq", -1) >= 0
         && (event.contains_key("event_hash")
             || event.contains_key("event_hash_hex")
             || event.contains_key("hash_hex")
