@@ -19,7 +19,10 @@ pub fn watch<T: Clone>(value: T) -> (Sender<T>, Receiver<T>) {
         Sender {
             inner: inner.clone(),
         },
-        Receiver { inner },
+        Receiver {
+            inner,
+            seen_version: 0,
+        },
     )
 }
 
@@ -54,6 +57,7 @@ impl<T: Clone> Sender<T> {
 #[derive(Clone)]
 pub struct Receiver<T> {
     inner: Arc<Inner<T>>,
+    seen_version: usize,
 }
 
 impl<T: Clone> Receiver<T> {
@@ -70,8 +74,14 @@ impl<T: Clone + 'static> Future for Receiver<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.inner.closed.load(Ordering::Acquire) != 0 {
-            return Poll::Ready(self.borrow());
+        let this = self.get_mut();
+        let version = this.inner.version.load(Ordering::Acquire);
+        if version > this.seen_version {
+            this.seen_version = version;
+            return Poll::Ready(this.borrow());
+        }
+        if this.inner.closed.load(Ordering::Acquire) != 0 {
+            return Poll::Ready(this.borrow());
         }
         cx.waker().wake_by_ref();
         Poll::Pending

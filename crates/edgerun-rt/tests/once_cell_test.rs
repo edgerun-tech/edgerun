@@ -1,5 +1,5 @@
-use edgerun_rt::OnceCell;
 use core::panic::AssertUnwindSafe;
+use edgerun_rt::OnceCell;
 
 #[test]
 fn once_cell_new() {

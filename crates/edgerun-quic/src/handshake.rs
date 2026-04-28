@@ -397,11 +397,15 @@ impl QuicTlsHandshaker {
     /// Derive Initial-level protection keys for the given destination connection ID.
     pub fn initial_keys(&self, dcid: &[u8]) -> ProtectionKeys {
         let (write, read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
-        let hp = quic_hp_key(
-            &self.key_schedule_derive_initial_secret(dcid),
-            16,
-            &self.hasher,
-        );
+        let initial_secret = self.key_schedule_derive_initial_secret(dcid);
+        let client_in_secret =
+            self.hasher
+                .quic_expand_label(&initial_secret, "client in", &[], self.hasher.len());
+        let server_in_secret =
+            self.hasher
+                .quic_expand_label(&initial_secret, "server in", &[], self.hasher.len());
+        let write_hp = quic_hp_key(&server_in_secret, 16, &self.hasher);
+        let read_hp = quic_hp_key(&client_in_secret, 16, &self.hasher);
         ProtectionKeys::new(
             CipherSuite::TLS_AES_128_GCM_SHA256,
             write.write_key,
@@ -409,6 +413,7 @@ impl QuicTlsHandshaker {
             read.write_key,
             read.write_iv,
         )
+        .with_header_protection(write_hp, read_hp)
     }
 
     /// Derive the initial traffic secret from DCID (for HP key derivation).
@@ -537,15 +542,17 @@ impl QuicTlsHandshaker {
             12,
             &self.hasher,
         );
-        let hp = quic_hp_key(&client_hs_secret, self.cipher_suite.key_len(), &self.hasher);
+        let write_hp = quic_hp_key(&client_hs_secret, self.cipher_suite.key_len(), &self.hasher);
+        let read_hp = quic_hp_key(&server_hs_secret, self.cipher_suite.key_len(), &self.hasher);
 
         Ok(ProtectionKeys::new(
-            CipherSuite::TLS_AES_128_GCM_SHA256,
+            self.cipher_suite,
             write.write_key,
             write.write_iv,
             read.write_key,
             read.write_iv,
         ))
+        .map(|keys| keys.with_header_protection(write_hp, read_hp))
     }
 
     /// Process received CRYPTO data from Handshake-level packets.
@@ -758,15 +765,17 @@ impl QuicTlsHandshaker {
         );
         let key_len = self.cipher_suite.key_len();
         let iv_len = 12;
+        let write_hp = quic_hp_key(&self.early_traffic_secret, key_len, &self.hasher);
         // 0-RTT is client-to-server only. Do not mirror write keys into
         // the read side or tests can accidentally decrypt with client state.
         Some(ProtectionKeys::new(
-            CipherSuite::TLS_AES_128_GCM_SHA256,
+            self.cipher_suite,
             keys.write_key,
             keys.write_iv,
             vec![0u8; key_len],
             vec![0u8; iv_len],
         ))
+        .map(|keys| keys.with_header_protection(write_hp, vec![0u8; key_len]))
     }
 
     /// Build server-side keys for reading client 0-RTT data from the same
@@ -783,13 +792,15 @@ impl QuicTlsHandshaker {
         );
         let key_len = self.cipher_suite.key_len();
         let iv_len = 12;
+        let read_hp = quic_hp_key(&self.early_traffic_secret, key_len, &self.hasher);
         Some(ProtectionKeys::new(
-            CipherSuite::TLS_AES_128_GCM_SHA256,
+            self.cipher_suite,
             vec![0u8; key_len],
             vec![0u8; iv_len],
             keys.write_key,
             keys.write_iv,
         ))
+        .map(|keys| keys.with_header_protection(vec![0u8; key_len], read_hp))
     }
 
     /// Derive application traffic keys from the post-Client-Finished transcript hash.
@@ -815,14 +826,25 @@ impl QuicTlsHandshaker {
             12,
             &self.hasher,
         );
+        let write_hp = quic_hp_key(
+            &client_app_secret,
+            self.cipher_suite.key_len(),
+            &self.hasher,
+        );
+        let read_hp = quic_hp_key(
+            &server_app_secret,
+            self.cipher_suite.key_len(),
+            &self.hasher,
+        );
 
         ProtectionKeys::new(
-            CipherSuite::TLS_AES_128_GCM_SHA256,
+            self.cipher_suite,
             write.write_key,
             write.write_iv,
             read.write_key,
             read.write_iv,
         )
+        .with_header_protection(write_hp, read_hp)
     }
 
     /// Check if handshake is complete.
@@ -863,7 +885,7 @@ impl QuicTlsHandshaker {
         dcid: &[u8],
         transcript_after_finished: &[u8],
     ) -> Result<HandshakeResult, String> {
-        let (init_write, init_read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
+        let initial_keys = self.initial_keys(dcid);
 
         let hs_keys = self.handshake_keys()?;
         let app_keys = self.app_keys(transcript_after_finished);
@@ -871,13 +893,7 @@ impl QuicTlsHandshaker {
         let early_data_keys = self.early_data_keys();
 
         Ok(HandshakeResult {
-            initial_keys: ProtectionKeys::new(
-                CipherSuite::TLS_AES_128_GCM_SHA256,
-                init_write.write_key,
-                init_write.write_iv,
-                init_read.write_key,
-                init_read.write_iv,
-            ),
+            initial_keys,
             handshake_keys: hs_keys,
             app_keys,
             early_data_keys,

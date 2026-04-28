@@ -190,9 +190,8 @@ impl QuicPacket {
 
     /// Serialize the packet header for use as AEAD AAD (RFC 9001 §5.2).
     ///
-    /// The AAD is the unprotected packet header — everything before the
-    /// encrypted payload. For long-header packets, this includes the
-    /// packet number (since we don't implement header protection yet).
+    /// The AAD is the header as it exists before QUIC header protection is
+    /// applied. This includes the encoded packet number bytes.
     pub fn header_to_bytes_aad(&self) -> Vec<u8> {
         self.header_to_bytes_aad_with_payload_len(self.payload.len())
     }
@@ -469,6 +468,89 @@ pub fn get_packet_number_length(first_byte: u8) -> usize {
     ((first_byte & 0x03) + 1) as usize
 }
 
+/// Get byte offset where the packet number starts.
+///
+/// For protected packets, callers can use this offset with
+/// `PacketProtection::unprotect_header` before parsing the full packet. Long
+/// headers carry enough length metadata to find the offset without unmasking;
+/// short headers require the expected Destination CID length from connection
+/// state.
+pub fn get_packet_number_offset(data: &[u8], short_dcid_len: usize) -> Result<usize, String> {
+    if data.is_empty() {
+        return Err("Empty data".to_string());
+    }
+    if data[0] & 0x40 == 0 {
+        return Err("QUIC fixed bit is not set".to_string());
+    }
+
+    if data[0] & 0x80 == 0 {
+        if short_dcid_len > 20 {
+            return Err("Short header CID too long".to_string());
+        }
+        let pn_offset = 1usize
+            .checked_add(short_dcid_len)
+            .ok_or_else(|| "Short header packet number offset overflow".to_string())?;
+        if pn_offset >= data.len() {
+            return Err("Packet number missing".to_string());
+        }
+        return Ok(pn_offset);
+    }
+
+    if data.len() < 7 {
+        return Err("Header too short".to_string());
+    }
+    let packet_type = PacketType::from_byte(data[0]).ok_or("Invalid packet type")?;
+    if packet_type == PacketType::Retry {
+        return Err("Retry packets do not carry protected packet numbers".to_string());
+    }
+
+    let mut pos = 5;
+
+    if pos >= data.len() {
+        return Err("DCID length missing".to_string());
+    }
+    let dst_cid_len = data[pos] as usize;
+    if dst_cid_len > 20 {
+        return Err("DCID length exceeds QUIC maximum".to_string());
+    }
+    pos += 1 + dst_cid_len;
+    if pos > data.len() {
+        return Err("DCID exceeds packet length".to_string());
+    }
+
+    if pos >= data.len() {
+        return Err("SCID length missing".to_string());
+    }
+    let src_cid_len = data[pos] as usize;
+    if src_cid_len > 20 {
+        return Err("SCID length exceeds QUIC maximum".to_string());
+    }
+    pos += 1 + src_cid_len;
+    if pos > data.len() {
+        return Err("SCID exceeds packet length".to_string());
+    }
+
+    if packet_type == PacketType::Initial {
+        let (token_len, consumed) =
+            quic_decode_varint(&data[pos..]).map_err(|_| "Invalid token length")?;
+        pos = pos
+            .checked_add(consumed)
+            .and_then(|pos| pos.checked_add(token_len as usize))
+            .ok_or("Token length overflows packet")?;
+        if pos > data.len() {
+            return Err("Token exceeds packet length".to_string());
+        }
+    }
+
+    let (_, consumed) = quic_decode_varint(&data[pos..]).map_err(|_| "Invalid length varint")?;
+    pos += consumed;
+    if pos >= data.len() {
+        return Err("Packet number missing".to_string());
+    }
+
+    Ok(pos)
+}
+
 /// Choose the shortest packet-number encoding that preserves the value.
 pub fn packet_number_length_for_value(packet_number: u64) -> usize {
     if packet_number <= 0xff {
@@ -542,6 +624,7 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     let (_, consumed) = quic_decode_varint(&data[pos..]).map_err(|_| "Invalid length varint")?;
     pos += consumed;
 
+    pos = get_packet_number_offset(data, 0)?;
     let pn_length = get_packet_number_length(first_byte);
     pos += pn_length;
 

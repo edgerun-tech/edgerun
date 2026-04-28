@@ -6,6 +6,7 @@ extern crate edgerun_platform;
 use crate::Error;
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
@@ -59,7 +60,18 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    JoinHandle::ready(Ok(f()))
+    let handle = JoinHandle::pending();
+    let state = handle.state.clone();
+    enqueue_task(Box::pin(async move {
+        let value = f();
+        let mut result = state.result.lock();
+        if state.aborted.load(Ordering::Acquire) {
+            *result = Some(Err(JoinError));
+        } else {
+            *result = Some(Ok(value));
+        }
+    }));
+    handle
 }
 
 pub fn block_on<F>(f: F) -> F::Output
@@ -88,22 +100,43 @@ fn enqueue_task(task: TaskFuture) {
 pub fn run_queue() {
     let waker = noop_waker();
     let mut cx = Context::from_waker(&waker);
-    let initial_len = TASK_QUEUE.lock().len();
+    let mut tasks = {
+        let mut queue = TASK_QUEUE.lock();
+        let mut tasks = Vec::with_capacity(queue.len());
 
-    for _ in 0..initial_len {
-        let Some(mut task) = (TASK_QUEUE.lock().pop_front()) else {
-            break;
-        };
+        for _ in 0..queue.len() {
+            if let Some(task) = queue.pop_front() {
+                tasks.push(task);
+            } else {
+                break;
+            }
+        }
+
+        tasks
+    };
+    let mut completed_count = 0usize;
+    let mut pending = Vec::new();
+
+    for mut task in tasks.drain(..) {
 
         match task.as_mut().poll(&mut cx) {
             Poll::Ready(()) => {
-                PENDING_TASKS.fetch_sub(1, Ordering::AcqRel);
+                completed_count += 1;
             }
             Poll::Pending => {
-                TASK_QUEUE.lock().push_back(task);
+                pending.push(task);
             }
         }
     }
+
+    if !pending.is_empty() {
+        TASK_QUEUE.lock().extend(pending);
+    }
+
+    if completed_count > 0 {
+        PENDING_TASKS.fetch_sub(completed_count, Ordering::AcqRel);
+    }
+
     RUN_COUNT.fetch_add(1, Ordering::AcqRel);
 }
 

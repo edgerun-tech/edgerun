@@ -38,7 +38,7 @@ impl<T> LazyStatic<T> {
                 Ok(_) => {
                     #[cfg(not(target_os = "none"))]
                     let value = {
-                        use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+                        use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
                         match catch_unwind(AssertUnwindSafe(init)) {
                             Ok(value) => value,
                             Err(err) => {
@@ -152,7 +152,7 @@ impl<T> OnceCell<T> {
             {
                 #[cfg(not(target_os = "none"))]
                 let value = {
-                    use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+                    use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
                     match catch_unwind(AssertUnwindSafe(init)) {
                         Ok(value) => value,
                         Err(err) => {

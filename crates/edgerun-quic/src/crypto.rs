@@ -16,6 +16,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
+use edgerun_crypto::aes::{Aes128, Aes256};
 use edgerun_crypto::aes_gcm::aead::{AeadInPlace, KeyInit};
 use edgerun_crypto::aes_gcm::{self, Aes128Gcm, Aes256Gcm};
 use edgerun_crypto::CipherSuite;
@@ -79,6 +80,61 @@ impl QuicAead {
     }
 }
 
+#[derive(Clone)]
+enum HeaderProtectionCipher {
+    Aes128(Aes128),
+    Aes256(Aes256),
+}
+
+impl HeaderProtectionCipher {
+    fn new(suite: CipherSuite, key: &[u8]) -> Result<Self, String> {
+        match suite {
+            CipherSuite::TLS_AES_128_GCM_SHA256 => {
+                if key.len() != 16 {
+                    return Err(format!(
+                        "AES-128 header protection key must be 16 bytes, got {}",
+                        key.len()
+                    ));
+                }
+                let mut key_bytes = [0u8; 16];
+                key_bytes.copy_from_slice(key);
+                Ok(Self::Aes128(Aes128::new(&key_bytes)))
+            }
+            CipherSuite::TLS_AES_256_GCM_SHA384 => {
+                if key.len() != 32 {
+                    return Err(format!(
+                        "AES-256 header protection key must be 32 bytes, got {}",
+                        key.len()
+                    ));
+                }
+                let mut key_bytes = [0u8; 32];
+                key_bytes.copy_from_slice(key);
+                Ok(Self::Aes256(Aes256::new(&key_bytes)))
+            }
+        }
+    }
+
+    fn mask(&self, sample: &[u8]) -> Result<[u8; 5], String> {
+        if sample.len() != 16 {
+            return Err(format!(
+                "header protection sample must be 16 bytes, got {}",
+                sample.len()
+            ));
+        }
+
+        let mut block = [0u8; 16];
+        block.copy_from_slice(sample);
+        let encrypted = match self {
+            Self::Aes128(cipher) => cipher.encrypt_block(&block),
+            Self::Aes256(cipher) => cipher.encrypt_block(&block),
+        };
+
+        let mut mask = [0u8; 5];
+        mask.copy_from_slice(&encrypted[..5]);
+        Ok(mask)
+    }
+}
+
 impl CryptoPhase {
     pub fn preferred() -> CipherSuite {
         CipherSuite::TLS_AES_128_GCM_SHA256
@@ -98,6 +154,10 @@ pub struct ProtectionKeys {
     pub read_key: Vec<u8>,
     /// Read IV
     pub read_iv: Vec<u8>,
+    /// Write header protection key
+    pub write_hp_key: Vec<u8>,
+    /// Read header protection key
+    pub read_hp_key: Vec<u8>,
 }
 
 impl ProtectionKeys {
@@ -111,11 +171,20 @@ impl ProtectionKeys {
     ) -> Self {
         ProtectionKeys {
             algorithm,
+            write_hp_key: write_key.clone(),
+            read_hp_key: read_key.clone(),
             write_key,
             write_iv,
             read_key,
             read_iv,
         }
+    }
+
+    /// Attach explicit header protection keys derived with QUIC label `"hp"`.
+    pub fn with_header_protection(mut self, write_hp_key: Vec<u8>, read_hp_key: Vec<u8>) -> Self {
+        self.write_hp_key = write_hp_key;
+        self.read_hp_key = read_hp_key;
+        self
     }
 
     /// Create test keys (all zeros) for unit testing
@@ -128,6 +197,8 @@ impl ProtectionKeys {
             write_iv: vec![0u8; iv_len],
             read_key: vec![0u8; key_len],
             read_iv: vec![0u8; iv_len],
+            write_hp_key: vec![0u8; key_len],
+            read_hp_key: vec![0u8; key_len],
         }
     }
 }
@@ -138,6 +209,10 @@ pub struct PacketProtection {
     write_aead: QuicAead,
     /// Decryption AEAD
     read_aead: QuicAead,
+    /// Header protection cipher for outgoing packets
+    write_hp: HeaderProtectionCipher,
+    /// Header protection cipher for incoming packets
+    read_hp: HeaderProtectionCipher,
     /// Write IV
     write_iv: Vec<u8>,
     /// Read IV
@@ -151,10 +226,16 @@ impl PacketProtection {
     pub fn new(keys: &ProtectionKeys) -> Self {
         let write_aead = QuicAead::new(keys.algorithm, &keys.write_key).expect("valid write key");
         let read_aead = QuicAead::new(keys.algorithm, &keys.read_key).expect("valid read key");
+        let write_hp = HeaderProtectionCipher::new(keys.algorithm, &keys.write_hp_key)
+            .expect("valid write header protection key");
+        let read_hp = HeaderProtectionCipher::new(keys.algorithm, &keys.read_hp_key)
+            .expect("valid read header protection key");
 
         PacketProtection {
             write_aead,
             read_aead,
+            write_hp,
+            read_hp,
             write_iv: keys.write_iv.clone(),
             read_iv: keys.read_iv.clone(),
             packet_number: 0,
@@ -232,6 +313,97 @@ impl PacketProtection {
             .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
 
         Ok(buffer)
+    }
+
+    /// Apply QUIC header protection to a full packet after payload AEAD.
+    ///
+    /// `pn_offset` is the byte offset of the encoded packet number and
+    /// `pn_len` is the encoded packet number length in bytes. The packet must
+    /// already contain ciphertext because the RFC 9001 sample starts four bytes
+    /// after the packet number offset.
+    pub fn protect_header(
+        &self,
+        packet: &mut [u8],
+        pn_offset: usize,
+        pn_len: usize,
+    ) -> Result<(), String> {
+        if !(1..=4).contains(&pn_len) {
+            return Err(format!(
+                "packet number length must be 1..=4, got {}",
+                pn_len
+            ));
+        }
+        if pn_offset
+            .checked_add(pn_len)
+            .filter(|end| *end <= packet.len())
+            .is_none()
+        {
+            return Err("packet number exceeds packet length".to_string());
+        }
+
+        let mask = self.header_protection_mask(packet, pn_offset, true)?;
+        if packet[0] & 0x80 != 0 {
+            packet[0] ^= mask[0] & 0x0f;
+        } else {
+            packet[0] ^= mask[0] & 0x1f;
+        }
+        for i in 0..pn_len {
+            packet[pn_offset + i] ^= mask[i + 1];
+        }
+        Ok(())
+    }
+
+    /// Remove QUIC header protection from a full packet before parsing.
+    ///
+    /// Returns the unmasked packet number length. The sample offset is
+    /// `pn_offset + 4`, so this can recover the length bits even though they
+    /// are masked in the first byte.
+    pub fn unprotect_header(&self, packet: &mut [u8], pn_offset: usize) -> Result<usize, String> {
+        if packet.is_empty() {
+            return Err("packet is empty".to_string());
+        }
+        if pn_offset >= packet.len() {
+            return Err("packet number offset exceeds packet length".to_string());
+        }
+
+        let mask = self.header_protection_mask(packet, pn_offset, false)?;
+        if packet[0] & 0x80 != 0 {
+            packet[0] ^= mask[0] & 0x0f;
+        } else {
+            packet[0] ^= mask[0] & 0x1f;
+        }
+
+        let pn_len = ((packet[0] & 0x03) + 1) as usize;
+        if pn_offset + pn_len > packet.len() {
+            return Err("packet number exceeds packet length".to_string());
+        }
+        for i in 0..pn_len {
+            packet[pn_offset + i] ^= mask[i + 1];
+        }
+        Ok(pn_len)
+    }
+
+    fn header_protection_mask(
+        &self,
+        packet: &[u8],
+        pn_offset: usize,
+        write: bool,
+    ) -> Result<[u8; 5], String> {
+        let sample_offset = pn_offset
+            .checked_add(4)
+            .ok_or_else(|| "header protection sample offset overflow".to_string())?;
+        let sample_end = sample_offset
+            .checked_add(16)
+            .ok_or_else(|| "header protection sample end overflow".to_string())?;
+        let sample = packet
+            .get(sample_offset..sample_end)
+            .ok_or_else(|| "packet too short for header protection sample".to_string())?;
+
+        if write {
+            self.write_hp.mask(sample)
+        } else {
+            self.read_hp.mask(sample)
+        }
     }
 
     /// QUIC nonce construction: iv XOR (packet_number << 8)
@@ -366,6 +538,8 @@ mod tests {
         let keys = ProtectionKeys::test_keys();
         assert_eq!(keys.write_key.len(), 16);
         assert_eq!(keys.write_iv.len(), 12);
+        assert_eq!(keys.write_hp_key.len(), 16);
+        assert_eq!(keys.read_hp_key.len(), 16);
     }
 
     #[test]
@@ -455,6 +629,69 @@ mod tests {
             .expect("decrypt failed");
         assert_eq!(decrypted.as_slice(), plaintext.as_slice());
         assert_eq!(encryptor.packet_number(), 8);
+    }
+
+    #[test]
+    fn test_long_header_protection_roundtrip() {
+        let keys = ProtectionKeys::test_keys();
+        let protection = PacketProtection::new(&keys);
+        let mut packet = vec![
+            0xcf, 0x00, 0x00, 0x00, 0x01, 0x08, 0, 1, 2, 3, 4, 5, 6, 7, 0x00, 0x14, 0x00, 0x00,
+            0x00, 0x07,
+        ];
+        packet.extend_from_slice(&[0x42; 32]);
+        let original = packet.clone();
+        let pn_offset = 16;
+
+        protection
+            .protect_header(&mut packet, pn_offset, 4)
+            .expect("protect header");
+        assert_ne!(packet[0], original[0]);
+        assert_ne!(
+            &packet[pn_offset..pn_offset + 4],
+            &original[pn_offset..pn_offset + 4]
+        );
+
+        let pn_len = protection
+            .unprotect_header(&mut packet, pn_offset)
+            .expect("unprotect header");
+        assert_eq!(pn_len, 4);
+        assert_eq!(packet, original);
+    }
+
+    #[test]
+    fn test_short_header_protection_roundtrip() {
+        let keys = ProtectionKeys::test_keys();
+        let protection = PacketProtection::new(&keys);
+        let mut packet = vec![0x45, 1, 2, 3, 4, 0xab, 0xcd];
+        packet.extend_from_slice(&[0x24; 32]);
+        let original = packet.clone();
+        let pn_offset = 5;
+
+        protection
+            .protect_header(&mut packet, pn_offset, 2)
+            .expect("protect header");
+        assert_ne!(packet[0], original[0]);
+        assert_ne!(
+            &packet[pn_offset..pn_offset + 2],
+            &original[pn_offset..pn_offset + 2]
+        );
+
+        let pn_len = protection
+            .unprotect_header(&mut packet, pn_offset)
+            .expect("unprotect header");
+        assert_eq!(pn_len, 2);
+        assert_eq!(packet, original);
+    }
+
+    #[test]
+    fn test_header_protection_requires_sample() {
+        let keys = ProtectionKeys::test_keys();
+        let protection = PacketProtection::new(&keys);
+        let mut packet = vec![0x41, 1, 2, 3, 4, 0x07];
+
+        let err = protection.protect_header(&mut packet, 5, 1).unwrap_err();
+        assert!(err.contains("sample"));
     }
 
     #[test]

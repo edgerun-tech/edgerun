@@ -21,7 +21,12 @@ fn extract_layer_basic() {
     let tar_file = tmp.join("layer.tar");
     std::fs::write(&tar_file, &tar_data).unwrap();
 
-    extract_layer(&tar_file, &dest, None).unwrap();
+    extract_layer(
+        &tar_file,
+        &dest,
+        Some("application/vnd.oci.image.layer.v1.tar"),
+    )
+    .unwrap();
 
     let extracted = dest.join("file.txt");
     assert!(extracted.exists());
@@ -84,7 +89,11 @@ fn extract_layer_rejects_write_through_symlink_parent() {
     let tar_file = tmp.join("layer.tar");
     std::fs::write(&tar_file, &tar_data).unwrap();
 
-    let result = extract_layer(&tar_file, &dest, None);
+    let result = extract_layer(
+        &tar_file,
+        &dest,
+        Some("application/vnd.oci.image.layer.v1.tar"),
+    );
 
     assert!(result.is_err());
     assert!(!outside.join("file.txt").exists());
@@ -103,9 +112,44 @@ fn extract_layer_replaces_directory_with_file() {
     let tar_file = tmp.join("layer.tar");
     std::fs::write(&tar_file, &tar_data).unwrap();
 
-    extract_layer(&tar_file, &dest, None).unwrap();
+    extract_layer(
+        &tar_file,
+        &dest,
+        Some("application/vnd.oci.image.layer.v1.tar"),
+    )
+    .unwrap();
 
     assert_eq!(std::fs::read(dest.join("config")).unwrap(), b"file");
+}
+
+#[test]
+fn extract_layer_rejects_missing_media_type() {
+    let tmp = tmp_dir();
+    let dest = tmp.join("rootfs");
+    std::fs::create_dir_all(&dest).unwrap();
+
+    let tar_data = tar(vec![tar_entry("file.txt", b'0', b"hello world")]);
+    let tar_file = tmp.join("layer.tar");
+    std::fs::write(&tar_file, &tar_data).unwrap();
+
+    let result = extract_layer(&tar_file, &dest, None);
+
+    assert!(result.is_err());
+    assert!(!dest.join("file.txt").exists());
+}
+
+#[test]
+fn extract_layer_rejects_unknown_media_type_even_with_gzip_extension() {
+    let tmp = tmp_dir();
+    let dest = tmp.join("rootfs");
+    std::fs::create_dir_all(&dest).unwrap();
+
+    let tar_file = tmp.join("layer.tar.gz");
+    std::fs::write(&tar_file, b"not a trusted gzip layer").unwrap();
+
+    let result = extract_layer(&tar_file, &dest, Some("application/vnd.example.layer"));
+
+    assert!(result.is_err());
 }
 
 fn tar_symlink_entry(path: &str, target: &str) -> Vec<u8> {

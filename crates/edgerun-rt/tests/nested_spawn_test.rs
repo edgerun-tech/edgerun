@@ -9,9 +9,15 @@ fn nested_spawn_should_complete() {
     while !outer.is_finished() {
         edgerun_rt::run_queue();
         spins += 1;
-        assert!(spins < 1000, "nested spawn did not complete within 1000 queue ticks");
+        assert!(
+            spins < 1000,
+            "nested spawn did not complete within 1000 queue ticks"
+        );
         if !outer.is_finished() {
-            assert!(edgerun_rt::pending() > 0, "runtime became idle before completion");
+            assert!(
+                edgerun_rt::pending() > 0,
+                "runtime became idle before completion"
+            );
         }
     }
 

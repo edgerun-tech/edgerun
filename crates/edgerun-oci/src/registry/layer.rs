@@ -44,19 +44,17 @@ pub fn extract_layer(
     file.read_to_end(&mut bytes)
         .map_err(RegistryError::IoError)?;
 
-    let compression = match layer_compression(media_type) {
-        OciLayerCompression::Unknown
-            if blob_path.extension().map(|e| e == "gz").unwrap_or(false) =>
-        {
-            OciLayerCompression::Gzip
-        }
-        compression => compression,
-    };
+    let compression = layer_compression(media_type);
 
     let tar_bytes = match compression {
         OciLayerCompression::Zstd => decompress_zstd_layer(&bytes),
         OciLayerCompression::Gzip => decompress_gzip_layer(&bytes),
-        OciLayerCompression::Uncompressed | OciLayerCompression::Unknown => Ok(bytes),
+        OciLayerCompression::Uncompressed => Ok(bytes),
+        OciLayerCompression::Unknown => {
+            Err(crate::tar_layer::TarLayerApplyError::UnsupportedMediaType(
+                media_type.map(ToString::to_string),
+            ))
+        }
     }
     .map_err(tar_apply_error)?;
 

@@ -20,10 +20,20 @@ const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
 const WIFI_MAC_RX_CTRL3: *mut u32 = 0x6003_310c as *mut u32;
+const WIFI_MAC_RX_GLOBAL: *mut u32 = 0x6003_309c as *mut u32;
+const WIFI_MAC_RX_CFG0: *mut u32 = 0x6003_3c5c as *mut u32;
+const WIFI_MAC_RX_CFG1: *mut u32 = 0x6003_3c60 as *mut u32;
+const WIFI_MAC_RX_CFG2: *mut u32 = 0x6003_3c64 as *mut u32;
+const WIFI_MAC_RX_CFG3: *mut u32 = 0x6003_3080 as *mut u32;
+const WIFI_MAC_RX_BASE: *mut u32 = 0x6003_3088 as *mut u32;
+const WIFI_MAC_RX_FILTER_COUNT: *mut u32 = 0x6003_311c as *mut u32;
+const WIFI_MAC_RX_FILTER_CTRL_BASE: *mut u32 = 0x6003_3120 as *mut u32;
+const WIFI_MAC_RX_FILTER_PATTERN_BASE: *mut u32 = 0x6003_313c as *mut u32;
+const WIFI_MAC_RX_FILTER_MASK_BASE: *mut u32 = 0x6003_3158 as *mut u32;
 const WIFI_MAC_CTRL_33114: *mut u32 = 0x6003_3114 as *mut u32;
 const WIFI_MAC_CTRL_33118: *mut u32 = 0x6003_3118 as *mut u32;
 const WIFI_COEX_CTRL: *mut u32 = 0x6003_5084 as *mut u32;
-const WIFI_COEX_PTI: *mut u32 = 0x6003_329c as *mut u32;
+const WIFI_COEX_PTI: *mut u32 = 0x6003_32ac as *mut u32;
 const WIFI_COEX_DEFAULT_PTI: *mut u32 = 0x6003_5094 as *mut u32;
 
 const SYSTEM_WIFI_CLK_WIFI_BT_COMMON: u32 = 0x0078_078f;
@@ -36,6 +46,11 @@ const MODEM_RESET_FIELD_WHEN_POWERED: u32 =
     (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 9) | (1 << 11) | (1 << 13);
 
 static LAST_STATUS: AtomicI32 = AtomicI32::new(0);
+
+#[repr(align(16))]
+struct AlignedRxScratch([u32; 512]);
+
+static mut RX_SCRATCH: AlignedRxScratch = AlignedRxScratch([0; 512]);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiMmioDebugRegs {
@@ -61,6 +76,19 @@ pub struct WifiMmioMacRegs {
     pub rx_ctrl1: u32,
     pub rx_ctrl2: u32,
     pub rx_ctrl3: u32,
+    pub rx_global: u32,
+    pub rx_cfg0: u32,
+    pub rx_cfg1: u32,
+    pub rx_cfg2: u32,
+    pub rx_cfg3: u32,
+    pub rx_base: u32,
+    pub rx_filter_count: u32,
+    pub rx_filter_ctrl0: u32,
+    pub rx_filter_ctrl5: u32,
+    pub rx_filter_pattern0: u32,
+    pub rx_filter_pattern5: u32,
+    pub rx_filter_mask0: u32,
+    pub rx_filter_mask5: u32,
     pub ctrl_33114: u32,
     pub ctrl_33118: u32,
     pub coex_ctrl: u32,
@@ -103,6 +131,19 @@ impl Esp32s3WifiMmio {
                 rx_ctrl1: WIFI_MAC_RX_CTRL1.read_volatile(),
                 rx_ctrl2: WIFI_MAC_RX_CTRL2.read_volatile(),
                 rx_ctrl3: WIFI_MAC_RX_CTRL3.read_volatile(),
+                rx_global: WIFI_MAC_RX_GLOBAL.read_volatile(),
+                rx_cfg0: WIFI_MAC_RX_CFG0.read_volatile(),
+                rx_cfg1: WIFI_MAC_RX_CFG1.read_volatile(),
+                rx_cfg2: WIFI_MAC_RX_CFG2.read_volatile(),
+                rx_cfg3: WIFI_MAC_RX_CFG3.read_volatile(),
+                rx_base: WIFI_MAC_RX_BASE.read_volatile(),
+                rx_filter_count: WIFI_MAC_RX_FILTER_COUNT.read_volatile(),
+                rx_filter_ctrl0: WIFI_MAC_RX_FILTER_CTRL_BASE.add(0).read_volatile(),
+                rx_filter_ctrl5: WIFI_MAC_RX_FILTER_CTRL_BASE.add(5).read_volatile(),
+                rx_filter_pattern0: WIFI_MAC_RX_FILTER_PATTERN_BASE.add(0).read_volatile(),
+                rx_filter_pattern5: WIFI_MAC_RX_FILTER_PATTERN_BASE.add(5).read_volatile(),
+                rx_filter_mask0: WIFI_MAC_RX_FILTER_MASK_BASE.add(0).read_volatile(),
+                rx_filter_mask5: WIFI_MAC_RX_FILTER_MASK_BASE.add(5).read_volatile(),
                 ctrl_33114: WIFI_MAC_CTRL_33114.read_volatile(),
                 ctrl_33118: WIFI_MAC_CTRL_33118.read_volatile(),
                 coex_ctrl: WIFI_COEX_CTRL.read_volatile(),
@@ -144,6 +185,24 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(401, Ordering::Relaxed);
                     init_mac_txrx_slice();
                     LAST_STATUS.store(402, Ordering::Relaxed);
+                    true
+                }
+                5 => {
+                    LAST_STATUS.store(501, Ordering::Relaxed);
+                    init_hal_tail_slice();
+                    LAST_STATUS.store(502, Ordering::Relaxed);
+                    true
+                }
+                6 => {
+                    LAST_STATUS.store(601, Ordering::Relaxed);
+                    init_rx_buffer_slice();
+                    LAST_STATUS.store(602, Ordering::Relaxed);
+                    true
+                }
+                7 => {
+                    LAST_STATUS.store(701, Ordering::Relaxed);
+                    init_rx_filter_slice();
+                    LAST_STATUS.store(702, Ordering::Relaxed);
                     true
                 }
                 _ => false,
@@ -235,6 +294,84 @@ unsafe fn init_mac_txrx_slice() {
     update(WIFI_MAC_DMA_CTRL, |v| v | 0x0000_0200);
     update(WIFI_MAC_CTRL_33114, |v| v & !0xf0);
     update(WIFI_MAC_CTRL_33118, |v| v | 0x8000_0000);
+}
+
+unsafe fn init_hal_tail_slice() {
+    unsafe {
+        WIFI_MAC_CTRL_33C34.write_volatile(0x19a8_79e0);
+    }
+    update(WIFI_MAC_DMA_CTRL, |v| v | (1 << 28));
+    update(WIFI_MAC_RX_GLOBAL, |v| (v & 0xffff_ff00) | 1);
+    update(WIFI_MAC_RX_GLOBAL, |v| (v & 0xffff_00ff) | 0x200);
+    update(WIFI_MAC_RX_GLOBAL, |v| v | (1 << 20));
+
+    update(WIFI_COEX_CTRL, |v| v | 2);
+    update(WIFI_COEX_PTI, |v| v & !0xff);
+    update(WIFI_COEX_DEFAULT_PTI, |v| v & !0x0f00);
+}
+
+unsafe fn init_rx_buffer_slice() {
+    update(WIFI_MAC_RX_CFG0, |v| (v & 0xfff0_0000) | (31 << 15));
+    update(WIFI_MAC_RX_CFG1, |v| (v & 0xfff0_0000) | (33 << 14));
+    update(WIFI_MAC_RX_CFG2, |v| (v & 0x000f_ffff) | (255 << 22));
+    update(WIFI_MAC_RX_CFG3, |v| v & 0xffff_ff00);
+    unsafe {
+        let base = core::ptr::addr_of!(RX_SCRATCH.0).cast::<u32>() as usize as u32;
+        WIFI_MAC_RX_BASE.write_volatile(base);
+    }
+}
+
+unsafe fn init_rx_filter_slice() {
+    let ctrl = [
+        0x0002_3006,
+        0x0002_3006,
+        0x0002_3006,
+        0x0002_301c,
+        0x0002_301c,
+        0x0002_3011,
+    ];
+    let pattern = [
+        0x0000_0608,
+        0x0000_0808,
+        0x0000_8e88,
+        0x4400_4300,
+        0x4300_4400,
+        0x0000_0001,
+    ];
+    let mask = [
+        0x0000_ffff,
+        0x0000_ffff,
+        0x0000_ffff,
+        0xffff_ffff,
+        0xffff_ffff,
+        0x0000_00ff,
+    ];
+
+    for (index, value) in ctrl.iter().enumerate() {
+        unsafe {
+            WIFI_MAC_RX_FILTER_CTRL_BASE
+                .add(index)
+                .write_volatile(*value);
+        }
+    }
+    for (index, value) in pattern.iter().enumerate() {
+        unsafe {
+            WIFI_MAC_RX_FILTER_PATTERN_BASE
+                .add(index)
+                .write_volatile(*value);
+        }
+    }
+    for (index, value) in mask.iter().enumerate() {
+        unsafe {
+            WIFI_MAC_RX_FILTER_MASK_BASE
+                .add(index)
+                .write_volatile(*value);
+        }
+    }
+
+    update(WIFI_MAC_RX_FILTER_COUNT, |v| v | (63 << 8));
+    update(WIFI_MAC_RX_FILTER_COUNT, |v| v | 126);
+    update(WIFI_MAC_RX_GLOBAL, |v| v | (1 << 27));
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
