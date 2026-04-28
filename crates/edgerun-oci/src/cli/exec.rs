@@ -558,7 +558,7 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     Ok(())
 }
 
-fn load_exec_spec(state: &crate::state::ContainerState) -> Option<crate::json::OciSpec> {
+pub(crate) fn load_exec_spec(state: &crate::state::ContainerState) -> Option<crate::json::OciSpec> {
     let runtime_config = crate::state::runtime_spec_path(&state.id);
     if let Ok(data) = fs::read(runtime_config) {
         if let Ok(spec) = crate::json::parse_oci_spec(&data) {
@@ -572,7 +572,10 @@ fn load_exec_spec(state: &crate::state::ContainerState) -> Option<crate::json::O
         .and_then(|data| crate::json::parse_oci_spec(&data).ok())
 }
 
-fn open_exec_root(pid: u32, spec: Option<&crate::json::OciSpec>) -> io::Result<(File, PathBuf)> {
+pub(crate) fn open_exec_root(
+    pid: u32,
+    spec: Option<&crate::json::OciSpec>,
+) -> io::Result<(File, PathBuf)> {
     if let Some(root_path) = spec
         .and_then(|spec| spec.root.as_ref())
         .map(|root| root.path.as_str())
@@ -589,7 +592,7 @@ fn open_exec_root(pid: u32, spec: Option<&crate::json::OciSpec>) -> io::Result<(
         .map_err(|error| io::Error::new(error.kind(), format!("open {proc_root}: {error}")))
 }
 
-fn enter_container_root(root_fd: i32) -> io::Result<()> {
+pub(crate) fn enter_container_root(root_fd: i32) -> io::Result<()> {
     let ret = unsafe { libc::fchdir(root_fd) };
     if ret != 0 {
         return Err(io::Error::last_os_error());
@@ -610,7 +613,7 @@ fn enter_container_root(root_fd: i32) -> io::Result<()> {
 /// Join all relevant namespaces of the container's init process.
 ///
 /// Returns `true` if the PID namespace was joined (caller must fork to enter it).
-fn join_container_namespaces(pid: u32) -> io::Result<bool> {
+pub(crate) fn join_container_namespaces(pid: u32) -> io::Result<bool> {
     let mut joined_pid_ns = false;
 
     // Namespaces to join: mount, uts, ipc, net, pid

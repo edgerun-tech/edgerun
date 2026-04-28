@@ -1216,6 +1216,13 @@ pub fn validate_delegation_chain(
                     empty_map(),
                 );
             }
+            if !delegation_timing_allows(parent, delegation) {
+                return reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("attenuation violated: child broadens validity window".into()),
+                    empty_map(),
+                );
+            }
             if parent_cap.capability_kind != child_cap.capability_kind {
                 return reject(
                     ReasonCode::AuthorityDenied,
@@ -1830,6 +1837,26 @@ fn duration_millis(duration: &prost_types::Duration) -> Option<i128> {
         return None;
     }
     Some(duration.seconds as i128 * 1000 + duration.nanos as i128 / 1_000_000)
+}
+
+fn delegation_timing_allows(parent: &DelegationRecord, child: &DelegationRecord) -> bool {
+    if let Some(parent_not_before) = &parent.not_before {
+        let Some(child_not_before) = &child.not_before else {
+            return false;
+        };
+        if timestamp_ms(child_not_before) < timestamp_ms(parent_not_before) {
+            return false;
+        }
+    }
+    if let Some(parent_expires_at) = &parent.expires_at {
+        let Some(child_expires_at) = &child.expires_at else {
+            return false;
+        };
+        if timestamp_ms(child_expires_at) > timestamp_ms(parent_expires_at) {
+            return false;
+        }
+    }
+    true
 }
 
 fn verify_delegation_signature(delegation: &DelegationRecord) -> bool {
@@ -5010,6 +5037,58 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::AssuranceInsufficient));
+    }
+
+    #[test]
+    fn delegation_chain_dropping_parent_not_before_is_rejected() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        parent.not_before = Some(prost_types::Timestamp {
+            seconds: 1_699_999_990,
+            nanos: 0,
+        });
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        child.not_before = None;
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_dropping_parent_expires_at_is_rejected() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        parent.expires_at = Some(prost_types::Timestamp {
+            seconds: 1_700_001_000,
+            nanos: 0,
+        });
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        child.expires_at = None;
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
     }
 
     #[test]
