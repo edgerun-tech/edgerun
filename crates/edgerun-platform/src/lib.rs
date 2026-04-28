@@ -3,7 +3,11 @@
 #![no_std]
 #![cfg_attr(target_arch = "xtensa", feature(asm_experimental_arch))]
 #![cfg_attr(
-    all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob"),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
     feature(c_variadic)
 )]
 
@@ -29,13 +33,19 @@ pub mod esp32s3_wifi_blob;
     target_os = "none",
     feature = "esp32s3-wifi-blob"
 ))]
-mod esp32s3_wifi_blob_stubs;
+mod esp32s3_wifi_blob_init;
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
     feature = "esp32s3-wifi-blob"
 ))]
-mod esp32s3_wifi_blob_init;
+mod esp32s3_wifi_blob_stubs;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio"
+))]
+pub mod esp32s3_wifi_mmio;
 pub mod irq;
 pub mod timer;
 pub mod tls;

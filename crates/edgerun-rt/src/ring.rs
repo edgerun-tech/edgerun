@@ -14,7 +14,10 @@ pub struct RingBuffer {
 
 impl RingBuffer {
     pub fn new(capacity: usize) -> Self {
-        let capacity = capacity.max(2).next_power_of_two();
+        let capacity = match capacity.max(2).checked_next_power_of_two() {
+            Some(capacity) => capacity,
+            None => 1 << (usize::BITS as usize - 1),
+        };
         Self {
             data: vec![0; capacity],
             head: 0,
@@ -33,17 +36,44 @@ impl RingBuffer {
     }
 
     pub fn push_slice(&mut self, bytes: &[u8]) -> usize {
-        let mut n = 0;
-        for &b in bytes {
-            if self.push(b) {
-                n += 1;
-            } else {
-                break;
-            }
-        }
-        n
-    }
+        let free = (self.capacity - 1).saturating_sub(self.len());
+        let count = free.min(bytes.len());
 
+        if count == 0 {
+            return 0;
+        }
+
+        let first = (self.capacity - self.tail).min(count);
+        let second = count - first;
+
+        self.data[self.tail..self.tail + first].copy_from_slice(&bytes[..first]);
+        if second > 0 {
+            self.data[..second].copy_from_slice(&bytes[first..first + second]);
+        }
+
+        self.tail = (self.tail + count) & (self.capacity - 1);
+        count
+    }
+}
+
+impl RingBuffer {
+    pub fn pop_slice(&mut self, buf: &mut [u8]) -> usize {
+        let count = self.len().min(buf.len());
+        if count == 0 {
+            return 0;
+        }
+
+        let first = (self.capacity - self.head).min(count);
+        let second = count - first;
+
+        buf[..first].copy_from_slice(&self.data[self.head..self.head + first]);
+        if second > 0 {
+            buf[first..count].copy_from_slice(&self.data[..second]);
+        }
+
+        self.head = (self.head + count) & (self.capacity - 1);
+        count
+    }
     pub fn pop(&mut self) -> Option<u8> {
         if self.head == self.tail {
             return None;
@@ -51,18 +81,6 @@ impl RingBuffer {
         let byte = self.data[self.head];
         self.head = (self.head + 1) & (self.capacity - 1);
         Some(byte)
-    }
-
-    pub fn pop_slice(&mut self, buf: &mut [u8]) -> usize {
-        let n = buf.len().min(self.len());
-        for i in 0..n {
-            if let Some(b) = self.pop() {
-                buf[i] = b;
-            } else {
-                break;
-            }
-        }
-        n
     }
 
     pub fn len(&self) -> usize {

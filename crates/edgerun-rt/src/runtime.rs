@@ -104,7 +104,6 @@ pub fn run_queue() {
             }
         }
     }
-
     RUN_COUNT.fetch_add(1, Ordering::AcqRel);
 }
 

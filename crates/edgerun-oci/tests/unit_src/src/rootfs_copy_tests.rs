@@ -122,3 +122,24 @@ fn merge_layer_dirs_replaces_file_with_directory() {
     assert_eq!(fs::read(dest.join("config/new")).unwrap(), b"new");
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn merge_layer_dirs_rejects_writes_through_lower_symlink_parent() {
+    let root = test_dir("symlink-parent");
+    let layer1 = root.join("layer1");
+    let layer2 = root.join("layer2");
+    let dest = root.join("dest");
+    let outside = root.join("outside");
+    fs::create_dir_all(&layer1).unwrap();
+    fs::create_dir_all(layer2.join("etc")).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    symlink(&outside, layer1.join("etc")).unwrap();
+    fs::write(layer2.join("etc/passwd"), b"upper").unwrap();
+
+    let error = merge_layer_dirs(&[layer1, layer2], &dest).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    assert!(error.to_string().contains("ancestor is a symlink"));
+    assert!(!outside.join("passwd").exists());
+    let _ = fs::remove_dir_all(root);
+}

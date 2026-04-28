@@ -13,6 +13,7 @@ use super::image_ref::ImageRef;
 use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest};
 use super::manifest::{ImageManifest, LayerDescriptor, SingleManifest};
 use super::oci_spec::generate_oci_spec;
+use crate::tar_layer::{layer_compression, OciLayerCompression};
 use crate::{sha256_digest_reference, validate_digest_reference};
 
 #[derive(Debug, Clone)]
@@ -172,7 +173,7 @@ where
     progress(PullProgress::WritingConfig {
         path: config_path.clone(),
     });
-    std::fs::write(config_path, config_json)?;
+    atomic_write(&config_path, config_json.as_bytes())?;
 
     Ok(ImagePullReport {
         path: bundle_path.to_path_buf(),
@@ -211,6 +212,7 @@ fn validate_manifest_descriptors(manifest: &SingleManifest) -> Result<(), Regist
     validate_registry_digest("manifest.config.digest", &manifest.config_digest)?;
     for (index, layer) in manifest.layers.iter().enumerate() {
         validate_registry_digest(format!("manifest.layers[{index}].digest"), &layer.digest)?;
+        validate_layer_media_type(layer)?;
     }
     Ok(())
 }
@@ -260,7 +262,7 @@ where
         }
         let _ = std::fs::remove_file(&cache_marker);
 
-        let blob_path = store_path.join(format!("{}.{}", &cache_key, layer_extension(layer)));
+        let blob_path = store_path.join(format!("{}.{}", &cache_key, layer_extension(layer)?));
         if blob_path.exists() && !cached_blob_valid(&blob_path, &layer.digest, Some(layer.size)) {
             std::fs::remove_file(&blob_path).map_err(RegistryError::IoError)?;
         }
@@ -395,12 +397,20 @@ fn atomic_write(dest: &Path, data: &[u8]) -> Result<(), RegistryError> {
         file.write_all(data)?;
         file.sync_all()?;
         std::fs::rename(&tmp, dest)?;
+        sync_parent_dir(dest)?;
         Ok::<(), std::io::Error>(())
     })();
 
     if let Err(error) = write_result {
         let _ = std::fs::remove_file(&tmp);
         return Err(RegistryError::IoError(error));
+    }
+    Ok(())
+}
+
+fn sync_parent_dir(path: &Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        File::open(parent)?.sync_all()?;
     }
     Ok(())
 }
@@ -419,12 +429,29 @@ fn temporary_write_path(dest: &Path) -> PathBuf {
     ))
 }
 
-fn layer_extension(layer: &LayerDescriptor) -> &'static str {
-    match layer.media_type.as_deref() {
-        Some(media_type) if media_type.contains("zstd") => "tar.zst",
-        Some(media_type) if media_type.contains("gzip") => "tar.gz",
-        Some(media_type) if media_type.contains("tar") => "tar",
-        _ => "tar.gz",
+fn validate_layer_media_type(layer: &LayerDescriptor) -> Result<(), RegistryError> {
+    match layer_compression(layer.media_type.as_deref()) {
+        OciLayerCompression::Uncompressed
+        | OciLayerCompression::Gzip
+        | OciLayerCompression::Zstd => Ok(()),
+        OciLayerCompression::Unknown => Err(unsupported_layer_media_type(layer)),
+    }
+}
+
+fn unsupported_layer_media_type(layer: &LayerDescriptor) -> RegistryError {
+    let media_type = layer.media_type.as_deref().unwrap_or("<missing>");
+    RegistryError::ParseError(format!(
+        "unsupported layer media type for {}: {}",
+        layer.digest, media_type
+    ))
+}
+
+fn layer_extension(layer: &LayerDescriptor) -> Result<&'static str, RegistryError> {
+    match layer_compression(layer.media_type.as_deref()) {
+        OciLayerCompression::Zstd => Ok("tar.zst"),
+        OciLayerCompression::Gzip => Ok("tar.gz"),
+        OciLayerCompression::Uncompressed => Ok("tar"),
+        OciLayerCompression::Unknown => Err(unsupported_layer_media_type(layer)),
     }
 }
 
@@ -540,6 +567,20 @@ mod tests {
     }
 
     #[test]
+    fn validate_manifest_descriptors_rejects_unsupported_layer_media_type() {
+        let config = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
+        let layer = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+        let mut manifest = manifest_with_digests(config, layer);
+        manifest.layers[0].media_type = Some("application/vnd.example.layer.v1+custom".into());
+
+        let error = validate_manifest_descriptors(&manifest).unwrap_err();
+
+        assert!(matches!(error, RegistryError::ParseError(_)));
+        assert!(error.to_string().contains("unsupported layer media type"));
+        assert!(error.to_string().contains(layer));
+    }
+
+    #[test]
     fn verify_descriptor_bytes_checks_digest_and_size() {
         let data = b"config bytes";
         let digest = crate::sha256_digest_reference(data);
@@ -596,7 +637,23 @@ mod tests {
             size: 0,
         };
 
-        assert_eq!(layer_extension(&uncompressed), "tar");
-        assert_eq!(layer_extension(&gzip), "tar.gz");
+        assert_eq!(layer_extension(&uncompressed).unwrap(), "tar");
+        assert_eq!(layer_extension(&gzip).unwrap(), "tar.gz");
+    }
+
+    #[test]
+    fn layer_extension_rejects_unknown_media_type() {
+        let layer = LayerDescriptor {
+            media_type: None,
+            digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                .into(),
+            size: 0,
+        };
+
+        let error = layer_extension(&layer).unwrap_err();
+
+        assert!(matches!(error, RegistryError::ParseError(_)));
+        assert!(error.to_string().contains("unsupported layer media type"));
+        assert!(error.to_string().contains("<missing>"));
     }
 }

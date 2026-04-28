@@ -11,6 +11,7 @@ edgerun-wifi = { path = "../edgerun-wifi" }
 
 [features]
 default = []
+esp32s3-wifi-mmio = []
 esp32s3-wifi-blob = []
 esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob"]
 esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob"]

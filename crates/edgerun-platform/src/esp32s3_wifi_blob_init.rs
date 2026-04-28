@@ -94,7 +94,8 @@ struct WifiOsiFuncs {
     _queue_create: Option<unsafe extern "C" fn(u32, u32) -> *mut c_void>,
     _queue_delete: Option<unsafe extern "C" fn(*mut c_void)>,
     _queue_send: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, u32) -> i32>,
-    _queue_send_from_isr: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32>,
+    _queue_send_from_isr:
+        Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32>,
     _queue_send_to_back: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, u32) -> i32>,
     _queue_send_to_front: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, u32) -> i32>,
     _queue_recv: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, u32) -> i32>,
@@ -103,9 +104,22 @@ struct WifiOsiFuncs {
     _event_group_delete: Option<unsafe extern "C" fn(*mut c_void)>,
     _event_group_set_bits: Option<unsafe extern "C" fn(*mut c_void, u32) -> u32>,
     _event_group_clear_bits: Option<unsafe extern "C" fn(*mut c_void, u32) -> u32>,
-    _event_group_wait_bits: Option<unsafe extern "C" fn(*mut c_void, u32, c_int, c_int, u32) -> u32>,
-    _task_create_pinned_to_core: Option<unsafe extern "C" fn(*mut c_void, *const c_char, u32, *mut c_void, u32, *mut c_void, u32) -> i32>,
-    _task_create: Option<unsafe extern "C" fn(*mut c_void, *const c_char, u32, *mut c_void, u32, *mut c_void) -> i32>,
+    _event_group_wait_bits:
+        Option<unsafe extern "C" fn(*mut c_void, u32, c_int, c_int, u32) -> u32>,
+    _task_create_pinned_to_core: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const c_char,
+            u32,
+            *mut c_void,
+            u32,
+            *mut c_void,
+            u32,
+        ) -> i32,
+    >,
+    _task_create: Option<
+        unsafe extern "C" fn(*mut c_void, *const c_char, u32, *mut c_void, u32, *mut c_void) -> i32,
+    >,
     _task_delete: Option<unsafe extern "C" fn(*mut c_void)>,
     _task_delay: Option<unsafe extern "C" fn(u32)>,
     _task_ms_to_tick: Option<unsafe extern "C" fn(u32) -> i32>,
@@ -145,7 +159,8 @@ struct WifiOsiFuncs {
     _nvs_close: Option<unsafe extern "C" fn(u32)>,
     _nvs_commit: Option<unsafe extern "C" fn(u32) -> c_int>,
     _nvs_set_blob: Option<unsafe extern "C" fn(u32, *const c_char, *const c_void, usize) -> c_int>,
-    _nvs_get_blob: Option<unsafe extern "C" fn(u32, *const c_char, *mut c_void, *mut usize) -> c_int>,
+    _nvs_get_blob:
+        Option<unsafe extern "C" fn(u32, *const c_char, *mut c_void, *mut usize) -> c_int>,
     _nvs_erase_key: Option<unsafe extern "C" fn(u32, *const c_char) -> c_int>,
     _get_random: Option<unsafe extern "C" fn(*mut u8, usize) -> c_int>,
     _get_time: Option<unsafe extern "C" fn(*mut c_void) -> c_int>,
@@ -182,8 +197,10 @@ struct WifiOsiFuncs {
     _coex_schm_curr_period_get: Option<unsafe extern "C" fn() -> u8>,
     _coex_schm_curr_phase_get: Option<unsafe extern "C" fn() -> *mut c_void>,
     _coex_schm_process_restart: Option<unsafe extern "C" fn() -> c_int>,
-    _coex_schm_register_cb: Option<unsafe extern "C" fn(c_int, Option<unsafe extern "C" fn(c_int) -> c_int>) -> c_int>,
-    _coex_register_start_cb: Option<unsafe extern "C" fn(Option<unsafe extern "C" fn() -> c_int>) -> c_int>,
+    _coex_schm_register_cb:
+        Option<unsafe extern "C" fn(c_int, Option<unsafe extern "C" fn(c_int) -> c_int>) -> c_int>,
+    _coex_register_start_cb:
+        Option<unsafe extern "C" fn(Option<unsafe extern "C" fn() -> c_int>) -> c_int>,
     _coex_schm_flexible_period_set: Option<unsafe extern "C" fn(u8) -> c_int>,
     _coex_schm_flexible_period_get: Option<unsafe extern "C" fn() -> u8>,
     _coex_schm_get_phase_by_idx: Option<unsafe extern "C" fn(c_int) -> *mut c_void>,
@@ -394,57 +411,136 @@ static WIFI_OSI_FUNCS: WifiOsiFuncs = WifiOsiFuncs {
     _magic: ESP_WIFI_OS_ADAPTER_MAGIC,
 };
 
-unsafe extern "C" fn env_is_chip() -> bool { true }
+unsafe extern "C" fn env_is_chip() -> bool {
+    true
+}
 unsafe extern "C" fn set_intr(_cpu: i32, _src: u32, _num: u32, _prio: i32) {}
 unsafe extern "C" fn clear_intr(_src: u32, _num: u32) {}
 unsafe extern "C" fn set_isr(_n: i32, _f: *mut c_void, _arg: *mut c_void) {}
 unsafe extern "C" fn ints_on(_mask: u32) {}
 unsafe extern "C" fn ints_off(_mask: u32) {}
-unsafe extern "C" fn is_from_isr() -> bool { false }
+unsafe extern "C" fn is_from_isr() -> bool {
+    false
+}
 unsafe extern "C" fn noop0() {}
-unsafe extern "C" fn ok0() -> c_int { ESP_OK }
-unsafe extern "C" fn zero0() -> u32 { 0 }
-unsafe extern "C" fn zero_u8() -> u8 { 0 }
-unsafe extern "C" fn null0() -> *mut c_void { ptr::null_mut() }
-unsafe extern "C" fn ok_ptr(_p: *mut c_void) -> i32 { 1 }
-unsafe extern "C" fn ok_take(_p: *mut c_void, _ticks: u32) -> i32 { 1 }
-unsafe extern "C" fn zero_ptr(_p: *mut c_void) -> u32 { 0 }
-unsafe extern "C" fn dummy_alloc() -> *mut c_void { 1usize as *mut c_void }
+unsafe extern "C" fn ok0() -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn zero0() -> u32 {
+    0
+}
+unsafe extern "C" fn zero_u8() -> u8 {
+    0
+}
+unsafe extern "C" fn null0() -> *mut c_void {
+    ptr::null_mut()
+}
+unsafe extern "C" fn ok_ptr(_p: *mut c_void) -> i32 {
+    1
+}
+unsafe extern "C" fn ok_take(_p: *mut c_void, _ticks: u32) -> i32 {
+    1
+}
+unsafe extern "C" fn zero_ptr(_p: *mut c_void) -> u32 {
+    0
+}
+unsafe extern "C" fn dummy_alloc() -> *mut c_void {
+    1usize as *mut c_void
+}
 unsafe extern "C" fn dummy_delete(_p: *mut c_void) {}
-unsafe extern "C" fn wifi_int_disable(_p: *mut c_void) -> u32 { 0 }
+unsafe extern "C" fn wifi_int_disable(_p: *mut c_void) -> u32 {
+    0
+}
 unsafe extern "C" fn wifi_int_restore(_p: *mut c_void, _state: u32) {}
-unsafe extern "C" fn semphr_create(_max: u32, _init: u32) -> *mut c_void { 1usize as *mut c_void }
-unsafe extern "C" fn queue_create(_len: u32, _item_size: u32) -> *mut c_void { 1usize as *mut c_void }
+unsafe extern "C" fn semphr_create(_max: u32, _init: u32) -> *mut c_void {
+    1usize as *mut c_void
+}
+unsafe extern "C" fn queue_create(_len: u32, _item_size: u32) -> *mut c_void {
+    1usize as *mut c_void
+}
 unsafe extern "C" fn wifi_create_queue(len: c_int, item_size: c_int) -> *mut c_void {
     unsafe { queue_create(len as u32, item_size as u32) }
 }
-unsafe extern "C" fn queue_send(_q: *mut c_void, _item: *mut c_void, _ticks: u32) -> i32 { 1 }
-unsafe extern "C" fn queue_send_from_isr(_q: *mut c_void, _item: *mut c_void, _hptw: *mut c_void) -> i32 { 1 }
-unsafe extern "C" fn queue_recv(_q: *mut c_void, _item: *mut c_void, _ticks: u32) -> i32 { 0 }
-unsafe extern "C" fn return_bits(_event: *mut c_void, bits: u32) -> u32 { bits }
-unsafe extern "C" fn return_zero_bits(_event: *mut c_void, _bits: u32) -> u32 { 0 }
-unsafe extern "C" fn wait_bits(_event: *mut c_void, bits: u32, _clear: c_int, _all: c_int, _ticks: u32) -> u32 { bits }
-unsafe extern "C" fn task_create_pinned_to_core(_task: *mut c_void, _name: *const c_char, _stack: u32, _param: *mut c_void, _prio: u32, handle: *mut c_void, _core: u32) -> i32 {
+unsafe extern "C" fn queue_send(_q: *mut c_void, _item: *mut c_void, _ticks: u32) -> i32 {
+    1
+}
+unsafe extern "C" fn queue_send_from_isr(
+    _q: *mut c_void,
+    _item: *mut c_void,
+    _hptw: *mut c_void,
+) -> i32 {
+    1
+}
+unsafe extern "C" fn queue_recv(_q: *mut c_void, _item: *mut c_void, _ticks: u32) -> i32 {
+    0
+}
+unsafe extern "C" fn return_bits(_event: *mut c_void, bits: u32) -> u32 {
+    bits
+}
+unsafe extern "C" fn return_zero_bits(_event: *mut c_void, _bits: u32) -> u32 {
+    0
+}
+unsafe extern "C" fn wait_bits(
+    _event: *mut c_void,
+    bits: u32,
+    _clear: c_int,
+    _all: c_int,
+    _ticks: u32,
+) -> u32 {
+    bits
+}
+unsafe extern "C" fn task_create_pinned_to_core(
+    _task: *mut c_void,
+    _name: *const c_char,
+    _stack: u32,
+    _param: *mut c_void,
+    _prio: u32,
+    handle: *mut c_void,
+    _core: u32,
+) -> i32 {
     if !handle.is_null() {
         unsafe { (handle as *mut *mut c_void).write(1usize as *mut c_void) };
     }
     1
 }
-unsafe extern "C" fn task_create(task: *mut c_void, name: *const c_char, stack: u32, param: *mut c_void, prio: u32, handle: *mut c_void) -> i32 {
+unsafe extern "C" fn task_create(
+    task: *mut c_void,
+    name: *const c_char,
+    stack: u32,
+    param: *mut c_void,
+    prio: u32,
+    handle: *mut c_void,
+) -> i32 {
     unsafe { task_create_pinned_to_core(task, name, stack, param, prio, handle, 0) }
 }
 unsafe extern "C" fn delay(_ticks: u32) {}
-unsafe extern "C" fn ms_to_tick(ms: u32) -> i32 { ms as i32 }
-unsafe extern "C" fn max_priority() -> i32 { 5 }
-unsafe extern "C" fn event_post(_base: *const c_char, _id: i32, _data: *mut c_void, _size: usize, _ticks: u32) -> i32 { ESP_OK }
-unsafe extern "C" fn free_heap() -> u32 { 64 * 1024 }
+unsafe extern "C" fn ms_to_tick(ms: u32) -> i32 {
+    ms as i32
+}
+unsafe extern "C" fn max_priority() -> i32 {
+    5
+}
+unsafe extern "C" fn event_post(
+    _base: *const c_char,
+    _id: i32,
+    _data: *mut c_void,
+    _size: usize,
+    _ticks: u32,
+) -> i32 {
+    ESP_OK
+}
+unsafe extern "C" fn free_heap() -> u32 {
+    64 * 1024
+}
 unsafe extern "C" fn rand() -> u32 {
     let mut value = RAND_STATE.load(Ordering::Relaxed);
     value = value.wrapping_mul(1664525).wrapping_add(1013904223);
     RAND_STATE.store(value, Ordering::Relaxed);
     value
 }
-unsafe extern "C" fn ok_country(_country: *const c_char) -> c_int { ESP_OK }
+unsafe extern "C" fn ok_country(_country: *const c_char) -> c_int {
+    ESP_OK
+}
 unsafe extern "C" fn read_mac(mac: *mut u8, type_: c_uint) -> c_int {
     if mac.is_null() {
         return -1;
@@ -456,19 +552,68 @@ unsafe extern "C" fn read_mac(mac: *mut u8, type_: c_uint) -> c_int {
 }
 unsafe extern "C" fn timer_arm(_timer: *mut c_void, _timeout: u32, _repeat: bool) {}
 unsafe extern "C" fn timer_setfn(_timer: *mut c_void, _func: *mut c_void, _arg: *mut c_void) {}
-unsafe extern "C" fn timer_get_time() -> i64 { TIME_US.fetch_add(1000, Ordering::Relaxed) as i64 }
-unsafe extern "C" fn nvs_set_i8(_h: u32, _k: *const c_char, _v: i8) -> c_int { ESP_OK }
-unsafe extern "C" fn nvs_get_i8(_h: u32, _k: *const c_char, out: *mut i8) -> c_int { if !out.is_null() { unsafe { out.write(0) } } ESP_OK }
-unsafe extern "C" fn nvs_set_u8(_h: u32, _k: *const c_char, _v: u8) -> c_int { ESP_OK }
-unsafe extern "C" fn nvs_get_u8(_h: u32, _k: *const c_char, out: *mut u8) -> c_int { if !out.is_null() { unsafe { out.write(0) } } ESP_OK }
-unsafe extern "C" fn nvs_set_u16(_h: u32, _k: *const c_char, _v: u16) -> c_int { ESP_OK }
-unsafe extern "C" fn nvs_get_u16(_h: u32, _k: *const c_char, out: *mut u16) -> c_int { if !out.is_null() { unsafe { out.write(0) } } ESP_OK }
-unsafe extern "C" fn nvs_open(_name: *const c_char, _mode: c_uint, out: *mut u32) -> c_int { if !out.is_null() { unsafe { out.write(1) } } ESP_OK }
+unsafe extern "C" fn timer_get_time() -> i64 {
+    TIME_US.fetch_add(1000, Ordering::Relaxed) as i64
+}
+unsafe extern "C" fn nvs_set_i8(_h: u32, _k: *const c_char, _v: i8) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn nvs_get_i8(_h: u32, _k: *const c_char, out: *mut i8) -> c_int {
+    if !out.is_null() {
+        unsafe { out.write(0) }
+    }
+    ESP_OK
+}
+unsafe extern "C" fn nvs_set_u8(_h: u32, _k: *const c_char, _v: u8) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn nvs_get_u8(_h: u32, _k: *const c_char, out: *mut u8) -> c_int {
+    if !out.is_null() {
+        unsafe { out.write(0) }
+    }
+    ESP_OK
+}
+unsafe extern "C" fn nvs_set_u16(_h: u32, _k: *const c_char, _v: u16) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn nvs_get_u16(_h: u32, _k: *const c_char, out: *mut u16) -> c_int {
+    if !out.is_null() {
+        unsafe { out.write(0) }
+    }
+    ESP_OK
+}
+unsafe extern "C" fn nvs_open(_name: *const c_char, _mode: c_uint, out: *mut u32) -> c_int {
+    if !out.is_null() {
+        unsafe { out.write(1) }
+    }
+    ESP_OK
+}
 unsafe extern "C" fn nvs_close(_h: u32) {}
-unsafe extern "C" fn nvs_commit(_h: u32) -> c_int { ESP_OK }
-unsafe extern "C" fn nvs_set_blob(_h: u32, _k: *const c_char, _v: *const c_void, _len: usize) -> c_int { ESP_OK }
-unsafe extern "C" fn nvs_get_blob(_h: u32, _k: *const c_char, _out: *mut c_void, len: *mut usize) -> c_int { if !len.is_null() { unsafe { len.write(0) } } ESP_OK }
-unsafe extern "C" fn nvs_erase_key(_h: u32, _k: *const c_char) -> c_int { ESP_OK }
+unsafe extern "C" fn nvs_commit(_h: u32) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn nvs_set_blob(
+    _h: u32,
+    _k: *const c_char,
+    _v: *const c_void,
+    _len: usize,
+) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn nvs_get_blob(
+    _h: u32,
+    _k: *const c_char,
+    _out: *mut c_void,
+    len: *mut usize,
+) -> c_int {
+    if !len.is_null() {
+        unsafe { len.write(0) }
+    }
+    ESP_OK
+}
+unsafe extern "C" fn nvs_erase_key(_h: u32, _k: *const c_char) -> c_int {
+    ESP_OK
+}
 unsafe extern "C" fn get_random(buf: *mut u8, len: usize) -> c_int {
     if buf.is_null() {
         return -1;
@@ -480,31 +625,78 @@ unsafe extern "C" fn get_random(buf: *mut u8, len: usize) -> c_int {
     }
     ESP_OK
 }
-unsafe extern "C" fn get_time(_t: *mut c_void) -> c_int { ESP_OK }
-unsafe extern "C" fn random() -> c_ulong { unsafe { rand() as c_ulong } }
-unsafe extern "C" fn slowclk_cal_get() -> u32 { 32_768 }
-unsafe extern "C" fn log_timestamp() -> u32 { (unsafe { timer_get_time() } / 1000) as u32 }
+unsafe extern "C" fn get_time(_t: *mut c_void) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn random() -> c_ulong {
+    unsafe { rand() as c_ulong }
+}
+unsafe extern "C" fn slowclk_cal_get() -> u32 {
+    32_768
+}
+unsafe extern "C" fn log_timestamp() -> u32 {
+    (unsafe { timer_get_time() } / 1000) as u32
+}
 unsafe extern "C" fn os_malloc(size: usize) -> *mut c_void {
-    let Ok(layout) = Layout::from_size_align(size.max(1), 4) else { return ptr::null_mut() };
+    let Ok(layout) = Layout::from_size_align(size.max(1), 4) else {
+        return ptr::null_mut();
+    };
     unsafe { alloc(layout).cast::<c_void>() }
 }
 unsafe extern "C" fn os_free(_p: *mut c_void) {}
-unsafe extern "C" fn os_realloc(_ptr: *mut c_void, size: usize) -> *mut c_void { unsafe { os_malloc(size) } }
+unsafe extern "C" fn os_realloc(_ptr: *mut c_void, size: usize) -> *mut c_void {
+    unsafe { os_malloc(size) }
+}
 unsafe extern "C" fn os_calloc(n: usize, size: usize) -> *mut c_void {
-    let Some(total) = n.checked_mul(size) else { return ptr::null_mut() };
-    let Ok(layout) = Layout::from_size_align(total.max(1), 4) else { return ptr::null_mut() };
+    let Some(total) = n.checked_mul(size) else {
+        return ptr::null_mut();
+    };
+    let Ok(layout) = Layout::from_size_align(total.max(1), 4) else {
+        return ptr::null_mut();
+    };
     unsafe { alloc_zeroed(layout).cast::<c_void>() }
 }
-unsafe extern "C" fn os_zalloc(size: usize) -> *mut c_void { unsafe { os_calloc(1, size) } }
+unsafe extern "C" fn os_zalloc(size: usize) -> *mut c_void {
+    unsafe { os_calloc(1, size) }
+}
 unsafe extern "C" fn coex_condition_set(_t: u32, _d: bool) {}
-unsafe extern "C" fn coex_wifi_request(_e: u32, _l: u32, _d: u32) -> c_int { ESP_OK }
-unsafe extern "C" fn coex_wifi_release(_e: u32) -> c_int { ESP_OK }
-unsafe extern "C" fn coex_wifi_channel_set(_p: u8, _s: u8) -> c_int { ESP_OK }
-unsafe extern "C" fn coex_event_duration_get(_e: u32, out: *mut u32) -> c_int { if !out.is_null() { unsafe { out.write(0) } } ESP_OK }
-unsafe extern "C" fn coex_pti_get(_e: u32, out: *mut u8) -> c_int { if !out.is_null() { unsafe { out.write(0) } } ESP_OK }
+unsafe extern "C" fn coex_wifi_request(_e: u32, _l: u32, _d: u32) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn coex_wifi_release(_e: u32) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn coex_wifi_channel_set(_p: u8, _s: u8) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn coex_event_duration_get(_e: u32, out: *mut u32) -> c_int {
+    if !out.is_null() {
+        unsafe { out.write(0) }
+    }
+    ESP_OK
+}
+unsafe extern "C" fn coex_pti_get(_e: u32, out: *mut u8) -> c_int {
+    if !out.is_null() {
+        unsafe { out.write(0) }
+    }
+    ESP_OK
+}
 unsafe extern "C" fn coex_status_bit(_t: u32, _s: u32) {}
-unsafe extern "C" fn coex_interval_set(_i: u32) -> c_int { ESP_OK }
-unsafe extern "C" fn coex_register_cb(_i: c_int, _cb: Option<unsafe extern "C" fn(c_int) -> c_int>) -> c_int { ESP_OK }
-unsafe extern "C" fn coex_register_start_cb(_cb: Option<unsafe extern "C" fn() -> c_int>) -> c_int { ESP_OK }
-unsafe extern "C" fn coex_flexible_period_set(_p: u8) -> c_int { ESP_OK }
-unsafe extern "C" fn coex_get_phase(_idx: c_int) -> *mut c_void { ptr::null_mut() }
+unsafe extern "C" fn coex_interval_set(_i: u32) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn coex_register_cb(
+    _i: c_int,
+    _cb: Option<unsafe extern "C" fn(c_int) -> c_int>,
+) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn coex_register_start_cb(_cb: Option<unsafe extern "C" fn() -> c_int>) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn coex_flexible_period_set(_p: u8) -> c_int {
+    ESP_OK
+}
+unsafe extern "C" fn coex_get_phase(_idx: c_int) -> *mut c_void {
+    ptr::null_mut()
+}

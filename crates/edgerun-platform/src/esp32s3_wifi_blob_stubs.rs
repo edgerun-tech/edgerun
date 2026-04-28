@@ -47,7 +47,13 @@ pub extern "C" fn pp_printf(_format: *const c_char) -> c_int {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn wifi_log(_level: c_int, _tag: *const c_char, _format: *const c_char, _args: ...) {}
+pub unsafe extern "C" fn wifi_log(
+    _level: c_int,
+    _tag: *const c_char,
+    _format: *const c_char,
+    _args: ...
+) {
+}
 
 #[no_mangle]
 pub extern "C" fn coexist_printf(_format: *const c_char) -> c_int {
@@ -90,11 +96,7 @@ pub extern "C" fn puts(_s: *const c_char) -> c_int {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn sprintf(
-    dst: *mut c_char,
-    _format: *const c_char,
-    _args: ...
-) -> c_int {
+pub unsafe extern "C" fn sprintf(dst: *mut c_char, _format: *const c_char, _args: ...) -> c_int {
     if !dst.is_null() {
         unsafe { dst.write(0) };
     }
@@ -116,11 +118,7 @@ pub unsafe extern "C" fn strcpy(dst: *mut c_char, src: *const c_char) -> *mut c_
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn strncpy(
-    dst: *mut c_char,
-    src: *const c_char,
-    n: usize,
-) -> *mut c_char {
+pub unsafe extern "C" fn strncpy(dst: *mut c_char, src: *const c_char, n: usize) -> *mut c_char {
     let mut i = 0;
     let mut done = false;
     while i < n {

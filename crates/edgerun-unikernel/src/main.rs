@@ -213,10 +213,7 @@ fn render_touch_ui(touch: (u16, u16)) {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn poll_serial_control(
-    rx: &mut rt::serial_mux::Receiver<256>,
-    last_touch: Option<(u16, u16)>,
-) {
+fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Option<(u16, u16)>) {
     let mut processed = 0;
     while processed < 8 {
         let frame = match rx.poll() {
@@ -306,6 +303,7 @@ fn poll_serial_control(
             b"wifi23" | b"wifi23\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifi24" | b"wifi24\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifi25" | b"wifi25\n" => write_wifi_debug_step(frame.seq, 25),
+            b"wifimmio" | b"wifimmio\n" => write_wifi_mmio_regs(frame.seq),
             b"wifiregs" | b"wifiregs\n" => write_wifi_debug_regs(frame.seq),
             b"wififuns" | b"wififuns\n" => write_wifi_phy_fun_slots(frame.seq),
             _ => {
@@ -339,6 +337,15 @@ fn write_wifi_phy_fun_slots(seq: u16) {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_wifi_mmio_regs(seq: u16) {
+    display_console_log("ctl wifimmio");
+    let mut buf = [0u8; 512];
+    let mut len = 0;
+    append_wifi_mmio_regs(&mut buf, &mut len);
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn write_wifi_debug_step(seq: u16, step: u8) {
     display_console_log("ctl wifi step");
     let mut buf = [0u8; 48];
@@ -353,7 +360,11 @@ fn write_wifi_debug_step(seq: u16, step: u8) {
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob"))]
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
 fn append_wifi_debug_regs(out: &mut [u8], len: &mut usize) {
     let regs = edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio::debug_regs();
     append_bytes(out, len, b"wifi regs pwc=0x");
@@ -371,7 +382,89 @@ fn append_wifi_debug_regs(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b"\n");
 }
 
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob"))]
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn append_wifi_mmio_regs(out: &mut [u8], len: &mut usize) {
+    let regs = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_mac_regs();
+    append_bytes(out, len, b"wifi mmio mac=0x");
+    append_hex_u32(out, len, regs.mac_reset_ctrl);
+    append_bytes(out, len, b" dma=0x");
+    append_hex_u32(out, len, regs.dma_ctrl);
+    append_bytes(out, len, b" rxp0=0x");
+    append_hex_u32(out, len, regs.rx_policy0);
+    append_bytes(out, len, b" rxp1=0x");
+    append_hex_u32(out, len, regs.rx_policy1);
+    append_bytes(out, len, b" rxp2=0x");
+    append_hex_u32(out, len, regs.rx_policy2);
+    append_bytes(out, len, b" rxp3=0x");
+    append_hex_u32(out, len, regs.rx_policy3);
+    append_bytes(out, len, b" c34=0x");
+    append_hex_u32(out, len, regs.ctrl_33c34);
+    append_bytes(out, len, b" c40=0x");
+    append_hex_u32(out, len, regs.ctrl_33c40);
+    append_bytes(out, len, b" c74=0x");
+    append_hex_u32(out, len, regs.ctrl_33c74);
+    append_bytes(out, len, b" r0=0x");
+    append_hex_u32(out, len, regs.rx_ctrl0);
+    append_bytes(out, len, b" r1=0x");
+    append_hex_u32(out, len, regs.rx_ctrl1);
+    append_bytes(out, len, b" r2=0x");
+    append_hex_u32(out, len, regs.rx_ctrl2);
+    append_bytes(out, len, b" r3=0x");
+    append_hex_u32(out, len, regs.rx_ctrl3);
+    append_bytes(out, len, b" c114=0x");
+    append_hex_u32(out, len, regs.ctrl_33114);
+    append_bytes(out, len, b" c118=0x");
+    append_hex_u32(out, len, regs.ctrl_33118);
+    append_bytes(out, len, b" coex=0x");
+    append_hex_u32(out, len, regs.coex_ctrl);
+    append_bytes(out, len, b" pti=0x");
+    append_hex_u32(out, len, regs.coex_pti);
+    append_bytes(out, len, b" dpti=0x");
+    append_hex_u32(out, len, regs.coex_default_pti);
+    append_bytes(out, len, b"\n");
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+)))]
+fn append_wifi_mmio_regs(out: &mut [u8], len: &mut usize) {
+    append_bytes(out, len, b"wifi mmio unavailable\n");
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn append_wifi_debug_regs(out: &mut [u8], len: &mut usize) {
+    let regs = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_regs();
+    append_bytes(out, len, b"wifi mmio regs pwc=0x");
+    append_hex_u32(out, len, regs.rtc_dig_pwc);
+    append_bytes(out, len, b" iso=0x");
+    append_hex_u32(out, len, regs.rtc_dig_iso);
+    append_bytes(out, len, b" clk=0x");
+    append_hex_u32(out, len, regs.wifi_clk_en);
+    append_bytes(out, len, b" rst=0x");
+    append_hex_u32(out, len, regs.wifi_rst_en);
+    append_bytes(out, len, b" mac=0x");
+    append_hex_u32(out, len, regs.mac_reset_ctrl);
+    append_bytes(out, len, b"\n");
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
 fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
     let slots = edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio::debug_phy_fun_slots();
     append_bytes(out, len, b"wifi funs 008=0x");
@@ -409,12 +502,28 @@ fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b"\n");
 }
 
-#[cfg(not(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob")))]
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+)))]
 fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b"wifi funs unavailable\n");
 }
 
-#[cfg(not(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob")))]
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-mmio",
+        not(feature = "esp32s3-wifi-blob")
+    )
+)))]
 fn append_wifi_debug_regs(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b"wifi regs unavailable\n");
 }
@@ -565,9 +674,8 @@ fn try_start_esp32s3_wifi_ap() -> bool {
         }
     };
 
-    let ap = unsafe {
-        ESP32S3_WIFI_AP.init(Esp32s3WifiAp::new(EspressifPromiscRadio::new(), config))
-    };
+    let ap =
+        unsafe { ESP32S3_WIFI_AP.init(Esp32s3WifiAp::new(EspressifPromiscRadio::new(), config)) };
     match ap.start() {
         Ok(()) => {
             rt::log::log(1, "ESP32-S3 WiFi AP start queued");
@@ -578,12 +686,11 @@ fn try_start_esp32s3_wifi_ap() -> bool {
                 13289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: channel not initialized"),
                 14289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: filter not initialized"),
                 15289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: callback not initialized"),
-                16289 => {
-                    rt::log::log(3, "ESP32-S3 WiFi AP start failed: promiscuous not initialized")
-                }
-                27289 => {
-                    rt::log::log(3, "ESP32-S3 WiFi AP start failed: set mode not initialized")
-                }
+                16289 => rt::log::log(
+                    3,
+                    "ESP32-S3 WiFi AP start failed: promiscuous not initialized",
+                ),
+                27289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: set mode not initialized"),
                 37289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: start not initialized"),
                 15000..=24999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: init stage"),
                 25000..=34999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: mode stage"),
@@ -613,30 +720,66 @@ fn wifi_debug_status() -> i32 {
     edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio::last_start_status()
 }
 
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn try_wifi_debug_step(step: u8) -> bool {
+    edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_step(step)
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn wifi_debug_status() -> i32 {
+    edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::last_status()
+}
+
 #[cfg(not(all(
     target_arch = "xtensa",
     target_os = "none",
     feature = "esp32s3-wifi-blob"
 )))]
 fn try_start_esp32s3_wifi_ap() -> bool {
-    rt::log::log(3, "ESP32-S3 WiFi AP blob feature disabled");
+    rt::log::log(3, "ESP32-S3 WiFi AP backend disabled");
     false
 }
 
-#[cfg(not(all(
-    target_arch = "xtensa",
-    target_os = "none",
-    feature = "esp32s3-wifi-blob"
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-mmio",
+        not(feature = "esp32s3-wifi-blob")
+    )
 )))]
 fn try_wifi_debug_step(_step: u8) -> bool {
-    rt::log::log(3, "ESP32-S3 WiFi debug blob feature disabled");
+    rt::log::log(3, "ESP32-S3 WiFi debug backend disabled");
     false
 }
 
-#[cfg(not(all(
-    target_arch = "xtensa",
-    target_os = "none",
-    feature = "esp32s3-wifi-blob"
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-mmio",
+        not(feature = "esp32s3-wifi-blob")
+    )
 )))]
 fn wifi_debug_status() -> i32 {
     0

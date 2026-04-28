@@ -36,7 +36,20 @@ impl<T> LazyStatic<T> {
                 Ordering::Relaxed,
             ) {
                 Ok(_) => {
+                    #[cfg(not(target_os = "none"))]
+                    let value = {
+                        use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+                        match catch_unwind(AssertUnwindSafe(init)) {
+                            Ok(value) => value,
+                            Err(err) => {
+                                self.state.store(UNINITIALIZED, Ordering::Release);
+                                resume_unwind(err);
+                            }
+                        }
+                    };
+                    #[cfg(target_os = "none")]
                     let value = init();
+
                     unsafe { (*self.data.get()).write(value) };
                     self.state.store(INITIALIZED, Ordering::Release);
                     return unsafe { &*self.data.get().cast::<T>() };
@@ -98,17 +111,25 @@ impl<T> OnceCell<T> {
     }
 
     pub fn try_insert(&self, value: T) -> Result<&T, (&T, T)> {
-        if self.state.load(Ordering::Acquire) == INITIALIZED {
-            return Err((self.get().expect("cell is initialized"), value));
-        }
+        let mut pending = Some(value);
 
-        match self.set(value) {
-            Ok(()) => Ok(self.get().unwrap()),
-            Err(value) => {
-                while self.state.load(Ordering::Acquire) == INITIALIZING {
-                    core::hint::spin_loop();
-                }
-                Err((self.get().expect("cell is initialized"), value))
+        loop {
+            let value = pending.take().expect("value present");
+            match self.set(value) {
+                Ok(()) => return Ok(self.get().unwrap()),
+                Err(value) => match self.state.load(Ordering::Acquire) {
+                    INITIALIZING => {
+                        pending = Some(value);
+                        while self.state.load(Ordering::Acquire) == INITIALIZING {
+                            core::hint::spin_loop();
+                        }
+                    }
+                    INITIALIZED => return Err((self.get().expect("cell is initialized"), value)),
+                    UNINITIALIZED => {
+                        pending = Some(value);
+                    }
+                    _ => unreachable!(),
+                },
             }
         }
     }
@@ -129,6 +150,18 @@ impl<T> OnceCell<T> {
                 )
                 .is_ok()
             {
+                #[cfg(not(target_os = "none"))]
+                let value = {
+                    use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+                    match catch_unwind(AssertUnwindSafe(init)) {
+                        Ok(value) => value,
+                        Err(err) => {
+                            self.state.store(UNINITIALIZED, Ordering::Release);
+                            resume_unwind(err);
+                        }
+                    }
+                };
+                #[cfg(target_os = "none")]
                 let value = init();
                 unsafe {
                     self.data.get().write(MaybeUninit::new(value));
