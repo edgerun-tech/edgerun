@@ -10,8 +10,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::cli::resolve_registry_auth;
-use crate::cli::GlobalOpts;
+use crate::cli::{default_images_dir, default_store_dir, resolve_registry_auth, GlobalOpts};
 use crate::json::{parse_oci_spec, OciSpec};
 use crate::lifecycle::{
     fork_container_child, run_create_runtime_hooks, run_poststart_hooks, run_prestart_hooks,
@@ -171,8 +170,8 @@ fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Vec<String>)>
         workdir: None,
         entrypoint: None,
         privileged: false,
-        images_dir: PathBuf::from("/var/lib/edgerun/images"),
-        store_path: PathBuf::from("/var/lib/edgerun/store"),
+        images_dir: default_images_dir(),
+        store_path: default_store_dir(),
     };
 
     let mut image: Option<String> = None;

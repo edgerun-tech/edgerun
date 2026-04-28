@@ -42,9 +42,9 @@ fn get_hooks(spec: &OciSpec) -> crate::json::OciHooks {
         .unwrap_or_default()
 }
 
-/// Write a diagnostic message to the kernel log (dmesg).
-/// Used in the child process where stdio is unavailable after pivot_root.
+/// Write a diagnostic message to stderr and the kernel log when available.
 fn kmsg(msg: &str) {
+    eprintln!("ert child: {msg}");
     let _ = fs::write("/dev/kmsg", format!("edgerun-oci: {msg}"));
 }
 
@@ -234,11 +234,6 @@ fn fork_rooted(
     }
 
     if child_pid == 0 {
-        // Child process — close stdio
-        unsafe { libc::close(libc::STDIN_FILENO) };
-        unsafe { libc::close(libc::STDOUT_FILENO) };
-        unsafe { libc::close(libc::STDERR_FILENO) };
-
         // Open FIFO
         let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
         if fifo_fd < 0 {
@@ -277,11 +272,6 @@ fn fork_rootless(
     }
 
     if child_pid == 0 {
-        // Child process — close stdio
-        unsafe { libc::close(libc::STDIN_FILENO) };
-        unsafe { libc::close(libc::STDOUT_FILENO) };
-        unsafe { libc::close(libc::STDERR_FILENO) };
-
         // Open FIFO
         let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
         if fifo_fd < 0 {

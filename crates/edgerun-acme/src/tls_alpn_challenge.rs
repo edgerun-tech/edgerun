@@ -7,8 +7,6 @@ use edgerun_rt::RwLock;
 #[derive(Clone)]
 pub struct TlsAlpnChallenge {
     domain: String,
-    token: String,
-    thumbprint: String,
     challenge_value: String,
 }
 
@@ -22,8 +20,6 @@ impl TlsAlpnChallenge {
 
         Self {
             domain: domain.to_string(),
-            token: token.to_string(),
-            thumbprint: thumbprint.to_string(),
             challenge_value: base64url_nopad_encode(&digest),
         }
     }

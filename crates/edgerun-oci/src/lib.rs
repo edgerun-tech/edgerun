@@ -238,6 +238,8 @@ pub use registry::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
     )
 ))]
 pub use registry::client::EdgeFsImagePullReport;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub use registry::client::{ImagePullReport, PullProgress};
 #[cfg(any(
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))

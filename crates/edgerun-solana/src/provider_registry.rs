@@ -6,12 +6,12 @@ use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::HttpClient;
-use edgerun_json::{json, JsonValue};
+use edgerun_json::{JsonValue, json};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
 use crate::provider_registry_program_id;
-use crate::types::{collateral, Provider, ProviderStatus};
+use crate::types::{Provider, ProviderStatus, collateral};
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[allow(dead_code)]
@@ -282,14 +282,6 @@ impl HttpRuntime {
                 .build()
                 .expect("runtime"),
         }
-    }
-
-    fn spawn<F>(&self, f: F)
-    where
-        F: std::future::Future + Send + 'static,
-        F::Output: Send + 'static,
-    {
-        self.rt.spawn(f);
     }
 
     fn block_on<F>(&self, f: F) -> F::Output

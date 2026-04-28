@@ -112,6 +112,68 @@ pub struct EdgeFsImagePullReport {
     pub bytes_downloaded: u64,
 }
 
+#[cfg(all(feature = "std", not(target_os = "none")))]
+#[derive(Debug, Clone)]
+pub struct ImagePullReport {
+    pub path: PathBuf,
+    pub bytes_downloaded: u64,
+    pub layers: usize,
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+#[derive(Debug, Clone)]
+pub enum PullProgress {
+    Resolving {
+        image: String,
+    },
+    ManifestResolved {
+        layers: usize,
+        config_digest: String,
+    },
+    FetchingConfig {
+        digest: String,
+    },
+    ConfigFetched {
+        bytes: u64,
+    },
+    LayerCached {
+        index: usize,
+        total: usize,
+        digest: String,
+    },
+    LayerDownloading {
+        index: usize,
+        total: usize,
+        digest: String,
+        size: u64,
+    },
+    LayerDownloaded {
+        index: usize,
+        total: usize,
+        digest: String,
+        bytes: u64,
+    },
+    LayerExtracting {
+        index: usize,
+        total: usize,
+        digest: String,
+    },
+    LayerExtracted {
+        index: usize,
+        total: usize,
+        digest: String,
+    },
+    ApplyingWhiteouts {
+        layers: usize,
+    },
+    BuildingRootfs {
+        path: PathBuf,
+    },
+    WritingConfig {
+        path: PathBuf,
+    },
+}
+
 impl RegistryClient {
     /// Create a new registry client with anonymous auth.
     pub fn new() -> Self {
@@ -783,6 +845,27 @@ impl RegistryClient {
         bundle_path: &Path,
         store_path: &Path,
     ) -> Result<PathBuf, RegistryError> {
+        self.pull_with_progress(image, bundle_path, store_path, |_| {})
+            .await
+            .map(|report| report.path)
+    }
+
+    /// Pull an image to a local bundle directory and report coarse progress.
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    pub async fn pull_with_progress<F>(
+        &mut self,
+        image: &ImageRef,
+        bundle_path: &Path,
+        store_path: &Path,
+        mut progress: F,
+    ) -> Result<ImagePullReport, RegistryError>
+    where
+        F: FnMut(PullProgress),
+    {
+        self.bytes_downloaded = 0;
+        progress(PullProgress::Resolving {
+            image: image.to_string(),
+        });
         let manifest = self.resolve_manifest(image).await?;
 
         let manifest_data = match manifest {
@@ -812,6 +895,14 @@ impl RegistryClient {
             }
         };
 
+        let total_layers = manifest_data.layers.len();
+        progress(PullProgress::ManifestResolved {
+            layers: total_layers,
+            config_digest: manifest_data.config_digest.clone(),
+        });
+        progress(PullProgress::FetchingConfig {
+            digest: manifest_data.config_digest.clone(),
+        });
         let config_blob = self
             .fetch_blob(
                 &image.registry,
@@ -819,6 +910,9 @@ impl RegistryClient {
                 &manifest_data.config_digest,
             )
             .await?;
+        progress(PullProgress::ConfigFetched {
+            bytes: config_blob.len() as u64,
+        });
         let image_config = parse_image_config(&config_blob).map_err(|error| {
             RegistryError::ParseError(format!(
                 "image config parse failed for {}: body {} bytes: {}",
@@ -838,11 +932,17 @@ impl RegistryClient {
         std::fs::create_dir_all(&cache_dir)?;
 
         let mut layer_dirs = Vec::new();
-        for layer in manifest_data.layers.iter() {
+        for (offset, layer) in manifest_data.layers.iter().enumerate() {
+            let index = offset + 1;
             let cache_key = layer.digest.replace(':', "_");
             let cached_layer = cache_dir.join(&cache_key);
 
             if cached_layer.is_dir() {
+                progress(PullProgress::LayerCached {
+                    index,
+                    total: total_layers,
+                    digest: layer.digest.clone(),
+                });
                 layer_dirs.push(cached_layer);
                 continue;
             }
@@ -857,29 +957,66 @@ impl RegistryClient {
             };
             let blob_path = store_path.join(format!("{}.{}", &cache_key, ext));
             if !blob_path.exists() {
-                self.download_blob(
-                    &image.registry,
-                    &image.repository,
-                    &layer.digest,
-                    &blob_path,
-                )
-                .await?;
+                progress(PullProgress::LayerDownloading {
+                    index,
+                    total: total_layers,
+                    digest: layer.digest.clone(),
+                    size: layer.size,
+                });
+                let bytes = self
+                    .download_blob(
+                        &image.registry,
+                        &image.repository,
+                        &layer.digest,
+                        &blob_path,
+                    )
+                    .await?;
+                progress(PullProgress::LayerDownloaded {
+                    index,
+                    total: total_layers,
+                    digest: layer.digest.clone(),
+                    bytes,
+                });
             }
 
             verify_blob_digest(&blob_path, &layer.digest)?;
 
             std::fs::create_dir_all(&cached_layer)?;
+            progress(PullProgress::LayerExtracting {
+                index,
+                total: total_layers,
+                digest: layer.digest.clone(),
+            });
             extract_layer(&blob_path, &cached_layer, layer.media_type.as_deref())?;
+            progress(PullProgress::LayerExtracted {
+                index,
+                total: total_layers,
+                digest: layer.digest.clone(),
+            });
             layer_dirs.push(cached_layer);
         }
 
+        progress(PullProgress::ApplyingWhiteouts {
+            layers: layer_dirs.len(),
+        });
         apply_whiteouts(&layer_dirs)?;
+        progress(PullProgress::BuildingRootfs {
+            path: rootfs.clone(),
+        });
         build_rootfs(&layer_dirs, &rootfs)?;
 
         let config_json = generate_oci_spec(&image_config, rootfs.to_str().unwrap_or("/"));
-        std::fs::write(bundle_path.join("config.json"), config_json)?;
+        let config_path = bundle_path.join("config.json");
+        progress(PullProgress::WritingConfig {
+            path: config_path.clone(),
+        });
+        std::fs::write(config_path, config_json)?;
 
-        Ok(bundle_path.to_path_buf())
+        Ok(ImagePullReport {
+            path: bundle_path.to_path_buf(),
+            bytes_downloaded: self.bytes_downloaded,
+            layers: total_layers,
+        })
     }
 
     /// Download a blob to a local file, tracking bytes.
@@ -890,14 +1027,13 @@ impl RegistryClient {
         repository: &str,
         digest: &str,
         dest: &Path,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<u64, RegistryError> {
         let url = format!("/v2/{}/blobs/{}", repository, digest);
         let body = self.authenticated_get(registry, &url, &[]).await?;
+        let bytes = body.len() as u64;
 
-        let n = body.len() as u64;
-        self.bytes_downloaded += n;
-
-        std::fs::write(dest, &body).map_err(RegistryError::IoError)
+        std::fs::write(dest, &body).map_err(RegistryError::IoError)?;
+        Ok(bytes)
     }
 
     // ------------------------------------------------------------------

@@ -34,6 +34,36 @@ fn validate_object_ref(
     if object.object_id.is_empty() {
         return Some(ProofStructuralResult::Invalid { reason });
     }
+    if object.object_kind.is_some_and(|object_kind| {
+        edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(object_kind)
+            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+    }) {
+        return Some(ProofStructuralResult::Invalid {
+            reason: "ObjectRef object_kind is invalid",
+        });
+    }
+    None
+}
+
+fn validate_identity_ref(
+    identity: &edgerun_proto::edgerun::v0::common::IdentityRef,
+    empty_reason: &'static str,
+    invalid_kind_reason: &'static str,
+) -> Option<ProofStructuralResult> {
+    if identity.identity_id.is_empty() {
+        return Some(ProofStructuralResult::Invalid {
+            reason: empty_reason,
+        });
+    }
+    if identity.identity_kind.is_some_and(|identity_kind| {
+        edgerun_proto::edgerun::v0::common::IdentityKind::from_i32(identity_kind).is_none_or(
+            |kind| kind == edgerun_proto::edgerun::v0::common::IdentityKind::Unspecified,
+        )
+    }) {
+        return Some(ProofStructuralResult::Invalid {
+            reason: invalid_kind_reason,
+        });
+    }
     None
 }
 
@@ -50,10 +80,31 @@ fn validate_event_ref(
             reason: "EventSetProof event_ref missing event_hash",
         });
     };
+    if event_hash.algorithm
+        != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256 as i32
+    {
+        return Some(ProofStructuralResult::Invalid {
+            reason: "EventSetProof event_ref event_hash algorithm is not SHA-256",
+        });
+    }
     if event_hash.value.len() != 32 {
         return Some(ProofStructuralResult::Invalid {
             reason: "EventSetProof event_ref event_hash must be 32 bytes",
         });
+    }
+    None
+}
+
+fn validate_timestamp_shape(
+    timestamp: &prost_types::Timestamp,
+    reason: &'static str,
+) -> Option<ValidationResult> {
+    if !(0..1_000_000_000).contains(&timestamp.nanos) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("reason", ystr(reason))]),
+            empty_map(),
+        ));
     }
     None
 }
@@ -71,6 +122,11 @@ pub fn validate_snapshot_set_proof(proof: &SnapshotSetProof) -> ProofStructuralR
         if snapshot.snapshot_id.is_empty() {
             return ProofStructuralResult::Invalid {
                 reason: "SnapshotSetProof snapshot_ref missing snapshot_id",
+            };
+        }
+        if snapshot.object_id.as_ref().is_some_and(Vec::is_empty) {
+            return ProofStructuralResult::Invalid {
+                reason: "SnapshotSetProof snapshot_ref empty object_id",
             };
         }
     }
@@ -133,15 +189,18 @@ pub fn validate_object_assertion_proof(proof: &ObjectAssertionProof) -> ProofStr
 /// responders is structurally invalid.
 pub fn validate_aggregate_summary_proof(proof: &AggregateSummaryProof) -> ProofStructuralResult {
     use std::collections::HashSet;
-    if proof
+    for responder in proof
         .included_responders
         .iter()
         .chain(proof.excluded_responders.iter())
-        .any(|r| r.identity_id.is_empty())
     {
-        return ProofStructuralResult::Invalid {
-            reason: "AggregateSummaryProof responder identity_id is empty",
-        };
+        if let Some(result) = validate_identity_ref(
+            responder,
+            "AggregateSummaryProof responder identity_id is empty",
+            "AggregateSummaryProof responder identity_kind is invalid",
+        ) {
+            return result;
+        }
     }
     let included: HashSet<&[u8]> = proof
         .included_responders
@@ -265,19 +324,23 @@ pub fn validate_proof_bundle(
             empty_map(),
         );
     };
-    if payload_object.object_id.is_empty() {
+    if let Some(ProofStructuralResult::Invalid { reason }) =
+        validate_object_ref(payload_object, "empty_payload_object_id")
+    {
         return reject(
             ReasonCode::StructuralInvalid,
-            mapping([("reason", ystr("empty_payload_object_id"))]),
+            mapping([("reason", ystr(reason))]),
             empty_map(),
         );
     }
 
     for object in &bundle.supporting_objects {
-        if object.object_id.is_empty() {
+        if let Some(ProofStructuralResult::Invalid { reason }) =
+            validate_object_ref(object, "empty_supporting_object_id")
+        {
             return reject(
                 ReasonCode::StructuralInvalid,
-                mapping([("reason", ystr("empty_supporting_object_id"))]),
+                mapping([("reason", ystr(reason))]),
                 empty_map(),
             );
         }
@@ -356,19 +419,27 @@ pub fn validate_federated_aggregate_descriptor(
             empty_map(),
         );
     };
-    if aggregator.identity_id.is_empty() {
+    if let Some(ProofStructuralResult::Invalid { reason }) = validate_identity_ref(
+        aggregator,
+        "empty_aggregator_identity",
+        "invalid_aggregator_identity_kind",
+    ) {
         return reject(
             ReasonCode::StructuralInvalid,
-            mapping([("reason", ystr("empty_aggregator_identity"))]),
+            mapping([("reason", ystr(reason))]),
             empty_map(),
         );
     }
-    if descriptor.aggregated_at.is_none() {
+    let Some(aggregated_at) = &descriptor.aggregated_at else {
         return reject(
             ReasonCode::StructuralInvalid,
             mapping([("reason", ystr("missing_aggregated_at"))]),
             empty_map(),
         );
+    };
+    if let Some(result) = validate_timestamp_shape(aggregated_at, "invalid_aggregated_at_timestamp")
+    {
+        return result;
     }
     if descriptor.input_fragments.is_empty() {
         return reject(
@@ -378,19 +449,24 @@ pub fn validate_federated_aggregate_descriptor(
         );
     }
     for fragment in &descriptor.input_fragments {
-        if fragment.object_id.is_empty() {
+        if let Some(ProofStructuralResult::Invalid { reason }) =
+            validate_object_ref(fragment, "empty_input_fragment_object_id")
+        {
             return reject(
                 ReasonCode::StructuralInvalid,
-                mapping([("reason", ystr("empty_input_fragment_object_id"))]),
+                mapping([("reason", ystr(reason))]),
                 empty_map(),
             );
         }
     }
     if let Some(aggregation_policy_object) = &descriptor.aggregation_policy_object {
-        if aggregation_policy_object.object_id.is_empty() {
+        if let Some(ProofStructuralResult::Invalid { reason }) = validate_object_ref(
+            aggregation_policy_object,
+            "empty_aggregation_policy_object_id",
+        ) {
             return reject(
                 ReasonCode::StructuralInvalid,
-                mapping([("reason", ystr("empty_aggregation_policy_object_id"))]),
+                mapping([("reason", ystr(reason))]),
                 empty_map(),
             );
         }
@@ -403,10 +479,12 @@ pub fn validate_federated_aggregate_descriptor(
             empty_map(),
         );
     };
-    if payload_object.object_id.is_empty() {
+    if let Some(ProofStructuralResult::Invalid { reason }) =
+        validate_object_ref(payload_object, "empty_payload_object_id")
+    {
         return reject(
             ReasonCode::StructuralInvalid,
-            mapping([("reason", ystr("empty_payload_object_id"))]),
+            mapping([("reason", ystr(reason))]),
             empty_map(),
         );
     }
@@ -423,7 +501,9 @@ pub fn validate_federated_aggregate_descriptor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_proto::edgerun::v0::common::{EventRef, IdentityRef, ObjectRef, SnapshotRef};
+    use edgerun_proto::edgerun::v0::common::{
+        EventRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef,
+    };
 
     #[test]
     fn snapshot_set_proof_empty_is_invalid() {
@@ -507,6 +587,23 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_set_proof_empty_object_id_is_invalid() {
+        let proof = SnapshotSetProof {
+            source_query_id: vec![1],
+            snapshots: vec![SnapshotRef {
+                snapshot_id: vec![1],
+                object_id: Some(vec![]),
+            }],
+        };
+        assert_eq!(
+            validate_snapshot_set_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "SnapshotSetProof snapshot_ref empty object_id"
+            }
+        );
+    }
+
+    #[test]
     fn event_set_proof_missing_event_hash_is_invalid() {
         let proof = EventSetProof {
             source_query_id: vec![1],
@@ -521,6 +618,28 @@ mod tests {
             validate_event_set_proof(&proof),
             ProofStructuralResult::Invalid {
                 reason: "EventSetProof event_ref missing event_hash"
+            }
+        );
+    }
+
+    #[test]
+    fn event_set_proof_non_sha256_event_hash_is_invalid() {
+        let proof = EventSetProof {
+            source_query_id: vec![1],
+            events: vec![EventRef {
+                stream_id: vec![1],
+                seq: 1,
+                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                    algorithm: 0,
+                    value: vec![2; 32],
+                }),
+            }],
+            related_objects: vec![],
+        };
+        assert_eq!(
+            validate_event_set_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "EventSetProof event_ref event_hash algorithm is not SHA-256"
             }
         );
     }
@@ -546,6 +665,31 @@ mod tests {
             validate_event_set_proof(&proof),
             ProofStructuralResult::Invalid {
                 reason: "EventSetProof related_object missing object_id"
+            }
+        );
+    }
+
+    #[test]
+    fn event_set_proof_invalid_related_object_kind_is_invalid() {
+        let proof = EventSetProof {
+            source_query_id: vec![1],
+            events: vec![EventRef {
+                stream_id: vec![1],
+                seq: 1,
+                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                    algorithm: 1,
+                    value: vec![2; 32],
+                }),
+            }],
+            related_objects: vec![ObjectRef {
+                object_id: vec![1],
+                object_kind: Some(ObjectKind::Unspecified as i32),
+            }],
+        };
+        assert_eq!(
+            validate_event_set_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "ObjectRef object_kind is invalid"
             }
         );
     }
@@ -669,6 +813,27 @@ mod tests {
     }
 
     #[test]
+    fn aggregate_summary_invalid_responder_kind_is_invalid() {
+        let proof = AggregateSummaryProof {
+            source_query_id: vec![1],
+            included_responders: vec![IdentityRef {
+                identity_id: vec![1],
+                identity_kind: Some(999_999),
+                key_hint: None,
+            }],
+            excluded_responders: vec![],
+            total_trust_score: 0,
+            trust_policy_object: None,
+        };
+        assert_eq!(
+            validate_aggregate_summary_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "AggregateSummaryProof responder identity_kind is invalid"
+            }
+        );
+    }
+
+    #[test]
     fn trust_policy_proof_missing_both_objects_is_invalid() {
         let proof = TrustPolicyProof {
             source_query_id: vec![1],
@@ -769,6 +934,17 @@ mod tests {
     }
 
     #[test]
+    fn proof_bundle_invalid_payload_object_kind_rejected() {
+        let mut bundle = valid_proof_bundle();
+        bundle.payload_object.as_mut().unwrap().object_kind = Some(ObjectKind::Unspecified as i32);
+
+        let result = validate_proof_bundle(&bundle, Some(&[1, 2, 3]), None, &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn proof_bundle_unavailable_payload_defers() {
         let bundle = valid_proof_bundle();
         let available = std::collections::HashSet::new();
@@ -848,6 +1024,43 @@ mod tests {
     fn federated_aggregate_descriptor_missing_input_rejected() {
         let mut descriptor = valid_federated_aggregate_descriptor();
         descriptor.input_fragments.clear();
+
+        let result = validate_federated_aggregate_descriptor(&descriptor, Some(&[4, 5, 6]));
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn federated_aggregate_descriptor_invalid_aggregator_kind_rejected() {
+        let mut descriptor = valid_federated_aggregate_descriptor();
+        descriptor.aggregator.as_mut().unwrap().identity_kind =
+            Some(IdentityKind::Unspecified as i32);
+
+        let result = validate_federated_aggregate_descriptor(&descriptor, Some(&[4, 5, 6]));
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn federated_aggregate_descriptor_invalid_aggregated_at_rejected() {
+        let mut descriptor = valid_federated_aggregate_descriptor();
+        descriptor.aggregated_at = Some(prost_types::Timestamp {
+            seconds: 1_700_000_000,
+            nanos: 1_000_000_000,
+        });
+
+        let result = validate_federated_aggregate_descriptor(&descriptor, Some(&[4, 5, 6]));
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn federated_aggregate_descriptor_invalid_input_fragment_kind_rejected() {
+        let mut descriptor = valid_federated_aggregate_descriptor();
+        descriptor.input_fragments[0].object_kind = Some(999_999);
 
         let result = validate_federated_aggregate_descriptor(&descriptor, Some(&[4, 5, 6]));
 

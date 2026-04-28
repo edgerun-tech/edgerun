@@ -45,6 +45,38 @@ pub use registry_login::cmd_login;
 pub use registry_logout::cmd_logout;
 pub use run::cmd_run;
 
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub fn default_images_dir() -> std::path::PathBuf {
+    edgerun_data_dir().join("images")
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub fn default_store_dir() -> std::path::PathBuf {
+    edgerun_data_dir().join("store")
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+fn edgerun_data_dir() -> std::path::PathBuf {
+    if unsafe { libc::geteuid() } == 0 && std::env::var_os("_ERT_ROOTLESS_CHILD").is_none() {
+        return std::path::PathBuf::from("/var/lib/edgerun");
+    }
+
+    if let Some(path) = std::env::var_os("EDGERUN_DATA_DIR") {
+        return std::path::PathBuf::from(path);
+    }
+    if let Some(path) = std::env::var_os("XDG_DATA_HOME") {
+        return std::path::PathBuf::from(path).join("edgerun");
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("edgerun");
+    }
+
+    std::env::temp_dir().join("edgerun")
+}
+
 /// Global options parsed from the CLI.
 #[derive(Debug, Default)]
 pub struct GlobalOpts {
@@ -177,10 +209,12 @@ pub fn print_usage() {
     eprintln!("  registry logout <reg>     Logout from a registry");
     eprintln!();
     eprintln!("Registry options:");
-    eprintln!(
-        "  --images-dir <path>       Image storage directory (default: /var/lib/edgerun/images)"
-    );
-    eprintln!("  --store <path>            Layer blob cache (default: /var/lib/edgerun/store)");
+    eprintln!("  --images-dir <path>       Image storage directory");
+    eprintln!("                            (default: /var/lib/edgerun/images as root,");
+    eprintln!("                             $XDG_DATA_HOME/edgerun/images rootless)");
+    eprintln!("  --store <path>            Layer blob cache");
+    eprintln!("                            (default: /var/lib/edgerun/store as root,");
+    eprintln!("                             $XDG_DATA_HOME/edgerun/store rootless)");
     eprintln!();
     eprintln!("Global options:");
     eprintln!("  --bundle <path>           Path to bundle directory");

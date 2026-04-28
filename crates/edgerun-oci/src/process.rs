@@ -172,7 +172,12 @@ fn serialize_ns_paths(namespaces: Option<&[crate::json::OciNamespace]>) -> Strin
     match namespaces {
         Some(ns) => ns
             .iter()
-            .filter_map(|n| n.path.as_ref().map(|p| format!("{}:{}", n.ns_type, p)))
+            .filter_map(|n| {
+                n.path
+                    .as_ref()
+                    .filter(|path| !path.is_empty())
+                    .map(|path| format!("{}:{}", n.ns_type, path))
+            })
             .collect::<Vec<_>>()
             .join("\n"),
         None => String::new(),
@@ -735,11 +740,18 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
     // 1. Unshare remaining namespaces (exclude user and mount — clone already created these)
     let remaining_flags = cfg.ns_flags & !(ns::NEWUSER | ns::NEWNS);
     if remaining_flags != 0 {
-        do_unshare(remaining_flags)?;
+        do_unshare(remaining_flags).map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("unshare remaining namespaces 0x{remaining_flags:x} failed: {error}"),
+            )
+        })?;
     }
 
     // 2. Join explicit namespace paths (skip user namespace — already joined via parent)
-    join_explicit_namespaces_non_user(&cfg.ns_paths)?;
+    join_explicit_namespaces_non_user(&cfg.ns_paths).map_err(|error| {
+        io::Error::new(error.kind(), format!("join namespaces failed: {error}"))
+    })?;
 
     // Skip uid/gid map writing — parent already wrote these via /proc/<pid>/
 
@@ -756,10 +768,16 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
         cfg.cap_inheritable.as_deref(),
         cfg.cap_bounding.as_deref(),
         cfg.cap_ambient.as_deref(),
-    )?;
+    )
+    .map_err(|error| io::Error::new(error.kind(), format!("set capabilities failed: {error}")))?;
 
     // 5. Security: no_new_privs + non-dumpable
-    apply_security_hardening(cfg.no_new_privs)?;
+    apply_security_hardening(cfg.no_new_privs).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("apply security hardening failed: {error}"),
+        )
+    })?;
 
     // 6. Resource limits
     for rl in &cfg.rlimits {
@@ -775,7 +793,9 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
 
     // 6b. Scheduler configuration
     if let Some(ref sched) = cfg.scheduler {
-        apply_scheduler(sched)?;
+        apply_scheduler(sched).map_err(|error| {
+            io::Error::new(error.kind(), format!("apply scheduler failed: {error}"))
+        })?;
     }
 
     // 6c. I/O priority
@@ -815,17 +835,26 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
             Some(&devices)
         },
         mount_label,
-    )?;
+    )
+    .map_err(|error| io::Error::new(error.kind(), format!("setup rootfs failed: {error}")))?;
 
     // 12. Rootfs propagation
-    set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
+    set_rootfs_propagation(cfg.rootfs_propagation.as_deref()).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("set rootfs propagation failed: {error}"),
+        )
+    })?;
 
     // 13. Sysctl
-    apply_sysctl(cfg.sysctl.as_ref())?;
+    apply_sysctl(cfg.sysctl.as_ref())
+        .map_err(|error| io::Error::new(error.kind(), format!("apply sysctl failed: {error}")))?;
 
     // 13b. Terminal / PTY allocation
     if cfg.terminal {
-        setup_terminal()?;
+        setup_terminal().map_err(|error| {
+            io::Error::new(error.kind(), format!("setup terminal failed: {error}"))
+        })?;
     }
 
     // 14. Supplementary groups
@@ -834,8 +863,10 @@ pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
     }
 
     // 15. Drop GID then UID
-    do_setgid(cfg.gid)?;
-    do_setuid(cfg.uid)?;
+    do_setgid(cfg.gid)
+        .map_err(|error| io::Error::new(error.kind(), format!("setgid failed: {error}")))?;
+    do_setuid(cfg.uid)
+        .map_err(|error| io::Error::new(error.kind(), format!("setuid failed: {error}")))?;
 
     // 16. Seccomp
     let _listener_fd =

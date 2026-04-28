@@ -30,6 +30,7 @@ fn main() {
                     | "events"
                     | "checkpoint"
                     | "restore"
+                    | "run"
             )
         })
         .unwrap_or(false);

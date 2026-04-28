@@ -3,8 +3,7 @@
 use crate::prelude::*;
 use std::path::PathBuf;
 
-use crate::cli::resolve_registry_auth;
-use crate::cli::GlobalOpts;
+use crate::cli::{default_images_dir, resolve_registry_auth, GlobalOpts};
 use crate::ImageRef;
 use crate::RegistryClient;
 
@@ -41,8 +40,7 @@ pub fn cmd_push(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
 }
 
 fn parse_push_args(args: &[String]) -> std::io::Result<(String, PathBuf)> {
-    let default_images = PathBuf::from("/var/lib/edgerun/images");
-    let mut images_dir = default_images;
+    let mut images_dir = default_images_dir();
     let mut image: Option<String> = None;
 
     let mut i = 0;

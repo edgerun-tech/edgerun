@@ -1,7 +1,6 @@
 use crate::prelude::v1::*;
 use std::path::PathBuf;
 
-use edgerun_crypto::random_p256_signing_key;
 use edgerun_secret_service::Backend;
 
 use crate::AcmeError;
@@ -116,20 +115,4 @@ impl CertStore {
     pub fn list(&self) -> Result<Vec<String>, AcmeError> {
         Ok(vec![])
     }
-}
-
-pub fn parse_pem_cert(pem: &str) -> Result<CertInfo, AcmeError> {
-    Ok(CertInfo {
-        domains: vec![],
-        cert_pem: pem.to_string(),
-        key_pem: String::new(),
-        issued_at: 0,
-        expires_at: 0,
-    })
-}
-
-pub fn generate_key() -> String {
-    use edgerun_crypto::p256_signing_key_to_pem;
-    let key = random_p256_signing_key();
-    p256_signing_key_to_pem(&key)
 }

@@ -2,6 +2,7 @@
 
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(target_os = "none"), allow(dead_code, unused_imports))]
 
 extern crate alloc;
 extern crate edgerun_dhcp;
@@ -9,6 +10,7 @@ extern crate edgerun_http;
 extern crate edgerun_oci;
 extern crate edgerun_platform;
 extern crate edgerun_rt as rt;
+extern crate edgerun_rtl8125;
 extern crate edgerun_tftp;
 extern crate edgerun_tpm;
 extern crate edgerun_virtio;
@@ -1132,8 +1134,74 @@ struct PumpStats {
     icmp_replies: u32,
 }
 
+enum BareNic {
+    Rtl8125(edgerun_rtl8125::Rtl8125),
+    Virtio(edgerun_virtio::VirtNet),
+}
+
+struct BareNicStats {
+    tx_completed: u32,
+    rx_received: u32,
+}
+
+impl BareNic {
+    fn init(&mut self) -> bool {
+        match self {
+            Self::Rtl8125(net) => net.init(),
+            Self::Virtio(net) => net.init(),
+        }
+    }
+
+    fn send(&mut self, data: &[u8]) -> bool {
+        match self {
+            Self::Rtl8125(net) => net.send(data),
+            Self::Virtio(net) => net.send(data),
+        }
+    }
+
+    fn recv(&mut self, out: &mut [u8]) -> Option<usize> {
+        match self {
+            Self::Rtl8125(net) => net.recv(out),
+            Self::Virtio(net) => net.recv(out),
+        }
+    }
+
+    fn get_mac(&self) -> [u8; 6] {
+        match self {
+            Self::Rtl8125(net) => net.get_mac(),
+            Self::Virtio(net) => net.get_mac(),
+        }
+    }
+
+    fn is_link_up(&self) -> bool {
+        match self {
+            Self::Rtl8125(net) => net.is_link_up(),
+            Self::Virtio(net) => net.is_link_up(),
+        }
+    }
+
+    fn stats(&mut self) -> BareNicStats {
+        match self {
+            Self::Rtl8125(net) => {
+                let stats = net.stats();
+                BareNicStats {
+                    tx_completed: stats.tx_completed,
+                    rx_received: stats.rx_received,
+                }
+            }
+            Self::Virtio(net) => {
+                let stats = net.stats();
+                BareNicStats {
+                    tx_completed: stats.tx_completed,
+                    rx_received: stats.rx_received,
+                }
+            }
+        }
+    }
+}
+
 struct NetPump<'net, 'stack> {
-    net: &'net mut edgerun_virtio::VirtNet,
+    net: &'net mut BareNic,
     network: Network<'stack>,
     rx_buf: [u8; 1514],
     logged_start: bool,
@@ -1209,7 +1277,7 @@ async fn run_configured_oci_pull(config: &boot_config::BootConfig) {
 
 #[cfg(target_os = "none")]
 struct KernelBareNetDriver {
-    net: AtomicPtr<edgerun_virtio::VirtNet>,
+    net: AtomicPtr<BareNic>,
     stack: AtomicPtr<IpStack>,
 }
 
@@ -1225,12 +1293,12 @@ impl KernelBareNetDriver {
         }
     }
 
-    fn install(&self, net: *mut edgerun_virtio::VirtNet, stack: *mut IpStack) {
+    fn install(&self, net: *mut BareNic, stack: *mut IpStack) {
         self.net.store(net, Ordering::Release);
         self.stack.store(stack, Ordering::Release);
     }
 
-    fn net(&self) -> *mut edgerun_virtio::VirtNet {
+    fn net(&self) -> *mut BareNic {
         self.net.load(Ordering::Acquire)
     }
 
@@ -1283,7 +1351,7 @@ impl rt::BareNetDriver for KernelBareNetDriver {
 static BARE_NET_DRIVER: KernelBareNetDriver = KernelBareNetDriver::empty();
 
 fn poll_network(
-    net: &mut edgerun_virtio::VirtNet,
+    net: &mut BareNic,
     network: &mut Network<'_>,
     rx_buf: &mut [u8; 1514],
 ) -> PumpStats {
@@ -1502,6 +1570,35 @@ impl Future for NetPump<'_, '_> {
         cx.waker().wake_by_ref();
         Poll::Pending
     }
+}
+
+#[cfg(target_os = "none")]
+fn find_initialized_bare_nic() -> Option<BareNic> {
+    if let Some(rtl8125) = edgerun_rtl8125::find_rtl8125() {
+        rt::log::log(1, "RTL8125 found");
+        let mut net = BareNic::Rtl8125(rtl8125);
+        if net.init() {
+            rt::log::log(1, "RTL8125 init ok");
+            return Some(net);
+        }
+        rt::log::log(1, "RTL8125 init failed");
+    } else {
+        rt::log::log(1, "No RTL8125 found");
+    }
+
+    if let Some(virtio) = edgerun_virtio::find_virtio_net() {
+        rt::log::log(1, "VirtIO net found");
+        let mut net = BareNic::Virtio(virtio);
+        if net.init() {
+            rt::log::log(1, "VirtIO net init ok");
+            return Some(net);
+        }
+        rt::log::log(1, "VirtIO net init failed");
+    } else {
+        rt::log::log(1, "No VirtIO net found");
+    }
+
+    None
 }
 
 #[cfg(target_os = "none")]
@@ -1735,23 +1832,15 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         rt::log::log(1, "No VirtIO block device found");
     }
 
-    let mut net = match edgerun_virtio::find_virtio_net() {
-        Some(n) => n,
+    let mut net = match find_initialized_bare_nic() {
+        Some(net) => net,
         None => {
-            rt::log::log(1, "No VirtIO found");
+            rt::log::log(1, "No usable NIC found");
             loop {
                 core::arch::asm!("hlt");
             }
         }
     };
-
-    rt::log::log(1, "VirtIO found");
-    if !net.init() {
-        rt::log::log(1, "VirtIO init failed");
-        loop {
-            core::arch::asm!("hlt");
-        }
-    }
     let mac = net.get_mac();
 
     let mut stack = IpStack::new();
@@ -1792,7 +1881,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     for _ in 0..1000 {
         if let Some(len) = net.recv(&mut rx_buf) {
             if !logged_rx {
-                rt::log::log(1, "VirtIO RX packet observed");
+                rt::log::log(1, "NIC RX packet observed");
                 logged_rx = true;
             }
             if let Some(ParsedPacket::Udp {
@@ -1863,12 +1952,12 @@ pub unsafe extern "C" fn kernel_main() -> ! {
 
     let net_stats = net.stats();
     if net_stats.tx_completed != 0 {
-        rt::log::log(1, "VirtIO TX completed");
+        rt::log::log(1, "NIC TX completed");
     } else {
-        rt::log::log(1, "VirtIO TX pending");
+        rt::log::log(1, "NIC TX pending");
     }
     if net_stats.rx_received == 0 {
-        rt::log::log(1, "VirtIO RX no packets");
+        rt::log::log(1, "NIC RX no packets");
     }
 
     drop(network);
