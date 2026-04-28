@@ -48,6 +48,19 @@ pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Res
         image_path.unwrap_or_else(|| PathBuf::from(format!("/var/lib/edgerun/checkpoint/{}", id)));
     let work_path = work_path.unwrap_or_else(|| image_path.join("work"));
 
+    if !image_path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--image-path must be an absolute path",
+        ));
+    }
+    if !work_path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--work-path must be an absolute path",
+        ));
+    }
+
     let state = load_state(&id)?;
 
     if state.status != "running" && state.status != "created" && state.status != "paused" {
@@ -60,6 +73,19 @@ pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Res
     let pid = state
         .pid
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "container has no PID"))?;
+    if !crate::cli::is_process_alive(pid) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("container {} has no live process (pid {})", id, pid),
+        ));
+    }
+
+    if let Err(err) = crate::criu::validate_criu_image_path(&image_path) {
+        return Err(err);
+    }
+    if let Err(err) = crate::criu::validate_criu_image_path(&work_path) {
+        return Err(err);
+    }
 
     fs::create_dir_all(&image_path)?;
     fs::create_dir_all(&work_path)?;
@@ -80,7 +106,8 @@ pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Res
 
     crate::criu::criu_dump(&dump_opts)?;
 
-    if !leave_running {
+    let should_stop_container = !leave_running && !need_pre_dump;
+    if should_stop_container {
         let mut new_state = state.clone();
         new_state.status = "stopped".to_string();
         new_state.pid = None;

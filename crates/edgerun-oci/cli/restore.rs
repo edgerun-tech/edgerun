@@ -3,12 +3,11 @@
 //! Restores a container from a checkpoint using CRIU.
 
 use crate::prelude::*;
-use std::fs;
 use std::io;
 use std::path::PathBuf;
 
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
-use crate::state::{save_state, ContainerState as StateContainerState};
+use crate::state::{load_state, save_state, ContainerState as StateContainerState};
 use edgerun_clap::{Arg, Command};
 
 pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -32,9 +31,61 @@ pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     let image_path = matches
         .get_one::<PathBuf>("image-path")
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "--image-path is required"))?;
+    let work_path = matches.get_one::<PathBuf>("work-path");
     let bundle_path = matches.get_one::<PathBuf>("bundle");
 
     let bundle_path = bundle_path.unwrap_or_else(|| PathBuf::from("/var/lib/edgerun/bundle"));
+    let work_path = work_path.cloned().unwrap_or_else(|| image_path.join("work"));
+
+    if !image_path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--image-path must be an absolute path",
+        ));
+    }
+    if !work_path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--work-path must be an absolute path",
+        ));
+    }
+
+    if let Err(err) = crate::criu::validate_criu_image_path(image_path) {
+        return Err(err);
+    }
+    if let Err(err) = crate::criu::validate_criu_image_path(&work_path) {
+        return Err(err);
+    }
+
+    let existing_state = load_state(&id).ok();
+    if let Some(existing_state) = existing_state.as_ref() {
+        if existing_state.status == "running"
+            || existing_state.status == "paused"
+            || existing_state.status == "created"
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "container {} already has active state ({})",
+                    id, existing_state.status
+                ),
+            ));
+        }
+    }
+
+    if let Some(pid) = existing_state.and_then(|state| state.pid) {
+        if pid != 0 && !crate::cli::is_process_alive(pid) {
+            let mut stopped_state = StateContainerState {
+                oci_version: "1.0.2".to_string(),
+                id: id.clone(),
+                status: "stopped".to_string(),
+                pid: None,
+                bundle: bundle_path.to_string_lossy().to_string(),
+                annotations: None,
+            };
+            save_state(&stopped_state, &id)?;
+        }
+    }
 
     let inventory = image_path.join("inventory.img");
     if !inventory.exists() {
