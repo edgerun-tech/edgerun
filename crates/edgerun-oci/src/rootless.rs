@@ -176,13 +176,10 @@ fn normalize_cgroup_path(path: &str) -> io::Result<String> {
                 "cgroup path contains illegal path traversal segment",
             ));
         }
-        if !part
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
-        {
+        if !part.chars().all(|c| c.is_ascii() && !c.is_ascii_control()) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "cgroup path may only contain letters, digits, '-', '_' and '.'",
+                "cgroup path may not contain control characters",
             ));
         }
         parts.push(part);
