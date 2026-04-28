@@ -157,7 +157,10 @@ fn register_waker(wakers: &mut Vec<Waker>, waker: &Waker) {
 }
 
 fn remove_waker(wakers: &mut Vec<Waker>, waker: &Waker) {
-    if let Some(pos) = wakers.iter().position(|registered| registered.will_wake(waker)) {
+    if let Some(pos) = wakers
+        .iter()
+        .position(|registered| registered.will_wake(waker))
+    {
         wakers.remove(pos);
     }
 }

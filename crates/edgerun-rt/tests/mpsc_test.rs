@@ -1,7 +1,7 @@
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use edgerun_rt::{mpsc_channel, run_queue, noop_waker};
+use edgerun_rt::{mpsc_channel, noop_waker, run_queue};
 
 #[test]
 fn mpsc_send_and_recv() {
@@ -101,19 +101,13 @@ fn mpsc_multiple_waiting_receivers_are_not_starved() {
             Pin::new(&mut recv2).poll(&mut cx),
             Poll::Ready(Some(11))
         ));
-        assert!(matches!(
-            Pin::new(&mut recv1).poll(&mut cx),
-            Poll::Pending
-        ));
+        assert!(matches!(Pin::new(&mut recv1).poll(&mut cx), Poll::Pending));
     } else {
         assert!(matches!(
             Pin::new(&mut recv1).poll(&mut cx),
             Poll::Ready(Some(11))
         ));
-        assert!(matches!(
-            Pin::new(&mut recv2).poll(&mut cx),
-            Poll::Pending
-        ));
+        assert!(matches!(Pin::new(&mut recv2).poll(&mut cx), Poll::Pending));
     }
 }
 

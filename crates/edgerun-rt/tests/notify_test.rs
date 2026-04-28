@@ -1,11 +1,14 @@
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use edgerun_rt::{noop_waker, Notify};
 #[cfg(not(target_os = "none"))]
-use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 #[cfg(not(target_os = "none"))]
 use std::task::{Wake, Waker};
-use edgerun_rt::{noop_waker, Notify};
 
 #[test]
 fn notify_new_creates_notify() {

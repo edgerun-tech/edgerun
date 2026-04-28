@@ -88,7 +88,11 @@ impl Future for Interval {
             self.waker = None;
             Poll::Ready(())
         } else {
-            if self.waker.as_ref().map_or(true, |registered| !registered.will_wake(cx.waker())) {
+            if self
+                .waker
+                .as_ref()
+                .map_or(true, |registered| !registered.will_wake(cx.waker()))
+            {
                 self.waker = Some(cx.waker().clone());
             }
             Poll::Pending

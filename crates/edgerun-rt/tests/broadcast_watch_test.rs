@@ -1,11 +1,14 @@
 use core::future::Future;
-#[cfg(not(target_os = "none"))]
-use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
-#[cfg(not(target_os = "none"))]
-use std::task::{Wake, Waker};
-use edgerun_rt::{broadcast, noop_waker};
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use edgerun_rt::{broadcast, noop_waker};
+#[cfg(not(target_os = "none"))]
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+#[cfg(not(target_os = "none"))]
+use std::task::{Wake, Waker};
 
 #[test]
 fn broadcast_with_multiple_subscribers_and_overflow() {
@@ -120,7 +123,10 @@ fn broadcast_drop_removes_waiter() {
         let mut dropped = subscriber.clone();
         let waker = Waker::from(counter.clone());
         let mut cx = Context::from_waker(&waker);
-        assert!(matches!(Pin::new(&mut dropped).poll(&mut cx), Poll::Pending));
+        assert!(matches!(
+            Pin::new(&mut dropped).poll(&mut cx),
+            Poll::Pending
+        ));
     }
 
     publisher.send(10);

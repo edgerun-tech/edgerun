@@ -89,7 +89,10 @@ impl Future for Notified<'_> {
                 if let Some(previous) = this.waker.replace(cx.waker().clone()) {
                     remove_waker(&mut inner.waiters, &previous);
                 }
-                register_waker(&mut inner.waiters, this.waker.as_ref().expect("registered wakeup"));
+                register_waker(
+                    &mut inner.waiters,
+                    this.waker.as_ref().expect("registered wakeup"),
+                );
             }
             Poll::Pending
         }
@@ -106,7 +109,10 @@ impl Drop for Notified<'_> {
 }
 
 fn remove_waker(waiters: &mut alloc::collections::VecDeque<Waker>, waker: &Waker) {
-    if let Some(pos) = waiters.iter().position(|registered| registered.will_wake(waker)) {
+    if let Some(pos) = waiters
+        .iter()
+        .position(|registered| registered.will_wake(waker))
+    {
         waiters.remove(pos);
     }
 }

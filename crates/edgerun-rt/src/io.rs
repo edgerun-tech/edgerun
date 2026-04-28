@@ -711,11 +711,7 @@ impl<B: AsyncBufRead + Unpin> Future for Lines<B> {
             match Pin::new(&mut this.buf).poll_fill_buf(cx) {
                 Poll::Ready(Ok(s)) => {
                     if let Some(i) = s.iter().position(|&b| b == b'\n') {
-                        let line_end = if i > 0 && s[i - 1] == b'\r' {
-                            i - 1
-                        } else {
-                            i
-                        };
+                        let line_end = if i > 0 && s[i - 1] == b'\r' { i - 1 } else { i };
                         let chunk = s[..line_end].to_vec();
                         this.buf.consume(i + 1);
                         this.line.extend_from_slice(&chunk);

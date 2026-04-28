@@ -1,9 +1,9 @@
 use edgerun_rt::Builder;
+use edgerun_rt::{run_queue, spawn};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use edgerun_rt::{run_queue, spawn};
 
 #[test]
 fn runtime_block_on_with_await() {

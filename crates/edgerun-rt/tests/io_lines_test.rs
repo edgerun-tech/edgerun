@@ -3,7 +3,10 @@ use edgerun_rt::{block_on, io::lines, BufReader, Cursor};
 
 #[test]
 fn lines_handles_crlf_without_newline_tail() {
-    let value = block_on(lines(BufReader::new(Cursor::new(b"alpha\r\nbeta".to_vec())))).unwrap();
+    let value = block_on(lines(BufReader::new(Cursor::new(
+        b"alpha\r\nbeta".to_vec(),
+    ))))
+    .unwrap();
     assert_eq!(value, Some("alpha".to_string()));
 }
 

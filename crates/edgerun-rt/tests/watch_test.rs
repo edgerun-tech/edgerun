@@ -1,9 +1,12 @@
-use core::pin::Pin;
 use core::future::Future;
+use core::pin::Pin;
 use core::task::{Context, Poll};
 use edgerun_rt::{noop_waker, watch_channel};
 #[cfg(not(target_os = "none"))]
-use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 #[cfg(not(target_os = "none"))]
 use std::task::{Wake, Waker};
 
@@ -94,7 +97,10 @@ fn watch_drop_removes_waiter() {
     {
         let mut dropped = receiver;
         let mut cx = Context::from_waker(&Waker::from(counter.clone()));
-        assert!(matches!(Pin::new(&mut dropped).poll(&mut cx), Poll::Pending));
+        assert!(matches!(
+            Pin::new(&mut dropped).poll(&mut cx),
+            Poll::Pending
+        ));
     }
 
     sender.close();

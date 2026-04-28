@@ -44,7 +44,11 @@ impl Future for Sleep {
             this.waker = None;
             Poll::Ready(())
         } else {
-            if this.waker.as_ref().map_or(true, |registered| !registered.will_wake(cx.waker())) {
+            if this
+                .waker
+                .as_ref()
+                .map_or(true, |registered| !registered.will_wake(cx.waker()))
+            {
                 this.waker = Some(cx.waker().clone());
             }
             Poll::Pending

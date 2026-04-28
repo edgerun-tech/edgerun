@@ -37,7 +37,10 @@ fn semaphore_waiter_acquires_after_release() {
     let mut cx = Context::from_waker(&waker);
     let mut waiting = sem.acquire();
 
-    assert!(matches!(Pin::new(&mut waiting).poll(&mut cx), Poll::Pending));
+    assert!(matches!(
+        Pin::new(&mut waiting).poll(&mut cx),
+        Poll::Pending
+    ));
 
     drop(held);
 

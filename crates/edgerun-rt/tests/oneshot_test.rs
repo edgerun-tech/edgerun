@@ -1,7 +1,7 @@
-use edgerun_rt::channel;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Wake, Waker};
+use edgerun_rt::channel;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -83,7 +83,10 @@ fn oneshot_dropped_waiter_is_removed() {
     {
         let mut cx = Context::from_waker(&Waker::from(counter.clone()));
         let mut dropped = receiver;
-        assert!(matches!(Pin::new(&mut dropped).poll(&mut cx), Poll::Pending));
+        assert!(matches!(
+            Pin::new(&mut dropped).poll(&mut cx),
+            Poll::Pending
+        ));
     }
 
     sender.close();
