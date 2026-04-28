@@ -429,10 +429,8 @@ impl QuicTransport {
             prev_end = range_start;
         }
 
-        // FIRST: Detect lost packets
-        self.detect_lost_packets(space);
-
-        // THEN: Track newly acked packets
+        // Track newly acked packets before loss detection so packet-threshold
+        // loss can see larger packets acknowledged by this ACK frame.
         let mut newly_acked_size = 0u64;
         let mut newly_acked_count = 0;
         for pkt in &mut self.sent_packets {
@@ -445,6 +443,8 @@ impl QuicTransport {
                 newly_acked_count += 1;
             }
         }
+
+        self.detect_lost_packets(space);
 
         // Update congestion window (RFC 9002 §7)
         if newly_acked_count > 0 {
@@ -507,13 +507,15 @@ impl QuicTransport {
                     return None;
                 }
 
-                let larger_acked = self.sent_packets.iter().any(|other| {
-                    other.acked && other.space == space && other.packet_number > pkt.packet_number
+                let packet_threshold_expired = self.sent_packets.iter().any(|other| {
+                    other.acked
+                        && other.space == space
+                        && other.packet_number >= pkt.packet_number.saturating_add(3)
                 });
 
                 let time_expired = now - pkt.time_sent > time_threshold;
 
-                if larger_acked || time_expired {
+                if packet_threshold_expired || time_expired {
                     Some(pkt.packet_number)
                 } else {
                     None
@@ -901,6 +903,38 @@ mod tests {
         assert_eq!(transport.sent_packets.len(), 1);
         assert_eq!(transport.sent_packets[0].space, PacketNumberSpace::Initial);
         assert_eq!(transport.sent_packets[0].packet_number, 0);
+    }
+
+    #[test]
+    fn test_ack_received_detects_losses_from_new_ack() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 1, 100, false);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 2, 100, false);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 3, 100, false);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 4, 100, false);
+        assert_eq!(transport.bytes_in_flight(), 400);
+
+        transport.on_ack_received(
+            PacketNumberSpace::ApplicationData,
+            4,
+            0,
+            &[],
+            std::time::Duration::ZERO,
+        );
+
+        assert_eq!(transport.bytes_in_flight(), 200);
+        assert_eq!(transport.sent_packets.len(), 2);
+        assert!(transport
+            .sent_packets
+            .iter()
+            .any(|pkt| pkt.packet_number == 2));
+        assert!(transport
+            .sent_packets
+            .iter()
+            .any(|pkt| pkt.packet_number == 3));
     }
 
     #[test]
