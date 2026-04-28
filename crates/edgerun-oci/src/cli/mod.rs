@@ -1,6 +1,7 @@
 //! CLI argument parsing and command dispatch for ert.
 
 use crate::prelude::*;
+use std::io;
 mod checkpoint;
 mod create;
 mod delete;
@@ -95,6 +96,55 @@ pub struct GlobalOpts {
     pub bundle: Option<std::path::PathBuf>,
     pub pid_file: Option<std::path::PathBuf>,
     pub root: Option<std::path::PathBuf>,
+}
+
+pub fn apply_global_opts(opts: &GlobalOpts) -> io::Result<()> {
+    if let Some(ref root) = opts.root {
+        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+        })?);
+    }
+    Ok(())
+}
+
+pub(crate) fn json_string(value: &str) -> String {
+    edgerun_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
+}
+
+pub(crate) fn write_all_fd(fd: i32, bytes: &[u8]) {
+    let mut written = 0usize;
+    while written < bytes.len() {
+        let n = unsafe {
+            libc::write(
+                fd,
+                bytes[written..].as_ptr() as *const libc::c_void,
+                bytes.len() - written,
+            )
+        };
+        if n <= 0 {
+            break;
+        }
+        written += n as usize;
+    }
+}
+
+pub(crate) fn load_bundle_spec(bundle: &str) -> io::Result<crate::json::OciSpec> {
+    let data = std::fs::read(std::path::Path::new(bundle).join("config.json"))?;
+    crate::json::parse_oci_spec(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+pub(crate) fn load_runtime_spec(id: &str) -> io::Result<crate::json::OciSpec> {
+    let data = std::fs::read(crate::state::runtime_spec_path(id))?;
+    crate::json::parse_oci_spec(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+pub(crate) fn load_runtime_or_bundle_spec(
+    id: &str,
+    bundle: &str,
+) -> Option<crate::json::OciSpec> {
+    load_runtime_spec(id)
+        .ok()
+        .or_else(|| load_bundle_spec(bundle).ok())
 }
 
 /// Parse global options and identify the command from raw arguments.
