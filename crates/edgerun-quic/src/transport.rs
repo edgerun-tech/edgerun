@@ -227,11 +227,11 @@ impl QuicTransport {
 
     /// Expand a truncated packet number (RFC 9000 Appendix A.1).
     pub fn expand_packet_number(
-        &mut self,
+        &self,
         space: PacketNumberSpace,
         truncated_pn: u64,
         pn_length: usize,
-    ) -> Option<u64> {
+    ) -> u64 {
         debug_assert!((1..=4).contains(&pn_length));
         let idx = space as usize;
         let pn_nbits = (pn_length * 8) as u64;
@@ -239,28 +239,19 @@ impl QuicTransport {
         let pn_hwin = pn_win / 2;
         let pn_mask = pn_win - 1;
 
-        if self.pn_state[idx].largest_received.is_none() {
-            self.pn_state[idx].largest_received = Some(truncated_pn);
-            return Some(truncated_pn);
+        let expected = self.pn_state[idx]
+            .largest_received
+            .map(|largest| largest + 1)
+            .unwrap_or(0);
+        let mut candidate = (expected & !pn_mask) | truncated_pn;
+
+        if candidate + pn_hwin <= expected {
+            candidate = candidate.saturating_add(pn_win);
+        } else if candidate > expected + pn_hwin && candidate >= pn_win {
+            candidate -= pn_win;
         }
 
-        let largest = self.pn_state[idx].largest_received.unwrap();
-        let candidate = (largest & !pn_mask) | truncated_pn;
-
-        let expanded = if candidate > largest.saturating_add(pn_hwin) {
-            candidate.saturating_sub(pn_win)
-        } else if largest > candidate.saturating_add(pn_hwin) {
-            candidate + pn_win
-        } else {
-            candidate
-        };
-
-        if expanded <= largest {
-            return None;
-        }
-
-        self.pn_state[idx].largest_received = Some(expanded);
-        Some(expanded)
+        candidate
     }
 
     // -----------------------------------------------------------------------
