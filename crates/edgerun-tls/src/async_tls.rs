@@ -196,6 +196,8 @@ pub struct AsyncTlsStream<S> {
     write_plaintext_len: usize,
     /// Whether the underlying stream still needs flushing after `write_record`.
     write_needs_flush: bool,
+    /// The ALPN protocol negotiated during the TLS handshake.
+    alpn_protocol: Option<Vec<u8>>,
 }
 
 impl<S> AsyncTlsStream<S> {
@@ -207,6 +209,11 @@ impl<S> AsyncTlsStream<S> {
     /// Consume the TLS stream and return the underlying transport stream.
     pub fn into_inner(self) -> S {
         self.stream
+    }
+
+    /// Returns the negotiated ALPN protocol, or `None` if none was negotiated.
+    pub fn alpn_protocol(&self) -> Option<&[u8]> {
+        self.alpn_protocol.as_deref()
     }
 }
 
@@ -325,7 +332,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
 
         // 4. Read encrypted handshake messages
-        async_read_encrypted_handshake_messages(
+        let alpn_protocol = async_read_encrypted_handshake_messages(
             &mut stream,
             &mut _read_cipher,
             &mut ks,
@@ -385,6 +392,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             write_record_pos: 0,
             write_plaintext_len: 0,
             write_needs_flush: false,
+            alpn_protocol,
         })
     }
 
@@ -540,6 +548,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             write_record_pos: 0,
             write_plaintext_len: 0,
             write_needs_flush: false,
+            alpn_protocol: None,
         })
     }
 
@@ -1037,8 +1046,9 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
     hash: &Hasher,
     handshake_transcript_hash: &[u8],
     server_name: &str,
-) -> Result<()> {
+) -> Result<Option<Vec<u8>>> {
     let mut handshake_buf = Vec::new();
+    let mut alpn_protocol = None;
 
     loop {
         let mut hdr = [0u8; 5];
@@ -1078,6 +1088,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
             match msg[0] {
                 8 => {
                     // EncryptedExtensions
+                    alpn_protocol = parse_encrypted_extensions_alpn(&msg);
                     transcript.extend_from_slice(&msg);
                 }
                 11 => {
@@ -1159,12 +1170,58 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                         ));
                     }
                     transcript.extend_from_slice(&msg);
-                    return Ok(());
+                    return Ok(alpn_protocol);
                 }
                 _ => {}
             }
         }
     }
+}
+
+fn parse_encrypted_extensions_alpn(msg: &[u8]) -> Option<Vec<u8>> {
+    if msg.len() < 6 || msg[0] != 8 {
+        return None;
+    }
+    let body_len = read_u24_be(msg, 1) as usize;
+    if msg.len() < 4 + body_len || body_len < 2 {
+        return None;
+    }
+    let body = &msg[4..4 + body_len];
+    let ext_len = u16::from_be_bytes([body[0], body[1]]) as usize;
+    if body.len() < 2 + ext_len {
+        return None;
+    }
+
+    let mut pos = 2usize;
+    let end = 2 + ext_len;
+    while pos + 4 <= end {
+        let ext_type = u16::from_be_bytes([body[pos], body[pos + 1]]);
+        let ext_data_len = u16::from_be_bytes([body[pos + 2], body[pos + 3]]) as usize;
+        pos += 4;
+        if pos + ext_data_len > end {
+            return None;
+        }
+        if ext_type == 16 {
+            return parse_alpn_extension_data(&body[pos..pos + ext_data_len]);
+        }
+        pos += ext_data_len;
+    }
+    None
+}
+
+fn parse_alpn_extension_data(data: &[u8]) -> Option<Vec<u8>> {
+    if data.len() < 3 {
+        return None;
+    }
+    let list_len = u16::from_be_bytes([data[0], data[1]]) as usize;
+    if list_len == 0 || data.len() < 2 + list_len {
+        return None;
+    }
+    let protocol_len = data[2] as usize;
+    if protocol_len == 0 || 3 + protocol_len > 2 + list_len {
+        return None;
+    }
+    Some(data[3..3 + protocol_len].to_vec())
 }
 
 async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
@@ -1860,5 +1917,35 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<edgerun_rt::io::Result<()>> {
         self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_encrypted_extensions_alpn;
+
+    #[test]
+    fn parses_alpn_from_encrypted_extensions() {
+        let msg = [
+            8, 0, 0, 11, // EncryptedExtensions, 11-byte body
+            0, 9, // extensions length
+            0, 16, // ALPN extension
+            0, 5, // extension data length
+            0, 3, // protocol name list length
+            2, b'h', b'2',
+        ];
+
+        assert_eq!(parse_encrypted_extensions_alpn(&msg), Some(b"h2".to_vec()));
+    }
+
+    #[test]
+    fn ignores_encrypted_extensions_without_alpn() {
+        let msg = [
+            8, 0, 0, 4, // EncryptedExtensions, 4-byte body
+            0, 2, // extensions length
+            0, 0, // empty SNI extension
+        ];
+
+        assert_eq!(parse_encrypted_extensions_alpn(&msg), None);
     }
 }

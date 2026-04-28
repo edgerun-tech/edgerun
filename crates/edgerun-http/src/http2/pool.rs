@@ -30,7 +30,7 @@ struct PoolKey {
 
 /// An HTTP/2 connection, wrapped for shared access.
 struct Http2Conn {
-    client: Option<AsyncClient>,
+    client: Arc<AsyncClient>,
     last_used: Instant,
 }
 
@@ -131,7 +131,7 @@ impl Http2Pool {
             self.connections.insert(
                 key.clone(),
                 Http2Conn {
-                    client: Some(client),
+                    client: Arc::new(client),
                     last_used: Instant::now(),
                 },
             );
@@ -146,11 +146,8 @@ impl Http2Pool {
         conn.last_used = Instant::now();
 
         let body = request.body().map(|b| b.to_vec());
-        let client = conn
+        let pending = conn
             .client
-            .as_mut()
-            .ok_or_else(|| Error::ProtocolError("connection has no client".into()))?;
-        let pending = client
             .request(&h2_headers, body)
             .await
             .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")))?;
@@ -204,7 +201,7 @@ impl Http2Pool {
             p2.connections.insert(
                 key.clone(),
                 Http2Conn {
-                    client: Some(client),
+                    client: Arc::new(client),
                     last_used: Instant::now(),
                 },
             );
@@ -212,44 +209,24 @@ impl Http2Pool {
 
         let h2_headers = Self::build_h2_headers(request, &path_and_query, &host, true);
 
-        // Extract client, make request, put it back
-        let (body, mut client) = {
+        let (body, client) = {
             let mut p = pool.lock();
             let conn = p
                 .connections
                 .get_mut(&key)
                 .ok_or_else(|| Error::ProtocolError("connection not found".into()))?;
             conn.last_used = Instant::now();
-            (
-                request.body().map(|b| b.to_vec()),
-                conn.client
-                    .take()
-                    .ok_or_else(|| Error::ProtocolError("connection has no client".into()))?,
-            )
+            (request.body().map(|b| b.to_vec()), Arc::clone(&conn.client))
         };
 
-        let result = client
+        let pending = client
             .request(&h2_headers, body)
             .await
-            .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")));
-
-        let response = match result {
-            Ok(pending) => pending
-                .into_full_response()
-                .await
-                .map_err(|e| Error::ProtocolError(format!("HTTP/2 response failed: {e:?}"))),
-            Err(e) => Err(e),
-        };
-
-        // Put client back
-        {
-            let mut p = pool.lock();
-            if let Some(conn) = p.connections.get_mut(&key) {
-                conn.client = Some(client);
-            }
-        }
-
-        response
+            .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")))?;
+        pending
+            .into_full_response()
+            .await
+            .map_err(|e| Error::ProtocolError(format!("HTTP/2 response failed: {e:?}")))
     }
 
     fn build_h2_headers(
@@ -308,6 +285,11 @@ impl Http2Pool {
         let tls = AsyncTlsStream::client(stream, host, &[b"h2"], Some(session_cache))
             .await
             .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
+        if tls.alpn_protocol() != Some(b"h2".as_slice()) {
+            return Err(Error::ProtocolError(
+                "server did not negotiate HTTP/2 via ALPN".into(),
+            ));
+        }
 
         let client = AsyncClient::new(tls)
             .await

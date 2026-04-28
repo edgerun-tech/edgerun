@@ -204,7 +204,7 @@ impl AsyncClient {
     /// If `body` is `Some`, the body is sent as DATA frame(s) after HEADERS.
     /// For streaming uploads, use [`Self::request_stream`] instead.
     pub async fn request(
-        &mut self,
+        &self,
         headers: &[(Vec<u8>, Vec<u8>)],
         body: Option<Vec<u8>>,
     ) -> Result<PendingRequest> {
@@ -276,7 +276,7 @@ impl AsyncClient {
     /// let resp = pending.into_full_response().await?;
     /// ```
     pub async fn request_stream(
-        &mut self,
+        &self,
         headers: &[(Vec<u8>, Vec<u8>)],
         body_rx: mpsc::Receiver<Vec<u8>>,
     ) -> Result<PendingRequest> {

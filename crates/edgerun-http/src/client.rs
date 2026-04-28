@@ -318,7 +318,8 @@ impl HttpClient {
                 }
                 match self.execute_http2_with_timeout(request).await {
                     Ok(r) => Ok(r),
-                    Err(_) => {
+                    Err(err) => {
+                        timing_log_http2_fallback(request, &err);
                         self.disable_h2_fallback_for(request);
                         self.execute_http1(request).await
                     }
@@ -335,7 +336,8 @@ impl HttpClient {
                 }
                 match self.execute_http2_with_timeout(request).await {
                     Ok(r) => Ok(r),
-                    Err(_) => {
+                    Err(err) => {
+                        timing_log_http2_fallback(request, &err);
                         self.disable_h2_fallback_for(request);
                         self.execute_http1(request).await
                     }
@@ -636,6 +638,13 @@ impl HttpClient {
         Err(Error::ProtocolError(
             "HTTP/2 client requires edgerun-http tls feature".into(),
         ))
+    }
+}
+
+fn timing_log_http2_fallback(request: &Request, err: &Error) {
+    #[cfg(feature = "std")]
+    if std::env::var_os("EDGERUN_TIMING").is_some() {
+        eprintln!("http2.fallback url={} error={}", request.uri(), err);
     }
 }
 
