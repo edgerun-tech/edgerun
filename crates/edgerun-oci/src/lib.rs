@@ -246,14 +246,6 @@ pub use userns::drop_capabilities;
 pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
 
 pub use registry::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
-#[cfg(all(
-    feature = "edgefs",
-    any(
-        feature = "registry-client",
-        all(feature = "std", not(target_os = "none"))
-    )
-))]
-pub use registry::client::EdgeFsImagePullReport;
 #[cfg(any(
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))
