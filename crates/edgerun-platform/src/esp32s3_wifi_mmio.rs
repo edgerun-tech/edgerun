@@ -63,8 +63,38 @@ const WIFI_I2C_XPD_CTRL0: *mut u32 = 0x6000_8034 as *mut u32;
 const WIFI_I2C_XPD_CTRL1: *mut u32 = 0x6000_8000 as *mut u32;
 const WIFI_RF_CTRL: *mut u32 = 0x6000_e130 as *mut u32;
 const WIFI_TXRX_CTRL: *mut u32 = 0x6000_6110 as *mut u32;
+const WIFI_FREQ_PLL_CAP: *mut u32 = 0x6000_e0c0 as *mut u32;
 const WIFI_FREQ_HW_CTRL: *mut u32 = 0x6000_e0c4 as *mut u32;
+const WIFI_FREQ_MEM_CTRL: *mut u32 = 0x6000_e148 as *mut u32;
+const WIFI_FREQ_SW_CTRL: *mut u32 = 0x6000_e150 as *mut u32;
+const WIFI_FREQ_BUSY: *mut u32 = 0x6000_e168 as *mut u32;
+const WIFI_FREQ_STATUS: *mut u32 = 0x6000_e170 as *mut u32;
 const WIFI_FREQ_MODE_CTRL: *mut u32 = 0x6003_509c as *mut u32;
+const WIFI_FREQ_I2C_ADDR_CTRL: *mut u32 = 0x6000_e164 as *mut u32;
+const WIFI_FREQ_I2C_NIB0: *mut u32 = 0x6000_e100 as *mut u32;
+const WIFI_FREQ_I2C_NIB1: *mut u32 = 0x6000_e104 as *mut u32;
+const WIFI_FREQ_I2C_NIB2: *mut u32 = 0x6000_e108 as *mut u32;
+const WIFI_FREQ_I2C_PAIR0: *mut u32 = 0x6000_e0d8 as *mut u32;
+const WIFI_FREQ_I2C_PAIR1: *mut u32 = 0x6000_e0dc as *mut u32;
+const WIFI_FREQ_I2C_PAIR2: *mut u32 = 0x6000_e0e0 as *mut u32;
+const WIFI_FREQ_I2C_PAIR3: *mut u32 = 0x6000_e0e4 as *mut u32;
+const WIFI_FREQ_I2C_PAIR4: *mut u32 = 0x6000_e0e8 as *mut u32;
+const WIFI_FREQ_I2C_PAIR5: *mut u32 = 0x6000_e0ec as *mut u32;
+const WIFI_FREQ_I2C_PAIR6: *mut u32 = 0x6000_e0f0 as *mut u32;
+const WIFI_FREQ_I2C_PAIR7: *mut u32 = 0x6000_e0f4 as *mut u32;
+const WIFI_FREQ_I2C_PAIR8: *mut u32 = 0x6000_e10c as *mut u32;
+const WIFI_FREQ_I2C_PAIR9: *mut u32 = 0x6000_e110 as *mut u32;
+const WIFI_FREQ_I2C_HI_A: *mut u32 = 0x6000_e128 as *mut u32;
+const WIFI_FREQ_I2C_HI_B: *mut u32 = 0x6000_e12c as *mut u32;
+const WIFI_FREQ_I2C_LOW_A0: *mut u32 = 0x6000_e0d0 as *mut u32;
+const WIFI_FREQ_I2C_LOW_A1: *mut u32 = 0x6000_e0d4 as *mut u32;
+const WIFI_FREQ_I2C_LOW_A2: *mut u32 = 0x6000_e124 as *mut u32;
+const WIFI_FREQ_I2C_LOW_B0: *mut u32 = 0x6000_e11c as *mut u32;
+const WIFI_FREQ_I2C_LOW_B1: *mut u32 = 0x6000_e120 as *mut u32;
+const WIFI_FREQ_I2C_BYTE0: *mut u32 = 0x6000_e0c8 as *mut u32;
+const WIFI_FREQ_I2C_BYTE1: *mut u32 = 0x6000_e0cc as *mut u32;
+const WIFI_FREQ_I2C_BYTE2: *mut u32 = 0x6000_e114 as *mut u32;
+const WIFI_FREQ_I2C_BYTE3: *mut u32 = 0x6000_e118 as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
@@ -162,6 +192,12 @@ pub struct WifiMmioTxRegs {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiMmioRxScratchRegs {
+    pub base: u32,
+    pub words: [u32; 16],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiMmioRateRegs {
     pub rate_33404: u32,
     pub rate_33408: u32,
@@ -215,7 +251,12 @@ pub struct WifiMmioPhyRegs {
     pub i2c_xpd_ctrl1: u32,
     pub rf_ctrl: u32,
     pub txrx_ctrl: u32,
+    pub freq_pll_cap: u32,
     pub freq_hw_ctrl: u32,
+    pub freq_mem_ctrl: u32,
+    pub freq_sw_ctrl: u32,
+    pub freq_busy: u32,
+    pub freq_status: u32,
     pub freq_mode_ctrl: u32,
 }
 
@@ -293,6 +334,22 @@ impl Esp32s3WifiMmio {
         }
     }
 
+    pub fn debug_rx_scratch_regs() -> WifiMmioRxScratchRegs {
+        unsafe {
+            let words = core::ptr::addr_of!(RX_SCRATCH.0).cast::<u32>();
+            let mut snapshot = [0u32; 16];
+            let mut index = 0;
+            while index < snapshot.len() {
+                snapshot[index] = words.add(index).read_volatile();
+                index += 1;
+            }
+            WifiMmioRxScratchRegs {
+                base: WIFI_MAC_RX_BASE.read_volatile(),
+                words: snapshot,
+            }
+        }
+    }
+
     pub fn debug_rate_regs() -> WifiMmioRateRegs {
         unsafe {
             WifiMmioRateRegs {
@@ -361,7 +418,12 @@ impl Esp32s3WifiMmio {
                 i2c_xpd_ctrl1: WIFI_I2C_XPD_CTRL1.read_volatile(),
                 rf_ctrl: WIFI_RF_CTRL.read_volatile(),
                 txrx_ctrl: WIFI_TXRX_CTRL.read_volatile(),
+                freq_pll_cap: WIFI_FREQ_PLL_CAP.read_volatile(),
                 freq_hw_ctrl: WIFI_FREQ_HW_CTRL.read_volatile(),
+                freq_mem_ctrl: WIFI_FREQ_MEM_CTRL.read_volatile(),
+                freq_sw_ctrl: WIFI_FREQ_SW_CTRL.read_volatile(),
+                freq_busy: WIFI_FREQ_BUSY.read_volatile(),
+                freq_status: WIFI_FREQ_STATUS.read_volatile(),
                 freq_mode_ctrl: WIFI_FREQ_MODE_CTRL.read_volatile(),
             }
         }
@@ -507,6 +569,60 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(2201, Ordering::Relaxed);
                     set_chan_freq_hw_init_direct_slice(2, 4);
                     LAST_STATUS.store(2202, Ordering::Relaxed);
+                    true
+                }
+                23 => {
+                    LAST_STATUS.store(2301, Ordering::Relaxed);
+                    set_chan_freq_hw_init_direct_slice(1, 4);
+                    LAST_STATUS.store(2302, Ordering::Relaxed);
+                    true
+                }
+                24 => {
+                    LAST_STATUS.store(2401, Ordering::Relaxed);
+                    set_chan_freq_hw_init_direct_slice(6, 4);
+                    LAST_STATUS.store(2402, Ordering::Relaxed);
+                    true
+                }
+                25 => {
+                    LAST_STATUS.store(2501, Ordering::Relaxed);
+                    set_chan_freq_hw_init_direct_slice(11, 4);
+                    LAST_STATUS.store(2502, Ordering::Relaxed);
+                    true
+                }
+                26 => {
+                    LAST_STATUS.store(2601, Ordering::Relaxed);
+                    set_chan_freq_sw_start_direct_slice(11);
+                    LAST_STATUS.store(2602, Ordering::Relaxed);
+                    true
+                }
+                27 => {
+                    LAST_STATUS.store(2701, Ordering::Relaxed);
+                    pll_cap_mem_update_direct_slice(0);
+                    LAST_STATUS.store(2702, Ordering::Relaxed);
+                    true
+                }
+                28 => {
+                    LAST_STATUS.store(2801, Ordering::Relaxed);
+                    phy_en_hw_set_freq_direct_slice();
+                    LAST_STATUS.store(2802, Ordering::Relaxed);
+                    true
+                }
+                29 => {
+                    LAST_STATUS.store(2901, Ordering::Relaxed);
+                    phy_dis_hw_set_freq_direct_slice();
+                    LAST_STATUS.store(2902, Ordering::Relaxed);
+                    true
+                }
+                30 => {
+                    LAST_STATUS.store(3001, Ordering::Relaxed);
+                    freq_i2c_data_write_direct_slice();
+                    LAST_STATUS.store(3002, Ordering::Relaxed);
+                    true
+                }
+                31 => {
+                    LAST_STATUS.store(3101, Ordering::Relaxed);
+                    set_chan_freq_sw_start_direct_slice(171);
+                    LAST_STATUS.store(3102, Ordering::Relaxed);
                     true
                 }
                 _ => false,
@@ -883,6 +999,7 @@ unsafe fn set_chan_freq_hw_init_direct_slice(channel: u8, mode: u8) {
     let channel = (channel as u32) & 0x0f;
     let mode = (mode as u32) & 0x0f;
 
+    freq_i2c_data_write_direct_slice();
     update(WIFI_FREQ_MODE_CTRL, |v| (v & 0x0000_ffff) | 0x0c80_0000);
     update(WIFI_FREQ_HW_CTRL, |v| (v & 0xfff0_ffff) | (channel << 16));
     update(WIFI_FREQ_HW_CTRL, |v| (v & 0xff0f_ffff) | (mode << 20));
@@ -891,10 +1008,194 @@ unsafe fn set_chan_freq_hw_init_direct_slice(channel: u8, mode: u8) {
     update(WIFI_FREQ_HW_CTRL, |v| v & !0x2000_0000);
 }
 
+unsafe fn set_chan_freq_sw_start_direct_slice(channel: u8) {
+    let channel = channel & 0x7f;
+
+    update(WIFI_FREQ_HW_CTRL, |v| v & !0x0000_0100);
+    update(WIFI_FREQ_SW_CTRL, |v| {
+        (v & 0xf00f_ffff) | ((channel as u32) << 20)
+    });
+    update(WIFI_FREQ_HW_CTRL, |v| {
+        (v & 0xffff_ff00) | (((channel as u32) << 1) & 0xff)
+    });
+
+    for _ in 0..3 {
+        wait_freq_not_busy();
+        update(WIFI_FREQ_HW_CTRL, |v| v | 0x0000_0100);
+        update(WIFI_FREQ_HW_CTRL, |v| v & !0x0000_0100);
+        delay_approx_us(1);
+        wait_freq_not_busy();
+
+        let status = unsafe { WIFI_FREQ_STATUS.read_volatile() };
+        if ((status >> 17) & 0x7f) == channel as u32 {
+            break;
+        }
+    }
+}
+
+unsafe fn pll_cap_mem_update_direct_slice(offset: i16) {
+    let mut index = 0u32;
+    for _ in 0..85 {
+        update(WIFI_FREQ_HW_CTRL, |v| (v & 0xffff_ff00) | (index & 0xff));
+
+        let cap = unsafe { WIFI_FREQ_PLL_CAP.read_volatile() };
+        let raw = (((cap >> 12) & 0x1) << 8) | (cap & 0xff);
+        let adjusted = raw.wrapping_add(offset as i32 as u32) & 0xffff;
+        let adjusted_high = ((adjusted as i16 as i32) >> 8) as u32;
+        let encoded = (cap & 0x0000_ef00) | (adjusted & 0xff) | (adjusted_high << 12);
+
+        WIFI_FREQ_MEM_CTRL.write_volatile(encoded);
+        update(WIFI_FREQ_HW_CTRL, |v| v | 0x0000_0200);
+        update(WIFI_FREQ_HW_CTRL, |v| v & !0x0000_0200);
+
+        index = index.wrapping_add(3);
+    }
+}
+
+unsafe fn phy_en_hw_set_freq_direct_slice() {
+    update(WIFI_FREQ_HW_CTRL, |v| v & !0x0200_0000);
+}
+
+unsafe fn phy_dis_hw_set_freq_direct_slice() {
+    update(WIFI_FREQ_HW_CTRL, |v| v | 0x0200_0000);
+    delay_approx_us(2);
+}
+
+unsafe fn freq_i2c_data_write_direct_slice() {
+    let enable = [1, 1, 1, 1, 1, 1, 1, 1, 1, 0];
+    let host = [99, 98, 98, 99, 99, 99, 99, 99, 98, 103];
+    let addr = [0, 1, 2, 0, 3, 5, 4, 0, 11, 3];
+    let low_b = [15, 16, 17, 0, 22, 20, 21, 1, 2, 3];
+    let data_b = [0, 0, 0, 0, 0, 0, 0, 0x10, 6, 0xf0];
+    let low_a = [15, 16, 17, 0, 22, 20, 21, 1, 2, 4];
+    let data_a = [0, 0, 0, 0, 0, 0, 0, 0x10, 6, 0xf4];
+    let flags = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    freq_i2c_write_set_direct_slice(
+        &enable, &host, &addr, &low_b, &data_b, &low_a, &data_a, &flags,
+    );
+}
+
+unsafe fn freq_i2c_write_set_direct_slice(
+    enable: &[u8; 10],
+    host: &[u8; 10],
+    addr: &[u8; 10],
+    low_b: &[u8; 10],
+    data_b: &[u8; 10],
+    low_a: &[u8; 10],
+    data_a: &[u8; 10],
+    flags: &[u8; 10],
+) {
+    const COUNT: usize = 10;
+
+    update(WIFI_FREQ_HW_CTRL, |v| {
+        (v & 0xffff_83ff) | ((COUNT as u32 & 0x1f) << 10)
+    });
+
+    let mut enable_mask = 0u32;
+    for index in 0..COUNT {
+        if low_a[index] == 1 {
+            enable_mask |= 1u32 << index;
+        }
+    }
+    WIFI_FREQ_I2C_ADDR_CTRL.write_volatile(enable_mask);
+
+    for index in 0..COUNT {
+        let reg = match index / 8 {
+            0 => WIFI_FREQ_I2C_NIB0,
+            1 => WIFI_FREQ_I2C_NIB1,
+            _ => WIFI_FREQ_I2C_NIB2,
+        };
+        set_field(reg, ((index % 8) * 4) as u32, 4, enable[index] as u32);
+    }
+
+    for index in 0..COUNT {
+        let pair = ((addr[index] as u32) << 8) | host[index] as u32;
+        let reg = match index / 2 {
+            0 => WIFI_FREQ_I2C_PAIR0,
+            1 => WIFI_FREQ_I2C_PAIR1,
+            2 => WIFI_FREQ_I2C_PAIR2,
+            3 => WIFI_FREQ_I2C_PAIR3,
+            4 => WIFI_FREQ_I2C_PAIR4,
+            5 => WIFI_FREQ_I2C_PAIR5,
+            6 => WIFI_FREQ_I2C_PAIR6,
+            7 => WIFI_FREQ_I2C_PAIR7,
+            8 => WIFI_FREQ_I2C_PAIR8,
+            _ => WIFI_FREQ_I2C_PAIR9,
+        };
+        set_field(reg, ((index % 2) * 16) as u32, 16, pair);
+    }
+
+    for index in 0..COUNT {
+        set_field(
+            WIFI_FREQ_I2C_HI_A,
+            index as u32,
+            1,
+            (low_a[index] >> 4) as u32,
+        );
+        set_field(
+            WIFI_FREQ_I2C_HI_B,
+            index as u32,
+            1,
+            (low_b[index] >> 4) as u32,
+        );
+
+        let low_a_reg = match index / 8 {
+            0 => WIFI_FREQ_I2C_LOW_A0,
+            1 => WIFI_FREQ_I2C_LOW_A1,
+            _ => WIFI_FREQ_I2C_LOW_A2,
+        };
+        let low_b_reg = match index / 8 {
+            0 => WIFI_FREQ_I2C_LOW_B0,
+            _ => WIFI_FREQ_I2C_LOW_B1,
+        };
+        set_field(low_a_reg, ((index % 8) * 4) as u32, 4, low_a[index] as u32);
+        set_field(low_b_reg, ((index % 8) * 4) as u32, 4, low_b[index] as u32);
+    }
+
+    for index in 0..COUNT {
+        set_i2c_byte_field(low_a[index], data_a[index]);
+        set_i2c_byte_field(low_b[index], data_b[index]);
+        if flags[index] != 0 {
+            set_i2c_byte_field(flags[index], flags[index]);
+        }
+    }
+}
+
+unsafe fn set_i2c_byte_field(selector: u8, value: u8) {
+    let reg = match selector >> 2 {
+        0 => WIFI_FREQ_I2C_BYTE0,
+        1 => WIFI_FREQ_I2C_BYTE1,
+        2 => WIFI_FREQ_I2C_BYTE2,
+        3 => WIFI_FREQ_I2C_BYTE3,
+        _ => return,
+    };
+    set_field(reg, ((selector & 0x03) as u32) * 8, 8, value as u32);
+}
+
+fn wait_freq_not_busy() {
+    for _ in 0..100_000 {
+        let busy = unsafe { WIFI_FREQ_BUSY.read_volatile() as i32 };
+        if busy >= 0 {
+            break;
+        }
+        core::hint::spin_loop();
+    }
+}
+
 fn delay_approx_us(us: u32) {
     for _ in 0..us.saturating_mul(320) {
         core::hint::spin_loop();
     }
+}
+
+unsafe fn set_field(reg: *mut u32, shift: u32, width: u32, value: u32) {
+    let mask = if width == 32 {
+        u32::MAX
+    } else {
+        ((1u32 << width) - 1) << shift
+    };
+    update(reg, |v| (v & !mask) | ((value << shift) & mask));
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {

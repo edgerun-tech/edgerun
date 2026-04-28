@@ -112,6 +112,9 @@ fn display_console_log(message: &str) {
     DISPLAY_CONSOLE.with(|console| console.push(message));
 }
 
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+fn display_console_log(_message: &str) {}
+
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn next_line_end(bytes: &[u8], offset: usize) -> usize {
     let mut end = offset;
@@ -304,7 +307,18 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifi23" | b"wifi23\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifi24" | b"wifi24\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifi25" | b"wifi25\n" => write_wifi_debug_step(frame.seq, 25),
+            b"wifi26" | b"wifi26\n" => write_wifi_debug_step(frame.seq, 26),
+            b"wifi27" | b"wifi27\n" => write_wifi_debug_step(frame.seq, 27),
+            b"wifi28" | b"wifi28\n" => write_wifi_debug_step(frame.seq, 28),
+            b"wifi29" | b"wifi29\n" => write_wifi_debug_step(frame.seq, 29),
+            b"wifi30" | b"wifi30\n" => write_wifi_debug_step(frame.seq, 30),
+            b"wifi31" | b"wifi31\n" => write_wifi_debug_step(frame.seq, 31),
+            b"wifich1" | b"wifich1\n" => write_wifi_debug_step(frame.seq, 23),
+            b"wifich6" | b"wifich6\n" => write_wifi_debug_step(frame.seq, 24),
+            b"wifich11" | b"wifich11\n" => write_wifi_debug_step(frame.seq, 25),
+            b"wifistart" | b"wifistart\n" => write_wifi_debug_step(frame.seq, 26),
             b"wifimmio" | b"wifimmio\n" => write_wifi_mmio_regs(frame.seq),
+            b"wifirx" | b"wifirx\n" => write_wifi_rx_scratch_regs(frame.seq),
             b"wifitx" | b"wifitx\n" => write_wifi_tx_regs(frame.seq),
             b"wifirate" | b"wifirate\n" => write_wifi_rate_regs(frame.seq),
             b"wificrypto" | b"wificrypto\n" => write_wifi_crypto_regs(frame.seq),
@@ -375,6 +389,14 @@ fn write_wifi_tx_regs(seq: u16) {
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
+fn write_wifi_rx_scratch_regs(seq: u16) {
+    display_console_log("ctl wifirx");
+    let mut buf = [0u8; 256];
+    let mut len = 0;
+    append_wifi_rx_scratch_regs(&mut buf, &mut len);
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
 fn write_wifi_rate_regs(seq: u16) {
     display_console_log("ctl wifirate");
     let mut buf = [0u8; 160];
@@ -401,7 +423,7 @@ fn write_wifi_antenna_regs(seq: u16) {
 
 fn write_wifi_phy_regs(seq: u16) {
     display_console_log("ctl wifiphy");
-    let mut buf = [0u8; 576];
+    let mut buf = [0u8; 704];
     let mut len = 0;
     append_wifi_phy_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -554,6 +576,23 @@ fn append_wifi_tx_regs(out: &mut [u8], len: &mut usize) {
     feature = "esp32s3-wifi-mmio",
     not(feature = "esp32s3-wifi-blob")
 ))]
+fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
+    let regs = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_rx_scratch_regs();
+    append_bytes(out, len, b"wifi rx base=0x");
+    append_hex_u32(out, len, regs.base);
+    for word in regs.words {
+        append_bytes(out, len, b" ");
+        append_hex_u32(out, len, word);
+    }
+    append_bytes(out, len, b"\n");
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
 fn append_wifi_rate_regs(out: &mut [u8], len: &mut usize) {
     let regs = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_rate_regs();
     append_bytes(out, len, b"wifi rate r404=0x");
@@ -679,8 +718,18 @@ fn append_wifi_phy_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.rf_ctrl);
     append_bytes(out, len, b" txrx=0x");
     append_hex_u32(out, len, regs.txrx_ctrl);
+    append_bytes(out, len, b" fpll=0x");
+    append_hex_u32(out, len, regs.freq_pll_cap);
     append_bytes(out, len, b" fh=0x");
     append_hex_u32(out, len, regs.freq_hw_ctrl);
+    append_bytes(out, len, b" fmem=0x");
+    append_hex_u32(out, len, regs.freq_mem_ctrl);
+    append_bytes(out, len, b" fsw=0x");
+    append_hex_u32(out, len, regs.freq_sw_ctrl);
+    append_bytes(out, len, b" fbusy=0x");
+    append_hex_u32(out, len, regs.freq_busy);
+    append_bytes(out, len, b" fstat=0x");
+    append_hex_u32(out, len, regs.freq_status);
     append_bytes(out, len, b" fm=0x");
     append_hex_u32(out, len, regs.freq_mode_ctrl);
     append_bytes(out, len, b"\n");
@@ -724,6 +773,16 @@ fn append_wifi_rate_regs(out: &mut [u8], len: &mut usize) {
 )))]
 fn append_wifi_tx_regs(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b"wifi tx unavailable\n");
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+)))]
+fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
+    append_bytes(out, len, b"wifi rx unavailable\n");
 }
 
 #[cfg(not(all(
@@ -1955,12 +2014,16 @@ mod oci_image_boot {
             OciImageBootError::Registry(RegistryError::HttpStatus(_)) => "registry http status",
             OciImageBootError::Registry(RegistryError::HttpError(_)) => "registry http error",
             OciImageBootError::Registry(RegistryError::AuthError(_)) => "registry auth error",
+            OciImageBootError::Registry(RegistryError::TrustPolicy(_)) => "registry trust policy",
             OciImageBootError::Registry(RegistryError::ManifestNotFound(_)) => {
                 "registry manifest not found"
             }
             OciImageBootError::Registry(RegistryError::NoManifests) => "registry no manifests",
             OciImageBootError::Registry(RegistryError::DigestMismatch { .. }) => {
                 "registry digest mismatch"
+            }
+            OciImageBootError::Registry(RegistryError::DescriptorSizeMismatch { .. }) => {
+                "registry descriptor size mismatch"
             }
             OciImageBootError::Registry(RegistryError::ParseError(_)) => "registry parse error",
             OciImageBootError::Elf(_) => "elf error",
@@ -1972,6 +2035,9 @@ mod oci_image_boot {
             OciImageBootError::InvalidImageRef(detail) => Some(detail.as_str()),
             OciImageBootError::Registry(RegistryError::HttpError(detail)) => Some(detail.as_str()),
             OciImageBootError::Registry(RegistryError::AuthError(detail)) => Some(detail.as_str()),
+            OciImageBootError::Registry(RegistryError::TrustPolicy(detail)) => {
+                Some(detail.as_str())
+            }
             OciImageBootError::Registry(RegistryError::ManifestNotFound(detail)) => {
                 Some(detail.as_str())
             }
