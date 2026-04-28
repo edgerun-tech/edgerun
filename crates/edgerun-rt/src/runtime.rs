@@ -6,8 +6,8 @@ extern crate edgerun_platform;
 use crate::Error;
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
@@ -376,7 +376,7 @@ impl<T> Future for JoinHandle<T> {
     type Output = Result<T, JoinError>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        if let Some(result) = self.state.result.lock().take() {
+        if let Some(result) = this.state.result.lock().take() {
             if let Some(waker) = this.waker.take() {
                 let mut waiters = this.state.waiters.lock();
                 remove_waker(&mut waiters, &waker);
@@ -392,7 +392,10 @@ impl<T> Future for JoinHandle<T> {
                 if let Some(previous) = this.waker.replace(cx.waker().clone()) {
                     remove_waker(&mut waiters, &previous);
                 }
-                register_waker(&mut waiters, this.waker.as_ref().expect("registered wakeup"));
+                register_waker(
+                    &mut waiters,
+                    this.waker.as_ref().expect("registered wakeup"),
+                );
             }
             Poll::Pending
         }
@@ -415,7 +418,10 @@ fn register_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
 }
 
 fn remove_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
-    if let Some(pos) = waiters.iter().position(|registered| registered.will_wake(waker)) {
+    if let Some(pos) = waiters
+        .iter()
+        .position(|registered| registered.will_wake(waker))
+    {
         waiters.remove(pos);
     }
 }

@@ -55,6 +55,7 @@ pub struct SentPacket {
     pub packet_number: u64,
     pub time_sent: std::time::Instant,
     pub size: usize,
+    pub packet_bytes: Option<Vec<u8>>,
     pub has_crypto: bool,
     pub acked: bool,
     pub lost: bool,
@@ -382,11 +383,23 @@ impl QuicTransport {
         size: usize,
         has_crypto: bool,
     ) {
+        self.record_packet_sent_with_data(space, packet_number, size, has_crypto, None);
+    }
+
+    pub fn record_packet_sent_with_data(
+        &mut self,
+        space: PacketNumberSpace,
+        packet_number: u64,
+        size: usize,
+        has_crypto: bool,
+        packet_bytes: Option<Vec<u8>>,
+    ) {
         let packet = SentPacket {
             space,
             packet_number,
             time_sent: std::time::Instant::now(),
             size,
+            packet_bytes,
             has_crypto,
 
             acked: false,
@@ -531,7 +544,9 @@ impl QuicTransport {
                     lost_size += pkt.size as u64;
 
                     if pkt.has_crypto {
-                        self.retransmit_queue.push(Vec::new());
+                        if let Some(packet_bytes) = pkt.packet_bytes.clone() {
+                            self.retransmit_queue.push(packet_bytes);
+                        }
                     }
                 }
             }
@@ -935,6 +950,39 @@ mod tests {
             .sent_packets
             .iter()
             .any(|pkt| pkt.packet_number == 3));
+    }
+
+    #[test]
+    fn test_lost_crypto_packet_queues_original_bytes_for_retransmission() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        let packet_1 = vec![0xc0, 0, 0, 0, 1, 0x06];
+        transport.record_packet_sent_with_data(
+            PacketNumberSpace::Initial,
+            1,
+            packet_1.len(),
+            true,
+            Some(packet_1.clone()),
+        );
+        transport.record_packet_sent(PacketNumberSpace::Initial, 2, 100, true);
+        transport.record_packet_sent(PacketNumberSpace::Initial, 3, 100, true);
+        transport.record_packet_sent(PacketNumberSpace::Initial, 4, 100, true);
+
+        transport.on_ack_received(
+            PacketNumberSpace::Initial,
+            4,
+            0,
+            &[],
+            std::time::Duration::ZERO,
+        );
+
+        assert_eq!(transport.get_retransmit_queue(), &[packet_1]);
+        assert!(transport
+            .get_retransmit_queue()
+            .iter()
+            .all(|packet| !packet.is_empty()));
     }
 
     #[test]

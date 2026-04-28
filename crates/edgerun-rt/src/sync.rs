@@ -152,16 +152,19 @@ impl Semaphore {
     }
 
     pub fn try_acquire(&self) -> Result<SemaphoreGuard<'_>, SemaphoreTryAcquireError> {
-        let n = self.permits.load(Ordering::Acquire);
-        if n == 0 {
-            return Err(SemaphoreTryAcquireError::NoPermits);
-        }
-        if self
-            .permits
-            .compare_exchange(n, n - 1, Ordering::Acquire, Ordering::Acquire)
-            .is_ok()
-        {
-            return Ok(SemaphoreGuard(self));
+        let mut permits = self.permits.load(Ordering::Acquire);
+        while permits > 0 {
+            match self.permits.compare_exchange(
+                permits,
+                permits - 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return Ok(SemaphoreGuard(self)),
+                Err(observed) => {
+                    permits = observed;
+                }
+            }
         }
         Err(SemaphoreTryAcquireError::NoPermits)
     }
@@ -174,7 +177,10 @@ fn register_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
 }
 
 fn remove_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
-    if let Some(pos) = waiters.iter().position(|registered| registered.will_wake(waker)) {
+    if let Some(pos) = waiters
+        .iter()
+        .position(|registered| registered.will_wake(waker))
+    {
         waiters.remove(pos);
     }
 }
@@ -211,7 +217,7 @@ impl<'a> Future for SemaphoreAcquire<'a> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        match self.semaphore.try_acquire() {
+        match this.semaphore.try_acquire() {
             Ok(guard) => {
                 if let Some(waker) = this.waker.take() {
                     let mut waiters = this.semaphore.waiters.lock();
@@ -229,7 +235,10 @@ impl<'a> Future for SemaphoreAcquire<'a> {
                     if let Some(previous) = this.waker.replace(cx.waker().clone()) {
                         remove_waker(&mut waiters, &previous);
                     }
-                    register_waker(&mut waiters, this.waker.as_ref().expect("registered wakeup"));
+                    register_waker(
+                        &mut waiters,
+                        this.waker.as_ref().expect("registered wakeup"),
+                    );
                 }
                 Poll::Pending
             }
@@ -376,34 +385,113 @@ impl<'a, T> core::ops::DerefMut for RwLockWriteGuard<'a, T> {
 
 pub struct AsyncMutex<T> {
     inner: Mutex<T>,
+    waiters: Mutex<Vec<Waker>>,
 }
 
 impl<T> AsyncMutex<T> {
     pub fn new(data: T) -> Self {
         Self {
             inner: Mutex::new(data),
+            waiters: Mutex::new(Vec::new()),
         }
     }
 
     pub fn lock(&self) -> AsyncMutexLock<'_, T> {
-        AsyncMutexLock { mutex: self }
+        AsyncMutexLock {
+            mutex: self,
+            waker: None,
+        }
     }
 }
 
 pub struct AsyncMutexLock<'a, T> {
     mutex: &'a AsyncMutex<T>,
+    waker: Option<Waker>,
+}
+
+pub struct AsyncMutexGuard<'a, T> {
+    inner: Option<MutexGuard<'a, T>>,
+    mutex: &'a AsyncMutex<T>,
+}
+
+impl<'a, T> AsyncMutexGuard<'a, T> {
+    fn new(guard: MutexGuard<'a, T>, mutex: &'a AsyncMutex<T>) -> Self {
+        Self {
+            inner: Some(guard),
+            mutex,
+        }
+    }
+}
+
+impl<'a, T> core::ops::Deref for AsyncMutexGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner
+            .as_ref()
+            .expect("locked guard must be present")
+            .deref()
+    }
+}
+
+impl<'a, T> core::ops::DerefMut for AsyncMutexGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner
+            .as_mut()
+            .expect("locked guard must be present")
+            .deref_mut()
+    }
+}
+
+impl<'a, T> Drop for AsyncMutexGuard<'a, T> {
+    fn drop(&mut self) {
+        self.inner = None;
+        let mut waiters = self.mutex.waiters.lock();
+        if let Some(waker) = waiters.pop() {
+            waker.wake();
+        }
+    }
 }
 
 impl<'a, T> Future for AsyncMutexLock<'a, T> {
-    type Output = MutexGuard<'a, T>;
+    type Output = AsyncMutexGuard<'a, T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.mutex.inner.try_lock() {
-            Some(guard) => Poll::Ready(guard),
+        let this = self.get_mut();
+        match this.mutex.inner.try_lock() {
+            Some(guard) => {
+                if let Some(waker) = this.waker.take() {
+                    let mut waiters = this.mutex.waiters.lock();
+                    remove_waker(&mut waiters, &waker);
+                }
+                Poll::Ready(AsyncMutexGuard::new(guard, this.mutex))
+            }
             None => {
-                cx.waker().wake_by_ref();
+                let should_register = match this.waker.as_ref() {
+                    Some(registered) => !registered.will_wake(cx.waker()),
+                    None => true,
+                };
+                if should_register {
+                    let mut waiters = this.mutex.waiters.lock();
+                    if let Some(previous) = this.waker.replace(cx.waker().clone()) {
+                        remove_waker(&mut waiters, &previous);
+                    }
+                    register_waker(
+                        &mut waiters,
+                        this.waker.as_ref().expect("registered wakeup"),
+                    );
+                }
                 Poll::Pending
             }
+        }
+    }
+}
+
+impl<'a, T> Drop for AsyncMutexLock<'a, T> {
+    fn drop(&mut self) {
+        if let Some(waker) = self.waker.take() {
+            let mut waiters = self.mutex.waiters.lock();
+            remove_waker(&mut waiters, &waker);
         }
     }
 }

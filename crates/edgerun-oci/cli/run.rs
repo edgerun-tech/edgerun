@@ -205,16 +205,14 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     if run_opts.rm {
         if let Ok(state) = load_state(&container_id) {
             if let Some(ref linux) = spec.linux {
-                let raw_cgroup = linux.cgroups_path.as_deref().unwrap_or("");
-                let rootless = crate::state::is_rootless_mode();
-                let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup)?;
+                let cgroup_path = linux.cgroups_path.clone().unwrap_or("/edgerun".into());
                 crate::lifecycle::run_poststop_and_cleanup(
                     &container_id,
                     state.pid.unwrap_or(0),
                     &state.bundle,
                     &cgroup_path,
                     &spec,
-                );
+                )?;
             }
         }
         delete_state(&container_id);

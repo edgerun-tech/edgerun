@@ -386,11 +386,12 @@ impl QuicConnection {
             .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
-        self.transport.record_packet_sent(
+        self.transport.record_packet_sent_with_data(
             PacketNumberSpace::Initial,
             pkt.header.packet_number,
             full_packet.len(),
             true,
+            Some(full_packet.clone()),
         );
         self.sent_packets_buffer.push(full_packet);
         self.transport.update_activity();
@@ -446,11 +447,12 @@ impl QuicConnection {
             .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
-        self.transport.record_packet_sent(
+        self.transport.record_packet_sent_with_data(
             PacketNumberSpace::Handshake,
             pkt.header.packet_number,
             full_packet.len(),
             true,
+            Some(full_packet.clone()),
         );
         self.sent_packets_buffer.push(full_packet);
         self.transport.update_activity();
@@ -788,11 +790,12 @@ impl QuicConnection {
             .await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
-        self.transport.record_packet_sent(
+        self.transport.record_packet_sent_with_data(
             packet_number_space(packet.header.packet_type),
             packet.header.packet_number,
             send_bytes.len(),
             false,
+            Some(send_bytes.clone()),
         );
         self.transport.update_activity();
         Ok(())

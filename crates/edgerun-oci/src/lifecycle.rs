@@ -440,7 +440,7 @@ pub fn run_poststop_and_cleanup(
     bundle_path: &str,
     cgroup_path: &str,
     spec: &OciSpec,
-) {
+) -> io::Result<()> {
     // Poststop hooks
     let hooks = spec
         .linux
@@ -467,9 +467,20 @@ pub fn run_poststop_and_cleanup(
     // Clean up cgroup directory
     if let Some(cgroup_dir) = container_cgroup_dir(cgroup_path) {
         if cgroup_dir.exists() {
-            let _ = std::fs::remove_dir_all(&cgroup_dir);
+            std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to remove cgroup directory {}: {}",
+                        cgroup_dir.display(),
+                        e
+                    ),
+                )
+            })?;
         }
     }
+
+    Ok(())
 }
 
 /// Delete a container and run poststop hooks.
@@ -501,7 +512,16 @@ fn delete_container_internal(
 
     if let Some(cgroup_dir) = container_cgroup_dir(cgroup_path) {
         if cgroup_dir.exists() {
-            let _ = std::fs::remove_dir_all(&cgroup_dir);
+            std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to remove cgroup directory {}: {}",
+                        cgroup_dir.display(),
+                        e
+                    ),
+                )
+            })?;
         }
     }
 
@@ -509,10 +529,31 @@ fn delete_container_internal(
 }
 
 fn container_cgroup_dir(cgroup_path: &str) -> Option<PathBuf> {
-    let raw = if cgroup_path.is_empty() { "/edgerun" } else { cgroup_path };
-    let resolved = crate::rootless::resolve_container_cgroup_path(crate::state::is_rootless_mode(), raw)
-        .ok()?;
+    let normalized = if cgroup_path.is_empty() {
+        "/edgerun".to_string()
+    } else {
+        strip_sysfs_prefix(cgroup_path)
+    };
+    let resolved = crate::rootless::resolve_container_cgroup_path(
+        crate::state::is_rootless_mode(),
+        &normalized,
+    )
+    .ok()?;
     Some(Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/')))
+}
+
+fn strip_sysfs_prefix(cgroup_path: &str) -> String {
+    let mut normalized = cgroup_path.trim();
+    if normalized.is_empty() {
+        return "/edgerun".to_string();
+    }
+    normalized = normalized.trim_start_matches('/');
+    let normalized = normalized.strip_prefix("sys/fs/cgroup/").unwrap_or(normalized);
+    if normalized.is_empty() {
+        "/edgerun".to_string()
+    } else {
+        normalized.to_string()
+    }
 }
 
 // ===========================================================================

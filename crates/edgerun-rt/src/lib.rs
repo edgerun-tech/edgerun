@@ -34,9 +34,9 @@ pub use yield_now::{yieldnow, YieldNow};
 
 pub mod sync;
 pub use sync::{
-    AsyncMutex, AsyncMutexLock, Condvar, Mutex, MutexGuard, Permit, RwLock, RwLockReadGuard,
-    RwLockWriteGuard, Semaphore, SemaphoreAcquire, SemaphoreAcquireError, SemaphoreGuard,
-    SemaphoreTryAcquireError, SpinLock, SpinLockGuard,
+    AsyncMutex, AsyncMutexGuard, AsyncMutexLock, Condvar, Mutex, MutexGuard, Permit, RwLock,
+    RwLockReadGuard, RwLockWriteGuard, Semaphore, SemaphoreAcquire, SemaphoreAcquireError,
+    SemaphoreGuard, SemaphoreTryAcquireError, SpinLock, SpinLockGuard,
 };
 
 pub type SyncMutex<T> = Mutex<T>;

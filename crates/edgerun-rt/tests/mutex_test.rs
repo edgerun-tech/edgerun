@@ -18,3 +18,26 @@ fn mutex_lock_becomes_ready_if_unlocked() {
     let poll = Pin::new(&mut lock).poll(cx);
     assert!(matches!(poll, Poll::Ready(_)));
 }
+
+#[test]
+fn mutex_waiter_becomes_ready_after_guard_drop() {
+    let mutex = AsyncMutex::new(10);
+    let waker = noop_waker();
+    let mut cx = &mut Context::from_waker(&waker);
+
+    let mut first = mutex.lock();
+    let held = match Pin::new(&mut first).poll(&mut cx) {
+        Poll::Ready(guard) => guard,
+        Poll::Pending => panic!("first lock should be ready"),
+    };
+
+    let mut waiter = mutex.lock();
+    assert!(matches!(Pin::new(&mut waiter).poll(&mut cx), Poll::Pending));
+
+    drop(held);
+
+    assert!(matches!(
+        Pin::new(&mut waiter).poll(&mut cx),
+        Poll::Ready(_)
+    ));
+}

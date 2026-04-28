@@ -2,23 +2,19 @@
 
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 
 pub fn yieldnow() -> YieldNow {
-    YieldNow { yielded: false }
+    YieldNow::new()
 }
 
 pub struct YieldNow {
     pub yielded: bool,
-    waker: Option<Waker>,
 }
 
 impl YieldNow {
     pub fn new() -> Self {
-        Self {
-            yielded: false,
-            waker: None,
-        }
+        Self { yielded: false }
     }
 }
 
@@ -31,21 +27,13 @@ impl Default for YieldNow {
 impl Future for YieldNow {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
         if this.yielded {
-            this.waker = None;
             Poll::Ready(())
         } else {
             this.yielded = true;
-            this.waker = Some(cx.waker().clone());
             Poll::Pending
         }
-    }
-}
-
-impl Drop for YieldNow {
-    fn drop(&mut self) {
-        self.waker = None;
     }
 }

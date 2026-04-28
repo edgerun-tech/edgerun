@@ -74,12 +74,7 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
             .cgroups_path
             .clone()
             .unwrap_or_else(|| "/edgerun".into());
-        let cgroup = crate::cli::cgroup_dir_path(&cgroup)?;
-        let cgroup = cgroup
-            .to_string_lossy()
-            .trim_start_matches('/')
-            .to_string();
-        run_poststop_and_cleanup(id, pid, &bundle, &cgroup, spec);
+        run_poststop_and_cleanup(id, pid, &bundle, &cgroup, spec)?;
     }
 
     // Clean up state dir
