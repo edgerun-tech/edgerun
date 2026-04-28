@@ -383,16 +383,8 @@ impl Http3Server {
             .map_err(|e| format!("Failed to build handshake result: {}", e))?;
         handshaker.mark_complete();
 
-        // Create a QuicConnection from the server-side handshake result
-        // We need to extract the raw socket — we'll use mem::replace to take ownership
-        // Actually, we can't extract the socket from AsyncUdpSocket. Instead,
-        // we create the Http3Connection directly with the handshake result.
-        let quic_conn = QuicConnection::from_server(
-            // For the server, we use the same socket but with the client's address
-            // The QuicConnection needs a UdpSocket — we'll create one bound to 0
-            // and manage the actual I/O through the server's socket.
-            // For now, use a dummy socket — the server handles I/O directly.
-            Self::dummy_socket().map_err(|e| format!("Failed to create dummy socket: {}", e))?,
+        let quic_conn = QuicConnection::from_server_socket(
+            Arc::clone(&self.socket),
             client_addr.to_string(),
             ConnectionId::new(client_dcid),
             ConnectionId::new(client_scid),
@@ -405,14 +397,6 @@ impl Http3Server {
             .map_err(|e| format!("Failed to create server HTTP/3 connection: {}", e))?;
 
         Ok((conn, client_addr))
-    }
-
-    /// Create a dummy UDP socket for server-side connections.
-    ///
-    /// Server connections don't use the socket directly — I/O is handled
-    /// through the server's AsyncUdpSocket.
-    fn dummy_socket() -> crate::runtime::io::Result<crate::runtime::net::UdpSocket> {
-        crate::runtime::net::UdpSocket::bind("127.0.0.1:0")
     }
 
     /// Build Initial response packet (contains ServerHello).
@@ -588,18 +572,11 @@ impl Http3Server {
 
             match self.accept().await {
                 Ok((mut conn, client_addr)) => {
-                    let handler = Arc::clone(&handler);
-                    crate::runtime::spawn(async move {
-                        if let Err(e) =
-                            Self::handle_connection(&mut conn, handler, client_addr).await
-                        {
-                            edgerun_log::warn!(
-                                "HTTP/3 connection error from {}: {}",
-                                client_addr,
-                                e
-                            );
-                        }
-                    });
+                    if let Err(e) =
+                        Self::handle_connection(&mut conn, Arc::clone(&handler), client_addr).await
+                    {
+                        edgerun_log::warn!("HTTP/3 connection error from {}: {}", client_addr, e);
+                    }
                 }
                 Err(e) => {
                     edgerun_log::warn!("HTTP/3 accept error: {}", e);
@@ -615,33 +592,35 @@ impl Http3Server {
         handler: Arc<dyn Handler>,
         _client_addr: SocketAddr,
     ) -> Result<(), String> {
-        loop {
-            let (stream_id, method, uri, headers) = match conn.accept_request().await {
-                Ok(Some(result)) => result,
+        let (stream_id, method, uri, headers) = loop {
+            match conn.accept_request().await {
+                Ok(Some(result)) => break result,
                 Ok(None) => continue,
                 Err(e) => return Err(format!("accept_request: {:?}", e)),
-            };
-
-            let body = conn
-                .recv_request_body(stream_id)
-                .await
-                .unwrap_or(None)
-                .unwrap_or_default();
-
-            let request = Request::new(method, uri, headers, Some(body));
-            let response = handler.handle(request).await;
-
-            let status = response.status();
-            let resp_headers = response.headers().clone();
-            let body = response.body().to_vec();
-
-            if let Err(e) = conn
-                .send_response(stream_id, status, &resp_headers, Some(body))
-                .await
-            {
-                return Err(format!("send_response: {:?}", e));
             }
+        };
+
+        let body = conn
+            .recv_request_body(stream_id)
+            .await
+            .unwrap_or(None)
+            .unwrap_or_default();
+
+        let request = Request::new(method, uri, headers, Some(body));
+        let response = handler.handle(request).await;
+
+        let status = response.status();
+        let resp_headers = response.headers().clone();
+        let body = response.body().to_vec();
+
+        if let Err(e) = conn
+            .send_response(stream_id, status, &resp_headers, Some(body))
+            .await
+        {
+            return Err(format!("send_response: {:?}", e));
         }
+
+        Ok(())
     }
 }
 
