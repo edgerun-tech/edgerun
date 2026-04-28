@@ -81,7 +81,7 @@ fn list_containers(args: &[String]) -> io::Result<()> {
             let Ok(data) = fs::read_to_string(path) else {
                 continue;
             };
-            let Ok(mut state) = edgerun_json::from_str::<ContainerState>(&data) else {
+            let Ok(mut state) = crate::state::load_state_from_str(&data) else {
                 continue;
             };
             if let Some(pid) = state.pid {

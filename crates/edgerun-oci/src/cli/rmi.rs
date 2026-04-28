@@ -82,7 +82,7 @@ fn referencing_container(bundle: &std::path::Path) -> io::Result<Option<String>>
         let Ok(data) = std::fs::read_to_string(state_path) else {
             continue;
         };
-        let Ok(state) = edgerun_json::from_str::<crate::state::ContainerState>(&data) else {
+        let Ok(state) = crate::state::load_state_from_str(&data) else {
             continue;
         };
         let state_bundle = std::path::PathBuf::from(&state.bundle);

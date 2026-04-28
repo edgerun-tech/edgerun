@@ -329,6 +329,7 @@ mod tests {
         assert!(json.contains("\"annotations\": {}"));
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn oci_hooks_deserializes_all_types() {
         let json = r#"{"prestart":[{"path":"/usr/bin/prestart"}],"createRuntime":[{"path":"/usr/bin/create-runtime","args":["arg1"],"env":["FOO=bar"],"timeout":10}],"createContainer":[{"path":"/usr/bin/create-container"}],"startContainer":[{"path":"/usr/bin/start-container"}],"poststart":[{"path":"/usr/bin/poststart","timeout":5}],"poststop":[{"path":"/usr/bin/poststop"}]}"#;
@@ -357,6 +358,7 @@ mod tests {
         assert!(hooks.poststop.is_some());
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn oci_hooks_deserializes_empty() {
         let json = r#"{}"#;

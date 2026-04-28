@@ -18,9 +18,8 @@ use crate::cli::{
 };
 use crate::json::{parse_oci_spec, OciMount, OciSpec};
 use crate::lifecycle::{
-    fork_container_child_with_terminal_socket, run_create_runtime_hooks, run_poststart_hooks,
-    run_prestart_hooks, save_created_state, setup_container_cgroups, signal_start,
-    update_state_running,
+    fork_container_child_with_terminal_socket, run_create_runtime_hooks, run_prestart_hooks,
+    save_and_start_forked_child,
 };
 use crate::process::validate_spec;
 use crate::rootfs_copy::copy_rootfs_tree;
@@ -202,27 +201,12 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     }
     let child_pid = forked.pid();
 
-    save_created_state(
+    save_and_start_forked_child(
         &spec,
         &container_id,
         child_pid,
         &bundle_path.to_string_lossy(),
     )?;
-
-    // === START phase ===
-    if let Some(ref linux) = spec.linux {
-        if let Some(ref resources) = linux.resources {
-            let raw_cgroup = linux.cgroups_path.as_deref().unwrap_or("");
-            let rootless = !crate::state::is_root();
-            let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup)
-                .unwrap_or_else(|_| raw_cgroup.to_string());
-            setup_container_cgroups(child_pid, resources, &cgroup_path);
-        }
-    }
-
-    signal_start(&container_id)?;
-    run_poststart_hooks(&spec, &container_id, child_pid)?;
-    update_state_running(&container_id, child_pid)?;
 
     if run_opts.detach {
         println!("{}", container_id);

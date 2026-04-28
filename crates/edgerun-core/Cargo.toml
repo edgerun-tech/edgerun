@@ -9,9 +9,12 @@ publish.workspace = true
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "p256"] }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "yaml", "serde"] }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"] }
 prost.workspace = true
 prost-types.workspace = true
+
+[features]
+conformance = ["edgerun-json/yaml"]
 
 [lints]
 workspace = true

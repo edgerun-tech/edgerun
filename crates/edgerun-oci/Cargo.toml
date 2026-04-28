@@ -29,7 +29,6 @@ serde = ["json", "dep:serde", "edgerun-json/serde"]
 zstd = ["json", "dep:ruzstd"]
 std = [
     "registry-client",
-    "serde",
     "dep:edgerun-rt",
     "dep:edgerun-secret-service",
     "dep:edgerun-core",

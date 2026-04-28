@@ -81,17 +81,16 @@ pub fn state_root_dir() -> PathBuf {
     PathBuf::from(base.as_ref())
 }
 
+use edgerun_json::{JsonValue, Map};
+
 /// Container state matching the OCI runtime spec JSON format.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ContainerState {
-    #[serde(rename = "ociVersion")]
     pub oci_version: String,
     pub id: String,
     pub status: String, // "creating" | "created" | "running" | "stopped"
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
     pub bundle: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<alloc::collections::BTreeMap<String, String>>,
 }
 
@@ -120,8 +119,8 @@ pub fn fifo_path(id: &str) -> PathBuf {
 pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = edgerun_json::to_string_pretty(state)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let json = edgerun_json::to_string_pretty(&state_to_json_value(state))
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
     fs::write(state_file_path(id), json)?;
     Ok(())
 }
@@ -130,8 +129,7 @@ pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
 pub fn save_runtime_spec(spec: &crate::json::OciSpec, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = edgerun_json::to_string_pretty(spec)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let json = spec.to_json_string_pretty();
     fs::write(runtime_spec_path(id), json)?;
     Ok(())
 }
@@ -139,7 +137,83 @@ pub fn save_runtime_spec(spec: &crate::json::OciSpec, id: &str) -> io::Result<()
 /// Load container state from disk.
 pub fn load_state(id: &str) -> io::Result<ContainerState> {
     let data = fs::read_to_string(state_file_path(id))?;
-    edgerun_json::from_str(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    load_state_from_str(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
+    let value = edgerun_json::parse_json(data).map_err(|error| error.to_string())?;
+    state_from_json_value(&value)
+}
+
+pub fn state_to_json_value(state: &ContainerState) -> JsonValue {
+    let mut fields = Map::new();
+    fields.push((
+        "ociVersion".into(),
+        JsonValue::String(state.oci_version.clone()),
+    ));
+    fields.push(("id".into(), JsonValue::String(state.id.clone())));
+    fields.push(("status".into(), JsonValue::String(state.status.clone())));
+    if let Some(pid) = state.pid {
+        fields.push(("pid".into(), JsonValue::from(pid)));
+    }
+    fields.push(("bundle".into(), JsonValue::String(state.bundle.clone())));
+    if let Some(annotations) = &state.annotations {
+        let mut annotation_fields = Map::new();
+        for (key, value) in annotations {
+            annotation_fields.push((key.clone(), JsonValue::String(value.clone())));
+        }
+        fields.push(("annotations".into(), JsonValue::Object(annotation_fields)));
+    }
+    JsonValue::Object(fields)
+}
+
+fn state_from_json_value(value: &JsonValue) -> Result<ContainerState, String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "container state must be an object".to_string())?;
+    let string = |key: &str| {
+        object
+            .get(key)
+            .and_then(JsonValue::as_str)
+            .map(ToString::to_string)
+            .ok_or_else(|| format!("container state missing string field {key}"))
+    };
+    let pid = object
+        .get("pid")
+        .map(|value| {
+            value
+                .as_u64()
+                .and_then(|pid| u32::try_from(pid).ok())
+                .ok_or_else(|| "container state pid must be a u32".to_string())
+        })
+        .transpose()?;
+    let annotations = object
+        .get("annotations")
+        .map(|value| {
+            let fields = value
+                .as_object()
+                .ok_or_else(|| "container state annotations must be an object".to_string())?;
+            fields
+                .iter()
+                .map(|(key, value)| {
+                    value
+                        .as_str()
+                        .map(|value| (key.clone(), value.to_string()))
+                        .ok_or_else(|| {
+                            "container state annotation values must be strings".to_string()
+                        })
+                })
+                .collect()
+        })
+        .transpose()?;
+    Ok(ContainerState {
+        oci_version: string("ociVersion")?,
+        id: string("id")?,
+        status: string("status")?,
+        pid,
+        bundle: string("bundle")?,
+        annotations,
+    })
 }
 
 /// Delete container state directory and all contents.

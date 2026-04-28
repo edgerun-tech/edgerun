@@ -224,49 +224,17 @@ fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
     unsafe { libc::_exit(127) };
 }
 
-/// Root mode fork: single fork, all namespaces at once.
-fn fork_rooted(
-    cfg: &ContainerConfig,
-    fifo_cstr_child: &CString,
-    ctx: ChildExecContext,
-) -> io::Result<i32> {
-    let child_pid = unsafe { libc::fork() };
-    if child_pid < 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    if child_pid == 0 {
-        // Open FIFO
-        let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
-        if fifo_fd < 0 {
-            kmsg(&format!(
-                "child: failed to open start FIFO: {}",
-                io::Error::last_os_error()
-            ));
-            unsafe { libc::_exit(1) };
-        }
-
-        // Standard container setup (all namespaces at once)
-        if let Err(e) = setup_container_child(cfg, ctx.terminal_socket_fd) {
-            kmsg(&format!("child: setup_container_child failed: {}", e));
-            unsafe { libc::_exit(1) };
-        }
-
-        // Common post-setup: hooks, FIFO wait, PID init, exec
-        run_child_post_setup(fifo_fd, &ctx);
-        unreachable!();
-    }
-
-    Ok(child_pid)
+#[derive(Clone, Copy)]
+enum ChildSetupMode {
+    Rooted,
+    Rootless,
 }
 
-/// Rootless mode fork: user namespace was already created by the re-exec in
-/// `main()` (Podman pattern). This is a simple `fork()` — the child calls
-/// `setup_container_child_rootless()` which skips NEWUSER+NEWNS.
-fn fork_rootless(
+fn fork_with_setup_mode(
     cfg: &ContainerConfig,
     fifo_cstr_child: &CString,
     ctx: ChildExecContext,
+    mode: ChildSetupMode,
 ) -> io::Result<i32> {
     let child_pid = unsafe { libc::fork() };
     if child_pid < 0 {
@@ -284,12 +252,16 @@ fn fork_rootless(
             unsafe { libc::_exit(1) };
         }
 
-        // Rootless container setup (skips NEWUSER+NEWNS — already created by re-exec)
-        if let Err(e) = setup_container_child_rootless(cfg, ctx.terminal_socket_fd) {
-            kmsg(&format!(
-                "child: setup_container_child_rootless failed: {}",
-                e
-            ));
+        let setup_result = match mode {
+            ChildSetupMode::Rooted => setup_container_child(cfg, ctx.terminal_socket_fd),
+            ChildSetupMode::Rootless => setup_container_child_rootless(cfg, ctx.terminal_socket_fd),
+        };
+        if let Err(e) = setup_result {
+            let setup_name = match mode {
+                ChildSetupMode::Rooted => "setup_container_child",
+                ChildSetupMode::Rootless => "setup_container_child_rootless",
+            };
+            kmsg(&format!("child: {setup_name} failed: {e}"));
             unsafe { libc::_exit(1) };
         }
 
@@ -408,10 +380,10 @@ pub fn fork_container_child_with_terminal_socket(
 
     let child_pid = if rootless {
         // ROOTLESS MODE: simple fork — user namespace was created by re-exec in main()
-        fork_rootless(&cfg, &fifo_cstr_child, ctx)?
+        fork_with_setup_mode(&cfg, &fifo_cstr_child, ctx, ChildSetupMode::Rootless)?
     } else {
         // ROOT MODE: Single fork, all namespaces at once
-        fork_rooted(&cfg, &fifo_cstr_child, ctx)?
+        fork_with_setup_mode(&cfg, &fifo_cstr_child, ctx, ChildSetupMode::Rooted)?
     };
 
     // Parent returns with child PID
@@ -496,6 +468,47 @@ pub fn setup_container_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_p
             format!("edgerun: cgroup setup failed for PID {}: {}", pid, e),
         );
     }
+}
+
+/// Set up cgroups declared by the spec before the container is started.
+pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec) {
+    let Some(linux) = spec.linux.as_ref() else {
+        return;
+    };
+    let Some(resources) = linux.resources.as_ref() else {
+        return;
+    };
+
+    let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
+    let rootless = !is_root();
+    let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
+        .unwrap_or_else(|e| {
+            let _ = fs::write(
+                "/dev/kmsg",
+                format!("edgerun: cgroup resolution failed: {}", e),
+            );
+            raw_cgroup_path.to_string()
+        });
+    setup_container_cgroups(pid, resources, &cgroup_path);
+}
+
+/// Start a created container: cgroups, FIFO signal, poststart hooks, and state.
+pub fn start_created_container(spec: &OciSpec, container_id: &str, pid: u32) -> io::Result<()> {
+    setup_spec_cgroups(pid, spec);
+    signal_start(container_id)?;
+    run_poststart_hooks(spec, container_id, pid)?;
+    update_state_running(container_id, pid)
+}
+
+/// Save created state for a freshly forked child, then start it.
+pub fn save_and_start_forked_child(
+    spec: &OciSpec,
+    container_id: &str,
+    pid: u32,
+    bundle_path: &str,
+) -> io::Result<()> {
+    save_created_state(spec, container_id, pid, bundle_path)?;
+    start_created_container(spec, container_id, pid)
 }
 
 // ===========================================================================
@@ -716,38 +729,8 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
     // Step 3: fork child
     let child = fork_container_child(spec, container_id)?;
     let pid = child.pid();
-    let resources = child.resources.clone();
 
-    // Step 4: save created state
-    save_created_state(spec, container_id, pid, child.bundle_path())?;
-
-    // Step 5: setup cgroups BEFORE signal_start
-    // Cgroup limits MUST be in place before the workload begins executing.
-    if let Some(ref res) = resources {
-        if let Some(ref linux) = spec.linux {
-            let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
-            let rootless = !is_root();
-            let cgroup_path =
-                crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
-                    .unwrap_or_else(|e| {
-                        let _ = fs::write(
-                            "/dev/kmsg",
-                            format!("edgerun: cgroup resolution failed: {}", e),
-                        );
-                        raw_cgroup_path.to_string()
-                    });
-            setup_container_cgroups(pid, res, &cgroup_path);
-        }
-    }
-
-    // Step 6: signal start (unblocks child)
-    signal_start(container_id)?;
-
-    // Step 7: poststart hooks
-    run_poststart_hooks(spec, container_id, pid)?;
-
-    // Step 8: update state to running
-    update_state_running(container_id, pid)?;
+    save_and_start_forked_child(spec, container_id, pid, child.bundle_path())?;
 
     // Step 9: return handle
     Ok(into_running_container(child))

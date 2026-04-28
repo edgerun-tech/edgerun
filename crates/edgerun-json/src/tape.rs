@@ -98,6 +98,15 @@ impl JsonTape {
 }
 
 impl<'a> TapeValue<'a> {
+    fn token(&self) -> &TapeToken {
+        &self.tape.tokens[self.index]
+    }
+
+    fn raw(&self) -> &'a str {
+        let token = self.token();
+        &self.input[token.start..token.end]
+    }
+
     #[must_use]
     pub fn kind(&self) -> TapeTokenKind {
         self.tape.tokens[self.index].kind
@@ -118,6 +127,96 @@ impl<'a> TapeValue<'a> {
             }
             _ => None,
         }
+    }
+
+    #[must_use]
+    pub fn as_bool(&self) -> Option<bool> {
+        match (self.kind(), self.raw()) {
+            (TapeTokenKind::Bool, "true") => Some(true),
+            (TapeTokenKind::Bool, "false") => Some(false),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_i64(&self) -> Option<i64> {
+        if self.kind() != TapeTokenKind::Number {
+            return None;
+        }
+        let raw = self.raw();
+        if raw.contains(['.', 'e', 'E']) {
+            return None;
+        }
+        raw.parse().ok()
+    }
+
+    #[must_use]
+    pub fn as_u64(&self) -> Option<u64> {
+        if self.kind() != TapeTokenKind::Number {
+            return None;
+        }
+        let raw = self.raw();
+        if raw.starts_with('-') || raw.contains(['.', 'e', 'E']) {
+            return None;
+        }
+        raw.parse().ok()
+    }
+
+    #[must_use]
+    pub fn array_items(&self) -> Option<Vec<TapeValue<'a>>> {
+        if self.kind() != TapeTokenKind::Array {
+            return None;
+        }
+        Some(
+            self.tape
+                .tokens
+                .iter()
+                .enumerate()
+                .filter_map(|(index, token)| {
+                    (token.parent == Some(self.index)).then_some(TapeValue {
+                        tape: self.tape,
+                        input: self.input,
+                        index,
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    #[must_use]
+    pub fn object_fields(&self) -> Option<Vec<(&'a str, TapeValue<'a>)>> {
+        if self.kind() != TapeTokenKind::Object {
+            return None;
+        }
+        let mut fields = Vec::new();
+        let tokens = &self.tape.tokens;
+        let mut i = self.index + 1;
+        while i + 1 < tokens.len() {
+            if tokens[i].parent != Some(self.index) || tokens[i].kind != TapeTokenKind::Key {
+                i += 1;
+                continue;
+            }
+            let key = TapeValue {
+                tape: self.tape,
+                input: self.input,
+                index: i,
+            };
+            let value_index = i + 1;
+            if tokens[value_index].parent == Some(self.index) {
+                if let Some(key) = key.as_str() {
+                    fields.push((
+                        key,
+                        TapeValue {
+                            tape: self.tape,
+                            input: self.input,
+                            index: value_index,
+                        },
+                    ));
+                }
+            }
+            i += 2;
+        }
+        Some(fields)
     }
 
     #[must_use]
@@ -427,5 +526,44 @@ impl CompiledRowSchema {
         }
         out.push(b']');
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{parse_json_tape, TapeTokenKind};
+    use alloc::{vec, vec::Vec};
+
+    #[test]
+    fn tape_value_scalar_accessors() {
+        let input = r#"{"t":true,"f":false,"i":-7,"u":42,"float":1.5}"#;
+        let tape = parse_json_tape(input).unwrap();
+        let root = tape.root(input).unwrap();
+
+        assert_eq!(root.get("t").unwrap().as_bool(), Some(true));
+        assert_eq!(root.get("f").unwrap().as_bool(), Some(false));
+        assert_eq!(root.get("i").unwrap().as_i64(), Some(-7));
+        assert_eq!(root.get("u").unwrap().as_u64(), Some(42));
+        assert_eq!(root.get("float").unwrap().as_i64(), None);
+        assert_eq!(root.get("float").unwrap().as_u64(), None);
+    }
+
+    #[test]
+    fn tape_value_array_items_and_object_fields_are_direct_children() {
+        let input = r#"{"items":[1,{"nested":true},3],"other":null}"#;
+        let tape = parse_json_tape(input).unwrap();
+        let root = tape.root(input).unwrap();
+        let items = root.get("items").unwrap().array_items().unwrap();
+
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].as_u64(), Some(1));
+        assert_eq!(items[1].kind(), TapeTokenKind::Object);
+        assert_eq!(items[2].as_u64(), Some(3));
+
+        let fields = root.object_fields().unwrap();
+        assert_eq!(
+            fields.iter().map(|(key, _)| *key).collect::<Vec<_>>(),
+            vec!["items", "other"]
+        );
     }
 }

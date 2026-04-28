@@ -4,7 +4,7 @@ use crate::prelude::*;
 #[cfg(feature = "serde")]
 use edgerun_json::{from_slice, to_string, to_string_pretty};
 #[cfg(all(feature = "json", not(feature = "serde")))]
-use edgerun_json::{parse_json, JsonValue};
+use edgerun_json::{parse_json_tape, TapeValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -23,16 +23,30 @@ pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
     from_slice(data).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "serde")]
+pub fn parse_oci_process(data: &[u8]) -> Result<OciProcess, String> {
+    from_slice(data).map_err(|e| e.to_string())
+}
+
 /// Parse an OCI spec from JSON bytes without serde.
-///
-/// This no_std parser covers the runtime-critical OCI fields needed by a
-/// bare-metal loader: version, platform, process, root, mounts, Linux
-/// namespaces, devices, mappings, sysctls, and basic resource settings.
 #[cfg(all(feature = "json", not(feature = "serde")))]
 pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
     let text = core::str::from_utf8(data).map_err(|_| "OCI spec is not UTF-8".to_string())?;
-    let value = parse_json(text).map_err(|e| e.to_string())?;
-    parse_oci_spec_value(&value)
+    let tape = parse_json_tape(text).map_err(|error| error.to_string())?;
+    let root = tape
+        .root(text)
+        .ok_or_else(|| "OCI spec is empty".to_string())?;
+    parse_oci_spec_tape(root)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+pub fn parse_oci_process(data: &[u8]) -> Result<OciProcess, String> {
+    let text = core::str::from_utf8(data).map_err(|_| "OCI process is not UTF-8".to_string())?;
+    let tape = parse_json_tape(text).map_err(|error| error.to_string())?;
+    let root = tape
+        .root(text)
+        .ok_or_else(|| "OCI process is empty".to_string())?;
+    parse_process(root)
 }
 
 // ===========================================================================
@@ -114,6 +128,19 @@ impl OciSpec {
     #[cfg(feature = "serde")]
     pub fn to_json_string_pretty(&self) -> String {
         to_string_pretty(self).unwrap_or_default()
+    }
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+impl OciSpec {
+    /// Serialize to compact JSON.
+    pub fn to_json_string(&self) -> String {
+        edgerun_json::to_string(&oci_spec_to_value(self)).unwrap_or_default()
+    }
+
+    /// Serialize to pretty-printed JSON.
+    pub fn to_json_string_pretty(&self) -> String {
+        edgerun_json::to_string_pretty(&oci_spec_to_value(self)).unwrap_or_default()
     }
 }
 
@@ -873,34 +900,27 @@ pub struct OciMount {
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_oci_spec_value(value: &JsonValue) -> Result<OciSpec, String> {
-    let object = object(value, "OCI spec")?;
-    let version = required_string(object.get("ociVersion"), "ociVersion")?;
-
+fn parse_oci_spec_tape(value: TapeValue<'_>) -> Result<OciSpec, String> {
     Ok(OciSpec {
-        version,
-        platform: object.get("platform").map(parse_platform).transpose()?,
-        process: object.get("process").map(parse_process).transpose()?,
-        root: object.get("root").map(parse_root).transpose()?,
-        hostname: optional_string(object.get("hostname"))?,
-        domainname: optional_string(object.get("domainname"))?,
-        linux: object.get("linux").map(parse_linux).transpose()?,
-        mounts: object.get("mounts").map(parse_mounts).transpose()?,
-        annotations: object
-            .get("annotations")
-            .map(parse_string_map)
-            .transpose()?,
+        version: required_string(value.get("ociVersion"), "ociVersion")?,
+        platform: value.get("platform").map(parse_platform).transpose()?,
+        process: value.get("process").map(parse_process).transpose()?,
+        root: value.get("root").map(parse_root).transpose()?,
+        hostname: optional_string(value.get("hostname"))?,
+        domainname: optional_string(value.get("domainname"))?,
+        linux: value.get("linux").map(parse_linux).transpose()?,
+        mounts: value.get("mounts").map(parse_mounts).transpose()?,
+        annotations: value.get("annotations").map(parse_string_map).transpose()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_platform(value: &JsonValue) -> Result<OciPlatform, String> {
-    let object = object(value, "platform")?;
+fn parse_platform(value: TapeValue<'_>) -> Result<OciPlatform, String> {
     Ok(OciPlatform {
-        os: optional_string(object.get("os"))?,
-        arch: optional_string(object.get("arch"))?,
-        os_version: optional_string(object.get("os.version"))?,
-        os_features: object
+        os: optional_string(value.get("os"))?,
+        arch: optional_string(value.get("arch"))?,
+        os_version: optional_string(value.get("os.version"))?,
+        os_features: value
             .get("os.features")
             .map(parse_string_array)
             .transpose()?,
@@ -908,101 +928,81 @@ fn parse_platform(value: &JsonValue) -> Result<OciPlatform, String> {
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_process(value: &JsonValue) -> Result<OciProcess, String> {
-    let object = object(value, "process")?;
+fn parse_process(value: TapeValue<'_>) -> Result<OciProcess, String> {
     Ok(OciProcess {
-        terminal: optional_bool(object.get("terminal"))?,
-        user: object.get("user").map(parse_user).transpose()?,
-        console_size: object.get("consoleSize").map(parse_box).transpose()?,
-        args: object.get("args").map(parse_string_array).transpose()?,
-        env: object.get("env").map(parse_string_array).transpose()?,
-        cwd: optional_string(object.get("cwd"))?,
-        capabilities: object
+        terminal: optional_bool(value.get("terminal"))?,
+        user: value.get("user").map(parse_user).transpose()?,
+        console_size: value.get("consoleSize").map(parse_box).transpose()?,
+        args: value.get("args").map(parse_string_array).transpose()?,
+        env: value.get("env").map(parse_string_array).transpose()?,
+        cwd: optional_string(value.get("cwd"))?,
+        capabilities: value
             .get("capabilities")
             .map(parse_capabilities)
             .transpose()?,
-        rlimits: object.get("rlimits").map(parse_rlimits).transpose()?,
-        no_new_privileges: optional_bool(object.get("noNewPrivileges"))?,
-        oom_score_adj: optional_i64(object.get("oomScoreAdj"))?,
-        apparmor_profile: optional_string(object.get("apparmorProfile"))?,
-        selinux_label: optional_string(object.get("selinuxLabel"))?,
-        scheduler: object.get("scheduler").map(parse_scheduler).transpose()?,
-        io_priority: object
-            .get("ioPriority")
-            .map(parse_io_priority)
-            .transpose()?,
+        rlimits: value.get("rlimits").map(parse_rlimits).transpose()?,
+        no_new_privileges: optional_bool(value.get("noNewPrivileges"))?,
+        oom_score_adj: optional_i64(value.get("oomScoreAdj"))?,
+        apparmor_profile: optional_string(value.get("apparmorProfile"))?,
+        selinux_label: optional_string(value.get("selinuxLabel"))?,
+        scheduler: value.get("scheduler").map(parse_scheduler).transpose()?,
+        io_priority: value.get("ioPriority").map(parse_io_priority).transpose()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_box(value: &JsonValue) -> Result<OciBox, String> {
-    let object = object(value, "consoleSize")?;
+fn parse_box(value: TapeValue<'_>) -> Result<OciBox, String> {
     Ok(OciBox {
-        width: required_u64(object.get("width"), "consoleSize.width")?,
-        height: required_u64(object.get("height"), "consoleSize.height")?,
+        width: required_u64(value.get("width"), "consoleSize.width")?,
+        height: required_u64(value.get("height"), "consoleSize.height")?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_user(value: &JsonValue) -> Result<OciUser, String> {
-    let object = object(value, "user")?;
+fn parse_user(value: TapeValue<'_>) -> Result<OciUser, String> {
     Ok(OciUser {
-        uid: optional_u32(object.get("uid"))?,
-        gid: optional_u32(object.get("gid"))?,
-        additional_gids: object
+        uid: optional_u32(value.get("uid"))?,
+        gid: optional_u32(value.get("gid"))?,
+        additional_gids: value
             .get("additionalGids")
             .map(parse_u32_array)
             .transpose()?,
-        umask: optional_u32(object.get("umask"))?,
+        umask: optional_u32(value.get("umask"))?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_capabilities(value: &JsonValue) -> Result<OciCapabilities, String> {
-    let object = object(value, "capabilities")?;
+fn parse_capabilities(value: TapeValue<'_>) -> Result<OciCapabilities, String> {
     Ok(OciCapabilities {
-        bounding: object.get("bounding").map(parse_string_array).transpose()?,
-        effective: object
-            .get("effective")
-            .map(parse_string_array)
-            .transpose()?,
-        inheritable: object
+        bounding: value.get("bounding").map(parse_string_array).transpose()?,
+        effective: value.get("effective").map(parse_string_array).transpose()?,
+        inheritable: value
             .get("inheritable")
             .map(parse_string_array)
             .transpose()?,
-        permitted: object
-            .get("permitted")
-            .map(parse_string_array)
-            .transpose()?,
-        ambient: object.get("ambient").map(parse_string_array).transpose()?,
+        permitted: value.get("permitted").map(parse_string_array).transpose()?,
+        ambient: value.get("ambient").map(parse_string_array).transpose()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_rlimits(value: &JsonValue) -> Result<Vec<OciRlimit>, String> {
-    array(value, "rlimits")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let object = object(value, "rlimit")?;
-            Ok(OciRlimit {
-                ns_type: required_string(object.get("type"), "rlimit.type")?,
-                hard: required_u64(object.get("hard"), "rlimit.hard")?,
-                soft: required_u64(object.get("soft"), "rlimit.soft")?,
-            })
-            .map_err(|e: String| format!("rlimits[{index}]: {e}"))
+fn parse_rlimits(value: TapeValue<'_>) -> Result<Vec<OciRlimit>, String> {
+    parse_array(value, "rlimits", |item| {
+        Ok(OciRlimit {
+            ns_type: required_string(item.get("type"), "rlimit.type")?,
+            hard: required_u64(item.get("hard"), "rlimit.hard")?,
+            soft: required_u64(item.get("soft"), "rlimit.soft")?,
         })
-        .collect()
+    })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_scheduler(value: &JsonValue) -> Result<OciScheduler, String> {
-    let object = object(value, "scheduler")?;
+fn parse_scheduler(value: TapeValue<'_>) -> Result<OciScheduler, String> {
     Ok(OciScheduler {
-        policy: required_string(object.get("policy"), "scheduler.policy")?,
-        nice: optional_i32(object.get("nice"))?,
-        priority: optional_i32(object.get("priority"))?,
-        deadline: object
+        policy: required_string(value.get("policy"), "scheduler.policy")?,
+        nice: optional_i32(value.get("nice"))?,
+        priority: optional_i32(value.get("priority"))?,
+        deadline: value
             .get("deadline")
             .map(parse_sched_deadline)
             .transpose()?,
@@ -1010,131 +1010,105 @@ fn parse_scheduler(value: &JsonValue) -> Result<OciScheduler, String> {
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_sched_deadline(value: &JsonValue) -> Result<OciSchedDeadline, String> {
-    let object = object(value, "scheduler.deadline")?;
+fn parse_sched_deadline(value: TapeValue<'_>) -> Result<OciSchedDeadline, String> {
     Ok(OciSchedDeadline {
-        runtime_ns: optional_u64(object.get("runtime"))?,
-        period_ns: optional_u64(object.get("period"))?,
-        deadline_ns: optional_u64(object.get("deadline"))?,
+        runtime_ns: optional_u64(value.get("runtime"))?,
+        period_ns: optional_u64(value.get("period"))?,
+        deadline_ns: optional_u64(value.get("deadline"))?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_io_priority(value: &JsonValue) -> Result<OciIoPriority, String> {
-    let object = object(value, "ioPriority")?;
+fn parse_io_priority(value: TapeValue<'_>) -> Result<OciIoPriority, String> {
     Ok(OciIoPriority {
-        class: required_u32(object.get("class"), "ioPriority.class")?,
-        priority: optional_u32(object.get("priority"))?,
+        class: required_u32(value.get("class"), "ioPriority.class")?,
+        priority: optional_u32(value.get("priority"))?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_root(value: &JsonValue) -> Result<OciRoot, String> {
-    let object = object(value, "root")?;
+fn parse_root(value: TapeValue<'_>) -> Result<OciRoot, String> {
     Ok(OciRoot {
-        path: required_string(object.get("path"), "root.path")?,
-        readonly: optional_bool(object.get("readonly"))?,
+        path: required_string(value.get("path"), "root.path")?,
+        readonly: optional_bool(value.get("readonly"))?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_linux(value: &JsonValue) -> Result<OciLinux, String> {
-    let object = object(value, "linux")?;
+fn parse_linux(value: TapeValue<'_>) -> Result<OciLinux, String> {
     Ok(OciLinux {
-        uid_mappings: object
+        uid_mappings: value
             .get("uidMappings")
             .map(parse_id_mappings)
             .transpose()?,
-        gid_mappings: object
+        gid_mappings: value
             .get("gidMappings")
             .map(parse_id_mappings)
             .transpose()?,
-        resources: object.get("resources").map(parse_resources).transpose()?,
-        cgroups_path: optional_string(object.get("cgroupsPath"))?,
-        namespaces: object.get("namespaces").map(parse_namespaces).transpose()?,
-        devices: object.get("devices").map(parse_devices).transpose()?,
-        masked_paths: object
+        resources: value.get("resources").map(parse_resources).transpose()?,
+        cgroups_path: optional_string(value.get("cgroupsPath"))?,
+        namespaces: value.get("namespaces").map(parse_namespaces).transpose()?,
+        devices: value.get("devices").map(parse_devices).transpose()?,
+        masked_paths: value
             .get("maskedPaths")
             .map(parse_string_array)
             .transpose()?,
-        readonly_paths: object
+        readonly_paths: value
             .get("readonlyPaths")
             .map(parse_string_array)
             .transpose()?,
-        mount_label: optional_string(object.get("mountLabel"))?,
-        rootfs_propagation: optional_string(object.get("rootfsPropagation"))?,
-        sysctl: object.get("sysctl").map(parse_string_map).transpose()?,
+        mount_label: optional_string(value.get("mountLabel"))?,
+        rootfs_propagation: optional_string(value.get("rootfsPropagation"))?,
+        sysctl: value.get("sysctl").map(parse_string_map).transpose()?,
         hooks: None,
         seccomp: None,
-        intel_rdt: object.get("intelRdt").map(parse_intel_rdt).transpose()?,
+        intel_rdt: value.get("intelRdt").map(parse_intel_rdt).transpose()?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_id_mappings(value: &JsonValue) -> Result<Vec<OciIdMapping>, String> {
-    array(value, "idMappings")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let object = object(value, "idMapping")?;
-            Ok(OciIdMapping {
-                container_id: required_u32(object.get("containerID"), "containerID")?,
-                host_id: required_u32(object.get("hostID"), "hostID")?,
-                size: required_u32(object.get("size"), "size")?,
-            })
-            .map_err(|e: String| format!("idMappings[{index}]: {e}"))
+fn parse_id_mappings(value: TapeValue<'_>) -> Result<Vec<OciIdMapping>, String> {
+    parse_array(value, "idMappings", |item| {
+        Ok(OciIdMapping {
+            container_id: required_u32(item.get("containerID"), "containerID")?,
+            host_id: required_u32(item.get("hostID"), "hostID")?,
+            size: required_u32(item.get("size"), "size")?,
         })
-        .collect()
+    })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_namespaces(value: &JsonValue) -> Result<Vec<OciNamespace>, String> {
-    array(value, "namespaces")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let object = object(value, "namespace")?;
-            Ok(OciNamespace {
-                ns_type: required_string(object.get("type"), "namespace.type")?,
-                path: optional_string(object.get("path"))?,
-            })
-            .map_err(|e: String| format!("namespaces[{index}]: {e}"))
+fn parse_namespaces(value: TapeValue<'_>) -> Result<Vec<OciNamespace>, String> {
+    parse_array(value, "namespaces", |item| {
+        Ok(OciNamespace {
+            ns_type: required_string(item.get("type"), "namespace.type")?,
+            path: optional_string(item.get("path"))?,
         })
-        .collect()
+    })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_devices(value: &JsonValue) -> Result<Vec<OciLinuxDevice>, String> {
-    array(value, "devices")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let object = object(value, "device")?;
-            Ok(OciLinuxDevice {
-                ns_type: required_string(object.get("type"), "device.type")?,
-                path: required_string(object.get("path"), "device.path")?,
-                file_mode: optional_u32(object.get("fileMode"))?,
-                uid: optional_u32(object.get("uid"))?,
-                gid: optional_u32(object.get("gid"))?,
-                major: optional_i64(object.get("major"))?,
-                minor: optional_i64(object.get("minor"))?,
-            })
-            .map_err(|e: String| format!("devices[{index}]: {e}"))
+fn parse_devices(value: TapeValue<'_>) -> Result<Vec<OciLinuxDevice>, String> {
+    parse_array(value, "devices", |item| {
+        Ok(OciLinuxDevice {
+            ns_type: required_string(item.get("type"), "device.type")?,
+            path: required_string(item.get("path"), "device.path")?,
+            file_mode: optional_u32(item.get("fileMode"))?,
+            uid: optional_u32(item.get("uid"))?,
+            gid: optional_u32(item.get("gid"))?,
+            major: optional_i64(item.get("major"))?,
+            minor: optional_i64(item.get("minor"))?,
         })
-        .collect()
+    })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_resources(value: &JsonValue) -> Result<OciLinuxResources, String> {
-    let object = object(value, "resources")?;
+fn parse_resources(value: TapeValue<'_>) -> Result<OciLinuxResources, String> {
     Ok(OciLinuxResources {
-        devices: object
-            .get("devices")
-            .map(parse_device_cgroups)
-            .transpose()?,
-        memory: object.get("memory").map(parse_memory).transpose()?,
-        cpu: object.get("cpu").map(parse_cpu).transpose()?,
-        pids: object.get("pids").map(parse_pids).transpose()?,
+        devices: value.get("devices").map(parse_device_cgroups).transpose()?,
+        memory: value.get("memory").map(parse_memory).transpose()?,
+        cpu: value.get("cpu").map(parse_cpu).transpose()?,
+        pids: value.get("pids").map(parse_pids).transpose()?,
         block_io: None,
         hugepage_limits: None,
         network: None,
@@ -1142,154 +1116,128 @@ fn parse_resources(value: &JsonValue) -> Result<OciLinuxResources, String> {
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_device_cgroups(value: &JsonValue) -> Result<Vec<OciLinuxDeviceCgroup>, String> {
-    array(value, "resources.devices")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let object = object(value, "device cgroup")?;
-            Ok(OciLinuxDeviceCgroup {
-                ns_type: required_string(object.get("type"), "device cgroup.type")?,
-                major: optional_i64(object.get("major"))?,
-                minor: optional_i64(object.get("minor"))?,
-                access: optional_string(object.get("access"))?,
-            })
-            .map_err(|e: String| format!("resources.devices[{index}]: {e}"))
+fn parse_device_cgroups(value: TapeValue<'_>) -> Result<Vec<OciLinuxDeviceCgroup>, String> {
+    parse_array(value, "resources.devices", |item| {
+        Ok(OciLinuxDeviceCgroup {
+            ns_type: required_string(item.get("type"), "device cgroup.type")?,
+            major: optional_i64(item.get("major"))?,
+            minor: optional_i64(item.get("minor"))?,
+            access: optional_string(item.get("access"))?,
         })
-        .collect()
+    })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_memory(value: &JsonValue) -> Result<OciLinuxMemory, String> {
-    let object = object(value, "memory")?;
+fn parse_memory(value: TapeValue<'_>) -> Result<OciLinuxMemory, String> {
     Ok(OciLinuxMemory {
-        limit: optional_i64(object.get("limit"))?,
-        reservation: optional_i64(object.get("reservation"))?,
-        swap: optional_i64(object.get("swap"))?,
-        kernel: optional_i64(object.get("kernel"))?,
-        kernel_tcp: optional_i64(object.get("kernelTCP"))?,
-        check_before_update: optional_bool(object.get("checkBeforeUpdate"))?,
+        limit: optional_i64(value.get("limit"))?,
+        reservation: optional_i64(value.get("reservation"))?,
+        swap: optional_i64(value.get("swap"))?,
+        kernel: optional_i64(value.get("kernel"))?,
+        kernel_tcp: optional_i64(value.get("kernelTCP"))?,
+        check_before_update: optional_bool(value.get("checkBeforeUpdate"))?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_cpu(value: &JsonValue) -> Result<OciLinuxCpu, String> {
-    let object = object(value, "cpu")?;
+fn parse_cpu(value: TapeValue<'_>) -> Result<OciLinuxCpu, String> {
     Ok(OciLinuxCpu {
-        shares: optional_u64(object.get("shares"))?,
-        quota: optional_i64(object.get("quota"))?,
-        period: optional_u64(object.get("period"))?,
-        realtime_runtime: optional_i64(object.get("realtimeRuntime"))?,
-        realtime_period: optional_u64(object.get("realtimePeriod"))?,
-        cpus: optional_string(object.get("cpus"))?,
-        mems: optional_string(object.get("mems"))?,
-        idle: optional_i64(object.get("idle"))?,
-        burst: optional_i64(object.get("burst"))?,
+        shares: optional_u64(value.get("shares"))?,
+        quota: optional_i64(value.get("quota"))?,
+        period: optional_u64(value.get("period"))?,
+        realtime_runtime: optional_i64(value.get("realtimeRuntime"))?,
+        realtime_period: optional_u64(value.get("realtimePeriod"))?,
+        cpus: optional_string(value.get("cpus"))?,
+        mems: optional_string(value.get("mems"))?,
+        idle: optional_i64(value.get("idle"))?,
+        burst: optional_i64(value.get("burst"))?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_pids(value: &JsonValue) -> Result<OciLinuxPids, String> {
-    let object = object(value, "pids")?;
+fn parse_pids(value: TapeValue<'_>) -> Result<OciLinuxPids, String> {
     Ok(OciLinuxPids {
-        limit: required_i64(object.get("limit"), "pids.limit")?,
+        limit: required_i64(value.get("limit"), "pids.limit")?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_intel_rdt(value: &JsonValue) -> Result<OciLinuxIntelRdt, String> {
-    let object = object(value, "intelRdt")?;
+fn parse_intel_rdt(value: TapeValue<'_>) -> Result<OciLinuxIntelRdt, String> {
     Ok(OciLinuxIntelRdt {
-        l3_cache_schema: optional_string(object.get("l3CacheSchema"))?,
-        mem_bw_schema: optional_string(object.get("memBwSchema"))?,
-        clos_id: optional_string(object.get("closID"))?,
-        enable_monitoring: optional_bool(object.get("enableMonitoring"))?,
-        schemata: optional_string(object.get("schemata"))?,
+        l3_cache_schema: optional_string(value.get("l3CacheSchema"))?,
+        mem_bw_schema: optional_string(value.get("memBwSchema"))?,
+        clos_id: optional_string(value.get("closID"))?,
+        enable_monitoring: optional_bool(value.get("enableMonitoring"))?,
+        schemata: optional_string(value.get("schemata"))?,
     })
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_mounts(value: &JsonValue) -> Result<Vec<OciMount>, String> {
-    array(value, "mounts")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let object = object(value, "mount")?;
-            Ok(OciMount {
-                destination: required_string(object.get("destination"), "mount.destination")?,
-                mount_type: optional_string(object.get("type"))?,
-                source: optional_string(object.get("source"))?,
-                options: object.get("options").map(parse_string_array).transpose()?,
-                label: optional_string(object.get("label"))?,
-                recursive: optional_bool(object.get("recursive"))?,
-                uid_mappings: object
-                    .get("uidMappings")
-                    .map(parse_id_mappings)
-                    .transpose()?,
-                gid_mappings: object
-                    .get("gidMappings")
-                    .map(parse_id_mappings)
-                    .transpose()?,
-            })
-            .map_err(|e: String| format!("mounts[{index}]: {e}"))
+fn parse_mounts(value: TapeValue<'_>) -> Result<Vec<OciMount>, String> {
+    parse_array(value, "mounts", |item| {
+        Ok(OciMount {
+            destination: required_string(item.get("destination"), "mount.destination")?,
+            mount_type: optional_string(item.get("type"))?,
+            source: optional_string(item.get("source"))?,
+            options: item.get("options").map(parse_string_array).transpose()?,
+            label: optional_string(item.get("label"))?,
+            recursive: optional_bool(item.get("recursive"))?,
+            uid_mappings: item.get("uidMappings").map(parse_id_mappings).transpose()?,
+            gid_mappings: item.get("gidMappings").map(parse_id_mappings).transpose()?,
         })
+    })
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn parse_string_map(value: TapeValue<'_>) -> Result<BTreeMap<String, String>, String> {
+    let fields = value
+        .object_fields()
+        .ok_or_else(|| "string map must be an object".to_string())?;
+    fields
+        .into_iter()
+        .map(|(key, value)| Ok((key.to_string(), string(value, key)?)))
         .collect()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_string_map(value: &JsonValue) -> Result<BTreeMap<String, String>, String> {
-    object(value, "string map")?
-        .iter()
-        .map(|(key, value)| Ok((key.clone(), string(value, key)?)))
-        .collect()
+fn parse_string_array(value: TapeValue<'_>) -> Result<Vec<String>, String> {
+    parse_array(value, "string array", |item| string(item, "array item"))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_string_array(value: &JsonValue) -> Result<Vec<String>, String> {
-    array(value, "string array")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| string(value, &format!("string array[{index}]")))
-        .collect()
+fn parse_u32_array(value: TapeValue<'_>) -> Result<Vec<u32>, String> {
+    parse_array(value, "u32 array", |item| u32_value(item, "array item"))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn parse_u32_array(value: &JsonValue) -> Result<Vec<u32>, String> {
-    array(value, "u32 array")?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| u32_value(value, &format!("u32 array[{index}]")))
-        .collect()
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn object<'a>(value: &'a JsonValue, name: &str) -> Result<&'a edgerun_json::Map, String> {
+fn parse_array<T>(
+    value: TapeValue<'_>,
+    name: &str,
+    mut parse_item: impl FnMut(TapeValue<'_>) -> Result<T, String>,
+) -> Result<Vec<T>, String> {
     value
-        .as_object()
-        .ok_or_else(|| format!("{name} must be an object"))
+        .array_items()
+        .ok_or_else(|| format!("{name} must be an array"))?
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| parse_item(item).map_err(|error| format!("{name}[{index}]: {error}")))
+        .collect()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn array<'a>(value: &'a JsonValue, name: &str) -> Result<&'a Vec<JsonValue>, String> {
-    value
-        .as_array()
-        .ok_or_else(|| format!("{name} must be an array"))
+fn optional_string(value: Option<TapeValue<'_>>) -> Result<Option<String>, String> {
+    value.map(|value| string(value, "field")).transpose()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn optional_string(value: Option<&JsonValue>) -> Result<Option<String>, String> {
-    value.map(|value| string(value, "string")).transpose()
-}
-
-#[cfg(all(feature = "json", not(feature = "serde")))]
-fn required_string(value: Option<&JsonValue>, name: &str) -> Result<String, String> {
+fn required_string(value: Option<TapeValue<'_>>, name: &str) -> Result<String, String> {
     value
         .ok_or_else(|| format!("missing required field {name}"))
         .and_then(|value| string(value, name))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn string(value: &JsonValue, name: &str) -> Result<String, String> {
+fn string(value: TapeValue<'_>, name: &str) -> Result<String, String> {
     value
         .as_str()
         .map(ToString::to_string)
@@ -1297,88 +1245,590 @@ fn string(value: &JsonValue, name: &str) -> Result<String, String> {
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn optional_bool(value: Option<&JsonValue>) -> Result<Option<bool>, String> {
-    value
-        .map(|value| {
-            value
-                .as_bool()
-                .ok_or_else(|| "field must be a boolean".to_string())
-        })
-        .transpose()
+fn optional_bool(value: Option<TapeValue<'_>>) -> Result<Option<bool>, String> {
+    value.map(|value| bool_value(value, "field")).transpose()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn optional_i32(value: Option<&JsonValue>) -> Result<Option<i32>, String> {
+fn bool_value(value: TapeValue<'_>, name: &str) -> Result<bool, String> {
+    value
+        .as_bool()
+        .ok_or_else(|| format!("{name} must be a boolean"))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn optional_i32(value: Option<TapeValue<'_>>) -> Result<Option<i32>, String> {
     value.map(|value| i32_value(value, "field")).transpose()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn optional_i64(value: Option<&JsonValue>) -> Result<Option<i64>, String> {
+fn optional_i64(value: Option<TapeValue<'_>>) -> Result<Option<i64>, String> {
     value.map(|value| i64_value(value, "field")).transpose()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn required_i64(value: Option<&JsonValue>, name: &str) -> Result<i64, String> {
+fn required_i64(value: Option<TapeValue<'_>>, name: &str) -> Result<i64, String> {
     value
         .ok_or_else(|| format!("missing required field {name}"))
         .and_then(|value| i64_value(value, name))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn optional_u32(value: Option<&JsonValue>) -> Result<Option<u32>, String> {
+fn optional_u32(value: Option<TapeValue<'_>>) -> Result<Option<u32>, String> {
     value.map(|value| u32_value(value, "field")).transpose()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn required_u32(value: Option<&JsonValue>, name: &str) -> Result<u32, String> {
+fn required_u32(value: Option<TapeValue<'_>>, name: &str) -> Result<u32, String> {
     value
         .ok_or_else(|| format!("missing required field {name}"))
         .and_then(|value| u32_value(value, name))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn optional_u64(value: Option<&JsonValue>) -> Result<Option<u64>, String> {
+fn optional_u64(value: Option<TapeValue<'_>>) -> Result<Option<u64>, String> {
     value.map(|value| u64_value(value, "field")).transpose()
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn required_u64(value: Option<&JsonValue>, name: &str) -> Result<u64, String> {
+fn required_u64(value: Option<TapeValue<'_>>, name: &str) -> Result<u64, String> {
     value
         .ok_or_else(|| format!("missing required field {name}"))
         .and_then(|value| u64_value(value, name))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn i32_value(value: &JsonValue, name: &str) -> Result<i32, String> {
+fn i32_value(value: TapeValue<'_>, name: &str) -> Result<i32, String> {
     let value = i64_value(value, name)?;
     i32::try_from(value).map_err(|_| format!("{name} is out of range for i32"))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn i64_value(value: &JsonValue, name: &str) -> Result<i64, String> {
+fn i64_value(value: TapeValue<'_>, name: &str) -> Result<i64, String> {
     value
         .as_i64()
-        .or_else(|| value.as_u64().and_then(|v| i64::try_from(v).ok()))
         .ok_or_else(|| format!("{name} must be an integer"))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn u32_value(value: &JsonValue, name: &str) -> Result<u32, String> {
+fn u32_value(value: TapeValue<'_>, name: &str) -> Result<u32, String> {
     let value = u64_value(value, name)?;
     u32::try_from(value).map_err(|_| format!("{name} is out of range for u32"))
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
-fn u64_value(value: &JsonValue, name: &str) -> Result<u64, String> {
+fn u64_value(value: TapeValue<'_>, name: &str) -> Result<u64, String> {
     value
         .as_u64()
-        .or_else(|| value.as_i64().and_then(|v| u64::try_from(v).ok()))
         .ok_or_else(|| format!("{name} must be an unsigned integer"))
 }
 
-// ===========================================================================
-// Tests
-// ===========================================================================
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn oci_spec_to_value(spec: &OciSpec) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "ociVersion", spec.version.clone());
+    push_opt(
+        &mut object,
+        "platform",
+        spec.platform.as_ref().map(platform_to_value),
+    );
+    push_opt(
+        &mut object,
+        "process",
+        spec.process.as_ref().map(process_to_value),
+    );
+    push_opt(&mut object, "root", spec.root.as_ref().map(root_to_value));
+    push_opt_string(&mut object, "hostname", spec.hostname.as_deref());
+    push_opt_string(&mut object, "domainname", spec.domainname.as_deref());
+    push_opt(
+        &mut object,
+        "linux",
+        spec.linux.as_ref().map(linux_to_value),
+    );
+    push_opt(
+        &mut object,
+        "mounts",
+        spec.mounts
+            .as_ref()
+            .map(|mounts| array(mounts.iter().map(mount_to_value))),
+    );
+    push_opt(
+        &mut object,
+        "annotations",
+        spec.annotations.as_ref().map(string_map_to_value),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn platform_to_value(platform: &OciPlatform) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt_string(&mut object, "os", platform.os.as_deref());
+    push_opt_string(&mut object, "arch", platform.arch.as_deref());
+    push_opt_string(&mut object, "os.version", platform.os_version.as_deref());
+    push_opt(
+        &mut object,
+        "os.features",
+        platform.os_features.as_ref().map(strings_to_value),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn process_to_value(process: &OciProcess) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt_bool(&mut object, "terminal", process.terminal);
+    push_opt(
+        &mut object,
+        "user",
+        process.user.as_ref().map(user_to_value),
+    );
+    push_opt(
+        &mut object,
+        "consoleSize",
+        process.console_size.as_ref().map(box_to_value),
+    );
+    push_opt(
+        &mut object,
+        "args",
+        process.args.as_ref().map(strings_to_value),
+    );
+    push_opt(
+        &mut object,
+        "env",
+        process.env.as_ref().map(strings_to_value),
+    );
+    push_opt_string(&mut object, "cwd", process.cwd.as_deref());
+    push_opt(
+        &mut object,
+        "capabilities",
+        process.capabilities.as_ref().map(capabilities_to_value),
+    );
+    push_opt(
+        &mut object,
+        "rlimits",
+        process
+            .rlimits
+            .as_ref()
+            .map(|rlimits| array(rlimits.iter().map(rlimit_to_value))),
+    );
+    push_opt_bool(&mut object, "noNewPrivileges", process.no_new_privileges);
+    push_opt_i64(&mut object, "oomScoreAdj", process.oom_score_adj);
+    push_opt_string(
+        &mut object,
+        "apparmorProfile",
+        process.apparmor_profile.as_deref(),
+    );
+    push_opt_string(
+        &mut object,
+        "selinuxLabel",
+        process.selinux_label.as_deref(),
+    );
+    push_opt(
+        &mut object,
+        "scheduler",
+        process.scheduler.as_ref().map(scheduler_to_value),
+    );
+    push_opt(
+        &mut object,
+        "ioPriority",
+        process.io_priority.as_ref().map(io_priority_to_value),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn box_to_value(value: &OciBox) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "width", value.width);
+    push(&mut object, "height", value.height);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn user_to_value(user: &OciUser) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt_u32(&mut object, "uid", user.uid);
+    push_opt_u32(&mut object, "gid", user.gid);
+    push_opt(
+        &mut object,
+        "additionalGids",
+        user.additional_gids
+            .as_ref()
+            .map(|values| array(values.iter().copied().map(edgerun_json::JsonValue::from))),
+    );
+    push_opt_u32(&mut object, "umask", user.umask);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn capabilities_to_value(caps: &OciCapabilities) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt(
+        &mut object,
+        "bounding",
+        caps.bounding.as_ref().map(strings_to_value),
+    );
+    push_opt(
+        &mut object,
+        "effective",
+        caps.effective.as_ref().map(strings_to_value),
+    );
+    push_opt(
+        &mut object,
+        "inheritable",
+        caps.inheritable.as_ref().map(strings_to_value),
+    );
+    push_opt(
+        &mut object,
+        "permitted",
+        caps.permitted.as_ref().map(strings_to_value),
+    );
+    push_opt(
+        &mut object,
+        "ambient",
+        caps.ambient.as_ref().map(strings_to_value),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn rlimit_to_value(rlimit: &OciRlimit) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "type", rlimit.ns_type.clone());
+    push(&mut object, "hard", rlimit.hard);
+    push(&mut object, "soft", rlimit.soft);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn scheduler_to_value(scheduler: &OciScheduler) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "policy", scheduler.policy.clone());
+    push_opt_i32(&mut object, "nice", scheduler.nice);
+    push_opt_i32(&mut object, "priority", scheduler.priority);
+    push_opt(
+        &mut object,
+        "deadline",
+        scheduler.deadline.as_ref().map(|deadline| {
+            let mut object = edgerun_json::Map::new();
+            push_opt_u64(&mut object, "runtime", deadline.runtime_ns);
+            push_opt_u64(&mut object, "period", deadline.period_ns);
+            push_opt_u64(&mut object, "deadline", deadline.deadline_ns);
+            edgerun_json::JsonValue::Object(object)
+        }),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn io_priority_to_value(ioprio: &OciIoPriority) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "class", ioprio.class);
+    push_opt_u32(&mut object, "priority", ioprio.priority);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn root_to_value(root: &OciRoot) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "path", root.path.clone());
+    push_opt_bool(&mut object, "readonly", root.readonly);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn linux_to_value(linux: &OciLinux) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt(
+        &mut object,
+        "uidMappings",
+        linux
+            .uid_mappings
+            .as_ref()
+            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+    );
+    push_opt(
+        &mut object,
+        "gidMappings",
+        linux
+            .gid_mappings
+            .as_ref()
+            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+    );
+    push_opt(
+        &mut object,
+        "resources",
+        linux.resources.as_ref().map(resources_to_value),
+    );
+    push_opt_string(&mut object, "cgroupsPath", linux.cgroups_path.as_deref());
+    push_opt(
+        &mut object,
+        "namespaces",
+        linux
+            .namespaces
+            .as_ref()
+            .map(|namespaces| array(namespaces.iter().map(namespace_to_value))),
+    );
+    push_opt(
+        &mut object,
+        "devices",
+        linux
+            .devices
+            .as_ref()
+            .map(|devices| array(devices.iter().map(device_to_value))),
+    );
+    push_opt(
+        &mut object,
+        "maskedPaths",
+        linux.masked_paths.as_ref().map(strings_to_value),
+    );
+    push_opt(
+        &mut object,
+        "readonlyPaths",
+        linux.readonly_paths.as_ref().map(strings_to_value),
+    );
+    push_opt_string(&mut object, "mountLabel", linux.mount_label.as_deref());
+    push_opt_string(
+        &mut object,
+        "rootfsPropagation",
+        linux.rootfs_propagation.as_deref(),
+    );
+    push_opt(
+        &mut object,
+        "sysctl",
+        linux.sysctl.as_ref().map(string_map_to_value),
+    );
+    push_opt(
+        &mut object,
+        "intelRdt",
+        linux.intel_rdt.as_ref().map(intel_rdt_to_value),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn id_mapping_to_value(mapping: &OciIdMapping) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "containerID", mapping.container_id);
+    push(&mut object, "hostID", mapping.host_id);
+    push(&mut object, "size", mapping.size);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn namespace_to_value(namespace: &OciNamespace) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "type", namespace.ns_type.clone());
+    push_opt_string(&mut object, "path", namespace.path.as_deref());
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn device_to_value(device: &OciLinuxDevice) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "type", device.ns_type.clone());
+    push(&mut object, "path", device.path.clone());
+    push_opt_u32(&mut object, "fileMode", device.file_mode);
+    push_opt_u32(&mut object, "uid", device.uid);
+    push_opt_u32(&mut object, "gid", device.gid);
+    push_opt_i64(&mut object, "major", device.major);
+    push_opt_i64(&mut object, "minor", device.minor);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn resources_to_value(resources: &OciLinuxResources) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt(
+        &mut object,
+        "devices",
+        resources
+            .devices
+            .as_ref()
+            .map(|devices| array(devices.iter().map(device_cgroup_to_value))),
+    );
+    push_opt(
+        &mut object,
+        "memory",
+        resources.memory.as_ref().map(memory_to_value),
+    );
+    push_opt(&mut object, "cpu", resources.cpu.as_ref().map(cpu_to_value));
+    push_opt(
+        &mut object,
+        "pids",
+        resources.pids.as_ref().map(pids_to_value),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn device_cgroup_to_value(device: &OciLinuxDeviceCgroup) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "type", device.ns_type.clone());
+    push_opt_i64(&mut object, "major", device.major);
+    push_opt_i64(&mut object, "minor", device.minor);
+    push_opt_string(&mut object, "access", device.access.as_deref());
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn memory_to_value(memory: &OciLinuxMemory) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt_i64(&mut object, "limit", memory.limit);
+    push_opt_i64(&mut object, "reservation", memory.reservation);
+    push_opt_i64(&mut object, "swap", memory.swap);
+    push_opt_i64(&mut object, "kernel", memory.kernel);
+    push_opt_i64(&mut object, "kernelTCP", memory.kernel_tcp);
+    push_opt_bool(&mut object, "checkBeforeUpdate", memory.check_before_update);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn cpu_to_value(cpu: &OciLinuxCpu) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt_u64(&mut object, "shares", cpu.shares);
+    push_opt_i64(&mut object, "quota", cpu.quota);
+    push_opt_u64(&mut object, "period", cpu.period);
+    push_opt_i64(&mut object, "realtimeRuntime", cpu.realtime_runtime);
+    push_opt_u64(&mut object, "realtimePeriod", cpu.realtime_period);
+    push_opt_string(&mut object, "cpus", cpu.cpus.as_deref());
+    push_opt_string(&mut object, "mems", cpu.mems.as_deref());
+    push_opt_i64(&mut object, "idle", cpu.idle);
+    push_opt_i64(&mut object, "burst", cpu.burst);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn pids_to_value(pids: &OciLinuxPids) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "limit", pids.limit);
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn intel_rdt_to_value(rdt: &OciLinuxIntelRdt) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push_opt_string(&mut object, "l3CacheSchema", rdt.l3_cache_schema.as_deref());
+    push_opt_string(&mut object, "memBwSchema", rdt.mem_bw_schema.as_deref());
+    push_opt_string(&mut object, "closID", rdt.clos_id.as_deref());
+    push_opt_bool(&mut object, "enableMonitoring", rdt.enable_monitoring);
+    push_opt_string(&mut object, "schemata", rdt.schemata.as_deref());
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn mount_to_value(mount: &OciMount) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    push(&mut object, "destination", mount.destination.clone());
+    push_opt_string(&mut object, "type", mount.mount_type.as_deref());
+    push_opt_string(&mut object, "source", mount.source.as_deref());
+    push_opt(
+        &mut object,
+        "options",
+        mount.options.as_ref().map(strings_to_value),
+    );
+    push_opt_string(&mut object, "label", mount.label.as_deref());
+    push_opt_bool(&mut object, "recursive", mount.recursive);
+    push_opt(
+        &mut object,
+        "uidMappings",
+        mount
+            .uid_mappings
+            .as_ref()
+            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+    );
+    push_opt(
+        &mut object,
+        "gidMappings",
+        mount
+            .gid_mappings
+            .as_ref()
+            .map(|mappings| array(mappings.iter().map(id_mapping_to_value))),
+    );
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn strings_to_value(values: &Vec<String>) -> edgerun_json::JsonValue {
+    array(values.iter().cloned().map(edgerun_json::JsonValue::String))
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn string_map_to_value(values: &BTreeMap<String, String>) -> edgerun_json::JsonValue {
+    let mut object = edgerun_json::Map::new();
+    for (key, value) in values {
+        push(&mut object, key.clone(), value.clone());
+    }
+    edgerun_json::JsonValue::Object(object)
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn array(values: impl IntoIterator<Item = edgerun_json::JsonValue>) -> edgerun_json::JsonValue {
+    edgerun_json::JsonValue::Array(values.into_iter().collect())
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push(
+    object: &mut edgerun_json::Map,
+    key: impl Into<String>,
+    value: impl Into<edgerun_json::JsonValue>,
+) {
+    object.push((key.into(), value.into()));
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push_opt(
+    object: &mut edgerun_json::Map,
+    key: &'static str,
+    value: Option<edgerun_json::JsonValue>,
+) {
+    if let Some(value) = value {
+        push(object, key, value);
+    }
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push_opt_string(object: &mut edgerun_json::Map, key: &'static str, value: Option<&str>) {
+    if let Some(value) = value {
+        push(object, key, value);
+    }
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push_opt_bool(object: &mut edgerun_json::Map, key: &'static str, value: Option<bool>) {
+    if let Some(value) = value {
+        push(object, key, value);
+    }
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push_opt_i32(object: &mut edgerun_json::Map, key: &'static str, value: Option<i32>) {
+    if let Some(value) = value {
+        push(object, key, value);
+    }
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push_opt_i64(object: &mut edgerun_json::Map, key: &'static str, value: Option<i64>) {
+    if let Some(value) = value {
+        push(object, key, value);
+    }
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push_opt_u32(object: &mut edgerun_json::Map, key: &'static str, value: Option<u32>) {
+    if let Some(value) = value {
+        push(object, key, value);
+    }
+}
+
+#[cfg(all(feature = "json", not(feature = "serde")))]
+fn push_opt_u64(object: &mut edgerun_json::Map, key: &'static str, value: Option<u64>) {
+    if let Some(value) = value {
+        push(object, key, value);
+    }
+}
 
 #[cfg(all(
     test,
@@ -1386,11 +1836,11 @@ fn u64_value(value: &JsonValue, name: &str) -> Result<u64, String> {
     feature = "json",
     not(feature = "serde")
 ))]
-mod json_feature_tests {
+mod tape_tests {
     use super::*;
 
     #[test]
-    fn parse_minimal_oci_spec_without_serde() {
+    fn parse_minimal_oci_spec_with_tape() {
         let json =
             r#"{"ociVersion":"1.0.2","root":{"path":"rootfs"},"process":{"args":["/bin/sh"]}}"#;
 
@@ -1402,7 +1852,7 @@ mod json_feature_tests {
     }
 
     #[test]
-    fn parse_runtime_fields_without_serde() {
+    fn parse_runtime_fields_with_tape() {
         let json = r#"{
             "ociVersion": "1.0.2",
             "hostname": "edgerun",
@@ -1458,7 +1908,7 @@ mod json_feature_tests {
     }
 
     #[test]
-    fn parse_oci_spec_without_serde_rejects_missing_version() {
+    fn parse_oci_spec_with_tape_rejects_missing_version() {
         assert!(parse_oci_spec(br#"{"root":{"path":"rootfs"}}"#).is_err());
     }
 }

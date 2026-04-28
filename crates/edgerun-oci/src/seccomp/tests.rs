@@ -646,6 +646,7 @@ fn build_seccomp_prog_multiple_syscall_names() {
     );
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn seccomp_arg_fields_serialize_correctly() {
     let arg = crate::json::OciSeccompArg {

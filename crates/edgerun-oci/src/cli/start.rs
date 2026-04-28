@@ -10,9 +10,7 @@ use std::fs;
 use std::io;
 
 use crate::json::parse_oci_spec;
-use crate::lifecycle::{
-    run_poststart_hooks, setup_container_cgroups, signal_start, update_state_running,
-};
+use crate::lifecycle::start_created_container;
 use crate::state::load_state;
 
 pub fn cmd_start(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -42,37 +40,12 @@ pub fn cmd_start(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
         None
     };
 
-    // Cgroups — MUST happen before signal_start so limits are in place
-    // when the workload begins executing.
     if let Some(ref spec) = spec {
-        if let Some(ref linux) = spec.linux {
-            if let Some(ref resources) = linux.resources {
-                let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
-                let rootless = !crate::state::is_root();
-                let cgroup_path =
-                    crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
-                        .unwrap_or_else(|e| {
-                            let _ = std::fs::write(
-                                "/dev/kmsg",
-                                format!("edgerun: cgroup resolution failed: {}", e),
-                            );
-                            raw_cgroup_path.to_string()
-                        });
-                setup_container_cgroups(pid, resources, &cgroup_path);
-            }
-        }
+        start_created_container(spec, id, pid)?;
+    } else {
+        crate::lifecycle::signal_start(id)?;
+        crate::lifecycle::update_state_running(id, pid)?;
     }
-
-    // Signal the FIFO to unblock the child
-    signal_start(id)?;
-
-    // Poststart hooks (runtime namespace)
-    if let Some(ref spec) = spec {
-        run_poststart_hooks(spec, id, pid)?;
-    }
-
-    // Update state to "running"
-    update_state_running(id, pid)?;
 
     // Return immediately — the container runs in the background.
     // Poststop and cleanup happen in `delete`.

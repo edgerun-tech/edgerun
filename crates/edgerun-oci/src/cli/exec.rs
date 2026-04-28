@@ -283,7 +283,7 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         if let Some(ref process_path) = parsed.process_json_path {
             // Load process config from JSON file
             let proc_data = fs::read(process_path)?;
-            let proc: crate::json::OciProcess = edgerun_json::from_slice(&proc_data)
+            let proc = crate::json::parse_oci_process(&proc_data)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
             let args = proc.args.clone().unwrap_or_else(|| vec!["sh".into()]);
             let env = proc.env.clone().unwrap_or_default();
@@ -293,7 +293,7 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
             (args, env, cwd, uid, gid)
         } else if let Some(ref proc_json) = parsed.process_json {
             // Parse inline process JSON
-            let proc: crate::json::OciProcess = edgerun_json::from_slice(proc_json.as_bytes())
+            let proc = crate::json::parse_oci_process(proc_json.as_bytes())
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
             let args = proc.args.clone().unwrap_or_else(|| vec!["sh".into()]);
             let env = proc.env.clone().unwrap_or_default();

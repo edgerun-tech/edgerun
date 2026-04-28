@@ -111,7 +111,8 @@ pub fn apply_global_opts(opts: &GlobalOpts) -> io::Result<()> {
 }
 
 pub(crate) fn json_string(value: &str) -> String {
-    edgerun_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
+    edgerun_json::to_string(&edgerun_json::JsonValue::String(value.to_string()))
+        .unwrap_or_else(|_| "\"\"".to_string())
 }
 
 pub(crate) fn write_all_fd(fd: i32, bytes: &[u8]) {

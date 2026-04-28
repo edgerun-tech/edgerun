@@ -79,8 +79,11 @@ No LAN responses were observed after no-bind provisioning.
 
 ## APK OTA Paths
 
-The TCL Home APK obtains firmware metadata from TCL cloud APIs. The firmware URL is returned in
-`NewVersion.url`.
+The TCL Home APK has two OTA paths:
+
+- BLE/local OTA, mostly used by soundbar code paths, downloads a file from `NewVersion.url`.
+- Cloud/device OTA, used by this AC, exposes firmware version and job state to the app but does not
+  return a package URL in the read-only app API response.
 
 AWS/cloud endpoints:
 
@@ -92,12 +95,37 @@ EMQ/overseas endpoints:
 - `GET /v1/ota/version/get?device_id=<device_id>&cloud_type=<cloud_type>`
 - `GET /v1/ota/device/lastest?device_id=<device_id>&cloud_type=<cloud_type>`
 
-The production AWS base host observed in the APK is:
+The production AWS center host observed in the APK is:
 
 - `https://prod-center.aws.tcljd.com`
 
-Unauthenticated requests return AWS `MissingAuthenticationToken`, so fetching firmware through this
-path requires a bound TCL account session and the actual cloud `device_id`.
+The bound account session resolved the AC's regional IoT API host to:
+
+- `https://prod-sgp.aws.tcljd.com`
+
+For the bound AC:
+
+- Device ID: `DSxvOivgAAE`
+- Product key: `V6VHeDcmZcw78ioZ`
+- Current firmware: `V8-R82CT04-LF1V025.0.1.11`
+- Available firmware: `V8-R82CT04-LF1V206.180.3.52`
+- Protocol type: `1`
+- Latest observed OTA job: `TIMED_OUT`
+
+The authenticated `GET /v3/ota/version/get?device_id=DSxvOivgAAE` response includes
+`newVersion.version`, `newVersion.versionName`, `upgradeType`, and release notes, but no
+`newVersion.url`. The authenticated `GET /v3/ota/device/lastest?device_id=DSxvOivgAAE` response
+includes job/status fields, but no package URL. Read-only probes of likely package/info endpoints
+also returned either the same version metadata or AWS `MissingAuthenticationToken`, which indicates
+an undeployed API Gateway route for those paths rather than a usable firmware endpoint.
+
+Do not call `POST /v3/ota/user/accept` just to look for the blob: in the APK this is the user
+"update now" action and may enqueue a real OTA job for the appliance. If that path is tested, it
+should be treated as a mutating operation and followed by explicit job-status and cancel handling.
+
+On 2026-04-28 the accept path was tested after explicit operator approval. It returned success with
+the known OTA job id, but the app REST status still only exposed job state and did not return a
+package URL. The useful firmware path was AWS IoT, not the TCL REST OTA API.
 
 Required app headers include:
 
@@ -113,6 +141,90 @@ Required app headers include:
 - `timestamp`
 - `nonce`
 - `sign = md5(timestamp + nonce + accessToken)`
+
+## AWS IoT OTA Blob Retrieval
+
+The AC OTA job is an AWS IoT Job that points to an AWS IoT Stream. Direct S3 access is denied to the
+app's Cognito role, but AWS IoT MQTT-based file delivery can read the same object in blocks.
+
+Fresh AWS session discovery:
+
+- `GET https://prod-sgp.aws.tcljd.com/v1/auth/service/loadBalance`
+- Required headers for this `@NoIotToken` endpoint are the app `ssoToken` and
+  `appId: wx6e1af3fa84fbe523`.
+- The response includes `cognitoId`, `cognitoToken`, `mqttEndpoint`, `saasToken`, and `userId`.
+- The returned `cognitoToken` must be exchanged with Cognito using login provider
+  `cognito-identity.amazonaws.com`. Passing it under `tcl_account_dev` fails with
+  `Invalid login token. Can't pass in a Cognito token.`
+
+Observed AWS values:
+
+- Region: `ap-southeast-1`
+- IoT endpoint: `a2qjkbbsk6qn2u-ats.iot.ap-southeast-1.amazonaws.com`
+- Identity pool: `ap-southeast-1:3141be4f-75b0-4bb7-9728-fbaced243dbe`
+- Thing name: `DSxvOivgAAE`
+- Job id: `V6VHeDcmZcw78ioZ_1773384355228_cota`
+
+The AWS IoT job document:
+
+```json
+{
+  "checksum": "63a75f9ed1579c1468673af4f293ec0b",
+  "command": "cota",
+  "fileId": 29,
+  "fileSize": 847738,
+  "imageVer": "V8-R82CT04-LF1V206.180.3.52",
+  "isForce": 0,
+  "otaType": "local",
+  "streamId": "V6VHeDcmZcw78ioZ_V8-R82CT04-LF1V206180352_1773384355228_cota",
+  "versionName": "system"
+}
+```
+
+`DescribeStream` resolves the stream file to:
+
+- Bucket: `420520409389-ap-southeast-1-backend-prod`
+- Key:
+  `ota-overseas-iot/V6VHeDcmZcw78ioZ/V8-R82CT04-LF1V206.180.3.52/18d6d09116f64d4c8d60cc16221cf725/system.bin`
+- File id: `29`
+
+The app Cognito role cannot `s3:GetObject` that key directly. Downloading succeeds through AWS IoT
+MQTT-based file delivery:
+
+- Subscribe: `$aws/things/DSxvOivgAAE/streams/<streamId>/data/json`
+- Subscribe: `$aws/things/DSxvOivgAAE/streams/<streamId>/rejected/json`
+- Publish block requests: `$aws/things/DSxvOivgAAE/streams/<streamId>/get/json`
+
+Example block request:
+
+```json
+{
+  "c": "er-0",
+  "f": 29,
+  "l": 131072,
+  "o": 0,
+  "n": 1
+}
+```
+
+The response contains `p` as base64 payload. Blocks are indexed by `i`. The full blob was retrieved
+as seven blocks.
+
+Retrieved firmware:
+
+- Path: `/tmp/tcl-firmware/mqtt-stream/system.bin`
+- Size: `847738`
+- MD5: `63a75f9ed1579c1468673af4f293ec0b`
+- SHA-256: `c05c752eb511cb1d6ab6ab94faab5f5b708b820c2d74e48c5aec71eca4705fb4`
+
+Initial binary notes:
+
+- Header starts with `THOS`.
+- Version strings include `V8-R82CT04-LF1V206.180.3.52`.
+- Platform strings include `AmebaZII`, `RT8720CF`, and `AmebaZIIRTL8710C`.
+- The image contains TCL/AWS OTA, MQTT, TLS, Wi-Fi, BLE, LAN, and local-control related strings.
+- It is not a mountable archive by `file` or `7z`; treat it as a Realtek Ameba firmware image until
+  a specific unpacker is identified.
 
 ## APK BLE OTA Protocol
 
@@ -267,10 +379,10 @@ writes the response file with mode `0600`.
 
 ## Next Steps
 
-1. Capture a real `/v1/auth/get_bind_code` response from the TCL app session or device logs.
-2. Re-run `diagnose-provision` with the captured bind response JSON.
-3. If the AC joins Wi-Fi, use UDP discovery to obtain local identity fields and then inspect local
+1. Analyze `/tmp/tcl-firmware/mqtt-stream/system.bin` as a Realtek AmebaZII/RTL8720 firmware image.
+2. Search the firmware for local-control protocol strings, BLE service handling, LAN discovery, and
+   UART/control framing.
+3. Capture a real `/v1/auth/get_bind_code` response from the TCL app session or device logs.
+4. Re-run `diagnose-provision` with the captured bind response JSON.
+5. If the AC joins Wi-Fi, use UDP discovery to obtain local identity fields and then inspect local
    control ports.
-4. Put the AC into firmware update mode only after normal local commissioning is understood.
-5. If firmware must come from cloud, obtain the bound TCL `device_id` and an explicit user-approved
-   auth session, then query `NewVersion.url`.

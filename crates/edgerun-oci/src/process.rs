@@ -62,7 +62,7 @@ pub struct ContainerConfig {
     pub mounts: Option<Vec<crate::json::OciMount>>,
     pub masked_paths: Option<Vec<String>>,
     pub readonly_paths: Option<Vec<String>>,
-    pub devices_json: String,
+    pub devices: Vec<OciLinuxDevice>,
     pub rootfs_propagation: Option<String>,
     pub sysctl: Option<alloc::collections::BTreeMap<String, String>>,
     pub additional_gids: Vec<u32>,
@@ -136,7 +136,7 @@ impl ContainerConfig {
             mounts: spec.mounts.clone(),
             masked_paths: linux.masked_paths.clone(),
             readonly_paths: linux.readonly_paths.clone(),
-            devices_json: serialize_devices(linux.devices.as_deref()),
+            devices: linux.devices.clone().unwrap_or_default(),
             rootfs_propagation: linux.rootfs_propagation.clone(),
             sysctl: linux.sysctl.clone(),
             additional_gids: user.additional_gids.unwrap_or_default(),
@@ -154,17 +154,6 @@ impl ContainerConfig {
     /// Returns true if PID namespace is unshared (not joined via path).
     pub fn has_pid_ns(&self) -> bool {
         (self.ns_flags & crate::syscalls::ns::NEWPID) != 0
-    }
-}
-
-// ===========================================================================
-// Serialization helpers
-// ===========================================================================
-
-fn serialize_devices(devices: Option<&[OciLinuxDevice]>) -> String {
-    match devices {
-        Some(devs) => edgerun_json::to_string(devs).unwrap_or_default(),
-        None => String::new(),
     }
 }
 
@@ -232,13 +221,6 @@ fn default_rootless_mapping() -> String {
             format!("0 {} 1\n", uid)
         }
     }
-}
-
-fn deserialize_devices(json: &str) -> Vec<OciLinuxDevice> {
-    if json.is_empty() {
-        return Vec::new();
-    }
-    edgerun_json::from_slice::<Vec<OciLinuxDevice>>(json.as_bytes()).unwrap_or_default()
 }
 
 /// Map an OCI namespace type string to the corresponding CLONE_NEW* flag.
@@ -343,17 +325,23 @@ pub fn setup_container_child(
     cfg: &ContainerConfig,
     terminal_socket_fd: Option<i32>,
 ) -> io::Result<()> {
-    // 1. Unshare namespaces
     do_unshare(cfg.ns_flags)?;
-
-    // 2. Join explicit namespace paths
     join_explicit_namespaces(&cfg.ns_paths)?;
-
-    // 3. UID/GID mapping
     write_uid_map(&cfg.uid_map)?;
     write_gid_map(&cfg.gid_map)?;
+    setup_container_child_common(cfg, terminal_socket_fd, RootfsMode::Rooted)
+}
 
-    // 4. Hostname + domainname
+enum RootfsMode {
+    Rooted,
+    Rootless,
+}
+
+fn setup_container_child_common(
+    cfg: &ContainerConfig,
+    terminal_socket_fd: Option<i32>,
+    rootfs_mode: RootfsMode,
+) -> io::Result<()> {
     let _ = do_set_hostname(&cfg.hostname);
     if let Some(ref domainname) = cfg.domainname {
         let _ = do_set_domainname(domainname);
@@ -363,7 +351,6 @@ pub fn setup_container_child(
     // mount/umount2/pivot_root syscalls that are NOT in the workload allow-list.
     // They will be applied just before exec, after runtime-only setup is done.
 
-    // 8. Resource limits
     for rl in &cfg.rlimits {
         if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
             let _ = do_setrlimit(resource, rl.soft, rl.hard);
@@ -375,58 +362,59 @@ pub fn setup_container_child(
         }
     }
 
-    // 8b. Scheduler configuration (OCI 1.0.2 process.scheduler)
     if let Some(ref sched) = cfg.scheduler {
         apply_scheduler(sched)?;
     }
 
-    // 8c. I/O priority (OCI 1.1.0)
     if let Some(ref ioprio) = cfg.io_priority {
         let _ = apply_io_priority(ioprio);
     }
 
-    // 9. OOM score — always write, even for 0 (spec requires it)
     let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
 
-    // 10. AppArmor
     if let Some(ref profile) = cfg.apparmor_profile {
         let _ = fs::write("/proc/self/attr/apparmor/exec", format!("exec {}", profile));
     }
 
-    // 11. SELinux label
     if let Some(ref label) = cfg.selinux_label {
         let _ = fs::write("/proc/self/attr/exec", label.as_bytes());
     }
 
-    // 12. Umask
     if let Some(mask) = cfg.umask {
         do_umask(mask);
     }
 
-    // 13. Rootfs
-    let devices = deserialize_devices(&cfg.devices_json);
+    let devices = cfg.devices.as_slice();
     let mount_label = cfg.mount_label.as_deref();
-    setup_rootfs(
-        &cfg.root,
-        cfg.mounts.as_deref(),
-        cfg.masked_paths.as_deref(),
-        cfg.readonly_paths.as_deref(),
-        if devices.is_empty() {
-            None
-        } else {
-            Some(&devices)
-        },
-        mount_label,
-    )?;
+    let devices = if devices.is_empty() {
+        None
+    } else {
+        Some(devices)
+    };
+    match rootfs_mode {
+        RootfsMode::Rooted => setup_rootfs(
+            &cfg.root,
+            cfg.mounts.as_deref(),
+            cfg.masked_paths.as_deref(),
+            cfg.readonly_paths.as_deref(),
+            devices,
+            mount_label,
+        )?,
+        RootfsMode::Rootless => setup_rootfs_rootless(
+            &cfg.root,
+            cfg.mounts.as_deref(),
+            cfg.masked_paths.as_deref(),
+            cfg.readonly_paths.as_deref(),
+            devices,
+            mount_label,
+        )
+        .map_err(|error| io::Error::new(error.kind(), format!("setup rootfs failed: {error}")))?,
+    }
 
-    // 14. Rootfs propagation
     set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
 
-    // 15. Sysctl
     apply_sysctl(cfg.sysctl.as_ref())?;
 
-    // 15b. Terminal / PTY allocation (must happen after /dev is mounted and
-    // before privilege drop — posix_openpt and grantpt need root access)
     if cfg.terminal {
         let master_fd = setup_terminal()?;
         if let Some(socket_fd) = terminal_socket_fd {
@@ -435,7 +423,6 @@ pub fn setup_container_child(
         }
     }
 
-    // 16. Security, capabilities, and supplementary groups.
     apply_security_hardening(cfg.no_new_privs)?;
     set_capabilities(
         cfg.cap_effective.as_deref(),
@@ -449,14 +436,9 @@ pub fn setup_container_child(
         set_supplementary_gids(&cfg.additional_gids);
     }
 
-    // 17. Drop GID then UID
     do_setgid(cfg.gid)?;
     do_setuid(cfg.uid)?;
 
-    // 18. Seccomp — applied AFTER rootfs and privilege drop.
-    // Rootfs setup needs mount/umount2/pivot_root syscalls that are NOT in the
-    // workload allow-list. Seccomp requires no_new_privs (set at step 6).
-    // Returns Option<listener_fd> when NOTIFY action is used.
     let _listener_fd =
         apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
             io::Error::new(
@@ -467,10 +449,7 @@ pub fn setup_container_child(
                 ),
             )
         })?;
-    // If NOTIFY is used, listener_fd is returned. The runtime doesn't handle
-    // seccomp user notifications — the fd is inherited by the workload.
 
-    // 19. Intel RDT (Resource Director Technology)
     if let Some(ref rdt) = cfg.intel_rdt {
         let _ = setup_intel_rdt(rdt);
     }
@@ -764,144 +743,7 @@ pub fn setup_container_child_rootless(
     })?;
 
     // Skip uid/gid map writing — parent already wrote these via /proc/<pid>/
-
-    // 3. Hostname + domainname
-    let _ = do_set_hostname(&cfg.hostname);
-    if let Some(ref domainname) = cfg.domainname {
-        let _ = do_set_domainname(domainname);
-    }
-
-    // Security hardening is applied after rootfs setup because mounts and
-    // pivot_root still need the runtime's full namespace privileges.
-
-    // 6. Resource limits
-    for rl in &cfg.rlimits {
-        if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
-            let _ = do_setrlimit(resource, rl.soft, rl.hard);
-        } else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("invalid RLIMIT type: {}", rl.ns_type),
-            ));
-        }
-    }
-
-    // 6b. Scheduler configuration
-    if let Some(ref sched) = cfg.scheduler {
-        apply_scheduler(sched).map_err(|error| {
-            io::Error::new(error.kind(), format!("apply scheduler failed: {error}"))
-        })?;
-    }
-
-    // 6c. I/O priority
-    if let Some(ref ioprio) = cfg.io_priority {
-        let _ = apply_io_priority(ioprio);
-    }
-
-    // 7. OOM score
-    let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
-
-    // 8. AppArmor
-    if let Some(ref profile) = cfg.apparmor_profile {
-        let _ = fs::write("/proc/self/attr/apparmor/exec", format!("exec {}", profile));
-    }
-
-    // 9. SELinux label
-    if let Some(ref label) = cfg.selinux_label {
-        let _ = fs::write("/proc/self/attr/exec", label.as_bytes());
-    }
-
-    // 10. Umask
-    if let Some(mask) = cfg.umask {
-        do_umask(mask);
-    }
-
-    // 11. Rootfs
-    let devices = deserialize_devices(&cfg.devices_json);
-    let mount_label = cfg.mount_label.as_deref();
-    setup_rootfs_rootless(
-        &cfg.root,
-        cfg.mounts.as_deref(),
-        cfg.masked_paths.as_deref(),
-        cfg.readonly_paths.as_deref(),
-        if devices.is_empty() {
-            None
-        } else {
-            Some(&devices)
-        },
-        mount_label,
-    )
-    .map_err(|error| io::Error::new(error.kind(), format!("setup rootfs failed: {error}")))?;
-
-    // 12. Rootfs propagation
-    set_rootfs_propagation(cfg.rootfs_propagation.as_deref()).map_err(|error| {
-        io::Error::new(
-            error.kind(),
-            format!("set rootfs propagation failed: {error}"),
-        )
-    })?;
-
-    // 13. Sysctl
-    apply_sysctl(cfg.sysctl.as_ref())
-        .map_err(|error| io::Error::new(error.kind(), format!("apply sysctl failed: {error}")))?;
-
-    // 13b. Terminal / PTY allocation
-    if cfg.terminal {
-        let master_fd = setup_terminal().map_err(|error| {
-            io::Error::new(error.kind(), format!("setup terminal failed: {error}"))
-        })?;
-        if let Some(socket_fd) = terminal_socket_fd {
-            send_fd(socket_fd, master_fd).map_err(|error| {
-                io::Error::new(error.kind(), format!("send terminal fd failed: {error}"))
-            })?;
-            unsafe { libc::close(master_fd) };
-        }
-    }
-
-    // 14. Security, capabilities, and supplementary groups.
-    apply_security_hardening(cfg.no_new_privs).map_err(|error| {
-        io::Error::new(
-            error.kind(),
-            format!("apply security hardening failed: {error}"),
-        )
-    })?;
-    set_capabilities(
-        cfg.cap_effective.as_deref(),
-        cfg.cap_permitted.as_deref(),
-        cfg.cap_inheritable.as_deref(),
-        cfg.cap_bounding.as_deref(),
-        cfg.cap_ambient.as_deref(),
-    )
-    .map_err(|error| io::Error::new(error.kind(), format!("set capabilities failed: {error}")))?;
-
-    if !cfg.additional_gids.is_empty() {
-        set_supplementary_gids(&cfg.additional_gids);
-    }
-
-    // 15. Drop GID then UID
-    do_setgid(cfg.gid)
-        .map_err(|error| io::Error::new(error.kind(), format!("setgid failed: {error}")))?;
-    do_setuid(cfg.uid)
-        .map_err(|error| io::Error::new(error.kind(), format!("setuid failed: {error}")))?;
-
-    // 16. Seccomp
-    let _listener_fd =
-        apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "seccomp filter failed to apply: {}. Container startup aborted for security.",
-                    e
-                ),
-            )
-        })?;
-
-    // 17. Intel RDT
-    if let Some(ref rdt) = cfg.intel_rdt {
-        let _ = setup_intel_rdt(rdt);
-    }
-
-    Ok(())
+    setup_container_child_common(cfg, terminal_socket_fd, RootfsMode::Rootless)
 }
 
 fn send_fd(sock_fd: i32, fd: i32) -> io::Result<()> {

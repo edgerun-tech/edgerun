@@ -44,7 +44,7 @@ pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
     println!(
         "{}",
         edgerun_json::to_string_pretty(&output)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
     );
     Ok(())
 }
