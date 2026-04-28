@@ -1,11 +1,11 @@
 //! OCI-compatible CLI for edgerun-oci — container runtime + registry.
 
-use std::os::raw::c_char;
-
 use edgerun_oci::cli::{
     dispatch_command, first_command, is_container_command, parse_args, print_usage,
     split_cli_prefix, RUN_VALUE_OPTIONS,
 };
+use edgerun_oci::rootless::{get_current_username, parse_subid_file, SubIdRange};
+use std::os::raw::c_char;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -46,66 +46,34 @@ fn main() {
     }
 }
 
-// ---------- Rootless re-exec (copied from original ert.rs) ----------
+// ---------- Rootless re-exec ----------
 
-fn parse_subid_for_user(path: &str, username: &str, uid: u32) -> Vec<(u32, u32)> {
-    let content = match std::fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
+fn parse_subid_for_user(path: &str, username: &str, uid: u32) -> Vec<SubIdRange> {
     let uidstr = format!("{}", uid);
-    let mut ranges = Vec::new();
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let parts: Vec<&str> = line.split(':').collect();
-        if parts.len() != 3 {
-            continue;
-        }
-        let name = parts[0].trim();
-        if name != username && name != "ALL" && name != uidstr {
-            continue;
-        }
-        if let (Ok(start), Ok(count)) = (
-            parts[1].trim().parse::<u32>(),
-            parts[2].trim().parse::<u32>(),
-        ) {
-            ranges.push((start, count));
-        }
-    }
-    ranges
+    parse_subid_file(std::path::Path::new(path))
+        .map(|ranges| {
+            ranges
+                .into_iter()
+                .filter(|range| {
+                    range.name == username || range.name == "ALL" || range.name == uidstr
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
-fn get_current_username() -> Option<String> {
-    if let Ok(user) = std::env::var("USER") {
-        return Some(user);
-    }
-    let uid = unsafe { libc::getuid() };
-    if let Ok(content) = std::fs::read_to_string("/etc/passwd") {
-        for line in content.lines() {
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 3 {
-                if let Ok(entry_uid) = parts[2].parse::<u32>() {
-                    if entry_uid == uid {
-                        return Some(parts[0].to_string());
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-fn try_newuidmap(pid: i32, host_uid: u32, subuids: &[(u32, u32)]) -> bool {
+fn try_newuidmap(pid: i32, host_uid: u32, subuids: &[SubIdRange]) -> bool {
     let uid_result = std::process::Command::new("newuidmap")
         .arg(format!("{}", pid))
         .arg("0")
         .arg(format!("{}", host_uid))
         .arg("1")
-        .args(subuids.iter().flat_map(|(start, count)| {
-            vec![format!("{}", 1), format!("{}", start), format!("{}", count)]
+        .args(subuids.iter().flat_map(|range| {
+            vec![
+                format!("{}", 1),
+                format!("{}", range.start),
+                format!("{}", range.count),
+            ]
         }))
         .output();
     let tool = match uid_result {
@@ -124,8 +92,12 @@ fn try_newuidmap(pid: i32, host_uid: u32, subuids: &[(u32, u32)]) -> bool {
             .arg("0")
             .arg(format!("{}", host_gid))
             .arg("1")
-            .args(subgids.iter().flat_map(|(start, count)| {
-                vec![format!("{}", 1), format!("{}", start), format!("{}", count)]
+            .args(subgids.iter().flat_map(|range| {
+                vec![
+                    format!("{}", 1),
+                    format!("{}", range.start),
+                    format!("{}", range.count),
+                ]
             }))
             .output();
     }
@@ -320,7 +292,7 @@ fn cleanup_rootless_run_rm(args: &[String]) {
         return;
     }
 
-    let mut root = opts.root.unwrap_or_else(default_rootless_state_dir);
+    let mut root = opts.root.unwrap_or_else(edgerun_oci::state::state_root_dir);
     let (prefix, _, _) = split_cli_prefix(&cmd_args, RUN_VALUE_OPTIONS);
     let mut rm = false;
     let mut name = None::<String>;
@@ -355,19 +327,6 @@ fn cleanup_rootless_run_rm(args: &[String]) {
     } else {
         cleanup_dead_run_states(&mut root);
     }
-}
-
-fn default_rootless_state_dir() -> std::path::PathBuf {
-    if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
-        return std::path::Path::new(&xdg).join("edgerun-oci");
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return std::path::Path::new(&home)
-            .join(".local")
-            .join("state")
-            .join("edgerun-oci");
-    }
-    std::env::temp_dir().join("edgerun-oci")
 }
 
 fn cleanup_dead_run_states(root: &mut std::path::PathBuf) {

@@ -50,12 +50,7 @@ fn verify_blob_digest_valid() {
     f.write_all(content).unwrap();
     f.sync_all().unwrap();
 
-    // Calculate expected SHA256
-    use edgerun_crypto::sha2::Digest;
-    let mut hasher = edgerun_crypto::sha2::Sha256::new();
-    hasher.update(content);
-    let hash = hasher.finalize();
-    let expected = format!("sha256:{}", bytes_to_hex(&hash));
+    let expected = crate::sha256_digest_reference(content);
 
     let result = verify_blob_digest(&blob_path, &expected);
     assert!(result.is_ok(), "digest mismatch: {:?}", result);

@@ -38,6 +38,8 @@ pub mod validate;
 
 mod registry {
     pub mod auth;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    pub(crate) mod bundle_push;
     #[cfg(any(
         feature = "registry-client",
         all(feature = "std", not(target_os = "none"))
@@ -51,6 +53,12 @@ mod registry {
     pub(crate) mod layer;
     pub mod manifest;
     pub(crate) mod oci_spec;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    pub(crate) mod pull;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    pub(crate) mod push_manifest;
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    pub(crate) mod tar_push;
     #[cfg(any(
         feature = "registry-client",
         all(feature = "std", not(target_os = "none"))
@@ -87,12 +95,23 @@ pub mod hooks;
 pub mod init;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod lifecycle;
+mod linux_catalog;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod process;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub(crate) mod process_config;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub(crate) mod process_exec;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod rootfs;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod rootfs_copy;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub(crate) mod rootfs_devices;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub(crate) mod rootfs_idmap;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod rootfs_layers;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod rootless;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -101,6 +120,8 @@ pub mod seccomp;
 pub mod state;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod syscalls;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub(crate) mod terminal;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod userns;
 
@@ -170,7 +191,7 @@ pub use image_plan::{
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use init::fork_and_init;
 pub use layer_pipeline::{
-    apply_layer_chunks, bytes_to_hex, format_digest, sha256_layer_digest,
+    apply_layer_chunks, bytes_to_hex, format_digest, sha256_digest_reference, sha256_layer_digest,
     validate_layer_descriptor, LayerApplyReport, LayerDigest, LayerPipelineError, LayerSink,
     Sha256LayerDigest,
 };
@@ -223,8 +244,6 @@ pub use registry::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
     )
 ))]
 pub use registry::client::EdgeFsImagePullReport;
-#[cfg(all(feature = "std", not(target_os = "none")))]
-pub use registry::client::{ImagePullReport, PullProgress};
 #[cfg(any(
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))
@@ -245,6 +264,8 @@ pub use registry::manifest::{
     ImageManifest, LayerDescriptor, ManifestDescriptor, PlatformDescriptor, SingleManifest,
 };
 pub use registry::oci_spec::{generate_oci_spec, generate_oci_spec_model};
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub use registry::pull::{ImagePullReport, PullProgress};
 
 pub const DEFAULT_NAMESPACES: &[(&str, Option<&str>)] = &[
     ("mount", None),

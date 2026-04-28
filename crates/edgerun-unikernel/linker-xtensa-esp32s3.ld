@@ -18,19 +18,18 @@ MEMORY
 
 SECTIONS
 {
-    .text : ALIGN(4) {
+    .iram_text : ALIGN(4) {
         KEEP(*(.text.entry))
+    } > iram_seg
+
+    .text : ALIGN(4) {
         *(.literal .literal.*)
         *(.text .text.*)
     } > iram_seg
 
-    .rodata : ALIGN(4) {
+    .appdesc : ALIGN(4) {
         KEEP(*(.flash.appdesc))
     } > drom_seg
-
-    .irom_dummy : ALIGN(4) {
-        LONG(0)
-    } > irom_seg
 
     .data : ALIGN(4) {
         *(.rodata .rodata.*)
@@ -50,6 +49,10 @@ SECTIONS
     _stack = .;
 
     _end = .;
+
+    .irom_dummy : ALIGN(4) {
+        LONG(0)
+    } > irom_seg
 
     /DISCARD/ : {
         *(.comment)

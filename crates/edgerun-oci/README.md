@@ -95,7 +95,7 @@ delete  →  (poststop + cgroup cleanup)                                     →
 | `copy_runtime_libs` | Dynamic linker/libc copied into rootfs |
 | `runner_id_format` | Container ID format validation |
 | **`device_uid_gid_ownership_in_container`** | Device chown() after mknod() — runs real container with spec device uid/gid |
-| **`time_namespace_accepted_by_validator`** | "time" in KNOWN_NAMESPACES — validates spec with time namespace |
+| **`time_namespace_accepted_by_validator`** | "time" in the Linux namespace catalog — validates spec with time namespace |
 | **`cgroup_weight_device_per_device_written`** | weightDevice global weight written to cgroup (per-device needs BFQ scheduler) |
 
 Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -- --test-threads=1`
@@ -180,7 +180,7 @@ Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -
 |---------|-------------|-----------------|--------|
 | `linux.devices[].uid/gid` | `chown()` after `mknod()` in `create_spec_device()` | `device_uid_gid_ownership_in_container` | ✅ Applied + Tested |
 | `blockIO.weightDevice` | Per-device writes to `io.weight` / `io.bfq.weight` via append | `cgroup_weight_device_per_device_written` | ✅ Code applied (kernel needs BFQ for per-device) |
-| `linux.time` namespace | `"time"` in `KNOWN_NAMESPACES`, flag mapped | `time_namespace_accepted_by_validator` | ✅ Applied + Tested |
+| `linux.time` namespace | Accepted by validation catalog; no clone flag is applied yet | `time_namespace_accepted_by_validator` | ⚠️ Protocol accepted, runtime not applied |
 | `process.consoleSize` | `TIOCSWINSZ` ioctl after PTY allocation | — | ✅ Code applied |
 | `linux.personality` | `personality(2)` syscall in `setup_container_child` | — | ✅ Applied |
 | `seccomp.listenerMetadata` | Written to `<bundle>/.edgerun-seccomp-metadata` | — | ✅ Applied |

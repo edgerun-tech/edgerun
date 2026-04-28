@@ -164,6 +164,10 @@ pub fn format_digest(algorithm: &str, bytes: &[u8]) -> String {
     format!("{algorithm}:{}", bytes_to_hex(bytes))
 }
 
+pub fn sha256_digest_reference(bytes: &[u8]) -> String {
+    format_digest("sha256", &edgerun_crypto::sha256(bytes))
+}
+
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
     edgerun_encoding::hex::bytes_to_hex(bytes)
 }

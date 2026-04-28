@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::cli::display::format_bytes;
 use crate::cli::{default_images_dir, invalid_input, parse_cli_args};
 use edgerun_clap::cli::Action;
 use edgerun_clap::{Arg, Command};
@@ -123,7 +124,7 @@ fn print_images_table(images: &[LocalImage]) {
             "{:<36} {:<16} {:<12} {}",
             image.repository,
             image.tag,
-            format_bytes(image.size),
+            format_bytes(image.size, ""),
             image.path.display()
         );
     }
@@ -144,19 +145,4 @@ fn print_images_json(images: &[LocalImage]) {
         .collect::<Vec<_>>();
     let output = edgerun_json::JsonValue::Array(entries);
     println!("{}", edgerun_json::to_string(&output).unwrap_or_default());
-}
-
-fn format_bytes(bytes: u64) -> String {
-    const KIB: u64 = 1024;
-    const MIB: u64 = KIB * 1024;
-    const GIB: u64 = MIB * 1024;
-    if bytes >= GIB {
-        format!("{:.1}GiB", bytes as f64 / GIB as f64)
-    } else if bytes >= MIB {
-        format!("{:.1}MiB", bytes as f64 / MIB as f64)
-    } else if bytes >= KIB {
-        format!("{:.1}KiB", bytes as f64 / KIB as f64)
-    } else {
-        format!("{bytes}B")
-    }
 }

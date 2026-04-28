@@ -9,13 +9,14 @@ use std::fs;
 use std::io;
 use std::os::unix::io::AsRawFd;
 
+use crate::linux_catalog::{namespace_flag, rlimit_number};
+pub use crate::process_config::ContainerConfig;
 use crate::rootfs::{apply_sysctl, set_rootfs_propagation, setup_rootfs, setup_rootfs_rootless};
 #[allow(unused_imports)]
 use crate::seccomp::apply_seccomp_from_spec;
-use crate::spec::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
-use crate::syscalls::{
-    do_set_hostname, do_setns, do_setrlimit, do_umask, do_unshare, rlimit_name_to_int,
-};
+use crate::spec::OciSpec;
+use crate::syscalls::{do_set_hostname, do_setns, do_setrlimit, do_umask, do_unshare};
+use crate::terminal::{send_fd, setup_pty_stdio};
 use crate::userns::{
     apply_security_hardening, do_setgid, do_setuid, set_capabilities, set_supplementary_gids,
 };
@@ -38,275 +39,9 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))
 }
 
-/// Extract all container-relevant config from a spec into a flat struct
-/// that can be cloned into a `pre_exec` closure.
-pub struct ContainerConfig {
-    pub ns_flags: i32,
-    pub ns_paths: String,
-    pub uid_map: String,
-    pub gid_map: String,
-    pub hostname: String,
-    pub domainname: Option<String>,
-    pub no_new_privs: bool,
-    pub cap_effective: Option<Vec<String>>,
-    pub cap_permitted: Option<Vec<String>>,
-    pub cap_inheritable: Option<Vec<String>>,
-    pub cap_bounding: Option<Vec<String>>,
-    pub cap_ambient: Option<Vec<String>>,
-    pub rlimits: Vec<crate::spec::OciRlimit>,
-    pub oom_score_adj: i64,
-    pub apparmor_profile: Option<String>,
-    pub selinux_label: Option<String>,
-    pub umask: Option<u32>,
-    pub root: OciRoot,
-    pub mounts: Option<Vec<crate::spec::OciMount>>,
-    pub masked_paths: Option<Vec<String>>,
-    pub readonly_paths: Option<Vec<String>>,
-    pub devices: Vec<OciLinuxDevice>,
-    pub rootfs_propagation: Option<String>,
-    pub sysctl: Option<alloc::collections::BTreeMap<String, String>>,
-    pub additional_gids: Vec<u32>,
-    pub uid: u32,
-    pub gid: u32,
-    pub seccomp: Option<crate::spec::OciLinuxSeccomp>,
-    pub mount_label: Option<String>,
-    pub scheduler: Option<crate::spec::OciScheduler>,
-    pub intel_rdt: Option<crate::spec::OciLinuxIntelRdt>,
-    pub io_priority: Option<crate::spec::OciIoPriority>,
-    pub terminal: bool,
-    pub bundle_path: String,
-}
-
-impl ContainerConfig {
-    /// Extract all config needed for pre_exec from an OCI spec.
-    pub fn from_spec(spec: &OciSpec) -> io::Result<Self> {
-        let root = spec
-            .root
-            .clone()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no root in OCI spec"))?;
-
-        let linux = spec.linux.clone().unwrap_or_default();
-        let process = spec.process.clone().unwrap_or_default();
-        let user = process.user.clone().unwrap_or_default();
-
-        let ns_list = linux
-            .namespaces
-            .clone()
-            .unwrap_or_else(crate::default_namespaces);
-        let ns_flags = crate::namespace_flags(&ns_list);
-
-        // Validate namespace types — reject unknown types
-        for ns in &ns_list {
-            if ns.path.is_none()
-                && !crate::validate::KNOWN_NAMESPACES.contains(&ns.ns_type.as_str())
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unknown namespace type: {}", ns.ns_type),
-                ));
-            }
-        }
-
-        let ns_paths = serialize_ns_paths(linux.namespaces.as_deref());
-        let uid_map = format_mapping(linux.uid_mappings.as_deref());
-        let gid_map = format_mapping(linux.gid_mappings.as_deref());
-
-        let caps = process.capabilities.clone().unwrap_or_default();
-
-        Ok(Self {
-            ns_flags,
-            ns_paths,
-            uid_map,
-            gid_map,
-            hostname: spec.hostname.clone().unwrap_or_else(|| "edgerun".into()),
-            domainname: spec.domainname.clone(),
-            no_new_privs: process.no_new_privileges.unwrap_or(true),
-            cap_effective: caps.effective,
-            cap_permitted: caps.permitted,
-            cap_inheritable: caps.inheritable,
-            cap_bounding: caps.bounding,
-            cap_ambient: caps.ambient,
-            rlimits: process.rlimits.clone().unwrap_or_default(),
-            oom_score_adj: process.oom_score_adj.unwrap_or(0),
-            apparmor_profile: process.apparmor_profile,
-            selinux_label: process.selinux_label,
-            umask: user.umask,
-            bundle_path: root.path.clone(),
-            root,
-            mounts: spec.mounts.clone(),
-            masked_paths: linux.masked_paths.clone(),
-            readonly_paths: linux.readonly_paths.clone(),
-            devices: linux.devices.clone().unwrap_or_default(),
-            rootfs_propagation: linux.rootfs_propagation.clone(),
-            sysctl: linux.sysctl.clone(),
-            additional_gids: user.additional_gids.unwrap_or_default(),
-            uid: user.uid.unwrap_or(0),
-            gid: user.gid.unwrap_or(0),
-            seccomp: linux.seccomp,
-            mount_label: linux.mount_label.clone(),
-            scheduler: process.scheduler.clone(),
-            intel_rdt: linux.intel_rdt.clone(),
-            io_priority: process.io_priority.clone(),
-            terminal: process.terminal.unwrap_or(false),
-        })
-    }
-
-    /// Returns true if PID namespace is unshared (not joined via path).
-    pub fn has_pid_ns(&self) -> bool {
-        (self.ns_flags & crate::syscalls::ns::NEWPID) != 0
-    }
-}
-
-fn serialize_ns_paths(namespaces: Option<&[crate::spec::OciNamespace]>) -> String {
-    match namespaces {
-        Some(ns) => ns
-            .iter()
-            .filter_map(|n| {
-                n.path
-                    .as_ref()
-                    .filter(|path| !path.is_empty())
-                    .map(|path| format!("{}:{}", n.ns_type, path))
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
-        None => String::new(),
-    }
-}
-
-fn format_mapping(mappings: Option<&[OciIdMapping]>) -> String {
-    if let Some(maps) = mappings {
-        if !maps.is_empty() {
-            return maps
-                .iter()
-                .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
-                .collect();
-        }
-    }
-    // No explicit mappings — generate rootless defaults
-    default_rootless_mapping()
-}
-
-/// Generate a default uid/gid mapping for rootless mode.
-///
-/// Uses subuid/subgid ranges from /etc/subuid and /etc/subgid.
-/// The kernel only allows uid_map entries within the caller's configured subuid range.
-/// When running as root, maps container root to host nobody.
-///
-/// Follows the Podman mapping pattern:
-/// - Container UID 0 → host's real UID (size 1)
-/// - Container UID 1..N → subuid ranges
-fn default_rootless_mapping() -> String {
-    let uid = unsafe { libc::getuid() };
-    if uid == 0 {
-        // Root mode: map container root to host nobody (minimal mapping)
-        return "0 65534 1\n".to_string();
-    }
-
-    // Rootless: use subuid/subgid ranges — the kernel REQUIRES all mapped
-    // host UIDs to be within the caller's configured subuid range.
-    match crate::rootless::get_current_user_subuids() {
-        Ok(subuids) if !subuids.is_empty() => {
-            // Map container uid 0 to the host user's own UID,
-            // then container 1..N to the subuid ranges
-            let mut map = format!("0 {} 1\n", uid);
-            for range in &subuids {
-                // Container IDs start at 1 (0 is reserved for the user's own UID)
-                map.push_str(&format!("1 {} {}\n", range.start, range.count));
-            }
-            map
-        }
-        _ => {
-            // No subuid ranges — map only the host user's own UID (size 1).
-            // This works because the kernel allows mapping your own uid.
-            format!("0 {} 1\n", uid)
-        }
-    }
-}
-
 /// Map an OCI namespace type string to the corresponding CLONE_NEW* flag.
 pub fn ns_type_to_flag(ns_type: &str) -> Option<i32> {
-    use crate::syscalls::ns;
-    match ns_type {
-        "mount" => Some(ns::NEWNS),
-        "cgroup" => Some(ns::NEWCGROUP),
-        "uts" => Some(ns::NEWUTS),
-        "ipc" => Some(ns::NEWIPC),
-        "user" => Some(ns::NEWUSER),
-        "pid" => Some(ns::NEWPID),
-        "network" => Some(ns::NEWNET),
-        _ => None,
-    }
-}
-
-// ===========================================================================
-// Terminal / PTY support
-// ===========================================================================
-
-/// Allocate a pseudo-terminal and connect it to stdin/stdout/stderr.
-///
-/// Opens `/dev/ptmx`, grants/unlocks the slave, then dups it to fds 0, 1, 2.
-/// The master fd is left open (it will be inherited by the exec'd workload).
-pub fn setup_terminal() -> io::Result<i32> {
-    use std::os::raw::c_char;
-    use std::os::raw::c_int;
-
-    extern "C" {
-        fn posix_openpt(flags: c_int) -> c_int;
-        fn grantpt(fd: c_int) -> c_int;
-        fn unlockpt(fd: c_int) -> c_int;
-        fn ptsname(fd: c_int) -> *const c_char;
-    }
-
-    // Open master PTY
-    let master_fd = unsafe { posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
-    if master_fd < 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    // Grant access to slave
-    if unsafe { grantpt(master_fd) } != 0 {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Unlock slave
-    if unsafe { unlockpt(master_fd) } != 0 {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Get slave path and open it
-    let slave_path = unsafe { ptsname(master_fd) };
-    if slave_path.is_null() {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Open slave PTY
-    let slave_fd = unsafe { libc::open(slave_path, libc::O_RDWR) };
-    if slave_fd < 0 {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Set controlling terminal
-    unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as _, 0) };
-
-    // Dup slave to stdin/stdout/stderr
-    unsafe { libc::dup2(slave_fd, libc::STDIN_FILENO) };
-    unsafe { libc::dup2(slave_fd, libc::STDOUT_FILENO) };
-    unsafe { libc::dup2(slave_fd, libc::STDERR_FILENO) };
-
-    // Close original slave fd (stdin/stdout/stderr are now the slave)
-    if slave_fd > 2 {
-        unsafe { libc::close(slave_fd) };
-    }
-
-    Ok(master_fd)
+    namespace_flag(ns_type)
 }
 
 // ===========================================================================
@@ -352,7 +87,7 @@ fn setup_container_child_common(
     // They will be applied just before exec, after runtime-only setup is done.
 
     for rl in &cfg.rlimits {
-        if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
+        if let Some(resource) = rlimit_number(&rl.ns_type) {
             let _ = do_setrlimit(resource, rl.soft, rl.hard);
         } else {
             return Err(io::Error::new(
@@ -416,7 +151,7 @@ fn setup_container_child_common(
     apply_sysctl(cfg.sysctl.as_ref())?;
 
     if cfg.terminal {
-        let master_fd = setup_terminal()?;
+        let master_fd = setup_pty_stdio()?;
         if let Some(socket_fd) = terminal_socket_fd {
             send_fd(socket_fd, master_fd)?;
             unsafe { libc::close(master_fd) };
@@ -744,42 +479,6 @@ pub fn setup_container_child_rootless(
 
     // Skip uid/gid map writing — parent already wrote these via /proc/<pid>/
     setup_container_child_common(cfg, terminal_socket_fd, RootfsMode::Rootless)
-}
-
-fn send_fd(sock_fd: i32, fd: i32) -> io::Result<()> {
-    let mut msg: libc::msghdr = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-    let cmsg_space = unsafe { libc::CMSG_SPACE(std::mem::size_of::<i32>() as u32) as usize };
-    let mut cmsg_buf = vec![0u8; cmsg_space];
-    let fd_to_send = fd;
-    let iov = libc::iovec {
-        iov_base: &fd_to_send as *const _ as *mut libc::c_void,
-        iov_len: std::mem::size_of::<i32>(),
-    };
-
-    msg.msg_iov = &iov as *const _ as *mut libc::iovec;
-    msg.msg_iovlen = 1;
-    msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-    msg.msg_controllen = cmsg_space as _;
-
-    let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
-    if cmsg.is_null() {
-        return Err(io::Error::other(
-            "failed to allocate terminal fd control message",
-        ));
-    }
-    unsafe {
-        (*cmsg).cmsg_level = libc::SOL_SOCKET;
-        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-        (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<i32>() as u32) as _;
-        std::ptr::copy_nonoverlapping(&fd as *const i32, libc::CMSG_DATA(cmsg) as *mut i32, 1);
-    }
-
-    let ret = unsafe { libc::sendmsg(sock_fd, &msg, 0) };
-    if ret < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
 }
 
 fn fork_into_pid_namespace() -> io::Result<()> {

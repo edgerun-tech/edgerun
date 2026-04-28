@@ -6,19 +6,33 @@
 //! - Overlay whiteout char device handling (0:0 device check)
 
 use crate::prelude::*;
+pub use crate::rootfs_layers::{apply_whiteouts, build_rootfs};
 use std::ffi::CString;
 use std::fs;
 use std::io;
 use std::os::raw::c_int;
 use std::os::raw::c_ulong;
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 
+use crate::rootfs_devices::create_rootfs_devices;
+use crate::rootfs_idmap::setup_idmapped_mount;
 use crate::spec::{OciLinuxDevice, OciMount, OciRoot};
 use crate::syscalls::{
-    chown, do_mount, do_mount_setattr, do_move_mount, do_open_tree, do_pivot_root, do_umount2,
-    makedev, mknod, mount_attr, move_mount, ms, open_tree, MountAttr, MNT_DETACH, S_IFCHR,
+    do_mount, do_mount_setattr, do_pivot_root, do_umount2, mount_attr, ms, MountAttr, MNT_DETACH,
 };
+
+fn c_string(value: &str) -> io::Result<CString> {
+    CString::new(value).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))
+}
+
+fn libc_unit(ret: c_int) -> io::Result<()> {
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
 
 // ===========================================================================
 // Mount helpers
@@ -59,6 +73,10 @@ fn is_bind_mount(mount: &OciMount) -> bool {
 }
 
 fn destination_under_rootfs(rootfs: &Path, destination: &str) -> io::Result<PathBuf> {
+    Ok(rootfs.join(rootfs_relative_destination(destination)?))
+}
+
+fn rootfs_relative_destination(destination: &str) -> io::Result<PathBuf> {
     let dest = Path::new(destination);
     let mut relative = PathBuf::new();
     for component in dest.components() {
@@ -79,7 +97,7 @@ fn destination_under_rootfs(rootfs: &Path, destination: &str) -> io::Result<Path
             }
         }
     }
-    Ok(rootfs.join(relative))
+    Ok(relative)
 }
 
 fn setup_bind_mount_before_pivot(rootfs: &Path, mount: &OciMount) -> io::Result<()> {
@@ -140,8 +158,7 @@ fn setup_bind_mount_before_pivot(rootfs: &Path, mount: &OciMount) -> io::Result<
 
 fn remount_bind_readonly(target: &str, flags: c_ulong) -> io::Result<()> {
     let target_str = target;
-    let target =
-        CString::new(target_str).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let target = c_string(target_str)?;
     let ret = unsafe {
         libc::mount(
             std::ptr::null(),
@@ -151,10 +168,7 @@ fn remount_bind_readonly(target: &str, flags: c_ulong) -> io::Result<()> {
             std::ptr::null(),
         )
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        let remount_error = io::Error::last_os_error();
+    libc_unit(ret).or_else(|remount_error| {
         let attr = MountAttr {
             attr_set: mount_attr::RDONLY,
             attr_clr: 0,
@@ -162,79 +176,15 @@ fn remount_bind_readonly(target: &str, flags: c_ulong) -> io::Result<()> {
             userns_fd: 0,
         };
         do_mount_setattr(libc::AT_FDCWD, target_str, &attr, 0).map_err(|_| remount_error)
-    }
+    })
 }
 
 fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
-    let dest = Path::new(&mount.destination);
-
     // Validate: mount destination must be absolute, or a relative path that
     // doesn't escape rootfs (OCI 1.2.0 allows relative mount destinations).
     // Relative paths are resolved against "/" (the container rootfs).
-    if !dest.is_absolute() {
-        // Check it doesn't escape via ".."
-        let normalized = dest.components().collect::<Vec<_>>();
-        let mut depth = 0isize;
-        for comp in &normalized {
-            use std::path::Component;
-            match comp {
-                Component::ParentDir => {
-                    depth -= 1;
-                    if depth < 0 {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("mount destination escapes rootfs: {}", mount.destination),
-                        ));
-                    }
-                }
-                _ => {
-                    depth += 1;
-                }
-            }
-        }
-        // Relative paths are resolved against rootfs root: "./foo" -> "/foo"
-    } else {
-        // For absolute paths, also check for escape attempts via symlinks or ".."
-        let normalized = dest.components().collect::<Vec<_>>();
-        let mut depth = 0isize;
-        for comp in &normalized {
-            use std::path::Component;
-            match comp {
-                Component::RootDir => {}
-                Component::Normal(_) => depth += 1,
-                Component::ParentDir => {
-                    depth -= 1;
-                    if depth < 0 {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("mount destination escapes rootfs: {}", mount.destination),
-                        ));
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    let normalized = dest.components().collect::<Vec<_>>();
-    let mut depth = 0isize;
-    for comp in &normalized {
-        use std::path::Component;
-        match comp {
-            Component::RootDir => {}
-            Component::Normal(_) => depth += 1,
-            Component::ParentDir => {
-                depth -= 1;
-                if depth < 0 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("mount destination escapes rootfs: {}", mount.destination),
-                    ));
-                }
-            }
-            _ => {}
-        }
-    }
+    rootfs_relative_destination(&mount.destination)?;
+    let dest = Path::new(&mount.destination);
 
     // Check if already mounted at this destination — skip if so
     if is_already_mounted(&mount.destination, mount.mount_type.as_deref()) {
@@ -320,8 +270,6 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
         if !uid_mappings.is_empty() {
             if let Err(e) = setup_idmapped_mount(
                 &mount.destination,
-                source,
-                fstype,
                 uid_mappings,
                 mount.gid_mappings.as_deref(),
             ) {
@@ -333,195 +281,6 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
     }
 
     Ok(())
-}
-
-/// Set up an idmapped mount using the new mount API (Linux 5.12+).
-///
-/// Creates a user namespace with the given uid/gid mappings, then uses
-/// open_tree + mount_setattr(MOUNT_ATTR_IDMAP) + move_mount to create
-/// an idmapped mount at the target path.
-///
-/// Flow:
-/// 1. fork child
-/// 2. child: unshare(CLONE_NEWUSER), write uid_map/gid_map, signal parent via pipe, pause
-/// 3. parent: open /proc/child_pid/ns/user → userns_fd
-/// 4. parent: open_tree(dest) → tree_fd
-/// 5. parent: mount_setattr(tree_fd, MOUNT_ATTR_IDMAP, userns_fd)
-/// 6. parent: move_mount(tree_fd, "", AT_FDCWD, dest)
-/// 7. parent: signal child to exit via pipe, waitpid
-fn setup_idmapped_mount(
-    dest: &str,
-    _source: &str,
-    _fstype: &str,
-    uid_mappings: &[crate::spec::OciIdMapping],
-    gid_mappings: Option<&[crate::spec::OciIdMapping]>,
-) -> io::Result<()> {
-    // Build uid_map string: "container_id host_id size\n" per entry
-    let uid_map_str: String = uid_mappings
-        .iter()
-        .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
-        .collect();
-
-    // Build gid_map string (same format)
-    let gid_map_str: String = gid_mappings
-        .map(|mappings| {
-            mappings
-                .iter()
-                .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Two pipes for bidirectional synchronization:
-    // child_ready: child writes "R" → parent reads
-    // parent_done: parent writes "D" → child reads
-    let mut child_ready: [c_int; 2] = [-1, -1]; // [0]=read(parent), [1]=write(child)
-    let mut parent_done: [c_int; 2] = [-1, -1]; // [0]=read(child), [1]=write(parent)
-    if unsafe { libc::pipe(child_ready.as_mut_ptr()) } != 0
-        || unsafe { libc::pipe(parent_done.as_mut_ptr()) } != 0
-    {
-        if child_ready[0] >= 0 {
-            unsafe { libc::close(child_ready[0]) };
-        }
-        if child_ready[1] >= 0 {
-            unsafe { libc::close(child_ready[1]) };
-        }
-        if parent_done[0] >= 0 {
-            unsafe { libc::close(parent_done[0]) };
-        }
-        if parent_done[1] >= 0 {
-            unsafe { libc::close(parent_done[1]) };
-        }
-        return Err(io::Error::last_os_error());
-    }
-
-    let pid = unsafe { libc::fork() };
-    if pid < 0 {
-        let _ = unsafe { libc::close(child_ready[0]) };
-        let _ = unsafe { libc::close(child_ready[1]) };
-        let _ = unsafe { libc::close(parent_done[0]) };
-        let _ = unsafe { libc::close(parent_done[1]) };
-        return Err(io::Error::last_os_error());
-    }
-
-    if pid == 0 {
-        // ====== CHILD PROCESS ======
-        // Close ends we don't use
-        unsafe { libc::close(child_ready[0]) }; // child doesn't read from child_ready
-        unsafe { libc::close(parent_done[1]) }; // child doesn't write to parent_done
-
-        // Create new user namespace
-        if unsafe { libc::unshare(libc::CLONE_NEWUSER) } != 0 {
-            let _ =
-                unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
-            unsafe { libc::_exit(1) };
-        }
-
-        // Write uid_map
-        if std::fs::write("/proc/self/uid_map", &uid_map_str).is_err() {
-            let _ =
-                unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
-            unsafe { libc::_exit(1) };
-        }
-
-        // Must deny setgroups before writing gid_map (kernel requirement)
-        let _ = std::fs::write("/proc/self/setgroups", "deny");
-
-        // Write gid_map (only if non-empty)
-        if !gid_map_str.is_empty() && std::fs::write("/proc/self/gid_map", &gid_map_str).is_err() {
-            let _ =
-                unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
-            unsafe { libc::_exit(1) };
-        }
-
-        // Signal parent that mappings are ready
-        let _ = unsafe { libc::write(child_ready[1], b"R" as *const _ as *const libc::c_void, 1) };
-
-        // Wait for parent to signal completion (or error)
-        // Parent will write "D" (done) or "E" (error)
-        let mut buf = [0u8; 1];
-        let _ = unsafe { libc::read(parent_done[0], buf.as_mut_ptr() as *mut _, 1) };
-        unsafe { libc::close(child_ready[1]) };
-        unsafe { libc::close(parent_done[0]) };
-
-        unsafe { libc::_exit(0) };
-    }
-
-    // ====== PARENT PROCESS ======
-    // Close ends we don't use
-    unsafe { libc::close(child_ready[1]) }; // parent doesn't write to child_ready
-    unsafe { libc::close(parent_done[0]) }; // parent doesn't read from parent_done
-
-    // Wait for child to signal ready or error
-    let mut buf = [0u8; 1];
-    let n = unsafe { libc::read(child_ready[0], buf.as_mut_ptr() as *mut _, 1) };
-    unsafe { libc::close(child_ready[0]) };
-
-    if n != 1 || buf[0] != b'R' {
-        // Child failed — reap it
-        unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "failed to create user namespace for idmapped mount",
-        ));
-    }
-
-    // Open child's user namespace fd
-    let userns_path = format!("/proc/{}/ns/user", pid);
-    let userns_cstr = match CString::new(userns_path.as_str()) {
-        Ok(c) => c,
-        Err(_) => {
-            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid userns path",
-            ));
-        }
-    };
-    let userns_fd = unsafe { libc::open(userns_cstr.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
-    if userns_fd < 0 {
-        let err = io::Error::last_os_error();
-        unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-        return Err(err);
-    }
-
-    // Step 1: open_tree to get a reference to the existing mount at dest
-    let tree_fd = do_open_tree(libc::AT_FDCWD, dest, open_tree::CLONE | open_tree::CLOEXEC);
-    if tree_fd.is_err() {
-        unsafe { libc::close(userns_fd) };
-        unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-        // Fall back gracefully — kernel may not support open_tree (pre-5.6)
-        return Ok(());
-    }
-    let tree_fd = tree_fd.unwrap();
-
-    // Step 2: mount_setattr with MOUNT_ATTR_IDMAP
-    let attr = MountAttr {
-        attr_set: mount_attr::IDMAP,
-        attr_clr: 0,
-        propagation: 0,
-        userns_fd: userns_fd as u64,
-    };
-    let result = do_mount_setattr(tree_fd, "", &attr, move_mount::T_EMPTY_PATH);
-
-    // Step 3: If mount_setattr succeeded, move_mount to re-attach the idmapped mount
-    if result.is_ok() {
-        let _ = do_move_mount(tree_fd, "", libc::AT_FDCWD, dest, move_mount::F_EMPTY_PATH);
-    }
-
-    // Cleanup
-    unsafe { libc::close(tree_fd) };
-    unsafe { libc::close(userns_fd) };
-
-    // Signal child to exit (write "D" to parent_done pipe)
-    // This unblocks the child's read on parent_done[0]
-    let _ = unsafe { libc::write(parent_done[1], b"D" as *const _ as *const libc::c_void, 1) };
-    unsafe { libc::close(parent_done[1]) };
-
-    // Reap child
-    unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-
-    result
 }
 
 /// Check if a filesystem of the given type is already mounted at the destination.
@@ -553,146 +312,6 @@ fn is_already_mounted(destination: &str, fstype: Option<&str>) -> bool {
         }
     }
     false
-}
-
-// ===========================================================================
-// Device creation
-// ===========================================================================
-
-fn create_device(path: &str, major: u64, minor: u64, mode: u32) {
-    let dev = makedev(major, minor);
-    let path_c = match CString::new(path) {
-        Ok(c) => c,
-        Err(_) => return, // Path contains null byte — skip
-    };
-    let _ = unsafe { mknod(path_c.as_ptr(), S_IFCHR | mode, dev) };
-}
-
-/// Create a device node from an OCI spec device entry.
-fn create_spec_device(device: &OciLinuxDevice) -> io::Result<()> {
-    let dev_type = match device.ns_type.as_str() {
-        "c" | "char" => S_IFCHR,
-        "b" | "block" => 0o060000, // S_IFBLK
-        "p" | "fifo" => 0o010000,  // S_IFIFO
-        _ => return Ok(()),        // Skip unknown types
-    };
-
-    let mode = device.file_mode.unwrap_or(0o660);
-    let major = device.major.unwrap_or(0) as u64;
-    let minor = device.minor.unwrap_or(0) as u64;
-
-    // Ensure parent directory exists
-    if let Some(parent) = Path::new(&device.path).parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
-    let path_c = match CString::new(device.path.as_str()) {
-        Ok(c) => c,
-        Err(_) => return Ok(()),
-    };
-
-    let dev = makedev(major, minor);
-    let ret = unsafe { mknod(path_c.as_ptr(), dev_type | mode, dev) };
-    if ret != 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    // Apply uid/gid ownership if specified (OCI spec compliance)
-    if device.uid.is_some() || device.gid.is_some() {
-        let uid = device.uid.unwrap_or(u32::MAX);
-        let gid = device.gid.unwrap_or(u32::MAX);
-        let ret = unsafe { chown(path_c.as_ptr(), uid, gid) };
-        if ret != 0 {
-            return Err(io::Error::last_os_error());
-        }
-    }
-
-    Ok(())
-}
-
-/// Create essential device nodes in /dev.
-fn create_essential_devices() {
-    create_device("/dev/null", 1, 3, 0o666);
-    create_device("/dev/zero", 1, 5, 0o666);
-    create_device("/dev/full", 1, 7, 0o666);
-    create_device("/dev/random", 1, 8, 0o444);
-    create_device("/dev/urandom", 1, 9, 0o444);
-    create_device("/dev/tty", 5, 0, 0o666);
-    let _ = fs::create_dir_all("/dev/pts");
-    let _ = fs::create_dir_all("/dev/shm");
-}
-
-// ===========================================================================
-// Whiteout handling
-// ===========================================================================
-
-/// Apply whiteout files across layers (reverse order, top layer first).
-pub fn apply_whiteouts(layer_dirs: &[std::path::PathBuf]) -> io::Result<()> {
-    for layer_dir in layer_dirs.iter().rev() {
-        remove_whiteout_files(layer_dir)?;
-    }
-    Ok(())
-}
-
-/// Remove whiteout files from a directory tree.
-/// Handles both OCI-style `.wh.` prefix and overlayfs char device whiteouts (0:0).
-fn remove_whiteout_files(dir: &Path) -> io::Result<()> {
-    if !dir.is_dir() {
-        return Ok(());
-    }
-
-    let entries: Vec<_> = match fs::read_dir(dir) {
-        Ok(entries) => entries.filter_map(|e| e.ok()).collect(),
-        Err(_) => return Ok(()),
-    };
-
-    for entry in entries {
-        let path = entry.path();
-        let file_name = entry.file_name();
-
-        if let Some(name) = file_name.to_str() {
-            // Skip the opaque whiteout marker itself (it's a control file, not a whiteout)
-            if name == ".wh..wh..opq" {
-                continue;
-            }
-            // OCI-style whiteout: .wh.<name> → delete <name>
-            if let Some(rest) = name.strip_prefix(".wh.") {
-                let target = path.parent().unwrap().join(rest);
-                if target.exists() {
-                    if target.is_dir() {
-                        let _ = fs::remove_dir_all(&target);
-                    } else {
-                        let _ = fs::remove_file(&target);
-                    }
-                }
-                let _ = fs::remove_file(&path);
-                continue;
-            }
-        }
-
-        // Overlayfs char device whiteout (0:0 character device)
-        // Must use rdev() (device numbers of the file itself), not dev() (filesystem device ID)
-        if let Ok(metadata) = path.metadata() {
-            if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
-                let _ = fs::remove_file(&path);
-            }
-        }
-
-        if path.is_dir() {
-            remove_whiteout_files(&path)?;
-        }
-    }
-
-    Ok(())
-}
-
-// ===========================================================================
-// Rootfs building
-// ===========================================================================
-
-/// Build rootfs by merging layers in order.
-pub fn build_rootfs(layer_dirs: &[std::path::PathBuf], dest: &Path) -> io::Result<()> {
-    crate::rootfs_copy::merge_layer_dirs(layer_dirs, dest)
 }
 
 // ===========================================================================
@@ -885,15 +504,7 @@ fn setup_rootfs_inner(
         io::Error::new(error.kind(), format!("mount tmpfs on /dev failed: {error}"))
     })?;
 
-    // Essential device nodes
-    create_essential_devices();
-
-    // Create spec-defined devices
-    if let Some(devices) = spec_devices {
-        for device in devices {
-            let _ = create_spec_device(device); // Best-effort — some devices may not be creatable
-        }
-    }
+    create_rootfs_devices(spec_devices);
 
     // Mount devpts
     let devpts_result = do_mount(

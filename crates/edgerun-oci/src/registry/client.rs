@@ -6,18 +6,14 @@ use core::{fmt, str::FromStr};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use std::io;
 #[cfg(all(feature = "std", not(target_os = "none")))]
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use edgerun_http::{HttpClient, Request, Response};
 
 use super::auth::{parse_bearer_auth, RegistryAuth};
 use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest};
 use super::errors::RegistryError;
-#[cfg(all(feature = "std", not(target_os = "none")))]
-use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest};
 use super::manifest::{ImageManifest, SingleManifest};
-#[cfg(all(feature = "std", not(target_os = "none")))]
-use super::oci_spec::generate_oci_spec;
 use super::urlencoding;
 #[cfg(feature = "edgefs")]
 use crate::image_apply::{
@@ -46,62 +42,6 @@ edgerun_json::impl_json_struct! {
     RegistryTokenResponse {
         required {}
         optional { token: ["token", "access_token"] => String }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct PushManifestConfig {
-    media_type: String,
-    digest: String,
-    size: usize,
-}
-
-#[derive(Debug, Clone)]
-struct PushManifestLayer {
-    media_type: String,
-    digest: String,
-    size: usize,
-}
-
-#[derive(Debug, Clone)]
-struct PushManifest {
-    schema_version: u32,
-    media_type: String,
-    config: PushManifestConfig,
-    layers: Vec<PushManifestLayer>,
-}
-
-edgerun_json::impl_json_struct! {
-    PushManifestConfig {
-        required {
-            media_type: "mediaType" => String,
-            digest: "digest" => String,
-            size: "size" => usize,
-        }
-        optional {}
-    }
-}
-
-edgerun_json::impl_json_struct! {
-    PushManifestLayer {
-        required {
-            media_type: "mediaType" => String,
-            digest: "digest" => String,
-            size: "size" => usize,
-        }
-        optional {}
-    }
-}
-
-edgerun_json::impl_json_struct! {
-    PushManifest {
-        required {
-            schema_version: "schemaVersion" => u32,
-            media_type: "mediaType" => String,
-            config: "config" => PushManifestConfig,
-            layers: "layers" => Vec<PushManifestLayer>,
-        }
-        optional {}
     }
 }
 
@@ -178,68 +118,6 @@ pub struct EdgeFsImagePullReport {
     pub plan: BareImagePlan,
     pub apply: BareImageApplyReport,
     pub bytes_downloaded: u64,
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-#[derive(Debug, Clone)]
-pub struct ImagePullReport {
-    pub path: PathBuf,
-    pub bytes_downloaded: u64,
-    pub layers: usize,
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-#[derive(Debug, Clone)]
-pub enum PullProgress {
-    Resolving {
-        image: String,
-    },
-    ManifestResolved {
-        layers: usize,
-        config_digest: String,
-    },
-    FetchingConfig {
-        digest: String,
-    },
-    ConfigFetched {
-        bytes: u64,
-    },
-    LayerCached {
-        index: usize,
-        total: usize,
-        digest: String,
-    },
-    LayerDownloading {
-        index: usize,
-        total: usize,
-        digest: String,
-        size: u64,
-    },
-    LayerDownloaded {
-        index: usize,
-        total: usize,
-        digest: String,
-        bytes: u64,
-    },
-    LayerExtracting {
-        index: usize,
-        total: usize,
-        digest: String,
-    },
-    LayerExtracted {
-        index: usize,
-        total: usize,
-        digest: String,
-    },
-    ApplyingWhiteouts {
-        layers: usize,
-    },
-    BuildingRootfs {
-        path: PathBuf,
-    },
-    WritingConfig {
-        path: PathBuf,
-    },
 }
 
 impl RegistryClient {
@@ -422,7 +300,7 @@ impl RegistryClient {
     }
 
     /// Perform an authenticated PUT request.
-    async fn authenticated_put(
+    pub(crate) async fn authenticated_put(
         &mut self,
         registry: &str,
         path: &str,
@@ -476,7 +354,7 @@ impl RegistryClient {
     }
 
     /// Perform an authenticated POST request.
-    async fn authenticated_post(
+    pub(crate) async fn authenticated_post(
         &mut self,
         registry: &str,
         path: &str,
@@ -595,7 +473,7 @@ impl RegistryClient {
     }
 
     /// Ensure we're authenticated for the given registry.
-    async fn ensure_auth(&mut self, registry: &str) -> Result<(), RegistryError> {
+    pub(crate) async fn ensure_auth(&mut self, registry: &str) -> Result<(), RegistryError> {
         if self.token.is_none() && !matches!(self.auth, RegistryAuth::Anonymous) {
             self.ping(registry).await?;
         }
@@ -901,10 +779,8 @@ impl RegistryClient {
         image: &ImageRef,
         bundle_path: &Path,
         store_path: &Path,
-    ) -> Result<PathBuf, RegistryError> {
-        self.pull_with_progress(image, bundle_path, store_path, |_| {})
-            .await
-            .map(|report| report.path)
+    ) -> Result<std::path::PathBuf, RegistryError> {
+        super::pull::pull(self, image, bundle_path, store_path).await
     }
 
     /// Pull an image to a local bundle directory and report coarse progress.
@@ -914,186 +790,12 @@ impl RegistryClient {
         image: &ImageRef,
         bundle_path: &Path,
         store_path: &Path,
-        mut progress: F,
-    ) -> Result<ImagePullReport, RegistryError>
+        progress: F,
+    ) -> Result<super::pull::ImagePullReport, RegistryError>
     where
-        F: FnMut(PullProgress),
+        F: FnMut(super::pull::PullProgress),
     {
-        self.bytes_downloaded = 0;
-        progress(PullProgress::Resolving {
-            image: image.to_string(),
-        });
-        let manifest = self.resolve_manifest(image).await?;
-
-        let manifest_data = match manifest {
-            ImageManifest::Single(m) => m,
-            ImageManifest::Index(idx) => {
-                if idx.manifests.is_empty() {
-                    return Err(RegistryError::NoManifests);
-                }
-                // Select manifest matching current platform (linux/amd64 preferred, fallback to first).
-                let current_arch = crate::host_arch();
-                let current_os = crate::host_os();
-                let best = idx
-                    .manifests
-                    .iter()
-                    .find(|m| {
-                        m.platform
-                            .as_ref()
-                            .map(|p| {
-                                p.architecture.as_deref() == Some(current_arch)
-                                    && p.os.as_deref() == Some(current_os)
-                            })
-                            .unwrap_or(false)
-                    })
-                    .unwrap_or(&idx.manifests[0]);
-                self.fetch_manifest_by_digest(&image.registry, &image.repository, &best.digest)
-                    .await?
-            }
-        };
-
-        let total_layers = manifest_data.layers.len();
-        progress(PullProgress::ManifestResolved {
-            layers: total_layers,
-            config_digest: manifest_data.config_digest.clone(),
-        });
-        progress(PullProgress::FetchingConfig {
-            digest: manifest_data.config_digest.clone(),
-        });
-        let config_blob = self
-            .fetch_blob(
-                &image.registry,
-                &image.repository,
-                &manifest_data.config_digest,
-            )
-            .await?;
-        progress(PullProgress::ConfigFetched {
-            bytes: config_blob.len() as u64,
-        });
-        let image_config = parse_image_config(&config_blob).map_err(|error| {
-            RegistryError::ParseError(format!(
-                "image config parse failed for {}: body {} bytes: {}",
-                manifest_data.config_digest,
-                config_blob.len(),
-                error
-            ))
-        })?;
-
-        std::fs::create_dir_all(bundle_path)?;
-        std::fs::create_dir_all(store_path)?;
-
-        let rootfs = bundle_path.join("rootfs");
-
-        let cache_dir = store_path.join("cache");
-        std::fs::create_dir_all(&cache_dir)?;
-
-        let mut layer_dirs = Vec::new();
-        for (offset, layer) in manifest_data.layers.iter().enumerate() {
-            let index = offset + 1;
-            let cache_key = layer.digest.replace(':', "_");
-            let cached_layer = cache_dir.join(&cache_key);
-
-            if cached_layer.is_dir() {
-                progress(PullProgress::LayerCached {
-                    index,
-                    total: total_layers,
-                    digest: layer.digest.clone(),
-                });
-                layer_dirs.push(cached_layer);
-                continue;
-            }
-
-            let ext = match layer.media_type.as_deref() {
-                Some(mt) if mt.contains("zstd") => "tar.zst",
-                Some(mt) if mt.contains("gzip") || mt.contains("tar") => "tar.gz",
-                Some(mt) if mt.contains("oci") && !mt.contains("gzip") && !mt.contains("zstd") => {
-                    "tar"
-                }
-                _ => "tar.gz",
-            };
-            let blob_path = store_path.join(format!("{}.{}", &cache_key, ext));
-            if !blob_path.exists() {
-                progress(PullProgress::LayerDownloading {
-                    index,
-                    total: total_layers,
-                    digest: layer.digest.clone(),
-                    size: layer.size,
-                });
-                let bytes = self
-                    .download_blob(
-                        &image.registry,
-                        &image.repository,
-                        &layer.digest,
-                        &blob_path,
-                    )
-                    .await?;
-                progress(PullProgress::LayerDownloaded {
-                    index,
-                    total: total_layers,
-                    digest: layer.digest.clone(),
-                    bytes,
-                });
-            }
-
-            verify_blob_digest(&blob_path, &layer.digest)?;
-
-            std::fs::create_dir_all(&cached_layer)?;
-            progress(PullProgress::LayerExtracting {
-                index,
-                total: total_layers,
-                digest: layer.digest.clone(),
-            });
-            extract_layer(&blob_path, &cached_layer, layer.media_type.as_deref())?;
-            progress(PullProgress::LayerExtracted {
-                index,
-                total: total_layers,
-                digest: layer.digest.clone(),
-            });
-            layer_dirs.push(cached_layer);
-        }
-
-        progress(PullProgress::ApplyingWhiteouts {
-            layers: layer_dirs.len(),
-        });
-        apply_whiteouts(&layer_dirs)?;
-        progress(PullProgress::BuildingRootfs {
-            path: rootfs.clone(),
-        });
-        if rootfs.exists() {
-            std::fs::remove_dir_all(&rootfs).map_err(RegistryError::IoError)?;
-        }
-        std::fs::create_dir_all(&rootfs).map_err(RegistryError::IoError)?;
-        build_rootfs(&layer_dirs, &rootfs)?;
-
-        let config_json = generate_oci_spec(&image_config, rootfs.to_str().unwrap_or("/"));
-        let config_path = bundle_path.join("config.json");
-        progress(PullProgress::WritingConfig {
-            path: config_path.clone(),
-        });
-        std::fs::write(config_path, config_json)?;
-
-        Ok(ImagePullReport {
-            path: bundle_path.to_path_buf(),
-            bytes_downloaded: self.bytes_downloaded,
-            layers: total_layers,
-        })
-    }
-
-    /// Download a blob to a local file, tracking bytes.
-    #[cfg(all(feature = "std", not(target_os = "none")))]
-    async fn download_blob(
-        &mut self,
-        registry: &str,
-        repository: &str,
-        digest: &str,
-        dest: &Path,
-    ) -> Result<u64, RegistryError> {
-        let url = format!("/v2/{}/blobs/{}", repository, digest);
-        let body = self.authenticated_get(registry, &url, &[]).await?;
-        let bytes = body.len() as u64;
-
-        std::fs::write(dest, &body).map_err(RegistryError::IoError)?;
-        Ok(bytes)
+        super::pull::pull_with_progress(self, image, bundle_path, store_path, progress).await
     }
 
     // ------------------------------------------------------------------
@@ -1107,143 +809,7 @@ impl RegistryClient {
         image: &ImageRef,
         bundle_path: &Path,
     ) -> Result<(), RegistryError> {
-        self.ensure_auth(&image.registry).await?;
-
-        let rootfs = bundle_path.join("rootfs");
-        if !rootfs.is_dir() {
-            return Err(RegistryError::IoError(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("rootfs not found: {}", rootfs.display()),
-            )));
-        }
-
-        let config_path = bundle_path.join("config.json");
-        let config_json = std::fs::read_to_string(&config_path).map_err(RegistryError::IoError)?;
-
-        let config_blob = config_json.as_bytes().to_vec();
-        let config_digest = format!("sha256:{}", hex_digest(&config_blob));
-        self.push_blob_raw(
-            &image.registry,
-            &image.repository,
-            &config_blob,
-            &config_digest,
-        )
-        .await?;
-
-        let layer_data = create_tar_from_dir(&rootfs)?;
-        let layer_digest = format!("sha256:{}", hex_digest(&layer_data));
-        self.push_blob_raw(
-            &image.registry,
-            &image.repository,
-            &layer_data,
-            &layer_digest,
-        )
-        .await?;
-
-        let manifest = edgerun_json::to_json_string(&PushManifest {
-            schema_version: 2,
-            media_type: "application/vnd.oci.image.manifest.v1+json".into(),
-            config: PushManifestConfig {
-                media_type: "application/vnd.oci.image.config.v1+json".into(),
-                digest: config_digest.clone(),
-                size: config_blob.len(),
-            },
-            layers: vec![PushManifestLayer {
-                media_type: "application/vnd.oci.image.layer.v1.tar+gzip".into(),
-                digest: layer_digest.clone(),
-                size: layer_data.len(),
-            }],
-        })
-        .map_err(|error| RegistryError::ParseError(error.to_string()))?;
-
-        self.push_manifest(
-            &image.registry,
-            &image.repository,
-            manifest.as_bytes(),
-            &image.tag,
-        )
-        .await?;
-        let manifest_digest = hex_digest(manifest.as_bytes());
-        self.push_manifest_by_digest(
-            &image.registry,
-            &image.repository,
-            manifest.as_bytes(),
-            &format!("sha256:{}", manifest_digest),
-        )
-        .await?;
-
-        Ok(())
-    }
-
-    /// Push a blob using monolithic upload.
-    async fn push_blob_raw(
-        &mut self,
-        registry: &str,
-        repository: &str,
-        data: &[u8],
-        digest: &str,
-    ) -> Result<(), RegistryError> {
-        let init_path = format!("/v2/{}/blobs/uploads/", repository);
-        let _ = self
-            .authenticated_post(registry, &init_path, &[], &[])
-            .await?;
-
-        let upload_path = format!(
-            "/v2/{}/blobs/uploads/{}",
-            repository,
-            super::urlencoding::encode(digest)
-        );
-        let put_path = format!(
-            "{}?digest={}",
-            upload_path,
-            super::urlencoding::encode(digest)
-        );
-        self.authenticated_put(
-            registry,
-            &put_path,
-            data,
-            &[("Content-Type", "application/octet-stream")],
-        )
-        .await?;
-        Ok(())
-    }
-
-    /// Push a manifest with a tag.
-    async fn push_manifest(
-        &mut self,
-        registry: &str,
-        repository: &str,
-        manifest: &[u8],
-        tag: &str,
-    ) -> Result<(), RegistryError> {
-        let path = format!("/v2/{}/manifests/{}", repository, tag);
-        self.authenticated_put(
-            registry,
-            &path,
-            manifest,
-            &[("Content-Type", "application/vnd.oci.image.manifest.v1+json")],
-        )
-        .await?;
-        Ok(())
-    }
-
-    /// Push a manifest by digest.
-    async fn push_manifest_by_digest(
-        &mut self,
-        registry: &str,
-        repository: &str,
-        manifest: &[u8],
-        digest: &str,
-    ) -> Result<(), RegistryError> {
-        let path = format!("/v2/{}/manifests/{}", repository, digest);
-        self.authenticated_put(
-            registry,
-            &path,
-            manifest,
-            &[("Content-Type", "application/vnd.oci.image.manifest.v1+json")],
-        )
-        .await?;
-        Ok(())
+        super::bundle_push::push(self, image, bundle_path).await
     }
 }
 
@@ -1257,176 +823,6 @@ fn registry_api_host(registry: &str) -> &str {
     } else {
         registry
     }
-}
-
-/// Compute SHA-256 hex digest.
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn hex_digest(data: &[u8]) -> String {
-    let hash = edgerun_crypto::sha256(data);
-    edgerun_encoding::hex::bytes_to_hex(&hash)
-}
-
-/// Create a gzip-compressed tar from a directory.
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn create_tar_from_dir(dir: &Path) -> std::io::Result<Vec<u8>> {
-    let mut tar = Vec::new();
-    append_tar_dir(&mut tar, dir, Path::new(""))?;
-    tar.extend_from_slice(&[0u8; 1024]);
-    Ok(gzip_bytes(&tar))
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn append_tar_dir(out: &mut Vec<u8>, dir: &Path, rel: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-
-    if !rel.as_os_str().is_empty() {
-        let metadata = std::fs::symlink_metadata(dir)?;
-        append_tar_header(
-            out,
-            rel,
-            b'5',
-            0,
-            metadata.permissions().mode(),
-            metadata.uid(),
-            metadata.gid(),
-            metadata.mtime().max(0) as u64,
-            None,
-        )?;
-    }
-
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let child_rel = rel.join(entry.file_name());
-        let metadata = std::fs::symlink_metadata(&path)?;
-        let file_type = metadata.file_type();
-
-        if file_type.is_dir() {
-            append_tar_dir(out, &path, &child_rel)?;
-        } else if file_type.is_symlink() {
-            let target = std::fs::read_link(&path)?;
-            append_tar_header(
-                out,
-                &child_rel,
-                b'2',
-                0,
-                metadata.permissions().mode(),
-                metadata.uid(),
-                metadata.gid(),
-                metadata.mtime().max(0) as u64,
-                Some(&target),
-            )?;
-        } else if file_type.is_file() {
-            let data = std::fs::read(&path)?;
-            append_tar_header(
-                out,
-                &child_rel,
-                b'0',
-                data.len() as u64,
-                metadata.permissions().mode(),
-                metadata.uid(),
-                metadata.gid(),
-                metadata.mtime().max(0) as u64,
-                None,
-            )?;
-            out.extend_from_slice(&data);
-            let padding = (512 - (data.len() % 512)) % 512;
-            out.extend(std::iter::repeat(0).take(padding));
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn append_tar_header(
-    out: &mut Vec<u8>,
-    path: &Path,
-    kind: u8,
-    size: u64,
-    mode: u32,
-    uid: u32,
-    gid: u32,
-    mtime: u64,
-    link_name: Option<&Path>,
-) -> std::io::Result<()> {
-    let mut header = [0u8; 512];
-    let name = path_to_tar_bytes(path)?;
-    if name.len() > 100 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("tar path too long: {}", path.display()),
-        ));
-    }
-    header[..name.len()].copy_from_slice(&name);
-
-    write_octal(&mut header[100..108], mode as u64)?;
-    write_octal(&mut header[108..116], uid as u64)?;
-    write_octal(&mut header[116..124], gid as u64)?;
-    write_octal(&mut header[124..136], size)?;
-    write_octal(&mut header[136..148], mtime)?;
-    header[148..156].fill(b' ');
-    header[156] = kind;
-
-    if let Some(link_name) = link_name {
-        let link = path_to_tar_bytes(link_name)?;
-        if link.len() > 100 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("tar link target too long: {}", link_name.display()),
-            ));
-        }
-        header[157..157 + link.len()].copy_from_slice(&link);
-    }
-
-    header[257..263].copy_from_slice(b"ustar\0");
-    header[263..265].copy_from_slice(b"00");
-
-    let checksum = header.iter().map(|byte| *byte as u32).sum::<u32>();
-    write_checksum(&mut header[148..156], checksum)?;
-    out.extend_from_slice(&header);
-    Ok(())
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn path_to_tar_bytes(path: &Path) -> std::io::Result<Vec<u8>> {
-    let path = path.to_str().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("non-utf8 tar path: {}", path.display()),
-        )
-    })?;
-    Ok(path.as_bytes().to_vec())
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn write_octal(field: &mut [u8], value: u64) -> std::io::Result<()> {
-    let encoded = format!("{:0width$o}\0", value, width = field.len() - 1);
-    if encoded.len() > field.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "tar numeric field overflow",
-        ));
-    }
-    field.copy_from_slice(encoded.as_bytes());
-    Ok(())
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn write_checksum(field: &mut [u8], value: u32) -> std::io::Result<()> {
-    let encoded = format!("{:06o}\0 ", value);
-    field.copy_from_slice(encoded.as_bytes());
-    Ok(())
-}
-
-#[cfg(all(feature = "std", not(target_os = "none")))]
-fn gzip_bytes(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(&[0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255]);
-    out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(data, 6));
-    out.extend_from_slice(&edgerun_encoding::crc32::crc32(data).to_le_bytes());
-    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
-    out
 }
 
 #[cfg(all(test, feature = "std", not(target_os = "none")))]

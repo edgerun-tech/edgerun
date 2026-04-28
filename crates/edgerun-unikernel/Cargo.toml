@@ -9,6 +9,7 @@ build = "build.rs"
 
 [features]
 default = []
+html-ui = ["dep:edgerun-layout"]
 
 [dependencies]
 edgerun-platform = { path = "../edgerun-platform" }
@@ -27,6 +28,7 @@ edgerun-virtio = { path = "../edgerun-virtio" }
 edgerun-rtl8125 = { path = "../edgerun-rtl8125" }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
+edgerun-layout = { path = "../../../edgerun-browser/crates/edgerun-layout", optional = true }
 
 [lints]
 workspace = true

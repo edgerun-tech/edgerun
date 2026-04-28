@@ -1,4 +1,5 @@
 use super::*;
+use crate::registry::tar_push::create_tar_from_dir;
 use std::path::PathBuf;
 
 fn tmp_root() -> PathBuf {

@@ -1,14 +1,4 @@
 use crate::prelude::*;
-use std::io;
-use std::os::raw::c_void;
-
-use crate::spec::{OciLinuxSeccomp, OciSeccompAction};
-use crate::syscalls::{
-    do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
-    SECCOMP_SET_MODE_FILTER,
-};
-
-use super::*;
 
 // BPF instruction builder
 // ===========================================================================
@@ -20,6 +10,23 @@ pub(crate) fn bpf_insn(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
     buf[3] = jf;
     buf[4..8].copy_from_slice(&k.to_le_bytes());
     buf
+}
+
+pub(crate) fn bpf_insn_j(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
+    bpf_insn(code, jt, jf, k)
+}
+
+pub(crate) fn finish_bpf_program(insns: Vec<[u8; 8]>) -> (Vec<u8>, Vec<u8>) {
+    let insn_bytes: Vec<u8> = insns.into_iter().flatten().collect();
+
+    let prog_len = insn_bytes.len() as u16 / 8;
+    let filter_ptr = insn_bytes.as_ptr();
+
+    let mut prog = Vec::with_capacity(16);
+    prog.extend_from_slice(&prog_len.to_le_bytes());
+    prog.resize(8, 0);
+    prog.extend_from_slice(&(filter_ptr as u64).to_le_bytes());
+    (insn_bytes, prog)
 }
 
 // ===========================================================================

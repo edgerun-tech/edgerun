@@ -3,9 +3,10 @@
 use crate::prelude::*;
 use std::io;
 
+use crate::linux_catalog::{capability_number, LINUX_CAPABILITIES};
 use crate::syscalls::{
-    cap_name_to_int, do_capset, do_prctl_cap_ambient, do_prctl_cap_bset_drop,
-    do_prctl_set_dumpable, do_prctl_set_no_new_privs, prctl_const, setgid, setgroups, setuid,
+    do_capset, do_prctl_cap_ambient, do_prctl_cap_bset_drop, do_prctl_set_dumpable,
+    do_prctl_set_no_new_privs, prctl_const, setgid, setgroups, setuid,
 };
 
 /// Set no_new_privs and dumpable flags.
@@ -26,13 +27,12 @@ pub fn apply_security_hardening(no_new_privs: bool) -> io::Result<()> {
 fn caps_to_bitmask(cap_names: &[String]) -> io::Result<u64> {
     let mut mask: u64 = 0;
     for name in cap_names {
-        let cap = cap_name_to_int(name);
-        if cap == u32::MAX {
-            return Err(io::Error::new(
+        let cap = capability_number(name).ok_or_else(|| {
+            io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("invalid capability name: {}", name),
-            ));
-        }
+            )
+        })?;
         if cap < 64 {
             mask |= 1u64 << cap;
         }
@@ -82,8 +82,7 @@ pub fn set_capabilities(
         // Clear all ambient capabilities first
         let _ = do_prctl_cap_ambient(prctl_const::PR_CAP_AMBIENT_CLEAR_ALL, 0);
         for name in ambient_caps {
-            let cap = cap_name_to_int(name);
-            if cap < 64 {
+            if let Some(cap) = capability_number(name) {
                 // Best-effort: may fail if CAP_SETPCAP not in permitted set
                 let _ = do_prctl_cap_ambient(prctl_const::PR_CAP_AMBIENT_RAISE, cap as i32);
             }
@@ -108,8 +107,7 @@ pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
 
     // First validate that all keep-listed capabilities are valid
     for &cap_name in &keep {
-        let cap = cap_name_to_int(cap_name);
-        if cap == u32::MAX {
+        if capability_number(cap_name).is_none() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("invalid capability name: {}", cap_name),
@@ -117,7 +115,7 @@ pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
         }
     }
 
-    for &cap in crate::validate::KNOWN_CAPABILITIES {
+    for &(cap, _) in LINUX_CAPABILITIES {
         let cap_stripped = cap.strip_prefix("CAP_").unwrap_or(cap);
         if !keep.contains(&cap_stripped) && !keep.contains(&cap) {
             // Best-effort drop — some caps may already be dropped or unavailable
@@ -130,7 +128,7 @@ pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
 
 /// Validate a capability name. Returns true if the name is a valid Linux capability.
 pub fn is_valid_capability(name: &str) -> bool {
-    cap_name_to_int(name) != u32::MAX
+    capability_number(name).is_some()
 }
 
 /// Set supplementary groups.

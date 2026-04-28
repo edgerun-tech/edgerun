@@ -28,6 +28,7 @@ use crate::hooks::{
     execute_poststop_hooks, execute_prestart_hooks, execute_start_container_hooks, ContainerState,
 };
 use crate::process::{setup_container_child, setup_container_child_rootless, ContainerConfig};
+use crate::process_exec::exec_with_env_and_cwd;
 use crate::spec::{OciHook, OciLinuxResources, OciSpec};
 use crate::state::{
     container_state_dir, fifo_path, is_root, save_runtime_spec, save_state,
@@ -169,59 +170,18 @@ fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
     }
 
     // 5. Exec the workload
-    unsafe { libc::clearenv() };
-    for e in &ctx.env {
-        if let Some((k, v)) = e.split_once('=') {
-            let k_c = CString::new(k.as_bytes()).unwrap();
-            let v_c = CString::new(v.as_bytes()).unwrap();
-            unsafe { libc::setenv(k_c.as_ptr(), v_c.as_ptr(), 1) };
-        }
-    }
-
-    let cwd_c = CString::new(ctx.cwd.as_bytes()).unwrap();
-    unsafe { libc::chdir(cwd_c.as_ptr()) };
-
-    let exe_path = if ctx.workload_args[0].starts_with('/') {
-        ctx.workload_args[0].clone()
-    } else {
-        let exe_name = &ctx.workload_args[0];
-        let path_env = ctx
-            .env
-            .iter()
-            .find(|e| e.starts_with("PATH="))
-            .map(|e| &e[5..])
-            .unwrap_or("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
-        let mut found = None;
-        for dir in path_env.split(':') {
-            let candidate = format!("{}/{}", dir, exe_name);
-            if std::path::Path::new(&candidate).exists() {
-                found = Some(candidate);
-                break;
-            }
-        }
-        found.unwrap_or_else(|| exe_name.clone())
-    };
-
-    {
-        let exe_cstr = CString::new(exe_path.as_bytes()).unwrap();
-        let c_args: Vec<CString> = ctx
-            .workload_args
-            .iter()
-            .map(|a| CString::new(a.as_bytes()).unwrap())
-            .collect();
-        let c_ptrs: Vec<*const libc::c_char> = c_args
-            .iter()
-            .map(|s| s.as_ptr())
-            .chain(std::iter::once(std::ptr::null()))
-            .collect();
-        unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr()) };
-    }
+    let error = exec_with_env_and_cwd(&ctx.workload_args, &ctx.env, &ctx.cwd)
+        .err()
+        .unwrap_or_else(|| {
+            crate::process_exec::ProcessExecError::Exec(io::Error::other(
+                "execvp unexpectedly returned success",
+            ))
+        });
     kmsg(&format!(
         "child: execvp({}) failed: {}",
-        ctx.workload_args[0],
-        io::Error::last_os_error()
+        ctx.workload_args[0], error
     ));
-    unsafe { libc::_exit(127) };
+    unsafe { libc::_exit(error.exit_code()) };
 }
 
 #[derive(Clone, Copy)]

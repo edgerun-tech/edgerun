@@ -8,15 +8,15 @@
 use crate::prelude::*;
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::os::unix::fs::{symlink, FileTypeExt, MetadataExt, PermissionsExt};
+use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use super::errors::RegistryError;
-use crate::layer_pipeline::bytes_to_hex;
+use crate::layer_pipeline::format_digest;
 use crate::oci_path::{layer_path_safe, normalize_layer_path};
 use crate::tar_layer::{
     apply_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer, layer_compression,
-    parse_oci_whiteout, OciLayerCompression, OciWhiteout, TarEntry, TarEntryKind, TarLayerSink,
+    OciLayerCompression, TarEntry, TarEntryKind, TarLayerSink,
 };
 use edgerun_crypto::sha2::Digest;
 
@@ -24,28 +24,9 @@ use edgerun_crypto::sha2::Digest;
 // Path validation helpers
 // ===========================================================================
 
-/// Check that a path component list does not escape the root via "..".
-fn path_safe_within_root(path: &std::path::Path) -> bool {
-    if let Some(path) = path.to_str() {
-        return layer_path_safe(path);
-    }
-
-    use std::path::Component;
-    let mut depth = 0isize;
-    for comp in path.components() {
-        match comp {
-            Component::RootDir => {}
-            Component::Normal(_) => depth += 1,
-            Component::ParentDir => {
-                depth -= 1;
-                if depth < 0 {
-                    return false;
-                }
-            }
-            _ => {}
-        }
-    }
-    true
+/// Check that a layer-relative path does not escape the destination root.
+fn path_safe_within_root(path: &Path) -> bool {
+    path.to_str().is_some_and(layer_path_safe)
 }
 
 // ===========================================================================
@@ -200,7 +181,14 @@ impl TarLayerSink for FsLayerSink {
                     .link_name
                     .as_deref()
                     .ok_or_else(|| format!("hardlink {:?} missing target", entry.path))?;
-                let target = self.dest.join(normalize_layer_path(target));
+                let normalized = normalize_layer_path(target);
+                if !layer_path_safe(&normalized) {
+                    return Err(format!(
+                        "hardlink {:?} -> {:?} would escape destination",
+                        entry.path, target
+                    ));
+                }
+                let target = self.dest.join(normalized);
                 Self::ensure_parent(&path)?;
                 let _ = fs::remove_file(&path);
                 fs::hard_link(target, &path).map_err(|error| error.to_string())?;
@@ -234,7 +222,7 @@ pub fn verify_blob_digest(blob_path: &Path, expected_digest: &str) -> Result<(),
         hasher.update(&buf[..n]);
     }
     let computed_hash = hasher.finalize();
-    let computed = format!("sha256:{}", bytes_to_hex(&computed_hash));
+    let computed = format_digest("sha256", &computed_hash);
 
     if computed != expected_digest {
         return Err(RegistryError::DigestMismatch {
@@ -252,67 +240,7 @@ pub fn verify_blob_digest(blob_path: &Path, expected_digest: &str) -> Result<(),
 
 /// Apply whiteout files across layers (reverse order, top layer first).
 pub fn apply_whiteouts(layer_dirs: &[PathBuf]) -> Result<(), RegistryError> {
-    for layer_dir in layer_dirs.iter().rev() {
-        remove_whiteout_files(layer_dir)?;
-    }
-    Ok(())
-}
-
-/// Remove whiteout files from a directory tree.
-/// Handles both OCI-style `.wh.` prefix and overlayfs char device whiteouts (0:0).
-fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
-    remove_whiteout_files_in(dir, dir)
-}
-
-fn remove_whiteout_files_in(root: &Path, dir: &Path) -> Result<(), RegistryError> {
-    if !dir.is_dir() {
-        return Ok(());
-    }
-
-    let entries: Vec<_> = match fs::read_dir(dir) {
-        Ok(entries) => entries.filter_map(|e| e.ok()).collect(),
-        Err(_) => return Ok(()),
-    };
-
-    for entry in entries {
-        let path = entry.path();
-        let file_name = entry.file_name();
-
-        if let Some(relative_path) = path.strip_prefix(root).ok().and_then(|path| path.to_str()) {
-            match parse_oci_whiteout(relative_path) {
-                Some(OciWhiteout::RemovePath(target_path)) => {
-                    let target = root.join(target_path);
-                    if target.exists() {
-                        if target.is_dir() {
-                            let _ = fs::remove_dir_all(&target);
-                        } else {
-                            let _ = fs::remove_file(&target);
-                        }
-                    }
-                    let _ = fs::remove_file(&path);
-                    continue;
-                }
-                Some(OciWhiteout::OpaqueDirectory(_)) => {
-                    let _ = fs::remove_file(&path);
-                    continue;
-                }
-                None => {}
-            }
-        }
-
-        // Overlayfs char device whiteout (0:0 character device)
-        if let Ok(metadata) = path.metadata() {
-            if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
-                let _ = fs::remove_file(&path);
-            }
-        }
-
-        if path.is_dir() {
-            remove_whiteout_files_in(root, &path)?;
-        }
-    }
-
-    Ok(())
+    crate::rootfs_layers::apply_whiteouts(layer_dirs).map_err(RegistryError::IoError)
 }
 
 // ===========================================================================
@@ -321,7 +249,7 @@ fn remove_whiteout_files_in(root: &Path, dir: &Path) -> Result<(), RegistryError
 
 /// Build rootfs by merging layers in order.
 pub fn build_rootfs(layer_dirs: &[PathBuf], dest: &Path) -> Result<(), RegistryError> {
-    crate::rootfs_copy::merge_layer_dirs(layer_dirs, dest).map_err(RegistryError::IoError)
+    crate::rootfs_layers::build_rootfs(layer_dirs, dest).map_err(RegistryError::IoError)
 }
 
 #[cfg(all(test, not(target_os = "none")))]

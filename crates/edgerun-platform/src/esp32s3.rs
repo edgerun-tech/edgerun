@@ -546,6 +546,70 @@ impl Jc3248w535Display {
         }
     }
 
+    /// Stream a BGRA8888 tile to the panel using the same row protocol as the
+    /// validated solid clear path.
+    pub unsafe fn draw_bgra8888_tile_rows(
+        width: u16,
+        full_height: u16,
+        tile_y: u16,
+        tile_height: u16,
+        pixels: &[u8],
+        stride: usize,
+    ) {
+        if width != LCD_WIDTH
+            || full_height != LCD_HEIGHT
+            || tile_y >= LCD_HEIGHT
+            || tile_height == 0
+            || stride < width as usize * 4
+        {
+            return;
+        }
+
+        let rows = min_u16(tile_height, LCD_HEIGHT - tile_y);
+        if pixels.len() < rows as usize * stride {
+            return;
+        }
+
+        tx_cmd(
+            0x2A,
+            &[
+                0x00,
+                0x00,
+                ((LCD_WIDTH - 1) >> 8) as u8,
+                (LCD_WIDTH - 1) as u8,
+            ],
+        );
+
+        let mut row = [0u8; LCD_WIDTH as usize * 2];
+        let mut local_y = 0u16;
+        while local_y < rows {
+            let src_row = local_y as usize * stride;
+            let mut px = 0usize;
+            let mut out = 0usize;
+            while px < LCD_WIDTH as usize {
+                let src = src_row + px * 4;
+                let b = pixels[src];
+                let g = pixels[src + 1];
+                let r = pixels[src + 2];
+                let rgb565 =
+                    (((r as u16) & 0xf8) << 8) | (((g as u16) & 0xfc) << 3) | (b as u16 >> 3);
+                row[out] = (rgb565 >> 8) as u8;
+                row[out + 1] = rgb565 as u8;
+                px += 1;
+                out += 2;
+            }
+
+            let cmd = if tile_y == 0 && local_y == 0 {
+                0x2C
+            } else {
+                0x3C
+            };
+            tx_command_word(cmd, LCD_OPCODE_WRITE_COLOR, false, true);
+            spi2_write(&row, true, false);
+            local_y += 1;
+        }
+    }
+
     /// Stream a generated full-screen RGB565 frame without allocating a framebuffer.
     pub unsafe fn draw_rgb565_with<F>(width: u16, height: u16, mut pixel_rgb565: F)
     where
@@ -949,11 +1013,7 @@ unsafe fn i2c_scl_release() {
 }
 
 fn min_u16(a: u16, b: u16) -> u16 {
-    if a < b {
-        a
-    } else {
-        b
-    }
+    if a < b { a } else { b }
 }
 
 fn dot_origin(coord: u16, radius: u16, limit: u16) -> u16 {

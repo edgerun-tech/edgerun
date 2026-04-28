@@ -5,6 +5,8 @@ use std::io;
 mod checkpoint;
 mod create;
 mod delete;
+mod display;
+mod env;
 mod events;
 mod exec;
 mod features;
@@ -66,132 +68,42 @@ struct CommandSpec {
     container: bool,
 }
 
+macro_rules! command_spec {
+    ($name:literal, $handler:ident, $container:literal) => {
+        CommandSpec {
+            name: $name,
+            handler: $handler,
+            container: $container,
+        }
+    };
+}
+
 const COMMANDS: &[CommandSpec] = &[
-    CommandSpec {
-        name: "create",
-        handler: cmd_create,
-        container: true,
-    },
-    CommandSpec {
-        name: "start",
-        handler: cmd_start,
-        container: true,
-    },
-    CommandSpec {
-        name: "stop",
-        handler: cmd_stop,
-        container: true,
-    },
-    CommandSpec {
-        name: "state",
-        handler: cmd_state,
-        container: true,
-    },
-    CommandSpec {
-        name: "inspect",
-        handler: cmd_inspect,
-        container: true,
-    },
-    CommandSpec {
-        name: "kill",
-        handler: cmd_kill,
-        container: true,
-    },
-    CommandSpec {
-        name: "logs",
-        handler: cmd_logs,
-        container: true,
-    },
-    CommandSpec {
-        name: "delete",
-        handler: cmd_delete,
-        container: true,
-    },
-    CommandSpec {
-        name: "rm",
-        handler: cmd_delete,
-        container: true,
-    },
-    CommandSpec {
-        name: "exec",
-        handler: cmd_exec,
-        container: true,
-    },
-    CommandSpec {
-        name: "update",
-        handler: cmd_update,
-        container: true,
-    },
-    CommandSpec {
-        name: "pause",
-        handler: cmd_pause,
-        container: true,
-    },
-    CommandSpec {
-        name: "resume",
-        handler: cmd_resume,
-        container: true,
-    },
-    CommandSpec {
-        name: "checkpoint",
-        handler: cmd_checkpoint,
-        container: true,
-    },
-    CommandSpec {
-        name: "restore",
-        handler: cmd_restore,
-        container: true,
-    },
-    CommandSpec {
-        name: "events",
-        handler: cmd_events,
-        container: true,
-    },
-    CommandSpec {
-        name: "ps",
-        handler: cmd_ps,
-        container: true,
-    },
-    CommandSpec {
-        name: "features",
-        handler: cmd_features,
-        container: false,
-    },
-    CommandSpec {
-        name: "spec",
-        handler: cmd_spec,
-        container: false,
-    },
-    CommandSpec {
-        name: "pull",
-        handler: cmd_pull,
-        container: false,
-    },
-    CommandSpec {
-        name: "push",
-        handler: cmd_push,
-        container: false,
-    },
-    CommandSpec {
-        name: "images",
-        handler: cmd_images,
-        container: false,
-    },
-    CommandSpec {
-        name: "rmi",
-        handler: cmd_rmi,
-        container: false,
-    },
-    CommandSpec {
-        name: "run",
-        handler: cmd_run,
-        container: true,
-    },
-    CommandSpec {
-        name: "registry",
-        handler: dispatch_registry_command,
-        container: false,
-    },
+    command_spec!("create", cmd_create, true),
+    command_spec!("start", cmd_start, true),
+    command_spec!("stop", cmd_stop, true),
+    command_spec!("state", cmd_state, true),
+    command_spec!("inspect", cmd_inspect, true),
+    command_spec!("kill", cmd_kill, true),
+    command_spec!("logs", cmd_logs, true),
+    command_spec!("delete", cmd_delete, true),
+    command_spec!("rm", cmd_delete, true),
+    command_spec!("exec", cmd_exec, true),
+    command_spec!("update", cmd_update, true),
+    command_spec!("pause", cmd_pause, true),
+    command_spec!("resume", cmd_resume, true),
+    command_spec!("checkpoint", cmd_checkpoint, true),
+    command_spec!("restore", cmd_restore, true),
+    command_spec!("events", cmd_events, true),
+    command_spec!("ps", cmd_ps, true),
+    command_spec!("features", cmd_features, false),
+    command_spec!("spec", cmd_spec, false),
+    command_spec!("pull", cmd_pull, false),
+    command_spec!("push", cmd_push, false),
+    command_spec!("images", cmd_images, false),
+    command_spec!("rmi", cmd_rmi, false),
+    command_spec!("run", cmd_run, true),
+    command_spec!("registry", dispatch_registry_command, false),
 ];
 
 #[cfg(all(feature = "std", not(target_os = "none")))]

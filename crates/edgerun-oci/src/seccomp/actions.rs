@@ -9,6 +9,7 @@ use crate::syscalls::{
 };
 
 use super::*;
+use crate::linux_catalog::seccomp_arch_bpf;
 
 pub(crate) fn action_to_bpf(action: &OciSeccompAction, errno_ret: Option<u32>) -> u32 {
     match action {
@@ -25,12 +26,5 @@ pub(crate) fn action_to_bpf(action: &OciSeccompAction, errno_ret: Option<u32>) -
 }
 
 pub(crate) fn arch_to_bpf(arch: &str) -> u32 {
-    match arch {
-        "SCMP_ARCH_X86_64" => 0xc000003e,
-        "SCMP_ARCH_X86" => 0x40000003,
-        "SCMP_ARCH_X32" => 0x4000003e,
-        "SCMP_ARCH_AARCH64" => 0xc00000b7,
-        "SCMP_ARCH_ARM" => 0x40000028,
-        _ => CURRENT_ARCH,
-    }
+    seccomp_arch_bpf(arch).unwrap_or(CURRENT_ARCH)
 }

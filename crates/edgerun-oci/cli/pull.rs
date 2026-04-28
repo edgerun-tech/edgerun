@@ -3,6 +3,7 @@
 use crate::prelude::*;
 use std::path::PathBuf;
 
+use crate::cli::display::format_bytes;
 use crate::cli::{
     default_images_dir, default_store_dir, invalid_input, parse_cli_args, required_positional,
     resolve_registry_auth, GlobalOpts,
@@ -49,7 +50,7 @@ pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
                 "Done: {} -> {} ({} downloaded, {} layer{})",
                 image_ref,
                 report.path.display(),
-                format_bytes(report.bytes_downloaded),
+                format_bytes(report.bytes_downloaded, " "),
                 report.layers,
                 if report.layers == 1 { "" } else { "s" }
             );
@@ -79,7 +80,7 @@ pub(crate) fn print_pull_progress(event: PullProgress) {
             eprintln!("  -> config {}", short_digest(&digest));
         }
         PullProgress::ConfigFetched { bytes } => {
-            eprintln!("  ok config: {}", format_bytes(bytes));
+            eprintln!("  ok config: {}", format_bytes(bytes, " "));
         }
         PullProgress::LayerCached {
             index,
@@ -100,7 +101,7 @@ pub(crate) fn print_pull_progress(event: PullProgress) {
             eprintln!(
                 "  -> layer {index}/{total}: {} ({})",
                 short_digest(&digest),
-                format_bytes(size)
+                format_bytes(size, " ")
             );
         }
         PullProgress::LayerDownloaded {
@@ -111,7 +112,7 @@ pub(crate) fn print_pull_progress(event: PullProgress) {
         } => {
             eprintln!(
                 "  ok layer {index}/{total}: {} downloaded",
-                format_bytes(bytes)
+                format_bytes(bytes, " ")
             );
             eprintln!("     {}", short_digest(&digest));
         }
@@ -156,22 +157,6 @@ fn short_digest(digest: &str) -> String {
         format!("{algorithm}:{}", &value[..short_len])
     } else {
         digest.chars().take(18).collect()
-    }
-}
-
-fn format_bytes(bytes: u64) -> String {
-    const KIB: u64 = 1024;
-    const MIB: u64 = KIB * 1024;
-    const GIB: u64 = MIB * 1024;
-
-    if bytes >= GIB {
-        format!("{:.1} GiB", bytes as f64 / GIB as f64)
-    } else if bytes >= MIB {
-        format!("{:.1} MiB", bytes as f64 / MIB as f64)
-    } else if bytes >= KIB {
-        format!("{:.1} KiB", bytes as f64 / KIB as f64)
-    } else {
-        format!("{bytes} B")
     }
 }
 

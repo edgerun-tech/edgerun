@@ -11,11 +11,12 @@ use std::io::{self, Write};
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 
+use crate::cli::env::{parse_env_assignment, read_env_file};
 use crate::cli::pull::print_pull_progress;
 use crate::cli::user::{resolve_user, validate_user_spec};
 use crate::cli::{
     default_images_dir, default_store_dir, parse_cli_args, resolve_registry_auth, split_cli_prefix,
-    write_all_fd, GlobalOpts, RUN_VALUE_OPTIONS,
+    GlobalOpts, RUN_VALUE_OPTIONS,
 };
 use crate::lifecycle::{
     fork_container_child_with_terminal_socket, run_create_runtime_hooks, run_prestart_hooks,
@@ -25,6 +26,7 @@ use crate::process::validate_spec;
 use crate::rootfs_copy::copy_rootfs_tree;
 use crate::spec::{parse_oci_spec, OciMount, OciSpec};
 use crate::state::{delete_state, load_state};
+use crate::terminal::{recv_fd, relay_pty_until_exit, wait_for_exit_code};
 
 use crate::ImageRef;
 use crate::RegistryAuth;
@@ -291,154 +293,6 @@ fn pull_image(
             Ok(())
         }
         Err(e) => Err(io::Error::other(format!("pull failed: {e}"))),
-    }
-}
-
-fn wait_for_exit_code(child_pid: i32) -> io::Result<i32> {
-    let mut status = 0i32;
-    let pid = unsafe { libc::waitpid(child_pid, &mut status as *mut i32, 0) };
-    if pid < 0 {
-        return Err(io::Error::other("waitpid failed"));
-    }
-    Ok(exit_code_from_status(status))
-}
-
-fn exit_code_from_status(status: i32) -> i32 {
-    if libc::WIFEXITED(status) {
-        libc::WEXITSTATUS(status)
-    } else if libc::WIFSIGNALED(status) {
-        128 + libc::WTERMSIG(status)
-    } else {
-        128
-    }
-}
-
-fn recv_fd(sock_fd: i32) -> io::Result<i32> {
-    let mut msg: libc::msghdr = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-    let cmsg_space = unsafe { libc::CMSG_SPACE(std::mem::size_of::<i32>() as u32) as usize };
-    let mut cmsg_buf = vec![0u8; cmsg_space];
-    let mut fd_buf = 0i32;
-    let iov = libc::iovec {
-        iov_base: &mut fd_buf as *mut _ as *mut libc::c_void,
-        iov_len: std::mem::size_of::<i32>(),
-    };
-
-    msg.msg_iov = &iov as *const _ as *mut libc::iovec;
-    msg.msg_iovlen = 1;
-    msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-    msg.msg_controllen = cmsg_space as _;
-
-    let ret = unsafe { libc::recvmsg(sock_fd, &mut msg, 0) };
-    if ret < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
-    if cmsg.is_null() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "no PTY control message received",
-        ));
-    }
-
-    let fd = unsafe { std::ptr::read_unaligned(libc::CMSG_DATA(cmsg) as *const i32) };
-    Ok(fd)
-}
-
-fn relay_pty_until_exit(pty_master_fd: i32, child_pid: i32, interactive: bool) -> io::Result<i32> {
-    let stdin_fd = libc::STDIN_FILENO;
-    let has_terminal = unsafe { libc::isatty(stdin_fd) == 1 };
-    let mut saved = None;
-    if interactive && has_terminal {
-        let mut original: libc::termios = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-        if unsafe { libc::tcgetattr(stdin_fd, &mut original) } == 0 {
-            let mut raw = original;
-            raw.c_lflag &= !(libc::ECHO | libc::ICANON | libc::ISIG | libc::IEXTEN);
-            raw.c_iflag &= !(libc::BRKINT | libc::ICRNL | libc::INPCK | libc::ISTRIP | libc::IXON);
-            raw.c_cflag &= !(libc::CSIZE | libc::PARENB);
-            raw.c_cflag |= libc::CS8;
-            raw.c_cc[libc::VMIN] = 1;
-            raw.c_cc[libc::VTIME] = 0;
-            let _ = unsafe { libc::tcsetattr(stdin_fd, libc::TCSAFLUSH, &raw) };
-            saved = Some(original);
-        }
-    }
-
-    struct TerminalRestore(Option<libc::termios>);
-    impl Drop for TerminalRestore {
-        fn drop(&mut self) {
-            if let Some(termios) = self.0 {
-                let _ = unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, &termios) };
-            }
-        }
-    }
-    let _restore = TerminalRestore(saved);
-
-    let mut buf_in = [0u8; 4096];
-    let mut buf_out = [0u8; 4096];
-    let mut stdin_open = interactive;
-    loop {
-        let mut fds = [
-            libc::pollfd {
-                fd: stdin_fd,
-                events: if stdin_open { libc::POLLIN } else { 0 },
-                revents: 0,
-            },
-            libc::pollfd {
-                fd: pty_master_fd,
-                events: libc::POLLIN,
-                revents: 0,
-            },
-        ];
-        let ret = unsafe { libc::poll(fds.as_mut_ptr(), 2, 100) };
-        if ret < 0 {
-            continue;
-        }
-
-        if stdin_open && fds[0].revents & libc::POLLIN != 0 {
-            let n = unsafe {
-                libc::read(
-                    stdin_fd,
-                    buf_in.as_mut_ptr() as *mut libc::c_void,
-                    buf_in.len(),
-                )
-            };
-            if n > 0 {
-                write_all_fd(pty_master_fd, &buf_in[..n as usize]);
-            } else {
-                stdin_open = false;
-                write_all_fd(pty_master_fd, &[4]);
-            }
-        }
-
-        if fds[1].revents & libc::POLLIN != 0 {
-            let n = unsafe {
-                libc::read(
-                    pty_master_fd,
-                    buf_out.as_mut_ptr() as *mut libc::c_void,
-                    buf_out.len(),
-                )
-            };
-            if n > 0 {
-                write_all_fd(libc::STDOUT_FILENO, &buf_out[..n as usize]);
-            }
-        }
-
-        let mut status = 0i32;
-        let wait = unsafe { libc::waitpid(child_pid, &mut status as *mut i32, libc::WNOHANG) };
-        if wait > 0 {
-            drain_fd_to_stdout(pty_master_fd, &mut buf_out);
-            return Ok(exit_code_from_status(status));
-        }
-    }
-}
-
-fn drain_fd_to_stdout(fd: i32, buffer: &mut [u8]) {
-    loop {
-        let n = unsafe { libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) };
-        if n <= 0 {
-            break;
-        }
-        write_all_fd(libc::STDOUT_FILENO, &buffer[..n as usize]);
     }
 }
 
@@ -826,60 +680,6 @@ fn parse_add_host(value: &str) -> io::Result<(String, String)> {
     let host = validate_hostname(host)?;
     let ip = validate_dns_server(ip)?;
     Ok((host, ip))
-}
-
-fn parse_env_assignment(value: &str) -> io::Result<String> {
-    let Some((key, _)) = value.split_once('=') else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "environment entries must be KEY=VALUE",
-        ));
-    };
-    validate_env_key(key)?;
-    Ok(value.to_string())
-}
-
-fn validate_env_key(key: &str) -> io::Result<()> {
-    let mut bytes = key.bytes();
-    let Some(first) = bytes.next() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "environment key must not be empty",
-        ));
-    };
-    if !(first.is_ascii_alphabetic() || first == b'_') {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "environment key must start with a letter or '_'",
-        ));
-    }
-    if !bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "environment key must contain only letters, digits, and '_'",
-        ));
-    }
-    Ok(())
-}
-
-fn read_env_file(path: &Path) -> io::Result<Vec<String>> {
-    let data = fs::read_to_string(path)?;
-    let mut out = Vec::new();
-    for (index, line) in data.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let line = line.strip_prefix("export ").unwrap_or(line);
-        let parsed = parse_env_assignment(line).map_err(|error| {
-            io::Error::new(
-                error.kind(),
-                format!("{}:{}: {}", path.display(), index + 1, error),
-            )
-        })?;
-        out.push(parsed);
-    }
-    Ok(out)
 }
 
 fn apply_user_override(spec: &mut OciSpec, rootfs: &Path, value: Option<&str>) -> io::Result<()> {

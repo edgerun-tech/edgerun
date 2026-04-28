@@ -11,253 +11,15 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 
+use crate::cli::env::{parse_env_pair, upsert_env};
 use crate::cli::user::{resolve_user, validate_user_spec};
 use crate::cli::{parse_cli_args, split_cli_prefix, EXEC_VALUE_OPTIONS};
+use crate::process_exec::exec_with_env_and_cwd;
 use crate::syscalls::{do_setns, ns};
+use crate::terminal::{recv_fd, relay_pty_until_exit, send_fd, setup_pty_stdio};
 use crate::userns::{do_setgid, do_setuid};
 use edgerun_clap::cli::Action;
 use edgerun_clap::{Arg, Command};
-
-/// Relay I/O between the host terminal and a container PTY.
-///
-/// Sets the host terminal to raw mode, forwards stdin→pty_master and
-/// pty_master→stdout until the child exits, then restores terminal settings.
-fn tty_relay(pty_master_fd: i32, child_pid: libc::pid_t) -> io::Result<std::process::ExitStatus> {
-    use std::mem::MaybeUninit;
-    use std::os::unix::process::ExitStatusExt;
-
-    extern "C" {
-        fn tcgetattr(fd: i32, termios: *mut libc::termios) -> i32;
-        fn tcsetattr(fd: i32, optional_actions: i32, termios: *const libc::termios) -> i32;
-    }
-
-    // Save the host terminal settings
-    let stdin_fd = libc::STDIN_FILENO;
-    let mut orig_termios: libc::termios = unsafe { MaybeUninit::zeroed().assume_init() };
-    if unsafe { tcgetattr(stdin_fd, &mut orig_termios) } != 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    // Put the terminal in raw mode
-    let mut raw_termios = orig_termios;
-    raw_termios.c_lflag &= !(libc::ECHO | libc::ICANON | libc::ISIG | libc::IEXTEN);
-    raw_termios.c_iflag &= !(libc::BRKINT | libc::ICRNL | libc::INPCK | libc::ISTRIP | libc::IXON);
-    raw_termios.c_cflag &= !(libc::CSIZE | libc::PARENB);
-    raw_termios.c_cflag |= libc::CS8;
-    raw_termios.c_cc[libc::VMIN] = 1;
-    raw_termios.c_cc[libc::VTIME] = 0;
-    unsafe { tcsetattr(stdin_fd, libc::TCSAFLUSH, &raw_termios) };
-
-    // Restore terminal on exit (including signals, panics, etc.)
-    struct TerminalGuard(libc::termios);
-    impl Drop for TerminalGuard {
-        fn drop(&mut self) {
-            unsafe { tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, &self.0) };
-        }
-    }
-    let _guard = TerminalGuard(orig_termios);
-
-    // Bidirectional relay using poll(2)
-    use std::os::fd::IntoRawFd;
-    use std::os::unix::io::FromRawFd;
-    let stdin_file = unsafe { std::fs::File::from_raw_fd(stdin_fd) };
-    let pty_file = unsafe { std::fs::File::from_raw_fd(pty_master_fd) };
-
-    // Don't let File::drop close stdin or the pty master (owned elsewhere)
-    let _ = stdin_file.into_raw_fd();
-    let _ = pty_file.into_raw_fd();
-
-    let mut buf_in = [0u8; 4096];
-    let mut buf_out = [0u8; 4096];
-
-    loop {
-        let mut fds = [
-            libc::pollfd {
-                fd: stdin_fd,
-                events: libc::POLLIN,
-                revents: 0,
-            },
-            libc::pollfd {
-                fd: pty_master_fd,
-                events: libc::POLLIN,
-                revents: 0,
-            },
-        ];
-
-        let ret = unsafe { libc::poll(fds.as_mut_ptr(), 2, 100) };
-        if ret < 0 {
-            if unsafe { *libc::__errno_location() } == libc::EINTR {
-                continue;
-            }
-            break;
-        }
-
-        // stdin → pty_master
-        if fds[0].revents & libc::POLLIN != 0 {
-            let n = unsafe {
-                libc::read(
-                    stdin_fd,
-                    buf_in.as_mut_ptr() as *mut libc::c_void,
-                    buf_in.len(),
-                )
-            };
-            if n > 0 {
-                let mut sent = 0isize;
-                while sent < n as isize {
-                    let w = unsafe {
-                        libc::write(
-                            pty_master_fd,
-                            buf_in.as_ptr().offset(sent) as *const libc::c_void,
-                            (n as isize - sent) as usize,
-                        )
-                    };
-                    if w <= 0 {
-                        break;
-                    }
-                    sent += w as isize;
-                }
-            } else if n == 0 {
-                break; // stdin EOF
-            }
-        }
-
-        // pty_master → stdout
-        if fds[1].revents & libc::POLLIN != 0 {
-            let n = unsafe {
-                libc::read(
-                    pty_master_fd,
-                    buf_out.as_mut_ptr() as *mut libc::c_void,
-                    buf_out.len(),
-                )
-            };
-            if n > 0 {
-                let mut sent = 0isize;
-                while sent < n as isize {
-                    let w = unsafe {
-                        libc::write(
-                            libc::STDOUT_FILENO,
-                            buf_out.as_ptr().offset(sent) as *const libc::c_void,
-                            (n as isize - sent) as usize,
-                        )
-                    };
-                    if w <= 0 {
-                        break;
-                    }
-                    sent += w as isize;
-                }
-            } else if n == 0 {
-                break; // pty EOF
-            }
-        }
-
-        // Check if child has exited
-        let mut status: i32 = 0;
-        let wait_ret = unsafe { libc::waitpid(child_pid, &mut status, libc::WNOHANG) };
-        if wait_ret > 0 {
-            // Drain remaining pty output
-            loop {
-                let n = unsafe {
-                    libc::read(
-                        pty_master_fd,
-                        buf_out.as_mut_ptr() as *mut libc::c_void,
-                        buf_out.len(),
-                    )
-                };
-                if n <= 0 {
-                    break;
-                }
-                let mut sent = 0isize;
-                while sent < n as isize {
-                    let w = unsafe {
-                        libc::write(
-                            libc::STDOUT_FILENO,
-                            buf_out.as_ptr().offset(sent) as *const libc::c_void,
-                            (n as isize - sent) as usize,
-                        )
-                    };
-                    if w <= 0 {
-                        break;
-                    }
-                    sent += w as isize;
-                }
-            }
-            return Ok(std::process::ExitStatus::from_raw(status));
-        }
-    }
-
-    // Child hasn't exited yet — wait for it
-    let mut status: i32 = 0;
-    unsafe { libc::waitpid(child_pid, &mut status, 0) };
-    Ok(std::process::ExitStatus::from_raw(status))
-}
-
-/// Send a file descriptor over a Unix socket using SCM_RIGHTS.
-fn send_fd(sock_fd: i32, fd: i32) -> io::Result<()> {
-    let mut msg: libc::msghdr = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-    let cmsg_space = unsafe { libc::CMSG_SPACE(std::mem::size_of::<i32>() as u32) as usize };
-    let mut cmsg_buf = vec![0u8; cmsg_space];
-
-    let fd_to_send = fd;
-    let iov = libc::iovec {
-        iov_base: &fd_to_send as *const _ as *mut libc::c_void,
-        iov_len: std::mem::size_of::<i32>(),
-    };
-    msg.msg_iov = &iov as *const _ as *mut libc::iovec;
-    msg.msg_iovlen = 1;
-    msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-    msg.msg_controllen = cmsg_space as _;
-
-    let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
-    unsafe {
-        (*cmsg).cmsg_level = libc::SOL_SOCKET;
-        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-        (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<i32>() as u32) as _;
-        std::ptr::copy_nonoverlapping(&fd as *const i32, libc::CMSG_DATA(cmsg) as *mut i32, 1);
-    }
-
-    let ret = unsafe { libc::sendmsg(sock_fd, &msg, 0) };
-    if ret < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-/// Receive a file descriptor over a Unix socket using SCM_RIGHTS.
-fn recv_fd(sock_fd: i32) -> io::Result<i32> {
-    let mut msg: libc::msghdr = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-    let cmsg_space = unsafe { libc::CMSG_SPACE(std::mem::size_of::<i32>() as u32) as usize };
-    let mut cmsg_buf = vec![0u8; cmsg_space];
-    let mut fd_buf: i32 = 0;
-
-    let iov = libc::iovec {
-        iov_base: &mut fd_buf as *mut _ as *mut libc::c_void,
-        iov_len: std::mem::size_of::<i32>(),
-    };
-    msg.msg_iov = &iov as *const _ as *mut libc::iovec;
-    msg.msg_iovlen = 1;
-    msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-    msg.msg_controllen = cmsg_space as _;
-
-    let ret = unsafe { libc::recvmsg(sock_fd, &mut msg, 0) };
-    if ret < 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
-    if cmsg.is_null() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "no control message received",
-        ));
-    }
-
-    let fd = unsafe {
-        let data = libc::CMSG_DATA(cmsg) as *const i32;
-        std::ptr::read_unaligned(data)
-    };
-    Ok(fd)
-}
 
 pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
@@ -330,9 +92,7 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
 
             // Apply --env overrides
             for (k, v) in &parsed.extra_env {
-                let entry = format!("{}={}", k, v);
-                env.retain(|e| !e.starts_with(&format!("{}=", k)));
-                env.push(entry);
+                upsert_env(&mut env, k, v);
             }
 
             let exec_args = if parsed.exec_args.is_empty() {
@@ -399,46 +159,16 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
             // Close parent end in child
             unsafe { libc::close(parent_sock) };
 
-            extern "C" {
-                fn posix_openpt(flags: libc::c_int) -> libc::c_int;
-                fn grantpt(fd: libc::c_int) -> libc::c_int;
-                fn unlockpt(fd: libc::c_int) -> libc::c_int;
-                fn ptsname(fd: libc::c_int) -> *const std::ffi::c_char;
-            }
-
-            let master_fd = unsafe { posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
-            if master_fd < 0 {
-                unsafe { libc::_exit(126) };
-            }
-            if unsafe { grantpt(master_fd) } != 0 || unsafe { unlockpt(master_fd) } != 0 {
-                unsafe { libc::_exit(126) };
-            }
+            let master_fd = match setup_pty_stdio() {
+                Ok(fd) => fd,
+                Err(_) => unsafe { libc::_exit(126) },
+            };
 
             // Send master fd to parent
             if send_fd(sockets[1], master_fd).is_err() {
                 unsafe { libc::_exit(126) };
             }
             unsafe { libc::close(master_fd) };
-
-            // Open slave and dup to stdio
-            let slave_path = unsafe { ptsname(master_fd) };
-            if slave_path.is_null() {
-                unsafe { libc::_exit(126) };
-            }
-            let slave_fd = unsafe { libc::open(slave_path, libc::O_RDWR) };
-            if slave_fd < 0 {
-                unsafe { libc::_exit(126) };
-            }
-
-            // Set controlling terminal
-            unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as _, 0) };
-
-            unsafe { libc::dup2(slave_fd, libc::STDIN_FILENO) };
-            unsafe { libc::dup2(slave_fd, libc::STDOUT_FILENO) };
-            unsafe { libc::dup2(slave_fd, libc::STDERR_FILENO) };
-            if slave_fd > 2 {
-                unsafe { libc::close(slave_fd) };
-            }
         }
 
         // Drop privileges if needed
@@ -449,71 +179,11 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
             let _ = do_setuid(uid);
         }
 
-        // chdir
-        let cwd_c = match CString::new(cwd.as_bytes()) {
-            Ok(c) => c,
-            Err(_) => {
-                unsafe { libc::_exit(126) };
-            }
-        };
-        unsafe { libc::chdir(cwd_c.as_ptr()) };
-
-        // Set environment
-        unsafe { libc::clearenv() };
-        for e in &env_vars {
-            if let Some((k, v)) = e.split_once('=') {
-                let k_c = match CString::new(k.as_bytes()) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                let v_c = match CString::new(v.as_bytes()) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                unsafe { libc::setenv(k_c.as_ptr(), v_c.as_ptr(), 1) };
-            }
-        }
-
-        // Resolve executable
-        let exe_path = if exec_args[0].starts_with('/') {
-            exec_args[0].clone()
-        } else {
-            let exe_name = &exec_args[0];
-            let path_env = env_vars
-                .iter()
-                .find(|e| e.starts_with("PATH="))
-                .map(|e| &e[5..])
-                .unwrap_or("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
-            let mut found = None;
-            for dir in path_env.split(':') {
-                let candidate = format!("{}/{}", dir, exe_name);
-                if std::path::Path::new(&candidate).exists() {
-                    found = Some(candidate);
-                    break;
-                }
-            }
-            found.unwrap_or_else(|| exe_name.clone())
-        };
-
-        // Exec
-        let exe_cstr = match CString::new(exe_path.as_bytes()) {
-            Ok(c) => c,
-            Err(_) => {
-                unsafe { libc::_exit(126) };
-            }
-        };
-        let c_args: Vec<CString> = exec_args
-            .iter()
-            .filter_map(|a| CString::new(a.as_bytes()).ok())
-            .collect();
-        let c_ptrs: Vec<*const libc::c_char> = c_args
-            .iter()
-            .map(|s| s.as_ptr())
-            .chain(std::iter::once(std::ptr::null()))
-            .collect();
-
-        unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr()) };
-        unsafe { libc::_exit(127) };
+        let exit_code = exec_with_env_and_cwd(&exec_args, &env_vars, &cwd)
+            .err()
+            .map(|error| error.exit_code())
+            .unwrap_or(127);
+        unsafe { libc::_exit(exit_code) };
     }
 
     // Parent: receive PTY master fd if --terminal, then wait/relay
@@ -527,13 +197,11 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         unsafe { libc::close(parent_sock) };
 
         // Bidirectional TTY relay
-        let exit_status = tty_relay(pty_master, child_pid)?;
+        let exit_code = relay_pty_until_exit(pty_master, child_pid, true)?;
         unsafe { libc::close(pty_master) };
 
-        if let Some(code) = exit_status.code() {
-            if code != 0 {
-                std::process::exit(code);
-            }
+        if exit_code != 0 {
+            std::process::exit(exit_code);
         }
     } else {
         // No terminal — just wait for child
@@ -691,9 +359,8 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
 
     if let Some(env) = matches.get_many::<String>("env") {
         for entry in env {
-            if let Some((key, value)) = entry.split_once('=') {
-                result.extra_env.push((key.into(), value.into()));
-            }
+            let (key, value) = parse_env_pair(&entry)?;
+            result.extra_env.push((key.into(), value.into()));
         }
     }
 

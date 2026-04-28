@@ -8,6 +8,8 @@
 extern crate alloc;
 extern crate edgerun_dhcp;
 extern crate edgerun_http;
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+extern crate edgerun_layout;
 extern crate edgerun_oci;
 extern crate edgerun_platform;
 extern crate edgerun_rt as rt;
@@ -37,7 +39,7 @@ struct EspAppDesc {
     reserv2: [u32; 18],
 }
 
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
 const UI_HTML: &str = r#"
 <main class="remote">
   <section class="status">
@@ -54,21 +56,512 @@ const UI_HTML: &str = r#"
 </main>
 "#;
 
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
 const UI_CSS: &str = r#"
-main { display: block; width: 320px; min-height: 480px; background-color: #f8fafc; color: #101828; padding: 18px; }
-.status { display: block; background-color: #0f766e; color: white; border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+main { display: block; width: 320px; min-height: 480px; background-color: #f8fafc; color: #101828; padding: 16px; }
+.status { display: block; background-color: #0f766e; color: white; border-radius: 14px; padding: 18px; margin-bottom: 14px; }
 .label { display: block; font-size: 16px; margin-bottom: 8px; }
 .temp { display: block; font-size: 72px; line-height: 1.0; margin-bottom: 8px; }
 .mode { display: block; font-size: 18px; }
 .controls { display: flex; flex-wrap: wrap; }
-button { display: block; width: 132px; height: 74px; margin-right: 8px; margin-bottom: 10px; background-color: #e2e8f0; color: #0f172a; border-radius: 10px; padding: 18px; font-size: 18px; }
+button { display: block; width: 132px; height: 72px; margin-right: 8px; margin-bottom: 10px; background-color: #e2e8f0; color: #0f172a; border-radius: 10px; padding: 18px; font-size: 18px; }
 .power { background-color: #dc2626; color: white; }
 "#;
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn render_initial_ui() {
+    #[cfg(feature = "html-ui")]
+    render_html_ui(None);
+    #[cfg(not(feature = "html-ui"))]
     render_debug_pattern(None);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_touch_ui(touch: (u16, u16)) {
+    #[cfg(feature = "html-ui")]
+    render_html_ui(Some(touch));
+    #[cfg(not(feature = "html-ui"))]
+    render_debug_pattern(Some(touch));
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn render_html_ui(touch: Option<(u16, u16)>) {
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
+            if let Some((tx, ty)) = touch {
+                let dx = x.abs_diff(tx);
+                let dy = y.abs_diff(ty);
+                if dx <= 5 && dy <= 5 {
+                    return 0xf800;
+                }
+            }
+            html_ui_pixel(x, y)
+        });
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn html_ui_pixel(x: u16, y: u16) -> u16 {
+    let x = x as u32;
+    let y = y as u32;
+
+    const TEXT: u16 = 0xe79f;
+    const MUTED_TEXT: u16 = 0x9cf3;
+    const PANEL_TEXT: u16 = 0xffff;
+    const ACCENT: u16 = 0x4e7f;
+
+    if text_pixel(x, y, 32, 50, 16, "TCL AC") {
+        return MUTED_TEXT;
+    }
+    if text_pixel(x, y, 30, 128, 72, "24") {
+        return PANEL_TEXT;
+    }
+    if text_pixel(x, y, 34, 160, 18, "Cool - Auto fan") {
+        return MUTED_TEXT;
+    }
+    if text_pixel(x, y, 56, 246, 18, "Power") {
+        return PANEL_TEXT;
+    }
+    if text_pixel(x, y, 194, 246, 18, "Mode") {
+        return TEXT;
+    }
+    if text_pixel(x, y, 56, 324, 18, "Fan") {
+        return TEXT;
+    }
+    if text_pixel(x, y, 194, 324, 18, "Swing") {
+        return TEXT;
+    }
+
+    if power_icon_pixel(x, y, 34, 232) {
+        return PANEL_TEXT;
+    }
+    if snow_icon_pixel(x, y, 172, 232) {
+        return ACCENT;
+    }
+    if fan_icon_pixel(x, y, 34, 310) {
+        return ACCENT;
+    }
+    if swing_icon_pixel(x, y, 172, 310) {
+        return ACCENT;
+    }
+
+    if y == 188 && x >= 28 && x < 292 {
+        return rgb565(22, 47, 55);
+    }
+
+    if in_rounded_rect(x, y, 16, 16, 288, 174, 14) {
+        return rgb565(8, 37, 45);
+    }
+    if in_rounded_rect(x, y, 22, 210, 128, 68, 10) {
+        return rgb565(173, 36, 48);
+    }
+    if in_rounded_rect(x, y, 170, 210, 128, 68, 10)
+        || in_rounded_rect(x, y, 22, 292, 128, 68, 10)
+        || in_rounded_rect(x, y, 170, 292, 128, 68, 10)
+    {
+        return rgb565(17, 31, 38);
+    }
+
+    if x < 320 && y < 480 {
+        let shade = if ((x / 24) + (y / 24)) & 1 == 0 { 0 } else { 3 };
+        return rgb565(5 + shade, 11 + shade, 15 + shade);
+    }
+
+    0
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn power_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
+    let dx = px as i32 - (x + 9) as i32;
+    let dy = py as i32 - (y + 9) as i32;
+    let d2 = dx * dx + dy * dy;
+    let ring = (56..=90).contains(&d2) && !(dx.abs() <= 2 && dy < -2);
+    let stem = px >= x + 8 && px <= x + 10 && py >= y && py <= y + 9;
+    ring || stem
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn snow_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
+    let cx = x + 9;
+    let cy = y + 9;
+    let dx = px.abs_diff(cx);
+    let dy = py.abs_diff(cy);
+    (px >= cx.saturating_sub(9) && px <= cx + 9 && dy <= 1)
+        || (py >= cy.saturating_sub(9) && py <= cy + 9 && dx <= 1)
+        || (dx == dy && dx <= 7)
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn fan_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
+    let cx = x + 9;
+    let cy = y + 9;
+    let dx = px as i32 - cx as i32;
+    let dy = py as i32 - cy as i32;
+    let hub = dx * dx + dy * dy <= 5;
+    let blade_a = dx >= 1 && dx <= 8 && dy.abs() <= 2;
+    let blade_b = dy >= 1 && dy <= 8 && (dx + dy).abs() <= 4;
+    let blade_c = dy <= -1 && dy >= -8 && (dx - dy).abs() <= 4;
+    hub || blade_a || blade_b || blade_c
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn swing_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
+    let cx = x + 9;
+    let cy = y + 5;
+    let dx = px as i32 - cx as i32;
+    let dy = py as i32 - cy as i32;
+    let d2 = dx * dx + dy * dy;
+    let arc = (86..=116).contains(&d2) && py >= cy;
+    let vane = py >= y + 14 && py <= y + 16 && px >= x + 2 && px <= x + 16;
+    arc || vane || (px == x + 15 && py >= y + 11 && py <= y + 16)
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn in_rounded_rect(px: u32, py: u32, x: u32, y: u32, w: u32, h: u32, radius: u32) -> bool {
+    if px < x || py < y || px >= x.saturating_add(w) || py >= y.saturating_add(h) {
+        return false;
+    }
+    let r = radius.min(w / 2).min(h / 2);
+    let in_corner = (px < x + r || px >= x + w - r) && (py < y + r || py >= y + h - r);
+    if !in_corner {
+        return true;
+    }
+    let cx = if px < x + r { x + r } else { x + w - r - 1 };
+    let cy = if py < y + r { y + r } else { y + h - r - 1 };
+    let dx = px as i32 - cx as i32;
+    let dy = py as i32 - cy as i32;
+    dx * dx + dy * dy <= (r * r) as i32
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn text_pixel(px: u32, py: u32, x: u32, baseline_y: u32, font_size: u32, text: &str) -> bool {
+    let scale = (font_size / 8).max(1);
+    let glyph_w = 5 * scale;
+    let glyph_h = 7 * scale;
+    let top = baseline_y.saturating_sub(glyph_h);
+    if py < top || py >= baseline_y {
+        return false;
+    }
+
+    let mut cursor_x = x;
+    for byte in text.bytes() {
+        if px >= cursor_x && px < cursor_x.saturating_add(glyph_w) {
+            let gx = (px - cursor_x) / scale;
+            let gy = (py - top) / scale;
+            let glyph = glyph_5x7(byte);
+            return (glyph[gy as usize] & (1 << (4 - gx))) != 0;
+        }
+        cursor_x = cursor_x.saturating_add(glyph_w + scale);
+    }
+    false
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn paint_tile_commands(
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    tile_y: u32,
+    commands: &[edgerun_layout::UiRenderCommand],
+) {
+    for command in commands {
+        match command {
+            edgerun_layout::UiRenderCommand::FillRect { x, y, w, h, color } => {
+                fill_rect_bgra(pixels, width, height, tile_y, *x, *y, *w, *h, *color);
+            }
+            edgerun_layout::UiRenderCommand::StrokeRect {
+                x,
+                y,
+                w,
+                h,
+                color,
+                style,
+                thickness,
+            } => {
+                let t = (*thickness).max(1);
+                fill_rect_bgra(pixels, width, height, tile_y, *x, *y, *w, t, *color);
+                fill_rect_bgra(
+                    pixels,
+                    width,
+                    height,
+                    tile_y,
+                    *x,
+                    y + h.saturating_sub(t),
+                    *w,
+                    t,
+                    *color,
+                );
+                fill_rect_bgra(pixels, width, height, tile_y, *x, *y, t, *h, *color);
+                fill_rect_bgra(
+                    pixels,
+                    width,
+                    height,
+                    tile_y,
+                    x + w.saturating_sub(t),
+                    *y,
+                    t,
+                    *h,
+                    *color,
+                );
+            }
+            edgerun_layout::UiRenderCommand::Text {
+                x,
+                y,
+                text,
+                color,
+                font_size,
+            } => {
+                draw_text_bgra(
+                    pixels, width, height, tile_y, *x, *y, text, *color, *font_size,
+                );
+            }
+            edgerun_layout::UiRenderCommand::RoundedRect {
+                x,
+                y,
+                w,
+                h,
+                color,
+                radius,
+            } => {
+                fill_rounded_rect_bgra(
+                    pixels, width, height, tile_y, *x, *y, *w, *h, *radius, *color,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn fill_rect_bgra(
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    tile_y: u32,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    color: edgerun_layout::Color,
+) {
+    if w == 0 || h == 0 || color.a == 0 {
+        return;
+    }
+    let x0 = x.min(width);
+    let x1 = x.saturating_add(w).min(width);
+    let y0 = y.max(tile_y);
+    let y1 = y.saturating_add(h).min(tile_y.saturating_add(height));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+
+    let mut py = y0;
+    while py < y1 {
+        let local_y = py - tile_y;
+        let row = local_y as usize * width as usize * 4;
+        let mut px = x0;
+        while px < x1 {
+            set_pixel_bgra(pixels, row + px as usize * 4, color);
+            px += 1;
+        }
+        py += 1;
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn fill_rounded_rect_bgra(
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    tile_y: u32,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    radius: u32,
+    color: edgerun_layout::Color,
+) {
+    if radius == 0 {
+        fill_rect_bgra(pixels, width, height, tile_y, x, y, w, h, color);
+        return;
+    }
+
+    let x0 = x.min(width);
+    let x1 = x.saturating_add(w).min(width);
+    let y0 = y.max(tile_y);
+    let y1 = y.saturating_add(h).min(tile_y.saturating_add(height));
+    let r = radius.min(w / 2).min(h / 2);
+    let r2 = (r * r) as i32;
+
+    let mut py = y0;
+    while py < y1 {
+        let local_y = py - tile_y;
+        let row = local_y as usize * width as usize * 4;
+        let mut px = x0;
+        while px < x1 {
+            let in_corner = (px < x + r || px >= x + w - r) && (py < y + r || py >= y + h - r);
+            let draw = if !in_corner {
+                true
+            } else {
+                let cx = if px < x + r { x + r } else { x + w - r - 1 };
+                let cy = if py < y + r { y + r } else { y + h - r - 1 };
+                let dx = px as i32 - cx as i32;
+                let dy = py as i32 - cy as i32;
+                dx * dx + dy * dy <= r2
+            };
+            if draw {
+                set_pixel_bgra(pixels, row + px as usize * 4, color);
+            }
+            px += 1;
+        }
+        py += 1;
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn draw_text_bgra(
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    tile_y: u32,
+    x: u32,
+    baseline_y: u32,
+    text: &str,
+    color: edgerun_layout::Color,
+    font_size: f32,
+) {
+    let scale = ((font_size as u32) / 8).max(1);
+    let glyph_w = 5 * scale;
+    let glyph_h = 7 * scale;
+    let mut cursor_x = x;
+    let top = baseline_y.saturating_sub(glyph_h);
+    for byte in text.bytes() {
+        draw_glyph_bgra(
+            pixels, width, height, tile_y, cursor_x, top, scale, byte, color,
+        );
+        cursor_x = cursor_x.saturating_add(glyph_w + scale);
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn draw_glyph_bgra(
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    tile_y: u32,
+    x: u32,
+    y: u32,
+    scale: u32,
+    byte: u8,
+    color: edgerun_layout::Color,
+) {
+    let glyph = glyph_5x7(byte);
+    let mut gy = 0u32;
+    while gy < 7 {
+        let bits = glyph[gy as usize];
+        let mut gx = 0u32;
+        while gx < 5 {
+            if (bits & (1 << (4 - gx))) != 0 {
+                fill_rect_bgra(
+                    pixels,
+                    width,
+                    height,
+                    tile_y,
+                    x + gx * scale,
+                    y + gy * scale,
+                    scale,
+                    scale,
+                    color,
+                );
+            }
+            gx += 1;
+        }
+        gy += 1;
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn glyph_5x7(byte: u8) -> [u8; 7] {
+    match byte {
+        b'0' => [0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e],
+        b'1' => [0x04, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x0e],
+        b'2' => [0x0e, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1f],
+        b'3' => [0x1e, 0x01, 0x01, 0x0e, 0x01, 0x01, 0x1e],
+        b'4' => [0x02, 0x06, 0x0a, 0x12, 0x1f, 0x02, 0x02],
+        b'5' => [0x1f, 0x10, 0x10, 0x1e, 0x01, 0x01, 0x1e],
+        b'6' => [0x0e, 0x10, 0x10, 0x1e, 0x11, 0x11, 0x0e],
+        b'7' => [0x1f, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+        b'8' => [0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e],
+        b'9' => [0x0e, 0x11, 0x11, 0x0f, 0x01, 0x01, 0x0e],
+        b'A' | b'a' => [0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
+        b'C' | b'c' => [0x0f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0f],
+        b'D' | b'd' => [0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e],
+        b'E' | b'e' => [0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f],
+        b'F' | b'f' => [0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x10],
+        b'G' | b'g' => [0x0f, 0x10, 0x10, 0x13, 0x11, 0x11, 0x0f],
+        b'I' | b'i' => [0x0e, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0e],
+        b'L' | b'l' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f],
+        b'M' | b'm' => [0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11],
+        b'N' | b'n' => [0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11],
+        b'O' | b'o' => [0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
+        b'P' | b'p' => [0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10],
+        b'R' | b'r' => [0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11],
+        b'S' | b's' => [0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e],
+        b'T' | b't' => [0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
+        b'U' | b'u' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
+        b'W' | b'w' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x1b, 0x11],
+        b'Y' | b'y' => [0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04],
+        b'-' => [0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00],
+        b' ' => [0x00; 7],
+        _ => [0x1f, 0x11, 0x15, 0x15, 0x15, 0x11, 0x1f],
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn set_pixel_bgra(pixels: &mut [u8], i: usize, color: edgerun_layout::Color) {
+    if i + 3 >= pixels.len() {
+        return;
+    }
+    if color.a == 255 {
+        pixels[i] = color.b;
+        pixels[i + 1] = color.g;
+        pixels[i + 2] = color.r;
+        pixels[i + 3] = color.a;
+        return;
+    }
+    let a = color.a as u32;
+    let inv_a = 255 - a;
+    pixels[i] = ((color.b as u32 * a + pixels[i] as u32 * inv_a) / 255) as u8;
+    pixels[i + 1] = ((color.g as u32 * a + pixels[i + 1] as u32 * inv_a) / 255) as u8;
+    pixels[i + 2] = ((color.r as u32 * a + pixels[i + 2] as u32 * inv_a) / 255) as u8;
+    pixels[i + 3] = 255;
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn paint_touch_marker(pixels: &mut [u8], width: u32, height: u32, tile_y: u32, x: u32, y: u32) {
+    if y.saturating_add(6) < tile_y || y > tile_y.saturating_add(height).saturating_add(6) {
+        return;
+    }
+
+    let local_y = y.saturating_sub(tile_y);
+    let x0 = x.saturating_sub(5);
+    let y0 = local_y.saturating_sub(5);
+    let x1 = x.saturating_add(6).min(width);
+    let y1 = local_y.saturating_add(6).min(height);
+    let mut py = y0;
+    while py < y1 {
+        let row = py as usize * width as usize * 4;
+        let mut px = x0;
+        while px < x1 {
+            let i = row + px as usize * 4;
+            pixels[i] = 0x00;
+            pixels[i + 1] = 0x00;
+            pixels[i + 2] = 0xff;
+            pixels[i + 3] = 0xff;
+            px += 1;
+        }
+        py += 1;
+    }
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
@@ -184,11 +677,11 @@ use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 #[cfg(target_arch = "x86_64")]
 use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
 #[cfg(target_arch = "x86_64")]
-use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
+use edgerun_tftp::message::{TFTP_PORT, TftpMessage};
 #[cfg(target_arch = "x86_64")]
-use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
+use rt::ip::{ARP_OP_REQUEST, ICMP_ECHO_REQUEST, ParsedPacket};
 #[cfg(target_arch = "x86_64")]
-use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
+use rt::{IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket, block_on, crc32};
 
 #[cfg(target_arch = "x86_64")]
 use core::future::Future;
@@ -206,12 +699,12 @@ mod oci_syscall {
     use edgerun_oci::prelude::String;
     use edgerun_oci::rootfs_access::OciRootfs;
     use edgerun_oci::{
-        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
         OciElfError, OciElfLoadBias, OciElfUnsafeIdentityMapper, OciPreparedLaunchState,
         OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink, OciX86_64SyscallFrame,
+        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
     };
     use edgerun_platform::arch::x86_64::{
-        self, SyscallFrame, KERNEL_CODE_SELECTOR, USER_COMPAT_CODE_SELECTOR,
+        self, KERNEL_CODE_SELECTOR, SyscallFrame, USER_COMPAT_CODE_SELECTOR,
     };
 
     struct DirectMemory;
@@ -802,9 +1295,9 @@ mod disk_boot {
     use super::boot_config::{BootConfig, BootConfigError, EdgeFsBootTarget};
     use edgerun_edgefs::{EdgeFs, EdgeFsError, EdgeFsInfo};
     use edgerun_storage::{
-        detect_partitions, probe_filesystem, BlockStorage, FatError, FatReadOnly, FileSystemKind,
-        FileSystemProbe, FileSystemProbeError, PartitionBlockDevice, PartitionEntry,
-        PartitionError, PartitionTable, StorageError,
+        BlockStorage, FatError, FatReadOnly, FileSystemKind, FileSystemProbe, FileSystemProbeError,
+        PartitionBlockDevice, PartitionEntry, PartitionError, PartitionTable, StorageError,
+        detect_partitions, probe_filesystem,
     };
 
     pub const DEFAULT_BOOT_CONFIG_PATHS: &[&str] =
@@ -1327,6 +1820,8 @@ core::arch::global_asm!(
     .word 0x600c0024
 .Lusb_conf0_default:
     .word 0x4200
+.Lkernel_main_ptr:
+    .word kernel_main
 
     .global _start
 _start:
@@ -1933,10 +2428,10 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
     rt::log::info!("JC3248W535 display init complete");
-    rt::log::info!("Rendering display diagnostic pattern");
+    rt::log::info!("Rendering display UI");
     render_initial_ui();
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
-    rt::log::info!("Display diagnostic pattern rendered");
+    rt::log::info!("Display UI rendered");
     rt::log::info!("JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;
@@ -1945,7 +2440,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             if let Some(point) = edgerun_platform::esp32s3::Jc3248w535Touch::read_point() {
                 let touch = (point.x, point.y);
                 if last_touch != Some(touch) {
-                    render_debug_pattern(Some(touch));
+                    render_touch_ui(touch);
                     rt::log::info!("Touch point x={} y={}", point.x, point.y);
                     last_touch = Some(touch);
                 }
