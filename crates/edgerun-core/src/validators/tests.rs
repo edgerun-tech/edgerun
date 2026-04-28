@@ -491,6 +491,7 @@ fn snapshot_matching_local_head_is_trusted_accept() {
                     ("event_hash_hex", ystr("hash-3")),
                 ])]),
             ),
+            ("payload_object", ystr("snapshot-payload")),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -622,6 +623,7 @@ fn snapshot_stale_missing_delta_is_deferred() {
                     ("event_hash_hex", ystr("hash-2")),
                 ])]),
             ),
+            ("payload_object", ystr("snapshot-payload")),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -665,6 +667,7 @@ fn snapshot_stale_with_full_deltas_is_accepted_stale() {
                     ("event_hash_hex", ystr("hash-2")),
                 ])]),
             ),
+            ("payload_object", ystr("snapshot-payload")),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -694,6 +697,112 @@ fn snapshot_stale_with_full_deltas_is_accepted_stale() {
         derived.get("acceptance_class").and_then(Value::as_str),
         Some("accepted_stale")
     );
+}
+
+#[test]
+fn snapshot_checkpoint_base_with_head_is_accepted() {
+    let semantic = match mapping([(
+        "snapshot",
+        mapping([
+            ("producer", ystr("node-a")),
+            (
+                "base_checkpoints",
+                seq([mapping([
+                    ("checkpoint_id", ystr("checkpoint-1")),
+                    (
+                        "heads",
+                        seq([mapping([
+                            ("stream_id", ystr("stream-1")),
+                            ("seq", yi64(3)),
+                            ("event_hash_hex", ystr("hash-3")),
+                        ])]),
+                    ),
+                ])]),
+            ),
+            ("payload_object", ystr("snapshot-payload")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([
+        ("trusted_snapshot_producers", seq([ystr("node-a")])),
+        (
+            "stream_heads",
+            mapping([(
+                "stream-1",
+                mapping([("seq", yi64(3)), ("event_hash_hex", ystr("hash-3"))]),
+            )]),
+        ),
+    ]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_snapshot_case(&semantic, &state, &TestVerifier, &no_hash);
+    let derived = result.derived.as_map().expect("derived map");
+    assert_eq!(result.verdict, Verdict::Accept);
+    assert_eq!(
+        derived.get("acceptance_class").and_then(Value::as_str),
+        Some("accepted_trusted")
+    );
+}
+
+#[test]
+fn snapshot_checkpoint_id_without_heads_defers_resolution() {
+    let semantic = match mapping([(
+        "snapshot",
+        mapping([
+            ("producer", ystr("node-a")),
+            (
+                "base_checkpoints",
+                seq([mapping([("checkpoint_id", ystr("checkpoint-1"))])]),
+            ),
+            ("payload_object", ystr("snapshot-payload")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("trusted_snapshot_producers", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_snapshot_case(&semantic, &state, &TestVerifier, &no_hash);
+    let derived = result.derived.as_map().expect("derived map");
+    assert_eq!(result.verdict, Verdict::Defer);
+    assert_eq!(result.reason_code, Some(ReasonCode::MissingDependency));
+    assert_eq!(
+        derived.get("acceptance_class").and_then(Value::as_str),
+        Some("deferred_missing_checkpoint")
+    );
+}
+
+#[test]
+fn snapshot_missing_payload_object_is_rejected() {
+    let semantic = match mapping([(
+        "snapshot",
+        mapping([
+            ("producer", ystr("node-a")),
+            (
+                "base_heads",
+                seq([mapping([
+                    ("stream_id", ystr("stream-1")),
+                    ("seq", yi64(3)),
+                    ("event_hash_hex", ystr("hash-3")),
+                ])]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("trusted_snapshot_producers", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_snapshot_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
 }
 
 #[test]

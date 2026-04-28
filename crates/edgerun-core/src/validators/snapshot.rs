@@ -22,10 +22,16 @@ pub fn validate_snapshot_case(
     if !snapshot_refs_are_valid(snap) {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     }
+    if !snap.contains_key("payload_object") || snap.get("payload_object") == Some(&Value::Null) {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
     let base_heads = get_seq(snap, "base_heads")
         .map(|v| v.to_vec())
         .unwrap_or_default();
-    if base_heads.is_empty() {
+    let base_checkpoints = get_seq(snap, "base_checkpoints")
+        .map(|v| v.to_vec())
+        .unwrap_or_default();
+    if base_heads.is_empty() && base_checkpoints.is_empty() {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     }
     for base in &base_heads {
@@ -33,6 +39,14 @@ pub fn validate_snapshot_case(
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         };
         if !base_head_is_valid(base) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+    }
+    for checkpoint in &base_checkpoints {
+        let Some(checkpoint) = checkpoint.as_map() else {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        };
+        if !base_checkpoint_is_valid(checkpoint) {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
     }
@@ -47,13 +61,19 @@ pub fn validate_snapshot_case(
     if matches!(verifier.verify_signed_fixture(snap, &expected), Some(false)) {
         return reject(ReasonCode::CryptoInvalid, empty_map(), empty_map());
     }
-    let Some(base) = base_heads[0].as_map() else {
-        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    let snapshot_hash = semantic_hash_hex(snap).unwrap_or_default();
+    let Some(base) = first_base_head(&base_heads, &base_checkpoints) else {
+        return defer(
+            ReasonCode::MissingDependency,
+            mapping([
+                ("acceptance_class", ystr("deferred_missing_checkpoint")),
+                ("snapshot_descriptor_hash", ystr(snapshot_hash)),
+            ]),
+        );
     };
     let local_head = local_state
         .get("stream_heads")
         .and_then(|v| map_value(v, &string_value(base, "stream_id", "")));
-    let snapshot_hash = semantic_hash_hex(snap).unwrap_or_default();
     let Some(local_head) = local_head else {
         return defer(ReasonCode::MissingDependency, empty_map());
     };
@@ -152,6 +172,38 @@ fn base_head_is_valid(base: &BTreeMap<String, Value>) -> bool {
     !string_value(base, "stream_id", "").is_empty()
         && number_value(base, "seq", -1) >= 0
         && !base_head_hash(base).is_empty()
+}
+
+fn base_checkpoint_is_valid(checkpoint: &BTreeMap<String, Value>) -> bool {
+    let checkpoint_id_present = checkpoint
+        .get("checkpoint_id")
+        .and_then(Value::as_str)
+        .is_some_and(|id| !id.is_empty());
+    let heads = get_seq(checkpoint, "heads").unwrap_or(&[]);
+    if !checkpoint_id_present && heads.is_empty() {
+        return false;
+    }
+    heads
+        .iter()
+        .filter_map(Value::as_map)
+        .all(base_head_is_valid)
+        && heads.iter().all(|head| head.as_map().is_some())
+}
+
+fn first_base_head<'a>(
+    base_heads: &'a [Value],
+    base_checkpoints: &'a [Value],
+) -> Option<&'a BTreeMap<String, Value>> {
+    base_heads.first().and_then(Value::as_map).or_else(|| {
+        base_checkpoints
+            .iter()
+            .filter_map(Value::as_map)
+            .find_map(|checkpoint| {
+                get_seq(checkpoint, "heads")
+                    .and_then(|heads| heads.first())
+                    .and_then(Value::as_map)
+            })
+    })
 }
 
 fn base_head_hash(base: &BTreeMap<String, Value>) -> String {

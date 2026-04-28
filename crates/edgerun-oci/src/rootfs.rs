@@ -692,7 +692,7 @@ fn remove_whiteout_files(dir: &Path) -> io::Result<()> {
 
 /// Build rootfs by merging layers in order.
 pub fn build_rootfs(layer_dirs: &[std::path::PathBuf], dest: &Path) -> io::Result<()> {
-    crate::rootfs_merge::build_rootfs_from_layers(layer_dirs, dest)
+    crate::rootfs_copy::merge_layer_dirs(layer_dirs, dest)
 }
 
 // ===========================================================================

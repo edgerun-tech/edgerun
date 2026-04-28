@@ -103,8 +103,6 @@ pub mod rootfs;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod rootfs_copy;
 #[cfg(all(feature = "std", not(target_os = "none")))]
-pub mod rootfs_merge;
-#[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod rootless;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod seccomp;

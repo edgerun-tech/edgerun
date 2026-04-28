@@ -400,5 +400,5 @@ fn remove_whiteout_files_in(root: &Path, dir: &Path) -> Result<(), RegistryError
 
 /// Build rootfs by merging layers in order.
 pub fn build_rootfs(layer_dirs: &[PathBuf], dest: &Path) -> Result<(), RegistryError> {
-    crate::rootfs_merge::build_rootfs_from_layers(layer_dirs, dest).map_err(RegistryError::IoError)
+    crate::rootfs_copy::merge_layer_dirs(layer_dirs, dest).map_err(RegistryError::IoError)
 }
