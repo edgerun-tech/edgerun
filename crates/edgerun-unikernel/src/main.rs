@@ -645,6 +645,10 @@ fn append_wifi_phy_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.rx_11b_ctrl2);
     append_bytes(out, len, b" b3=0x");
     append_hex_u32(out, len, regs.rx_11b_ctrl3);
+    append_bytes(out, len, b" bb=0x");
+    append_hex_u32(out, len, regs.bb_ctrl_1cc48);
+    append_bytes(out, len, b" en=0x");
+    append_hex_u32(out, len, regs.modem_wifi_enable);
     append_bytes(out, len, b" m=0x");
     append_hex_u32(out, len, regs.modem_ctrl_26010);
     append_bytes(out, len, b"\n");

@@ -29,19 +29,54 @@ where
     let state = handle.state.clone();
     enqueue_task(Box::pin(async move {
         if state.aborted.load(Ordering::Acquire) {
-            let mut result = state.result.lock();
-            if result.is_none() {
-                *result = Some(Err(JoinError));
+            let mut should_wake = false;
+            let waiters = {
+                let mut result = state.result.lock();
+                if result.is_none() {
+                    *result = Some(Err(JoinError));
+                    should_wake = true;
+                }
+                if should_wake {
+                    let mut waiters = state.waiters.lock();
+                    Some(core::mem::take(&mut *waiters))
+                } else {
+                    None
+                }
+            };
+
+            if should_wake {
+                if let Some(waiters) = waiters {
+                    for waker in waiters {
+                        waker.wake();
+                    }
+                }
             }
             return;
         }
 
         let value = f.await;
         let mut result = state.result.lock();
+        let mut should_wake = false;
         if state.aborted.load(Ordering::Acquire) {
-            *result = Some(Err(JoinError));
+            if result.is_none() {
+                *result = Some(Err(JoinError));
+                should_wake = true;
+            }
         } else {
-            *result = Some(Ok(value));
+            if result.is_none() {
+                *result = Some(Ok(value));
+                should_wake = true;
+            }
+        }
+
+        if should_wake {
+            let waiters = {
+                let mut waiters = state.waiters.lock();
+                core::mem::take(&mut *waiters)
+            };
+            for waker in waiters {
+                waker.wake();
+            }
         }
     }));
     handle
@@ -65,10 +100,27 @@ where
     enqueue_task(Box::pin(async move {
         let value = f();
         let mut result = state.result.lock();
+        let mut should_wake = false;
         if state.aborted.load(Ordering::Acquire) {
-            *result = Some(Err(JoinError));
+            if result.is_none() {
+                *result = Some(Err(JoinError));
+                should_wake = true;
+            }
         } else {
-            *result = Some(Ok(value));
+            if result.is_none() {
+                *result = Some(Ok(value));
+                should_wake = true;
+            }
+        }
+
+        if should_wake {
+            let waiters = {
+                let mut waiters = state.waiters.lock();
+                core::mem::take(&mut *waiters)
+            };
+            for waker in waiters {
+                waker.wake();
+            }
         }
     }));
     handle
@@ -235,16 +287,19 @@ crate::error::impl_error!(JoinError, |_this, f| { f.write_str("join error") });
 struct JoinState<T> {
     result: crate::sync::Mutex<Option<Result<T, JoinError>>>,
     aborted: AtomicBool,
+    waiters: crate::sync::Mutex<Vec<Waker>>,
 }
 
 pub struct JoinHandle<T> {
     state: Arc<JoinState<T>>,
+    waker: Option<Waker>,
 }
 
 impl<T> Clone for JoinHandle<T> {
     fn clone(&self) -> Self {
         Self {
             state: self.state.clone(),
+            waker: None,
         }
     }
 }
@@ -255,7 +310,9 @@ impl<T> JoinHandle<T> {
             state: Arc::new(JoinState {
                 result: crate::sync::Mutex::new(None),
                 aborted: AtomicBool::new(false),
+                waiters: crate::sync::Mutex::new(Vec::new()),
             }),
+            waker: None,
         }
     }
 
@@ -264,15 +321,35 @@ impl<T> JoinHandle<T> {
             state: Arc::new(JoinState {
                 result: crate::sync::Mutex::new(Some(result)),
                 aborted: AtomicBool::new(false),
+                waiters: crate::sync::Mutex::new(Vec::new()),
             }),
+            waker: None,
         }
     }
 
     pub fn abort(&self) {
         self.state.aborted.store(true, Ordering::Release);
-        let mut result = self.state.result.lock();
-        if result.is_none() {
-            *result = Some(Err(JoinError));
+        let mut should_wake = false;
+        let waiters = {
+            let mut result = self.state.result.lock();
+            if result.is_none() {
+                *result = Some(Err(JoinError));
+                should_wake = true;
+            }
+            if should_wake {
+                let mut waiters = self.state.waiters.lock();
+                Some(core::mem::take(&mut *waiters))
+            } else {
+                None
+            }
+        };
+
+        if should_wake {
+            if let Some(waiters) = waiters {
+                for waker in waiters {
+                    waker.wake();
+                }
+            }
         }
     }
 
@@ -298,12 +375,48 @@ impl<T> JoinHandle<T> {
 impl<T> Future for JoinHandle<T> {
     type Output = Result<T, JoinError>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
         if let Some(result) = self.state.result.lock().take() {
+            if let Some(waker) = this.waker.take() {
+                let mut waiters = this.state.waiters.lock();
+                remove_waker(&mut waiters, &waker);
+            }
             Poll::Ready(result)
         } else {
-            cx.waker().wake_by_ref();
+            let should_register = match this.waker.as_ref() {
+                Some(registered) => !registered.will_wake(cx.waker()),
+                None => true,
+            };
+            if should_register {
+                let mut waiters = this.state.waiters.lock();
+                if let Some(previous) = this.waker.replace(cx.waker().clone()) {
+                    remove_waker(&mut waiters, &previous);
+                }
+                register_waker(&mut waiters, this.waker.as_ref().expect("registered wakeup"));
+            }
             Poll::Pending
         }
+    }
+}
+
+impl<T> Drop for JoinHandle<T> {
+    fn drop(&mut self) {
+        if let Some(waker) = self.waker.take() {
+            let mut waiters = self.state.waiters.lock();
+            remove_waker(&mut waiters, &waker);
+        }
+    }
+}
+
+fn register_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
+    if !waiters.iter().any(|registered| registered.will_wake(waker)) {
+        waiters.push(waker.clone());
+    }
+}
+
+fn remove_waker(waiters: &mut Vec<Waker>, waker: &Waker) {
+    if let Some(pos) = waiters.iter().position(|registered| registered.will_wake(waker)) {
+        waiters.remove(pos);
     }
 }
 

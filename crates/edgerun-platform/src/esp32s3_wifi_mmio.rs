@@ -46,6 +46,8 @@ const WIFI_PHY_RX_11B_CTRL0: *mut u32 = 0x6001_c044 as *mut u32;
 const WIFI_PHY_RX_11B_CTRL1: *mut u32 = 0x6001_c124 as *mut u32;
 const WIFI_PHY_RX_11B_CTRL2: *mut u32 = 0x6001_c804 as *mut u32;
 const WIFI_PHY_RX_11B_CTRL3: *mut u32 = 0x6001_c104 as *mut u32;
+const WIFI_PHY_BB_CTRL_1CC48: *mut u32 = 0x6001_cc48 as *mut u32;
+const WIFI_MODEM_WIFI_ENABLE: *mut u32 = 0x6002_600c as *mut u32;
 const WIFI_MODEM_CTRL_26010: *mut u32 = 0x6002_6010 as *mut u32;
 const WIFI_MAC_RX_CTRL0: *mut u32 = 0x6003_3100 as *mut u32;
 const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
@@ -180,6 +182,8 @@ pub struct WifiMmioPhyRegs {
     pub rx_11b_ctrl1: u32,
     pub rx_11b_ctrl2: u32,
     pub rx_11b_ctrl3: u32,
+    pub bb_ctrl_1cc48: u32,
+    pub modem_wifi_enable: u32,
     pub modem_ctrl_26010: u32,
 }
 
@@ -308,6 +312,8 @@ impl Esp32s3WifiMmio {
                 rx_11b_ctrl1: WIFI_PHY_RX_11B_CTRL1.read_volatile(),
                 rx_11b_ctrl2: WIFI_PHY_RX_11B_CTRL2.read_volatile(),
                 rx_11b_ctrl3: WIFI_PHY_RX_11B_CTRL3.read_volatile(),
+                bb_ctrl_1cc48: WIFI_PHY_BB_CTRL_1CC48.read_volatile(),
+                modem_wifi_enable: WIFI_MODEM_WIFI_ENABLE.read_volatile(),
                 modem_ctrl_26010: WIFI_MODEM_CTRL_26010.read_volatile(),
             }
         }
@@ -407,13 +413,25 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(1402, Ordering::Relaxed);
                     true
                 }
+                15 => {
+                    LAST_STATUS.store(1501, Ordering::Relaxed);
+                    init_phy_bb_reg_slice();
+                    LAST_STATUS.store(1502, Ordering::Relaxed);
+                    true
+                }
+                16 => {
+                    LAST_STATUS.store(1601, Ordering::Relaxed);
+                    set_phy_wifi_enable(true);
+                    LAST_STATUS.store(1602, Ordering::Relaxed);
+                    true
+                }
                 _ => false,
             }
         }
     }
 
     pub fn init_known_good() -> bool {
-        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] {
+        for step in [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] {
             if !Self::debug_step(step) {
                 return false;
             }
@@ -647,6 +665,21 @@ unsafe fn init_phy_rx_11b_opt_slice() {
     update(WIFI_PHY_RX_11B_CTRL2, |v| (v & 0xffff_0fff) | 0x9000);
     update(WIFI_PHY_RX_11B_CTRL3, |v| (v & 0xffff_fe00) | 0x1e2);
     update(WIFI_MODEM_CTRL_26010, |v| v | 0x0002_0000);
+}
+
+unsafe fn init_phy_bb_reg_slice() {
+    unsafe {
+        WIFI_PHY_BB_CTRL_1CC48.write_volatile(0x1704_33af);
+    }
+    update(WIFI_PHY_TX_SEED, |v| v | 0x6000);
+}
+
+unsafe fn set_phy_wifi_enable(enable: bool) {
+    if enable {
+        update(WIFI_MODEM_WIFI_ENABLE, |v| v | 2);
+    } else {
+        update(WIFI_MODEM_WIFI_ENABLE, |v| v & !2);
+    }
 }
 
 unsafe fn update(reg: *mut u32, f: impl FnOnce(u32) -> u32) {

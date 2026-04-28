@@ -27,6 +27,7 @@ pub fn broadcast<T: Clone + 'static>(cap: usize) -> (Publisher<T>, Subscriber<T>
         Subscriber {
             inner,
             next_seq: Cell::new(0),
+            waker: None,
         },
     )
 }
