@@ -12,22 +12,28 @@ use core::task::{Context, Poll};
 
 use crate::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
 use crate::ip::{
-    checksum, ip_checksum, EthHeader, IpHeader, TcpHeader, ETH_TYPE_ARP, ETH_TYPE_IPV4,
-    IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST, TCP_FLAG_SYN,
+    ETH_TYPE_ARP, ETH_TYPE_IPV4, EthHeader, IP_PROTO_TCP, IP_PROTO_UDP, IpHeader, TCP_FLAG_ACK,
+    TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST, TCP_FLAG_SYN, TcpHeader, checksum, ip_checksum,
 };
 use crate::sync::Mutex;
 
 const MAX_STREAMS: usize = 8;
 const MTU: usize = 1514;
 const TCP_HEADER_LEN: usize = 20;
+const UDP_HEADER_LEN: usize = 8;
 const IP_HEADER_LEN: usize = 20;
 const ETH_HEADER_LEN: usize = 14;
 const TCP_PACKET_HEADER_LEN: usize = ETH_HEADER_LEN + IP_HEADER_LEN + TCP_HEADER_LEN;
+const UDP_PACKET_HEADER_LEN: usize = ETH_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN;
 const CONNECT_POLL_BUDGET: usize = 128;
 const STREAM_RX_BUF_LEN: usize = 65536;
+const MAX_UDP_PACKETS: usize = 8;
+const UDP_PAYLOAD_LEN: usize = 1472;
 
 static DRIVER: Mutex<Option<&'static dyn BareNetDriver>> = Mutex::new(None);
 static STREAMS: Mutex<[StreamState; MAX_STREAMS]> = Mutex::new([StreamState::empty(); MAX_STREAMS]);
+static UDP_PACKETS: Mutex<[UdpPacket; MAX_UDP_PACKETS]> =
+    Mutex::new([UdpPacket::empty(); MAX_UDP_PACKETS]);
 static NEXT_PORT: AtomicU16 = AtomicU16::new(49152);
 
 pub trait BareNetDriver: Sync {
@@ -66,6 +72,31 @@ struct StreamState {
     rx: [u8; STREAM_RX_BUF_LEN],
     rx_start: usize,
     rx_len: usize,
+}
+
+#[derive(Clone, Copy)]
+struct UdpPacket {
+    used: bool,
+    src_ip: [u8; 4],
+    src_port: u16,
+    dst_ip: [u8; 4],
+    dst_port: u16,
+    len: usize,
+    payload: [u8; UDP_PAYLOAD_LEN],
+}
+
+impl UdpPacket {
+    const fn empty() -> Self {
+        Self {
+            used: false,
+            src_ip: [0; 4],
+            src_port: 0,
+            dst_ip: [0; 4],
+            dst_port: 0,
+            len: 0,
+            payload: [0; UDP_PAYLOAD_LEN],
+        }
+    }
 }
 
 impl StreamState {
@@ -426,6 +457,57 @@ impl AsyncUdpSocket {
     }
 }
 
+pub fn bare_udp_send_to(
+    local_ip: [u8; 4],
+    local_port: u16,
+    remote_ip: [u8; 4],
+    remote_port: u16,
+    payload: &[u8],
+) -> IoResult<usize> {
+    let Some(driver) = *DRIVER.lock() else {
+        return Err(unavailable());
+    };
+    let source_ip = if local_ip == [0; 4] {
+        driver.local_ipv4()
+    } else {
+        local_ip
+    };
+    if send_udp_datagram(
+        driver,
+        source_ip,
+        local_port,
+        remote_ip,
+        remote_port,
+        payload,
+    ) {
+        Ok(payload.len())
+    } else {
+        Err(IoError::WriteZero)
+    }
+}
+
+pub fn bare_udp_recv_from(
+    local_ip: [u8; 4],
+    local_port: u16,
+    out: &mut [u8],
+) -> IoResult<(usize, [u8; 4], u16)> {
+    poll_driver();
+    let mut packets = UDP_PACKETS.lock();
+    let Some((index, packet)) = packets.iter_mut().enumerate().find(|(_, packet)| {
+        packet.used
+            && packet.dst_port == local_port
+            && (local_ip == [0; 4] || packet.dst_ip == local_ip || packet.dst_ip == [255; 4])
+    }) else {
+        return Err(IoError::Other("would block"));
+    };
+    let len = core::cmp::min(out.len(), packet.len);
+    out[..len].copy_from_slice(&packet.payload[..len]);
+    let src_ip = packet.src_ip;
+    let src_port = packet.src_port;
+    packets[index] = UdpPacket::empty();
+    Ok((len, src_ip, src_port))
+}
+
 fn poll_driver() {
     let Some(driver) = *DRIVER.lock() else {
         return;
@@ -437,7 +519,7 @@ fn poll_driver() {
 }
 
 fn handle_frame(driver: &dyn BareNetDriver, frame: &[u8]) {
-    if frame.len() < TCP_PACKET_HEADER_LEN {
+    if frame.len() < UDP_PACKET_HEADER_LEN {
         return;
     }
     let eth = EthHeader::from_slice(frame);
@@ -448,11 +530,18 @@ fn handle_frame(driver: &dyn BareNetDriver, frame: &[u8]) {
         return;
     }
     let ip = IpHeader::from_slice(&frame[ETH_HEADER_LEN..]);
-    if ip.proto != IP_PROTO_TCP || ip.dst != driver.local_ipv4() {
+    if ip.dst != driver.local_ipv4() && ip.dst != [255; 4] {
         return;
     }
     let ip_header_len = usize::from(ip.ver_ihl & 0x0f) * 4;
     let ip_total_len = usize::from(ip.len);
+    if ip.proto == IP_PROTO_UDP {
+        handle_udp_frame(&ip, frame, ip_header_len, ip_total_len);
+        return;
+    }
+    if ip.proto != IP_PROTO_TCP {
+        return;
+    }
     if ip_header_len < IP_HEADER_LEN
         || frame.len() < ETH_HEADER_LEN + ip_header_len + TCP_HEADER_LEN
         || ip_total_len < ip_header_len + TCP_HEADER_LEN
@@ -505,6 +594,41 @@ fn handle_frame(driver: &dyn BareNetDriver, frame: &[u8]) {
         stream.closed = true;
         let _ = send_tcp_segment(driver, stream, TCP_FLAG_ACK, &[]);
     }
+}
+
+fn handle_udp_frame(ip: &IpHeader, frame: &[u8], ip_header_len: usize, ip_total_len: usize) {
+    if ip_header_len < IP_HEADER_LEN
+        || frame.len() < ETH_HEADER_LEN + ip_header_len + UDP_HEADER_LEN
+        || ip_total_len < ip_header_len + UDP_HEADER_LEN
+        || frame.len() < ETH_HEADER_LEN + ip_total_len
+    {
+        return;
+    }
+    let udp_start = ETH_HEADER_LEN + ip_header_len;
+    let udp = crate::ip::UdpHeader::from_slice(&frame[udp_start..]);
+    let udp_len = usize::from(udp.len);
+    if udp_len < UDP_HEADER_LEN || ip_total_len < ip_header_len + udp_len {
+        return;
+    }
+    let payload_start = udp_start + UDP_HEADER_LEN;
+    let payload_len = core::cmp::min(udp_len - UDP_HEADER_LEN, UDP_PAYLOAD_LEN);
+    if frame.len() < payload_start + payload_len {
+        return;
+    }
+
+    let mut packets = UDP_PACKETS.lock();
+    let slot_index = packets.iter().position(|packet| !packet.used).unwrap_or(0);
+    let Some(packet) = packets.get_mut(slot_index) else {
+        return;
+    };
+    packet.used = true;
+    packet.src_ip = ip.src;
+    packet.src_port = udp.src_port;
+    packet.dst_ip = ip.dst;
+    packet.dst_port = udp.dst_port;
+    packet.len = payload_len;
+    packet.payload[..payload_len]
+        .copy_from_slice(&frame[payload_start..payload_start + payload_len]);
 }
 
 fn send_tcp_segment(
@@ -560,6 +684,62 @@ fn send_tcp_segment(
         &packet[tcp_start..tcp_start + TCP_HEADER_LEN + payload.len()],
     );
     packet[tcp_start + 16..tcp_start + 18].copy_from_slice(&checksum.to_be_bytes());
+    driver.send_frame(&packet[..packet_len])
+}
+
+fn send_udp_datagram(
+    driver: &dyn BareNetDriver,
+    local_ip: [u8; 4],
+    local_port: u16,
+    remote_ip: [u8; 4],
+    remote_port: u16,
+    payload: &[u8],
+) -> bool {
+    let udp_len = UDP_HEADER_LEN + payload.len();
+    let ip_len = IP_HEADER_LEN + udp_len;
+    let packet_len = ETH_HEADER_LEN + ip_len;
+    if packet_len > MTU || udp_len > u16::MAX as usize || ip_len > u16::MAX as usize {
+        return false;
+    }
+
+    let routed_ip = route_ipv4(local_ip, driver.gateway_ipv4(), remote_ip);
+    let dst_mac = if remote_ip == [255; 4] || routed_ip == [255; 4] {
+        [0xff; 6]
+    } else {
+        driver.lookup_arp(routed_ip).unwrap_or([0xff; 6])
+    };
+
+    let mut packet = [0u8; MTU];
+    EthHeader {
+        dst: dst_mac,
+        src: driver.local_mac(),
+        ethertype: ETH_TYPE_IPV4,
+    }
+    .to_slice(&mut packet[..ETH_HEADER_LEN]);
+
+    let mut ip = IpHeader {
+        ver_ihl: 0x45,
+        tos: 0,
+        len: ip_len as u16,
+        ttl: 64,
+        proto: IP_PROTO_UDP,
+        checksum: 0,
+        src: local_ip,
+        dst: remote_ip,
+    };
+    ip.to_slice(&mut packet[ETH_HEADER_LEN..ETH_HEADER_LEN + IP_HEADER_LEN]);
+    ip.checksum = ip_checksum(&packet[ETH_HEADER_LEN..ETH_HEADER_LEN + IP_HEADER_LEN]);
+    packet[ETH_HEADER_LEN + 10..ETH_HEADER_LEN + 12].copy_from_slice(&ip.checksum.to_be_bytes());
+
+    let udp_start = ETH_HEADER_LEN + IP_HEADER_LEN;
+    crate::ip::UdpHeader {
+        src_port: local_port,
+        dst_port: remote_port,
+        len: udp_len as u16,
+        checksum: 0,
+    }
+    .to_slice(&mut packet[udp_start..udp_start + UDP_HEADER_LEN]);
+    packet[udp_start + UDP_HEADER_LEN..packet_len].copy_from_slice(payload);
     driver.send_frame(&packet[..packet_len])
 }
 

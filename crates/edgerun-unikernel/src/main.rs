@@ -108,7 +108,6 @@ fn html_ui_pixel(x: u16, y: u16) -> u16 {
     const TEXT: u16 = 0xe79f;
     const MUTED_TEXT: u16 = 0x9cf3;
     const PANEL_TEXT: u16 = 0xffff;
-    const ACCENT: u16 = 0x4e7f;
 
     if text_pixel(x, y, 32, 50, 16, "TCL AC") {
         return MUTED_TEXT;
@@ -119,30 +118,17 @@ fn html_ui_pixel(x: u16, y: u16) -> u16 {
     if text_pixel(x, y, 34, 160, 18, "Cool - Auto fan") {
         return MUTED_TEXT;
     }
-    if text_pixel(x, y, 56, 246, 18, "Power") {
+    if text_pixel(x, y, 57, 251, 18, "Power") {
         return PANEL_TEXT;
     }
-    if text_pixel(x, y, 194, 246, 18, "Mode") {
+    if text_pixel(x, y, 211, 251, 18, "Mode") {
         return TEXT;
     }
-    if text_pixel(x, y, 56, 324, 18, "Fan") {
+    if text_pixel(x, y, 69, 333, 18, "Fan") {
         return TEXT;
     }
-    if text_pixel(x, y, 194, 324, 18, "Swing") {
+    if text_pixel(x, y, 205, 333, 18, "Swing") {
         return TEXT;
-    }
-
-    if power_icon_pixel(x, y, 34, 232) {
-        return PANEL_TEXT;
-    }
-    if snow_icon_pixel(x, y, 172, 232) {
-        return ACCENT;
-    }
-    if fan_icon_pixel(x, y, 34, 310) {
-        return ACCENT;
-    }
-    if swing_icon_pixel(x, y, 172, 310) {
-        return ACCENT;
     }
 
     if y == 188 && x >= 28 && x < 292 {
@@ -168,52 +154,6 @@ fn html_ui_pixel(x: u16, y: u16) -> u16 {
     }
 
     0
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
-fn power_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
-    let dx = px as i32 - (x + 9) as i32;
-    let dy = py as i32 - (y + 9) as i32;
-    let d2 = dx * dx + dy * dy;
-    let ring = (56..=90).contains(&d2) && !(dx.abs() <= 2 && dy < -2);
-    let stem = px >= x + 8 && px <= x + 10 && py >= y && py <= y + 9;
-    ring || stem
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
-fn snow_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
-    let cx = x + 9;
-    let cy = y + 9;
-    let dx = px.abs_diff(cx);
-    let dy = py.abs_diff(cy);
-    (px >= cx.saturating_sub(9) && px <= cx + 9 && dy <= 1)
-        || (py >= cy.saturating_sub(9) && py <= cy + 9 && dx <= 1)
-        || (dx == dy && dx <= 7)
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
-fn fan_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
-    let cx = x + 9;
-    let cy = y + 9;
-    let dx = px as i32 - cx as i32;
-    let dy = py as i32 - cy as i32;
-    let hub = dx * dx + dy * dy <= 5;
-    let blade_a = dx >= 1 && dx <= 8 && dy.abs() <= 2;
-    let blade_b = dy >= 1 && dy <= 8 && (dx + dy).abs() <= 4;
-    let blade_c = dy <= -1 && dy >= -8 && (dx - dy).abs() <= 4;
-    hub || blade_a || blade_b || blade_c
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
-fn swing_icon_pixel(px: u32, py: u32, x: u32, y: u32) -> bool {
-    let cx = x + 9;
-    let cy = y + 5;
-    let dx = px as i32 - cx as i32;
-    let dy = py as i32 - cy as i32;
-    let d2 = dx * dx + dy * dy;
-    let arc = (86..=116).contains(&d2) && py >= cy;
-    let vane = py >= y + 14 && py <= y + 16 && px >= x + 2 && px <= x + 16;
-    arc || vane || (px == x + 15 && py >= y + 11 && py <= y + 16)
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]

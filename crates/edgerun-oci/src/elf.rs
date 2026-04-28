@@ -1,5 +1,15 @@
 //! no_std ELF executable probe for OCI rootfs launch plans.
 
+pub use crate::elf_memory::{
+    build_elf_memory_map, build_elf_memory_map_with_load_bias, build_elf_memory_map_with_page_size,
+    build_elf_memory_map_with_page_size_and_load_bias, build_elf_runtime_layout,
+    build_elf_runtime_mapping_list, build_elf_runtime_memory_map,
+    build_elf_runtime_memory_map_with_load_bias, build_elf_runtime_memory_map_with_page_size,
+    build_elf_runtime_memory_map_with_page_size_and_load_bias,
+};
+pub use crate::elf_stack::{
+    build_elf64_auxv, write_elf64_initial_stack, write_elf64_initial_stack_aligned,
+};
 use crate::prelude::*;
 use crate::rootfs_access::{
     build_launch_plan, normalize_rootfs_path, OciLaunchPlan, OciRootfs, OciRootfsError,
@@ -22,7 +32,7 @@ const PT_INTERP: u32 = 3;
 const PF_X: u32 = 1;
 const PF_W: u32 = 2;
 const PF_R: u32 = 4;
-const DEFAULT_PAGE_SIZE: u64 = 4096;
+pub(crate) const DEFAULT_PAGE_SIZE: u64 = 4096;
 
 pub const OCI_ELF_AT_NULL: u64 = 0;
 pub const OCI_ELF_AT_PHDR: u64 = 3;
@@ -713,80 +723,6 @@ pub fn read_elf_runtime_mapping_chunk<R: OciRootfs>(
     read_elf_mapping_chunk(rootfs, plan, map, mapping_index, mapping_offset, out)
 }
 
-pub fn build_elf_runtime_mapping_list(
-    plan: &OciElfRuntimePlan,
-    memory: &OciElfRuntimeMemoryMap,
-) -> Result<Vec<OciElfRuntimeMapping>, OciElfError> {
-    let mut mappings = Vec::with_capacity(
-        memory.executable.mappings.len()
-            + memory
-                .interpreter
-                .as_ref()
-                .map(|map| map.mappings.len())
-                .unwrap_or(0),
-    );
-    append_runtime_mappings(
-        &mut mappings,
-        OciElfImage::Executable,
-        plan.executable.path.as_str(),
-        &memory.executable,
-    );
-    if let (Some(interpreter), Some(map)) = (plan.interpreter.as_ref(), memory.interpreter.as_ref())
-    {
-        append_runtime_mappings(
-            &mut mappings,
-            OciElfImage::Interpreter,
-            interpreter.path.as_str(),
-            map,
-        );
-    } else if plan.interpreter.is_some() || memory.interpreter.is_some() {
-        return Err(OciElfError::MissingInterpreter);
-    }
-    mappings.sort_by_key(|mapping| mapping.mapping.map_start);
-    validate_runtime_mapping_list(&mappings)?;
-    Ok(mappings)
-}
-
-pub fn build_elf_runtime_layout(
-    plan: &OciElfRuntimePlan,
-    memory: &OciElfRuntimeMemoryMap,
-) -> Result<OciElfRuntimeLayout, OciElfError> {
-    let mappings = build_elf_runtime_mapping_list(plan, memory)?;
-    let Some(first) = mappings.first() else {
-        return Ok(OciElfRuntimeLayout {
-            mappings,
-            map_start: 0,
-            map_end: 0,
-            mapped_bytes: 0,
-        });
-    };
-    let mut map_start = first.mapping.map_start;
-    let mut map_end = first
-        .mapping
-        .map_start
-        .checked_add(first.mapping.map_size)
-        .ok_or(OciElfError::Overflow)?;
-    let mut mapped_bytes = first.mapping.map_size;
-    for mapping in mappings.iter().skip(1) {
-        map_start = core::cmp::min(map_start, mapping.mapping.map_start);
-        let end = mapping
-            .mapping
-            .map_start
-            .checked_add(mapping.mapping.map_size)
-            .ok_or(OciElfError::Overflow)?;
-        map_end = core::cmp::max(map_end, end);
-        mapped_bytes = mapped_bytes
-            .checked_add(mapping.mapping.map_size)
-            .ok_or(OciElfError::Overflow)?;
-    }
-    Ok(OciElfRuntimeLayout {
-        mappings,
-        map_start,
-        map_end,
-        mapped_bytes,
-    })
-}
-
 pub fn read_elf_runtime_mapping_list_chunk<R: OciRootfs>(
     rootfs: &R,
     plan: &OciElfRuntimePlan,
@@ -804,142 +740,6 @@ pub fn read_elf_runtime_mapping_list_chunk<R: OciRootfs>(
         mapping_offset,
         out,
     )
-}
-
-pub fn build_elf_memory_map(plan: &OciElfLoadPlan) -> Result<OciElfMemoryMap, OciElfError> {
-    build_elf_memory_map_with_page_size(plan, DEFAULT_PAGE_SIZE)
-}
-
-pub fn build_elf_memory_map_with_load_bias(
-    plan: &OciElfLoadPlan,
-    load_bias: u64,
-) -> Result<OciElfMemoryMap, OciElfError> {
-    build_elf_memory_map_with_page_size_and_load_bias(plan, DEFAULT_PAGE_SIZE, load_bias)
-}
-
-pub fn build_elf_runtime_memory_map(
-    plan: &OciElfRuntimePlan,
-) -> Result<OciElfRuntimeMemoryMap, OciElfError> {
-    build_elf_runtime_memory_map_with_page_size(plan, DEFAULT_PAGE_SIZE)
-}
-
-pub fn build_elf_runtime_memory_map_with_load_bias(
-    plan: &OciElfRuntimePlan,
-    load_bias: OciElfLoadBias,
-) -> Result<OciElfRuntimeMemoryMap, OciElfError> {
-    build_elf_runtime_memory_map_with_page_size_and_load_bias(plan, DEFAULT_PAGE_SIZE, load_bias)
-}
-
-pub fn build_elf_runtime_memory_map_with_page_size(
-    plan: &OciElfRuntimePlan,
-    page_size: u64,
-) -> Result<OciElfRuntimeMemoryMap, OciElfError> {
-    build_elf_runtime_memory_map_with_page_size_and_load_bias(
-        plan,
-        page_size,
-        OciElfLoadBias::default(),
-    )
-}
-
-pub fn build_elf_runtime_memory_map_with_page_size_and_load_bias(
-    plan: &OciElfRuntimePlan,
-    page_size: u64,
-    load_bias: OciElfLoadBias,
-) -> Result<OciElfRuntimeMemoryMap, OciElfError> {
-    Ok(OciElfRuntimeMemoryMap {
-        executable: build_elf_memory_map_with_page_size_and_load_bias(
-            &plan.executable,
-            page_size,
-            load_bias.executable,
-        )?,
-        interpreter: plan
-            .interpreter
-            .as_ref()
-            .map(|interpreter| {
-                build_elf_memory_map_with_page_size_and_load_bias(
-                    interpreter,
-                    page_size,
-                    load_bias.interpreter,
-                )
-            })
-            .transpose()?,
-    })
-}
-
-pub fn build_elf_memory_map_with_page_size(
-    plan: &OciElfLoadPlan,
-    page_size: u64,
-) -> Result<OciElfMemoryMap, OciElfError> {
-    build_elf_memory_map_with_page_size_and_load_bias(plan, page_size, 0)
-}
-
-pub fn build_elf_memory_map_with_page_size_and_load_bias(
-    plan: &OciElfLoadPlan,
-    page_size: u64,
-    load_bias: u64,
-) -> Result<OciElfMemoryMap, OciElfError> {
-    if page_size == 0 || !page_size.is_power_of_two() {
-        return Err(OciElfError::InvalidPageSize(page_size));
-    }
-
-    let mut mappings = Vec::with_capacity(plan.segments.len());
-    for (index, segment) in plan.segments.iter().enumerate() {
-        let segment_start = segment
-            .virtual_addr
-            .checked_add(load_bias)
-            .ok_or(OciElfError::Overflow)?;
-        let map_start = align_down(segment_start, page_size);
-        let segment_end = segment
-            .virtual_addr
-            .checked_add(load_bias)
-            .ok_or(OciElfError::Overflow)?
-            .checked_add(segment.memory_size)
-            .ok_or(OciElfError::Overflow)?;
-        let map_end = align_up(segment_end, page_size)?;
-        mappings.push(OciElfMapping {
-            segment_index: index,
-            map_start,
-            map_size: map_end
-                .checked_sub(map_start)
-                .ok_or(OciElfError::Overflow)?,
-            segment_start,
-            segment_size: segment.memory_size,
-            file_size: segment.file_size,
-            flags: segment.flags,
-        });
-    }
-
-    mappings.sort_by_key(|mapping| mapping.map_start);
-    for pair in mappings.windows(2) {
-        let left_end = pair[0]
-            .map_start
-            .checked_add(pair[0].map_size)
-            .ok_or(OciElfError::Overflow)?;
-        if left_end > pair[1].map_start {
-            return Err(OciElfError::OverlappingLoadSegments);
-        }
-    }
-
-    Ok(OciElfMemoryMap {
-        page_size,
-        load_bias,
-        entry: plan
-            .entry
-            .checked_add(load_bias)
-            .ok_or(OciElfError::Overflow)?,
-        mappings,
-    })
-}
-
-pub fn write_elf64_initial_stack(
-    stack_base: u64,
-    stack_top: u64,
-    stack: &mut [u8],
-    argv: &[String],
-    env: &[String],
-    auxv: &[OciElfAuxvEntry],
-) -> Result<OciElfInitialStack, OciElfError> {
-    write_elf64_initial_stack_aligned(stack_base, stack_top, stack, argv, env, auxv, 16)
 }
 
 pub fn write_prepared_elf64_initial_stack(
@@ -1178,158 +978,6 @@ pub unsafe fn enter_elf64_launch_state(launch: &OciPreparedLaunchState) -> ! {
     unsafe { enter_elf64(launch.entry_point, launch.stack_pointer) }
 }
 
-pub fn build_elf64_auxv(
-    plan: &OciElfRuntimePlan,
-    memory: &OciElfRuntimeMemoryMap,
-) -> Result<Vec<OciElfAuxvEntry>, OciElfError> {
-    let phdr = load_file_offset_addr(
-        &plan.executable,
-        &memory.executable,
-        plan.executable.program_header_offset,
-    )?;
-    let base = memory
-        .interpreter
-        .as_ref()
-        .map(|map| map.load_bias)
-        .unwrap_or(0);
-
-    Ok(vec![
-        OciElfAuxvEntry {
-            key: OCI_ELF_AT_PHDR,
-            value: phdr,
-        },
-        OciElfAuxvEntry {
-            key: OCI_ELF_AT_PHENT,
-            value: plan.executable.program_header_entry_size as u64,
-        },
-        OciElfAuxvEntry {
-            key: OCI_ELF_AT_PHNUM,
-            value: plan.executable.program_header_count as u64,
-        },
-        OciElfAuxvEntry {
-            key: OCI_ELF_AT_PAGESZ,
-            value: memory.executable.page_size,
-        },
-        OciElfAuxvEntry {
-            key: OCI_ELF_AT_BASE,
-            value: base,
-        },
-        OciElfAuxvEntry {
-            key: OCI_ELF_AT_FLAGS,
-            value: 0,
-        },
-        OciElfAuxvEntry {
-            key: OCI_ELF_AT_ENTRY,
-            value: memory.executable.entry,
-        },
-    ])
-}
-
-pub fn write_elf64_initial_stack_aligned(
-    stack_base: u64,
-    stack_top: u64,
-    stack: &mut [u8],
-    argv: &[String],
-    env: &[String],
-    auxv: &[OciElfAuxvEntry],
-    align: u64,
-) -> Result<OciElfInitialStack, OciElfError> {
-    if align == 0 || !align.is_power_of_two() {
-        return Err(OciElfError::InvalidStackAlignment(align));
-    }
-    let stack_len = u64::try_from(stack.len()).map_err(|_| OciElfError::Overflow)?;
-    if stack_base
-        .checked_add(stack_len)
-        .ok_or(OciElfError::Overflow)?
-        != stack_top
-    {
-        return Err(OciElfError::StackTooSmall);
-    }
-
-    let argv_string_bytes = c_string_bytes(argv)?;
-    let env_string_bytes = c_string_bytes(env)?;
-    let string_bytes = argv_string_bytes
-        .checked_add(env_string_bytes)
-        .ok_or(OciElfError::Overflow)?;
-    let auxv_slots = auxv
-        .len()
-        .checked_add(1)
-        .and_then(|value| value.checked_mul(2))
-        .ok_or(OciElfError::Overflow)?;
-    let pointer_slots = 1usize
-        .checked_add(argv.len())
-        .and_then(|value| value.checked_add(1))
-        .and_then(|value| value.checked_add(env.len()))
-        .and_then(|value| value.checked_add(1))
-        .and_then(|value| value.checked_add(auxv_slots))
-        .ok_or(OciElfError::Overflow)?;
-    let pointer_bytes = pointer_slots.checked_mul(8).ok_or(OciElfError::Overflow)?;
-    let raw_bytes = string_bytes
-        .checked_add(pointer_bytes)
-        .ok_or(OciElfError::Overflow)?;
-    let raw_bytes_u64 = u64::try_from(raw_bytes).map_err(|_| OciElfError::Overflow)?;
-    let aligned_bytes = align_up(raw_bytes_u64, align)?;
-    if aligned_bytes > stack_len {
-        return Err(OciElfError::StackTooSmall);
-    }
-
-    stack.fill(0);
-    let stack_pointer = stack_top
-        .checked_sub(aligned_bytes)
-        .ok_or(OciElfError::Overflow)?;
-    let mut cursor = addr_to_stack_offset(stack_base, stack_pointer)?;
-    let argc_addr = stack_pointer;
-    write_u64_at(stack, &mut cursor, argv.len() as u64)?;
-    let argv_ptrs_addr = stack_base
-        .checked_add(cursor as u64)
-        .ok_or(OciElfError::Overflow)?;
-
-    let strings_addr = stack_top
-        .checked_sub(string_bytes as u64)
-        .ok_or(OciElfError::Overflow)?;
-    let mut string_cursor = addr_to_stack_offset(stack_base, strings_addr)?;
-    for value in argv {
-        let addr = stack_base
-            .checked_add(string_cursor as u64)
-            .ok_or(OciElfError::Overflow)?;
-        write_u64_at(stack, &mut cursor, addr)?;
-        write_c_string_at(stack, &mut string_cursor, value)?;
-    }
-    write_u64_at(stack, &mut cursor, 0)?;
-
-    let env_ptrs_addr = stack_base
-        .checked_add(cursor as u64)
-        .ok_or(OciElfError::Overflow)?;
-    for value in env {
-        let addr = stack_base
-            .checked_add(string_cursor as u64)
-            .ok_or(OciElfError::Overflow)?;
-        write_u64_at(stack, &mut cursor, addr)?;
-        write_c_string_at(stack, &mut string_cursor, value)?;
-    }
-    write_u64_at(stack, &mut cursor, 0)?;
-
-    let auxv_addr = stack_base
-        .checked_add(cursor as u64)
-        .ok_or(OciElfError::Overflow)?;
-    for entry in auxv {
-        write_u64_at(stack, &mut cursor, entry.key)?;
-        write_u64_at(stack, &mut cursor, entry.value)?;
-    }
-    write_u64_at(stack, &mut cursor, 0)?;
-    write_u64_at(stack, &mut cursor, 0)?;
-
-    Ok(OciElfInitialStack {
-        stack_pointer,
-        bytes_used: aligned_bytes as usize,
-        argc_addr,
-        argv_ptrs_addr,
-        env_ptrs_addr,
-        auxv_addr,
-        strings_addr,
-    })
-}
-
 fn elf_load_plan<R: OciRootfs>(
     rootfs: &R,
     info: OciElfInfo,
@@ -1373,66 +1021,6 @@ fn elf_load_plan<R: OciRootfs>(
         interpreter: info.interpreter,
         segments,
     })
-}
-
-fn load_file_offset_addr(
-    plan: &OciElfLoadPlan,
-    map: &OciElfMemoryMap,
-    file_offset: u64,
-) -> Result<u64, OciElfError> {
-    for mapping in &map.mappings {
-        let segment = plan
-            .segments
-            .get(mapping.segment_index)
-            .ok_or(OciElfError::InvalidSegmentIndex(mapping.segment_index))?;
-        if file_offset < segment.file_offset {
-            continue;
-        }
-        let segment_file_offset = file_offset
-            .checked_sub(segment.file_offset)
-            .ok_or(OciElfError::Overflow)?;
-        if segment_file_offset < segment.file_size {
-            return mapping
-                .segment_start
-                .checked_add(segment_file_offset)
-                .ok_or(OciElfError::Overflow);
-        }
-    }
-    Err(OciElfError::MissingProgramHeaders)
-}
-
-fn append_runtime_mappings(
-    out: &mut Vec<OciElfRuntimeMapping>,
-    image: OciElfImage,
-    path: &str,
-    map: &OciElfMemoryMap,
-) {
-    out.extend(
-        map.mappings
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(mapping_index, mapping)| OciElfRuntimeMapping {
-                image,
-                path: path.into(),
-                mapping_index,
-                mapping,
-            }),
-    );
-}
-
-fn validate_runtime_mapping_list(mappings: &[OciElfRuntimeMapping]) -> Result<(), OciElfError> {
-    for pair in mappings.windows(2) {
-        let left_end = pair[0]
-            .mapping
-            .map_start
-            .checked_add(pair[0].mapping.map_size)
-            .ok_or(OciElfError::Overflow)?;
-        if left_end > pair[1].mapping.map_start {
-            return Err(OciElfError::OverlappingLoadSegments);
-        }
-    }
-    Ok(())
 }
 
 unsafe fn copy_to_addr(addr: u64, bytes: &[u8]) -> Result<(), OciElfError> {
@@ -1503,63 +1091,6 @@ fn contains_addr(start: u64, len: u64, addr: u64) -> bool {
         .checked_add(len)
         .map(|end| addr >= start && addr < end)
         .unwrap_or(false)
-}
-
-fn align_down(value: u64, align: u64) -> u64 {
-    value & !(align - 1)
-}
-
-fn align_up(value: u64, align: u64) -> Result<u64, OciElfError> {
-    if value == 0 {
-        return Ok(0);
-    }
-    value
-        .checked_add(align - 1)
-        .map(|value| align_down(value, align))
-        .ok_or(OciElfError::Overflow)
-}
-
-fn c_string_bytes(values: &[String]) -> Result<usize, OciElfError> {
-    values.iter().try_fold(0usize, |len, value| {
-        if value.as_bytes().contains(&0) {
-            return Err(OciElfError::InvalidStackString);
-        }
-        len.checked_add(value.len())
-            .and_then(|len| len.checked_add(1))
-            .ok_or(OciElfError::Overflow)
-    })
-}
-
-fn addr_to_stack_offset(stack_base: u64, addr: u64) -> Result<usize, OciElfError> {
-    let offset = addr
-        .checked_sub(stack_base)
-        .ok_or(OciElfError::StackTooSmall)?;
-    usize::try_from(offset).map_err(|_| OciElfError::Overflow)
-}
-
-fn write_u64_at(stack: &mut [u8], cursor: &mut usize, value: u64) -> Result<(), OciElfError> {
-    let end = cursor.checked_add(8).ok_or(OciElfError::Overflow)?;
-    let Some(out) = stack.get_mut(*cursor..end) else {
-        return Err(OciElfError::StackTooSmall);
-    };
-    out.copy_from_slice(&value.to_le_bytes());
-    *cursor = end;
-    Ok(())
-}
-
-fn write_c_string_at(stack: &mut [u8], cursor: &mut usize, value: &str) -> Result<(), OciElfError> {
-    let bytes = value.as_bytes();
-    let end = cursor
-        .checked_add(bytes.len())
-        .and_then(|end| end.checked_add(1))
-        .ok_or(OciElfError::Overflow)?;
-    let Some(out) = stack.get_mut(*cursor..end) else {
-        return Err(OciElfError::StackTooSmall);
-    };
-    out[..bytes.len()].copy_from_slice(bytes);
-    out[bytes.len()] = 0;
-    *cursor = end;
-    Ok(())
 }
 
 fn read_exact_rootfs<R: OciRootfs>(

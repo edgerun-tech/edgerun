@@ -30,7 +30,10 @@ pub mod oci_path;
 pub mod rootfs_access;
 pub mod runtime_config;
 pub mod spec;
+mod spec_json;
+mod tar_compression;
 pub mod tar_layer;
+mod tar_whiteout;
 #[cfg(all(test, not(target_os = "none")))]
 pub(crate) mod test_support;
 mod util;
@@ -83,6 +86,8 @@ pub mod ebpf_netcls;
 #[cfg(feature = "edgefs")]
 pub mod edgefs;
 pub mod elf;
+mod elf_memory;
+mod elf_stack;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod error;
 #[cfg(all(feature = "std", not(target_os = "none")))]

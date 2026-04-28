@@ -4,6 +4,7 @@ use crate::test_support::{
     test_digest_for, TestDigest, TEST_TAR_BLOCK_SIZE,
 };
 use alloc::vec::Vec;
+use edgerun_encoding::crc32::crc32;
 
 #[derive(Default)]
 struct CollectSink {
