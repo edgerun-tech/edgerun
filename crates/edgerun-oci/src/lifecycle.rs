@@ -306,40 +306,42 @@ pub fn signal_start(container_id: &str) -> io::Result<()> {
 // ===========================================================================
 
 /// Set up cgroups for the container.
-pub fn setup_container_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str) {
+pub fn setup_container_cgroups(
+    pid: u32,
+    resources: &OciLinuxResources,
+    cgroup_path: &str,
+) -> io::Result<()> {
     if let Err(e) = setup_cgroups(pid, resources, cgroup_path) {
         let _ = std::fs::write(
             "/dev/kmsg",
             format!("edgerun: cgroup setup failed for PID {}: {}", pid, e),
         );
+        return Err(io::Error::other(format!(
+            "failed to setup cgroups for container at {}: {}",
+            cgroup_path, e
+        )));
     }
+    Ok(())
 }
 
 /// Set up cgroups declared by the spec before the container is started.
-pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec) {
+pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec) -> io::Result<()> {
     let Some(linux) = spec.linux.as_ref() else {
-        return;
+        return Ok(());
     };
     let Some(resources) = linux.resources.as_ref() else {
-        return;
+        return Ok(());
     };
 
     let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
     let rootless = is_rootless_mode();
-    let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
-        .unwrap_or_else(|e| {
-            let _ = fs::write(
-                "/dev/kmsg",
-                format!("edgerun: cgroup resolution failed: {}", e),
-            );
-            "/edgerun".to_string()
-        });
-    setup_container_cgroups(pid, resources, &cgroup_path);
+    let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)?;
+    setup_container_cgroups(pid, resources, &cgroup_path)
 }
 
 /// Start a created container: cgroups, FIFO signal, poststart hooks, and state.
 pub fn start_created_container(spec: &OciSpec, container_id: &str, pid: u32) -> io::Result<()> {
-    setup_spec_cgroups(pid, spec);
+    setup_spec_cgroups(pid, spec)?;
     signal_start(container_id)?;
     run_poststart_hooks(spec, container_id, pid)?;
     update_state_running(container_id, pid)
