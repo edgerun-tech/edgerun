@@ -45,7 +45,7 @@ const BPF_CGROUP_DEV_ALLOW: i32 = 2;
 /// 3. If all checks pass → return ALLOW
 /// 4. Default → return DENY (r0 = 0)
 ///
-/// All forward jump offsets are computed correctly.
+/// Jump targets are resolved to signed BPF 16-bit offsets after generation.
 pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
     // We use a two-pass approach:
     // Pass 1: build symbolic instruction list with labels
@@ -62,14 +62,7 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
     let mut fwd_refs: Vec<(usize, String)> = Vec::new(); // (index, target_label)
 
     // r6 = r1 (save context pointer)
-    sym.push(SymInsn::Raw(mov_reg(R6, R0 + 1))); // R1 = 1, but we want r1
-    sym.pop();
-    sym.push(SymInsn::Raw(mov_reg(R6, 1))); // Wrong again — mov_reg takes reg numbers
-
-    // Let me be explicit:
-    // R1 is register number 1, which is the context pointer for cgroup device programs.
-    sym.clear();
-    sym.push(SymInsn::Raw(mov_reg(R6, 1))); // r6 = r1
+    sym.push(SymInsn::Raw(mov_reg(R6, R1)));
 
     // For each rule, generate checks
     for (i, rule) in rules.iter().enumerate() {
@@ -204,9 +197,10 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
         let target_idx = label_map
             .get(target_label)
             .copied()
-            .unwrap_or(insns.len() - 1);
+            .unwrap_or_else(|| insns.len().saturating_sub(1));
         // off = target - (current + 1)
-        let off = (target_idx as isize - (*insn_idx as isize + 1)).max(0) as i16;
+        let off = target_idx as isize - (*insn_idx as isize + 1);
+        let off = off.clamp(i16::MIN as isize, i16::MAX as isize) as i16;
         insns[*insn_idx][2..4].copy_from_slice(&off.to_le_bytes());
     }
 
