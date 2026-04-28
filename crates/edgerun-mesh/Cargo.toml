@@ -9,7 +9,7 @@ publish.workspace = true
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-core = { path = "../edgerun-core" }
-serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"] }
 
 [lints]
 workspace = true

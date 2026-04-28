@@ -1,9 +1,8 @@
 use crate::collections::HashMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ProviderInfo {
     pub node_id: [u8; 32],
     pub name: String,
@@ -17,6 +16,23 @@ pub struct ProviderInfo {
     pub uptime_percent: u32,
     pub slash_count: u32,
     pub is_online: bool,
+}
+
+edgerun_json::impl_json_struct! {
+    ProviderInfo {
+        node_id: [u8; 32],
+        name: String,
+        cpu_cores_available: u32,
+        cpu_cores_used: u32,
+        memory_bytes_available: u64,
+        memory_bytes_used: u64,
+        storage_bytes_available: u64,
+        storage_bytes_used: u64,
+        network_mbps: u32,
+        uptime_percent: u32,
+        slash_count: u32,
+        is_online: bool,
+    }
 }
 
 impl ProviderInfo {

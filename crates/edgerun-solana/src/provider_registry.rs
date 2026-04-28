@@ -13,24 +13,6 @@ use crate::error::SolanaError;
 use crate::provider_registry_program_id;
 use crate::types::{collateral, Provider, ProviderStatus};
 
-#[derive(Debug, Clone, serde::Serialize)]
-#[allow(dead_code)]
-enum ProviderRegistryInstruction {
-    Initialize,
-    Register {
-        cpu_cores: u32,
-        memory_bytes: u64,
-        storage_bytes: u64,
-        network_mbits: u32,
-    },
-    UpdateCollateral(u64),
-    Pause,
-    Resume,
-    Attest {
-        uptime_seconds: u32,
-    },
-}
-
 pub struct ProviderClient {
     http: HttpClient,
     program_id: Pubkey,
@@ -112,13 +94,13 @@ impl ProviderClient {
         Ok(pubkeys)
     }
 
-    fn make_instruction<T: serde::Serialize>(
+    fn make_instruction(
         &self,
         variant: u8,
-        data: &T,
+        data: JsonValue,
         accounts: Vec<AccountMeta>,
     ) -> Instruction {
-        let encoded = edgerun_json::to_vec(data).unwrap();
+        let encoded = data.to_json_string().unwrap_or_default().into_bytes();
         let mut bytes = vec![variant];
         bytes.extend(encoded);
         Instruction {
@@ -139,12 +121,14 @@ impl ProviderClient {
     ) -> Instruction {
         self.make_instruction(
             1,
-            &ProviderRegistryInstruction::Register {
-                cpu_cores,
-                memory_bytes,
-                storage_bytes,
-                network_mbits,
-            },
+            json!({
+                "Register": {
+                    "cpu_cores": cpu_cores,
+                    "memory_bytes": memory_bytes,
+                    "storage_bytes": storage_bytes,
+                    "network_mbits": network_mbits
+                }
+            }),
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -159,7 +143,7 @@ impl ProviderClient {
     ) -> Instruction {
         self.make_instruction(
             0,
-            &ProviderRegistryInstruction::Initialize,
+            json!("Initialize"),
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -174,7 +158,7 @@ impl ProviderClient {
     ) -> Instruction {
         self.make_instruction(
             3,
-            &ProviderRegistryInstruction::Pause,
+            json!("Pause"),
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -189,7 +173,7 @@ impl ProviderClient {
     ) -> Instruction {
         self.make_instruction(
             4,
-            &ProviderRegistryInstruction::Resume,
+            json!("Resume"),
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -205,7 +189,7 @@ impl ProviderClient {
     ) -> Instruction {
         self.make_instruction(
             5,
-            &ProviderRegistryInstruction::Attest { uptime_seconds },
+            json!({ "Attest": { "uptime_seconds": uptime_seconds } }),
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),

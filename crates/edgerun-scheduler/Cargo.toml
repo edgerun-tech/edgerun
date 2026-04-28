@@ -9,5 +9,4 @@ edgerun-config = { path = "../edgerun-config" }
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-error.workspace = true
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "serde"] }
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"] }

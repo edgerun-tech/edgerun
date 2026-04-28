@@ -1,9 +1,9 @@
 use crate::prelude::*;
-use serde::{Deserialize, Serialize};
+use edgerun_json::{FromJson, JsonValue, JsonValueError, ToJson};
 
 const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pubkey([u8; 32]);
 
 impl Pubkey {
@@ -27,6 +27,18 @@ impl Pubkey {
 impl Default for Pubkey {
     fn default() -> Self {
         Self::default()
+    }
+}
+
+impl ToJson for Pubkey {
+    fn to_json(&self) -> JsonValue {
+        self.0.to_json()
+    }
+}
+
+impl FromJson for Pubkey {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        Ok(Self(<[u8; 32]>::from_json(value)?))
     }
 }
 

@@ -16,6 +16,7 @@
 
 use crate::collections::HashMap;
 use crate::prelude::v1::*;
+use edgerun_json::{FromJson, ToJson};
 
 // ---------------------------------------------------------------------------
 // K8s-compatible resource envelope
@@ -25,23 +26,20 @@ use crate::prelude::v1::*;
 pub const API_VERSION: &str = "edgerun.io/v1alpha1";
 
 /// Standard K8s-style metadata.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ResourceMetadata {
     /// Resource name (unique within namespace).
     pub name: String,
     /// Namespace for grouping resources.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub namespace: Option<String>,
     /// Key-value labels for selection and filtering.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<HashMap<String, String>>,
     /// Arbitrary annotations (for converters, notes, etc.).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<HashMap<String, String>>,
 }
 
 /// A complete K8s-style config resource envelope.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Resource<T> {
     /// API version (always "edgerun.io/v1alpha1").
     pub api_version: String,
@@ -88,29 +86,26 @@ impl<T> Resource<T> {
     }
 }
 
-impl<T: serde::Serialize + serde::de::DeserializeOwned> Resource<T> {
+impl<T: edgerun_json::ToJson + edgerun_json::FromJson> Resource<T> {
     /// Serialize to YAML string.
     pub fn to_yaml(&self) -> Result<String, edgerun_json::yaml::YamlError> {
-        let json = edgerun_json::to_value(self).map_err(|_| {
-            edgerun_json::yaml::YamlError::IoError("serialization error".to_string())
-        })?;
-
-        edgerun_json::yaml::to_yaml_string(&edgerun_json::yaml::json_to_yaml(json))
+        edgerun_json::yaml::to_yaml_string(&edgerun_json::yaml::json_to_yaml(
+            edgerun_json::ToJson::to_json(self),
+        ))
     }
 
     /// Parse from YAML string.
     pub fn from_yaml(yaml: &str) -> Result<Self, edgerun_json::yaml::YamlError> {
         let yaml_value = edgerun_json::yaml::from_yaml_str(yaml)?;
         let json = edgerun_json::yaml::yaml_to_json(yaml_value);
-        edgerun_json::from_value(json).map_err(|_| {
+        edgerun_json::FromJson::from_json(json).map_err(|_| {
             edgerun_json::yaml::YamlError::IoError("deserialization error".to_string())
         })
     }
 }
 
 /// K8s-style config resource — wraps raw spec types with the envelope.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "kind", rename_all = "PascalCase")]
+#[derive(Debug, Clone)]
 pub enum ConfigResource {
     DnsServer(DnsServerSpec),
     DnsZone(DnsZoneSpec),
@@ -202,28 +197,21 @@ impl ConfigResource {
 // ---------------------------------------------------------------------------
 
 /// DNS server configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DnsServerSpec {
     /// UDP/TCP bind address (default: "0.0.0.0:53").
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_address: Option<String>,
     /// IPv6 bind address (e.g. "[::]:53").
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_address_ipv6: Option<String>,
     /// Default TTL for records (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_ttl: Option<u32>,
     /// Rate limit queries per second per IP (0 = unlimited).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limit_qps: Option<u32>,
     /// List of zone names this server serves.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub zones: Option<Vec<String>>,
     /// Upstream resolver for forwarding.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub forward_to: Option<String>,
     /// Enable recursive resolution.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub recursive: Option<bool>,
 }
 
@@ -232,84 +220,68 @@ pub struct DnsServerSpec {
 // ---------------------------------------------------------------------------
 
 /// DNS zone configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DnsZoneSpec {
     /// Zone origin (e.g. "example.com").
     pub origin: String,
     /// SOA record.
     pub soa: SoaRecord,
     /// DNS records in the zone.
-    #[serde(default)]
     pub records: Vec<ZoneRecord>,
     /// DNSSEC signing config.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub dnssec: Option<DnssecConfig>,
     /// Wildcard records.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub wildcards: Option<Vec<ZoneRecord>>,
 }
 
 /// SOA record configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SoaRecord {
     /// Primary nameserver.
     pub mname: String,
     /// Responsible admin email (with `@` replaced by `.`).
     pub rname: String,
     /// Zone serial number.
-    #[serde(default = "default_serial")]
     pub serial: u32,
     /// Refresh interval (seconds).
-    #[serde(default = "default_3600")]
     pub refresh: u32,
     /// Retry interval (seconds).
-    #[serde(default = "default_900")]
     pub retry: u32,
     /// Expiry time (seconds).
-    #[serde(default = "default_604800")]
     pub expire: u32,
     /// Minimum TTL / negative cache TTL (seconds).
-    #[serde(default = "default_86400")]
     pub minimum: u32,
 }
 
 /// A single DNS record in a zone.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ZoneRecord {
     /// Record name (relative to zone origin, or FQDN).
     pub name: String,
     /// Record type (A, AAAA, CNAME, MX, TXT, SRV, etc.).
-    #[serde(rename = "type")]
     pub record_type: String,
     /// TTL in seconds (defaults to zone default).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ttl: Option<u32>,
     /// Record value — type-specific.
     pub value: edgerun_json::JsonValue,
 }
 
 /// DNSSEC configuration for a zone.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DnssecConfig {
     /// Algorithm: "ed25519", "ecdsap256".
     pub algorithm: String,
     /// Key flags: 256 (ZSK), 257 (KSK).
-    #[serde(default = "default_ksk")]
     pub key_flags: u16,
     /// Key TTL (seconds).
-    #[serde(default = "default_86400")]
     pub key_ttl: u32,
     /// Signature validity period (seconds from now).
-    #[serde(default = "default_30d")]
     pub signature_validity: u32,
     /// Enable NSEC3.
-    #[serde(default)]
     pub nsec3: bool,
     /// NSEC3 salt (hex string).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub nsec3_salt: Option<String>,
     /// NSEC3 iterations.
-    #[serde(default)]
     pub nsec3_iterations: u16,
 }
 
@@ -318,24 +290,19 @@ pub struct DnssecConfig {
 // ---------------------------------------------------------------------------
 
 /// DNS forwarder configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DnsForwarderSpec {
     /// Bind address for the forwarder.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_address: Option<String>,
     /// List of upstream resolvers.
     pub upstreams: Vec<String>,
     /// Query timeout (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u64>,
     /// Enable caching.
-    #[serde(default)]
     pub cache: bool,
     /// Cache TTL (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<u32>,
     /// Max cache entries.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_max_entries: Option<usize>,
 }
 
@@ -344,17 +311,15 @@ pub struct DnsForwarderSpec {
 // ---------------------------------------------------------------------------
 
 /// Conditional forwarding rule (like CoreDNS's `forward` plugin).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ForwardingRuleSpec {
     /// Domain zone to match (e.g. "cluster.local").
     pub zone: String,
     /// Upstream servers to forward to.
     pub upstreams: Vec<String>,
     /// Optional policy: "sequential", "random", "round_robin".
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub policy: Option<String>,
     /// Health check interval (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub health_check: Option<u64>,
 }
 
@@ -363,25 +328,19 @@ pub struct ForwardingRuleSpec {
 // ---------------------------------------------------------------------------
 
 /// TLS configuration for DoT/DoH.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TlsConfigSpec {
     /// Enable DNS-over-TLS on port 853.
-    #[serde(default)]
     pub dot_enabled: bool,
     /// Enable DNS-over-HTTPS.
-    #[serde(default)]
     pub doh_enabled: bool,
     /// DoH bind address.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub doh_bind_address: Option<String>,
     /// DoH URL path.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub doh_path: Option<String>,
     /// TLS certificate path.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cert_path: Option<String>,
     /// TLS key path.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub key_path: Option<String>,
 }
 
@@ -390,16 +349,13 @@ pub struct TlsConfigSpec {
 // ---------------------------------------------------------------------------
 
 /// Rate limiting configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RateLimitSpec {
     /// Queries per second per client IP.
-    #[serde(default = "default_100")]
     pub qps: u32,
     /// Burst size.
-    #[serde(default = "default_200")]
     pub burst: u32,
     /// Block duration after exceeding limit (seconds).
-    #[serde(default = "default_60")]
     pub block_duration: u32,
 }
 
@@ -408,50 +364,40 @@ pub struct RateLimitSpec {
 // ---------------------------------------------------------------------------
 
 /// DHCP server configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DhcpServerSpec {
     /// Network interface to bind to.
     pub interface: String,
     /// Pool name references.
     pub pools: Vec<String>,
     /// Default lease time (seconds).
-    #[serde(default = "default_86400")]
     pub default_lease_time: u32,
     /// Max lease time (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_lease_time: Option<u32>,
     /// DNS servers to hand out.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub dns_servers: Option<Vec<String>>,
     /// Router/gateway to hand out.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<String>,
     /// NTP servers.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ntp_servers: Option<Vec<String>>,
     /// Domain name.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub domain_name: Option<String>,
     /// PXE bootfile.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bootfile: Option<String>,
     /// PXE TFTP server.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tftp_server: Option<String>,
     /// Static reservations.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub reservations: Option<Vec<DhcpReservation>>,
 }
 
 /// DHCP static reservation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DhcpReservation {
     /// MAC address.
     pub mac: String,
     /// Reserved IP address.
     pub ip: String,
     /// Optional hostname.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
 }
 
@@ -460,26 +406,21 @@ pub struct DhcpReservation {
 // ---------------------------------------------------------------------------
 
 /// DHCPv6 server configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Dhcpv6ServerSpec {
     /// Network interface to bind to.
     pub interface: String,
     /// Pool name references.
     pub pools: Vec<String>,
     /// Default preferred lifetime (seconds).
-    #[serde(default = "default_3600")]
     pub default_preferred_lifetime: u32,
     /// Default valid lifetime (seconds).
-    #[serde(default = "default_7200")]
     pub default_valid_lifetime: u32,
     /// DNS servers to hand out (IPv6 addresses).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub dns_servers: Option<Vec<String>>,
     /// Domain name.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub domain_name: Option<String>,
     /// Static reservations (IPv6).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub reservations: Option<Vec<Dhcpv6Reservation>>,
 }
 
@@ -491,14 +432,13 @@ fn default_7200() -> u32 {
 }
 
 /// DHCPv6 static reservation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Dhcpv6Reservation {
     /// DUID (DHCP Unique Identifier) or MAC address.
     pub duid: String,
     /// Reserved IPv6 address.
     pub ip: String,
     /// Optional hostname.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
 }
 
@@ -507,7 +447,7 @@ pub struct Dhcpv6Reservation {
 // ---------------------------------------------------------------------------
 
 /// DHCPv6 pool configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Dhcpv6PoolSpec {
     /// Pool name.
     pub name: String,
@@ -518,7 +458,6 @@ pub struct Dhcpv6PoolSpec {
     /// Prefix length (e.g., 64).
     pub prefix_length: u8,
     /// Excluded IPv6s.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<Vec<String>>,
 }
 
@@ -527,7 +466,7 @@ pub struct Dhcpv6PoolSpec {
 // ---------------------------------------------------------------------------
 
 /// DHCP pool configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DhcpPoolSpec {
     /// Pool name.
     pub name: String,
@@ -538,7 +477,6 @@ pub struct DhcpPoolSpec {
     /// Subnet mask.
     pub subnet_mask: String,
     /// Excluded IPs.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<Vec<String>>,
 }
 
@@ -547,21 +485,17 @@ pub struct DhcpPoolSpec {
 // ---------------------------------------------------------------------------
 
 /// TFTP server configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TftpServerSpec {
     /// Bind address (default: "0.0.0.0:69").
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_address: Option<String>,
     /// Root directory for served files.
     pub root_dir: String,
     /// Block size (default: 512, max: 65464).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub block_size: Option<u16>,
     /// Timeout (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
     /// Allow writes.
-    #[serde(default)]
     pub allow_writes: bool,
 }
 
@@ -570,51 +504,37 @@ pub struct TftpServerSpec {
 // ---------------------------------------------------------------------------
 
 /// SMTP server configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SmtpServerSpec {
     /// Server hostname (for EHLO/HELO).
     pub hostname: String,
     /// TCP bind address (default: "0.0.0.0:25").
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_address: Option<String>,
     /// Enable SMTPS on port 465.
-    #[serde(default)]
     pub smtps: bool,
     /// Enable STARTTLS on port 587.
-    #[serde(default)]
     pub starttls: bool,
     /// Maximum message size in bytes (default: 35MB).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_message_size: Option<usize>,
     /// Local domains for mail delivery.
-    #[serde(default)]
     pub local_domains: Vec<String>,
     /// Maildir root for storing messages.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub maildir_root: Option<String>,
     /// Enable outbound relay/queue.
-    #[serde(default)]
     pub relay_enabled: bool,
     /// Queue data directory for outbound mail.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub queue_dir: Option<String>,
     /// DNS server for MX lookups (default: "8.8.8.8:53").
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub dns_server: Option<String>,
     /// DKIM signing domain.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub dkim_domain: Option<String>,
     /// DKIM selector.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub dkim_selector: Option<String>,
     /// Path to DKIM private key file.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub dkim_key_path: Option<String>,
     /// TLS certificate (PEM format).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_cert: Option<String>,
     /// TLS private key (PEM format).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_key: Option<String>,
 }
 
@@ -623,24 +543,19 @@ pub struct SmtpServerSpec {
 // ---------------------------------------------------------------------------
 
 /// IMAP server configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ImapServerSpec {
     /// Server hostname (for CAPABILITY).
     pub hostname: String,
     /// TCP bind address (default: "0.0.0.0:143").
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_address: Option<String>,
     /// Enable IMAPS on port 993.
-    #[serde(default)]
     pub imaps: bool,
     /// Maildir root for storing messages (should match SMTP).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub maildir_root: Option<String>,
     /// TLS certificate (PEM format).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_cert: Option<String>,
     /// TLS private key (PEM format).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_key: Option<String>,
 }
 
@@ -650,28 +565,23 @@ pub struct ImapServerSpec {
 
 /// Node configuration - defines controllers who can control this node.
 /// Node ID is the public key (derived from genesis), not set in config.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NodeSpec {
     /// Controller identity IDs (node IDs = public keys).
     /// These identities can send commands to this node.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub controllers: Vec<String>,
     /// Node roles (e.g. "control-plane", "worker").
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<String>,
     /// Public IPs for this node (for reachability).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub public_ips: Vec<String>,
     /// Taints applied to pods that can't schedule on this node.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub taints: Vec<NodeTaint>,
     /// Unschedulable marks node as unschedulable.
-    #[serde(default)]
     pub unschedulable: bool,
 }
 
 /// Node taint - marks pods that can't schedule on this node.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NodeTaint {
     /// Taint key.
     pub key: String,
@@ -680,7 +590,6 @@ pub struct NodeTaint {
     /// Taint effect: "NoSchedule", "PreferNoSchedule", "NoExecute".
     pub effect: String,
     /// Time when taint expires.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub time_added: Option<String>,
 }
 
@@ -689,36 +598,30 @@ pub struct NodeTaint {
 // ---------------------------------------------------------------------------
 
 /// Peer configuration - defines a peer node in the mesh.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PeerSpec {
     /// Node ID (public key) of the peer.
     pub node_id: String,
     /// Reachability hints - how to contact this peer.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub endpoints: Vec<PeerEndpoint>,
     /// Last seen timestamp (RFC3339).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_seen: Option<String>,
     /// Peer is currently reachable.
-    #[serde(default)]
     pub reachable: bool,
     /// Roles advertised by peer.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<String>,
 }
 
 /// Peer endpoint - transport-specific reachability.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PeerEndpoint {
     /// Transport: "tcp", "quic", "ble", "http3".
     pub transport: String,
     /// Address (host:port) or URL.
     pub address: String,
     /// Is encrypted.
-    #[serde(default)]
     pub encrypted: bool,
     /// Cost metric (lower is better).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<i32>,
 }
 
@@ -727,21 +630,18 @@ pub struct PeerEndpoint {
 // ---------------------------------------------------------------------------
 
 /// Gateway specification - configures the proxy server.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GatewaySpec {
     /// Listeners - ports and protocols to listen on.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub listeners: Vec<GatewayListener>,
     /// Default TLS config.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls: Option<GatewayTlsConfig>,
     /// Route selector - which routes this gateway handles.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route_selector: Option<HashMap<String, String>>,
 }
 
 /// Gateway listener - a port/protocol combination.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GatewayListener {
     /// Listener name.
     pub name: String,
@@ -750,21 +650,17 @@ pub struct GatewayListener {
     /// Protocol: HTTP, HTTPS, TCP, TLS.
     pub protocol: String,
     /// TLS config (for HTTPS/TLS listeners).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls: Option<GatewayTlsConfig>,
 }
 
 /// Gateway TLS configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GatewayTlsConfig {
     /// Secret reference for TLS cert.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret_ref: Option<String>,
     /// Min TLS version.
-    #[serde(default)]
     pub min_version: String,
     /// Cipher suites.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ciphers: Vec<String>,
 }
 
@@ -773,35 +669,30 @@ pub struct GatewayTlsConfig {
 // ---------------------------------------------------------------------------
 
 /// Service specification - selector-based container discovery.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ServiceSpec {
     /// Selector - matches containers with these labels.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selector: Option<HashMap<String, String>>,
     /// Ports to expose.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ports: Vec<ServicePort>,
     /// Session affinity.
-    #[serde(default)]
     pub affinity: ServiceAffinity,
 }
 
 /// Service port definition.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ServicePort {
     /// Port number.
     pub port: i32,
     /// Target port on container.
     pub target_port: i32,
     /// Protocol: TCP, UDP.
-    #[serde(default)]
     pub protocol: String,
     /// Port name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub enum ServiceAffinity {
     #[default]
     None,
@@ -814,45 +705,38 @@ pub enum ServiceAffinity {
 // ---------------------------------------------------------------------------
 
 /// HttpRoute specification - HTTP routing rules.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HttpRouteSpec {
     /// Parent gateway reference.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_ref: Option<String>,
     /// Hostnames to match.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hostnames: Vec<String>,
     /// Routing rules.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rules: Vec<HttpRouteRule>,
 }
 
 /// HTTP route rule.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HttpRouteRule {
     /// Path matches.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub matches: Vec<HttpRouteMatch>,
     /// Backend reference.
     pub backend: HttpRouteBackend,
 }
 
 /// HTTP route match.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HttpRouteMatch {
     /// Path value to match.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     /// Path type: "Exact", "Prefix", "Regex".
-    #[serde(default)]
     pub path_type: String,
     /// Header matches.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub headers: Vec<HttpRouteHeaderMatch>,
 }
 
 /// HTTP route header match.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HttpRouteHeaderMatch {
     pub name: String,
     pub value: String,
@@ -860,7 +744,7 @@ pub struct HttpRouteHeaderMatch {
 }
 
 /// HTTP route backend.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HttpRouteBackend {
     /// Service name.
     pub service: String,
@@ -873,21 +757,18 @@ pub struct HttpRouteBackend {
 // ---------------------------------------------------------------------------
 
 /// TcpRoute specification - TCP routing rules.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TcpRouteSpec {
     /// Parent gateway reference.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_ref: Option<String>,
     /// Port to match.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<i32>,
     /// Backend reference.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend: Option<TcpRouteBackend>,
 }
 
 /// TCP route backend.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TcpRouteBackend {
     pub service: String,
     pub port: i32,
@@ -898,21 +779,18 @@ pub struct TcpRouteBackend {
 // ---------------------------------------------------------------------------
 
 /// TlsRoute specification - TLS passthrough routing.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TlsRouteSpec {
     /// Parent gateway reference.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_ref: Option<String>,
     /// SNI hostnames to match.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sni_hostnames: Vec<String>,
     /// Backend reference.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend: Option<TlsRouteBackend>,
 }
 
 /// TLS route backend.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TlsRouteBackend {
     pub service: String,
     pub port: i32,
@@ -924,175 +802,130 @@ pub struct TlsRouteBackend {
 
 /// Container workload specification.
 /// Deployment spec - multiple containers with networking.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DeploymentSpec {
     /// Deployment name.
     pub name: String,
     /// Namespace.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub namespace: String,
     /// Container specs to run.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub containers: Vec<Container>,
     /// Replicas per container.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replicas: Option<i32>,
     /// Service networking between containers.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service: Option<DeploymentService>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct DeploymentService {
     /// Ports exposed by container (container_name -> ports).
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub ports: HashMap<String, Vec<u16>>,
 }
 
 /// Maps to K8s Pod spec with OCI container.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ContainerSpec {
     /// Container image (OCI image reference).
     pub image: String,
     /// Image pull policy: "Always", "IfNotPresent", "Never".
-    #[serde(default = "default_pull_always")]
     pub image_pull_policy: String,
     /// Container restart policy.
-    #[serde(default)]
     pub restart_policy: ContainerRestartPolicy,
     /// Active deadline (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub active_deadline_seconds: Option<u64>,
     /// Service account name.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_account_name: Option<String>,
     /// Number of desired pods (replicas).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replicas: Option<i32>,
     /// Selector for pods (label query).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub selector: Option<HashMap<String, String>>,
     /// Pod template spec.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<PodTemplateSpec>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PodTemplateSpec {
     /// Standard object's metadata.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<ResourceMetadata>,
     /// Pod specification.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec: Option<PodSpec>,
 }
 
 /// Pod specification (subset of K8s PodSpec).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PodSpec {
     /// Containers in this pod.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub containers: Vec<Container>,
     /// Init containers.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub init_containers: Vec<Container>,
     /// Restart policy.
-    #[serde(default)]
     pub restart_policy: ContainerRestartPolicy,
     /// Termination grace period (seconds).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub termination_grace_period_seconds: Option<i64>,
     /// DNS policy.
-    #[serde(default = "default_dns_policy")]
     pub dns_policy: String,
     /// Node selector.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_selector: Option<HashMap<String, String>>,
     /// Node name.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub node_name: Option<String>,
     /// Host network.
-    #[serde(default)]
     pub host_network: bool,
     /// Host PID.
-    #[serde(default)]
     pub host_pid: bool,
     /// Host IPC.
-    #[serde(default)]
     pub host_ipc: bool,
     /// Share process namespace.
-    #[serde(default)]
     pub share_process_namespace: bool,
     /// Security context.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub security_context: Option<PodSecurityContext>,
     /// Image pull secrets.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_pull_secrets: Vec<LocalObjectReference>,
     /// Volumes.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub volumes: Vec<Volume>,
     /// Affinity.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub affinity: Option<Affinity>,
     /// Tolerations.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tolerations: Vec<Toleration>,
 }
 
 /// Container specification (from K8s Container).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Container {
     /// Container name.
     pub name: String,
     /// Container image.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
     /// Image pull policy.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub image_pull_policy: Option<String>,
     /// Command (entrypoint).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub command: Vec<String>,
     /// Args (command arguments).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
     /// Environment variables.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env: Vec<EnvVar>,
     /// Environment from sources.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env_from: Vec<EnvFromSource>,
     /// Volume mounts.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub volume_mounts: Vec<VolumeMount>,
     /// Ports.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ports: Vec<ContainerPort>,
     /// Resources.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resources: Option<ResourceRequirements>,
     /// Security context.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub security_context: Option<ContainerSecurityContext>,
     /// Liveness probe.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub liveness_probe: Option<Probe>,
     /// Readiness probe.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readiness_probe: Option<Probe>,
     /// Startup probe.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startup_probe: Option<Probe>,
     /// Lifecycle hook.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<Lifecycle>,
     /// Working directory.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub working_dir: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub enum ContainerRestartPolicy {
     Always,
     #[default]
@@ -1100,311 +933,241 @@ pub enum ContainerRestartPolicy {
     Never,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EnvVar {
     pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value_from: Option<EnvVarSource>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EnvVarSource {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_ref: Option<ObjectFieldSelector>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret_ref: Option<SecretEnvSource>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ObjectFieldSelector {
     pub field_path: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SecretEnvSource {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optional: Option<bool>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EnvFromSource {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub prefix: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_map_ref: Option<ConfigMapEnvSource>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret_ref: Option<SecretEnvSource>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ConfigMapEnvSource {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optional: Option<bool>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct VolumeMount {
     pub name: String,
     pub mount_path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_path: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ContainerPort {
     pub name: Option<String>,
     pub container_port: i32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_port: Option<i32>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ResourceRequirements {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limits: Option<HashMap<String, String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requests: Option<HashMap<String, String>>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ResourceLimits {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cpu_cores: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_bytes: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub storage_bytes: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network_mbps: Option<u32>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ContainerSecurityContext {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub privileged: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_as_user: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_as_non_root: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Capabilities>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seccomp_profile: Option<SeccompProfile>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Capabilities {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub add: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub drop: Vec<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SeccompProfile {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub localhost_profile: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PodSecurityContext {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_as_user: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_as_non_root: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_as_group: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fs_group: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supplemental_groups: Option<Vec<i64>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seccomp_profile: Option<SeccompProfile>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sysctls: Option<Vec<Sysctl>>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Sysctl {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct LocalObjectReference {
     pub name: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Volume {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub empty_dir: Option<EmptyDirVolumeSource>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_map: Option<ConfigMapVolumeSource>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<SecretVolumeSource>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub persistent_volume_claim: Option<PersistentVolumeClaimVolumeSource>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_path: Option<HostPathVolumeSource>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EmptyDirVolumeSource {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub medium: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_limit: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ConfigMapVolumeSource {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub items: Option<Vec<KeyToPath>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optional: Option<bool>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SecretVolumeSource {
     pub secret_name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub items: Option<Vec<KeyToPath>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optional: Option<bool>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PersistentVolumeClaimVolumeSource {
     pub claim_name: String,
-    #[serde(default)]
     pub read_only: bool,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HostPathVolumeSource {
     pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct KeyToPath {
     pub key: String,
     pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<i32>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Affinity {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_affinity: Option<NodeAffinity>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod_affinity: Option<PodAffinity>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod_anti_affinity: Option<PodAntiAffinity>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NodeAffinity {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preferred_during_scheduling: Option<Vec<PreferredSchedulingTerm>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_during_scheduling: Option<NodeSelector>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PreferredSchedulingTerm {
     pub weight: i32,
     pub preference: NodeSelectorTerm,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NodeSelector {
     pub node_selector_terms: Vec<NodeSelectorTerm>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NodeSelectorTerm {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub match_expressions: Vec<NodeSelectorRequirement>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub match_fields: Vec<NodeSelectorRequirement>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NodeSelectorRequirement {
     pub key: String,
     pub operator: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PodAffinity {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub required_during_scheduling: Vec<PodAffinityTerm>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub preferred_during_scheduling: Vec<WeightedPodAffinityTerm>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PodAntiAffinity {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub required_during_scheduling: Vec<PodAffinityTerm>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub preferred_during_scheduling: Vec<WeightedPodAffinityTerm>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PodAffinityTerm {
     pub label_selector: Option<ResourceMetadata>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub namespaces: Vec<String>,
     pub topology_key: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct WeightedPodAffinityTerm {
     pub weight: i32,
     pub pod_affinity_term: PodAffinityTerm,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Toleration {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
     pub operator: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub effect: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub toleration_seconds: Option<i64>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Probe {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec: Option<ExecAction>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub http_get: Option<HTTPGetAction>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tcp_socket: Option<TCPSocketAction>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grpc: Option<GRPCAction>,
     pub initial_delay_seconds: Option<i32>,
     pub timeout_seconds: Option<i32>,
@@ -1413,57 +1176,47 @@ pub struct Probe {
     pub failure_threshold: Option<i32>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ExecAction {
     pub command: Vec<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HTTPGetAction {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     pub port: i32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheme: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub http_headers: Vec<HTTPHeader>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HTTPHeader {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TCPSocketAction {
     pub port: i32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GRPCAction {
     pub port: i32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Lifecycle {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_start: Option<LifecycleHandler>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_stop: Option<LifecycleHandler>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct LifecycleHandler {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec: Option<ExecAction>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub http_get: Option<HTTPGetAction>,
 }
 
@@ -1472,24 +1225,20 @@ pub struct LifecycleHandler {
 // ---------------------------------------------------------------------------
 
 /// Secret specification - stores encrypted data reference in blob store.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SecretSpec {
     /// Secret data (base64-encoded when serialized).
     /// Stored encrypted in blob store, not in config.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<HashMap<String, Vec<u8>>>,
     /// Secret string data (plaintext when serialized).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub string_data: Option<HashMap<String, String>>,
     /// Secret type: "Opaque", "kubernetes.io/tls", "kubernetes.io/dockerconfigjson", etc.
-    #[serde(default)]
     pub secret_type: SecretType,
     /// Reference to blob store for the actual encrypted data.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blob_ref: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub enum SecretType {
     #[default]
     Opaque,
@@ -1497,6 +1246,942 @@ pub enum SecretType {
     DockerConfigJson,
     TLS,
     BootstrapToken,
+}
+
+macro_rules! impl_config_json_struct {
+    (
+        $ty:ty {
+            required { $($req_field:ident : $req_key:expr => $req_ty:ty),* $(,)? }
+            optional { $($opt_field:ident : $opt_key:expr => $opt_ty:ty),* $(,)? }
+            default { $($def_field:ident : $def_key:expr => $def_ty:ty),* $(,)? }
+            default_with { $($with_field:ident : $with_key:expr => $with_ty:ty = $with_fn:path),* $(,)? }
+        }
+    ) => {
+        impl edgerun_json::ToJson for $ty {
+            fn to_json(&self) -> edgerun_json::JsonValue {
+                let mut object = edgerun_json::Map::new();
+                $(object.push_field($req_key, edgerun_json::ToJson::to_json(&self.$req_field));)*
+                $(if let Some(value) = &self.$opt_field {
+                    object.push_field($opt_key, edgerun_json::ToJson::to_json(value));
+                })*
+                $(object.push_field($def_key, edgerun_json::ToJson::to_json(&self.$def_field));)*
+                $(object.push_field($with_key, edgerun_json::ToJson::to_json(&self.$with_field));)*
+                object.into()
+            }
+        }
+
+        impl edgerun_json::FromJson for $ty {
+            fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+                let mut object = match value {
+                    edgerun_json::JsonValue::Object(object) => object,
+                    other => {
+                        return Err(edgerun_json::JsonValueError::WrongType(format!(
+                            "expected object for {}, found {:?}",
+                            stringify!($ty),
+                            other
+                        )));
+                    }
+                };
+                Ok(Self {
+                    $($req_field: edgerun_json::FromJson::from_json(
+                        object.remove($req_key).ok_or_else(|| {
+                            edgerun_json::JsonValueError::WrongType(format!(
+                                "missing field `{}` for {}",
+                                $req_key,
+                                stringify!($ty)
+                            ))
+                        })?
+                    )?,)*
+                    $($opt_field: object
+                        .remove($opt_key)
+                        .map(edgerun_json::FromJson::from_json)
+                        .transpose()?,)*
+                    $($def_field: object
+                        .remove($def_key)
+                        .map(edgerun_json::FromJson::from_json)
+                        .transpose()?
+                        .unwrap_or_default(),)*
+                    $($with_field: object
+                        .remove($with_key)
+                        .map(edgerun_json::FromJson::from_json)
+                        .transpose()?
+                        .unwrap_or_else($with_fn),)*
+                })
+            }
+        }
+    };
+}
+
+impl_config_json_struct! {
+    ResourceMetadata {
+        required { name: "name" => String }
+        optional {
+            namespace: "namespace" => String,
+            labels: "labels" => HashMap<String, String>,
+            annotations: "annotations" => HashMap<String, String>,
+        }
+        default {}
+        default_with {}
+    }
+}
+
+impl<T: edgerun_json::ToJson> edgerun_json::ToJson for Resource<T> {
+    fn to_json(&self) -> edgerun_json::JsonValue {
+        let mut object = edgerun_json::Map::new();
+        object.push_field("apiVersion", &self.api_version);
+        object.push_field("kind", &self.kind);
+        object.push_field("metadata", self.metadata.to_json());
+        object.push_field("spec", self.spec.to_json());
+        object.into()
+    }
+}
+
+impl<T: edgerun_json::FromJson> edgerun_json::FromJson for Resource<T> {
+    fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let mut object = match value {
+            edgerun_json::JsonValue::Object(object) => object,
+            _ => {
+                return Err(edgerun_json::JsonValueError::WrongType(
+                    "expected resource object".to_string(),
+                ));
+            }
+        };
+        Ok(Self {
+            api_version: object
+                .remove("apiVersion")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_else(|| API_VERSION.to_string()),
+            kind: edgerun_json::FromJson::from_json(object.remove("kind").ok_or_else(|| {
+                edgerun_json::JsonValueError::WrongType("missing field `kind`".to_string())
+            })?)?,
+            metadata: object
+                .remove("metadata")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_else(|| ResourceMetadata {
+                    name: String::new(),
+                    namespace: None,
+                    labels: None,
+                    annotations: None,
+                }),
+            spec: edgerun_json::FromJson::from_json(object.remove("spec").ok_or_else(|| {
+                edgerun_json::JsonValueError::WrongType("missing field `spec`".to_string())
+            })?)?,
+        })
+    }
+}
+
+impl_config_json_struct! {
+    DnsServerSpec {
+        required {}
+        optional {
+            bind_address: "bind_address" => String,
+            bind_address_ipv6: "bind_address_ipv6" => String,
+            default_ttl: "default_ttl" => u32,
+            rate_limit_qps: "rate_limit_qps" => u32,
+            zones: "zones" => Vec<String>,
+            forward_to: "forward_to" => String,
+            recursive: "recursive" => bool,
+        }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    DnsZoneSpec {
+        required { origin: "origin" => String, soa: "soa" => SoaRecord }
+        optional {
+            dnssec: "dnssec" => DnssecConfig,
+            wildcards: "wildcards" => Vec<ZoneRecord>,
+        }
+        default { records: "records" => Vec<ZoneRecord> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    SoaRecord {
+        required { mname: "mname" => String, rname: "rname" => String }
+        optional {}
+        default {}
+        default_with {
+            serial: "serial" => u32 = default_serial,
+            refresh: "refresh" => u32 = default_3600,
+            retry: "retry" => u32 = default_900,
+            expire: "expire" => u32 = default_604800,
+            minimum: "minimum" => u32 = default_86400,
+        }
+    }
+}
+
+impl_config_json_struct! {
+    ZoneRecord {
+        required {
+            name: "name" => String,
+            record_type: "type" => String,
+            value: "value" => edgerun_json::JsonValue,
+        }
+        optional { ttl: "ttl" => u32 }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    DnssecConfig {
+        required { algorithm: "algorithm" => String }
+        optional { nsec3_salt: "nsec3_salt" => String }
+        default { nsec3: "nsec3" => bool, nsec3_iterations: "nsec3_iterations" => u16 }
+        default_with {
+            key_flags: "key_flags" => u16 = default_ksk,
+            key_ttl: "key_ttl" => u32 = default_86400,
+            signature_validity: "signature_validity" => u32 = default_30d,
+        }
+    }
+}
+
+impl_config_json_struct! {
+    DnsForwarderSpec {
+        required { upstreams: "upstreams" => Vec<String> }
+        optional {
+            bind_address: "bind_address" => String,
+            timeout: "timeout" => u64,
+            cache_ttl: "cache_ttl" => u32,
+            cache_max_entries: "cache_max_entries" => usize,
+        }
+        default { cache: "cache" => bool }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    ForwardingRuleSpec {
+        required { zone: "zone" => String, upstreams: "upstreams" => Vec<String> }
+        optional { policy: "policy" => String, health_check: "health_check" => u64 }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    TlsConfigSpec {
+        required {}
+        optional {
+            doh_bind_address: "doh_bind_address" => String,
+            doh_path: "doh_path" => String,
+            cert_path: "cert_path" => String,
+            key_path: "key_path" => String,
+        }
+        default { dot_enabled: "dot_enabled" => bool, doh_enabled: "doh_enabled" => bool }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    RateLimitSpec {
+        required {}
+        optional {}
+        default {}
+        default_with {
+            qps: "qps" => u32 = default_100,
+            burst: "burst" => u32 = default_200,
+            block_duration: "block_duration" => u32 = default_60,
+        }
+    }
+}
+
+impl_config_json_struct! {
+    DhcpServerSpec {
+        required { interface: "interface" => String, pools: "pools" => Vec<String> }
+        optional {
+            max_lease_time: "max_lease_time" => u32,
+            dns_servers: "dns_servers" => Vec<String>,
+            router: "router" => String,
+            ntp_servers: "ntp_servers" => Vec<String>,
+            domain_name: "domain_name" => String,
+            bootfile: "bootfile" => String,
+            tftp_server: "tftp_server" => String,
+            reservations: "reservations" => Vec<DhcpReservation>,
+        }
+        default {}
+        default_with { default_lease_time: "default_lease_time" => u32 = default_86400 }
+    }
+}
+
+impl_config_json_struct! {
+    DhcpReservation {
+        required { mac: "mac" => String, ip: "ip" => String }
+        optional { hostname: "hostname" => String }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    Dhcpv6ServerSpec {
+        required { interface: "interface" => String, pools: "pools" => Vec<String> }
+        optional {
+            dns_servers: "dns_servers" => Vec<String>,
+            domain_name: "domain_name" => String,
+            reservations: "reservations" => Vec<Dhcpv6Reservation>,
+        }
+        default {}
+        default_with {
+            default_preferred_lifetime: "default_preferred_lifetime" => u32 = default_3600,
+            default_valid_lifetime: "default_valid_lifetime" => u32 = default_7200,
+        }
+    }
+}
+
+impl_config_json_struct! {
+    Dhcpv6Reservation {
+        required { duid: "duid" => String, ip: "ip" => String }
+        optional { hostname: "hostname" => String }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    Dhcpv6PoolSpec {
+        required {
+            name: "name" => String,
+            range_start: "range_start" => String,
+            range_end: "range_end" => String,
+            prefix_length: "prefix_length" => u8,
+        }
+        optional { exclude: "exclude" => Vec<String> }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    DhcpPoolSpec {
+        required {
+            name: "name" => String,
+            range_start: "range_start" => String,
+            range_end: "range_end" => String,
+            subnet_mask: "subnet_mask" => String,
+        }
+        optional { exclude: "exclude" => Vec<String> }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    TftpServerSpec {
+        required { root_dir: "root_dir" => String }
+        optional {
+            bind_address: "bind_address" => String,
+            block_size: "block_size" => u16,
+            timeout: "timeout" => u32,
+        }
+        default { allow_writes: "allow_writes" => bool }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    SmtpServerSpec {
+        required { hostname: "hostname" => String }
+        optional {
+            bind_address: "bind_address" => String,
+            max_message_size: "max_message_size" => usize,
+            maildir_root: "maildir_root" => String,
+            queue_dir: "queue_dir" => String,
+            dns_server: "dns_server" => String,
+            dkim_domain: "dkim_domain" => String,
+            dkim_selector: "dkim_selector" => String,
+            dkim_key_path: "dkim_key_path" => String,
+            tls_cert: "tls_cert" => String,
+            tls_key: "tls_key" => String,
+        }
+        default {
+            smtps: "smtps" => bool,
+            starttls: "starttls" => bool,
+            local_domains: "local_domains" => Vec<String>,
+            relay_enabled: "relay_enabled" => bool,
+        }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    ImapServerSpec {
+        required { hostname: "hostname" => String }
+        optional {
+            bind_address: "bind_address" => String,
+            maildir_root: "maildir_root" => String,
+            tls_cert: "tls_cert" => String,
+            tls_key: "tls_key" => String,
+        }
+        default { imaps: "imaps" => bool }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    NodeSpec {
+        required {}
+        optional {}
+        default {
+            controllers: "controllers" => Vec<String>,
+            roles: "roles" => Vec<String>,
+            public_ips: "public_ips" => Vec<String>,
+            taints: "taints" => Vec<NodeTaint>,
+            unschedulable: "unschedulable" => bool,
+        }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    NodeTaint {
+        required { key: "key" => String, effect: "effect" => String }
+        optional { value: "value" => String, time_added: "time_added" => String }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    PeerSpec {
+        required { node_id: "node_id" => String }
+        optional { last_seen: "last_seen" => String }
+        default {
+            endpoints: "endpoints" => Vec<PeerEndpoint>,
+            reachable: "reachable" => bool,
+            roles: "roles" => Vec<String>,
+        }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    PeerEndpoint {
+        required { transport: "transport" => String, address: "address" => String }
+        optional { cost: "cost" => i32 }
+        default { encrypted: "encrypted" => bool }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    GatewaySpec {
+        required {}
+        optional {
+            tls: "tls" => GatewayTlsConfig,
+            route_selector: "route_selector" => HashMap<String, String>,
+        }
+        default { listeners: "listeners" => Vec<GatewayListener> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    GatewayListener {
+        required { name: "name" => String, port: "port" => i32, protocol: "protocol" => String }
+        optional { tls: "tls" => GatewayTlsConfig }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    GatewayTlsConfig {
+        required {}
+        optional { secret_ref: "secret_ref" => String }
+        default { min_version: "min_version" => String, ciphers: "ciphers" => Vec<String> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    ServiceSpec {
+        required {}
+        optional { selector: "selector" => HashMap<String, String> }
+        default { ports: "ports" => Vec<ServicePort>, affinity: "affinity" => ServiceAffinity }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    ServicePort {
+        required { port: "port" => i32, target_port: "target_port" => i32 }
+        optional { name: "name" => String }
+        default { protocol: "protocol" => String }
+        default_with {}
+    }
+}
+
+impl edgerun_json::ToJson for ServiceAffinity {
+    fn to_json(&self) -> edgerun_json::JsonValue {
+        match self {
+            Self::None => "None",
+            Self::ClientIP => "ClientIP",
+            Self::Cookie => "Cookie",
+        }
+        .into()
+    }
+}
+
+impl edgerun_json::FromJson for ServiceAffinity {
+    fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        match <String as edgerun_json::FromJson>::from_json(value)?.as_str() {
+            "None" => Ok(Self::None),
+            "ClientIP" => Ok(Self::ClientIP),
+            "Cookie" => Ok(Self::Cookie),
+            other => Err(edgerun_json::JsonValueError::WrongType(format!(
+                "unknown service affinity `{other}`"
+            ))),
+        }
+    }
+}
+
+impl_config_json_struct! {
+    HttpRouteSpec {
+        required {}
+        optional { parent_ref: "parent_ref" => String }
+        default { hostnames: "hostnames" => Vec<String>, rules: "rules" => Vec<HttpRouteRule> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    HttpRouteRule {
+        required { backend: "backend" => HttpRouteBackend }
+        optional {}
+        default { matches: "matches" => Vec<HttpRouteMatch> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    HttpRouteMatch {
+        required {}
+        optional { path: "path" => String }
+        default { path_type: "path_type" => String, headers: "headers" => Vec<HttpRouteHeaderMatch> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    HttpRouteHeaderMatch {
+        required { name: "name" => String, value: "value" => String, type_: "type" => String }
+        optional {}
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    HttpRouteBackend {
+        required { service: "service" => String, port: "port" => i32 }
+        optional {}
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    TcpRouteSpec {
+        required {}
+        optional { parent_ref: "parent_ref" => String, port: "port" => i32, backend: "backend" => TcpRouteBackend }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    TcpRouteBackend {
+        required { service: "service" => String, port: "port" => i32 }
+        optional {}
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    TlsRouteSpec {
+        required {}
+        optional { parent_ref: "parent_ref" => String, backend: "backend" => TlsRouteBackend }
+        default { sni_hostnames: "sni_hostnames" => Vec<String> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    TlsRouteBackend {
+        required { service: "service" => String, port: "port" => i32 }
+        optional {}
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    DeploymentSpec {
+        required { name: "name" => String }
+        optional { replicas: "replicas" => i32, service: "service" => DeploymentService }
+        default { namespace: "namespace" => String, containers: "containers" => Vec<Container> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    DeploymentService {
+        required {}
+        optional {}
+        default { ports: "ports" => HashMap<String, Vec<u16>> }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    ContainerSpec {
+        required { image: "image" => String }
+        optional {
+            active_deadline_seconds: "active_deadline_seconds" => u64,
+            service_account_name: "service_account_name" => String,
+            replicas: "replicas" => i32,
+            selector: "selector" => HashMap<String, String>,
+            template: "template" => PodTemplateSpec,
+        }
+        default { restart_policy: "restart_policy" => ContainerRestartPolicy }
+        default_with { image_pull_policy: "image_pull_policy" => String = default_pull_always }
+    }
+}
+
+impl_config_json_struct! {
+    PodTemplateSpec {
+        required {}
+        optional { metadata: "metadata" => ResourceMetadata, spec: "spec" => PodSpec }
+        default {}
+        default_with {}
+    }
+}
+
+impl edgerun_json::ToJson for PodSpec {
+    fn to_json(&self) -> edgerun_json::JsonValue {
+        let mut object = edgerun_json::Map::new();
+        object.push_field("containers", self.containers.to_json());
+        object.push_field("init_containers", self.init_containers.to_json());
+        object.push_field("restart_policy", self.restart_policy.to_json());
+        if let Some(value) = &self.termination_grace_period_seconds {
+            object.push_field("termination_grace_period_seconds", *value);
+        }
+        object.push_field("dns_policy", &self.dns_policy);
+        if let Some(value) = &self.node_selector {
+            object.push_field("node_selector", value.to_json());
+        }
+        if let Some(value) = &self.node_name {
+            object.push_field("node_name", value);
+        }
+        object.push_field("host_network", self.host_network);
+        object.push_field("host_pid", self.host_pid);
+        object.push_field("host_ipc", self.host_ipc);
+        object.push_field("share_process_namespace", self.share_process_namespace);
+        object.into()
+    }
+}
+
+impl edgerun_json::FromJson for PodSpec {
+    fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let mut object = match value {
+            edgerun_json::JsonValue::Object(object) => object,
+            _ => {
+                return Err(edgerun_json::JsonValueError::WrongType(
+                    "expected PodSpec object".to_string(),
+                ))
+            }
+        };
+        Ok(Self {
+            containers: object
+                .remove("containers")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            init_containers: object
+                .remove("init_containers")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            restart_policy: object
+                .remove("restart_policy")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            termination_grace_period_seconds: object
+                .remove("termination_grace_period_seconds")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+            dns_policy: object
+                .remove("dns_policy")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_else(default_dns_policy),
+            node_selector: object
+                .remove("node_selector")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+            node_name: object
+                .remove("node_name")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+            host_network: object
+                .remove("host_network")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            host_pid: object
+                .remove("host_pid")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            host_ipc: object
+                .remove("host_ipc")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            share_process_namespace: object
+                .remove("share_process_namespace")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            security_context: None,
+            image_pull_secrets: Vec::new(),
+            volumes: Vec::new(),
+            affinity: None,
+            tolerations: Vec::new(),
+        })
+    }
+}
+
+impl edgerun_json::ToJson for Container {
+    fn to_json(&self) -> edgerun_json::JsonValue {
+        let mut object = edgerun_json::Map::new();
+        object.push_field("name", &self.name);
+        if let Some(value) = &self.image {
+            object.push_field("image", value);
+        }
+        if let Some(value) = &self.image_pull_policy {
+            object.push_field("image_pull_policy", value);
+        }
+        object.push_field("command", self.command.to_json());
+        object.push_field("args", self.args.to_json());
+        object.push_field("env", self.env.to_json());
+        object.push_field("volume_mounts", self.volume_mounts.to_json());
+        object.push_field("ports", self.ports.to_json());
+        if let Some(value) = &self.resources {
+            object.push_field("resources", value.to_json());
+        }
+        if let Some(value) = &self.working_dir {
+            object.push_field("working_dir", value);
+        }
+        object.into()
+    }
+}
+
+impl edgerun_json::FromJson for Container {
+    fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let mut object = match value {
+            edgerun_json::JsonValue::Object(object) => object,
+            _ => {
+                return Err(edgerun_json::JsonValueError::WrongType(
+                    "expected Container object".to_string(),
+                ))
+            }
+        };
+        Ok(Self {
+            name: edgerun_json::FromJson::from_json(object.remove("name").ok_or_else(|| {
+                edgerun_json::JsonValueError::WrongType("missing field `name`".to_string())
+            })?)?,
+            image: object
+                .remove("image")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+            image_pull_policy: object
+                .remove("image_pull_policy")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+            command: object
+                .remove("command")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            args: object
+                .remove("args")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            env: object
+                .remove("env")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            env_from: Vec::new(),
+            volume_mounts: object
+                .remove("volume_mounts")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            ports: object
+                .remove("ports")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?
+                .unwrap_or_default(),
+            resources: object
+                .remove("resources")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+            security_context: None,
+            liveness_probe: None,
+            readiness_probe: None,
+            startup_probe: None,
+            lifecycle: None,
+            working_dir: object
+                .remove("working_dir")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+        })
+    }
+}
+
+impl edgerun_json::ToJson for EnvVar {
+    fn to_json(&self) -> edgerun_json::JsonValue {
+        let mut object = edgerun_json::Map::new();
+        object.push_field("name", &self.name);
+        if let Some(value) = &self.value {
+            object.push_field("value", value);
+        }
+        object.into()
+    }
+}
+
+impl edgerun_json::FromJson for EnvVar {
+    fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let mut object = match value {
+            edgerun_json::JsonValue::Object(object) => object,
+            _ => {
+                return Err(edgerun_json::JsonValueError::WrongType(
+                    "expected EnvVar object".to_string(),
+                ))
+            }
+        };
+        Ok(Self {
+            name: edgerun_json::FromJson::from_json(object.remove("name").ok_or_else(|| {
+                edgerun_json::JsonValueError::WrongType("missing field `name`".to_string())
+            })?)?,
+            value: object
+                .remove("value")
+                .map(edgerun_json::FromJson::from_json)
+                .transpose()?,
+            value_from: None,
+        })
+    }
+}
+
+impl_config_json_struct! {
+    VolumeMount {
+        required { name: "name" => String, mount_path: "mount_path" => String }
+        optional { read_only: "read_only" => bool, sub_path: "sub_path" => String }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    ContainerPort {
+        required { container_port: "container_port" => i32 }
+        optional {
+            name: "name" => String,
+            protocol: "protocol" => String,
+            host_port: "host_port" => i32,
+        }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    ResourceRequirements {
+        required {}
+        optional {
+            limits: "limits" => HashMap<String, String>,
+            requests: "requests" => HashMap<String, String>,
+        }
+        default {}
+        default_with {}
+    }
+}
+
+impl edgerun_json::ToJson for ContainerRestartPolicy {
+    fn to_json(&self) -> edgerun_json::JsonValue {
+        match self {
+            Self::Always => "Always",
+            Self::OnFailure => "OnFailure",
+            Self::Never => "Never",
+        }
+        .into()
+    }
+}
+
+impl edgerun_json::FromJson for ContainerRestartPolicy {
+    fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        match <String as edgerun_json::FromJson>::from_json(value)?.as_str() {
+            "Always" => Ok(Self::Always),
+            "OnFailure" => Ok(Self::OnFailure),
+            "Never" => Ok(Self::Never),
+            other => Err(edgerun_json::JsonValueError::WrongType(format!(
+                "unknown restart policy `{other}`"
+            ))),
+        }
+    }
+}
+
+impl_config_json_struct! {
+    SecretSpec {
+        required {}
+        optional {
+            data: "data" => HashMap<String, Vec<u8>>,
+            string_data: "string_data" => HashMap<String, String>,
+            blob_ref: "blob_ref" => String,
+        }
+        default { secret_type: "secret_type" => SecretType }
+        default_with {}
+    }
+}
+
+impl edgerun_json::ToJson for SecretType {
+    fn to_json(&self) -> edgerun_json::JsonValue {
+        match self {
+            Self::Opaque => "Opaque",
+            Self::ServiceAccountToken => "ServiceAccountToken",
+            Self::DockerConfigJson => "DockerConfigJson",
+            Self::TLS => "TLS",
+            Self::BootstrapToken => "BootstrapToken",
+        }
+        .into()
+    }
+}
+
+impl edgerun_json::FromJson for SecretType {
+    fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        match <String as edgerun_json::FromJson>::from_json(value)?.as_str() {
+            "Opaque" => Ok(Self::Opaque),
+            "ServiceAccountToken" => Ok(Self::ServiceAccountToken),
+            "DockerConfigJson" => Ok(Self::DockerConfigJson),
+            "TLS" => Ok(Self::TLS),
+            "BootstrapToken" => Ok(Self::BootstrapToken),
+            other => Err(edgerun_json::JsonValueError::WrongType(format!(
+                "unknown secret type `{other}`"
+            ))),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

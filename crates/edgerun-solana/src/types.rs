@@ -1,9 +1,8 @@
 use crate::prelude::*;
 use crate::solana_types::Pubkey;
-use edgerun_json::from_slice;
-use serde::{Deserialize, Serialize};
+use edgerun_json::{from_json_slice, FromJson, JsonValue, JsonValueError, ToJson};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ProviderStatus {
     #[default]
     Active = 0,
@@ -11,7 +10,26 @@ pub enum ProviderStatus {
     Slashed = 2,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+impl ToJson for ProviderStatus {
+    fn to_json(&self) -> JsonValue {
+        (*self as u64).to_json()
+    }
+}
+
+impl FromJson for ProviderStatus {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match u64::from_json(value)? {
+            0 => Ok(Self::Active),
+            1 => Ok(Self::Paused),
+            2 => Ok(Self::Slashed),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown provider status {other}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DeploymentStatus {
     #[default]
     Created = 0,
@@ -21,7 +39,28 @@ pub enum DeploymentStatus {
     Disputed = 4,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+impl ToJson for DeploymentStatus {
+    fn to_json(&self) -> JsonValue {
+        (*self as u64).to_json()
+    }
+}
+
+impl FromJson for DeploymentStatus {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match u64::from_json(value)? {
+            0 => Ok(Self::Created),
+            1 => Ok(Self::Running),
+            2 => Ok(Self::Paused),
+            3 => Ok(Self::Stopped),
+            4 => Ok(Self::Disputed),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown deployment status {other}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Provider {
     pub authority: Pubkey,
     pub collateral_staked: u64,
@@ -35,7 +74,22 @@ pub struct Provider {
     pub status: ProviderStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+edgerun_json::impl_json_struct! {
+    Provider {
+        authority: Pubkey,
+        collateral_staked: u64,
+        cpu_cores: u32,
+        memory_bytes: u64,
+        storage_bytes: u64,
+        network_mbits: u32,
+        total_earnings: u64,
+        slash_count: u32,
+        uptime_percent: u32,
+        status: ProviderStatus,
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Deployment {
     pub owner: Pubkey,
     pub provider: Pubkey,
@@ -52,6 +106,26 @@ pub struct Deployment {
     pub created_at: i64,
     pub started_at: i64,
     pub paused_at: i64,
+}
+
+edgerun_json::impl_json_struct! {
+    Deployment {
+        owner: Pubkey,
+        provider: Pubkey,
+        name: Vec<u8>,
+        container_count: u32,
+        total_cpu_cores: u32,
+        total_memory_bytes: u64,
+        total_storage_bytes: u64,
+        total_network_mbps: u32,
+        deposit: u64,
+        burn_rate: u64,
+        spent: u64,
+        status: DeploymentStatus,
+        created_at: i64,
+        started_at: i64,
+        paused_at: i64,
+    }
 }
 
 impl Default for Deployment {
@@ -78,13 +152,13 @@ impl Default for Deployment {
 
 impl Deployment {
     pub fn try_from_slice(data: &[u8]) -> Result<Self, String> {
-        from_slice(data).map_err(|e| format!("{:?}", e))
+        from_json_slice(data).map_err(|e| format!("{:?}", e))
     }
 }
 
 impl Provider {
     pub fn try_from_slice(data: &[u8]) -> Result<Self, String> {
-        from_slice(data).map_err(|e| format!("{:?}", e))
+        from_json_slice(data).map_err(|e| format!("{:?}", e))
     }
 }
 

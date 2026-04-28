@@ -9,9 +9,8 @@ description = "Kubernetes-compatible DNS/DHCP configuration with event-sourced s
 [dependencies]
 edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "serde", "yaml"] }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "yaml"] }
 edgerun-error.workspace = true
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 
 [lints]
 workspace = true

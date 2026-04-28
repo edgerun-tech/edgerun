@@ -143,7 +143,6 @@ mod tests {
     use crate::provider::ProviderInfo;
     use crate::{DeploymentStatus, Scheduler};
     use alloc::string::ToString;
-    use alloc::vec;
 
     #[test]
     fn test_scheduler_creation() {

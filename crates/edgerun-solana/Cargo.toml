@@ -5,9 +5,8 @@ edition.workspace = true
 
 [dependencies]
 edgerun-error.workspace = true
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 edgerun-http = { path = "../edgerun-http", default-features = false, features = ["client", "tls"] }
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "serde"] }
+edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"] }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["ed25519"] }
 edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }

@@ -4,6 +4,7 @@ use crate::collections::HashMap;
 use crate::prelude::v1::*;
 use crate::types::ConfigResource;
 use edgerun_json::yaml::{YamlDeserializer, YamlValue};
+use edgerun_json::FromJson;
 
 #[derive(Debug, Clone)]
 struct RawDoc {
@@ -46,8 +47,16 @@ pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError>
                     .map(ConfigResource::DhcpServer),
                 "DhcpPool" => deserialize_resource::<crate::types::DhcpPoolSpec>(spec)
                     .map(ConfigResource::DhcpPool),
+                "Dhcpv6Server" => deserialize_resource::<crate::types::Dhcpv6ServerSpec>(spec)
+                    .map(ConfigResource::Dhcpv6Server),
+                "Dhcpv6Pool" => deserialize_resource::<crate::types::Dhcpv6PoolSpec>(spec)
+                    .map(ConfigResource::Dhcpv6Pool),
                 "TftpServer" => deserialize_resource::<crate::types::TftpServerSpec>(spec)
                     .map(ConfigResource::TftpServer),
+                "SmtpServer" => deserialize_resource::<crate::types::SmtpServerSpec>(spec)
+                    .map(ConfigResource::SmtpServer),
+                "ImapServer" => deserialize_resource::<crate::types::ImapServerSpec>(spec)
+                    .map(ConfigResource::ImapServer),
                 "Node" => {
                     deserialize_resource::<crate::types::NodeSpec>(spec).map(ConfigResource::Node)
                 }
@@ -85,9 +94,9 @@ pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError>
     Ok(resources)
 }
 
-fn deserialize_resource<T: serde::de::DeserializeOwned>(spec: YamlValue) -> Result<T, ConfigError> {
+fn deserialize_resource<T: FromJson>(spec: YamlValue) -> Result<T, ConfigError> {
     let json = yaml_to_json(spec);
-    edgerun_json::from_value(json).map_err(|e| ConfigError::ParseError(e.to_string()))
+    T::from_json(json).map_err(|e| ConfigError::ParseError(e.to_string()))
 }
 
 fn yaml_to_json(yaml: YamlValue) -> edgerun_json::JsonValue {
@@ -117,14 +126,45 @@ pub fn to_yaml_all(resources: &[ConfigResource]) -> Result<String, ConfigError> 
             out.push_str("---\n");
         }
 
-        let json =
-            edgerun_json::to_value(res).map_err(|e| ConfigError::ParseError(e.to_string()))?;
+        let json = resource_to_json(res);
         let yaml = edgerun_json::yaml::json_to_yaml(json);
         let yaml_str = edgerun_json::yaml::to_yaml_string(&yaml)
             .map_err(|e| ConfigError::ParseError(e.to_string()))?;
         out.push_str(&yaml_str);
     }
     Ok(out)
+}
+
+fn resource_to_json(res: &ConfigResource) -> edgerun_json::JsonValue {
+    let spec = match res {
+        ConfigResource::DnsServer(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::DnsZone(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::DnsForwarder(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::ForwardingRule(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::TlsConfig(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::RateLimit(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::DhcpServer(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::DhcpPool(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Dhcpv6Server(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Dhcpv6Pool(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::TftpServer(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::SmtpServer(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::ImapServer(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Node(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Deployment(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Container(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Secret(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Peer(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Gateway(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::Service(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::HttpRoute(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::TcpRoute(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::TlsRoute(spec) => edgerun_json::ToJson::to_json(spec),
+    };
+    let mut object = edgerun_json::Map::new();
+    object.push_field("kind", res.kind());
+    object.push_field("spec", spec);
+    object.into()
 }
 
 pub fn parse_and_validate(yaml: &str) -> Result<ConfigState, ConfigError> {

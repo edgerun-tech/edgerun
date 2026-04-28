@@ -141,8 +141,8 @@ pub fn __json_error_message(message: &str) -> alloc::string::String {
 macro_rules! impl_json_struct {
     (
         $ty:ty {
-            required { $($required_field:ident : $required_key:literal => $required_ty:ty),* $(,)? }
-            optional { $($optional_field:ident : $optional_key:literal => $optional_ty:ty),* $(,)? }
+            required { $($required_field:ident : $required_key:expr => $required_ty:ty),* $(,)? }
+            optional { $($optional_field:ident : $optional_key:expr => $optional_ty:ty),* $(,)? }
         }
     ) => {
         impl $crate::ToJson for $ty {
@@ -196,7 +196,18 @@ macro_rules! impl_json_struct {
     };
     (
         $ty:ty {
-            $($field:ident : $json_key:literal => $field_ty:ty),* $(,)?
+            $($field:ident : $field_ty:ty),* $(,)?
+        }
+    ) => {
+        $crate::impl_json_struct! {
+            $ty {
+                $($field : stringify!($field) => $field_ty),*
+            }
+        }
+    };
+    (
+        $ty:ty {
+            $($field:ident : $json_key:expr => $field_ty:ty),* $(,)?
         }
     ) => {
         impl $crate::ToJson for $ty {
@@ -231,17 +242,6 @@ macro_rules! impl_json_struct {
                         )?,
                     )*
                 })
-            }
-        }
-    };
-    (
-        $ty:ty {
-            $($field:ident : $field_ty:ty),* $(,)?
-        }
-    ) => {
-        $crate::impl_json_struct! {
-            $ty {
-                $($field : stringify!($field) => $field_ty),*
             }
         }
     };

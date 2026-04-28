@@ -45,6 +45,62 @@ macro_rules! impl_to_from_json_number {
     };
 }
 
+macro_rules! impl_to_from_json_unsigned_cast {
+    ($ty:ty) => {
+        impl ToJson for $ty {
+            fn to_json(&self) -> JsonValue {
+                JsonValue::from(*self as u64)
+            }
+        }
+
+        impl FromJson for $ty {
+            fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+                let number = value.as_u64().ok_or_else(|| {
+                    JsonValueError::WrongType(format!(
+                        "expected {}, found {}",
+                        stringify!($ty),
+                        value.variant_name()
+                    ))
+                })?;
+                <$ty>::try_from(number).map_err(|_| {
+                    JsonValueError::WrongType(format!(
+                        "number is out of range for {}",
+                        stringify!($ty)
+                    ))
+                })
+            }
+        }
+    };
+}
+
+macro_rules! impl_to_from_json_signed_cast {
+    ($ty:ty) => {
+        impl ToJson for $ty {
+            fn to_json(&self) -> JsonValue {
+                JsonValue::from(*self as i64)
+            }
+        }
+
+        impl FromJson for $ty {
+            fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+                let number = value.as_i64().ok_or_else(|| {
+                    JsonValueError::WrongType(format!(
+                        "expected {}, found {}",
+                        stringify!($ty),
+                        value.variant_name()
+                    ))
+                })?;
+                <$ty>::try_from(number).map_err(|_| {
+                    JsonValueError::WrongType(format!(
+                        "number is out of range for {}",
+                        stringify!($ty)
+                    ))
+                })
+            }
+        }
+    };
+}
+
 impl ToJson for JsonValue {
     fn to_json(&self) -> JsonValue {
         self.clone()
@@ -117,6 +173,73 @@ impl_to_from_json_number!(u32);
 impl_to_from_json_number!(u64);
 impl_to_from_json_number!(usize);
 impl_to_from_json_number!(f64);
+impl_to_from_json_unsigned_cast!(u8);
+impl_to_from_json_unsigned_cast!(u16);
+impl_to_from_json_signed_cast!(i8);
+impl_to_from_json_signed_cast!(i16);
+
+impl<T: ToJson, const N: usize> ToJson for [T; N] {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::array_from_iter(self.iter().map(ToJson::to_json))
+    }
+}
+
+impl<T: FromJson + Default + Copy, const N: usize> FromJson for [T; N] {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let values = match value {
+            JsonValue::Array(values) => values,
+            other => {
+                return Err(JsonValueError::WrongType(format!(
+                    "expected array, found {}",
+                    other.variant_name()
+                )));
+            }
+        };
+        if values.len() != N {
+            return Err(JsonValueError::WrongType(format!(
+                "expected array of length {N}, found {}",
+                values.len()
+            )));
+        }
+        let mut out = [T::default(); N];
+        for (slot, value) in out.iter_mut().zip(values.into_iter()) {
+            *slot = T::from_json(value)?;
+        }
+        Ok(out)
+    }
+}
+
+impl<A: ToJson, B: ToJson> ToJson for (A, B) {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::array_from_iter([self.0.to_json(), self.1.to_json()])
+    }
+}
+
+impl<A: FromJson, B: FromJson> FromJson for (A, B) {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut values = match value {
+            JsonValue::Array(values) => values.into_iter(),
+            other => {
+                return Err(JsonValueError::WrongType(format!(
+                    "expected array, found {}",
+                    other.variant_name()
+                )));
+            }
+        };
+        let first = values
+            .next()
+            .ok_or_else(|| JsonValueError::WrongType(String::from("expected pair item 0")))?;
+        let second = values
+            .next()
+            .ok_or_else(|| JsonValueError::WrongType(String::from("expected pair item 1")))?;
+        if values.next().is_some() {
+            return Err(JsonValueError::WrongType(String::from(
+                "expected pair array of length 2",
+            )));
+        }
+        Ok((A::from_json(first)?, B::from_json(second)?))
+    }
+}
 
 impl<T: ToJson> ToJson for Option<T> {
     fn to_json(&self) -> JsonValue {

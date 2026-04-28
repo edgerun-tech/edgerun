@@ -441,7 +441,6 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-json",
- "serde",
 ]
 
 [[package]]
@@ -886,7 +885,7 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
- "serde",
+ "edgerun-json",
 ]
 
 [[package]]
@@ -1187,7 +1186,6 @@ dependencies = [
  "edgerun-mesh",
  "edgerun-rt",
  "edgerun-solana",
- "serde",
 ]
 
 [[package]]
@@ -1229,7 +1227,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-rt",
- "serde",
 ]
 
 [[package]]
@@ -1324,7 +1321,6 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-json",
  "edgerun-rt",
- "serde",
 ]
 
 [[package]]
