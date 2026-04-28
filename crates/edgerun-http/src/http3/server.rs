@@ -148,7 +148,9 @@ impl Http3Server {
 
     /// Local address of the server.
     pub fn local_addr(&self) -> crate::runtime::io::Result<SocketAddr> {
-        Ok(self.socket.local_addr()?)
+        self.socket
+            .local_addr()
+            .map_err(crate::runtime::io::Error::other)
     }
 
     /// Accept the next incoming HTTP/3 connection.

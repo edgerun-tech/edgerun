@@ -3,6 +3,9 @@
 //! These tests verify that core HTTP types correctly enforce the rules specified
 //! in the relevant RFCs.
 
+use alloc::format;
+use alloc::string::ToString;
+
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
 use crate::method::Method;
 use crate::status::StatusCode;

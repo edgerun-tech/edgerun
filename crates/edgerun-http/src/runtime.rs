@@ -4,10 +4,10 @@
 //! bare-metal builds share one boundary for I/O, networking, time, filesystem,
 //! synchronization, and collection compatibility.
 
-#[cfg(not(target_os = "none"))]
+#[cfg(feature = "std")]
 pub use std::{collections, fs, io, net, path, sync, time};
 
-#[cfg(target_os = "none")]
+#[cfg(not(feature = "std"))]
 pub use crate::std_compat::{collections, fs, io, net, path, sync, time};
 
 pub use edgerun_rt::sync::Mutex;
@@ -57,16 +57,33 @@ pub fn bind_tcp_listener<A>(addr: A) -> io::Result<AsyncTcpListener>
 where
     A: net::ToSocketAddrs,
 {
-    Ok(AsyncTcpListener::bind(addr)?)
+    let addr = addr
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no socket address"))?;
+    AsyncTcpListener::bind(addr).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 }
 
 pub fn bind_udp_socket<A>(addr: A) -> io::Result<AsyncUdpSocket>
 where
     A: net::ToSocketAddrs,
 {
-    Ok(AsyncUdpSocket::bind(addr)?)
+    let addr = addr
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no socket address"))?;
+    AsyncUdpSocket::bind(addr).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 }
 
+#[cfg(feature = "std")]
 pub fn wrap_udp_socket(socket: net::UdpSocket) -> io::Result<AsyncUdpSocket> {
-    Ok(AsyncUdpSocket::from_std(socket)?)
+    AsyncUdpSocket::from_std(socket).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+}
+
+#[cfg(not(feature = "std"))]
+pub fn wrap_udp_socket(_socket: net::UdpSocket) -> io::Result<AsyncUdpSocket> {
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        "wrapping host UDP sockets requires the std feature",
+    ))
 }

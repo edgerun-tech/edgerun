@@ -7,7 +7,7 @@ publish.workspace = true
 description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 
 [features]
-default = ["client", "server", "http1", "http2", "static-files", "http-compression"]
+default = []
 std = []
 client = ["http1", "http2", "runtime", "dep:edgerun-dns", "dep:edgerun-log"]
 connection-middleware = []
@@ -17,7 +17,7 @@ http2 = ["runtime", "dep:edgerun-dns", "dep:edgerun-hpack", "dep:edgerun-log"]
 http3 = ["client", "server", "tls", "dep:edgerun-crypto", "dep:edgerun-quic", "dep:edgerun-qpack", "dep:edgerun-encoding", "dep:edgerun-log"]
 runtime = ["dep:edgerun-rt"]
 server = ["http1", "http2", "runtime", "dep:edgerun-log"]
-static-files = ["server"]
+static-files = ["std", "server"]
 tls = ["dep:edgerun-tls"]
 
 [dependencies]
@@ -35,15 +35,15 @@ brotli = { workspace = true, optional = true }
 
 [[test]]
 name = "http3_integration"
-required-features = ["http3"]
+required-features = ["std", "http3"]
 
 [[test]]
 name = "integration_unified"
-required-features = ["tls"]
+required-features = ["std", "client", "server", "tls", "http3"]
 
 [[test]]
 name = "tls_journey"
-required-features = ["tls"]
+required-features = ["std", "client", "server", "tls"]
 
 [lints]
 workspace = true

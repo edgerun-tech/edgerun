@@ -389,7 +389,7 @@ impl Http2Pool {
         let fut = ConnectFuture::new(addr.to_string());
         match rt_timeout(connect_timeout, fut).await {
             Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(e)) => Err(Error::Network(e.into())),
+            Ok(Err(e)) => Err(Error::Network(crate::runtime::io::Error::other(e))),
             Err(_) => Err(Error::Timeout),
         }
     }

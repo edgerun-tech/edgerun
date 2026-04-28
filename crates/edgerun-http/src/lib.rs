@@ -73,12 +73,12 @@
 //! | http3  | [RFC 9001](https://www.rfc-editor.org/rfc/rfc9001) | QUIC TLS Mapping |
 //! | http3  | [RFC 9204](https://www.rfc-editor.org/rfc/rfc9204) | QPACK Header Compression |
 
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(non_camel_case_types)] // HTTP/2 error code names follow RFC 9113
 
 extern crate alloc;
 
-#[cfg(target_os = "none")]
+#[cfg(not(feature = "std"))]
 #[path = "std.rs"]
 mod std_compat;
 
@@ -86,9 +86,9 @@ mod std_compat;
 pub mod runtime;
 #[cfg(feature = "runtime")]
 pub use runtime::{collections, fs, io, net, path, sync, time};
-#[cfg(all(not(feature = "runtime"), not(target_os = "none")))]
+#[cfg(all(not(feature = "runtime"), feature = "std"))]
 pub use std::{collections, fs, io, net, path, sync, time};
-#[cfg(all(not(feature = "runtime"), target_os = "none"))]
+#[cfg(all(not(feature = "runtime"), not(feature = "std")))]
 pub use std_compat::{collections, fs, io, net, path, sync, time};
 
 // ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ pub mod request;
 pub mod response;
 #[cfg(feature = "server")]
 pub mod server;
-#[cfg(all(feature = "static-files", not(target_os = "none")))]
+#[cfg(feature = "static-files")]
 pub mod static_handler;
 
 #[cfg(feature = "client")]
@@ -130,7 +130,7 @@ pub use response::Response;
 pub use server::TlsCertificate;
 #[cfg(feature = "server")]
 pub use server::{BoundHttpServer, HttpServer};
-#[cfg(all(feature = "static-files", not(target_os = "none")))]
+#[cfg(feature = "static-files")]
 pub use static_handler::{serve_static, StaticHandler};
 
 // ---------------------------------------------------------------------------

@@ -98,7 +98,9 @@ impl HttpServer {
         addr: impl crate::runtime::net::ToSocketAddrs,
     ) -> crate::runtime::io::Result<BoundHttpServer> {
         let listener = bind_tcp_listener(addr)?;
-        let local_addr = listener.local_addr()?;
+        let local_addr = listener
+            .local_addr()
+            .map_err(crate::runtime::io::Error::other)?;
 
         #[cfg(feature = "http3")]
         let http3_server = if self.http3_enabled && self.tls_cert.is_some() {
@@ -243,7 +245,11 @@ impl BoundHttpServer {
     }
 
     pub async fn accept_one(&self) -> crate::runtime::io::Result<()> {
-        let (stream, _) = self.listener.accept().await?;
+        let (stream, _) = self
+            .listener
+            .accept()
+            .await
+            .map_err(crate::runtime::io::Error::other)?;
         let handler = Arc::clone(&self.handler);
         handle_connection(
             stream,
