@@ -6,7 +6,7 @@
 
 use crate::prelude::*;
 use std::ffi::CString;
-use std::fs;
+use std::fs::{self, File};
 use std::io;
 use std::os::unix::io::AsRawFd;
 
@@ -278,14 +278,10 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         ));
     }
 
-    // Load spec for process config
-    let bundle = &state.bundle;
-    let config_path = std::path::Path::new(bundle).join("config.json");
-    let spec = if let Ok(data) = fs::read(&config_path) {
-        crate::json::parse_oci_spec(&data).ok()
-    } else {
-        None
-    };
+    // Load the effective runtime spec first; the pulled image bundle config is
+    // only a template and misses run-time overrides such as env, user, and rootfs.
+    let spec = load_exec_spec(&state);
+    let root_fd = open_exec_root(pid, spec.as_ref())?;
 
     // Determine final args, env, cwd, user
     let (exec_args, env_vars, cwd, uid, gid) =
@@ -394,6 +390,10 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
                 unsafe { libc::_exit(0) };
             }
             // Grandchild: now in the container's PID namespace
+        }
+
+        if enter_container_root(root_fd.as_raw_fd()).is_err() {
+            unsafe { libc::_exit(126) };
         }
 
         // If --terminal, allocate a PTY and send master fd to parent
@@ -554,6 +554,54 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         }
     }
 
+    Ok(())
+}
+
+fn load_exec_spec(state: &crate::state::ContainerState) -> Option<crate::json::OciSpec> {
+    let runtime_config = crate::state::runtime_spec_path(&state.id);
+    if let Ok(data) = fs::read(runtime_config) {
+        if let Ok(spec) = crate::json::parse_oci_spec(&data) {
+            return Some(spec);
+        }
+    }
+
+    let config_path = std::path::Path::new(&state.bundle).join("config.json");
+    fs::read(config_path)
+        .ok()
+        .and_then(|data| crate::json::parse_oci_spec(&data).ok())
+}
+
+fn open_exec_root(pid: u32, spec: Option<&crate::json::OciSpec>) -> io::Result<File> {
+    if let Some(root_path) = spec
+        .and_then(|spec| spec.root.as_ref())
+        .map(|root| root.path.as_str())
+        .filter(|path| !path.is_empty())
+    {
+        if let Ok(file) = File::open(root_path) {
+            return Ok(file);
+        }
+    }
+
+    let proc_root = format!("/proc/{pid}/root");
+    File::open(&proc_root)
+        .map_err(|error| io::Error::new(error.kind(), format!("open {proc_root}: {error}")))
+}
+
+fn enter_container_root(root_fd: i32) -> io::Result<()> {
+    let ret = unsafe { libc::fchdir(root_fd) };
+    if ret != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let dot = CString::new(".").unwrap();
+    let ret = unsafe { libc::chroot(dot.as_ptr()) };
+    if ret != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let slash = CString::new("/").unwrap();
+    let ret = unsafe { libc::chdir(slash.as_ptr()) };
+    if ret != 0 {
+        return Err(io::Error::last_os_error());
+    }
     Ok(())
 }
 

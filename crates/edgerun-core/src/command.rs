@@ -2162,13 +2162,18 @@ fn attenuate_timing(
     depth: usize,
 ) -> Result<(), ValidationResult> {
     // Child must not start before parent
-    if let (Some(child_not_before), Some(parent_not_before)) =
-        (&child.not_before, &parent.not_before)
-    {
-        if child_not_before.seconds < parent_not_before.seconds
-            || (child_not_before.seconds == parent_not_before.seconds
-                && child_not_before.nanos < parent_not_before.nanos)
-        {
+    if let Some(parent_not_before) = &parent.not_before {
+        let Some(child_not_before) = &child.not_before else {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(format!(
+                    "timing attenuation: child drops not_before at depth {}",
+                    depth
+                )),
+                empty_map(),
+            ));
+        };
+        if timestamp_millis(child_not_before) < timestamp_millis(parent_not_before) {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
@@ -2181,11 +2186,18 @@ fn attenuate_timing(
     }
 
     // Child must not expire after parent
-    if let (Some(child_expires), Some(parent_expires)) = (&child.expires_at, &parent.expires_at) {
-        if child_expires.seconds > parent_expires.seconds
-            || (child_expires.seconds == parent_expires.seconds
-                && child_expires.nanos > parent_expires.nanos)
-        {
+    if let Some(parent_expires) = &parent.expires_at {
+        let Some(child_expires) = &child.expires_at else {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(format!(
+                    "timing attenuation: child drops expires_at at depth {}",
+                    depth
+                )),
+                empty_map(),
+            ));
+        };
+        if timestamp_millis(child_expires) > timestamp_millis(parent_expires) {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
@@ -4901,6 +4913,42 @@ mod tests {
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_timing_attenuation_rejects_dropped_not_before() {
+        let mut parent = DelegationRecord::default();
+        parent.not_before = Some(prost_types::Timestamp {
+            seconds: 1_700_000_000,
+            nanos: 0,
+        });
+        let child = DelegationRecord::default();
+
+        let result = attenuate_timing(&parent, &child, 1);
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().reason_code,
+            Some(ReasonCode::AuthorityDenied)
+        );
+    }
+
+    #[test]
+    fn delegation_timing_attenuation_rejects_dropped_expires_at() {
+        let mut parent = DelegationRecord::default();
+        parent.expires_at = Some(prost_types::Timestamp {
+            seconds: 1_700_001_000,
+            nanos: 0,
+        });
+        let child = DelegationRecord::default();
+
+        let result = attenuate_timing(&parent, &child, 1);
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().reason_code,
+            Some(ReasonCode::AuthorityDenied)
+        );
     }
 
     #[test]
