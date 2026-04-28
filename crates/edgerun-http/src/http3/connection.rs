@@ -1051,22 +1051,8 @@ impl Http3Connection {
         let stream = Http3Stream::new(stream_id, Http3StreamType::Request);
         self.streams.insert(stream_id, stream);
 
-        let headers_frame = Http3Frame::Headers { header_block };
-        let frame_data = headers_frame.to_bytes();
-
-        self.quic
-            .send_stream_data(stream_id, &frame_data, body.is_none())
-            .await
-            .map_err(|e| format!("Failed to send headers: {}", e))?;
-
-        if let Some(body_data) = body {
-            let data_frame = Http3Frame::Data { payload: body_data };
-            let data_bytes = data_frame.to_bytes();
-            self.quic
-                .send_stream_data(stream_id, &data_bytes, true)
-                .await
-                .map_err(|e| format!("Failed to send data: {}", e))?;
-        }
+        self.send_headers_and_optional_body(stream_id, header_block, body)
+            .await?;
 
         Ok(stream_id)
     }
@@ -1078,26 +1064,64 @@ impl Http3Connection {
         header_block: Vec<u8>,
         body: Option<Vec<u8>>,
     ) -> Result<()> {
-        let headers_frame = Http3Frame::Headers { header_block };
-        let frame_data = headers_frame.to_bytes();
-
-        self.quic
-            .send_stream_data(stream_id, &frame_data, body.is_none())
-            .await
-            .map_err(|e| format!("Failed to send headers: {}", e))?;
-
-        if let Some(body_data) = body {
-            let data_frame = Http3Frame::Data { payload: body_data };
-            let data_bytes = data_frame.to_bytes();
-            self.quic
-                .send_stream_data(stream_id, &data_bytes, true)
-                .await
-                .map_err(|e| format!("Failed to send data: {}", e))?;
-        }
+        self.send_headers_and_optional_body(stream_id, header_block, body)
+            .await?;
 
         if let Some(stream) = self.streams.get_mut(&stream_id) {
             stream.half_close_local();
         }
+
+        Ok(())
+    }
+
+    async fn send_headers_and_optional_body(
+        &mut self,
+        stream_id: u64,
+        header_block: Vec<u8>,
+        body: Option<Vec<u8>>,
+    ) -> Result<()> {
+        self.send_frame_on_stream(
+            stream_id,
+            Http3Frame::Headers { header_block },
+            body.is_none(),
+        )
+        .await?;
+
+        if let Some(body_data) = body {
+            self.send_frame_on_stream(stream_id, Http3Frame::Data { payload: body_data }, true)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn send_frame_on_stream(
+        &mut self,
+        stream_id: u64,
+        frame: Http3Frame,
+        fin: bool,
+    ) -> Result<()> {
+        let frame_data = frame.to_bytes();
+        self.quic
+            .send_stream_data(stream_id, &frame_data, fin)
+            .await
+            .map_err(Http3Error::QuicError)
+    }
+
+    async fn send_control_frame_with_context(
+        &mut self,
+        frame: Http3Frame,
+        context: &str,
+    ) -> Result<()> {
+        let control_id = self
+            .control_stream_id
+            .ok_or_else(|| "No control stream established".to_string())?;
+        let frame_data = frame.to_bytes();
+
+        self.quic
+            .send_stream_data(control_id, &frame_data, false)
+            .await
+            .map_err(|e| format!("{}: {}", context, e))?;
 
         Ok(())
     }
@@ -1111,17 +1135,14 @@ impl Http3Connection {
         stream_id: u64,
         trailer_block: Vec<u8>,
     ) -> super::Result<()> {
-        // Trailers are sent as a HEADERS frame after DATA
-        // The server must have already sent the initial HEADERS + DATA
-        let headers_frame = Http3Frame::Headers {
-            header_block: trailer_block,
-        };
-        let frame_data = headers_frame.to_bytes();
-
-        self.quic
-            .send_stream_data(stream_id, &frame_data, false)
-            .await
-            .map_err(Http3Error::QuicError)
+        self.send_frame_on_stream(
+            stream_id,
+            Http3Frame::Headers {
+                header_block: trailer_block,
+            },
+            false,
+        )
+        .await
     }
 
     /// Receive HTTP/3 response trailers from the given stream.
@@ -1193,19 +1214,12 @@ impl Http3Connection {
     /// Send GOAWAY
     pub async fn goaway(&mut self, stream_id: u64) -> Result<()> {
         self.sent_goaway_id = stream_id;
-        let frame = Http3Frame::Goaway { stream_id };
-        let frame_data = frame.to_bytes();
-
         let control_id = self
             .control_stream_id
             .ok_or_else(|| "No control stream established".to_string())?;
 
-        self.quic
-            .send_stream_data(control_id, &frame_data, false)
+        self.send_frame_on_stream(control_id, Http3Frame::Goaway { stream_id }, false)
             .await
-            .map_err(Http3Error::QuicError)?;
-
-        Ok(())
     }
 
     /// Get stream by ID
@@ -1254,17 +1268,15 @@ impl Http3Connection {
             )));
         }
 
-        // Send PUSH_PROMISE on the request stream
-        let push_promise = Http3Frame::PushPromise {
-            push_id,
-            header_block: promised_headers.clone(),
-        };
-        let frame_data = push_promise.to_bytes();
-
-        self.quic
-            .send_stream_data(request_stream_id, &frame_data, false)
-            .await
-            .map_err(Http3Error::QuicError)?;
+        self.send_frame_on_stream(
+            request_stream_id,
+            Http3Frame::PushPromise {
+                push_id,
+                header_block: promised_headers.clone(),
+            },
+            false,
+        )
+        .await?;
 
         // Create the push stream with type varint prefix (RFC 9114 §6.2.4)
         let mut push_stream_data = Vec::new();
@@ -1293,24 +1305,18 @@ impl Http3Connection {
         push_body: Vec<u8>,
         fin: bool,
     ) -> Result<()> {
-        // Send HEADERS frame on push stream
-        let headers_frame = Http3Frame::Headers {
-            header_block: push_headers,
-        };
-        let headers_data = headers_frame.to_bytes();
-        self.quic
-            .send_stream_data(push_stream_id, &headers_data, false)
-            .await
-            .map_err(Http3Error::QuicError)?;
+        self.send_frame_on_stream(
+            push_stream_id,
+            Http3Frame::Headers {
+                header_block: push_headers,
+            },
+            false,
+        )
+        .await?;
 
-        // Send DATA frame on push stream
         if !push_body.is_empty() {
-            let data_frame = Http3Frame::Data { payload: push_body };
-            let data_data = data_frame.to_bytes();
-            self.quic
-                .send_stream_data(push_stream_id, &data_data, fin)
-                .await
-                .map_err(Http3Error::QuicError)?;
+            self.send_frame_on_stream(push_stream_id, Http3Frame::Data { payload: push_body }, fin)
+                .await?;
         } else if fin {
             // No body, but close the stream
             self.quic
@@ -1324,36 +1330,20 @@ impl Http3Connection {
 
     /// Send a MAX_PUSH_ID frame to allow the server to push more responses.
     pub async fn send_max_push_id(&mut self, push_id: u64) -> Result<()> {
-        let frame = Http3Frame::MaxPushId { push_id };
-        let frame_data = frame.to_bytes();
-
-        let control_id = self
-            .control_stream_id
-            .ok_or_else(|| "No control stream established".to_string())?;
-
-        self.quic
-            .send_stream_data(control_id, &frame_data, false)
-            .await
-            .map_err(|e| format!("Failed to send MAX_PUSH_ID: {}", e))?;
-
-        Ok(())
+        self.send_control_frame_with_context(
+            Http3Frame::MaxPushId { push_id },
+            "Failed to send MAX_PUSH_ID",
+        )
+        .await
     }
 
     /// Cancel a server push stream.
     pub async fn cancel_push(&mut self, push_id: u64) -> Result<()> {
-        let frame = Http3Frame::CancelPush { push_id };
-        let frame_data = frame.to_bytes();
-
-        let control_id = self
-            .control_stream_id
-            .ok_or_else(|| "No control stream established".to_string())?;
-
-        self.quic
-            .send_stream_data(control_id, &frame_data, false)
-            .await
-            .map_err(|e| format!("Failed to send CANCEL_PUSH: {}", e))?;
-
-        Ok(())
+        self.send_control_frame_with_context(
+            Http3Frame::CancelPush { push_id },
+            "Failed to send CANCEL_PUSH",
+        )
+        .await
     }
 
     // ------------------------------------------------------------------
