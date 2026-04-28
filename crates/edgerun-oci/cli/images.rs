@@ -5,7 +5,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::cli::{default_images_dir, inline_value, invalid_input, CliArgs};
+use crate::cli::{default_images_dir, invalid_input, parse_cli_args};
+use edgerun_clap::cli::Action;
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_images(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     let (images_dir, json) = parse_images_args(args)?;
@@ -30,32 +32,24 @@ struct LocalImage {
 }
 
 fn parse_images_args(args: &[String]) -> io::Result<(PathBuf, bool)> {
-    let mut images_dir = default_images_dir();
-    let mut json = false;
-    let mut args = CliArgs::new(args);
-    while let Some(arg) = args.next() {
-        match arg {
-            "--images-dir" => {
-                images_dir = PathBuf::from(args.value("--images-dir requires a path")?);
-            }
-            "--format" => {
-                json = args.value("--format requires a value")? == "json";
-            }
-            arg if inline_value(arg, "--images-dir").is_some() => {
-                images_dir = PathBuf::from(inline_value(arg, "--images-dir").unwrap());
-            }
-            arg if inline_value(arg, "--format").is_some() => {
-                json = inline_value(arg, "--format").unwrap() == "json";
-            }
-            "--format=json" | "--json" => {
-                json = true;
-            }
-            _ => {
-                return Err(invalid_input(
-                    "Usage: ert images [--images-dir DIR] [--format json]",
-                ));
-            }
-        }
+    const USAGE: &str = "Usage: ert images [--images-dir DIR] [--format json]";
+    let matches = parse_cli_args(
+        Command::new("images")
+            .arg(Arg::new("images-dir").long("images-dir"))
+            .arg(Arg::new("format").long("format"))
+            .arg(Arg::new("json").long("json").action(Action::StoreTrue)),
+        args,
+        USAGE,
+    )?;
+    let images_dir = matches
+        .get_one::<PathBuf>("images-dir")
+        .unwrap_or_else(default_images_dir);
+    let json = matches.get_flag("json")
+        || matches
+            .get_one::<String>("format")
+            .is_some_and(|format| format == "json");
+    if matches.positional_count() > 0 {
+        return Err(invalid_input(USAGE));
     }
     Ok((images_dir, json))
 }

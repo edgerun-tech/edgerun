@@ -8,6 +8,7 @@ description = "OCI container runtime and registry client — pull, push, login, 
 
 [dependencies]
 edgerun-json = { path = "../edgerun-json", default-features = false }
+edgerun-clap = { path = "../edgerun-clap", default-features = false }
 edgerun-crypto = { workspace = true, default-features = false }
 edgerun-http = { path = "../edgerun-http", default-features = false, features = ["client", "tls"], optional = true }
 edgerun-edgefs = { workspace = true, optional = true }

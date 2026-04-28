@@ -4,9 +4,11 @@ use crate::prelude::*;
 use std::io;
 use std::path::PathBuf;
 
-use crate::cli::{default_images_dir, inline_value, invalid_input, CliArgs};
+use crate::cli::{default_images_dir, invalid_input, parse_cli_args, required_positional};
 use crate::state::state_root_dir;
 use crate::ImageRef;
+use edgerun_clap::cli::Action;
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_rmi(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
@@ -37,32 +39,27 @@ pub fn cmd_rmi(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()>
 }
 
 fn parse_rmi_args(args: &[String]) -> io::Result<(String, PathBuf, bool)> {
-    let mut images_dir = default_images_dir();
-    let mut force = false;
-    let mut image = None;
-    let mut args = CliArgs::new(args);
-    while let Some(arg) = args.next() {
-        match arg {
-            "--force" | "-f" => {
-                force = true;
-            }
-            "--images-dir" => {
-                images_dir = PathBuf::from(args.value("--images-dir requires a path")?);
-            }
-            arg if inline_value(arg, "--images-dir").is_some() => {
-                images_dir = PathBuf::from(inline_value(arg, "--images-dir").unwrap());
-            }
-            arg if !arg.starts_with('-') && image.is_none() => {
-                image = Some(arg.to_string());
-            }
-            _ => {
-                return Err(invalid_input("Usage: ert rmi [--images-dir DIR] <image>"));
-            }
-        }
+    const USAGE: &str = "Usage: ert rmi [--images-dir DIR] <image>";
+    let matches = parse_cli_args(
+        Command::new("rmi")
+            .arg(
+                Arg::new("force")
+                    .short('f')
+                    .long("force")
+                    .action(Action::StoreTrue),
+            )
+            .arg(Arg::new("images-dir").long("images-dir")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
-    image
-        .map(|image| (image, images_dir, force))
-        .ok_or_else(|| invalid_input("image is required"))
+    let image = required_positional(&matches, 0, "image is required")?.to_string();
+    let images_dir = matches
+        .get_one::<PathBuf>("images-dir")
+        .unwrap_or_else(default_images_dir);
+    Ok((image, images_dir, matches.get_flag("force")))
 }
 
 fn referencing_container(bundle: &std::path::Path) -> io::Result<Option<String>> {

@@ -4,10 +4,12 @@ use crate::prelude::*;
 use std::path::PathBuf;
 
 use crate::cli::{
-    default_images_dir, inline_value, invalid_input, resolve_registry_auth, CliArgs, GlobalOpts,
+    default_images_dir, invalid_input, parse_cli_args, required_positional, resolve_registry_auth,
+    GlobalOpts,
 };
 use crate::ImageRef;
 use crate::RegistryClient;
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_push(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     let (image_ref, images_dir) = parse_push_args(args)?;
@@ -42,28 +44,18 @@ pub fn cmd_push(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
 }
 
 fn parse_push_args(args: &[String]) -> std::io::Result<(String, PathBuf)> {
-    let mut images_dir = default_images_dir();
-    let mut image: Option<String> = None;
-
-    let mut args = CliArgs::new(args);
-    while let Some(arg) = args.next() {
-        match arg {
-            "--images-dir" => {
-                images_dir = PathBuf::from(args.value("--images-dir requires a path")?);
-            }
-            arg if inline_value(arg, "--images-dir").is_some() => {
-                images_dir = PathBuf::from(inline_value(arg, "--images-dir").unwrap());
-            }
-            arg if !arg.starts_with('-') => {
-                image = Some(arg.to_string());
-            }
-            _ => {
-                return Err(invalid_input(format!("unknown flag: {}", arg)));
-            }
-        }
+    const USAGE: &str = "Usage: ert push [--images-dir DIR] <image>";
+    let matches = parse_cli_args(
+        Command::new("push").arg(Arg::new("images-dir").long("images-dir")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
-
-    let image = image.ok_or_else(|| invalid_input("Usage: ert push [--images-dir DIR] <image>"))?;
-
+    let image = required_positional(&matches, 0, USAGE)?.to_string();
+    let images_dir = matches
+        .get_one::<PathBuf>("images-dir")
+        .unwrap_or_else(default_images_dir);
     Ok((image, images_dir))
 }

@@ -8,6 +8,8 @@ extern crate std;
 
 pub mod arch;
 pub mod cpu;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+pub mod esp32s3;
 pub mod irq;
 pub mod timer;
 pub mod tls;

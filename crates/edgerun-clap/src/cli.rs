@@ -1,4 +1,4 @@
-#[cfg(all(feature = "std", not(target_os = "none")))]
+#[cfg(any(test, all(feature = "std", not(target_os = "none"))))]
 extern crate std;
 
 extern crate alloc;
@@ -6,9 +6,8 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use core::fmt::{self, Write};
 use edgerun_json::{JsonNumber, Value};
-#[cfg(all(feature = "std", not(target_os = "none")))]
-use std::eprintln;
 
 pub struct Command {
     name: String,
@@ -80,7 +79,15 @@ impl Command {
 
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn get_matches(&self) -> ArgMatches {
-        self.get_matches_from(std::env::args().skip(1).collect())
+        self.get_matches_from_iter(std::env::args().skip(1))
+    }
+
+    pub fn get_matches_from_iter<I, S>(&self, args: I) -> ArgMatches
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.get_matches_from(args.into_iter().map(Into::into).collect())
     }
 
     pub fn get_matches_from(&self, args: Vec<String>) -> ArgMatches {
@@ -99,10 +106,18 @@ impl Command {
             }
 
             if arg.starts_with('-') && arg.len() > 1 {
-                let rest = if arg.starts_with("--") {
+                let mut rest = if arg.starts_with("--") {
                     arg.trim_start_matches('-')
                 } else {
                     arg.trim_start_matches('-')
+                };
+                let inline_value = if arg.starts_with("--") {
+                    rest.split_once('=').map(|(name, value)| {
+                        rest = name;
+                        value
+                    })
+                } else {
+                    None
                 };
 
                 if rest.is_empty() {
@@ -136,11 +151,19 @@ impl Command {
                             );
                         }
                         _ => {
-                            i += 1;
+                            let value_arg = if let Some(value) = inline_value {
+                                Some(value)
+                            } else {
+                                i += 1;
+                                args.get(i).map(String::as_str)
+                            };
                             if let Some(delimiter) = a.value_delimiter {
-                                let values: Vec<_> = if i < args.len() && !args[i].starts_with('-')
-                                {
-                                    args[i].split(delimiter).map(String::from).collect()
+                                let values: Vec<_> = if let Some(value) = value_arg {
+                                    if !value.starts_with('-') || inline_value.is_some() {
+                                        value.split(delimiter).map(String::from).collect()
+                                    } else {
+                                        Vec::new()
+                                    }
                                 } else {
                                     Vec::new()
                                 };
@@ -156,10 +179,14 @@ impl Command {
                                         ),
                                     );
                                 }
-                            } else if i < args.len() && !args[i].starts_with('-') {
-                                matches
-                                    .map
-                                    .insert(a.name.clone(), Value::String(args[i].clone()));
+                            } else if let Some(value) = value_arg {
+                                if value.starts_with('-') && inline_value.is_none() {
+                                    matches.map.insert(a.name.clone(), Value::Bool(true));
+                                } else {
+                                    matches
+                                        .map
+                                        .insert(a.name.clone(), Value::String(value.to_string()));
+                                }
                             } else if a.num_args.is_none() {
                                 matches.map.insert(a.name.clone(), Value::Bool(true));
                             } else {
@@ -187,6 +214,8 @@ impl Command {
                             }
                         }
                     }
+                } else {
+                    matches.unknown.push(arg.clone());
                 }
             } else {
                 positional_values.push(arg.clone());
@@ -198,19 +227,18 @@ impl Command {
         matches
     }
 
-    #[cfg(all(feature = "std", not(target_os = "none")))]
-    pub fn print_help(&self) {
-        eprintln!("Usage: {} [OPTIONS] [SUBCOMMAND]", self.name);
+    pub fn write_help<W: Write>(&self, out: &mut W) -> fmt::Result {
+        writeln!(out, "Usage: {} [OPTIONS] [SUBCOMMAND]", self.name)?;
 
         if let Some(about) = &self.about {
-            eprintln!();
-            eprintln!("{}", about);
+            writeln!(out)?;
+            writeln!(out, "{}", about)?;
         }
 
         if !self.args.iter().any(|a| a.is_positional) {
             if !self.args.is_empty() {
-                eprintln!();
-                eprintln!("Options:");
+                writeln!(out)?;
+                writeln!(out, "Options:")?;
                 for arg in &self.args {
                     if let Some(long) = &arg.long {
                         let mut flags = String::new();
@@ -227,48 +255,61 @@ impl Command {
                             Some(Action::StoreTrue) | Some(Action::StoreFalse)
                         );
                         if let Some(default) = &arg.default_value {
-                            eprintln!("  {} (default: {})", flags, default);
+                            writeln!(out, "  {} (default: {})", flags, default)?;
                         } else if is_store_bool {
-                            eprintln!("  {}", flags);
+                            writeln!(out, "  {}", flags)?;
                         } else if arg.required {
-                            eprintln!("  {} <value> (required)", flags);
+                            writeln!(out, "  {} <value> (required)", flags)?;
                         } else {
-                            eprintln!("  {}", flags);
+                            writeln!(out, "  {}", flags)?;
                         }
 
                         if let Some(help) = &arg.help {
-                            eprintln!("    {}", help);
+                            writeln!(out, "    {}", help)?;
                         }
                     }
                 }
             }
         } else {
-            eprintln!();
-            eprintln!("Arguments:");
+            writeln!(out)?;
+            writeln!(out, "Arguments:")?;
             for arg in &self.args {
                 if arg.is_positional {
                     if arg.required {
-                        eprintln!("  {}", arg.name.to_uppercase());
+                        writeln!(out, "  {}", arg.name.to_uppercase())?;
                     } else {
-                        eprintln!("  [{}]", arg.name.to_uppercase());
+                        writeln!(out, "  [{}]", arg.name.to_uppercase())?;
                     }
                     if let Some(help) = &arg.help {
-                        eprintln!("    {}", help);
+                        writeln!(out, "    {}", help)?;
                     }
                 }
             }
         }
 
         if !self.subcommands.is_empty() {
-            eprintln!();
-            eprintln!("Subcommands:");
+            writeln!(out)?;
+            writeln!(out, "Subcommands:")?;
             for sub in &self.subcommands {
-                eprintln!("  {}", sub.name);
+                writeln!(out, "  {}", sub.name)?;
                 if let Some(about) = &sub.about {
-                    eprintln!("    {}", about);
+                    writeln!(out, "    {}", about)?;
                 }
             }
         }
+
+        Ok(())
+    }
+
+    pub fn render_help(&self) -> String {
+        let mut out = String::new();
+        let _ = self.write_help(&mut out);
+        out
+    }
+
+    #[cfg(all(feature = "std", not(target_os = "none")))]
+    pub fn print_help(&self) {
+        std::eprint!("{}", self.render_help());
     }
 
     pub fn find_subcommand(&self, name: &str) -> Option<&Command> {
@@ -362,6 +403,7 @@ impl Arg {
 pub struct ArgMatches {
     pub(crate) map: alloc::collections::BTreeMap<String, Value>,
     pub positional: alloc::vec::Vec<String>,
+    unknown: alloc::vec::Vec<String>,
 }
 
 impl Default for ArgMatches {
@@ -375,6 +417,7 @@ impl ArgMatches {
         Self {
             map: alloc::collections::BTreeMap::new(),
             positional: alloc::vec::Vec::new(),
+            unknown: alloc::vec::Vec::new(),
         }
     }
 
@@ -443,6 +486,10 @@ impl ArgMatches {
             })
             .unwrap_or(false)
     }
+
+    pub fn unknown_args(&self) -> &[String] {
+        &self.unknown
+    }
 }
 
 pub trait FromArgMatches {
@@ -467,9 +514,112 @@ pub trait Parser: Sized {
         let matches = Self::command().get_matches();
         Self::from(&matches)
     }
+    fn parse_from<I, S>(args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let matches = Self::command().get_matches_from_iter(args);
+        Self::from(&matches)
+    }
     fn from(matches: &ArgMatches) -> Self;
 }
 
 pub trait Subcommand: Sized {
     fn name() -> &'static str;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Action, Arg, ArgMatches, Command, Parser};
+    use alloc::string::String;
+    use alloc::string::ToString;
+
+    #[test]
+    fn parses_matches_from_iter_without_process_args() {
+        let matches = Command::new("edge")
+            .arg(Arg::new("name").long("name"))
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .action(Action::StoreTrue),
+            )
+            .get_matches_from_iter(["--name", "node-a", "-v"]);
+
+        assert_eq!(matches.get_one::<String>("name").as_deref(), Some("node-a"));
+        assert!(matches.get_flag("verbose"));
+    }
+
+    #[test]
+    fn parses_inline_long_option_values() {
+        let matches = Command::new("edge")
+            .arg(Arg::new("name").long("name"))
+            .arg(Arg::new("tags").long("tags").value_delimiter(','))
+            .get_matches_from_iter(["--name=node-a", "--tags=edge,no-std"]);
+
+        assert_eq!(matches.get_one::<String>("name").as_deref(), Some("node-a"));
+        assert_eq!(
+            matches.get_many::<String>("tags"),
+            Some(alloc::vec!["edge".to_string(), "no-std".to_string()])
+        );
+    }
+
+    #[test]
+    fn records_unknown_options_for_strict_callers() {
+        let matches = Command::new("edge")
+            .arg(Arg::new("name").long("name"))
+            .get_matches_from_iter(["--name", "node-a", "--bad"]);
+
+        assert_eq!(matches.unknown_args(), &["--bad".to_string()]);
+    }
+
+    #[test]
+    fn renders_help_without_stderr() {
+        let help = Command::new("edge")
+            .about("edge runner")
+            .arg(
+                Arg::new("name")
+                    .short('n')
+                    .long("name")
+                    .help("node name")
+                    .required(),
+            )
+            .render_help();
+
+        assert!(help.contains("Usage: edge [OPTIONS] [SUBCOMMAND]"));
+        assert!(help.contains("edge runner"));
+        assert!(help.contains("-n, --name <value> (required)"));
+        assert!(help.contains("node name"));
+    }
+
+    #[test]
+    fn parser_parse_from_uses_no_std_argument_source() {
+        struct Opts {
+            name: String,
+            verbose: bool,
+        }
+
+        impl Parser for Opts {
+            fn command() -> Command {
+                Command::new("opts").arg(Arg::new("name").long("name")).arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .action(Action::StoreTrue),
+                )
+            }
+
+            fn from(matches: &ArgMatches) -> Self {
+                Self {
+                    name: matches.get_one::<String>("name").unwrap_or_default(),
+                    verbose: matches.get_flag("verbose"),
+                }
+            }
+        }
+
+        let opts = Opts::parse_from(["--name", "node-b", "--verbose"]);
+
+        assert_eq!(opts.name, "node-b");
+        assert!(opts.verbose);
+    }
 }

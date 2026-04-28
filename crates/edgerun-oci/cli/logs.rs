@@ -6,59 +6,63 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::cli::{inline_value, invalid_input, CliArgs};
+use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::{container_state_dir, load_state};
+use edgerun_clap::cli::Action;
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_logs(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
     let opts = parse_logs_args(args)?;
     let id = opts.id;
-    let _ = load_state(id)?;
-    let state_dir = container_state_dir(id);
+    let _ = load_state(&id)?;
+    let state_dir = container_state_dir(&id);
     let stdout = state_dir.join("stdout.log");
     let stderr = state_dir.join("stderr.log");
 
     if opts.follow {
-        follow_logs(id, &stdout, &stderr, opts.tail)
+        follow_logs(&id, &stdout, &stderr, opts.tail)
     } else {
         print_file(&stdout, io::stdout(), opts.tail)?;
         print_file(&stderr, io::stderr(), opts.tail)
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-struct LogsArgs<'a> {
+#[derive(Clone, Debug)]
+struct LogsArgs {
     follow: bool,
     tail: Option<usize>,
-    id: &'a str,
+    id: String,
 }
 
-fn parse_logs_args(args: &[String]) -> io::Result<LogsArgs<'_>> {
-    let mut follow = false;
-    let mut tail = None;
-    let mut id = None;
-    let mut args = CliArgs::new(args);
-    while let Some(arg) = args.next() {
-        match arg {
-            "-f" | "--follow" => follow = true,
-            "--tail" => {
-                tail = Some(parse_tail(args.value("--tail requires a number")?)?);
-            }
-            arg if inline_value(arg, "--tail").is_some() => {
-                tail = Some(parse_tail(inline_value(arg, "--tail").unwrap())?);
-            }
-            arg if id.is_none() => id = Some(arg),
-            _ => {
-                return Err(invalid_input(
-                    "Usage: ert logs [-f] [--tail N] <container-id>",
-                ));
-            }
-        }
+fn parse_logs_args(args: &[String]) -> io::Result<LogsArgs> {
+    const USAGE: &str = "Usage: ert logs [-f] [--tail N] <container-id>";
+    let matches = parse_cli_args(
+        Command::new("logs")
+            .arg(
+                Arg::new("follow")
+                    .short('f')
+                    .long("follow")
+                    .action(Action::StoreTrue),
+            )
+            .arg(Arg::new("tail").long("tail")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
-
-    id.map(|id| LogsArgs { follow, tail, id })
-        .ok_or_else(|| invalid_input("Usage: ert logs [-f] [--tail N] <container-id>"))
+    let id = required_positional(&matches, 0, USAGE)?.to_string();
+    let tail = matches
+        .get_one::<String>("tail")
+        .map(|value| parse_tail(&value))
+        .transpose()?;
+    Ok(LogsArgs {
+        follow: matches.get_flag("follow"),
+        tail,
+        id,
+    })
 }
 
 fn parse_tail(value: &str) -> io::Result<usize> {

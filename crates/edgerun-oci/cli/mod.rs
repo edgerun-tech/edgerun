@@ -283,29 +283,26 @@ pub(crate) fn invalid_input(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message.into())
 }
 
-pub(crate) struct CliArgs<'a> {
-    args: &'a [String],
+pub(crate) fn parse_cli_args(
+    command: edgerun_clap::Command,
+    args: &[String],
+    usage: &'static str,
+) -> io::Result<edgerun_clap::ArgMatches> {
+    let matches = command.get_matches_from_iter(args.iter().map(String::as_str));
+    if let Some(arg) = matches.unknown_args().first() {
+        return Err(invalid_input(format!("{usage}: unknown option {arg}")));
+    }
+    Ok(matches)
+}
+
+pub(crate) fn required_positional<'a>(
+    matches: &'a edgerun_clap::ArgMatches,
     index: usize,
-}
-
-impl<'a> CliArgs<'a> {
-    pub(crate) fn new(args: &'a [String]) -> Self {
-        Self { args, index: 0 }
-    }
-
-    pub(crate) fn next(&mut self) -> Option<&'a str> {
-        let arg = self.args.get(self.index)?;
-        self.index += 1;
-        Some(arg.as_str())
-    }
-
-    pub(crate) fn value(&mut self, message: &'static str) -> io::Result<&'a str> {
-        self.next().ok_or_else(|| invalid_input(message))
-    }
-}
-
-pub(crate) fn inline_value<'a>(arg: &'a str, flag: &str) -> Option<&'a str> {
-    arg.strip_prefix(flag)?.strip_prefix('=')
+    usage: &'static str,
+) -> io::Result<&'a str> {
+    matches
+        .get_positional(index)
+        .ok_or_else(|| invalid_input(usage))
 }
 
 fn command_spec(command: &str) -> Option<&'static CommandSpec> {

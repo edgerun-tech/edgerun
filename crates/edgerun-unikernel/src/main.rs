@@ -1800,6 +1800,11 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     rt::log::log(1, "Starting edgerun unikernel on Xtensa");
     rt::log::init_serial_logger();
     rt::log::info!("Xtensa formatted logger online");
+    rt::log::info!("Initializing JC3248W535 display");
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Display::init();
+    }
+    rt::log::info!("JC3248W535 display init complete");
 
     loop {
         let mut i = 0;

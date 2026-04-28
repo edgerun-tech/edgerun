@@ -6,23 +6,24 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
-use crate::cli::{inline_value, invalid_input, is_process_alive, CliArgs};
+use crate::cli::{invalid_input, is_process_alive, parse_cli_args, required_positional};
 use crate::state::{load_state, save_state};
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
     let (timeout, id) = parse_stop_args(args)?;
-    let mut state = load_state(id)?;
+    let mut state = load_state(&id)?;
     let Some(pid) = state.pid else {
         state.status = "stopped".to_string();
-        save_state(&state, id)?;
+        save_state(&state, &id)?;
         return Ok(());
     };
 
     if !is_process_alive(pid) {
         state.status = "stopped".to_string();
-        save_state(&state, id)?;
+        save_state(&state, &id)?;
         return Ok(());
     }
 
@@ -31,7 +32,7 @@ pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     while Instant::now() < deadline {
         if !is_process_alive(pid) {
             state.status = "stopped".to_string();
-            save_state(&state, id)?;
+            save_state(&state, &id)?;
             return Ok(());
         }
         thread::sleep(Duration::from_millis(100));
@@ -42,32 +43,26 @@ pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         let _ = wait_tree_dead(pid, Duration::from_secs(2));
     }
     state.status = "stopped".to_string();
-    save_state(&state, id)
+    save_state(&state, &id)
 }
 
-fn parse_stop_args(args: &[String]) -> io::Result<(u64, &str)> {
-    let mut timeout = 10u64;
-    let mut id = None;
-    let mut args = CliArgs::new(args);
-    while let Some(arg) = args.next() {
-        match arg {
-            "-t" | "--time" => {
-                timeout = parse_timeout(args.value("stop timeout must be seconds")?)?;
-            }
-            arg if inline_value(arg, "--time").is_some() => {
-                timeout = parse_timeout(inline_value(arg, "--time").unwrap())?;
-            }
-            arg if id.is_none() => {
-                id = Some(arg);
-            }
-            _ => {
-                return Err(invalid_input("Usage: ert stop [-t seconds] <container-id>"));
-            }
-        }
+fn parse_stop_args(args: &[String]) -> io::Result<(u64, String)> {
+    const USAGE: &str = "Usage: ert stop [-t seconds] <container-id>";
+    let matches = parse_cli_args(
+        Command::new("stop").arg(Arg::new("time").short('t').long("time")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
-
-    id.map(|id| (timeout, id))
-        .ok_or_else(|| invalid_input("Usage: ert stop [-t seconds] <container-id>"))
+    let timeout = matches
+        .get_one::<String>("time")
+        .map(|value| parse_timeout(&value))
+        .transpose()?
+        .unwrap_or(10);
+    let id = required_positional(&matches, 0, USAGE)?.to_string();
+    Ok((timeout, id))
 }
 
 fn parse_timeout(value: &str) -> io::Result<u64> {
