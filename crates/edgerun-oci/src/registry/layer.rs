@@ -8,7 +8,7 @@
 use crate::prelude::*;
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::os::unix::fs::{symlink, PermissionsExt};
+use std::os::unix::fs::{symlink, FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use super::errors::RegistryError;
@@ -103,11 +103,40 @@ impl FsLayerSink {
         Ok(self.dest.join(path))
     }
 
-    fn ensure_parent(path: &Path) -> Result<(), String> {
+    fn ensure_parent(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
+            self.reject_symlink_ancestors(parent)?;
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
         Ok(())
+    }
+
+    fn reject_symlink_ancestors(&self, path: &Path) -> Result<(), String> {
+        let relative = path.strip_prefix(&self.dest).unwrap_or(path);
+        let mut current = self.dest.clone();
+        for component in relative.components() {
+            current.push(component.as_os_str());
+            match fs::symlink_metadata(&current) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(format!("tar entry parent {:?} is a symlink", current));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        Ok(())
+    }
+
+    fn remove_existing(path: &Path) -> Result<(), String> {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_dir() => {
+                fs::remove_dir_all(path).map_err(|error| error.to_string())
+            }
+            Ok(_) => fs::remove_file(path).map_err(|error| error.to_string()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.to_string()),
+        }
     }
 
     fn validate_link(&self, entry_path: &Path, target: &Path) -> Result<(), String> {
@@ -155,12 +184,20 @@ impl TarLayerSink for FsLayerSink {
 
         match entry.kind {
             TarEntryKind::Regular => {
-                Self::ensure_parent(&path)?;
+                self.ensure_parent(&path)?;
+                Self::remove_existing(&path)?;
                 fs::write(&path, data).map_err(|error| error.to_string())?;
                 fs::set_permissions(&path, fs::Permissions::from_mode(entry.mode))
                     .map_err(|error| error.to_string())?;
             }
             TarEntryKind::Directory => {
+                self.ensure_parent(&path)?;
+                match fs::symlink_metadata(&path) {
+                    Ok(metadata) if metadata.file_type().is_dir() => {}
+                    Ok(_) => Self::remove_existing(&path)?,
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.to_string()),
+                }
                 fs::create_dir_all(&path).map_err(|error| error.to_string())?;
                 fs::set_permissions(&path, fs::Permissions::from_mode(entry.mode))
                     .map_err(|error| error.to_string())?;
@@ -172,8 +209,8 @@ impl TarLayerSink for FsLayerSink {
                     .ok_or_else(|| format!("symlink {:?} missing target", entry.path))?;
                 let target = Path::new(target);
                 self.validate_link(&path, target)?;
-                Self::ensure_parent(&path)?;
-                let _ = fs::remove_file(&path);
+                self.ensure_parent(&path)?;
+                Self::remove_existing(&path)?;
                 symlink(target, &path).map_err(|error| error.to_string())?;
             }
             TarEntryKind::Hardlink => {
@@ -189,8 +226,8 @@ impl TarLayerSink for FsLayerSink {
                     ));
                 }
                 let target = self.dest.join(normalized);
-                Self::ensure_parent(&path)?;
-                let _ = fs::remove_file(&path);
+                self.ensure_parent(&path)?;
+                Self::remove_existing(&path)?;
                 fs::hard_link(target, &path).map_err(|error| error.to_string())?;
             }
             TarEntryKind::Character | TarEntryKind::Block | TarEntryKind::Fifo => {}

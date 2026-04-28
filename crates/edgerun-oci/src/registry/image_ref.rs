@@ -1,6 +1,8 @@
 use crate::prelude::*;
 use core::{fmt, str::FromStr};
 
+use crate::validate_digest_reference;
+
 /// An OCI image reference (e.g., `docker.io/library/alpine:latest`).
 #[derive(Clone, Debug)]
 pub struct ImageRef {
@@ -30,6 +32,9 @@ impl FromStr for ImageRef {
             if repo.is_empty() || digest.is_empty() {
                 return Err("digest image references must be repository@algorithm:hex".into());
             }
+            if !validate_digest_reference(digest) {
+                return Err("digest image references must use algorithm:hex digest syntax".into());
+            }
             let repository = split_repository_tag(repo)
                 .map(|(repository, _tag)| repository)
                 .unwrap_or(repo);
@@ -38,13 +43,19 @@ impl FromStr for ImageRef {
             if repo.is_empty() || tag.is_empty() {
                 return Err("tag image references must be repository:tag".into());
             }
+            if !valid_tag(tag) {
+                return Err("image tag contains invalid characters".into());
+            }
             (repo.to_string(), tag.to_string())
         } else {
             (rest.to_string(), "latest".to_string())
         };
 
-        if repository.is_empty() {
-            return Err("image repository is empty".into());
+        if !valid_registry(&registry) {
+            return Err("image registry contains invalid characters".into());
+        }
+        if !valid_repository(&repository) {
+            return Err("image repository contains invalid characters".into());
         }
         if registry == "docker.io" && !repository.contains('/') {
             repository = format!("library/{}", repository);
@@ -64,7 +75,7 @@ impl ImageRef {
     }
 
     pub fn is_digest_reference(&self) -> bool {
-        self.tag.contains(':')
+        validate_digest_reference(&self.tag)
     }
 }
 
@@ -86,4 +97,40 @@ fn split_repository_tag(reference: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((&reference[..tag_separator], &reference[tag_separator + 1..]))
+}
+
+fn valid_registry(registry: &str) -> bool {
+    !registry.is_empty()
+        && !registry.starts_with('.')
+        && !registry.ends_with('.')
+        && registry.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':' | b'[' | b']')
+        })
+}
+
+fn valid_repository(repository: &str) -> bool {
+    !repository.is_empty()
+        && !repository.starts_with('/')
+        && !repository.ends_with('/')
+        && repository.split('/').all(valid_repository_component)
+}
+
+fn valid_repository_component(component: &str) -> bool {
+    !component.is_empty()
+        && component.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
+}
+
+fn valid_tag(tag: &str) -> bool {
+    !tag.is_empty()
+        && tag.len() <= 128
+        && tag
+            .bytes()
+            .next()
+            .map(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            .unwrap_or(false)
+        && tag
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
 }

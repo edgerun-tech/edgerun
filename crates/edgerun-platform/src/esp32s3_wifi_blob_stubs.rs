@@ -47,6 +47,9 @@ pub extern "C" fn pp_printf(_format: *const c_char) -> c_int {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn wifi_log(_level: c_int, _tag: *const c_char, _format: *const c_char, _args: ...) {}
+
+#[no_mangle]
 pub extern "C" fn coexist_printf(_format: *const c_char) -> c_int {
     0
 }

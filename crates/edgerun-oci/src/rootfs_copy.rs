@@ -108,6 +108,7 @@ fn copy_rootfs_entry(src: &Path, dest: &Path, mode: CopyMode) -> io::Result<()> 
     let metadata = fs::symlink_metadata(src)?;
     let file_type = metadata.file_type();
     if file_type.is_dir() {
+        remove_dest_if_not_dir(dest)?;
         fs::create_dir_all(dest)?;
         copy_dir_contents(src, dest, mode)?;
         if mode.preserve_metadata {
@@ -121,19 +122,20 @@ fn copy_rootfs_entry(src: &Path, dest: &Path, mode: CopyMode) -> io::Result<()> 
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
         }
+        remove_path(dest)?;
         if mode.atomic_replace {
             let temp_path = temp_path(dest);
             let _ = fs::remove_file(&temp_path);
             symlink(target, &temp_path)?;
             fs::rename(&temp_path, dest)?;
         } else {
-            let _ = fs::remove_file(dest);
             symlink(target, dest)?;
         }
     } else if file_type.is_file() {
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
         }
+        remove_path(dest)?;
         if mode.atomic_replace {
             let temp_path = temp_path(dest);
             fs::copy(src, &temp_path)?;
@@ -163,6 +165,15 @@ fn copy_rootfs_entry(src: &Path, dest: &Path, mode: CopyMode) -> io::Result<()> 
         ));
     }
     Ok(())
+}
+
+fn remove_dest_if_not_dir(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => Ok(()),
+        Ok(_) => remove_path(path),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn create_special_file(dest: &Path, kind: libc::mode_t, mode: u32, dev: u64) -> io::Result<()> {

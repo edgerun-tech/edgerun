@@ -230,6 +230,9 @@ where
         let _ = std::fs::remove_file(&cache_marker);
 
         let blob_path = store_path.join(format!("{}.{}", &cache_key, layer_extension(layer)));
+        if blob_path.exists() && !cached_blob_valid(&blob_path, &layer.digest) {
+            std::fs::remove_file(&blob_path).map_err(RegistryError::IoError)?;
+        }
         if !blob_path.exists() {
             progress(PullProgress::LayerDownloading {
                 index,
@@ -273,6 +276,10 @@ where
     Ok(layer_dirs)
 }
 
+fn cached_blob_valid(blob_path: &Path, digest: &str) -> bool {
+    verify_blob_digest(blob_path, digest).is_ok()
+}
+
 fn layer_cache_complete(marker: &Path, digest: &str) -> bool {
     std::fs::read_to_string(marker)
         .map(|value| value.trim() == digest)
@@ -296,8 +303,8 @@ async fn download_blob(
 fn layer_extension(layer: &LayerDescriptor) -> &'static str {
     match layer.media_type.as_deref() {
         Some(media_type) if media_type.contains("zstd") => "tar.zst",
-        Some(media_type) if media_type.contains("gzip") || media_type.contains("tar") => "tar.gz",
-        Some(media_type) if media_type.contains("oci") => "tar",
+        Some(media_type) if media_type.contains("gzip") => "tar.gz",
+        Some(media_type) if media_type.contains("tar") => "tar",
         _ => "tar.gz",
     }
 }
@@ -329,5 +336,39 @@ mod tests {
         assert!(layer_cache_complete(&marker, "sha256:layer"));
 
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cached_blob_valid_rejects_corrupt_cached_blob() {
+        let root = tmp_root();
+        let blob = root.join("layer.tar");
+        let data = b"cached layer";
+        let digest = crate::sha256_digest_reference(data);
+        std::fs::write(&blob, data).unwrap();
+
+        assert!(cached_blob_valid(&blob, &digest));
+
+        std::fs::write(&blob, b"corrupt").unwrap();
+        assert!(!cached_blob_valid(&blob, &digest));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn layer_extension_distinguishes_uncompressed_tar() {
+        let digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let uncompressed = LayerDescriptor {
+            media_type: Some("application/vnd.oci.image.layer.v1.tar".into()),
+            digest: digest.into(),
+            size: 0,
+        };
+        let gzip = LayerDescriptor {
+            media_type: Some("application/vnd.oci.image.layer.v1.tar+gzip".into()),
+            digest: digest.into(),
+            size: 0,
+        };
+
+        assert_eq!(layer_extension(&uncompressed), "tar");
+        assert_eq!(layer_extension(&gzip), "tar.gz");
     }
 }

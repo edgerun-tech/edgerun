@@ -76,6 +76,34 @@ fn create_tar_from_dir_roundtrips_through_layer_extractor() {
 }
 
 #[test]
+fn registry_redirect_location_resolves_absolute_and_relative_targets() {
+    assert_eq!(
+        RegistryClient::test_resolve_redirect_location(
+            "https://registry.example/v2/repo/blobs/sha256:abc",
+            "https://cdn.example/blob"
+        )
+        .unwrap(),
+        "https://cdn.example/blob"
+    );
+    assert_eq!(
+        RegistryClient::test_resolve_redirect_location(
+            "https://registry.example/v2/repo/blobs/sha256:abc",
+            "/storage/blob"
+        )
+        .unwrap(),
+        "https://registry.example/storage/blob"
+    );
+    assert_eq!(
+        RegistryClient::test_resolve_redirect_location(
+            "https://registry.example/v2/repo/blobs/sha256:abc",
+            "next"
+        )
+        .unwrap(),
+        "https://registry.example/v2/repo/blobs/next"
+    );
+}
+
+#[test]
 fn image_ref_parsing() {
     let img: ImageRef = "docker.io/library/alpine:latest".parse().unwrap();
     assert_eq!(img.registry, "docker.io");
@@ -109,7 +137,7 @@ fn image_ref_display() {
 
 #[test]
 fn image_ref_digest_reference_uses_digest_as_registry_reference() {
-    let digest = "sha256:0123456789abcdef";
+    let digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     let img: ImageRef = format!("alpine@{digest}").parse().unwrap();
 
     assert_eq!(img.registry, "docker.io");
@@ -125,7 +153,7 @@ fn image_ref_digest_reference_uses_digest_as_registry_reference() {
 
 #[test]
 fn image_ref_digest_reference_ignores_optional_tag_for_manifest_lookup() {
-    let digest = "sha256:fedcba9876543210";
+    let digest = "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
     let img: ImageRef = format!("ghcr.io/owner/repo:v1@{digest}").parse().unwrap();
 
     assert_eq!(img.registry, "ghcr.io");
@@ -139,5 +167,9 @@ fn image_ref_rejects_empty_and_malformed_digest_references() {
     assert!("".parse::<ImageRef>().is_err());
     assert!("alpine@".parse::<ImageRef>().is_err());
     assert!("@sha256:abc".parse::<ImageRef>().is_err());
+    assert!("alpine@not-a-digest".parse::<ImageRef>().is_err());
+    assert!("alpine@sha256:abc".parse::<ImageRef>().is_err());
     assert!("alpine:".parse::<ImageRef>().is_err());
+    assert!("UPPER/repo:tag".parse::<ImageRef>().is_err());
+    assert!("alpine:bad tag".parse::<ImageRef>().is_err());
 }

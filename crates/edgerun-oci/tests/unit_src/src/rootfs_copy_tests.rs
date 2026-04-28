@@ -88,3 +88,37 @@ fn merge_layer_dirs_applies_opaque_whiteout_to_lower_directory() {
     assert!(!dest.join("etc/.wh..wh..opq").exists());
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn merge_layer_dirs_replaces_directory_with_file() {
+    let root = test_dir("dir-to-file");
+    let layer1 = root.join("layer1");
+    let layer2 = root.join("layer2");
+    let dest = root.join("dest");
+    fs::create_dir_all(layer1.join("config")).unwrap();
+    fs::write(layer1.join("config/old"), b"old").unwrap();
+    fs::create_dir_all(&layer2).unwrap();
+    fs::write(layer2.join("config"), b"file").unwrap();
+
+    merge_layer_dirs(&[layer1, layer2], &dest).unwrap();
+
+    assert_eq!(fs::read(dest.join("config")).unwrap(), b"file");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn merge_layer_dirs_replaces_file_with_directory() {
+    let root = test_dir("file-to-dir");
+    let layer1 = root.join("layer1");
+    let layer2 = root.join("layer2");
+    let dest = root.join("dest");
+    fs::create_dir_all(&layer1).unwrap();
+    fs::write(layer1.join("config"), b"file").unwrap();
+    fs::create_dir_all(layer2.join("config")).unwrap();
+    fs::write(layer2.join("config/new"), b"new").unwrap();
+
+    merge_layer_dirs(&[layer1, layer2], &dest).unwrap();
+
+    assert_eq!(fs::read(dest.join("config/new")).unwrap(), b"new");
+    let _ = fs::remove_dir_all(root);
+}

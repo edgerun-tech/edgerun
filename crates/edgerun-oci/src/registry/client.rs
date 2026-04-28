@@ -154,23 +154,27 @@ impl RegistryClient {
                 .execute(&request2)
                 .await
                 .map_err(|e| RegistryError::HttpError(e.to_string()))?;
-            self.response_body_following_redirects(&client, resp2).await
+            self.response_body_following_redirects(&client, &url, resp2)
+                .await
         } else if resp.status().as_u16() >= 400 {
             Err(RegistryError::HttpError(format!(
                 "GET {url} returned HTTP {}",
                 resp.status().as_u16()
             )))
         } else {
-            self.response_body_following_redirects(&client, resp).await
+            self.response_body_following_redirects(&client, &url, resp)
+                .await
         }
     }
 
     async fn response_body_following_redirects(
         &mut self,
         client: &HttpClient,
+        start_url: &str,
         mut resp: Response,
     ) -> Result<Vec<u8>, RegistryError> {
         let mut redirects = 0u8;
+        let mut current_url = start_url.to_string();
         while (300..400).contains(&resp.status().as_u16()) {
             if redirects >= 5 {
                 return Err(RegistryError::HttpError(
@@ -185,9 +189,10 @@ impl RegistryClient {
                 .ok_or_else(|| {
                     RegistryError::HttpError("registry redirect without Location".into())
                 })?;
+            let redirect_url = resolve_redirect_location(&current_url, &location)?;
             let request = Request::builder()
                 .method(edgerun_http::Method::GET)
-                .uri(&location)
+                .uri(&redirect_url)
                 .build()?;
             resp = client
                 .execute(&request)
@@ -195,10 +200,11 @@ impl RegistryClient {
                 .map_err(|e| RegistryError::HttpError(e.to_string()))?;
             if resp.status().as_u16() >= 400 {
                 return Err(RegistryError::HttpError(format!(
-                    "GET redirect {location} returned HTTP {}",
+                    "GET redirect {redirect_url} returned HTTP {}",
                     resp.status().as_u16()
                 )));
             }
+            current_url = redirect_url;
             redirects = redirects.saturating_add(1);
         }
         if resp.status().as_u16() >= 400 {
@@ -213,6 +219,14 @@ impl RegistryClient {
     fn count_body(&mut self, body: &[u8]) -> Vec<u8> {
         self.bytes_downloaded = self.bytes_downloaded.saturating_add(body.len() as u64);
         body.to_vec()
+    }
+
+    #[cfg(test)]
+    fn test_resolve_redirect_location(
+        current_url: &str,
+        location: &str,
+    ) -> Result<String, RegistryError> {
+        resolve_redirect_location(current_url, location)
     }
 
     /// Perform an authenticated PUT request.
@@ -632,6 +646,38 @@ fn registry_api_host(registry: &str) -> &str {
     } else {
         registry
     }
+}
+
+fn resolve_redirect_location(current_url: &str, location: &str) -> Result<String, RegistryError> {
+    if location.starts_with("http://") || location.starts_with("https://") {
+        return Ok(location.to_string());
+    }
+
+    let (scheme, rest) = current_url
+        .split_once("://")
+        .ok_or_else(|| RegistryError::HttpError(format!("invalid redirect base: {current_url}")))?;
+    let (authority, path) = rest
+        .split_once('/')
+        .map(|(authority, path)| (authority, format!("/{path}")))
+        .unwrap_or((rest, "/".to_string()));
+
+    if authority.is_empty() {
+        return Err(RegistryError::HttpError(format!(
+            "invalid redirect base: {current_url}"
+        )));
+    }
+
+    if location.starts_with('/') {
+        return Ok(format!("{scheme}://{authority}{location}"));
+    }
+
+    let base_dir = path.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("");
+    let joined = if base_dir.is_empty() {
+        format!("/{location}")
+    } else {
+        format!("{base_dir}/{location}")
+    };
+    Ok(format!("{scheme}://{authority}{joined}"))
 }
 
 #[cfg(all(test, feature = "std", not(target_os = "none")))]

@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 /// Create a gzip-compressed tar from a directory.
@@ -28,8 +29,14 @@ fn append_tar_dir(out: &mut Vec<u8>, dir: &Path, rel: &Path) -> io::Result<()> {
         )?;
     }
 
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
+    let mut entries = std::fs::read_dir(dir)?.collect::<io::Result<Vec<_>>>()?;
+    entries.sort_by(|left, right| {
+        left.file_name()
+            .as_bytes()
+            .cmp(right.file_name().as_bytes())
+    });
+
+    for entry in entries {
         let path = entry.path();
         let child_rel = rel.join(entry.file_name());
         let metadata = std::fs::symlink_metadata(&path)?;
@@ -84,14 +91,11 @@ fn append_tar_header(
     link_name: Option<&Path>,
 ) -> io::Result<()> {
     let mut header = [0u8; 512];
-    let name = path_to_tar_bytes(path)?;
-    if name.len() > 100 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("tar path too long: {}", path.display()),
-        ));
-    }
+    let (name, prefix) = split_ustar_path(path)?;
     header[..name.len()].copy_from_slice(&name);
+    if let Some(prefix) = prefix {
+        header[345..345 + prefix.len()].copy_from_slice(&prefix);
+    }
 
     write_octal(&mut header[100..108], mode as u64)?;
     write_octal(&mut header[108..116], uid as u64)?;
@@ -119,6 +123,36 @@ fn append_tar_header(
     write_checksum(&mut header[148..156], checksum);
     out.extend_from_slice(&header);
     Ok(())
+}
+
+fn split_ustar_path(path: &Path) -> io::Result<(Vec<u8>, Option<Vec<u8>>)> {
+    let name = path_to_tar_bytes(path)?;
+    if name.len() <= 100 {
+        return Ok((name, None));
+    }
+
+    let split = name
+        .iter()
+        .enumerate()
+        .filter(|(_, byte)| **byte == b'/')
+        .map(|(index, _)| index)
+        .find(|index| *index <= 155 && name.len().saturating_sub(index + 1) <= 100)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("tar path too long: {}", path.display()),
+            )
+        })?;
+
+    let prefix = &name[..split];
+    let suffix = &name[split + 1..];
+    if prefix.is_empty() || suffix.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid tar path: {}", path.display()),
+        ));
+    }
+    Ok((suffix.to_vec(), Some(prefix.to_vec())))
 }
 
 fn path_to_tar_bytes(path: &Path) -> io::Result<Vec<u8>> {
@@ -155,4 +189,80 @@ fn gzip_bytes(data: &[u8]) -> Vec<u8> {
     out.extend_from_slice(&edgerun_encoding::crc32::crc32(data).to_le_bytes());
     out.extend_from_slice(&(data.len() as u32).to_le_bytes());
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tar_layer::{
+        apply_uncompressed_tar_layer, decompress_gzip_layer, TarEntry, TarLayerSink,
+    };
+    use std::path::PathBuf;
+
+    #[derive(Default)]
+    struct CollectSink {
+        entries: Vec<TarEntry>,
+    }
+
+    impl TarLayerSink for CollectSink {
+        fn apply_entry(&mut self, entry: &TarEntry, _data: &[u8]) -> Result<(), String> {
+            self.entries.push(entry.clone());
+            Ok(())
+        }
+    }
+
+    fn tmp_dir(name: &str) -> PathBuf {
+        static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let p = std::env::temp_dir().join(format!(
+            "edgerun-oci-tar-push-{name}-{}-{n}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn pushed_entries(dir: &Path) -> Vec<TarEntry> {
+        let gzip = create_tar_from_dir(dir).unwrap();
+        let tar = decompress_gzip_layer(&gzip).unwrap();
+        let mut sink = CollectSink::default();
+        apply_uncompressed_tar_layer(&tar, &mut sink).unwrap();
+        sink.entries
+    }
+
+    #[test]
+    fn create_tar_from_dir_orders_entries_deterministically() {
+        let root = tmp_dir("order");
+        std::fs::write(root.join("z"), b"z").unwrap();
+        std::fs::write(root.join("a"), b"a").unwrap();
+        std::fs::create_dir_all(root.join("m")).unwrap();
+        std::fs::write(root.join("m/b"), b"b").unwrap();
+
+        let paths = pushed_entries(&root)
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+
+        assert_eq!(paths, vec!["a", "m", "m/b", "z"]);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn create_tar_from_dir_supports_ustar_prefix_paths() {
+        let root = tmp_dir("long");
+        let dir_name = "a".repeat(90);
+        let file_name = "b".repeat(60);
+        let dir = root.join(&dir_name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(&file_name), b"long").unwrap();
+
+        let paths = pushed_entries(&root)
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+
+        assert!(paths.contains(&format!("{dir_name}/{file_name}")));
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

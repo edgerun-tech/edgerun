@@ -11,6 +11,7 @@ build = "build.rs"
 default = []
 html-ui = ["dep:edgerun-layout"]
 esp32s3-wifi-blob = ["edgerun-platform/esp32s3-wifi-blob", "dep:edgerun-wifi"]
+esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-phy-probe"]
 
 [dependencies]
 edgerun-platform = { path = "../edgerun-platform" }
