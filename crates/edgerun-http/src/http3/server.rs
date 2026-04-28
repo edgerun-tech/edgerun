@@ -238,7 +238,7 @@ impl Http3Server {
             .map_err(|e| format!("Decrypt failed: {}", e))?;
 
         // Try parsing as QUIC CRYPTO frame first (0x06)
-        let mut crypto_data = Self::parse_crypto_frame(&plaintext).map(|(d, _)| d);
+        let mut crypto_data = super::crypto_frame::parse_crypto_frame(&plaintext).map(|(d, _)| d);
 
         // If no QUIC CRYPTO frame, try treating raw TLS handshake data
         if crypto_data.is_none() && !plaintext.is_empty() {
@@ -527,7 +527,7 @@ impl Http3Server {
                 .map_err(|e| format!("Handshake decrypt failed: {}", e))?;
 
             // Parse CRYPTO frame
-            if let Some((crypto_data, _)) = Self::parse_crypto_frame(&plaintext) {
+            if let Some((crypto_data, _)) = super::crypto_frame::parse_crypto_frame(&plaintext) {
                 // The client's Finished message is in this CRYPTO data
                 // Finished message: type(1) + length(3) + verify_data(32)
                 if crypto_data.len() >= 4 + expected_client_verify.len() {
@@ -545,33 +545,6 @@ impl Http3Server {
         }
 
         Err("Client Finished not received after 20 attempts".into())
-    }
-
-    /// Parse a CRYPTO frame from decrypted packet payload.
-    fn parse_crypto_frame(data: &[u8]) -> Option<(Vec<u8>, usize)> {
-        if data.is_empty() {
-            return None;
-        }
-
-        let frame_type = data[0];
-        if frame_type != 0x06 {
-            return None;
-        }
-
-        let mut pos = 1;
-        let (offset, n) = super::varint::quic_decode_varint_at(data, pos).ok()?;
-        pos += n;
-        let _offset = offset;
-
-        let (length, n) = super::varint::quic_decode_varint_at(data, pos).ok()?;
-        pos += n;
-
-        if pos + length as usize > data.len() {
-            return None;
-        }
-
-        let crypto_data = data[pos..pos + length as usize].to_vec();
-        Some((crypto_data, pos + length as usize))
     }
 
     /// Run the HTTP/3 server, dispatching incoming requests to the given handler.

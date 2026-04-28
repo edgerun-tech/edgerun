@@ -229,8 +229,9 @@ impl QuicConnection {
         edgerun_log::debug!("CLIENT: Decrypted, parsing CRYPTO frame...");
 
         // Parse CRYPTO frame from decrypted payload
-        let (server_crypto_data, _) = Self::parse_crypto_frame(&decrypted_initial)
-            .ok_or_else(|| "No CRYPTO frame in server Initial packet".to_string())?;
+        let (server_crypto_data, _) =
+            super::crypto_frame::parse_crypto_frame(&decrypted_initial)
+                .ok_or_else(|| "No CRYPTO frame in server Initial packet".to_string())?;
 
         // Feed ServerHello to handshaker
         handshaker.process_initial_crypto(&server_crypto_data)?;
@@ -250,7 +251,7 @@ impl QuicConnection {
             match self.recv_packet().await {
                 Ok(pkt) => {
                     let decrypted = self.decrypt_packet_handshake(&pkt)?;
-                    if let Some((data, _)) = Self::parse_crypto_frame(&decrypted) {
+                    if let Some((data, _)) = super::crypto_frame::parse_crypto_frame(&decrypted) {
                         all_handshake_crypto.extend_from_slice(&data);
                     }
                 }
@@ -438,39 +439,6 @@ impl QuicConnection {
         } else {
             Err("No Handshake protection keys for decryption".into())
         }
-    }
-
-    /// Parse a CRYPTO frame from decrypted packet payload.
-    /// Returns (crypto_data, bytes_consumed).
-    fn parse_crypto_frame(data: &[u8]) -> Option<(Vec<u8>, usize)> {
-        if data.is_empty() {
-            return None;
-        }
-
-        let frame_type = data[0];
-        if frame_type != 0x06 {
-            // Not a CRYPTO frame
-            return None;
-        }
-
-        // Parse CRYPTO frame: type(1) + offset(varint) + length(varint) + data
-        let mut pos = 1;
-
-        // Offset
-        let (offset, n) = super::varint::quic_decode_varint_at(data, pos).ok()?;
-        pos += n;
-        let _offset = offset;
-
-        // Length
-        let (length, n) = super::varint::quic_decode_varint_at(data, pos).ok()?;
-        pos += n;
-
-        if pos + length as usize > data.len() {
-            return None;
-        }
-
-        let crypto_data = data[pos..pos + length as usize].to_vec();
-        Some((crypto_data, pos + length as usize))
     }
 
     /// Create a dummy connection for testing

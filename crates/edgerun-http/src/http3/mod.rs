@@ -4,6 +4,7 @@ use alloc::string::{String, ToString};
 use core::fmt;
 
 pub mod connection;
+pub(crate) mod crypto_frame;
 pub mod frame;
 pub mod quic;
 pub mod server;
