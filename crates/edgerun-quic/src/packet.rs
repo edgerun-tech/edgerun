@@ -512,7 +512,13 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     if packet_type == PacketType::Initial {
         let (token_len, consumed) =
             quic_decode_varint(&data[pos..]).map_err(|_| "Invalid token length")?;
-        pos += consumed + token_len as usize;
+        pos = pos
+            .checked_add(consumed)
+            .and_then(|pos| pos.checked_add(token_len as usize))
+            .ok_or("Token length overflows packet")?;
+        if pos > data.len() {
+            return Err("Token exceeds packet length".to_string());
+        }
     }
 
     let (_, consumed) = quic_decode_varint(&data[pos..]).map_err(|_| "Invalid length varint")?;
@@ -620,6 +626,19 @@ mod tests {
         // Just verify offset is valid (within packet bounds)
         assert!(offset >= 5, "Offset should be >= 5");
         assert!(offset < packet.len(), "Offset should be < packet len");
+    }
+
+    #[test]
+    fn test_get_long_header_payload_offset_rejects_truncated_token() {
+        let packet = vec![
+            0xcf, 0, 0, 0, 1, // first byte + version
+            0, // dst_cid_len
+            0, // src_cid_len
+            4, // token_len
+            0xaa, 0xbb, // truncated token
+        ];
+
+        assert!(get_long_header_payload_offset(&packet).is_err());
     }
 
     #[test]
