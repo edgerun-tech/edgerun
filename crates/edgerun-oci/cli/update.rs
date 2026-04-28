@@ -59,7 +59,7 @@ pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     // Load spec for cgroup path
     let bundle = &state.bundle;
     let config_path = std::path::Path::new(bundle).join("config.json");
-    let spec: OciSpec = if let Ok(data) = fs::read(&config_path) {
+    let mut spec: OciSpec = if let Ok(data) = fs::read(&config_path) {
         crate::spec::parse_oci_spec(&data).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -87,7 +87,7 @@ pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     apply_update(&cgroup_root, &update_opts)?;
 
     // Update the spec file with the new values
-    update_spec_config(&config_path, &update_opts)?;
+    update_spec_config(&config_path, &mut spec, &update_opts)?;
 
     Ok(())
 }
@@ -187,10 +187,64 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
     Ok(())
 }
 
-fn update_spec_config(_config_path: &std::path::Path, _opts: &UpdateOpts) -> io::Result<()> {
-    // In a full implementation, we'd parse the config.json, update the
-    // linux.resources section, and write it back. For now, cgroup files
-    // are updated directly and the config.json is a template for new containers.
+fn update_spec_config(
+    config_path: &std::path::Path,
+    spec: &mut OciSpec,
+    opts: &UpdateOpts,
+) -> io::Result<()> {
+    let linux = spec.linux.get_or_insert_with(Default::default);
+    let resources = linux.resources.get_or_insert_with(Default::default);
+    let cpu = resources.cpu.get_or_insert_with(Default::default);
+    let memory = resources.memory.get_or_insert_with(Default::default);
+    let pids = resources.pids.get_or_insert_with(Default::default);
+    let block_io = resources.block_io.get_or_insert_with(Default::default);
+
+    if let Some(limit) = opts.memory {
+        memory.limit = Some(limit);
+    }
+    if let Some(swap) = opts.memory_swap {
+        memory.swap = Some(swap);
+    }
+    if let Some(shares) = opts.cpu_shares {
+        cpu.shares = Some(shares);
+    }
+    if let Some(quota) = opts.cpu_quota {
+        cpu.quota = Some(quota);
+    }
+    if let Some(period) = opts.cpu_period {
+        cpu.period = Some(period);
+    }
+    if let Some(rt_runtime) = opts.cpu_rt_runtime {
+        cpu.realtime_runtime = Some(rt_runtime);
+    }
+    if let Some(rt_period) = opts.cpu_rt_period {
+        cpu.realtime_period = Some(rt_period);
+    }
+    if let Some(ref cpus) = opts.cpuset_cpus {
+        cpu.cpus = Some(cpus.clone());
+    }
+    if let Some(ref mems) = opts.cpuset_mems {
+        cpu.mems = Some(mems.clone());
+    }
+    if let Some(limit) = opts.pids_limit {
+        pids.limit = limit;
+    }
+    if let Some(weight) = opts.blkio_weight {
+        if weight > 0 {
+            let stored_weight = if weight > 10_000 { 10_000 } else { weight };
+            block_io.weight = Some(stored_weight as u16);
+        }
+    }
+
+    let tmp_path = config_path.with_extension(format!("json.new.{}", std::process::id()));
+    let data = spec.to_json_string_pretty();
+
+    fs::write(&tmp_path, data.as_bytes())?;
+    fs::rename(&tmp_path, config_path).map_err(|err| {
+        let _ = fs::remove_file(&tmp_path);
+        err
+    })?;
+
     Ok(())
 }
 
