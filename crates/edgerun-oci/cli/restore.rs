@@ -3,6 +3,7 @@
 //! Restores a container from a checkpoint using CRIU.
 
 use crate::prelude::*;
+use std::fs;
 use std::io;
 use std::path::PathBuf;
 
@@ -55,6 +56,9 @@ pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     }
     if let Err(err) = crate::criu::validate_criu_image_path(&work_path) {
         return Err(err);
+    }
+    if !work_path.exists() {
+        fs::create_dir_all(&work_path)?;
     }
 
     let existing_state = load_state(&id).ok();
