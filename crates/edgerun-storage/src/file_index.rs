@@ -26,7 +26,56 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicI64, Ordering};
+#[cfg(target_has_atomic = "64")]
+use std::sync::atomic::AtomicI64;
+#[cfg(not(target_has_atomic = "64"))]
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+
+#[cfg(target_has_atomic = "64")]
+type AtomicFetchId = AtomicI64;
+#[cfg(not(target_has_atomic = "64"))]
+type AtomicFetchId = AtomicUsize;
+
+#[cfg(target_has_atomic = "64")]
+fn atomic_fetch_id_new(value: i64) -> AtomicFetchId {
+    AtomicFetchId::new(value)
+}
+
+#[cfg(not(target_has_atomic = "64"))]
+fn atomic_fetch_id_new(value: i64) -> AtomicFetchId {
+    AtomicFetchId::new(value.max(1) as usize)
+}
+
+#[cfg(target_has_atomic = "64")]
+fn atomic_fetch_id_load(id: &AtomicFetchId) -> i64 {
+    id.load(Ordering::Relaxed)
+}
+
+#[cfg(not(target_has_atomic = "64"))]
+fn atomic_fetch_id_load(id: &AtomicFetchId) -> i64 {
+    id.load(Ordering::Relaxed) as i64
+}
+
+#[cfg(target_has_atomic = "64")]
+fn atomic_fetch_id_store(id: &AtomicFetchId, value: i64) {
+    id.store(value, Ordering::Relaxed);
+}
+
+#[cfg(not(target_has_atomic = "64"))]
+fn atomic_fetch_id_store(id: &AtomicFetchId, value: i64) {
+    id.store(value.max(1) as usize, Ordering::Relaxed);
+}
+
+#[cfg(target_has_atomic = "64")]
+fn atomic_fetch_id_next(id: &AtomicFetchId) -> i64 {
+    id.fetch_add(1, Ordering::Relaxed)
+}
+
+#[cfg(not(target_has_atomic = "64"))]
+fn atomic_fetch_id_next(id: &AtomicFetchId) -> i64 {
+    id.fetch_add(1, Ordering::Relaxed) as i64
+}
 
 // ===========================================================================
 // Simple binary serialization helpers
@@ -224,7 +273,7 @@ pub struct FileIndex {
     events: RwLock<HashMap<(String, i64), EventRecord>>,
     replay_cache: RwLock<HashMap<(String, String), ReplayEntry>>,
     fetch_queue: RwLock<Vec<FetchEntry>>,
-    next_fetch_id: AtomicI64,
+    next_fetch_id: AtomicFetchId,
     object_presence: RwLock<HashMap<String, (String, String, String)>>,
     peers: RwLock<HashMap<String, PeerRecord>>,
     snapshots: RwLock<HashMap<String, SnapshotRecord>>,
@@ -248,7 +297,7 @@ impl FileIndex {
             events: RwLock::new(HashMap::new()),
             replay_cache: RwLock::new(HashMap::new()),
             fetch_queue: RwLock::new(Vec::new()),
-            next_fetch_id: AtomicI64::new(1),
+            next_fetch_id: atomic_fetch_id_new(1),
             object_presence: RwLock::new(HashMap::new()),
             peers: RwLock::new(HashMap::new()),
             snapshots: RwLock::new(HashMap::new()),
@@ -497,8 +546,8 @@ impl FileIndex {
                     created_at,
                     status,
                 });
-                if id >= self.next_fetch_id.load(Ordering::Relaxed) {
-                    self.next_fetch_id.store(id + 1, Ordering::Relaxed);
+                if id >= atomic_fetch_id_load(&self.next_fetch_id) {
+                    atomic_fetch_id_store(&self.next_fetch_id, id + 1);
                 }
             }
         }
@@ -846,8 +895,7 @@ impl FileIndex {
         priority: i64,
     ) -> io::Result<()> {
         let now = unix_time_secs();
-        let id = self.next_fetch_id.load(Ordering::Relaxed);
-        self.next_fetch_id.store(id + 1, Ordering::Relaxed);
+        let id = atomic_fetch_id_next(&self.next_fetch_id);
         self.fetch_queue.write().push(FetchEntry {
             id,
             target_type: target_type.to_string(),
