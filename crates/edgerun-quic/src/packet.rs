@@ -303,6 +303,9 @@ impl QuicPacket {
         // Destination CID
         let dst_cid_len = data[pos] as usize;
         pos += 1;
+        if dst_cid_len > 20 {
+            return Err("DST CID too long".to_string());
+        }
         if pos + dst_cid_len > data.len() {
             return Err("DST CID too long".to_string());
         }
@@ -312,6 +315,9 @@ impl QuicPacket {
         // Source CID
         let src_cid_len = data[pos] as usize;
         pos += 1;
+        if src_cid_len > 20 {
+            return Err("SRC CID too long".to_string());
+        }
         if pos + src_cid_len > data.len() {
             return Err("SRC CID too long".to_string());
         }
@@ -410,6 +416,9 @@ impl QuicPacket {
         if data.len() < 3 {
             return Err("Short header too short".to_string());
         }
+        if dst_cid_len > 20 {
+            return Err("Short header CID too long".to_string());
+        }
 
         let pn_length = ((data[0] & 0x03) + 1) as usize;
         let key_phase = data[0] & 0x04 != 0;
@@ -497,12 +506,18 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
         return Err("DCID length missing".to_string());
     }
     let dst_cid_len = data[pos] as usize;
+    if dst_cid_len > 20 {
+        return Err("DCID length exceeds QUIC maximum".to_string());
+    }
     pos += 1 + dst_cid_len;
 
     if pos >= data.len() {
         return Err("SCID length missing".to_string());
     }
     let src_cid_len = data[pos] as usize;
+    if src_cid_len > 20 {
+        return Err("SCID length exceeds QUIC maximum".to_string());
+    }
     pos += 1 + src_cid_len;
 
     if pos > data.len() {
@@ -664,6 +679,27 @@ mod tests {
         bytes[0] &= !0x40;
 
         assert!(QuicPacket::from_bytes_with_short_dcid_len(&bytes, 4).is_err());
+    }
+
+    #[test]
+    fn test_rejects_long_header_connection_ids_over_20_bytes() {
+        let bytes = vec![
+            0xcf, 0, 0, 0, 1, // first byte + version
+            21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // dcid
+            0, // scid_len
+            0, // token_len
+            4, // length
+            0, 0, 0, 0, // packet number
+        ];
+
+        assert!(QuicPacket::from_bytes(&bytes).is_err());
+        assert!(get_long_header_payload_offset(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_rejects_short_header_connection_id_length_over_20_bytes() {
+        let bytes = vec![0x40, 0, 0, 0, 0];
+        assert!(QuicPacket::from_bytes_with_short_dcid_len(&bytes, 21).is_err());
     }
 
     #[test]
