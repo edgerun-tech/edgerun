@@ -692,51 +692,7 @@ fn remove_whiteout_files(dir: &Path) -> io::Result<()> {
 
 /// Build rootfs by merging layers in order.
 pub fn build_rootfs(layer_dirs: &[std::path::PathBuf], dest: &Path) -> io::Result<()> {
-    for layer_dir in layer_dirs {
-        copy_dir_contents(layer_dir, dest)?;
-    }
-    Ok(())
-}
-
-/// Copy all contents from src to dest, overwriting existing files.
-fn copy_dir_contents(src: &Path, dest: &Path) -> io::Result<()> {
-    use std::os::unix::fs::symlink;
-
-    if !src.is_dir() {
-        return Ok(());
-    }
-
-    let entries: Vec<_> = match fs::read_dir(src) {
-        Ok(entries) => entries.filter_map(|e| e.ok()).collect(),
-        Err(_) => return Ok(()),
-    };
-
-    for entry in entries {
-        let src_path = entry.path();
-        let dest_path = dest.join(entry.file_name());
-        let file_name = entry.file_name();
-
-        // Skip whiteout files
-        if let Some(name) = file_name.to_str() {
-            if name.starts_with(".wh.") {
-                continue;
-            }
-        }
-
-        if src_path.is_dir() {
-            let _ = fs::create_dir_all(&dest_path);
-            copy_dir_contents(&src_path, &dest_path)?;
-        } else if src_path.is_symlink() {
-            let target = fs::read_link(&src_path)?;
-            let _ = fs::remove_file(&dest_path);
-            let _ = symlink(&target, &dest_path);
-        } else {
-            let _ = fs::remove_file(&dest_path);
-            fs::copy(&src_path, &dest_path)?;
-        }
-    }
-
-    Ok(())
+    crate::rootfs_merge::build_rootfs_from_layers(layer_dirs, dest)
 }
 
 // ===========================================================================
