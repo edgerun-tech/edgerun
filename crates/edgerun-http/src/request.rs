@@ -113,7 +113,10 @@ impl Request {
                 .map(|v| v.as_str().to_ascii_lowercase().contains("chunked"))
                 .unwrap_or(false)
             {
-                Some(parse_chunked_body(body_str.as_bytes())?)
+                Some(
+                    crate::chunked::parse_body(body_str.as_bytes())
+                        .map_err(|err| crate::Error::InvalidRequest(err.to_string()))?,
+                )
             } else if let Some(cl) = headers.get("content-length") {
                 if let Ok(len) = cl.as_str().parse::<usize>() {
                     Some(body_str[..len.min(body_str.len())].as_bytes().to_vec())
@@ -198,10 +201,6 @@ impl Request {
         }
         buf
     }
-}
-
-fn parse_chunked_body(input: &[u8]) -> Result<Vec<u8>> {
-    crate::chunked::parse_body(input).map_err(|err| crate::Error::InvalidRequest(err.to_string()))
 }
 
 impl fmt::Display for Request {
