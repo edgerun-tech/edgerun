@@ -10,7 +10,7 @@ pub fn cmd_spec(_opts: &crate::cli::GlobalOpts, _args: &[String]) -> io::Result<
 }
 
 fn default_spec() -> String {
-    use crate::json::*;
+    use crate::spec::*;
 
     let spec = OciSpec {
         version: "1.0.2".into(),

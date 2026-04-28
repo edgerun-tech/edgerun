@@ -22,7 +22,7 @@ use crate::prelude::*;
 use alloc::collections::BTreeMap;
 use std::io;
 
-use crate::json::{OciMount, OciRlimit, OciSpec};
+use crate::spec::{OciMount, OciRlimit, OciSpec};
 use crate::validate::{default_process_args, default_process_env};
 
 /// Configuration for a container child process.
@@ -631,7 +631,7 @@ mod tests {
 
     #[test]
     fn from_spec_missing_root_errors() {
-        let spec = crate::json::OciSpec {
+        let spec = crate::spec::OciSpec {
             version: "1.0.2".into(),
             root: None,
             process: None,

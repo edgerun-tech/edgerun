@@ -3,63 +3,37 @@
 use crate::prelude::*;
 use crate::util::StringResultExt;
 use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
-#[cfg(feature = "serde")]
-use edgerun_json::from_slice;
-#[cfg(feature = "json")]
-use edgerun_json::{parse_json, JsonValue, Map};
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use edgerun_json::{from_json_slice, FromJson, JsonValue, JsonValueError, Map};
 
 use super::manifest::{ImageIndex, ImageManifest, SingleManifest};
 
 /// Parsed image config.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct ImageConfig {
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub architecture: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub os: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub config: Option<ImageConfigInner>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub rootfs: Option<RootFs>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub history: Option<Vec<HistoryEntry>>,
 }
 
 /// Inner image config (Cmd, Env, WorkingDir, etc.).
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", serde(rename_all = "PascalCase"))]
 pub struct ImageConfigInner {
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub user: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub env: Option<Vec<String>>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub entrypoint: Option<Vec<String>>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cmd: Option<Vec<String>>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub working_dir: Option<String>,
-    #[cfg(feature = "json")]
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub exposed_ports: Option<BTreeMap<String, edgerun_json::JsonValue>>,
-    #[cfg(feature = "json")]
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub volumes: Option<BTreeMap<String, edgerun_json::JsonValue>>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub labels: Option<BTreeMap<String, String>>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub stop_signal: Option<String>,
 }
 
 /// Root filesystem info.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RootFs {
     pub r#type: String,
@@ -67,17 +41,11 @@ pub struct RootFs {
 }
 
 /// History entry (build layer info, from OCI image config).
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub struct HistoryEntry {
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub created: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub created_by: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub comment: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub empty_layer: Option<bool>,
 }
 
@@ -86,320 +54,212 @@ pub struct HistoryEntry {
 // ===========================================================================
 
 /// Parse an image config from JSON bytes.
-#[cfg(all(feature = "serde", not(feature = "json")))]
 pub fn parse_image_config(data: &[u8]) -> Result<ImageConfig, String> {
-    from_slice(data).string_err()
-}
-
-/// Parse an image config from JSON bytes without serde.
-#[cfg(feature = "json")]
-pub fn parse_image_config(data: &[u8]) -> Result<ImageConfig, String> {
-    let value = parse_json_bytes(data)?;
-    parse_image_config_value(&value)
+    from_json_slice(data).string_err()
 }
 
 /// Parse JSON bytes into a JsonValue (for ad-hoc inspection).
-#[cfg(feature = "json")]
 pub fn parse_json_bytes(data: &[u8]) -> Result<edgerun_json::JsonValue, String> {
-    let input = core::str::from_utf8(data).string_err()?;
-    parse_json(input).string_err()
+    from_json_slice(data).string_err()
 }
 
 // ===========================================================================
-// Manifest parsing via serde
+// Manifest parsing
 // ===========================================================================
 
 /// Parse a raw JSON blob into an ImageManifest (index or single).
-#[cfg(all(feature = "serde", not(feature = "json")))]
 pub fn parse_manifest(data: &[u8]) -> Result<ImageManifest, String> {
-    // Try as index first (has "manifests" array)
-    if let Ok(index) = from_slice::<ImageIndex>(data) {
-        if !index.manifests.is_empty() {
-            return Ok(ImageManifest::Index(index));
+    let value = parse_json_bytes(data)?;
+    if let Some(manifests) = value
+        .as_object()
+        .and_then(|object| object.get_array("manifests"))
+    {
+        if !manifests.is_empty() {
+            return ImageIndex::from_json(value)
+                .map(ImageManifest::Index)
+                .string_err();
         }
     }
 
-    // Fall back to single manifest
-    from_slice::<SingleManifest>(data)
+    SingleManifest::from_json(value)
         .map(ImageManifest::Single)
         .string_err()
 }
 
-/// Parse a raw JSON blob into an ImageManifest (index or single) without serde.
-#[cfg(feature = "json")]
-pub fn parse_manifest(data: &[u8]) -> Result<ImageManifest, String> {
-    let value = parse_json_bytes(data)?;
-    let obj = object(&value, "manifest")?;
-    if let Some(JsonValue::Array(manifests)) = obj.get("manifests") {
-        if !manifests.is_empty() {
-            return Ok(ImageManifest::Index(parse_image_index_object(obj)?));
-        }
-    }
-
-    parse_single_manifest_value(&value).map(ImageManifest::Single)
-}
-
 /// Parse a raw JSON blob as a single manifest.
-#[cfg(all(feature = "serde", not(feature = "json")))]
 pub fn parse_single_manifest(data: &[u8]) -> Result<SingleManifest, String> {
-    from_slice(data).string_err()
+    from_json_slice(data).string_err()
 }
 
-/// Parse a raw JSON blob as a single manifest without serde.
-#[cfg(feature = "json")]
-pub fn parse_single_manifest(data: &[u8]) -> Result<SingleManifest, String> {
-    let value = parse_json_bytes(data)?;
-    parse_single_manifest_value(&value)
-}
-
-#[cfg(feature = "json")]
-fn parse_image_config_value(value: &JsonValue) -> Result<ImageConfig, String> {
-    let obj = object(value, "image config")?;
-    Ok(ImageConfig {
-        architecture: optional_string(obj, "architecture"),
-        os: optional_string(obj, "os"),
-        config: obj
-            .get("config")
-            .map(parse_image_config_inner)
-            .transpose()?,
-        rootfs: obj.get("rootfs").map(parse_rootfs).transpose()?,
-        history: parse_array(obj.get("history"), parse_history_entry)?,
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_image_config_inner(value: &JsonValue) -> Result<ImageConfigInner, String> {
-    let obj = object(value, "image config.config")?;
-    Ok(ImageConfigInner {
-        user: optional_string_any(obj, &["User", "user"]),
-        env: parse_string_array_any(obj, &["Env", "env"])?,
-        entrypoint: parse_string_array_any(obj, &["Entrypoint", "entrypoint"])?,
-        cmd: parse_string_array_any(obj, &["Cmd", "cmd"])?,
-        working_dir: optional_string_any(obj, &["WorkingDir", "workingDir", "working_dir"]),
-        exposed_ports: parse_json_object_map_any(obj, &["ExposedPorts", "exposedPorts"])?,
-        volumes: parse_json_object_map_any(obj, &["Volumes", "volumes"])?,
-        labels: parse_string_map_any(obj, &["Labels", "labels"])?,
-        stop_signal: optional_string_any(obj, &["StopSignal", "stopSignal", "stop_signal"]),
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_rootfs(value: &JsonValue) -> Result<RootFs, String> {
-    let obj = object(value, "rootfs")?;
-    Ok(RootFs {
-        r#type: required_string(obj, "type")?,
-        diff_ids: parse_string_array_required(obj, "diff_ids")?,
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_history_entry(value: &JsonValue) -> Result<HistoryEntry, String> {
-    let obj = object(value, "history entry")?;
-    Ok(HistoryEntry {
-        created: optional_string(obj, "created"),
-        created_by: optional_string(obj, "created_by"),
-        comment: optional_string(obj, "comment"),
-        empty_layer: obj.get_bool("empty_layer"),
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_image_index_object(obj: &Map) -> Result<ImageIndex, String> {
-    Ok(ImageIndex {
-        media_type: optional_string(obj, "mediaType"),
-        manifests: parse_array_required(obj, "manifests", parse_manifest_descriptor)?,
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_manifest_descriptor(
-    value: &JsonValue,
-) -> Result<super::manifest::ManifestDescriptor, String> {
-    let obj = object(value, "manifest descriptor")?;
-    Ok(super::manifest::ManifestDescriptor {
-        media_type: optional_string(obj, "mediaType"),
-        digest: required_string(obj, "digest")?,
-        size: obj.required_u64("size").string_err()?,
-        platform: obj.get("platform").map(parse_platform).transpose()?,
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_platform(value: &JsonValue) -> Result<super::manifest::PlatformDescriptor, String> {
-    let obj = object(value, "platform")?;
-    Ok(super::manifest::PlatformDescriptor {
-        architecture: optional_string(obj, "architecture"),
-        os: optional_string(obj, "os"),
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_single_manifest_value(value: &JsonValue) -> Result<SingleManifest, String> {
-    let obj = object(value, "single manifest")?;
-    Ok(SingleManifest {
-        config_digest: parse_config_digest(obj.get("config"))?,
-        layers: parse_array_required(obj, "layers", parse_layer_descriptor)?,
-    })
-}
-
-#[cfg(feature = "json")]
-fn parse_config_digest(value: Option<&JsonValue>) -> Result<String, String> {
+fn object(value: JsonValue, name: &str) -> Result<Map, JsonValueError> {
     match value {
-        Some(JsonValue::Object(obj)) => required_string(obj, "digest"),
-        Some(JsonValue::String(value)) => Ok(value.clone()),
-        Some(_) => Err("manifest config must be an object or string".to_string()),
-        None => Err("missing manifest config".to_string()),
+        JsonValue::Object(object) => Ok(object),
+        other => Err(JsonValueError::WrongType(format!(
+            "{name} must be an object, found {other:?}"
+        ))),
     }
 }
 
-#[cfg(feature = "json")]
-fn parse_layer_descriptor(value: &JsonValue) -> Result<super::manifest::LayerDescriptor, String> {
-    let obj = object(value, "layer descriptor")?;
-    Ok(super::manifest::LayerDescriptor {
-        media_type: optional_string(obj, "mediaType"),
-        digest: required_string(obj, "digest")?,
-        size: obj.required_u64("size").string_err()?,
-    })
-}
-
-#[cfg(feature = "json")]
-fn object<'a>(value: &'a JsonValue, name: &str) -> Result<&'a Map, String> {
-    match value {
-        JsonValue::Object(obj) => Ok(obj),
-        _ => Err(format!("{name} must be an object")),
-    }
-}
-
-#[cfg(feature = "json")]
-fn optional_string(obj: &Map, key: &str) -> Option<String> {
-    obj.get_str(key).map(ToString::to_string)
-}
-
-#[cfg(feature = "json")]
-fn optional_string_any(obj: &Map, keys: &[&str]) -> Option<String> {
-    keys.iter().find_map(|key| optional_string(obj, key))
-}
-
-#[cfg(feature = "json")]
-fn required_string(obj: &Map, key: &str) -> Result<String, String> {
-    obj.required_str(key).map(ToString::to_string).string_err()
-}
-
-#[cfg(feature = "json")]
-fn parse_array<T>(
-    value: Option<&JsonValue>,
-    parse_item: fn(&JsonValue) -> Result<T, String>,
-) -> Result<Option<Vec<T>>, String> {
-    match value {
-        Some(JsonValue::Array(items)) => items
-            .iter()
-            .map(parse_item)
-            .collect::<Result<Vec<_>, _>>()
-            .map(Some),
-        Some(_) => Err("expected array".to_string()),
-        None => Ok(None),
-    }
-}
-
-#[cfg(feature = "json")]
-fn parse_array_required<T>(
-    obj: &Map,
-    key: &str,
-    parse_item: fn(&JsonValue) -> Result<T, String>,
-) -> Result<Vec<T>, String> {
-    obj.required_array(key)
-        .string_err()?
-        .iter()
-        .map(parse_item)
-        .collect()
-}
-
-#[cfg(feature = "json")]
-fn parse_string_array_any(obj: &Map, keys: &[&str]) -> Result<Option<Vec<String>>, String> {
-    for key in keys {
-        if let Some(value) = obj.get(key) {
-            return parse_string_array_value(value).map(Some);
-        }
-    }
-    Ok(None)
-}
-
-#[cfg(feature = "json")]
-fn parse_string_array_required(obj: &Map, key: &str) -> Result<Vec<String>, String> {
-    match obj.get(key) {
-        Some(value) => parse_string_array_value(value),
-        None => Err(format!("missing string array field {key}")),
-    }
-}
-
-#[cfg(feature = "json")]
-fn parse_string_array_value(value: &JsonValue) -> Result<Vec<String>, String> {
-    value
-        .as_array()
-        .ok_or_else(|| "expected string array".to_string())?
-        .iter()
-        .map(|item| {
-            item.as_str()
-                .map(ToString::to_string)
-                .ok_or_else(|| "array item must be a string".to_string())
+fn take_optional<T: FromJson>(object: &mut Map, key: &str) -> Result<Option<T>, JsonValueError> {
+    object
+        .remove(key)
+        .map(|value| match value {
+            JsonValue::Null => Ok(None),
+            value => T::from_json(value).map(Some),
         })
-        .collect()
+        .transpose()
+        .map(Option::flatten)
 }
 
-#[cfg(feature = "json")]
-fn parse_string_map_any(
-    obj: &Map,
+fn take_optional_any<T: FromJson>(
+    object: &mut Map,
     keys: &[&str],
-) -> Result<Option<BTreeMap<String, String>>, String> {
+) -> Result<Option<T>, JsonValueError> {
     for key in keys {
-        if let Some(value) = obj.get(key) {
-            return parse_string_map_value(value).map(Some);
+        if object.contains_key(key) {
+            return take_optional(object, key);
         }
     }
     Ok(None)
 }
 
-#[cfg(feature = "json")]
-fn parse_string_map_value(value: &JsonValue) -> Result<BTreeMap<String, String>, String> {
-    let obj = object(value, "string map")?;
-    let mut out = BTreeMap::new();
-    for (key, value) in obj.fields() {
-        if let JsonValue::String(value) = value {
-            out.insert(key.to_string(), value.clone());
-        }
-    }
-    Ok(out)
+fn take_required<T: FromJson>(object: &mut Map, key: &str) -> Result<T, JsonValueError> {
+    let value = object
+        .remove(key)
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))?;
+    T::from_json(value)
 }
 
-#[cfg(feature = "json")]
-fn parse_json_object_map_any(
-    obj: &Map,
-    keys: &[&str],
-) -> Result<Option<BTreeMap<String, JsonValue>>, String> {
-    for key in keys {
-        if let Some(value) = obj.get(key) {
-            let fields = object(value, key)?;
-            let mut out = BTreeMap::new();
-            for (field_key, field_value) in fields.fields() {
-                out.insert(field_key.to_string(), field_value.clone());
-            }
-            return Ok(Some(out));
-        }
+impl FromJson for ImageConfig {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "image config")?;
+        Ok(Self {
+            architecture: take_optional(&mut object, "architecture")?,
+            os: take_optional(&mut object, "os")?,
+            config: take_optional(&mut object, "config")?,
+            rootfs: take_optional(&mut object, "rootfs")?,
+            history: take_optional(&mut object, "history")?,
+        })
     }
-    Ok(None)
 }
 
-#[cfg(all(
-    test,
-    not(target_os = "none"),
-    feature = "json",
-    not(feature = "serde")
-))]
+impl FromJson for ImageConfigInner {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "image config.config")?;
+        Ok(Self {
+            user: take_optional_any(&mut object, &["User", "user"])?,
+            env: take_optional_any(&mut object, &["Env", "env"])?,
+            entrypoint: take_optional_any(&mut object, &["Entrypoint", "entrypoint"])?,
+            cmd: take_optional_any(&mut object, &["Cmd", "cmd"])?,
+            working_dir: take_optional_any(
+                &mut object,
+                &["WorkingDir", "workingDir", "working_dir"],
+            )?,
+            exposed_ports: take_optional_any(&mut object, &["ExposedPorts", "exposedPorts"])?,
+            volumes: take_optional_any(&mut object, &["Volumes", "volumes"])?,
+            labels: take_optional_any(&mut object, &["Labels", "labels"])?,
+            stop_signal: take_optional_any(
+                &mut object,
+                &["StopSignal", "stopSignal", "stop_signal"],
+            )?,
+        })
+    }
+}
+
+impl FromJson for RootFs {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "rootfs")?;
+        Ok(Self {
+            r#type: take_required(&mut object, "type")?,
+            diff_ids: take_required(&mut object, "diff_ids")?,
+        })
+    }
+}
+
+impl FromJson for HistoryEntry {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "history entry")?;
+        Ok(Self {
+            created: take_optional(&mut object, "created")?,
+            created_by: take_optional(&mut object, "created_by")?,
+            comment: take_optional(&mut object, "comment")?,
+            empty_layer: take_optional(&mut object, "empty_layer")?,
+        })
+    }
+}
+
+impl FromJson for ImageIndex {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "image index")?;
+        Ok(Self {
+            media_type: take_optional(&mut object, "mediaType")?,
+            manifests: take_required(&mut object, "manifests")?,
+        })
+    }
+}
+
+impl FromJson for super::manifest::ManifestDescriptor {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "manifest descriptor")?;
+        Ok(Self {
+            media_type: take_optional(&mut object, "mediaType")?,
+            digest: take_required(&mut object, "digest")?,
+            size: take_required(&mut object, "size")?,
+            platform: take_optional(&mut object, "platform")?,
+        })
+    }
+}
+
+impl FromJson for super::manifest::PlatformDescriptor {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "platform")?;
+        Ok(Self {
+            architecture: take_optional(&mut object, "architecture")?,
+            os: take_optional(&mut object, "os")?,
+        })
+    }
+}
+
+impl FromJson for SingleManifest {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "single manifest")?;
+        Ok(Self {
+            config_digest: take_config_digest(&mut object)?,
+            layers: take_required(&mut object, "layers")?,
+        })
+    }
+}
+
+fn take_config_digest(object: &mut Map) -> Result<String, JsonValueError> {
+    match object.remove("config") {
+        Some(JsonValue::Object(mut object)) => take_required(&mut object, "digest"),
+        Some(JsonValue::String(value)) => Ok(value),
+        Some(other) => Err(JsonValueError::WrongType(format!(
+            "manifest config must be an object or string, found {other:?}"
+        ))),
+        None => Err(JsonValueError::WrongType(
+            "missing required field `config`".into(),
+        )),
+    }
+}
+
+impl FromJson for super::manifest::LayerDescriptor {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "layer descriptor")?;
+        Ok(Self {
+            media_type: take_optional(&mut object, "mediaType")?,
+            digest: take_required(&mut object, "digest")?,
+            size: take_required(&mut object, "size")?,
+        })
+    }
+}
+
+#[cfg(all(test, not(target_os = "none")))]
 mod json_feature_tests {
     use super::*;
 
     #[test]
-    fn parses_image_config_without_serde() {
+    fn parses_image_config_with_edgerun_json() {
         let config = parse_image_config(
             br#"{
                 "architecture":"amd64",
@@ -431,7 +291,7 @@ mod json_feature_tests {
     }
 
     #[test]
-    fn parses_single_manifest_descriptor_config_without_serde() {
+    fn parses_single_manifest_descriptor_config_with_edgerun_json() {
         let manifest = parse_single_manifest(
             br#"{
                 "schemaVersion":2,
@@ -446,7 +306,7 @@ mod json_feature_tests {
     }
 
     #[test]
-    fn parses_image_index_without_serde() {
+    fn parses_image_index_with_edgerun_json() {
         let manifest = parse_manifest(
             br#"{
                 "schemaVersion":2,

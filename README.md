@@ -11,7 +11,7 @@ The crate tree implements that model across protocol validation, event storage,
 mesh transport, node daemons, services, hardware capability providers, and
 bare-metal runtime support. Most library crates are `no_std` or `alloc`-first
 and use local runtime/serialization/logging primitives rather than Tokio,
-serde_json, clap, or tracing.
+host JSON stacks, clap, or tracing.
 
 ## Protocol Model
 

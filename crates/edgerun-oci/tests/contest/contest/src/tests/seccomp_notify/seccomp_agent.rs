@@ -4,13 +4,45 @@ use std::os::unix::prelude::RawFd;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use edgerun_json::JsonValue;
 use nix::sys::socket::{self, Backlog, UnixAddr};
 use nix::unistd;
-use oci_spec::runtime::ContainerProcessState;
 
 const DEFAULT_BUFFER_SIZE: usize = 4096;
 
 pub type SeccompAgentResult = Result<(ContainerProcessState, RawFd)>;
+
+#[derive(Debug, Clone)]
+pub struct ContainerProcessState {
+    state: ProcessState,
+    pid: i32,
+    metadata: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessState {
+    id: String,
+}
+
+impl ContainerProcessState {
+    pub fn state(&self) -> &ProcessState {
+        &self.state
+    }
+
+    pub fn pid(&self) -> &i32 {
+        &self.pid
+    }
+
+    pub fn metadata(&self) -> &Option<String> {
+        &self.metadata
+    }
+}
+
+impl ProcessState {
+    pub fn id(&self) -> &String {
+        &self.id
+    }
+}
 
 // Receive information from seccomp notify listener. We will receive 2 items, 1
 // container process state and 1 seccomp notify fd. This function will only
@@ -78,8 +110,7 @@ pub fn recv_seccomp_listener(seccomp_listener: &Path) -> SeccompAgentResult {
         }
     };
 
-    // We have to truncate the message to the correct size, so serde can
-    // deserialized the data correctly.
+    // We have to truncate the message to the correct size before parsing it.
     if msg.bytes >= DEFAULT_BUFFER_SIZE {
         bail!("received more than the DEFAULT_BUFFER_SIZE");
     }
@@ -87,8 +118,39 @@ pub fn recv_seccomp_listener(seccomp_listener: &Path) -> SeccompAgentResult {
 
     buf.truncate(msg_bytes);
 
-    let container_process_state: ContainerProcessState = serde_json::from_slice(&buf[..])
+    let container_process_state = parse_container_process_state(&buf)
         .context("failed to parse the received message as container process state")?;
 
     Ok((container_process_state, fd))
+}
+
+fn parse_container_process_state(bytes: &[u8]) -> Result<ContainerProcessState> {
+    let value = crate::utils::json::parse_slice(bytes)?;
+    let JsonValue::Object(object) = value else {
+        bail!("container process state is not an object");
+    };
+    let state_value = object
+        .get("state")
+        .ok_or_else(|| anyhow::anyhow!("missing state"))?;
+    let JsonValue::Object(state_object) = state_value else {
+        bail!("state is not an object");
+    };
+    let id = state_object
+        .get("id")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| anyhow::anyhow!("missing state.id"))?
+        .to_string();
+    let pid = object
+        .get("pid")
+        .and_then(JsonValue::as_i32)
+        .ok_or_else(|| anyhow::anyhow!("missing pid"))?;
+    let metadata = object
+        .get("metadata")
+        .and_then(JsonValue::as_str)
+        .map(str::to_string);
+    Ok(ContainerProcessState {
+        state: ProcessState { id },
+        pid,
+        metadata,
+    })
 }

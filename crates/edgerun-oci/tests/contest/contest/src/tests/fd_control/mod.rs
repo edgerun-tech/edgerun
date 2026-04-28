@@ -1,5 +1,5 @@
 use std::fs;
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
 
 use anyhow::{Context, Result, anyhow};
 use oci_spec::runtime::{ProcessBuilder, Spec, SpecBuilder};
@@ -27,10 +27,12 @@ fn open_devnull_no_cloexec() -> Result<(fs::File, RawFd)> {
     // Rust std by default sets cloexec, so we undo it
     let devnull = fs::File::open("/dev/null")?;
     let devnull_fd = devnull.as_raw_fd();
-    let flags = nix::fcntl::fcntl(devnull_fd, nix::fcntl::FcntlArg::F_GETFD)?;
+    // SAFETY: devnull owns this fd and remains alive until after the fcntl calls.
+    let borrowed = unsafe { BorrowedFd::borrow_raw(devnull_fd) };
+    let flags = nix::fcntl::fcntl(borrowed, nix::fcntl::FcntlArg::F_GETFD)?;
     let mut flags = nix::fcntl::FdFlag::from_bits_retain(flags);
     flags.remove(nix::fcntl::FdFlag::FD_CLOEXEC);
-    nix::fcntl::fcntl(devnull_fd, nix::fcntl::FcntlArg::F_SETFD(flags))?;
+    nix::fcntl::fcntl(borrowed, nix::fcntl::FcntlArg::F_SETFD(flags))?;
     Ok((devnull, devnull_fd))
 }
 

@@ -7,9 +7,8 @@ publish.workspace = true
 description = "Consolidated encoding utilities for the edgerun workspace"
 
 [features]
-default = ["alloc"]
-std = ["alloc"]
-alloc = []
+default = []
+std = []
 hpack = ["dep:edgerun-hpack"]
 
 [dependencies]

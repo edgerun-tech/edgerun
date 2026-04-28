@@ -74,7 +74,7 @@ impl OidcDiscoveryDocument {
     /// Serialize to JSON string.
     pub fn to_json(&self) -> String {
         use edgerun_json::{to_string, JsonValue, Map};
-        let mut obj = Vec::new();
+        let mut obj: Vec<(String, JsonValue)> = Vec::new();
         obj.push(("issuer".into(), JsonValue::String(self.issuer.clone())));
         obj.push((
             "authorization_endpoint".into(),
@@ -230,7 +230,7 @@ impl JwksDocument {
     pub fn to_json(&self) -> String {
         use edgerun_json::{to_string, JsonValue, Map};
         let keys_arr: Vec<JsonValue> = self.keys.iter().map(|k| k.raw.clone()).collect();
-        let obj = vec![("keys".into(), JsonValue::Array(keys_arr))];
+        let obj: Vec<(String, JsonValue)> = vec![("keys".into(), JsonValue::Array(keys_arr))];
         let val = JsonValue::Object(Map::from_iter(obj));
         to_string(&val).unwrap_or_else(|_| "{}".into())
     }

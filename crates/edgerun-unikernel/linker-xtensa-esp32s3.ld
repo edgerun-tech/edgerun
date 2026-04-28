@@ -10,6 +10,8 @@ ENTRY(_start)
 
 MEMORY
 {
+    drom_seg (R)   : ORIGIN = 0x3C000020, LENGTH = 4M
+    irom_seg (RX)  : ORIGIN = 0x42000020, LENGTH = 4M
     iram_seg (RX)  : ORIGIN = 0x40380000, LENGTH = 256K
     dram_seg (RW)  : ORIGIN = 0x3FC88000, LENGTH = 256K
 }
@@ -23,8 +25,13 @@ SECTIONS
     } > iram_seg
 
     .rodata : ALIGN(4) {
+        KEEP(*(.flash.appdesc))
         *(.rodata .rodata.*)
-    } > dram_seg
+    } > drom_seg
+
+    .irom_dummy : ALIGN(4) {
+        LONG(0)
+    } > irom_seg
 
     .data : ALIGN(4) {
         *(.data .data.*)

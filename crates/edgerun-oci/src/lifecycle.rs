@@ -27,15 +27,15 @@ use crate::hooks::{
     execute_create_container_hooks, execute_create_runtime_hooks, execute_poststart_hooks,
     execute_poststop_hooks, execute_prestart_hooks, execute_start_container_hooks, ContainerState,
 };
-use crate::json::{OciHook, OciLinuxResources, OciSpec};
 use crate::process::{setup_container_child, setup_container_child_rootless, ContainerConfig};
+use crate::spec::{OciHook, OciLinuxResources, OciSpec};
 use crate::state::{
     container_state_dir, fifo_path, is_root, save_runtime_spec, save_state,
     ContainerState as StateContainerState,
 };
 
 /// Extract hooks from an OCI spec, returning a default-empty set if absent.
-fn get_hooks(spec: &OciSpec) -> crate::json::OciHooks {
+fn get_hooks(spec: &OciSpec) -> crate::spec::OciHooks {
     spec.linux
         .as_ref()
         .and_then(|l| l.hooks.as_ref())
@@ -739,7 +739,7 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
 /// Run an OCI bundle (directory containing config.json + rootfs/).
 pub fn run_bundle(bundle_path: &Path) -> io::Result<std::process::ExitStatus> {
     let config_data = fs::read(bundle_path.join("config.json"))?;
-    let spec: OciSpec = crate::json::parse_oci_spec(&config_data).map_err(|e| {
+    let spec: OciSpec = crate::spec::parse_oci_spec(&config_data).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("invalid OCI config: {}", e),
@@ -751,7 +751,7 @@ pub fn run_bundle(bundle_path: &Path) -> io::Result<std::process::ExitStatus> {
 /// Start a container from an OCI bundle without blocking.
 pub fn start_bundle(bundle_path: &Path) -> io::Result<RunningContainer> {
     let config_data = fs::read(bundle_path.join("config.json"))?;
-    let spec: OciSpec = crate::json::parse_oci_spec(&config_data).map_err(|e| {
+    let spec: OciSpec = crate::spec::parse_oci_spec(&config_data).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("invalid OCI config: {}", e),

@@ -23,21 +23,15 @@ pub mod prelude {
     pub use std::{eprintln, print, println};
 }
 
-#[cfg(feature = "json")]
 pub mod image_apply;
-#[cfg(feature = "json")]
 pub mod image_plan;
-pub mod json;
-#[cfg(feature = "json")]
 pub mod layer_pipeline;
-#[cfg(feature = "json")]
 pub mod oci_path;
-#[cfg(feature = "json")]
 pub mod rootfs_access;
 pub mod runtime_config;
-#[cfg(feature = "json")]
+pub mod spec;
 pub mod tar_layer;
-#[cfg(all(test, feature = "json", not(target_os = "none")))]
+#[cfg(all(test, not(target_os = "none")))]
 pub(crate) mod test_support;
 mod util;
 pub mod validate;
@@ -56,7 +50,6 @@ mod registry {
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod layer;
     pub mod manifest;
-    #[cfg(feature = "json")]
     pub(crate) mod oci_spec;
     #[cfg(any(
         feature = "registry-client",
@@ -65,9 +58,7 @@ mod registry {
     pub(crate) mod urlencoding;
 }
 
-#[cfg(feature = "json")]
 pub mod bare_rootfs;
-#[cfg(feature = "json")]
 pub mod bare_syscall;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod bundle;
@@ -83,7 +74,6 @@ pub mod ebpf_devices;
 pub mod ebpf_netcls;
 #[cfg(feature = "edgefs")]
 pub mod edgefs;
-#[cfg(feature = "json")]
 pub mod elf;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod error;
@@ -117,9 +107,7 @@ pub mod userns;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod cli;
 
-#[cfg(feature = "json")]
 pub use bare_rootfs::{BareRootfs, BareRootfsEntry, BareRootfsEntryKind};
-#[cfg(feature = "json")]
 pub use bare_syscall::{
     dispatch_linux_syscall, dispatch_x86_64_linux_syscall_frame, OciBufferSyscallSink,
     OciSliceSyscallMemory, OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink,
@@ -131,7 +119,6 @@ pub use bundle::{create_bundle, write_bundle};
 pub use config_builder::ContainerProcessConfig;
 #[cfg(feature = "edgefs")]
 pub use edgefs::EdgeFsLayerSink;
-#[cfg(feature = "json")]
 pub use elf::{
     build_elf64_auxv, build_elf_load_plan, build_elf_memory_map,
     build_elf_memory_map_with_load_bias, build_elf_memory_map_with_page_size,
@@ -158,7 +145,7 @@ pub use elf::{
     OCI_ELF_AT_FLAGS, OCI_ELF_AT_NULL, OCI_ELF_AT_PAGESZ, OCI_ELF_AT_PHDR, OCI_ELF_AT_PHENT,
     OCI_ELF_AT_PHNUM,
 };
-#[cfg(all(feature = "json", target_arch = "x86_64"))]
+#[cfg(target_arch = "x86_64")]
 pub use elf::{enter_elf64, enter_elf64_launch_state};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use error::{
@@ -169,12 +156,10 @@ pub use error::{
 pub use handle::RunningContainer;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use hooks::execute_poststop_hooks;
-#[cfg(feature = "json")]
 pub use image_apply::{
     apply_bare_image_layer_blobs, apply_bare_image_layer_blobs_sha256, BareImageApplyError,
     BareImageApplyReport,
 };
-#[cfg(feature = "json")]
 pub use image_plan::{
     parse_single_manifest_bytes, platform_matches, select_manifest_for_current_target,
     select_manifest_for_target, selected_manifest_digest_for_current_target,
@@ -183,8 +168,6 @@ pub use image_plan::{
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use init::fork_and_init;
-pub use json::*;
-#[cfg(feature = "json")]
 pub use layer_pipeline::{
     apply_layer_chunks, bytes_to_hex, format_digest, sha256_layer_digest,
     validate_layer_descriptor, LayerApplyReport, LayerDigest, LayerPipelineError, LayerSink,
@@ -197,13 +180,11 @@ pub use lifecycle::{
     save_created_state, setup_container_cgroups, signal_start, start_bundle, start_spec,
     start_spec_with_id, update_state_running,
 };
-#[cfg(feature = "json")]
 pub use oci_path::{layer_path_safe, normalize_layer_path};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use process::{setup_container_child, ContainerConfig};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootfs::setup_rootfs;
-#[cfg(feature = "json")]
 pub use rootfs_access::{
     build_launch_plan, resolve_executable, resolve_executable_path, OciDeviceId, OciExecutable,
     OciLaunchPlan, OciRootfs, OciRootfsEntry, OciRootfsEntryKind, OciRootfsError,
@@ -211,6 +192,7 @@ pub use rootfs_access::{
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootless::{generate_gid_map, generate_uid_map};
 pub use runtime_config::{BareNamespace, BareNamespaceKind, BareRuntimeConfig};
+pub use spec::*;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use state::{
     container_state_dir, delete_state, fifo_path, load_state, save_state, state_exists,
@@ -218,7 +200,6 @@ pub use state::{
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use syscalls::*;
-#[cfg(feature = "json")]
 pub use tar_layer::{
     apply_uncompressed_tar_layer, apply_uncompressed_tar_layer_streaming,
     apply_validated_tar_layer, apply_validated_tar_layer_sha256,
@@ -248,13 +229,10 @@ pub use registry::client::{ImagePullReport, PullProgress};
     all(feature = "std", not(target_os = "none"))
 ))]
 pub use registry::client::{ImageRef, RegistryClient};
-#[cfg(feature = "json")]
 pub use registry::config::{
     parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest, HistoryEntry,
     ImageConfig, ImageConfigInner, RootFs,
 };
-#[cfg(not(feature = "json"))]
-pub use registry::config::{HistoryEntry, ImageConfig, ImageConfigInner, RootFs};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::dbus_client::SecretClient;
 pub use registry::errors::RegistryError;
@@ -265,7 +243,6 @@ pub use registry::layer::{
 pub use registry::manifest::{
     ImageManifest, LayerDescriptor, ManifestDescriptor, PlatformDescriptor, SingleManifest,
 };
-#[cfg(feature = "json")]
 pub use registry::oci_spec::{generate_oci_spec, generate_oci_spec_model};
 
 pub const DEFAULT_NAMESPACES: &[(&str, Option<&str>)] = &[

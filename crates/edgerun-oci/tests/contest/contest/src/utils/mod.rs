@@ -1,10 +1,13 @@
 pub mod cgroup;
 pub mod intel_rdt;
+pub mod json;
 pub mod path_ext;
 pub mod support;
 pub mod test_utils;
 
-pub use cgroup::{CgroupSetup, ControllerType, DEFAULT_CGROUP_ROOT, get_available_controllers, get_cgroup_setup};
+pub use cgroup::{
+    CgroupSetup, ControllerType, DEFAULT_CGROUP_ROOT, get_available_controllers, get_cgroup_setup,
+};
 pub use intel_rdt::find_resctrl_mount_point;
 pub use path_ext::PathBufExt;
 

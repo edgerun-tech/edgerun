@@ -10,7 +10,7 @@ use alloc::string::String;
 use alloc::borrow::ToOwned;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
-#[cfg(all(feature = "alloc", any(not(feature = "std"), target_os = "none")))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
 #[derive(Debug)]

@@ -9,10 +9,10 @@ use std::fs;
 use std::io;
 use std::os::unix::io::AsRawFd;
 
-use crate::json::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
 use crate::rootfs::{apply_sysctl, set_rootfs_propagation, setup_rootfs, setup_rootfs_rootless};
 #[allow(unused_imports)]
 use crate::seccomp::apply_seccomp_from_spec;
+use crate::spec::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
 use crate::syscalls::{
     do_set_hostname, do_setns, do_setrlimit, do_umask, do_unshare, rlimit_name_to_int,
 };
@@ -53,13 +53,13 @@ pub struct ContainerConfig {
     pub cap_inheritable: Option<Vec<String>>,
     pub cap_bounding: Option<Vec<String>>,
     pub cap_ambient: Option<Vec<String>>,
-    pub rlimits: Vec<crate::json::OciRlimit>,
+    pub rlimits: Vec<crate::spec::OciRlimit>,
     pub oom_score_adj: i64,
     pub apparmor_profile: Option<String>,
     pub selinux_label: Option<String>,
     pub umask: Option<u32>,
     pub root: OciRoot,
-    pub mounts: Option<Vec<crate::json::OciMount>>,
+    pub mounts: Option<Vec<crate::spec::OciMount>>,
     pub masked_paths: Option<Vec<String>>,
     pub readonly_paths: Option<Vec<String>>,
     pub devices: Vec<OciLinuxDevice>,
@@ -68,11 +68,11 @@ pub struct ContainerConfig {
     pub additional_gids: Vec<u32>,
     pub uid: u32,
     pub gid: u32,
-    pub seccomp: Option<crate::json::OciLinuxSeccomp>,
+    pub seccomp: Option<crate::spec::OciLinuxSeccomp>,
     pub mount_label: Option<String>,
-    pub scheduler: Option<crate::json::OciScheduler>,
-    pub intel_rdt: Option<crate::json::OciLinuxIntelRdt>,
-    pub io_priority: Option<crate::json::OciIoPriority>,
+    pub scheduler: Option<crate::spec::OciScheduler>,
+    pub intel_rdt: Option<crate::spec::OciLinuxIntelRdt>,
+    pub io_priority: Option<crate::spec::OciIoPriority>,
     pub terminal: bool,
     pub bundle_path: String,
 }
@@ -157,7 +157,7 @@ impl ContainerConfig {
     }
 }
 
-fn serialize_ns_paths(namespaces: Option<&[crate::json::OciNamespace]>) -> String {
+fn serialize_ns_paths(namespaces: Option<&[crate::spec::OciNamespace]>) -> String {
     match namespaces {
         Some(ns) => ns
             .iter()
@@ -462,7 +462,7 @@ fn setup_container_child_common(
 // ===========================================================================
 
 /// Apply real-time scheduling policy via sched_setattr syscall.
-fn apply_scheduler(sched: &crate::json::OciScheduler) -> io::Result<()> {
+fn apply_scheduler(sched: &crate::spec::OciScheduler) -> io::Result<()> {
     // Use sched_setattr syscall (x86_64=314, aarch64=274)
     // sched_attr struct layout:
     //   size: u32
@@ -560,7 +560,7 @@ fn apply_scheduler(sched: &crate::json::OciScheduler) -> io::Result<()> {
 }
 
 /// Apply Intel RDT configuration via resctrl filesystem.
-fn setup_intel_rdt(rdt: &crate::json::OciLinuxIntelRdt) -> io::Result<()> {
+fn setup_intel_rdt(rdt: &crate::spec::OciLinuxIntelRdt) -> io::Result<()> {
     // The resctrl filesystem is mounted at /sys/fs/resctrl
     let resctrl = std::path::Path::new("/sys/fs/resctrl");
     if !resctrl.exists() {
@@ -686,7 +686,7 @@ fn do_set_domainname(name: &str) -> io::Result<()> {
 /// - class 3: idle (lowest priority, runs only when nobody else needs disk)
 ///
 /// The encoded value is: (class << 13) | priority
-fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
+fn apply_io_priority(ioprio: &crate::spec::OciIoPriority) -> io::Result<()> {
     // ioprio_set(which, who, ioprio)
     // which=1 = PRIO_PROCESS (current process), who=0 = self
     let priority = ioprio.priority.unwrap_or(4);
@@ -847,7 +847,7 @@ fn join_explicit_namespaces_where(
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
-    use crate::json::{
+    use crate::spec::{
         OciCapabilities, OciLinuxSeccomp, OciNamespace, OciProcess, OciRlimit, OciRoot,
         OciSeccompAction,
     };
@@ -933,7 +933,7 @@ mod tests {
     #[test]
     fn validate_spec_rejects_unknown_namespace() {
         let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
+        spec.linux = Some(crate::spec::OciLinux {
             namespaces: Some(vec![OciNamespace {
                 ns_type: "bogus".into(),
                 path: None,
@@ -949,7 +949,7 @@ mod tests {
     #[test]
     fn validate_spec_allows_path_based_namespace() {
         let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
+        spec.linux = Some(crate::spec::OciLinux {
             namespaces: Some(vec![OciNamespace {
                 ns_type: "custom".into(),
                 path: Some("/var/run/ns/custom".into()),
@@ -962,7 +962,7 @@ mod tests {
     #[test]
     fn validate_spec_rejects_unknown_rlimit() {
         let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
+        spec.linux = Some(crate::spec::OciLinux {
             ..Default::default()
         });
         spec.process.as_mut().unwrap().rlimits = Some(vec![OciRlimit {
@@ -979,7 +979,7 @@ mod tests {
     #[test]
     fn validate_spec_accepts_valid_seccomp_action() {
         let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
+        spec.linux = Some(crate::spec::OciLinux {
             seccomp: Some(OciLinuxSeccomp {
                 default_action: Some(OciSeccompAction::Allow),
                 ..Default::default()
@@ -1005,7 +1005,7 @@ mod tests {
 
     #[test]
     fn platform_matches_host_linux_amd64() {
-        use crate::json::OciPlatform;
+        use crate::spec::OciPlatform;
         let platform = OciPlatform {
             os: Some(host_os().into()),
             arch: Some(host_arch().into()),
@@ -1017,7 +1017,7 @@ mod tests {
 
     #[test]
     fn platform_rejects_windows() {
-        use crate::json::OciPlatform;
+        use crate::spec::OciPlatform;
         let platform = OciPlatform {
             os: Some("windows".into()),
             arch: Some("amd64".into()),
@@ -1029,7 +1029,7 @@ mod tests {
 
     #[test]
     fn platform_rejects_wrong_arch() {
-        use crate::json::OciPlatform;
+        use crate::spec::OciPlatform;
         let platform = OciPlatform {
             os: Some("linux".into()),
             arch: Some("riscv64".into()),
@@ -1048,7 +1048,7 @@ mod tests {
     fn platform_none_matches_host() {
         // When no platform is specified, it should not block creation
         // (the runtime allows None = no platform constraint)
-        use crate::json::OciPlatform;
+        use crate::spec::OciPlatform;
         let platform = OciPlatform {
             os: None,
             arch: None,

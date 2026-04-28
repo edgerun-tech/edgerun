@@ -149,7 +149,7 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 | `edgerun-linux-netif` | ✅ Functional | — | Linux network interface discovery |
 | `edgerun-linux-sysfs` | ✅ Functional | — | Linux sysfs abstraction |
 | `edgerun-machine-report` | ✅ Functional | — | Machine capability reporting |
-| `edgerun-json` | ✅ Functional | 100+ | JSON serialization (serde_json replacement) |
+| `edgerun-json` | ✅ Functional | 100+ | Native JSON serialization |
 | `edgerun-crypto` | ✅ Functional | — | Cryptographic boundary (single crate) |
 
 ### Rendering Engine Crates (~97)

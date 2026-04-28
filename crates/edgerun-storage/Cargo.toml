@@ -12,7 +12,7 @@ edgerun-proto = { path = "../edgerun-proto" }
 edgerun-stream = { path = "../edgerun-stream" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", default-features = false }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 prost.workspace = true
 prost-types.workspace = true
 edgerun-log = { path = "../edgerun-log" }

@@ -4,21 +4,6 @@
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
-/// Platform peripheral base (PMA)
-const PQMA_BASE: usize = 0x60000000;
-
-/// Timer/clock control
-const CCOUNT: usize = 0x208;
-
-/// Interrupt controller registers
-const INTENABLE: usize = 0x230;
-const INTERRUPT: usize = 0x234;
-const INTCLEAR: usize = 0x238;
-
-/// CPU SAR (Special Angle Registers)
-/// EXCSAVE - holds pointer to current exception handler state
-const XER_SAR: usize = 35;
-
 /// Interrupt numbers
 pub const INTLEVEL: u32 = 0x0;
 pub const NMI: u32 = 2;

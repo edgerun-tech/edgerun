@@ -1083,13 +1083,21 @@ impl RegistryClient {
         )
         .await?;
 
-        let manifest = format!(
-            r#"{{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"{}","size":{}}},"layers":[{{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"{}","size":{}}}]}}"#,
-            config_digest,
-            config_blob.len(),
-            layer_digest,
-            layer_data.len(),
-        );
+        let manifest = edgerun_json::to_string(&edgerun_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "config": {
+                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "digest": config_digest.as_str(),
+                "size": config_blob.len()
+            },
+            "layers": [{
+                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                "digest": layer_digest.as_str(),
+                "size": layer_data.len()
+            }]
+        }))
+        .map_err(|error| RegistryError::ParseError(error.to_string()))?;
 
         self.push_manifest(
             &image.registry,

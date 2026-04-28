@@ -2,6 +2,7 @@
 
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(target_arch = "xtensa", feature(asm_experimental_arch))]
 #![cfg_attr(not(target_os = "none"), allow(dead_code, unused_imports))]
 
 extern crate alloc;
@@ -17,15 +18,75 @@ extern crate edgerun_tpm;
 #[cfg(target_arch = "x86_64")]
 extern crate edgerun_virtio;
 
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[repr(C, packed)]
+struct EspAppDesc {
+    magic_word: u32,
+    secure_version: u32,
+    reserv1: [u32; 2],
+    version: [u8; 32],
+    project_name: [u8; 32],
+    time: [u8; 16],
+    date: [u8; 16],
+    idf_ver: [u8; 32],
+    app_elf_sha256: [u8; 32],
+    min_efuse_blk_rev_full: u16,
+    max_efuse_blk_rev_full: u16,
+    mmu_page_size: u8,
+    reserv3: [u8; 3],
+    reserv2: [u32; 18],
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const fn fixed_cstr<const N: usize>(bytes: &[u8]) -> [u8; N] {
+    let mut out = [0u8; N];
+    let mut i = 0;
+    while i < bytes.len() && i + 1 < N {
+        out[i] = bytes[i];
+        i += 1;
+    }
+    out
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[used]
+#[no_mangle]
+#[link_section = ".flash.appdesc"]
+static esp_app_desc: EspAppDesc = EspAppDesc {
+    magic_word: 0xABCD_5432,
+    secure_version: 0,
+    reserv1: [0; 2],
+    version: fixed_cstr(b"0.1.0"),
+    project_name: fixed_cstr(b"edgerun-unikernel"),
+    time: fixed_cstr(b"00:00:00"),
+    date: fixed_cstr(b"2026-04-28"),
+    idf_ver: fixed_cstr(b"edgerun-bare"),
+    app_elf_sha256: [0; 32],
+    min_efuse_blk_rev_full: 0,
+    max_efuse_blk_rev_full: u16::MAX,
+    mmu_page_size: 16,
+    reserv3: [0; 3],
+    reserv2: [0; 18],
+};
+
+#[cfg(target_arch = "x86_64")]
 use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
+#[cfg(target_arch = "x86_64")]
 use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
+#[cfg(target_arch = "x86_64")]
 use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
+#[cfg(target_arch = "x86_64")]
 use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
+#[cfg(target_arch = "x86_64")]
 use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
 
+#[cfg(target_arch = "x86_64")]
 use core::future::Future;
+#[cfg(target_arch = "x86_64")]
 use core::pin::Pin;
+#[cfg(target_arch = "x86_64")]
 use core::sync::atomic::{AtomicPtr, Ordering};
+#[cfg(target_arch = "x86_64")]
 use core::task::{Context, Poll};
 
 #[cfg(all(target_arch = "x86_64", target_os = "none"))]
@@ -1135,11 +1196,29 @@ _start:
 core::arch::global_asm!(
     r#"
     .section .text.entry,"ax"
+    .align 4
+.Lstack_ptr:
+    .word _stack
+.Lbss_start_ptr:
+    .word _bss_start
+.Lbss_end_ptr:
+    .word _bss_end
+.Luart0_fifo_ptr:
+    .word 0x60000000
+
     .global _start
 _start:
-    movi a1, _stack
-    movi a2, _bss_start
-    movi a3, _bss_end
+    l32r a5, .Luart0_fifo_ptr
+    movi a6, 69
+    s32i a6, a5, 0
+    movi a6, 82
+    s32i a6, a5, 0
+    movi a6, 10
+    s32i a6, a5, 0
+
+    l32r a1, .Lstack_ptr
+    l32r a2, .Lbss_start_ptr
+    l32r a3, .Lbss_end_ptr
     sub a3, a3, a2
     movi a4, 0
 1:
@@ -1149,7 +1228,7 @@ _start:
     addi a3, a3, -1
     j 1b
 2:
-    call0 kernel_main
+    j kernel_main
 3:
     waiti 0
     j 3b
@@ -1241,6 +1320,7 @@ struct NetPump<'net, 'stack> {
     logged_icmp: bool,
 }
 
+#[cfg(target_arch = "x86_64")]
 async fn run_http_smoke(url: &str) {
     let client = edgerun_http::HttpClient::new()
         .version(edgerun_http::HttpVersion::Http1)
@@ -1434,6 +1514,7 @@ fn poll_network(
     stats
 }
 
+#[cfg(target_arch = "x86_64")]
 fn dhcp_ipv4_to_rt(ip: edgerun_dhcp::Ipv4Addr) -> IpAddr {
     let octets = ip.octets();
     IpAddr::new(octets[0], octets[1], octets[2], octets[3])

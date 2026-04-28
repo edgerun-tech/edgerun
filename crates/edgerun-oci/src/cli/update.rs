@@ -7,7 +7,7 @@ use crate::prelude::*;
 use std::fs;
 use std::io;
 
-use crate::json::OciSpec;
+use crate::spec::OciSpec;
 use crate::state::load_state;
 
 /// Parsed update options from CLI flags.
@@ -66,7 +66,7 @@ pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     let bundle = &state.bundle;
     let config_path = std::path::Path::new(bundle).join("config.json");
     let spec: OciSpec = if let Ok(data) = fs::read(&config_path) {
-        crate::json::parse_oci_spec(&data).map_err(|e| {
+        crate::spec::parse_oci_spec(&data).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("invalid OCI config: {}", e),

@@ -38,7 +38,7 @@ fn get_container_pid(project_path: &Path, id: &str) -> Result<i32, TestResult> {
             )));
         }
     };
-    let state: State = match serde_json::from_str(&stdout) {
+    let state: State = match crate::utils::json::parse_state(&stdout) {
         Ok(v) => v,
         Err(e) => {
             return Err(TestResult::Failed(anyhow!(

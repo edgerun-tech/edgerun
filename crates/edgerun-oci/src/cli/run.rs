@@ -16,13 +16,13 @@ use crate::cli::user::{resolve_user, validate_user_spec};
 use crate::cli::{
     default_images_dir, default_store_dir, resolve_registry_auth, write_all_fd, GlobalOpts,
 };
-use crate::json::{parse_oci_spec, OciMount, OciSpec};
 use crate::lifecycle::{
     fork_container_child_with_terminal_socket, run_create_runtime_hooks, run_prestart_hooks,
     save_and_start_forked_child,
 };
 use crate::process::validate_spec;
 use crate::rootfs_copy::copy_rootfs_tree;
+use crate::spec::{parse_oci_spec, OciMount, OciSpec};
 use crate::state::{delete_state, load_state};
 
 use crate::ImageRef;

@@ -2,7 +2,7 @@ use crate::prelude::*;
 use std::io;
 use std::os::raw::c_void;
 
-use crate::json::{OciLinuxSeccomp, OciSeccompAction};
+use crate::spec::{OciLinuxSeccomp, OciSeccompAction};
 use crate::syscalls::{
     do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
     SECCOMP_SET_MODE_FILTER,
@@ -11,7 +11,7 @@ use crate::syscalls::{
 use super::*;
 use actions::{action_to_bpf, arch_to_bpf};
 
-use crate::json::OciSeccompSyscallEntry;
+use crate::spec::OciSeccompSyscallEntry;
 
 #[test]
 fn seccomp_bpf_prog_is_non_empty() {
@@ -129,7 +129,7 @@ fn build_seccomp_prog_with_arg_filters() {
             names: Some(vec!["openat".into()]),
             action: Some(OciSeccompAction::Errno),
             errno_ret: Some(13),
-            args: Some(vec![crate::json::OciSeccompArg {
+            args: Some(vec![crate::spec::OciSeccompArg {
                 index: 1,
                 value: 0o100000,
                 value_two: 0,
@@ -155,7 +155,7 @@ fn build_seccomp_prog_with_ne_arg_filter() {
             names: Some(vec!["ioctl".into()]),
             action: Some(OciSeccompAction::Kill),
             errno_ret: None,
-            args: Some(vec![crate::json::OciSeccompArg {
+            args: Some(vec![crate::spec::OciSeccompArg {
                 index: 1,
                 value: 0x5401,
                 value_two: 0,
@@ -212,7 +212,7 @@ fn bpf_lt_uses_jge() {
             names: Some(vec!["openat".into()]),
             action: Some(OciSeccompAction::Allow),
             errno_ret: None,
-            args: Some(vec![crate::json::OciSeccompArg {
+            args: Some(vec![crate::spec::OciSeccompArg {
                 index: 0,
                 value: 0x100,
                 value_two: 0,
@@ -270,7 +270,7 @@ fn bpf_gt_uses_jgt() {
             names: Some(vec!["openat".into()]),
             action: Some(OciSeccompAction::Allow),
             errno_ret: None,
-            args: Some(vec![crate::json::OciSeccompArg {
+            args: Some(vec![crate::spec::OciSeccompArg {
                 index: 0,
                 value: 0x100,
                 value_two: 0,
@@ -326,7 +326,7 @@ fn bpf_ge_uses_jge() {
             names: Some(vec!["openat".into()]),
             action: Some(OciSeccompAction::Allow),
             errno_ret: None,
-            args: Some(vec![crate::json::OciSeccompArg {
+            args: Some(vec![crate::spec::OciSeccompArg {
                 index: 0,
                 value: 0x100,
                 value_two: 0,
@@ -382,7 +382,7 @@ fn bpf_le_uses_jgt() {
             names: Some(vec!["openat".into()]),
             action: Some(OciSeccompAction::Allow),
             errno_ret: None,
-            args: Some(vec![crate::json::OciSeccompArg {
+            args: Some(vec![crate::spec::OciSeccompArg {
                 index: 0,
                 value: 0x100,
                 value_two: 0,
@@ -438,7 +438,7 @@ fn bpf_masked_eq_uses_and_then_jeq() {
             names: Some(vec!["openat".into()]),
             action: Some(OciSeccompAction::Allow),
             errno_ret: None,
-            args: Some(vec![crate::json::OciSeccompArg {
+            args: Some(vec![crate::spec::OciSeccompArg {
                 index: 0,
                 value: 0xFF,
                 value_two: 0x42,
@@ -644,24 +644,6 @@ fn build_seccomp_prog_multiple_syscall_names() {
         "multiple syscall names should generate multiple rules, got {}",
         len
     );
-}
-
-#[cfg(feature = "serde")]
-#[test]
-fn seccomp_arg_fields_serialize_correctly() {
-    let arg = crate::json::OciSeccompArg {
-        index: 2,
-        value: 0x123456789ABCDEF0,
-        value_two: 0xFEDCBA9876543210,
-        op: "SCMP_CMP_MASKED_EQ".into(),
-    };
-    let json = edgerun_json::to_string(&arg).unwrap();
-    assert!(json.contains("\"index\":2"));
-    let parsed: crate::json::OciSeccompArg = edgerun_json::from_slice(json.as_bytes()).unwrap();
-    assert_eq!(parsed.index, 2);
-    assert_eq!(parsed.value, 0x123456789ABCDEF0);
-    assert_eq!(parsed.value_two, 0xFEDCBA9876543210);
-    assert_eq!(parsed.op, "SCMP_CMP_MASKED_EQ");
 }
 
 #[test]

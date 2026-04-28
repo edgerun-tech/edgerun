@@ -13,4 +13,4 @@ workspace = true
 edgerun-tls = { path = "../edgerun-tls", default-features = false }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["aead", "hmac", "p256"] }
 edgerun-rt = { path = "../edgerun-rt" }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }

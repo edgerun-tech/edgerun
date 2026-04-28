@@ -5,7 +5,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::json::OciUser;
+use crate::spec::OciUser;
 
 pub(crate) fn validate_user_spec(value: &str) -> io::Result<String> {
     let mut parts = value.split(':');

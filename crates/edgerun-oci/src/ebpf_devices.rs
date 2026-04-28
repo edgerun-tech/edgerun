@@ -17,7 +17,7 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
-use crate::json::OciLinuxDeviceCgroup;
+use crate::spec::OciLinuxDeviceCgroup;
 use crate::syscalls::*;
 
 // bpf_cgroup_dev_ctx field offsets (from kernel headers)

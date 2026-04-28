@@ -10,7 +10,7 @@ use std::io;
 use std::io::Write;
 use std::path::Path;
 
-use crate::json::OciLinuxResources;
+use crate::spec::OciLinuxResources;
 
 /// Write to a cgroup file, logging errors to /dev/kmsg (best-effort).
 pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
@@ -225,7 +225,7 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
 fn write_throttle_devices(
     cgroup_root: &Path,
     file: &str,
-    devices: Option<&[crate::json::OciLinuxThrottleDevice]>,
+    devices: Option<&[crate::spec::OciLinuxThrottleDevice]>,
     key: &str,
 ) -> io::Result<()> {
     let Some(devices) = devices else {

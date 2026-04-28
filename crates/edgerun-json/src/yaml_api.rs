@@ -1,6 +1,4 @@
-//! YAML API compatible with serde_yaml.
-//!
-//! This module provides drop-in replacements for serde_yaml functionality.
+//! YAML value parsing and serialization API.
 
 use crate::prelude::*;
 
@@ -10,7 +8,7 @@ use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
-#[cfg(all(feature = "alloc", any(not(feature = "std"), target_os = "none")))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::{format, string::String, vec};
@@ -568,24 +566,6 @@ fn to_yaml_string_impl(
     Ok(())
 }
 
-#[cfg(feature = "serde")]
-pub fn to_value<T>(value: T) -> Result<YamlValue, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize,
-{
-    let json_value = crate::to_value(value)?;
-    Ok(json_to_yaml(json_value))
-}
-
-#[cfg(feature = "serde")]
-pub fn from_value<T>(value: YamlValue) -> Result<T, crate::serde_error::Error>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let json_value = yaml_to_json(value);
-    crate::from_value(json_value)
-}
-
 /// Convert JsonValue to YamlValue
 pub fn json_to_yaml(value: JsonValue) -> YamlValue {
     match value {
@@ -620,26 +600,6 @@ pub fn yaml_to_json(value: YamlValue) -> JsonValue {
         }
         YamlValue::Tagged(tagged) => yaml_to_json(*tagged.value),
     }
-}
-
-#[cfg(feature = "serde")]
-pub fn from_yaml_str_typed<T>(s: &str) -> Result<T, YamlError>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let yaml = from_yaml_str(s)?;
-    let json = yaml_to_json(yaml);
-    crate::from_value(json).map_err(|e| YamlError::IoError(e.to_string()))
-}
-
-#[cfg(feature = "serde")]
-pub fn to_yaml_string_typed<T>(value: &T) -> Result<String, YamlError>
-where
-    T: serde_crate::Serialize,
-{
-    let json_value = crate::to_value(value).map_err(|e| YamlError::IoError(e.to_string()))?;
-    let yaml_value = json_to_yaml(json_value);
-    to_yaml_string(&yaml_value)
 }
 
 pub struct YamlDeserializer<'a> {
@@ -684,69 +644,5 @@ impl<'a> Iterator for YamlDeserializer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_doc()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl serde_crate::Serialize for YamlValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde_crate::Serializer,
-    {
-        match self {
-            YamlValue::Null => serializer.serialize_unit(),
-            YamlValue::Bool(b) => serializer.serialize_bool(*b),
-            YamlValue::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    serializer.serialize_i64(i)
-                } else if let Some(u) = n.as_u64() {
-                    serializer.serialize_u64(u)
-                } else if let Some(f) = n.as_f64() {
-                    serializer.serialize_f64(f)
-                } else {
-                    serializer.serialize_str(&n.to_string())
-                }
-            }
-            YamlValue::String(s) => serializer.serialize_str(s),
-            YamlValue::Array(arr) => {
-                use serde_crate::ser::SerializeSeq;
-                let mut seq = serializer.serialize_seq(Some(arr.len()))?;
-                for item in arr {
-                    seq.serialize_element(item)?;
-                }
-                seq.end()
-            }
-            YamlValue::Mapping(map) => {
-                use serde_crate::ser::SerializeMap;
-                let mut m = serializer.serialize_map(Some(map.len()))?;
-                for (k, v) in map {
-                    m.serialize_key(k)?;
-                    m.serialize_value(v)?;
-                }
-                m.end()
-            }
-            YamlValue::Tagged(tagged) => tagged.value.serialize(serializer),
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde_crate::Deserialize<'de> for YamlValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde_crate::Deserializer<'de>,
-    {
-        let json = JsonValue::deserialize(deserializer)?;
-        Ok(json_to_yaml(json))
-    }
-}
-
-#[cfg(feature = "serde")]
-impl serde_crate::Serialize for YamlError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde_crate::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
     }
 }

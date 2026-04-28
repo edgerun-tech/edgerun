@@ -9,7 +9,7 @@ No Docker, no runc, no systemd, no libc crate. Just raw syscalls and `std`.
 
 The workspace package is `edgerun-oci`; the old `edgerun-oci-runtime`
 package name is stale. This README describes the code in `crates/edgerun-oci/`,
-including the CLI entry point at `src/bin/edgerun-oci.rs`.
+including the CLI entry point at `src/bin/ert.rs`.
 
 As of this audit, `cargo metadata --no-deps --format-version 1` succeeds for
 the root workspace. Treat the test counts below as the last recorded
@@ -21,7 +21,7 @@ OCI-specific run, not as freshly verified output from this documentation pass.
 crates/edgerun-oci/
 ├── src/
 │   ├── lib.rs              — Public API, re-exports, namespace helpers
-│   ├── json.rs             — OCI spec types (serde serialization via edgerun-json)
+│   ├── spec.rs             — OCI spec model using edgerun-json FromJson/ToJson
 │   ├── error.rs            — Structured error types per subsystem
 │   ├── state.rs            — Container state persistence (/run/edgerun-oci/<id>/state.json)
 │   ├── fifo.rs             — FIFO-based start synchronization
@@ -41,7 +41,7 @@ crates/edgerun-oci/
 │   ├── ebpf_netcls.rs      — eBPF-based network classification
 │   ├── cli/                — CLI command implementations
 │   └── bin/
-│       └── edgerun-oci.rs  — CLI entry point
+│       └── ert.rs          — CLI entry point
 ├── tests/
 │   ├── conformance.rs      — Integration conformance tests
 │   └── support/
@@ -303,7 +303,7 @@ Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -
 | Unit tests | 125 |
 | Integration tests | 24 |
 | Clippy warnings | 0 |
-| External dependencies | 3 (`edgerun-json`, `serde`, `libc`) |
+| External dependencies | `edgerun-json`, `edgerun-crypto`, `edgerun-encoding`, `miniz_oxide`, plus feature-gated host/runtime dependencies |
 | Async runtime | None (blocking syscalls only) |
 | Architectures | x86_64, aarch64 |
 
@@ -311,9 +311,11 @@ Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -
 
 | Crate | Purpose |
 |-------|---------|
-| `edgerun-json` | JSON serialization (drop-in for serde_json) |
-| `serde` | Derive macros for Serialize/Deserialize |
-| `libc` | Raw syscall FFI, constants |
+| `edgerun-json` | JSON parsing, typed conversion, and serialization |
+| `edgerun-crypto` | Built-in digest support |
+| `edgerun-encoding` | Encoding helpers |
+| `miniz_oxide` | Gzip layer decompression |
+| `libc` | Host-only raw syscall FFI and constants behind `std` |
 
 No async runtime, no external libraries (no libseccomp, no libcontainer, no libcap).
 

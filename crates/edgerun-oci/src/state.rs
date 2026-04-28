@@ -82,7 +82,7 @@ pub fn state_root_dir() -> PathBuf {
     PathBuf::from(base.as_ref())
 }
 
-use edgerun_json::{JsonValue, Map};
+use edgerun_json::{FromJson, JsonValue, JsonValueError, Map, ToJson};
 
 /// Container state matching the OCI runtime spec JSON format.
 #[derive(Debug, Clone)]
@@ -120,14 +120,14 @@ pub fn fifo_path(id: &str) -> PathBuf {
 pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = edgerun_json::to_string_pretty(&state_to_json_value(state))
+    let json = edgerun_json::to_string_pretty(&state.to_json())
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
     fs::write(state_file_path(id), json)?;
     Ok(())
 }
 
 /// Save the effective runtime OCI spec used to create the container.
-pub fn save_runtime_spec(spec: &crate::json::OciSpec, id: &str) -> io::Result<()> {
+pub fn save_runtime_spec(spec: &crate::spec::OciSpec, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
     let json = spec.to_json_string_pretty();
@@ -142,76 +142,65 @@ pub fn load_state(id: &str) -> io::Result<ContainerState> {
 }
 
 pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
-    let value = edgerun_json::parse_json(data).string_err()?;
-    state_from_json_value(&value)
+    edgerun_json::from_json_str(data).string_err()
 }
 
-pub fn state_to_json_value(state: &ContainerState) -> JsonValue {
-    let mut fields = Map::new();
-    fields.push_field("ociVersion", state.oci_version.clone());
-    fields.push_field("id", state.id.clone());
-    fields.push_field("status", state.status.clone());
-    if let Some(pid) = state.pid {
-        fields.push_field("pid", pid);
-    }
-    fields.push_field("bundle", state.bundle.clone());
-    if let Some(annotations) = &state.annotations {
-        let mut annotation_fields = Map::new();
-        for (key, value) in annotations {
-            annotation_fields.push_field(key.clone(), value.clone());
+impl ToJson for ContainerState {
+    fn to_json(&self) -> JsonValue {
+        let mut fields = Map::new();
+        fields.push_field("ociVersion", self.oci_version.as_str());
+        fields.push_field("id", self.id.as_str());
+        fields.push_field("status", self.status.as_str());
+        if let Some(pid) = self.pid {
+            fields.push_field("pid", pid);
         }
-        fields.push_field("annotations", JsonValue::Object(annotation_fields));
+        fields.push_field("bundle", self.bundle.as_str());
+        if let Some(annotations) = &self.annotations {
+            fields.push_field("annotations", annotations.to_json());
+        }
+        JsonValue::Object(fields)
     }
-    JsonValue::Object(fields)
 }
 
-fn state_from_json_value(value: &JsonValue) -> Result<ContainerState, String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "container state must be an object".to_string())?;
-    let pid = object
-        .get("pid")
-        .map(|value| {
-            value
-                .as_u64()
-                .and_then(|pid| u32::try_from(pid).ok())
-                .ok_or_else(|| "container state pid must be a u32".to_string())
+impl FromJson for ContainerState {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = object(value, "container state")?;
+        let pid = match object.remove("pid") {
+            Some(JsonValue::Null) | None => None,
+            Some(value) => Some(u32::from_json(value)?),
+        };
+        Ok(Self {
+            oci_version: take_required(&mut object, "ociVersion")?,
+            id: take_required(&mut object, "id")?,
+            status: take_required(&mut object, "status")?,
+            pid,
+            bundle: take_required(&mut object, "bundle")?,
+            annotations: take_optional(&mut object, "annotations")?,
         })
-        .transpose()?;
-    let annotations = object
-        .get("annotations")
-        .map(|value| {
-            let fields = value
-                .as_object()
-                .ok_or_else(|| "container state annotations must be an object".to_string())?;
-            fields
-                .fields()
-                .map(|(key, value)| {
-                    value
-                        .as_str()
-                        .map(|value| (key.to_string(), value.to_string()))
-                        .ok_or_else(|| {
-                            "container state annotation values must be strings".to_string()
-                        })
-                })
-                .collect()
-        })
-        .transpose()?;
-    Ok(ContainerState {
-        oci_version: required_object_string(object, "ociVersion")?,
-        id: required_object_string(object, "id")?,
-        status: required_object_string(object, "status")?,
-        pid,
-        bundle: required_object_string(object, "bundle")?,
-        annotations,
-    })
+    }
 }
 
-fn required_object_string(object: &Map, key: &str) -> Result<String, String> {
-    object
-        .required_str(key)
-        .map(ToString::to_string)
-        .string_err()
+fn object(value: JsonValue, name: &str) -> Result<Map, JsonValueError> {
+    match value {
+        JsonValue::Object(object) => Ok(object),
+        _ => Err(JsonValueError::WrongType(format!(
+            "{name} must be an object"
+        ))),
+    }
+}
+
+fn take_optional<T: FromJson>(object: &mut Map, key: &str) -> Result<Option<T>, JsonValueError> {
+    match object.remove(key) {
+        Some(JsonValue::Null) | None => Ok(None),
+        Some(value) => T::from_json(value).map(Some),
+    }
+}
+
+fn take_required<T: FromJson>(object: &mut Map, key: &str) -> Result<T, JsonValueError> {
+    let value = object
+        .remove(key)
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))?;
+    T::from_json(value)
 }
 
 /// Delete container state directory and all contents.

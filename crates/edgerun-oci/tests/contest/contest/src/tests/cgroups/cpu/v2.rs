@@ -11,8 +11,8 @@ use crate::tests::cgroups::attach_controller;
 use crate::utils::test_outside_container;
 use crate::utils::test_utils::{CGROUP_ROOT, check_container_created};
 use crate::utils::{
-    get_cgroup_setup, get_available_controllers, DEFAULT_CGROUP_ROOT,
-    CgroupSetup, ControllerType, PathBufExt,
+    CgroupSetup, ControllerType, DEFAULT_CGROUP_ROOT, PathBufExt, get_available_controllers,
+    get_cgroup_setup,
 };
 
 const DEFAULT_PERIOD: u64 = 100_000;
@@ -386,8 +386,7 @@ fn can_run() -> bool {
         return false;
     }
 
-    let controllers_result =
-        get_available_controllers(DEFAULT_CGROUP_ROOT);
+    let controllers_result = get_available_controllers(DEFAULT_CGROUP_ROOT);
     if controllers_result.is_err() {
         debug!(
             "could not retrieve cgroup controllers: {:?}",

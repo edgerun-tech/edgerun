@@ -17,7 +17,7 @@ edgerun-bluetooth-gatt = { path = "../edgerun-bluetooth-gatt" }
 edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"] }
+edgerun-json = { path = "../edgerun-json", default-features = false }
 
 [features]
 std = []

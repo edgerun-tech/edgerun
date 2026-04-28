@@ -11,8 +11,12 @@ $ cd crates/youki_integration_test
 $ cp ../youki .
 $ ./build.sh
 # currently root access is required
-$ sudo ./youki_integration_test -r ./youki
+$ cargo run --features manual -- run -r ./youki --runtimetest ./runtimetest
 ```
+
+The contest fixture is intentionally feature-gated. Build or run it with
+`--features manual`; default builds keep its fixture-only dependencies out of
+the normal dependency graph.
 
 This provides following commandline options :
 

@@ -202,19 +202,14 @@ fn volume_mounts_model(image_config: &ImageConfig) -> Option<Vec<OciMount>> {
         .filter(|mounts: &Vec<OciMount>| !mounts.is_empty())
 }
 
-#[cfg(all(
-    test,
-    not(target_os = "none"),
-    feature = "json",
-    not(feature = "serde")
-))]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use crate::validate_spec;
     use alloc::collections::BTreeMap;
 
     #[test]
-    fn generates_valid_oci_spec_model_without_serde() {
+    fn generates_valid_oci_spec_model_with_edgerun_json() {
         let mut volumes = BTreeMap::new();
         volumes.insert("/data".into(), edgerun_json::JsonValue::Null);
         let image_config = ImageConfig {

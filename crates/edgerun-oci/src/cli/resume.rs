@@ -26,7 +26,7 @@ pub fn cmd_resume(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     let bundle = &state.bundle;
     let config_path = std::path::Path::new(bundle).join("config.json");
     let cgroup_path = if let Ok(data) = fs::read(&config_path) {
-        if let Ok(spec) = crate::json::parse_oci_spec(&data) {
+        if let Ok(spec) = crate::spec::parse_oci_spec(&data) {
             spec.linux
                 .as_ref()
                 .and_then(|l| l.cgroups_path.as_ref())

@@ -1,15 +1,10 @@
-//! YAML parsing/serialization - compatible with serde_yaml.
-//!
-//! This module provides drop-in replacements for serde_yaml functionality.
+//! YAML parsing and serialization.
 
 #[cfg(feature = "yaml")]
 pub use crate::yaml_api::{
     from_yaml_str, json_to_yaml, parse_yaml_value, to_yaml_string, yaml_to_json, YamlDeserializer,
     YamlError, YamlValue,
 };
-
-#[cfg(all(feature = "yaml", feature = "serde"))]
-pub use crate::yaml_api::{from_yaml_str_typed, to_yaml_string_typed};
 
 #[cfg(feature = "yaml")]
 #[cfg(test)]

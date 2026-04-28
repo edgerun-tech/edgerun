@@ -11,97 +11,114 @@ pub fn cmd_features(_opts: &crate::cli::GlobalOpts, _args: &[String]) -> io::Res
 }
 
 fn features_json() -> String {
-    // Build manually to avoid adding a new struct
-    let mut f = String::new();
-    f.push_str("{\n");
-    f.push_str("  \"ociVersionMin\": \"1.0.0\",\n");
-    f.push_str("  \"ociVersionMax\": \"1.0.2\",\n");
-    f.push_str("  \"hooks\": [\n");
-    f.push_str("    \"prestart\",\n");
-    f.push_str("    \"createRuntime\",\n");
-    f.push_str("    \"createContainer\",\n");
-    f.push_str("    \"startContainer\",\n");
-    f.push_str("    \"poststart\",\n");
-    f.push_str("    \"poststop\"\n");
-    f.push_str("  ],\n");
-    f.push_str("  \"mountOptions\": [\"ro\", \"rw\", \"nosuid\", \"nodev\", \"noexec\", \"relatime\", \"strictatime\", \"nosymfollow\"],\n");
-    f.push_str("  \"linux\": {\n");
-    f.push_str("    \"namespaces\": [\n");
-    f.push_str("      \"cgroup\",\n");
-    f.push_str("      \"ipc\",\n");
-    f.push_str("      \"mount\",\n");
-    f.push_str("      \"network\",\n");
-    f.push_str("      \"pid\",\n");
-    f.push_str("      \"user\",\n");
-    f.push_str("      \"uts\"\n");
-    f.push_str("    ],\n");
-    f.push_str("    \"capabilities\": [\n");
-    f.push_str("      \"CAP_CHOWN\",\n");
-    f.push_str("      \"CAP_DAC_OVERRIDE\",\n");
-    f.push_str("      \"CAP_DAC_READ_SEARCH\",\n");
-    f.push_str("      \"CAP_FOWNER\",\n");
-    f.push_str("      \"CAP_FSETID\",\n");
-    f.push_str("      \"CAP_KILL\",\n");
-    f.push_str("      \"CAP_SETGID\",\n");
-    f.push_str("      \"CAP_SETUID\",\n");
-    f.push_str("      \"CAP_SETPCAP\",\n");
-    f.push_str("      \"CAP_LINUX_IMMUTABLE\",\n");
-    f.push_str("      \"CAP_NET_BIND_SERVICE\",\n");
-    f.push_str("      \"CAP_NET_BROADCAST\",\n");
-    f.push_str("      \"CAP_NET_ADMIN\",\n");
-    f.push_str("      \"CAP_NET_RAW\",\n");
-    f.push_str("      \"CAP_IPC_LOCK\",\n");
-    f.push_str("      \"CAP_IPC_OWNER\",\n");
-    f.push_str("      \"CAP_SYS_MODULE\",\n");
-    f.push_str("      \"CAP_SYS_RAWIO\",\n");
-    f.push_str("      \"CAP_SYS_CHROOT\",\n");
-    f.push_str("      \"CAP_SYS_PTRACE\",\n");
-    f.push_str("      \"CAP_SYS_PACCT\",\n");
-    f.push_str("      \"CAP_SYS_ADMIN\",\n");
-    f.push_str("      \"CAP_SYS_BOOT\",\n");
-    f.push_str("      \"CAP_SYS_NICE\",\n");
-    f.push_str("      \"CAP_SYS_RESOURCE\",\n");
-    f.push_str("      \"CAP_SYS_TIME\",\n");
-    f.push_str("      \"CAP_SYS_TTY_CONFIG\",\n");
-    f.push_str("      \"CAP_MKNOD\",\n");
-    f.push_str("      \"CAP_LEASE\",\n");
-    f.push_str("      \"CAP_AUDIT_WRITE\",\n");
-    f.push_str("      \"CAP_AUDIT_CONTROL\",\n");
-    f.push_str("      \"CAP_SETFCAP\",\n");
-    f.push_str("      \"CAP_MAC_OVERRIDE\",\n");
-    f.push_str("      \"CAP_MAC_ADMIN\",\n");
-    f.push_str("      \"CAP_SYSLOG\",\n");
-    f.push_str("      \"CAP_WAKE_ALARM\",\n");
-    f.push_str("      \"CAP_BLOCK_SUSPEND\",\n");
-    f.push_str("      \"CAP_AUDIT_READ\",\n");
-    f.push_str("      \"CAP_PERFMON\",\n");
-    f.push_str("      \"CAP_BPF\",\n");
-    f.push_str("      \"CAP_CHECKPOINT_RESTORE\"\n");
-    f.push_str("    ],\n");
-    f.push_str("    \"cgroup\": {\n");
-    f.push_str("      \"v1\": false,\n");
-    f.push_str("      \"v2\": true,\n");
-    f.push_str("      \"systemd\": false,\n");
-    f.push_str("      \"rdma\": false\n");
-    f.push_str("    },\n");
-    f.push_str("    \"seccomp\": {\n");
-    f.push_str("      \"enabled\": true,\n");
-    f.push_str("      \"actions\": [\"SCMP_ACT_ALLOW\", \"SCMP_ACT_ERRNO\", \"SCMP_ACT_KILL\", \"SCMP_ACT_KILL_PROCESS\", \"SCMP_ACT_KILL_THREAD\", \"SCMP_ACT_TRAP\", \"SCMP_ACT_TRACE\", \"SCMP_ACT_NOTIFY\", \"SCMP_ACT_LOG\"],\n");
-    f.push_str("      \"operators\": [\"SCMP_CMP_NE\", \"SCMP_CMP_EQ\", \"SCMP_CMP_LT\", \"SCMP_CMP_LE\", \"SCMP_CMP_GT\", \"SCMP_CMP_GE\", \"SCMP_CMP_MASKED_EQ\"]\n");
-    f.push_str("    },\n");
-    f.push_str("    \"apparmor\": {\n");
-    f.push_str("      \"enabled\": true\n");
-    f.push_str("    },\n");
-    f.push_str("    \"selinux\": {\n");
-    f.push_str("      \"enabled\": true\n");
-    f.push_str("    }\n");
-    f.push_str("  },\n");
-    f.push_str("  \"potentiallyUnsafeConfigAnnotations\": [],\n");
-    f.push_str("  \"annotations\": {},\n");
-    f.push_str("  \"rootless\": {\n");
-    f.push_str("    \"supported\": true,\n");
-    f.push_str(&format!("    \"uid\": {}\n", unsafe { libc::getuid() }));
-    f.push_str("  }\n");
-    f.push('}');
-    f
+    let features = edgerun_json::json!({
+        "ociVersionMin": "1.0.0",
+        "ociVersionMax": "1.0.2",
+        "hooks": [
+            "prestart",
+            "createRuntime",
+            "createContainer",
+            "startContainer",
+            "poststart",
+            "poststop"
+        ],
+        "mountOptions": [
+            "ro",
+            "rw",
+            "nosuid",
+            "nodev",
+            "noexec",
+            "relatime",
+            "strictatime",
+            "nosymfollow"
+        ],
+        "linux": {
+            "namespaces": ["cgroup", "ipc", "mount", "network", "pid", "user", "uts"],
+            "capabilities": [
+                "CAP_CHOWN",
+                "CAP_DAC_OVERRIDE",
+                "CAP_DAC_READ_SEARCH",
+                "CAP_FOWNER",
+                "CAP_FSETID",
+                "CAP_KILL",
+                "CAP_SETGID",
+                "CAP_SETUID",
+                "CAP_SETPCAP",
+                "CAP_LINUX_IMMUTABLE",
+                "CAP_NET_BIND_SERVICE",
+                "CAP_NET_BROADCAST",
+                "CAP_NET_ADMIN",
+                "CAP_NET_RAW",
+                "CAP_IPC_LOCK",
+                "CAP_IPC_OWNER",
+                "CAP_SYS_MODULE",
+                "CAP_SYS_RAWIO",
+                "CAP_SYS_CHROOT",
+                "CAP_SYS_PTRACE",
+                "CAP_SYS_PACCT",
+                "CAP_SYS_ADMIN",
+                "CAP_SYS_BOOT",
+                "CAP_SYS_NICE",
+                "CAP_SYS_RESOURCE",
+                "CAP_SYS_TIME",
+                "CAP_SYS_TTY_CONFIG",
+                "CAP_MKNOD",
+                "CAP_LEASE",
+                "CAP_AUDIT_WRITE",
+                "CAP_AUDIT_CONTROL",
+                "CAP_SETFCAP",
+                "CAP_MAC_OVERRIDE",
+                "CAP_MAC_ADMIN",
+                "CAP_SYSLOG",
+                "CAP_WAKE_ALARM",
+                "CAP_BLOCK_SUSPEND",
+                "CAP_AUDIT_READ",
+                "CAP_PERFMON",
+                "CAP_BPF",
+                "CAP_CHECKPOINT_RESTORE"
+            ],
+            "cgroup": {
+                "v1": false,
+                "v2": true,
+                "systemd": false,
+                "rdma": false
+            },
+            "seccomp": {
+                "enabled": true,
+                "actions": [
+                    "SCMP_ACT_ALLOW",
+                    "SCMP_ACT_ERRNO",
+                    "SCMP_ACT_KILL",
+                    "SCMP_ACT_KILL_PROCESS",
+                    "SCMP_ACT_KILL_THREAD",
+                    "SCMP_ACT_TRAP",
+                    "SCMP_ACT_TRACE",
+                    "SCMP_ACT_NOTIFY",
+                    "SCMP_ACT_LOG"
+                ],
+                "operators": [
+                    "SCMP_CMP_NE",
+                    "SCMP_CMP_EQ",
+                    "SCMP_CMP_LT",
+                    "SCMP_CMP_LE",
+                    "SCMP_CMP_GT",
+                    "SCMP_CMP_GE",
+                    "SCMP_CMP_MASKED_EQ"
+                ]
+            },
+            "apparmor": {
+                "enabled": true
+            },
+            "selinux": {
+                "enabled": true
+            }
+        },
+        "potentiallyUnsafeConfigAnnotations": [],
+        "annotations": {},
+        "rootless": {
+            "supported": true,
+            "uid": unsafe { libc::getuid() }
+        }
+    });
+    edgerun_json::to_string_pretty(&features).unwrap_or_default()
 }

@@ -9,8 +9,8 @@ use crate::prelude::*;
 use std::fs;
 use std::io;
 
-use crate::json::parse_oci_spec;
 use crate::lifecycle::start_created_container;
+use crate::spec::parse_oci_spec;
 use crate::state::load_state;
 
 pub fn cmd_start(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {

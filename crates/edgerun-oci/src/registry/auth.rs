@@ -34,24 +34,16 @@ pub enum RegistryAuth {
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub fn load_registry_auth(path: &std::path::Path) -> std::io::Result<RegistryAuth> {
     let data = std::fs::read_to_string(path)?;
-
-    // Minimal JSON parsing for auths
-    if let Some(auths_start) = data.find("\"auths\"") {
-        let rest = &data[auths_start..];
-        // Find the first auth entry with "auth"
-        if let Some(auth_start) = rest.find("\"auth\"") {
-            let auth_rest = &rest[auth_start..];
-            if let Some(colon) = auth_rest.find(':') {
-                let after_colon = &auth_rest[colon + 1..];
-                // Skip whitespace and quote
-                let trimmed = after_colon
-                    .trim_start_matches(|c: char| !c.is_ascii_alphanumeric() && c != '+');
-                // Find the closing quote
-                if let Some(end_quote) = trimmed.find('"') {
-                    let auth_str = &trimmed[..end_quote];
-                    if let Some((username, password)) = decode_basic_auth(auth_str) {
-                        return Ok(RegistryAuth::Basic { username, password });
-                    }
+    let value = edgerun_json::parse_json(&data)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string()))?;
+    if let Some(auths) = value
+        .as_object()
+        .and_then(|object| object.get_object("auths"))
+    {
+        for (_, entry) in auths.fields() {
+            if let Some(auth) = entry.as_object().and_then(|object| object.get_str("auth")) {
+                if let Some((username, password)) = decode_basic_auth(auth) {
+                    return Ok(RegistryAuth::Basic { username, password });
                 }
             }
         }

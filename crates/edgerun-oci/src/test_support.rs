@@ -1,9 +1,9 @@
 use crate::image_plan::BareImagePlan;
-use crate::json::{OciProcess, OciRoot, OciSpec};
 use crate::layer_pipeline::{format_digest, LayerDigest};
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use crate::runtime_config::BareRuntimeConfig;
+use crate::spec::{OciProcess, OciRoot, OciSpec};
 
 pub const TEST_TAR_BLOCK_SIZE: usize = 512;
 

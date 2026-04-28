@@ -20,7 +20,7 @@ rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"], o
 sha1-crate = { package = "sha1", version = "0.10", default-features = false, optional = true }
 x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"], optional = true }
 rand_core = { version = "0.6", default-features = false }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 
 [features]
 default = []

@@ -17,7 +17,7 @@ edgerun-http = { path = "../edgerun-http", default-features = false, features = 
 edgerun-tftp = { path = "../edgerun-tftp" }
 edgerun-tpm = { path = "../edgerun-tpm", default-features = false }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false }
-edgerun-oci = { path = "../edgerun-oci", default-features = false, features = ["json", "registry-client", "edgefs"] }
+edgerun-oci = { path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"] }
 edgerun-edgefs = { path = "../edgerun-edgefs" }
 edgerun-storage = { path = "../edgerun-storage" }
 

@@ -1,10 +1,10 @@
 //! no_std runtime-facing OCI configuration.
 
-use crate::json::{
+use crate::prelude::*;
+use crate::spec::{
     OciCapabilities, OciLinuxDevice, OciLinuxResources, OciLinuxSeccomp, OciMount, OciNamespace,
     OciRlimit, OciSpec,
 };
-use crate::prelude::*;
 use crate::validate::{
     default_process_args, default_process_env, validate_spec, OciValidationError,
 };
@@ -167,7 +167,7 @@ impl From<String> for BareNamespaceKind {
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
-    use crate::json::{OciLinux, OciProcess, OciRoot, OciUser};
+    use crate::spec::{OciLinux, OciProcess, OciRoot, OciUser};
 
     fn minimal_spec() -> OciSpec {
         OciSpec {

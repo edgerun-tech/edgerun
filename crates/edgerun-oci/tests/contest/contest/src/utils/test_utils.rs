@@ -10,7 +10,6 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use nix::mount::{MntFlags, umount2};
 use oci_spec::runtime::{LinuxNamespaceType, Spec};
-use serde::{Deserialize, Serialize};
 use test_framework::{TestResult, test_result};
 use thiserror::Error;
 
@@ -22,33 +21,27 @@ pub const CGROUP_ROOT: &str = "/sys/fs/cgroup";
 #[derive(Error, Debug)]
 pub enum ContainerStateError {
     #[error("Failed to parse lifecycle status")]
-    ParseLifecycleStatus(#[source] serde_json::Error),
+    ParseLifecycleStatus(#[source] anyhow::Error),
     #[error("Container does not exist")]
     ContainerNotFound,
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct State {
     pub oci_version: String,
     pub id: String,
     pub status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<i32>,
     pub bundle: PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub created: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub creator: Option<u32>,
     pub use_systemd: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum LifecycleStatus {
     Creating,
     Created,
@@ -180,7 +173,7 @@ pub fn get_container_status<P: AsRef<Path>>(
         )));
     }
 
-    let value = serde_json::from_str::<serde_json::Value>(&stdout).map_err(|err| {
+    let value = crate::utils::json::parse(&stdout).map_err(|err| {
         ContainerStateError::Other(anyhow!(
             "Failed to parse state output as JSON: {} - {}",
             stdout,
@@ -195,7 +188,7 @@ pub fn get_container_status<P: AsRef<Path>>(
         ))
     })?;
 
-    serde_json::from_value::<LifecycleStatus>(status.clone())
+    crate::utils::json::parse_lifecycle_status(status)
         .map_err(ContainerStateError::ParseLifecycleStatus)
 }
 
@@ -298,7 +291,7 @@ pub fn test_outside_container(
     let options = CreateOptions::default();
     let create_result = create_container(&id_str, &bundle, &options).unwrap().wait();
     let (out, err) = get_state(&id_str, &bundle).unwrap();
-    let state: Option<State> = serde_json::from_str(&out).ok();
+    let state: Option<State> = crate::utils::json::parse_state(&out).ok();
     let data = ContainerData {
         id: id.to_string(),
         state,
@@ -412,7 +405,7 @@ pub fn test_inside_container(
         ));
     }
 
-    let state: State = match serde_json::from_str(&out) {
+    let state: State = match crate::utils::json::parse_state(&out) {
         Ok(v) => v,
         Err(e) => {
             return TestResult::Failed(anyhow!(

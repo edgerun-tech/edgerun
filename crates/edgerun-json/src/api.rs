@@ -1,15 +1,15 @@
 //! High-level JSON parsing and serialization API.
 //!
 //! This module provides the main entry points for working with JSON data.
-//! The same function names work with both owned [`JsonValue`] and typed serde
-//! deserialization (when the `serde` feature is enabled).
+//! The primary entry points work with owned [`JsonValue`] values. Typed models
+//! should implement [`crate::FromJson`] and [`crate::ToJson`].
 //!
 //! # Parsing
 //!
 //! - [`parse_json`] — parse into an owned [`JsonValue`]
 //! - [`parse_json_borrowed`] — parse with zero-copy string borrowing
 //! - [`parse_json_tape`] — parse into a token tape for fast indexed access
-//! - [`from_str`] / [`from_slice`] — serde-compatible parsing
+//! - [`from_str`] / [`from_slice`] — parse into [`JsonValue`]
 //!
 //! # Serialization
 //!
@@ -18,17 +18,11 @@
 //! - [`to_writer`] / [`to_writer_pretty`] — write to any [`Write`] implementation
 //! - [`from_reader`] — read from any [`Read`] implementation
 //!
-//! # Serde Integration (feature-gated)
-//!
-//! When the `serde` feature is enabled, the same functions support typed
-//! deserialization. See the [crate-level documentation](crate) for examples.
-
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::{String, ToString};
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
-#[cfg(not(feature = "serde"))]
 use crate::error::JsonError;
 use crate::error::JsonParseError;
 use crate::io::{Read, Write};
@@ -146,10 +140,10 @@ pub fn parse_json_tape(input: &str) -> Result<crate::tape::JsonTape, JsonParseEr
     }
 }
 
-/// Converts an owned [`JsonValue`] into a caller-defined type without serde.
+/// Converts an owned [`JsonValue`] into a caller-defined type.
 ///
 /// This uses [`TryFrom<JsonValue>`], so crates can implement small explicit
-/// mappers for their protocol structs while keeping `serde` disabled.
+/// mappers for their protocol structs without adding a reflection dependency.
 pub fn from_value_as<T, E>(value: JsonValue) -> Result<T, JsonValueError>
 where
     T: TryFrom<JsonValue, Error = E>,
@@ -158,7 +152,7 @@ where
     T::try_from(value).map_err(|error| JsonValueError::WrongType(error.to_string()))
 }
 
-/// Parses JSON and converts the owned value into a caller-defined type without serde.
+/// Parses JSON and converts the owned value into a caller-defined type.
 pub fn from_str_as<T, E>(input: &str) -> Result<T, JsonValueError>
 where
     T: TryFrom<JsonValue, Error = E>,
@@ -167,7 +161,7 @@ where
     from_value_as(parse_json(input)?)
 }
 
-/// Parses a UTF-8 JSON byte slice and converts it into a caller-defined type without serde.
+/// Parses a UTF-8 JSON byte slice and converts it into a caller-defined type.
 pub fn from_slice_as<T, E>(input: &[u8]) -> Result<T, JsonValueError>
 where
     T: TryFrom<JsonValue, Error = E>,
@@ -177,41 +171,7 @@ where
     from_str_as(input)
 }
 
-// ---------------------------------------------------------------------------
-// Serde convenience functions (serde feature gate)
-// ---------------------------------------------------------------------------
-
-/// Converts a serializable value into a [`JsonValue`].
-///
-/// # Feature
-///
-/// Requires the `serde` feature flag.
-#[cfg(feature = "serde")]
-pub fn to_value<T>(value: T) -> Result<JsonValue, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize,
-{
-    value.serialize(crate::serde_serialize::JsonValueSerializer)
-}
-
-/// Deserializes a [`JsonValue`] into a typed value.
-///
-/// # Feature
-///
-/// Requires the `serde` feature flag.
-#[cfg(feature = "serde")]
-pub fn from_value<T>(value: JsonValue) -> Result<T, crate::serde_error::Error>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    T::deserialize(crate::serde_deserialize::JsonValueDeserializer::new(value))
-}
-
 /// Parses a JSON string.
-///
-/// Without the `serde` feature, returns a [`JsonValue`].
-/// With the `serde` feature, deserializes into any type implementing
-/// [`DeserializeOwned`](serde_crate::de::DeserializeOwned).
 ///
 /// # Example
 ///
@@ -222,71 +182,21 @@ where
 /// assert_eq!(value["name"].as_str(), Some("Alice"));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[cfg(feature = "serde")]
-pub fn from_str<T>(input: &str) -> Result<T, crate::serde_error::Error>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let mut de = crate::serde_deserialize::Deserializer::from_str(input);
-    let value = T::deserialize(&mut de)?;
-    de.end()?;
-    Ok(value)
-}
-
-/// Parses a JSON string into a [`JsonValue`].
-///
-/// This is an alias for [`parse_json`] when the `serde` feature is not enabled.
-#[cfg(not(feature = "serde"))]
 pub fn from_str(input: &str) -> Result<JsonValue, JsonParseError> {
     parse_json(input)
 }
 
 /// Parses a JSON byte slice.
 ///
-/// Without the `serde` feature, the input must be valid UTF-8 and returns a [`JsonValue`].
-/// With the `serde` feature, deserializes into any type implementing
-/// [`DeserializeOwned`](serde_crate::de::DeserializeOwned).
-#[cfg(feature = "serde")]
-pub fn from_slice<T>(input: &[u8]) -> Result<T, crate::serde_error::Error>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let mut de = crate::serde_deserialize::Deserializer::from_slice(input);
-    let value = T::deserialize(&mut de)?;
-    de.end()?;
-    Ok(value)
-}
-
-/// Parses a JSON byte slice into a [`JsonValue`].
-///
 /// # Errors
 ///
 /// Returns [`JsonParseError::InvalidUtf8`] if the input is not valid UTF-8.
-#[cfg(not(feature = "serde"))]
 pub fn from_slice(input: &[u8]) -> Result<JsonValue, JsonParseError> {
     let input = core::str::from_utf8(input).map_err(|_| JsonParseError::InvalidUtf8)?;
     parse_json(input)
 }
 
 /// Reads JSON from a reader and parses it.
-///
-/// Without the `serde` feature, returns a [`JsonValue`].
-/// With the `serde` feature, deserializes into any type implementing
-/// [`DeserializeOwned`](serde_crate::de::DeserializeOwned).
-#[cfg(feature = "serde")]
-pub fn from_reader<T, R>(reader: R) -> Result<T, crate::serde_error::Error>
-where
-    T: serde_crate::de::DeserializeOwned,
-    R: Read,
-{
-    let mut de = crate::serde_deserialize::Deserializer::from_reader(reader);
-    let value = T::deserialize(&mut de)?;
-    de.end()?;
-    Ok(value)
-}
-
-/// Reads JSON from a reader and parses it into a [`JsonValue`].
-#[cfg(not(feature = "serde"))]
 pub fn from_reader<R: Read>(mut reader: R) -> Result<JsonValue, JsonParseError> {
     let mut input = String::new();
     reader
@@ -297,9 +207,6 @@ pub fn from_reader<R: Read>(mut reader: R) -> Result<JsonValue, JsonParseError> 
 
 /// Serializes a value to a compact JSON string.
 ///
-/// Without the `serde` feature, accepts a [`JsonValue`].
-/// With the `serde` feature, accepts any type implementing [`Serialize`](serde_crate::Serialize).
-///
 /// # Example
 ///
 /// ```
@@ -309,34 +216,11 @@ pub fn from_reader<R: Read>(mut reader: R) -> Result<JsonValue, JsonParseError> 
 /// assert_eq!(to_string(&value)?, r#"{"name":"Alice","age":30}"#);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[cfg(feature = "serde")]
-pub fn to_string<T>(value: &T) -> Result<String, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize + ?Sized,
-{
-    crate::serde_streaming_serialize::to_string(value)
-}
-
-/// Serializes a [`JsonValue`] to a compact JSON string.
-#[cfg(not(feature = "serde"))]
 pub fn to_string(value: &JsonValue) -> Result<String, JsonError> {
     value.to_json_string()
 }
 
 /// Serializes a value to a JSON byte vector.
-///
-/// Without the `serde` feature, accepts a [`JsonValue`].
-/// With the `serde` feature, accepts any type implementing [`Serialize`](serde_crate::Serialize).
-#[cfg(feature = "serde")]
-pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize + ?Sized,
-{
-    crate::serde_streaming_serialize::to_vec(value)
-}
-
-/// Serializes a [`JsonValue`] to a JSON byte vector.
-#[cfg(not(feature = "serde"))]
 pub fn to_vec(value: &JsonValue) -> Result<Vec<u8>, JsonError> {
     let mut out = Vec::with_capacity(util::initial_json_capacity(value));
     util::write_json_value(&mut out, value)?;
@@ -344,38 +228,12 @@ pub fn to_vec(value: &JsonValue) -> Result<Vec<u8>, JsonError> {
 }
 
 /// Writes JSON to a writer.
-#[cfg(feature = "serde")]
-pub fn to_writer<T, W>(mut writer: W, value: &T) -> Result<(), crate::serde_error::Error>
-where
-    T: serde_crate::Serialize + ?Sized,
-    W: Write,
-{
-    let bytes = to_vec(value)?;
-    writer
-        .write_all(&bytes)
-        .map_err(|error| crate::serde_error::Error::custom(error.to_string()))
-}
-
-/// Writes a [`JsonValue`] to a writer.
-#[cfg(not(feature = "serde"))]
 pub fn to_writer<W: Write>(mut writer: W, value: &JsonValue) -> Result<(), JsonError> {
     let bytes = to_vec(value)?;
     writer.write_all(&bytes).map_err(|_| JsonError::Io)
 }
 
 /// Serializes a value to a pretty-printed JSON string.
-#[cfg(feature = "serde")]
-pub fn to_string_pretty<T>(value: &T) -> Result<String, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize + ?Sized,
-{
-    let json_value = to_value(value)?;
-    let mut out = Vec::with_capacity(util::initial_json_capacity(&json_value) + 16);
-    util::write_json_value_pretty(&mut out, &json_value, 0)?;
-    Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
-}
-
-/// Serializes a [`JsonValue`] to a pretty-printed JSON string.
 ///
 /// # Example
 ///
@@ -386,7 +244,6 @@ where
 /// let pretty = to_string_pretty(&value).unwrap();
 /// assert!(pretty.contains("\n"));
 /// ```
-#[cfg(not(feature = "serde"))]
 pub fn to_string_pretty(value: &JsonValue) -> Result<String, JsonError> {
     let mut out = Vec::with_capacity(util::initial_json_capacity(value) + 16);
     util::write_json_value_pretty(&mut out, value, 0)?;
@@ -394,19 +251,6 @@ pub fn to_string_pretty(value: &JsonValue) -> Result<String, JsonError> {
 }
 
 /// Serializes a value to a pretty-printed JSON byte vector.
-#[cfg(feature = "serde")]
-pub fn to_vec_pretty<T>(value: &T) -> Result<Vec<u8>, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize + ?Sized,
-{
-    let json_value = to_value(value)?;
-    let mut out = Vec::with_capacity(util::initial_json_capacity(&json_value) + 16);
-    util::write_json_value_pretty(&mut out, &json_value, 0)?;
-    Ok(out)
-}
-
-/// Serializes a [`JsonValue`] to a pretty-printed JSON byte vector.
-#[cfg(not(feature = "serde"))]
 pub fn to_vec_pretty(value: &JsonValue) -> Result<Vec<u8>, JsonError> {
     let mut out = Vec::with_capacity(util::initial_json_capacity(value) + 16);
     util::write_json_value_pretty(&mut out, value, 0)?;
@@ -414,19 +258,6 @@ pub fn to_vec_pretty(value: &JsonValue) -> Result<Vec<u8>, JsonError> {
 }
 
 /// Writes pretty-printed JSON to a writer.
-#[cfg(feature = "serde")]
-pub fn to_writer_pretty<T, W>(mut writer: W, value: &T) -> Result<(), crate::serde_error::Error>
-where
-    T: serde_crate::Serialize + ?Sized,
-    W: Write,
-{
-    let bytes = to_vec_pretty(value)?;
-    writer
-        .write_all(&bytes)
-        .map_err(|error| crate::serde_error::Error::custom(error.to_string()))
-}
-
-#[cfg(not(feature = "serde"))]
 pub fn to_writer_pretty<W: Write>(mut writer: W, value: &JsonValue) -> Result<(), JsonError> {
     let bytes = to_vec_pretty(value)?;
     writer.write_all(&bytes).map_err(|_| JsonError::Io)

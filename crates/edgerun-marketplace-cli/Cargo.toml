@@ -12,7 +12,7 @@ required-features = ["std"]
 edgerun-solana = { path = "../edgerun-solana" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc"] }
+edgerun-json = { path = "../edgerun-json", default-features = false }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 edgerun-clap = { path = "../edgerun-clap", features = ["std"] }

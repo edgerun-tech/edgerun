@@ -3,8 +3,7 @@ mod utils;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
-use edgerun_clap::Parser;
+use anyhow::{Context, Result, bail};
 use contest::logger;
 use test_framework::TestManager;
 use tests::cgroups;
@@ -58,30 +57,98 @@ use crate::tests::tlb::get_tlb_test;
 use crate::tests::uid_mappings::get_uid_mappings_test;
 use crate::utils::support::{set_runtime_path, set_runtimetest_path};
 
-#[derive(Parser, Debug)]
-#[command(version = "0.0.1", author = "youki team")]
+#[derive(Debug)]
 struct Opts {
-    #[arg(short, long)]
     debug: bool,
-
-    #[arg(subcommand)]
     command: SubCommand,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Debug)]
 enum SubCommand {
     Run(Run),
     List,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Debug)]
 struct Run {
-    #[arg(long)]
     runtime: PathBuf,
-    #[arg(long)]
     runtimetest: PathBuf,
-    #[arg(short, long, num_args = 1, value_delimiter = ' ')]
     tests: Option<Vec<String>>,
+}
+
+impl Opts {
+    fn parse() -> Result<Self> {
+        let mut args = std::env::args().skip(1).peekable();
+        let mut debug = false;
+        let mut command = None;
+        let mut runtime = None;
+        let mut runtimetest = None;
+        let mut tests = Vec::new();
+
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "-d" | "--debug" => debug = true,
+                "list" => command = Some(SubCommand::List),
+                "run" => {
+                    command = Some(SubCommand::Run(Run {
+                        runtime: PathBuf::new(),
+                        runtimetest: PathBuf::new(),
+                        tests: None,
+                    }))
+                }
+                "-r" | "--runtime" => {
+                    runtime = Some(PathBuf::from(next_arg(&mut args, arg.as_str())?));
+                }
+                "--runtime-test" | "--runtimetest" => {
+                    runtimetest = Some(PathBuf::from(next_arg(&mut args, arg.as_str())?));
+                }
+                "-t" | "--tests" => {
+                    while let Some(next) = args.peek() {
+                        if next.starts_with('-') {
+                            break;
+                        }
+                        tests.push(args.next().expect("peeked arg exists"));
+                    }
+                }
+                _ if let Some(value) = arg.strip_prefix("--runtime=") => {
+                    runtime = Some(PathBuf::from(value));
+                }
+                _ if let Some(value) = arg.strip_prefix("--runtimetest=") => {
+                    runtimetest = Some(PathBuf::from(value));
+                }
+                _ if let Some(value) = arg.strip_prefix("--runtime-test=") => {
+                    runtimetest = Some(PathBuf::from(value));
+                }
+                _ if command.is_none() => bail!("unknown command or argument: {arg}"),
+                _ => tests.push(arg),
+            }
+        }
+
+        let command = match command.unwrap_or_else(|| {
+            SubCommand::Run(Run {
+                runtime: PathBuf::new(),
+                runtimetest: PathBuf::new(),
+                tests: None,
+            })
+        }) {
+            SubCommand::List => SubCommand::List,
+            SubCommand::Run(_) => SubCommand::Run(Run {
+                runtime: runtime.context("--runtime is required")?,
+                runtimetest: runtimetest.context("--runtimetest is required")?,
+                tests: (!tests.is_empty()).then_some(tests),
+            }),
+        };
+
+        Ok(Self { debug, command })
+    }
+}
+
+fn next_arg(
+    args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
+    name: &str,
+) -> Result<String> {
+    args.next()
+        .with_context(|| format!("{name} requires a value"))
 }
 
 // parse test string given in commandline option as pair of testgroup name and tests belonging to that
@@ -100,7 +167,7 @@ fn parse_tests(tests: &[String]) -> Vec<(&str, Option<Vec<&str>>)> {
 }
 
 fn main() -> Result<()> {
-    let opts: Opts = Opts::parse();
+    let opts = Opts::parse()?;
 
     if let Err(e) = logger::init(opts.debug) {
         eprintln!("logger could not be initialized: {e:?}");

@@ -22,7 +22,7 @@ impl_json_struct! {
 }
 
 #[test]
-fn model_macro_expands_for_external_users_without_serde() {
+fn model_macro_expands_for_external_users() {
     let job = Job {
         id: String::from("job-1"),
         priority: 7,

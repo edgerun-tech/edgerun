@@ -1,7 +1,7 @@
 //! no_std OCI spec validation helpers.
 
-use crate::json::{OciSeccompAction, OciSpec};
 use crate::prelude::*;
+use crate::spec::{OciSeccompAction, OciSpec};
 use core::fmt;
 
 /// Default environment variables when none are specified in the OCI spec.
@@ -255,7 +255,7 @@ pub(crate) const KNOWN_SECCOMP_ARCHES: &[&str] = &[
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
-    use crate::json::{
+    use crate::spec::{
         OciCapabilities, OciLinux, OciLinuxSeccomp, OciNamespace, OciProcess, OciRlimit, OciRoot,
     };
 

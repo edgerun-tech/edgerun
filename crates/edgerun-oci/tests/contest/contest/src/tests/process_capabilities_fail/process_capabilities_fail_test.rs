@@ -3,8 +3,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 
 use anyhow::{Context, Ok, Result, anyhow};
+use edgerun_json::JsonValue as Value;
 use oci_spec::runtime::{ProcessBuilder, Spec, SpecBuilder};
-use serde_json::Value;
 use test_framework::{Test, TestGroup, TestResult, test_result};
 
 use crate::utils::test_inside_container;
@@ -30,7 +30,7 @@ fn process_capabilities_fail_test() -> TestResult {
         let spec_path = bundle.join("../config.json");
         let spec_str = fs::read_to_string(spec_path.clone()).unwrap();
 
-        let mut spec_json: Value = serde_json::from_str(&spec_str)?;
+        let mut spec_json: Value = crate::utils::json::parse(spec_str)?;
 
         // Before container creation, replace the spec's capability with an invalid one.
         let capability_paths = vec![
@@ -47,7 +47,7 @@ fn process_capabilities_fail_test() -> TestResult {
             }
         }
 
-        let updated_spec_str = serde_json::to_string_pretty(&spec_json)?;
+        let updated_spec_str = crate::utils::json::to_string_pretty(spec_json)?;
 
         let mut file = OpenOptions::new()
             .write(true)

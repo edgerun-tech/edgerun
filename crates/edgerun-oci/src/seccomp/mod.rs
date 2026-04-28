@@ -22,7 +22,7 @@ mod bpf;
 mod rules;
 mod syscall;
 
-use crate::json::{OciLinuxSeccomp, OciSeccompAction};
+use crate::spec::{OciLinuxSeccomp, OciSeccompAction};
 use crate::syscalls::{
     do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
     SECCOMP_SET_MODE_FILTER,

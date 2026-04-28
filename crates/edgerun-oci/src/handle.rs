@@ -7,7 +7,7 @@ use std::os::raw::c_int;
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 
-use crate::json::OciHook;
+use crate::spec::OciHook;
 use crate::syscalls::{kill, SIGKILL, SIGTERM};
 
 /// A handle to a running container that can be awaited or killed.

@@ -90,7 +90,7 @@ impl TokenStore {
 }
 
 fn credentials_to_json(creds: &Credentials) -> String {
-    let mut obj = Vec::new();
+    let mut obj: Vec<(String, JsonValue)> = Vec::new();
     if let Some(ref v) = creds.access_token {
         obj.push(("access_token".into(), JsonValue::String(v.clone())));
     }

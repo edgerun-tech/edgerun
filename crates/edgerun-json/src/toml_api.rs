@@ -1,6 +1,4 @@
-//! TOML API compatible with toml crate.
-//!
-//! This module provides drop-in replacements for toml functionality.
+//! TOML value parsing and serialization API.
 
 use crate::prelude::*;
 
@@ -8,7 +6,7 @@ use crate::prelude::*;
 use alloc::borrow::ToOwned;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
-#[cfg(all(feature = "alloc", any(not(feature = "std"), target_os = "none")))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::{format, string::String};
@@ -383,87 +381,5 @@ pub fn toml_to_json(value: TomlValue) -> JsonValue {
             }
             obj.into()
         }
-    }
-}
-
-#[cfg(feature = "serde")]
-pub fn to_value<T>(value: T) -> Result<TomlValue, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize,
-{
-    let json_value = crate::to_value(value)?;
-    Ok(json_to_toml(json_value))
-}
-
-#[cfg(feature = "serde")]
-pub fn from_value<T>(value: TomlValue) -> Result<T, crate::serde_error::Error>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let json_value = toml_to_json(value);
-    crate::from_value(json_value)
-}
-
-#[cfg(feature = "serde")]
-pub fn from_toml_str_typed<T>(s: &str) -> Result<T, TomlError>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let toml = from_toml_str(s)?;
-    let json = toml_to_json(toml);
-    crate::from_value(json).map_err(|e| TomlError::IoError(e.to_string()))
-}
-
-#[cfg(feature = "serde")]
-pub fn to_toml_string_typed<T>(value: &T) -> Result<String, TomlError>
-where
-    T: serde_crate::Serialize,
-{
-    let json_value = crate::to_value(value).map_err(|e| TomlError::IoError(e.to_string()))?;
-    let toml_value = json_to_toml(json_value);
-    to_toml_string(&toml_value)
-}
-
-#[cfg(feature = "serde")]
-impl serde_crate::Serialize for TomlValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde_crate::Serializer,
-    {
-        match self {
-            TomlValue::String(s) => serializer.serialize_str(s),
-            TomlValue::Integer(i) => serializer.serialize_i64(*i),
-            TomlValue::Float(f) => serializer.serialize_f64(*f),
-            TomlValue::Boolean(b) => serializer.serialize_bool(*b),
-            TomlValue::Datetime(s) => serializer.serialize_str(s),
-            TomlValue::Array(arr) => {
-                use serde_crate::ser::SerializeSeq;
-                let mut seq = serializer.serialize_seq(Some(arr.len()))?;
-                for item in arr {
-                    seq.serialize_element(item)?;
-                }
-                seq.end()
-            }
-            TomlValue::Table(table) => {
-                use serde_crate::ser::SerializeMap;
-                let mut m = serializer.serialize_map(Some(table.len()))?;
-                for (k, v) in table {
-                    m.serialize_key(k)?;
-                    m.serialize_value(v)?;
-                }
-                m.end()
-            }
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde_crate::Deserialize<'de> for TomlValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde_crate::Deserializer<'de>,
-    {
-        let json = JsonValue::deserialize(deserializer)?;
-        Ok(json_to_toml(json))
     }
 }

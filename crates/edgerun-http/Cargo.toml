@@ -26,7 +26,7 @@ edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optiona
 edgerun-rt = { path = "../edgerun-rt", optional = true }
 edgerun-log = { path = "../edgerun-log", optional = true }
 edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"], optional = true }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false, optional = true }
 edgerun-hpack = { path = "../edgerun-hpack", optional = true }
 edgerun-qpack = { path = "../edgerun-qpack", optional = true }
 edgerun-quic = { path = "../edgerun-quic", optional = true }

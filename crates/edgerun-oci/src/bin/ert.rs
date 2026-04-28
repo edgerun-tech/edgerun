@@ -499,15 +499,11 @@ fn cleanup_dead_run_states(root: &mut std::path::PathBuf) {
 }
 
 fn extract_json_pid(data: &str) -> Option<i32> {
-    let marker = "\"pid\"";
-    let start = data.find(marker)?;
-    let after = &data[start + marker.len()..];
-    let colon = after.find(':')?;
-    let digits = after[colon + 1..].trim_start();
-    let end = digits
-        .find(|ch: char| !ch.is_ascii_digit())
-        .unwrap_or(digits.len());
-    digits[..end].parse().ok()
+    edgerun_json::parse_json(data)
+        .ok()?
+        .as_object()?
+        .get("pid")?
+        .as_i32()
 }
 
 fn pid_alive(pid: i32) -> bool {

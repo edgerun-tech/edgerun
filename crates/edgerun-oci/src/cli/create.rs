@@ -8,11 +8,11 @@ use std::io;
 use std::path::Path;
 
 use crate::cli::GlobalOpts;
-use crate::json::{parse_oci_spec, OciSpec};
 use crate::lifecycle::{
     fork_container_child, run_create_runtime_hooks, run_prestart_hooks, save_created_state,
 };
 use crate::process::validate_spec;
+use crate::spec::{parse_oci_spec, OciSpec};
 
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));

@@ -3,7 +3,7 @@
 use crate::prelude::*;
 use std::io;
 
-use crate::json::OciSpec;
+use crate::spec::OciSpec;
 use crate::state::{container_state_dir, load_state, save_state, ContainerState};
 
 pub fn cmd_inspect(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -109,7 +109,7 @@ fn inspect_json(state: &ContainerState, spec: Option<&OciSpec>) -> edgerun_json:
     })
 }
 
-fn user_string(user: &crate::json::OciUser) -> String {
+fn user_string(user: &crate::spec::OciUser) -> String {
     match (user.uid, user.gid) {
         (Some(uid), Some(gid)) => format!("{uid}:{gid}"),
         (Some(uid), None) => uid.to_string(),

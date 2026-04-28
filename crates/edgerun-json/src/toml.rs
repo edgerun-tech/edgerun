@@ -1,15 +1,10 @@
-//! TOML parsing/serialization - compatible with toml crate.
-//!
-//! This module provides drop-in replacements for toml functionality.
+//! TOML value parsing and serialization.
 
 #[cfg(feature = "toml")]
 pub use crate::toml_api::{
     from_toml_str, json_to_toml, parse_toml_value, to_toml_string, toml_to_json, TomlError,
     TomlValue,
 };
-
-#[cfg(all(feature = "toml", feature = "serde"))]
-pub use crate::toml_api::{from_toml_str_typed, to_toml_string_typed};
 
 #[cfg(feature = "toml")]
 #[cfg(test)]

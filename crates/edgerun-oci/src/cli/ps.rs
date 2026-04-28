@@ -7,7 +7,6 @@ use std::io::Write;
 use std::os::unix::io::AsRawFd;
 
 use crate::cli::exec::{enter_container_root, join_container_namespaces, open_exec_root};
-use crate::cli::json_string;
 use crate::cli::process_tree;
 use crate::state::{load_state, save_state, state_root_dir, ContainerState};
 
@@ -124,21 +123,19 @@ fn print_containers_table(states: &[ContainerState]) {
 }
 
 fn print_containers_json(states: &[ContainerState]) {
-    let mut entries = Vec::new();
-    for state in states {
-        let pid = state
-            .pid
-            .map(|pid| pid.to_string())
-            .unwrap_or_else(|| "null".to_string());
-        entries.push(format!(
-            "{{\"id\":{},\"status\":{},\"pid\":{},\"bundle\":{}}}",
-            json_string(&state.id),
-            json_string(&state.status),
-            pid,
-            json_string(&state.bundle)
-        ));
-    }
-    println!("[{}]", entries.join(","));
+    let entries = states
+        .iter()
+        .map(|state| {
+            edgerun_json::json!({
+                "id": state.id.as_str(),
+                "status": state.status.as_str(),
+                "pid": state.pid.map(edgerun_json::JsonValue::from).unwrap_or(edgerun_json::JsonValue::Null),
+                "bundle": state.bundle.as_str()
+            })
+        })
+        .collect::<Vec<_>>();
+    let output = edgerun_json::JsonValue::Array(entries);
+    println!("{}", edgerun_json::to_string(&output).unwrap_or_default());
 }
 
 fn print_container_processes(init_pid: u32, root_fd: i32, json: bool) -> io::Result<()> {
@@ -265,15 +262,17 @@ fn print_processes_table(processes: &[ProcEntry]) {
 }
 
 fn print_processes_json(processes: &[ProcEntry]) {
-    let mut entries = Vec::new();
-    for process in processes {
-        entries.push(format!(
-            "{{\"pid\":{},\"ppid\":{},\"state\":{},\"command\":{}}}",
-            process.pid,
-            process.ppid,
-            json_string(&process.state),
-            json_string(&process.name)
-        ));
-    }
-    println!("[{}]", entries.join(","));
+    let entries = processes
+        .iter()
+        .map(|process| {
+            edgerun_json::json!({
+                "pid": process.pid,
+                "ppid": process.ppid,
+                "state": process.state.as_str(),
+                "command": process.name.as_str()
+            })
+        })
+        .collect::<Vec<_>>();
+    let output = edgerun_json::JsonValue::Array(entries);
+    println!("{}", edgerun_json::to_string(&output).unwrap_or_default());
 }

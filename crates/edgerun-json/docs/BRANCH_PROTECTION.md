@@ -93,8 +93,8 @@ cargo test
 # Run clippy
 cargo clippy --all-targets
 
-# Run host-only benchmarks (optional)
-cargo run -p edgerun-json --features std,serde_json_bench --bin edgerun-json-benchmark --release
+# Run crate tests
+cargo test -p edgerun-json
 ```
 
 ### 4. Push and Create PR

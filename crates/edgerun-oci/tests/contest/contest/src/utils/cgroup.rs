@@ -34,13 +34,11 @@ pub fn get_cgroup_setup() -> Result<CgroupSetup> {
     let cgroup_file = "/proc/self/cgroup";
     let mountinfo_file = "/proc/self/mountinfo";
 
-    let cgroup_content = fs::read_to_string(cgroup_file)
-        .with_context(|| format!("failed to read {cgroup_file}"))?;
+    let cgroup_content =
+        fs::read_to_string(cgroup_file).with_context(|| format!("failed to read {cgroup_file}"))?;
 
     // If cgroup v2 is in use, /proc/self/cgroup will have "0::/..."
-    let has_v2 = cgroup_content
-        .lines()
-        .any(|line| line.starts_with("0::"));
+    let has_v2 = cgroup_content.lines().any(|line| line.starts_with("0::"));
 
     if has_v2 {
         // Check if there are also v1 mounts (hybrid mode)
@@ -54,9 +52,7 @@ pub fn get_cgroup_setup() -> Result<CgroupSetup> {
     let mountinfo = fs::read_to_string(mountinfo_file)
         .with_context(|| format!("failed to read {mountinfo_file}"))?;
 
-    let has_v1 = mountinfo
-        .lines()
-        .any(|line| line.contains(" cgroup "));
+    let has_v1 = mountinfo.lines().any(|line| line.contains(" cgroup "));
 
     if has_v2 && has_v1 {
         Ok(CgroupSetup::Hybrid)

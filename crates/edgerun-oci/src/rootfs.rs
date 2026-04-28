@@ -14,7 +14,7 @@ use std::os::raw::c_ulong;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Component, Path, PathBuf};
 
-use crate::json::{OciLinuxDevice, OciMount, OciRoot};
+use crate::spec::{OciLinuxDevice, OciMount, OciRoot};
 use crate::syscalls::{
     chown, do_mount, do_mount_setattr, do_move_mount, do_open_tree, do_pivot_root, do_umount2,
     makedev, mknod, mount_attr, move_mount, ms, open_tree, MountAttr, MNT_DETACH, S_IFCHR,
@@ -353,8 +353,8 @@ fn setup_idmapped_mount(
     dest: &str,
     _source: &str,
     _fstype: &str,
-    uid_mappings: &[crate::json::OciIdMapping],
-    gid_mappings: Option<&[crate::json::OciIdMapping]>,
+    uid_mappings: &[crate::spec::OciIdMapping],
+    gid_mappings: Option<&[crate::spec::OciIdMapping]>,
 ) -> io::Result<()> {
     // Build uid_map string: "container_id host_id size\n" per entry
     let uid_map_str: String = uid_mappings

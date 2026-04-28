@@ -11,7 +11,7 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
-use crate::json::OciLinuxNetworkPriority;
+use crate::spec::OciLinuxNetworkPriority;
 use crate::syscalls::*;
 
 // For cgroup skb programs, context is struct __sk_buff:

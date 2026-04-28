@@ -2,8 +2,6 @@
 //!
 //! Run with: cargo test --test unicode -- --nocapture
 
-#[cfg(feature = "serde")]
-use edgerun_json::to_string;
 use edgerun_json::{parse_json, JsonValue};
 
 /// Test that all valid Unicode scalar values are handled correctly
@@ -172,14 +170,13 @@ fn test_raw_utf8() {
 }
 
 /// Test round-trip Unicode preservation
-#[cfg(feature = "serde")]
 #[test]
 fn test_unicode_roundtrip() {
     let test_strings = vec!["Hello, World!", "こんにちは世界", "🌍🌎🌏", "Привет мир"];
 
     for original in test_strings {
         let value = JsonValue::String(original.to_string());
-        let serialized = to_string(&value).expect("Failed to serialize");
+        let serialized = edgerun_json::to_string(&value).expect("Failed to serialize");
         let deserialized: JsonValue =
             edgerun_json::from_str(&serialized).expect("Failed to deserialize");
 
@@ -192,7 +189,6 @@ fn test_unicode_roundtrip() {
 }
 
 /// Test Unicode in object keys
-#[cfg(feature = "serde")]
 #[test]
 fn test_unicode_keys() {
     let json = r#"{"日本語": "value", "🔑": "key", "clé": "french"}"#;

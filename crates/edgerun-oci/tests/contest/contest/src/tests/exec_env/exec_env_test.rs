@@ -2,8 +2,8 @@ use std::ffi::OsStr;
 use std::fs;
 
 use anyhow::{Context, anyhow};
+use edgerun_json::json;
 use oci_spec::runtime::{ProcessBuilder, Spec, SpecBuilder};
-use serde_json::json;
 use test_framework::{Test, TestGroup, TestResult, test_result};
 
 use crate::utils::test_utils::check_container_created;
@@ -171,7 +171,7 @@ fn test_env_from_process_json() -> TestResult {
         let process_path = dir.join("process.json");
         if let Err(e) = fs::write(
             &process_path,
-            serde_json::to_vec_pretty(&process_json).unwrap(),
+            crate::utils::json::to_vec_pretty(process_json).unwrap(),
         ) {
             return TestResult::Failed(anyhow!("failed to write process.json: {}", e));
         }

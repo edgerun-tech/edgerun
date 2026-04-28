@@ -418,7 +418,6 @@ pub fn append_i64(out: &mut Vec<u8>, value: i64) {
 }
 
 /// u128 → ASCII using the same two-digits-at-a-time technique.
-#[cfg(feature = "serde")]
 pub fn append_u128(out: &mut Vec<u8>, mut value: u128) {
     if value == 0 {
         out.push(b'0');
@@ -460,7 +459,6 @@ pub fn append_u128(out: &mut Vec<u8>, mut value: u128) {
 }
 
 /// i128 → ASCII.
-#[cfg(feature = "serde")]
 pub fn append_i128(out: &mut Vec<u8>, value: i128) {
     if value < 0 {
         out.push(b'-');
@@ -473,7 +471,6 @@ pub fn append_i128(out: &mut Vec<u8>, value: i128) {
 /// f64 → ASCII.  Uses `ryu`-style formatting when available via
 /// `core::fmt::Write`, but avoids the FmtWriter struct re-definition overhead
 /// by using a small stack buffer and a single extend.
-#[cfg(feature = "serde")]
 pub fn append_f64(out: &mut Vec<u8>, value: f64) {
     // Special cases
     if value == 0.0 {

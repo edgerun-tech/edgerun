@@ -5,24 +5,52 @@ edition = "2024"
 
 [workspace]
 
+[features]
+default = []
+manual = [
+  "dep:anyhow",
+  "dep:edgerun-crypto",
+  "dep:edgerun-json",
+  "dep:flate2",
+  "dep:libc",
+  "dep:nix",
+  "dep:num_cpus",
+  "dep:oci-spec",
+  "dep:pnet_datalink",
+  "dep:procfs",
+  "dep:regex",
+  "dep:tar",
+  "dep:tempfile",
+  "dep:test_framework",
+  "dep:thiserror",
+  "dep:tracing",
+  "dep:tracing-subscriber",
+  "dep:uuid",
+  "dep:which",
+]
+
 [dependencies]
-anyhow = "1.0"
-flate2 = "1.1"
-nix = { version = "0.31.2", features = ["mount", "socket", "uio", "fs", "process", "user"] }
-num_cpus = "1.17"
-oci-spec = { version = "0.9.0", features = ["runtime"] }
-pnet_datalink = "0.35.0"
-procfs = "0.18.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tar = "0.4"
-test_framework = { path = "../test_framework" }
-uuid = "1.23"
-which = "8.0.2"
-tempfile = "3"
-thiserror = "2.0"
-tracing = { version = "0.1.44", features = ["attributes"] }
-tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
-regex = "1"
-edgerun_clap = { package = "edgerun-clap", path = "../../../../edgerun-clap", features = ["std"] }
-edgerun-crypto = { path = "../../../../edgerun-crypto" }
+anyhow = { version = "1.0", optional = true }
+flate2 = { version = "1.1", optional = true }
+libc = { version = "0.2", optional = true }
+nix = { version = "0.31.2", features = ["mount", "socket", "uio", "fs", "process", "user"], optional = true }
+num_cpus = { version = "1.17", optional = true }
+oci-spec = { version = "0.9.0", default-features = false, features = ["runtime"], optional = true }
+pnet_datalink = { version = "0.35.0", optional = true }
+procfs = { version = "0.18.0", optional = true }
+tar = { version = "0.4", optional = true }
+test_framework = { path = "../test_framework", optional = true }
+uuid = { version = "1.23", optional = true }
+which = { version = "8.0.2", optional = true }
+tempfile = { version = "3", optional = true }
+thiserror = { version = "2.0", optional = true }
+tracing = { version = "0.1.44", features = ["attributes"], optional = true }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"], optional = true }
+regex = { version = "1", optional = true }
+edgerun-crypto = { path = "../../../../edgerun-crypto", optional = true }
+edgerun-json = { path = "../../../../edgerun-json", features = ["std"], optional = true }
+
+[[bin]]
+name = "contest"
+path = "src/main.rs"
+required-features = ["manual"]

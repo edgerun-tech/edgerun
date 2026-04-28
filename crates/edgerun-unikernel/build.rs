@@ -13,4 +13,7 @@ fn main() {
         "cargo:rustc-link-arg-bin=edgerun-unikernel=-T{}",
         linker_script.display()
     );
+    if target_arch == "xtensa" {
+        println!("cargo:rustc-link-arg-bin=edgerun-unikernel=-nostartfiles");
+    }
 }
