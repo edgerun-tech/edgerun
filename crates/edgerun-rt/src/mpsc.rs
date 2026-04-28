@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use core::future::Future;
 use core::pin::Pin;
@@ -15,7 +16,7 @@ use crate::sync::Mutex;
 pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
     let queue = Arc::new(Queue {
         data: Mutex::new(VecDeque::new()),
-        waker: Mutex::new(None),
+        wakers: Mutex::new(Vec::new()),
         sender_count: AtomicUsize::new(1),
         closed: AtomicUsize::new(0),
     });
@@ -34,7 +35,7 @@ pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
 
 struct Queue<T> {
     data: Mutex<VecDeque<T>>,
-    waker: Mutex<Option<Waker>>,
+    wakers: Mutex<Vec<Waker>>,
     sender_count: AtomicUsize,
     closed: AtomicUsize,
 }
@@ -139,7 +140,7 @@ impl<T: Unpin> Future for Send<T> {
             Ok(()) => Poll::Ready(Ok(())),
             Err(TrySendError::Closed(value)) => Poll::Ready(Err(SendError(value))),
             Err(TrySendError::Full(value)) => {
-                *this.sender.queue.waker.lock() = Some(cx.waker().clone());
+                register_waker(&mut this.sender.queue.wakers.lock(), cx.waker());
                 this.value = Some(value);
                 Poll::Pending
             }
@@ -201,7 +202,7 @@ impl<T> Future for Receiver<T> {
             return Poll::Ready(value);
         }
         if self.queue.closed.load(Ordering::Acquire) == 0 {
-            *self.queue.waker.lock() = Some(cx.waker().clone());
+            register_waker(&mut self.queue.wakers.lock(), cx.waker());
         }
         Poll::Pending
     }
@@ -261,15 +262,25 @@ impl<T> Future for Recv<'_, T> {
             Ok(value) => Poll::Ready(Some(value)),
             Err(TryRecvError::Disconnected) => Poll::Ready(None),
             Err(TryRecvError::Empty) => {
-                *self.receiver.queue.waker.lock() = Some(cx.waker().clone());
+                register_waker(&mut self.receiver.queue.wakers.lock(), cx.waker());
                 Poll::Pending
             }
         }
     }
 }
 
+fn register_waker(wakers: &mut Vec<Waker>, waker: &Waker) {
+    if !wakers.iter().any(|registered| registered.will_wake(waker)) {
+        wakers.push(waker.clone());
+    }
+}
+
 fn wake_receiver<T>(queue: &Arc<Queue<T>>) {
-    if let Some(waker) = queue.waker.lock().take() {
+    let wakers = {
+        let mut wakers = queue.wakers.lock();
+        core::mem::take(&mut *wakers)
+    };
+    for waker in wakers {
         waker.wake();
     }
 }

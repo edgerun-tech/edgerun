@@ -39,6 +39,7 @@ pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Res
     }
 
     let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    crate::cli::validate_container_id(&id)?;
     let image_path = matches.get_one::<PathBuf>("image-path");
     let work_path = matches.get_one::<PathBuf>("work-path");
     let leave_running = matches.get_flag("leave-running");

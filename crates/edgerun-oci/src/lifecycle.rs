@@ -19,7 +19,7 @@ use crate::prelude::*;
 use std::ffi::CString;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::cgroups::setup_cgroups;
 pub use crate::handle::RunningContainer;
@@ -294,7 +294,7 @@ pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec) {
     };
 
     let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
-    let rootless = !is_root();
+    let rootless = is_rootless_mode();
     let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup_path)
         .unwrap_or_else(|e| {
             let _ = fs::write(
@@ -432,11 +432,9 @@ pub fn run_poststop_and_cleanup(
     }
 
     // Clean up cgroup directory
-    if !cgroup_path.is_empty() {
-        let cgroup_dir = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
-        if cgroup_dir.exists() {
-            let _ = std::fs::remove_dir_all(&cgroup_dir);
-        }
+    let cgroup_dir = container_cgroup_dir(cgroup_path);
+    if cgroup_dir.exists() {
+        let _ = std::fs::remove_dir_all(&cgroup_dir);
     }
 }
 
@@ -467,14 +465,22 @@ fn delete_container_internal(
 
     execute_poststop_hooks(Some(poststop_hooks), &state);
 
-    if !cgroup_path.is_empty() {
-        let cgroup_dir = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
-        if cgroup_dir.exists() {
-            let _ = std::fs::remove_dir_all(&cgroup_dir);
-        }
+    let cgroup_dir = container_cgroup_dir(cgroup_path);
+    if cgroup_dir.exists() {
+        let _ = std::fs::remove_dir_all(&cgroup_dir);
     }
 
     Ok(())
+}
+
+fn container_cgroup_dir(cgroup_path: &str) -> PathBuf {
+    let raw = if cgroup_path.is_empty() { "/edgerun" } else { cgroup_path };
+    let resolved = if crate::state::is_rootless_mode() {
+        crate::rootless::resolve_container_cgroup_path(true, raw).unwrap_or_else(|_| raw.to_string())
+    } else {
+        raw.to_string()
+    };
+    Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/'))
 }
 
 // ===========================================================================

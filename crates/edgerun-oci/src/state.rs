@@ -31,6 +31,11 @@ pub fn is_rootless() -> bool {
     std::env::var("_ERT_ROOTLESS_CHILD").is_ok()
 }
 
+/// Check if runtime behavior should use rootless assumptions.
+pub fn is_rootless_mode() -> bool {
+    !is_root() || is_rootless()
+}
+
 /// Resolve the default state directory based on whether we're rootless.
 ///
 /// Root: `/run/edgerun-oci`

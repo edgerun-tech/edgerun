@@ -62,6 +62,7 @@ fn parse_stop_args(args: &[String]) -> io::Result<(u64, String)> {
         .transpose()?
         .unwrap_or(10);
     let id = required_positional(&matches, 0, USAGE)?.to_string();
+    crate::cli::validate_container_id(&id)?;
     Ok((timeout, id))
 }
 

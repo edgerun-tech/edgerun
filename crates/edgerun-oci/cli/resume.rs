@@ -40,8 +40,7 @@ pub fn cmd_resume(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
         "/edgerun".into()
     };
 
-    let cgroup_dir =
-        std::path::Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+    let cgroup_dir = crate::cli::cgroup_dir_path(&cgroup_path)?;
     let freeze_file = cgroup_dir.join("cgroup.freeze");
 
     fs::write(&freeze_file, "0")

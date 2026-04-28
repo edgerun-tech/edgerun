@@ -323,10 +323,28 @@ fn cleanup_rootless_run_rm(args: &[String]) {
     }
 
     if let Some(name) = name {
+        if !valid_container_id(&name) {
+            return;
+        }
         let _ = std::fs::remove_dir_all(root.join(name));
     } else {
         cleanup_dead_run_states(&mut root);
     }
+}
+
+fn valid_container_id(value: &str) -> bool {
+    if value.is_empty() || value.len() > 255 {
+        return false;
+    }
+    let Some(first) = value.chars().next() else {
+        return false;
+    };
+    if !first.is_ascii_alphanumeric() {
+        return false;
+    }
+    value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
 }
 
 fn cleanup_dead_run_states(root: &mut std::path::PathBuf) {

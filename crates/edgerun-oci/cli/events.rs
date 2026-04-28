@@ -36,8 +36,7 @@ pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
         "/edgerun".into()
     };
 
-    let cgroup_dir =
-        std::path::Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+    let cgroup_dir = crate::cli::cgroup_dir_path(&cgroup_path)?;
 
     let Some(interval_ms) = parsed.interval_ms else {
         let stats = read_cgroup_stats(&cgroup_dir, pid)?;
@@ -88,6 +87,7 @@ fn parse_events_args(args: &[String]) -> io::Result<EventsArgs> {
         return Err(invalid_input(USAGE));
     }
     let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    crate::cli::validate_container_id(&id)?;
     let interval_ms = matches
         .get_one::<String>("interval")
         .map(|interval| {

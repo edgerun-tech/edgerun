@@ -54,6 +54,7 @@ fn parse_logs_args(args: &[String]) -> io::Result<LogsArgs> {
         return Err(invalid_input(USAGE));
     }
     let id = required_positional(&matches, 0, USAGE)?.to_string();
+    crate::cli::validate_container_id(&id)?;
     let tail = matches
         .get_one::<String>("tail")
         .map(|value| parse_tail(&value))

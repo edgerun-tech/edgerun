@@ -50,7 +50,9 @@ impl core::future::Future for Signal {
             if self.raised() {
                 return Poll::Ready(());
             }
-            guard.push(cx.waker().clone());
+            if !guard.iter().any(|waker| waker.will_wake(cx.waker())) {
+                guard.push(cx.waker().clone());
+            }
             Poll::Pending
         }
     }

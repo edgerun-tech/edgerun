@@ -2,6 +2,7 @@
 
 use crate::prelude::*;
 use std::io;
+use std::path::PathBuf;
 mod checkpoint;
 mod create;
 mod delete;
@@ -529,6 +530,7 @@ pub fn parse_kill_args(args: &[String]) -> io::Result<(Option<String>, String)> 
         return Err(invalid_input(USAGE));
     }
     let container_id = required_positional(&matches, 0, "container ID required")?.to_string();
+    validate_container_id(&container_id)?;
     let signal = matches.get_positional(1).map(str::to_string);
     Ok((signal, container_id))
 }
@@ -551,7 +553,13 @@ pub fn parse_delete_args(args: &[String]) -> io::Result<(bool, Option<String>)> 
     }
     Ok((
         matches.get_flag("force"),
-        matches.get_positional(0).map(str::to_string),
+        matches
+            .get_positional(0)
+            .map(|id| {
+                validate_container_id(id)?;
+                Ok(id.to_string())
+            })
+            .transpose()?,
     ))
 }
 
@@ -567,7 +575,50 @@ pub fn parse_container_id_args(args: &[String], command: &'static str) -> io::Re
     if matches.positional_count() > 1 {
         return Err(invalid_input(usage.clone()));
     }
-    required_positional(&matches, 0, "container ID required").map(str::to_string)
+    let id = required_positional(&matches, 0, "container ID required").to_string();
+    validate_container_id(&id)?;
+    Ok(id)
+}
+
+pub(crate) fn cgroup_dir_path(cgroup_path: &str) -> io::Result<PathBuf> {
+    let raw = if cgroup_path.is_empty() { "/edgerun" } else { cgroup_path };
+    let resolved = if crate::state::is_rootless_mode() {
+        crate::rootless::resolve_container_cgroup_path(true, raw).unwrap_or_else(|_| raw.to_string())
+    } else {
+        raw.to_string()
+    };
+    Ok(std::path::Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/')))
+}
+
+fn validate_container_id(value: &str) -> io::Result<()> {
+    if value.is_empty() || value.len() > 255 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID must be between 1 and 255 characters",
+        ));
+    }
+    let Some(first) = value.chars().next() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID cannot be empty",
+        ));
+    };
+    if !first.is_ascii_alphanumeric() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID must start with an alphanumeric character",
+        ));
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID may contain only letters, digits, '-', '_' and '.'",
+        ));
+    }
+    Ok(())
 }
 
 /// Resolve registry authentication via secret service.
@@ -672,5 +723,11 @@ mod tests {
         );
         assert!(parse_container_id_args(&args(&["abc", "extra"]), "state").is_err());
         assert!(parse_container_id_args(&args(&["--bad", "abc"]), "state").is_err());
+    }
+
+    #[test]
+    fn container_id_parser_rejects_path_like_ids() {
+        assert!(parse_container_id_args(&args(&["../bad"]), "state").is_err());
+        assert!(parse_container_id_args(&args(&["bad/id"]), "state").is_err());
     }
 }

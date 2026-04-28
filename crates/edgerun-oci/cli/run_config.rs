@@ -101,7 +101,13 @@ pub(super) fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Ve
     let mut opts = RunOpts {
         rm: matches.get_flag("rm"),
         detach: matches.get_flag("detach"),
-        name: matches.get_one::<String>("name"),
+        name: matches
+            .get_one::<String>("name")
+            .map(|name| {
+                crate::cli::validate_container_id(name)?;
+                Ok::<String, std::io::Error>(name.to_string())
+            })
+            .transpose()?,
         env: Vec::new(),
         env_files: Vec::new(),
         user: matches

@@ -72,8 +72,14 @@ impl Future for Notified<'_> {
             inner.permits -= 1;
             Poll::Ready(())
         } else {
-            inner.waiters.push_back(cx.waker().clone());
+            register_waker(&mut inner.waiters, cx.waker());
             Poll::Pending
         }
+    }
+}
+
+fn register_waker(waiters: &mut alloc::collections::VecDeque<Waker>, waker: &Waker) {
+    if !waiters.iter().any(|registered| registered.will_wake(waker)) {
+        waiters.push_back(waker.clone());
     }
 }

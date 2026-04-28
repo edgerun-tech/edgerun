@@ -86,8 +86,7 @@ pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
         .cloned()
         .unwrap_or_else(|| "/edgerun".into());
 
-    let cgroup_root =
-        std::path::Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+    let cgroup_root = crate::cli::cgroup_dir_path(&cgroup_path)?;
 
     // Apply updates
     apply_update(&cgroup_root, &update_opts)?;
@@ -322,6 +321,7 @@ fn parse_update_args(args: &[String]) -> io::Result<(String, UpdateOpts)> {
     }
 
     let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    crate::cli::validate_container_id(&id)?;
     let mut opts = UpdateOpts::default();
 
     if let Some(memory) = matches.get_one::<String>("memory") {

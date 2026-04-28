@@ -83,7 +83,13 @@ fn parse_ps_args(args: &[String]) -> io::Result<PsArgs> {
     Ok(PsArgs {
         all: matches.get_flag("all"),
         json,
-        container_id: matches.get_positional(0).map(str::to_string),
+        container_id: matches
+            .get_positional(0)
+            .map(|id| {
+                crate::cli::validate_container_id(id)?;
+                Ok(id.to_string())
+            })
+            .transpose()?,
     })
 }
 

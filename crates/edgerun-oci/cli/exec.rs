@@ -342,6 +342,7 @@ fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
     )?;
     let id =
         id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
+    crate::cli::validate_container_id(&id)?;
 
     let mut result = ExecArgs {
         id,

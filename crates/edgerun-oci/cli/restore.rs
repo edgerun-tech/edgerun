@@ -29,6 +29,7 @@ pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     }
 
     let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    crate::cli::validate_container_id(&id)?;
     let image_path = matches
         .get_one::<PathBuf>("image-path")
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "--image-path is required"))?;
