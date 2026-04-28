@@ -43,12 +43,12 @@ pub fn validate_stream_append(
     writer_key_hint: Option<&[u8; 64]>,
 ) -> ValidationResult {
     // Structural: required fields
-    if candidate.envelope_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported EventEnvelope version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        candidate.envelope_version,
+        "EventEnvelope",
+        "envelope_version",
+    ) {
+        return result;
     }
     if candidate.stream_id.is_empty() {
         return reject(
@@ -325,12 +325,12 @@ fn verify_event_signature(event: &EventEnvelope, key: &[u8; 64]) -> bool {
 
 /// Validates a node genesis payload before using it as bootstrap stream state.
 pub fn validate_node_genesis_payload(payload: &NodeGenesisPayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported NodeGenesisPayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "NodeGenesisPayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if payload.node_id.is_empty() {
         return reject(
@@ -394,22 +394,17 @@ pub fn validate_node_genesis_payload(payload: &NodeGenesisPayload) -> Validation
         return result;
     }
 
-    let mut derived = std::collections::BTreeMap::new();
-    derived.insert(
-        "payload_family".into(),
-        Value::String("node_genesis".into()),
-    );
-    accept(Value::Map(derived), empty_map())
+    accept_payload_family("node_genesis")
 }
 
 /// Validates a command-sent payload before using it as durable send evidence.
 pub fn validate_command_sent_payload(payload: &CommandSentPayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported CommandSentPayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "CommandSentPayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if let Some(result) =
         validate_command_ref(payload.command.as_ref(), "CommandSentPayload command")
@@ -428,23 +423,18 @@ pub fn validate_command_sent_payload(payload: &CommandSentPayload) -> Validation
         return result;
     }
 
-    let mut derived = std::collections::BTreeMap::new();
-    derived.insert(
-        "payload_family".into(),
-        Value::String("command_sent".into()),
-    );
-    accept(Value::Map(derived), empty_map())
+    accept_payload_family("command_sent")
 }
 
 /// Validates the structural fields of a command result payload before indexing
 /// or exposing it as command outcome evidence.
 pub fn validate_command_result_payload(payload: &CommandResultPayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported CommandResultPayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "CommandResultPayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if let Some(result) =
         validate_command_ref(payload.command.as_ref(), "CommandResultPayload command")
@@ -487,23 +477,18 @@ pub fn validate_command_result_payload(payload: &CommandResultPayload) -> Valida
         return result;
     }
 
-    let mut derived = std::collections::BTreeMap::new();
-    derived.insert(
-        "payload_family".into(),
-        Value::String("command_result".into()),
-    );
-    accept(Value::Map(derived), empty_map())
+    accept_payload_family("command_result")
 }
 
 /// Validates the structural fields of an action lifecycle payload before it is
 /// treated as command progress evidence.
 pub fn validate_action_lifecycle_payload(payload: &ActionLifecyclePayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported ActionLifecyclePayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "ActionLifecyclePayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if let Some(result) = validate_command_ref(
         payload.origin_command.as_ref(),
@@ -572,23 +557,18 @@ pub fn validate_action_lifecycle_payload(payload: &ActionLifecyclePayload) -> Va
         );
     }
 
-    let mut derived = std::collections::BTreeMap::new();
-    derived.insert(
-        "payload_family".into(),
-        Value::String("action_lifecycle".into()),
-    );
-    accept(Value::Map(derived), empty_map())
+    accept_payload_family("action_lifecycle")
 }
 
 /// Validates metadata for a stored or rotated secret. The secret value itself is
 /// intentionally outside this payload and remains in the encrypted blob store.
 pub fn validate_secret_put_payload(payload: &SecretPutPayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported SecretPutPayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "SecretPutPayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if let Some(result) = validate_required_string(&payload.namespace, "SecretPutPayload namespace")
     {
@@ -613,19 +593,17 @@ pub fn validate_secret_put_payload(payload: &SecretPutPayload) -> ValidationResu
         );
     }
 
-    let mut derived = std::collections::BTreeMap::new();
-    derived.insert("payload_family".into(), Value::String("secret_put".into()));
-    accept(Value::Map(derived), empty_map())
+    accept_payload_family("secret_put")
 }
 
 /// Validates metadata for a deleted secret.
 pub fn validate_secret_delete_payload(payload: &SecretDeletePayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported SecretDeletePayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "SecretDeletePayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if let Some(result) =
         validate_required_string(&payload.namespace, "SecretDeletePayload namespace")
@@ -639,22 +617,17 @@ pub fn validate_secret_delete_payload(payload: &SecretDeletePayload) -> Validati
         return result;
     }
 
-    let mut derived = std::collections::BTreeMap::new();
-    derived.insert(
-        "payload_family".into(),
-        Value::String("secret_delete".into()),
-    );
-    accept(Value::Map(derived), empty_map())
+    accept_payload_family("secret_delete")
 }
 
 /// Validates metadata for collection creation.
 pub fn validate_collection_created_payload(payload: &CollectionCreatedPayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported CollectionCreatedPayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "CollectionCreatedPayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if let Some(result) = validate_required_string(
         &payload.collection_name,
@@ -667,22 +640,17 @@ pub fn validate_collection_created_payload(payload: &CollectionCreatedPayload) -
         return result;
     }
 
-    let mut derived = std::collections::BTreeMap::new();
-    derived.insert(
-        "payload_family".into(),
-        Value::String("collection_created".into()),
-    );
-    accept(Value::Map(derived), empty_map())
+    accept_payload_family("collection_created")
 }
 
 /// Validates metadata for collection deletion.
 pub fn validate_collection_deleted_payload(payload: &CollectionDeletedPayload) -> ValidationResult {
-    if payload.payload_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported CollectionDeletedPayload version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        payload.payload_version,
+        "CollectionDeletedPayload",
+        "payload_version",
+    ) {
+        return result;
     }
     if let Some(result) = validate_required_string(
         &payload.collection_name,
@@ -691,11 +659,23 @@ pub fn validate_collection_deleted_payload(payload: &CollectionDeletedPayload) -
         return result;
     }
 
+    accept_payload_family("collection_deleted")
+}
+
+fn validate_required_version(value: u32, record: &str, field: &str) -> Option<ValidationResult> {
+    if value != 1 {
+        return Some(reject(
+            ReasonCode::VersionUnsupported,
+            Value::String(format!("unsupported {record} {field}: {value}")),
+            empty_map(),
+        ));
+    }
+    None
+}
+
+fn accept_payload_family(family: &str) -> ValidationResult {
     let mut derived = std::collections::BTreeMap::new();
-    derived.insert(
-        "payload_family".into(),
-        Value::String("collection_deleted".into()),
-    );
+    derived.insert("payload_family".into(), Value::String(family.into()));
     accept(Value::Map(derived), empty_map())
 }
 
@@ -956,12 +936,8 @@ fn validate_reachability_hint(
     hint: &edgerun_proto::edgerun::v0::network::ReachabilityHint,
     label: &str,
 ) -> Option<ValidationResult> {
-    if hint.hint_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!("{label} has unsupported version")),
-            empty_map(),
-        ));
+    if let Some(result) = validate_required_version(hint.hint_version, label, "hint_version") {
+        return Some(result);
     }
     if let Some(result) =
         validate_node_ref(hint.subject_node.as_ref(), &format!("{label} subject_node"))
@@ -1062,12 +1038,12 @@ pub fn validate_delegation_chain(
     }
 
     for (i, delegation) in chain.iter().enumerate() {
-        if delegation.record_version != 1 {
-            return reject(
-                ReasonCode::VersionUnsupported,
-                Value::String("unsupported DelegationRecord version".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_required_version(
+            delegation.record_version,
+            "DelegationRecord",
+            "record_version",
+        ) {
+            return result;
         }
         if delegation.delegation_id.is_empty() {
             return reject(
@@ -1338,12 +1314,12 @@ pub fn validate_delegation_chain(
 }
 
 fn validate_capability_descriptor(capability: &CapabilityDescriptor) -> Option<ValidationResult> {
-    if capability.capability_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported CapabilityDescriptor version".into()),
-            empty_map(),
-        ));
+    if let Some(result) = validate_required_version(
+        capability.capability_version,
+        "CapabilityDescriptor",
+        "capability_version",
+    ) {
+        return Some(result);
     }
     if edgerun_proto::edgerun::v0::trust::CapabilityKind::from_i32(capability.capability_kind)
         .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::trust::CapabilityKind::Unspecified)
@@ -1397,12 +1373,12 @@ fn validate_capability_descriptor(capability: &CapabilityDescriptor) -> Option<V
 }
 
 fn validate_constraint_set(constraints: &ConstraintSet) -> Option<ValidationResult> {
-    if constraints.constraint_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported ConstraintSet version".into()),
-            empty_map(),
-        ));
+    if let Some(result) = validate_required_version(
+        constraints.constraint_version,
+        "ConstraintSet",
+        "constraint_version",
+    ) {
+        return Some(result);
     }
     if let (Some(not_before), Some(expires_at)) = (&constraints.not_before, &constraints.expires_at)
     {
@@ -1529,12 +1505,8 @@ fn validate_constraint_set(constraints: &ConstraintSet) -> Option<ValidationResu
 }
 
 fn validate_scope_descriptor(scope: &ScopeDescriptor, label: &str) -> Option<ValidationResult> {
-    if scope.scope_version != 1 {
-        return Some(reject(
-            ReasonCode::VersionUnsupported,
-            Value::String(format!("{label} has unsupported version")),
-            empty_map(),
-        ));
+    if let Some(result) = validate_required_version(scope.scope_version, label, "scope_version") {
+        return Some(result);
     }
     if edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(scope.scope_kind)
         .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::trust::ScopeKind::Unspecified)
@@ -1942,12 +1914,12 @@ pub fn validate_snapshot(
     trusted_producers: &[Vec<u8>],
 ) -> ValidationResult {
     // Structural: required fields
-    if snapshot.descriptor_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported SnapshotDescriptor version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        snapshot.descriptor_version,
+        "SnapshotDescriptor",
+        "descriptor_version",
+    ) {
+        return result;
     }
     if snapshot.snapshot_id.is_empty() {
         return reject(
@@ -2217,12 +2189,12 @@ pub fn validate_object_retrieval(
     }
 
     if let Some(descriptor) = descriptor {
-        if descriptor.descriptor_version != 1 {
-            return reject(
-                ReasonCode::VersionUnsupported,
-                Value::String("unsupported descriptor version".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_required_version(
+            descriptor.descriptor_version,
+            "LogicalObjectDescriptor",
+            "descriptor_version",
+        ) {
+            return result;
         }
         if descriptor.object_id.is_empty() {
             return reject(
@@ -2320,12 +2292,12 @@ pub fn validate_object_retrieval(
     }
 
     if let Some(header) = header {
-        if header.header_version != 1 {
-            return reject(
-                ReasonCode::VersionUnsupported,
-                Value::String("unsupported representation header version".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_required_version(
+            header.header_version,
+            "StoredRepresentationHeader",
+            "header_version",
+        ) {
+            return result;
         }
         if header.representation_id.is_empty() {
             return reject(
@@ -2451,12 +2423,12 @@ pub fn validate_object_retrieval(
     }
 
     if let Some(manifest) = manifest {
-        if manifest.manifest_version != 1 {
-            return reject(
-                ReasonCode::VersionUnsupported,
-                Value::String("unsupported chunk manifest version".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_required_version(
+            manifest.manifest_version,
+            "ChunkManifest",
+            "manifest_version",
+        ) {
+            return result;
         }
         let Some(manifest_object) = &manifest.object else {
             return reject(
@@ -2653,12 +2625,10 @@ pub fn validate_object_retrieval(
 
 /// Verifies a signed `QueryRequest` before a responder executes it.
 pub fn validate_query_request_signature(query: &QueryRequest) -> ValidationResult {
-    if query.request_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported QueryRequest version".into()),
-            empty_map(),
-        );
+    if let Some(result) =
+        validate_required_version(query.request_version, "QueryRequest", "request_version")
+    {
+        return result;
     }
     if query.query_id.is_empty() {
         return reject(
@@ -2874,12 +2844,12 @@ pub fn validate_query_result_fragment(
     expected_query_id: Option<&[u8]>,
     trusted_responders: &[Vec<u8>],
 ) -> ValidationResult {
-    if fragment.fragment_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported QueryResultFragment version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        fragment.fragment_version,
+        "QueryResultFragment",
+        "fragment_version",
+    ) {
+        return result;
     }
     if fragment.query_id.is_empty() {
         return reject(
@@ -3175,12 +3145,10 @@ pub fn validate_session_hello(
     hello: &SessionHello,
     local_node_id: Option<&[u8]>,
 ) -> ValidationResult {
-    if hello.message_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported SessionHello version".into()),
-            empty_map(),
-        );
+    if let Some(result) =
+        validate_required_version(hello.message_version, "SessionHello", "message_version")
+    {
+        return result;
     }
     let Some(initiator) = &hello.initiator else {
         return reject(
@@ -3283,12 +3251,12 @@ pub fn validate_session_accept(
     expected_nonce: &[u8],
     supported_protocol_versions: &[u32],
 ) -> ValidationResult {
-    if accept_msg.message_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported SessionAccept version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        accept_msg.message_version,
+        "SessionAccept",
+        "message_version",
+    ) {
+        return result;
     }
     let Some(responder) = &accept_msg.responder else {
         return reject(
@@ -3390,12 +3358,12 @@ pub fn validate_relay_envelope(
     local_node_id: Option<&[u8]>,
     now_ms: i64,
 ) -> ValidationResult {
-    if envelope.envelope_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported RelayEnvelope version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        envelope.envelope_version,
+        "RelayEnvelope",
+        "envelope_version",
+    ) {
+        return result;
     }
     if envelope.relay_message_id.is_empty() {
         return reject(
@@ -3534,12 +3502,10 @@ pub fn validate_assurance_claim(
     now_ms: i64,
     trusted_attesters: &[Vec<u8>],
 ) -> ValidationResult {
-    if claim.claim_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported AssuranceClaim version".into()),
-            empty_map(),
-        );
+    if let Some(result) =
+        validate_required_version(claim.claim_version, "AssuranceClaim", "claim_version")
+    {
+        return result;
     }
     let Some(subject) = &claim.subject else {
         return reject(
@@ -3663,12 +3629,12 @@ pub fn validate_assurance_claim_satisfies_requirement(
     requirement: &AssuranceRequirement,
     now_ms: i64,
 ) -> ValidationResult {
-    if requirement.assurance_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported AssuranceRequirement version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        requirement.assurance_version,
+        "AssuranceRequirement",
+        "assurance_version",
+    ) {
+        return result;
     }
 
     let Some(required_class) =
@@ -3775,12 +3741,12 @@ pub fn validate_revocation_record(
     now_ms: i64,
     trusted_issuers: &[Vec<u8>],
 ) -> ValidationResult {
-    if revocation.record_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported RevocationRecord version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        revocation.record_version,
+        "RevocationRecord",
+        "record_version",
+    ) {
+        return result;
     }
     if revocation.revocation_id.is_empty() {
         return reject(
@@ -3985,12 +3951,12 @@ fn revocation_kind_matches_target(
 /// Route policy artifacts are advisory inputs, but their structural validity is
 /// a deterministic core rule under the v0 protocol.
 pub fn validate_aggregate_trust_policy(policy: &AggregateTrustPolicy) -> ValidationResult {
-    if policy.policy_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported AggregateTrustPolicy version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        policy.policy_version,
+        "AggregateTrustPolicy",
+        "policy_version",
+    ) {
+        return result;
     }
     for (index, aggregator) in policy.preferred_aggregators.iter().enumerate() {
         if let Some(result) = validate_identity_ref(
@@ -4088,12 +4054,12 @@ pub fn validate_route_trust_assignments(assignments: &RouteTrustAssignments) -> 
 
 /// Validates protobuf-native route selection policy records.
 pub fn validate_route_selection_policy(policy: &RouteSelectionPolicy) -> ValidationResult {
-    if policy.policy_version != 1 {
-        return reject(
-            ReasonCode::VersionUnsupported,
-            Value::String("unsupported RouteSelectionPolicy version".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_required_version(
+        policy.policy_version,
+        "RouteSelectionPolicy",
+        "policy_version",
+    ) {
+        return result;
     }
     for (index, advertiser) in policy.preferred_advertisers.iter().enumerate() {
         if let Some(result) = validate_identity_ref(
