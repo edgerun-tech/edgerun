@@ -509,11 +509,12 @@ impl QuicTlsServerHandshaker {
                 // Server reads 0-RTT data from client, so client's write keys are server's read keys
                 let read_keys =
                     quic_traffic_keys(secret, self.cipher_suite.key_len(), 12, &self.hasher);
-                // Server would write 0-RTT response using the same secret (same direction)
+                let key_len = self.cipher_suite.key_len();
+                let iv_len = 12;
                 ProtectionKeys::new(
                     CipherSuite::TLS_AES_128_GCM_SHA256,
-                    read_keys.write_key.clone(),
-                    read_keys.write_iv.clone(),
+                    vec![0u8; key_len],
+                    vec![0u8; iv_len],
                     read_keys.write_key,
                     read_keys.write_iv,
                 )

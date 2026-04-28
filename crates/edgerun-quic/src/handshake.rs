@@ -755,13 +755,38 @@ impl QuicTlsHandshaker {
             12,
             &self.hasher,
         );
-        // For 0-RTT, client sends so we use client's write keys.
-        // The server would use read keys from the same secret.
+        let key_len = self.cipher_suite.key_len();
+        let iv_len = 12;
+        // 0-RTT is client-to-server only. Do not mirror write keys into
+        // the read side or tests can accidentally decrypt with client state.
         Some(ProtectionKeys::new(
             CipherSuite::TLS_AES_128_GCM_SHA256,
-            keys.write_key.clone(),
-            keys.write_iv.clone(),
-            keys.write_key, // Same keys for simplicity — client sends, server reads
+            keys.write_key,
+            keys.write_iv,
+            vec![0u8; key_len],
+            vec![0u8; iv_len],
+        ))
+    }
+
+    /// Build server-side keys for reading client 0-RTT data from the same
+    /// early traffic secret.
+    pub fn server_early_data_read_keys(&self) -> Option<ProtectionKeys> {
+        if self.early_traffic_secret.is_empty() {
+            return None;
+        }
+        let keys = quic_traffic_keys(
+            &self.early_traffic_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
+        let key_len = self.cipher_suite.key_len();
+        let iv_len = 12;
+        Some(ProtectionKeys::new(
+            CipherSuite::TLS_AES_128_GCM_SHA256,
+            vec![0u8; key_len],
+            vec![0u8; iv_len],
+            keys.write_key,
             keys.write_iv,
         ))
     }
@@ -842,30 +867,7 @@ impl QuicTlsHandshaker {
         let hs_keys = self.handshake_keys()?;
         let app_keys = self.app_keys(transcript_after_finished);
 
-        // Derive 0-RTT early data protection keys (if early traffic secret was derived)
-        let early_data_keys = if !self.early_traffic_secret.is_empty() {
-            let early_keys = quic_traffic_keys(
-                &self.early_traffic_secret,
-                self.cipher_suite.key_len(),
-                12,
-                &self.hasher,
-            );
-            let early_read = quic_traffic_keys(
-                &self.early_traffic_secret,
-                self.cipher_suite.key_len(),
-                12,
-                &self.hasher,
-            );
-            Some(ProtectionKeys::new(
-                CipherSuite::TLS_AES_128_GCM_SHA256,
-                early_keys.write_key,
-                early_keys.write_iv,
-                early_read.write_key,
-                early_read.write_iv,
-            ))
-        } else {
-            None
-        };
+        let early_data_keys = self.early_data_keys();
 
         Ok(HandshakeResult {
             initial_keys: ProtectionKeys::new(
@@ -975,6 +977,31 @@ mod tests {
             hasher_for_suite(CipherSuite::TLS_AES_256_GCM_SHA384),
             Hasher::Sha384
         ));
+    }
+
+    #[test]
+    fn early_data_keys_are_directional() {
+        let mut hs = QuicTlsHandshaker::new("example.com");
+        hs.early_traffic_secret = vec![0x11; hs.hasher.len()];
+
+        let client_keys = hs.early_data_keys().unwrap();
+        let server_keys = hs.server_early_data_read_keys().unwrap();
+        assert_ne!(client_keys.write_key, client_keys.read_key);
+        assert_eq!(client_keys.write_key, server_keys.read_key);
+
+        let header = b"0rtt header";
+        let plaintext = b"GET /";
+        let mut client = PacketProtection::new(&client_keys);
+        let encrypted = client
+            .protect_with_packet_number(7, header, plaintext)
+            .unwrap();
+
+        let mut wrong_direction = PacketProtection::new(&client_keys);
+        assert!(wrong_direction.unprotect(header, 7, &encrypted).is_err());
+
+        let mut server = PacketProtection::new(&server_keys);
+        let decrypted = server.unprotect(header, 7, &encrypted).unwrap();
+        assert_eq!(decrypted, plaintext);
     }
 
     fn certificate_message(cert_der: &[u8]) -> Vec<u8> {

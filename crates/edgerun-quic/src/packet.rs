@@ -163,6 +163,7 @@ impl QuicPacket {
         key_phase: bool,
         payload: Vec<u8>,
     ) -> Self {
+        let pn_length = packet_number_length_for_value(packet_number);
         QuicPacket {
             header: QuicPacketHeader {
                 packet_type: PacketType::OneRtt,
@@ -170,7 +171,7 @@ impl QuicPacket {
                 dst_cid,
                 src_cid: Vec::new(),
                 token: Vec::new(),
-                pn_length: 1,
+                pn_length,
                 packet_number,
                 key_phase,
                 payload_length: payload.len(),
@@ -427,6 +428,19 @@ pub fn get_packet_number_length(first_byte: u8) -> usize {
     ((first_byte & 0x03) + 1) as usize
 }
 
+/// Choose the shortest packet-number encoding that preserves the value.
+pub fn packet_number_length_for_value(packet_number: u64) -> usize {
+    if packet_number <= 0xff {
+        1
+    } else if packet_number <= 0xffff {
+        2
+    } else if packet_number <= 0x00ff_ffff {
+        3
+    } else {
+        4
+    }
+}
+
 /// Get AAD for AEAD - use this instead of manual parsing
 pub fn get_packet_aad(packet: &QuicPacket) -> Vec<u8> {
     packet.header_to_bytes_aad()
@@ -541,6 +555,17 @@ mod tests {
         assert_eq!(get_packet_number_length(0xC2), 3);
         assert_eq!(get_packet_number_length(0xC3), 4);
         assert_eq!(get_packet_number_length(0xCF), 4);
+    }
+
+    #[test]
+    fn test_packet_number_length_for_value() {
+        assert_eq!(packet_number_length_for_value(0), 1);
+        assert_eq!(packet_number_length_for_value(0xff), 1);
+        assert_eq!(packet_number_length_for_value(0x100), 2);
+        assert_eq!(packet_number_length_for_value(0xffff), 2);
+        assert_eq!(packet_number_length_for_value(0x1_0000), 3);
+        assert_eq!(packet_number_length_for_value(0xff_ffff), 3);
+        assert_eq!(packet_number_length_for_value(0x1_000000), 4);
     }
 
     #[test]
@@ -764,5 +789,18 @@ mod tests {
         assert_eq!(parsed.payload, vec![0x01, 0x02]);
 
         assert!(QuicPacket::from_bytes(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_one_rtt_large_packet_number_is_not_truncated() {
+        let packet = QuicPacket::one_rtt(vec![1, 2, 3, 4, 5, 6, 7, 8], 0x1234, vec![0x01]);
+        assert_eq!(packet.header.pn_length, 2);
+
+        let bytes = packet.to_bytes();
+        let (parsed, consumed) = QuicPacket::from_bytes(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(parsed.header.packet_number, 0x1234);
+        assert_eq!(parsed.header.pn_length, 2);
+        assert_eq!(parsed.header_to_bytes_aad(), packet.header_to_bytes_aad());
     }
 }
