@@ -256,6 +256,18 @@ impl QuicPacket {
 
     /// Parse packet from bytes
     pub fn from_bytes(data: &[u8]) -> Result<(Self, usize), String> {
+        Self::from_bytes_with_short_dcid_len(data, 8)
+    }
+
+    /// Parse packet from bytes, using the supplied Destination CID length for
+    /// short-header packets.
+    ///
+    /// QUIC short headers do not carry a CID length on the wire; callers must
+    /// know the expected local Destination CID length from connection state.
+    pub fn from_bytes_with_short_dcid_len(
+        data: &[u8],
+        short_dcid_len: usize,
+    ) -> Result<(Self, usize), String> {
         if data.is_empty() {
             return Err("Empty data".to_string());
         }
@@ -267,7 +279,7 @@ impl QuicPacket {
             Self::parse_long_header(data)
         } else {
             // Short header (1-RTT)
-            Self::parse_short_header(data)
+            Self::parse_short_header(data, short_dcid_len)
         }
     }
 
@@ -364,7 +376,7 @@ impl QuicPacket {
     }
 
     /// Parse short header (1-RTT)
-    fn parse_short_header(data: &[u8]) -> Result<(Self, usize), String> {
+    fn parse_short_header(data: &[u8], dst_cid_len: usize) -> Result<(Self, usize), String> {
         if data.len() < 3 {
             return Err("Short header too short".to_string());
         }
@@ -373,12 +385,11 @@ impl QuicPacket {
         let key_phase = data[0] & 0x04 != 0;
         let mut pos = 1;
 
-        // Assume 8-byte CID for simplicity
-        if pos + 8 > data.len() {
+        if pos + dst_cid_len > data.len() {
             return Err("Short header CID missing".to_string());
         }
-        let dst_cid = data[pos..pos + 8].to_vec();
-        pos += 8;
+        let dst_cid = data[pos..pos + dst_cid_len].to_vec();
+        pos += dst_cid_len;
 
         // Packet number
         if pos + pn_length > data.len() {
@@ -738,5 +749,20 @@ mod tests {
         assert!(parsed.header.key_phase);
         assert_eq!(parsed.header_to_bytes_aad(), packet.header_to_bytes_aad());
         assert_eq!(parsed.payload, packet.payload);
+    }
+
+    #[test]
+    fn test_one_rtt_parses_explicit_destination_cid_length() {
+        let packet = QuicPacket::one_rtt(vec![1, 2, 3, 4], 9, vec![0x01, 0x02]);
+        let bytes = packet.to_bytes();
+
+        let (parsed, consumed) =
+            QuicPacket::from_bytes_with_short_dcid_len(&bytes, 4).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(parsed.header.dst_cid, vec![1, 2, 3, 4]);
+        assert_eq!(parsed.header.packet_number, 9);
+        assert_eq!(parsed.payload, vec![0x01, 0x02]);
+
+        assert!(QuicPacket::from_bytes(&bytes).is_err());
     }
 }

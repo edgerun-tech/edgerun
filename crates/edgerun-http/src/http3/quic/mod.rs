@@ -815,7 +815,10 @@ impl QuicConnection {
         while self.recv_offset < self.recv_buffer.len() {
             let data = &self.recv_buffer[self.recv_offset..];
 
-            match QuicPacket::from_bytes(data) {
+            match QuicPacket::from_bytes_with_short_dcid_len(
+                data,
+                self.transport.local_cid.len(),
+            ) {
                 Ok((packet, consumed)) => {
                     self.recv_offset += consumed;
 
