@@ -186,27 +186,10 @@ fn print_file_from(path: &PathBuf, offset: u64, fd: i32) -> io::Result<u64> {
         if n == 0 {
             break;
         }
-        write_all_fd(fd, &buf[..n]);
+        crate::cli::write_all_fd(fd, &buf[..n]);
         pos += n as u64;
     }
     Ok(pos)
-}
-
-fn write_all_fd(fd: i32, bytes: &[u8]) {
-    let mut written = 0usize;
-    while written < bytes.len() {
-        let n = unsafe {
-            libc::write(
-                fd,
-                bytes[written..].as_ptr() as *const libc::c_void,
-                bytes.len() - written,
-            )
-        };
-        if n <= 0 {
-            break;
-        }
-        written += n as usize;
-    }
 }
 
 #[cfg(test)]

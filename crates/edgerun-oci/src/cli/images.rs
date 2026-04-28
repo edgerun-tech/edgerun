@@ -5,7 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::cli::default_images_dir;
+use crate::cli::{default_images_dir, json_string};
 
 pub fn cmd_images(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     let (images_dir, json) = parse_images_args(args)?;
@@ -147,10 +147,6 @@ fn print_images_json(images: &[LocalImage]) {
         })
         .collect::<Vec<_>>();
     println!("[{}]", entries.join(","));
-}
-
-fn json_string(value: &str) -> String {
-    edgerun_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 fn format_bytes(bytes: u64) -> String {

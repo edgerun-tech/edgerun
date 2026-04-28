@@ -10,6 +10,7 @@ use crate::cli::exec::{
     enter_container_root, join_container_namespaces, load_exec_spec, open_exec_root,
 };
 use crate::cli::process_tree;
+use crate::cli::json_string;
 use crate::state::{load_state, save_state, state_root_dir, ContainerState};
 
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -140,10 +141,6 @@ fn print_containers_json(states: &[ContainerState]) {
         ));
     }
     println!("[{}]", entries.join(","));
-}
-
-fn json_string(value: &str) -> String {
-    edgerun_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 fn print_container_processes(init_pid: u32, root_fd: i32, json: bool) -> io::Result<()> {

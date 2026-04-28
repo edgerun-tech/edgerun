@@ -15,7 +15,9 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::pull::print_pull_progress;
 use crate::cli::user::{resolve_user, validate_user_spec};
-use crate::cli::{default_images_dir, default_store_dir, resolve_registry_auth, GlobalOpts};
+use crate::cli::{
+    default_images_dir, default_store_dir, resolve_registry_auth, write_all_fd, GlobalOpts,
+};
 use crate::json::{parse_oci_spec, OciMount, OciSpec};
 use crate::lifecycle::{
     fork_container_child_with_terminal_socket, run_create_runtime_hooks, run_poststart_hooks,
@@ -451,23 +453,6 @@ fn drain_fd_to_stdout(fd: i32, buffer: &mut [u8]) {
             break;
         }
         write_all_fd(libc::STDOUT_FILENO, &buffer[..n as usize]);
-    }
-}
-
-fn write_all_fd(fd: i32, bytes: &[u8]) {
-    let mut written = 0usize;
-    while written < bytes.len() {
-        let n = unsafe {
-            libc::write(
-                fd,
-                bytes[written..].as_ptr() as *const libc::c_void,
-                bytes.len() - written,
-            )
-        };
-        if n <= 0 {
-            break;
-        }
-        written += n as usize;
     }
 }
 
