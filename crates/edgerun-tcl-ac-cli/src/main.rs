@@ -72,6 +72,7 @@ enum Command {
     },
     SearchLan {
         timeout: Option<u64>,
+        target_mac: Option<String>,
     },
     Status,
     Power {
@@ -133,7 +134,10 @@ fn main() {
             wifi_path,
             bind_path,
         } => do_diagnose_provision(&address, &wifi_path, bind_path.as_deref()),
-        Command::SearchLan { timeout } => do_search_lan(timeout.unwrap_or(60)),
+        Command::SearchLan {
+            timeout,
+            target_mac,
+        } => do_search_lan(timeout.unwrap_or(60), target_mac.as_deref()),
         Command::Status => do_status(),
         Command::Power {
             power_on,
@@ -226,6 +230,7 @@ fn parse_args() -> Command {
         },
         "search-lan" => Command::SearchLan {
             timeout: args.get(1).and_then(|s| s.parse().ok()),
+            target_mac: args.get(2).cloned(),
         },
         "status" => Command::Status,
         "power" => Command::Power {
@@ -1545,21 +1550,36 @@ fn json_string_value(data: &str, key: &str) -> Option<String> {
     None
 }
 
-fn do_search_lan(timeout_secs: u64) {
-    search_lan_for(Duration::from_secs(timeout_secs));
+fn do_search_lan(timeout_secs: u64, target_mac: Option<&str>) {
+    search_lan_for_with_target(Duration::from_secs(timeout_secs), target_mac);
 }
 
 fn search_lan_for(timeout: Duration) {
-    let listen = match UdpSocket::bind(("0.0.0.0", 10074)) {
-        Ok(socket) => socket,
-        Err(err) => {
-            eprintln!("Failed to bind UDP listener on port 10074: {}", err);
-            process::exit(1);
+    search_lan_for_with_target(timeout, None);
+}
+
+fn search_lan_for_with_target(timeout: Duration, target_mac: Option<&str>) {
+    let mut listeners = Vec::new();
+    for port in [10074, 10075] {
+        match UdpSocket::bind(("0.0.0.0", port)) {
+            Ok(socket) => {
+                if let Err(err) = socket.set_read_timeout(Some(Duration::from_millis(200))) {
+                    eprintln!("Failed to set UDP read timeout on port {}: {}", port, err);
+                    process::exit(1);
+                }
+                listeners.push((port, socket));
+            }
+            Err(err) if port == 10075 => {
+                eprintln!(
+                    "Warning: could not bind optional UDP listener on port 10075: {}",
+                    err
+                );
+            }
+            Err(err) => {
+                eprintln!("Failed to bind UDP listener on port {}: {}", port, err);
+                process::exit(1);
+            }
         }
-    };
-    if let Err(err) = listen.set_read_timeout(Some(Duration::from_millis(500))) {
-        eprintln!("Failed to set UDP read timeout: {}", err);
-        process::exit(1);
     }
 
     let sender = match UdpSocket::bind(("0.0.0.0", 0)) {
@@ -1578,10 +1598,20 @@ fn search_lan_for(timeout: Duration) {
         "Searching LAN for TCL devices via UDP ports 10074/10075 for {}s...",
         timeout.as_secs()
     );
+    if let Some(target) = target_mac {
+        println!("Target MAC fuzzy match: {}", target);
+    }
 
     let broadcast = SocketAddr::from((Ipv4Addr::BROADCAST, 10075));
     let xml_search = b"<searchDevice></searchDevice>";
     let json_search = br#"{"msgId":"123","version":"123","method":"searchReq"}"#;
+    let xml_target_search = target_mac.map(|target| {
+        let normalized = normalize_mac(target);
+        format!(
+            "<searchDevice devid=\"{}\" randcode=\"123456\"></searchDevice>",
+            normalized
+        )
+    });
     let start = Instant::now();
     let mut next_send = Instant::now();
     let mut send_json = false;
@@ -1594,25 +1624,39 @@ fn search_lan_for(timeout: Duration) {
             if let Err(err) = sender.send_to(payload, broadcast) {
                 eprintln!("UDP broadcast failed: {}", err);
             }
+            if let Some(target_payload) = xml_target_search.as_ref() {
+                if let Err(err) = sender.send_to(target_payload.as_bytes(), broadcast) {
+                    eprintln!("UDP target broadcast failed: {}", err);
+                }
+            }
             send_json = !send_json;
             next_send = Instant::now() + Duration::from_millis(1500);
         }
 
-        match listen.recv_from(&mut buf) {
-            Ok((n, from)) => {
-                let text = String::from_utf8_lossy(&buf[..n]).trim().to_string();
-                if text.is_empty() || seen.iter().any(|entry| entry == &text) {
-                    continue;
+        for (port, listen) in &listeners {
+            match listen.recv_from(&mut buf) {
+                Ok((n, from)) => {
+                    let text = String::from_utf8_lossy(&buf[..n]).trim().to_string();
+                    if text.is_empty()
+                        || text == String::from_utf8_lossy(xml_search)
+                        || text == String::from_utf8_lossy(json_search)
+                    {
+                        continue;
+                    }
+                    let key = format!("{from}/{port}/{text}");
+                    if seen.iter().any(|entry| entry == &key) {
+                        continue;
+                    }
+                    seen.push(key);
+                    print_lan_response(from, *port, &text, target_mac);
                 }
-                seen.push(text.clone());
-                println!("{}  {}", from, text);
-            }
-            Err(err)
-                if err.kind() == io::ErrorKind::WouldBlock
-                    || err.kind() == io::ErrorKind::TimedOut => {}
-            Err(err) => {
-                eprintln!("UDP receive failed: {}", err);
-                process::exit(1);
+                Err(err)
+                    if err.kind() == io::ErrorKind::WouldBlock
+                        || err.kind() == io::ErrorKind::TimedOut => {}
+                Err(err) => {
+                    eprintln!("UDP receive failed on port {}: {}", port, err);
+                    process::exit(1);
+                }
             }
         }
     }
@@ -1620,6 +1664,108 @@ fn search_lan_for(timeout: Duration) {
     if seen.is_empty() {
         println!("No TCL LAN discovery responses received.");
     }
+}
+
+fn print_lan_response(from: SocketAddr, listen_port: u16, text: &str, target_mac: Option<&str>) {
+    println!("{} -> local:{}  {}", from, listen_port, text);
+
+    let fields = lan_response_fields(text);
+    if fields.is_empty() {
+        return;
+    }
+
+    println!("  parsed:");
+    for (name, value) in &fields {
+        println!("    {}: {}", name, value);
+    }
+
+    if let Some(target) = target_mac {
+        let candidate = fields
+            .iter()
+            .find(|(name, _)| matches!(*name, "mac" | "deviceId" | "did" | "tid"))
+            .map(|(_, value)| value.as_str());
+        if let Some(candidate) = candidate {
+            println!(
+                "    targetMatch: {}",
+                if fuzzy_mac_match(target, candidate) {
+                    "yes"
+                } else {
+                    "no"
+                }
+            );
+        }
+    }
+}
+
+fn lan_response_fields(text: &str) -> Vec<(&'static str, String)> {
+    let mut fields = Vec::new();
+    if text.trim_start().starts_with('{') {
+        for key in [
+            "did",
+            "deviceId",
+            "productKey",
+            "ip",
+            "port",
+            "mac",
+            "ssid",
+            "resetFlag",
+        ] {
+            if let Some(value) = json_string_value(text, key).filter(|value| !value.is_empty()) {
+                fields.push((key, value));
+            }
+        }
+    } else {
+        for key in [
+            "did",
+            "deviceId",
+            "tid",
+            "productKey",
+            "ip",
+            "port",
+            "mac",
+            "ssid",
+            "resetFlag",
+        ] {
+            if let Some(value) = xml_tag_value(text, key).filter(|value| !value.is_empty()) {
+                fields.push((key, value));
+            }
+        }
+    }
+    fields
+}
+
+fn xml_tag_value(data: &str, key: &str) -> Option<String> {
+    let start_tag = format!("<{}>", key);
+    let end_tag = format!("</{}>", key);
+    let start = data.find(&start_tag)? + start_tag.len();
+    let tail = &data[start..];
+    let end = tail.find(&end_tag)?;
+    Some(tail[..end].trim().to_string())
+}
+
+fn normalize_mac(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .flat_map(|ch| ch.to_lowercase())
+        .collect()
+}
+
+fn fuzzy_mac_match(target: &str, candidate: &str) -> bool {
+    let target = normalize_mac(target);
+    let candidate = normalize_mac(candidate);
+    if target.is_empty() || candidate.is_empty() {
+        return false;
+    }
+    if target == candidate || target.ends_with(&candidate) || candidate.ends_with(&target) {
+        return true;
+    }
+    target
+        .chars()
+        .zip(candidate.chars())
+        .filter(|(left, right)| left == right)
+        .count()
+        >= 5
 }
 
 fn print_bluetoothctl_info(address: &str) {

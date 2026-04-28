@@ -171,13 +171,6 @@ fn state_from_json_value(value: &JsonValue) -> Result<ContainerState, String> {
     let object = value
         .as_object()
         .ok_or_else(|| "container state must be an object".to_string())?;
-    let string = |key: &str| {
-        object
-            .get(key)
-            .and_then(JsonValue::as_str)
-            .map(ToString::to_string)
-            .ok_or_else(|| format!("container state missing string field {key}"))
-    };
     let pid = object
         .get("pid")
         .map(|value| {
@@ -194,11 +187,11 @@ fn state_from_json_value(value: &JsonValue) -> Result<ContainerState, String> {
                 .as_object()
                 .ok_or_else(|| "container state annotations must be an object".to_string())?;
             fields
-                .iter()
+                .fields()
                 .map(|(key, value)| {
                     value
                         .as_str()
-                        .map(|value| (key.clone(), value.to_string()))
+                        .map(|value| (key.to_string(), value.to_string()))
                         .ok_or_else(|| {
                             "container state annotation values must be strings".to_string()
                         })
@@ -207,11 +200,23 @@ fn state_from_json_value(value: &JsonValue) -> Result<ContainerState, String> {
         })
         .transpose()?;
     Ok(ContainerState {
-        oci_version: string("ociVersion")?,
-        id: string("id")?,
-        status: string("status")?,
+        oci_version: object
+            .required_str("ociVersion")
+            .map_err(|e| e.to_string())?
+            .to_string(),
+        id: object
+            .required_str("id")
+            .map_err(|e| e.to_string())?
+            .to_string(),
+        status: object
+            .required_str("status")
+            .map_err(|e| e.to_string())?
+            .to_string(),
         pid,
-        bundle: string("bundle")?,
+        bundle: object
+            .required_str("bundle")
+            .map_err(|e| e.to_string())?
+            .to_string(),
         annotations,
     })
 }

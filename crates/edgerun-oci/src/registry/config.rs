@@ -218,7 +218,7 @@ fn parse_manifest_descriptor(
     Ok(super::manifest::ManifestDescriptor {
         media_type: optional_string(obj, "mediaType"),
         digest: required_string(obj, "digest")?,
-        size: required_u64(obj, "size")?,
+        size: obj.required_u64("size").map_err(|e| e.to_string())?,
         platform: obj.get("platform").map(parse_platform).transpose()?,
     })
 }
@@ -257,7 +257,7 @@ fn parse_layer_descriptor(value: &JsonValue) -> Result<super::manifest::LayerDes
     Ok(super::manifest::LayerDescriptor {
         media_type: optional_string(obj, "mediaType"),
         digest: required_string(obj, "digest")?,
-        size: required_u64(obj, "size")?,
+        size: obj.required_u64("size").map_err(|e| e.to_string())?,
     })
 }
 
@@ -271,10 +271,7 @@ fn object<'a>(value: &'a JsonValue, name: &str) -> Result<&'a Map, String> {
 
 #[cfg(feature = "json")]
 fn optional_string(obj: &Map, key: &str) -> Option<String> {
-    match obj.get(key) {
-        Some(JsonValue::String(value)) => Some(value.clone()),
-        _ => None,
-    }
+    obj.get_str(key).map(ToString::to_string)
 }
 
 #[cfg(feature = "json")]
@@ -284,25 +281,14 @@ fn optional_string_any(obj: &Map, keys: &[&str]) -> Option<String> {
 
 #[cfg(feature = "json")]
 fn required_string(obj: &Map, key: &str) -> Result<String, String> {
-    optional_string(obj, key).ok_or_else(|| format!("missing string field {key}"))
+    obj.required_str(key)
+        .map(ToString::to_string)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(feature = "json")]
 fn optional_bool(obj: &Map, key: &str) -> Option<bool> {
-    match obj.get(key) {
-        Some(JsonValue::Bool(value)) => Some(*value),
-        _ => None,
-    }
-}
-
-#[cfg(feature = "json")]
-fn required_u64(obj: &Map, key: &str) -> Result<u64, String> {
-    match obj.get(key) {
-        Some(JsonValue::Number(value)) => value
-            .as_u64()
-            .ok_or_else(|| format!("field {key} must be an unsigned integer")),
-        _ => Err(format!("missing unsigned integer field {key}")),
-    }
+    obj.get_bool(key)
 }
 
 #[cfg(feature = "json")]
@@ -327,11 +313,11 @@ fn parse_array_required<T>(
     key: &str,
     parse_item: fn(&JsonValue) -> Result<T, String>,
 ) -> Result<Vec<T>, String> {
-    match obj.get(key) {
-        Some(JsonValue::Array(items)) => items.iter().map(parse_item).collect(),
-        Some(_) => Err(format!("field {key} must be an array")),
-        None => Err(format!("missing array field {key}")),
-    }
+    obj.required_array(key)
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(parse_item)
+        .collect()
 }
 
 #[cfg(feature = "json")]
@@ -354,16 +340,16 @@ fn parse_string_array_required(obj: &Map, key: &str) -> Result<Vec<String>, Stri
 
 #[cfg(feature = "json")]
 fn parse_string_array_value(value: &JsonValue) -> Result<Vec<String>, String> {
-    match value {
-        JsonValue::Array(items) => items
-            .iter()
-            .map(|item| match item {
-                JsonValue::String(value) => Ok(value.clone()),
-                _ => Err("array item must be a string".to_string()),
-            })
-            .collect(),
-        _ => Err("expected string array".to_string()),
-    }
+    value
+        .as_array()
+        .ok_or_else(|| "expected string array".to_string())?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(ToString::to_string)
+                .ok_or_else(|| "array item must be a string".to_string())
+        })
+        .collect()
 }
 
 #[cfg(feature = "json")]
@@ -383,9 +369,9 @@ fn parse_string_map_any(
 fn parse_string_map_value(value: &JsonValue) -> Result<BTreeMap<String, String>, String> {
     let obj = object(value, "string map")?;
     let mut out = BTreeMap::new();
-    for (key, value) in obj.iter() {
+    for (key, value) in obj.fields() {
         if let JsonValue::String(value) = value {
-            out.insert(key.clone(), value.clone());
+            out.insert(key.to_string(), value.clone());
         }
     }
     Ok(out)
@@ -400,8 +386,8 @@ fn parse_json_object_map_any(
         if let Some(value) = obj.get(key) {
             let fields = object(value, key)?;
             let mut out = BTreeMap::new();
-            for (field_key, field_value) in fields.iter() {
-                out.insert(field_key.clone(), field_value.clone());
+            for (field_key, field_value) in fields.fields() {
+                out.insert(field_key.to_string(), field_value.clone());
             }
             return Ok(Some(out));
         }

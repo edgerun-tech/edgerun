@@ -71,11 +71,72 @@ commissioning data.
 After provisioning, TCL Home searches for the device locally:
 
 - Listen UDP: `0.0.0.0:10074`
+- Optional/listed UDP listen port: `0.0.0.0:10075`
 - Broadcast target: `255.255.255.255:10075`
 - XML probe: `<searchDevice></searchDevice>`
 - JSON probe: `{"msgId":"123","version":"123","method":"searchReq"}`
 
+The JSON discovery response shape from the APK is:
+
+```json
+{
+  "msgId": "...",
+  "version": "...",
+  "method": "...",
+  "params": {
+    "did": "...",
+    "deviceId": "...",
+    "productKey": "...",
+    "ip": "...",
+    "port": "..."
+  }
+}
+```
+
+`UdpResponseParser.parseJsonDeviceInfo(...)` maps `did` to the app's device id field, `deviceId` to
+the internal `tid`, `productKey` to product key, and `ip`/`port` to the local endpoint. XML discovery
+uses the `resetFlag` tag path. The app's post-provision device matcher is fuzzy: it strips colons
+from MAC-like identifiers and treats five matching positions as enough to associate the discovery
+response with the device being added.
+
+The CLI now mirrors this more closely:
+
+```bash
+cargo run -p edgerun-tcl-ac-cli --features std --bin tcl-ac -- search-lan 60 3C:C5:DD:33:6D:1E
+```
+
+It listens on `10074` and, when available, `10075`; alternates XML/JSON broadcasts; sends the
+targeted XML probe when a MAC is supplied; and prints parsed `did`, `deviceId`, `productKey`, `ip`,
+and `port` fields from replies.
+
 No LAN responses were observed after no-bind provisioning.
+
+## SoftAP Provisioning Path
+
+The APK also has a direct SoftAP path in `com.tcl.libsoftap.action.SendRouteInfoAction`. This path is
+used when the phone joins the appliance's temporary Wi-Fi AP instead of provisioning over BLE.
+
+Observed behavior:
+
+- Device AP SSID matching includes `t*ap`, `tcl_`, `TCL_`, `eg_ac_`, and crystalclip names.
+- Default device IP: `192.168.1.1`
+- Alternate AWS SoftAP IP: `160.190.0.1`
+- TCP provisioning port: `10000`
+- UDP provisioning port: `10000`
+- UDP sender binds local port `10000`, sends the same `ConfigReqFactory.buildUdpConfigReq(...)`
+  JSON used by BLE three times, one second apart.
+- TCP sender connects to device port `10000` and sends:
+
+```xml
+<setReq><ssid>...</ssid><password>...</password></setReq>
+```
+
+The TCP response is XML with at least `<errcode>` and sometimes `<mac>`. The UDP response is parsed
+as `UdpConfigResp` and returns `params.mac`.
+
+This gives a second local commissioning route if BLE pairing keeps accepting the write but never
+emits the expected bind/config acknowledgement. It still uses TCL bind/cloud metadata in the JSON
+payload, so it is not yet a cloud-free control path.
 
 ## APK OTA Paths
 

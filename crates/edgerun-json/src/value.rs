@@ -133,6 +133,32 @@ macro_rules! impl_try_from_json_number {
     };
 }
 
+macro_rules! impl_try_from_json_number_cast {
+    ($ty:ty, $method:ident) => {
+        impl TryFrom<JsonValue> for $ty {
+            type Error = JsonValueError;
+
+            fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+                (&value).try_into()
+            }
+        }
+
+        impl TryFrom<&JsonValue> for $ty {
+            type Error = JsonValueError;
+
+            fn try_from(value: &JsonValue) -> Result<Self, Self::Error> {
+                value.$method().ok_or_else(|| {
+                    JsonValueError::WrongType(format!(
+                        "expected {}, found {}",
+                        stringify!($ty),
+                        value.variant_name()
+                    ))
+                })
+            }
+        }
+    };
+}
+
 impl JsonValue {
     /// Returns the name of this JSON value's variant (for error messages).
     pub(crate) fn variant_name(&self) -> &'static str {
@@ -184,6 +210,40 @@ impl JsonValue {
     #[must_use]
     pub fn array(values: Vec<JsonValue>) -> Self {
         Self::Array(values)
+    }
+
+    #[must_use]
+    pub fn empty_object() -> Self {
+        Self::Object(Map::new())
+    }
+
+    #[must_use]
+    pub fn empty_array() -> Self {
+        Self::Array(Vec::new())
+    }
+
+    #[must_use]
+    pub fn object_from_iter<K, V, I>(entries: I) -> Self
+    where
+        K: Into<String>,
+        V: Into<JsonValue>,
+        I: IntoIterator<Item = (K, V)>,
+    {
+        Self::Object(
+            entries
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into()))
+                .collect(),
+        )
+    }
+
+    #[must_use]
+    pub fn array_from_iter<V, I>(values: I) -> Self
+    where
+        V: Into<JsonValue>,
+        I: IntoIterator<Item = V>,
+    {
+        Self::Array(values.into_iter().map(Into::into).collect())
     }
 
     /// Serializes this JSON value to a compact JSON string.
@@ -329,6 +389,18 @@ impl JsonValue {
         self.as_number().and_then(JsonNumber::as_f64)
     }
 
+    pub fn as_i32(&self) -> Option<i32> {
+        self.as_i64().and_then(|value| i32::try_from(value).ok())
+    }
+
+    pub fn as_u32(&self) -> Option<u32> {
+        self.as_u64().and_then(|value| u32::try_from(value).ok())
+    }
+
+    pub fn as_usize(&self) -> Option<usize> {
+        self.as_u64().and_then(|value| usize::try_from(value).ok())
+    }
+
     #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
@@ -442,6 +514,46 @@ impl JsonValue {
             .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
     }
 
+    pub fn get_i32(&self, key: &str) -> Option<i32> {
+        self.get(key).and_then(JsonValue::as_i32)
+    }
+
+    pub fn required_i32(&self, key: &str) -> Result<i32, JsonValueError> {
+        self.required(key)?
+            .as_i32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i32")))
+    }
+
+    pub fn get_u32(&self, key: &str) -> Option<u32> {
+        self.get(key).and_then(JsonValue::as_u32)
+    }
+
+    pub fn required_u32(&self, key: &str) -> Result<u32, JsonValueError> {
+        self.required(key)?
+            .as_u32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u32")))
+    }
+
+    pub fn get_usize(&self, key: &str) -> Option<usize> {
+        self.get(key).and_then(JsonValue::as_usize)
+    }
+
+    pub fn required_usize(&self, key: &str) -> Result<usize, JsonValueError> {
+        self.required(key)?
+            .as_usize()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected usize")))
+    }
+
+    pub fn get_f64(&self, key: &str) -> Option<f64> {
+        self.get(key).and_then(JsonValue::as_f64)
+    }
+
+    pub fn required_f64(&self, key: &str) -> Result<f64, JsonValueError> {
+        self.required(key)?
+            .as_f64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected f64")))
+    }
+
     pub fn get_array(&self, key: &str) -> Option<&Vec<JsonValue>> {
         self.get(key).and_then(JsonValue::as_array)
     }
@@ -460,6 +572,18 @@ impl JsonValue {
         self.required(key)?
             .as_object()
             .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected object")))
+    }
+
+    pub fn required_index(&self, index: usize) -> Result<&JsonValue, JsonValueError> {
+        self.as_array()
+            .ok_or_else(|| {
+                JsonValueError::WrongType(format!(
+                    "array index expected array, found {}",
+                    self.variant_name()
+                ))
+            })?
+            .get(index)
+            .ok_or_else(|| JsonValueError::WrongType(format!("missing array index `{index}`")))
     }
 
     #[must_use]
@@ -497,6 +621,56 @@ impl JsonValue {
             Self::Array(values) => values.get(index),
             _ => None,
         }
+    }
+
+    pub fn index_str(&self, index: usize) -> Option<&str> {
+        self.get_index(index).and_then(JsonValue::as_str)
+    }
+
+    pub fn required_index_str(&self, index: usize) -> Result<&str, JsonValueError> {
+        self.required_index(index)?
+            .as_str()
+            .ok_or_else(|| JsonValueError::WrongType(format!("array index `{index}` expected string")))
+    }
+
+    pub fn index_bool(&self, index: usize) -> Option<bool> {
+        self.get_index(index).and_then(JsonValue::as_bool)
+    }
+
+    pub fn required_index_bool(&self, index: usize) -> Result<bool, JsonValueError> {
+        self.required_index(index)?
+            .as_bool()
+            .ok_or_else(|| JsonValueError::WrongType(format!("array index `{index}` expected boolean")))
+    }
+
+    pub fn index_i64(&self, index: usize) -> Option<i64> {
+        self.get_index(index).and_then(JsonValue::as_i64)
+    }
+
+    pub fn required_index_i64(&self, index: usize) -> Result<i64, JsonValueError> {
+        self.required_index(index)?
+            .as_i64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("array index `{index}` expected i64")))
+    }
+
+    pub fn index_u64(&self, index: usize) -> Option<u64> {
+        self.get_index(index).and_then(JsonValue::as_u64)
+    }
+
+    pub fn required_index_u64(&self, index: usize) -> Result<u64, JsonValueError> {
+        self.required_index(index)?
+            .as_u64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("array index `{index}` expected u64")))
+    }
+
+    pub fn index_f64(&self, index: usize) -> Option<f64> {
+        self.get_index(index).and_then(JsonValue::as_f64)
+    }
+
+    pub fn required_index_f64(&self, index: usize) -> Result<f64, JsonValueError> {
+        self.required_index(index)?
+            .as_f64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("array index `{index}` expected f64")))
     }
 
     pub fn get_index_mut(&mut self, index: usize) -> Option<&mut JsonValue> {
@@ -669,6 +843,9 @@ impl TryFrom<JsonValue> for Map {
 impl_try_from_json_number!(i64, as_i64);
 impl_try_from_json_number!(u64, as_u64);
 impl_try_from_json_number!(f64, as_f64);
+impl_try_from_json_number_cast!(i32, as_i32);
+impl_try_from_json_number_cast!(u32, as_u32);
+impl_try_from_json_number_cast!(usize, as_usize);
 
 impl From<String> for JsonValue {
     fn from(value: String) -> Self {

@@ -22,6 +22,11 @@ impl Map {
     }
 
     #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(Vec::with_capacity(capacity))
+    }
+
+    #[must_use]
     pub fn keys(&self) -> impl ExactSizeIterator<Item = &String> {
         self.0.iter().map(|(key, _)| key)
     }
@@ -109,6 +114,46 @@ impl Map {
             .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
     }
 
+    pub fn get_i32(&self, key: &str) -> Option<i32> {
+        self.get(key).and_then(JsonValue::as_i32)
+    }
+
+    pub fn required_i32(&self, key: &str) -> Result<i32, JsonValueError> {
+        self.required(key)?
+            .as_i32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i32")))
+    }
+
+    pub fn get_u32(&self, key: &str) -> Option<u32> {
+        self.get(key).and_then(JsonValue::as_u32)
+    }
+
+    pub fn required_u32(&self, key: &str) -> Result<u32, JsonValueError> {
+        self.required(key)?
+            .as_u32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u32")))
+    }
+
+    pub fn get_usize(&self, key: &str) -> Option<usize> {
+        self.get(key).and_then(JsonValue::as_usize)
+    }
+
+    pub fn required_usize(&self, key: &str) -> Result<usize, JsonValueError> {
+        self.required(key)?
+            .as_usize()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected usize")))
+    }
+
+    pub fn get_f64(&self, key: &str) -> Option<f64> {
+        self.get(key).and_then(JsonValue::as_f64)
+    }
+
+    pub fn required_f64(&self, key: &str) -> Result<f64, JsonValueError> {
+        self.required(key)?
+            .as_f64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected f64")))
+    }
+
     pub fn get_array(&self, key: &str) -> Option<&Vec<JsonValue>> {
         self.get(key).and_then(JsonValue::as_array)
     }
@@ -140,6 +185,15 @@ impl Map {
         }
         self.0.push((key, value));
         None
+    }
+
+    pub fn push_field(&mut self, key: impl Into<String>, value: impl Into<JsonValue>) {
+        self.0.push((key.into(), value.into()));
+    }
+
+    #[must_use]
+    pub fn into_vec(self) -> Vec<(String, JsonValue)> {
+        self.0
     }
 
     pub fn remove(&mut self, key: &str) -> Option<JsonValue> {
