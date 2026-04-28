@@ -6,11 +6,9 @@ use std::io;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 
-use crate::cli::exec::{
-    enter_container_root, join_container_namespaces, load_exec_spec, open_exec_root,
-};
-use crate::cli::process_tree;
+use crate::cli::exec::{enter_container_root, join_container_namespaces, open_exec_root};
 use crate::cli::json_string;
+use crate::cli::process_tree;
 use crate::state::{load_state, save_state, state_root_dir, ContainerState};
 
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -35,7 +33,7 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
         ));
     }
 
-    let spec = load_exec_spec(&state);
+    let spec = crate::cli::load_runtime_or_bundle_spec(&state.id, &state.bundle);
     let (root_fd, root_path) = open_exec_root(pid, spec.as_ref())?;
     let json = args
         .iter()

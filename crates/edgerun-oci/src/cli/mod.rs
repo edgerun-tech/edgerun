@@ -340,18 +340,7 @@ pub fn parse_delete_args(args: &[String]) -> (bool, Option<&str>) {
 
 /// Check if a process is alive and not already a zombie.
 pub fn is_process_alive(pid: u32) -> bool {
-    if unsafe { libc::kill(pid as std::os::raw::c_int, 0) != 0 } {
-        return false;
-    }
-    let status_path = format!("/proc/{pid}/status");
-    if let Ok(status) = std::fs::read_to_string(status_path) {
-        for line in status.lines() {
-            if let Some(rest) = line.strip_prefix("State:") {
-                return !rest.trim_start().starts_with('Z');
-            }
-        }
-    }
-    true
+    process_tree::process_alive(pid)
 }
 
 /// Extract container ID from command args, returning an error if missing.

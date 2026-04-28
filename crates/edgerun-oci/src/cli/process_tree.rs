@@ -46,7 +46,7 @@ fn tree_alive(root_pid: u32) -> bool {
     descendants(root_pid).into_iter().any(process_alive)
 }
 
-fn process_alive(pid: u32) -> bool {
+pub(crate) fn process_alive(pid: u32) -> bool {
     if unsafe { libc::kill(pid as c_int, 0) != 0 } {
         return false;
     }

@@ -275,7 +275,7 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
 
     // Load the effective runtime spec first; the pulled image bundle config is
     // only a template and misses run-time overrides such as env, user, and rootfs.
-    let spec = load_exec_spec(&state);
+    let spec = crate::cli::load_runtime_or_bundle_spec(&state.id, &state.bundle);
     let (root_fd, root_path) = open_exec_root(pid, spec.as_ref())?;
 
     // Determine final args, env, cwd, user
@@ -549,20 +549,6 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     }
 
     Ok(())
-}
-
-pub(crate) fn load_exec_spec(state: &crate::state::ContainerState) -> Option<crate::json::OciSpec> {
-    let runtime_config = crate::state::runtime_spec_path(&state.id);
-    if let Ok(data) = fs::read(runtime_config) {
-        if let Ok(spec) = crate::json::parse_oci_spec(&data) {
-            return Some(spec);
-        }
-    }
-
-    let config_path = std::path::Path::new(&state.bundle).join("config.json");
-    fs::read(config_path)
-        .ok()
-        .and_then(|data| crate::json::parse_oci_spec(&data).ok())
 }
 
 pub(crate) fn open_exec_root(
