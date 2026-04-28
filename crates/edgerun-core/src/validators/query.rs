@@ -9,12 +9,11 @@ pub fn validate_query_case(
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> ValidationResult {
     if let Some(proof) = get_map(semantic_input, "snapshot_set_proof") {
-        if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
-        {
-            let actual = string_value(proof, "source_query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
-                return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
-            }
+        if let Some(result) = validate_source_query_id(
+            proof,
+            local_state.get("current_query_id").and_then(Value::as_str),
+        ) {
+            return result;
         }
         let snapshots = get_seq(proof, "snapshots").unwrap_or(&[]);
         if snapshots.is_empty() {
@@ -45,12 +44,11 @@ pub fn validate_query_case(
         );
     }
     if let Some(proof) = get_map(semantic_input, "event_set_proof") {
-        if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
-        {
-            let actual = string_value(proof, "source_query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
-                return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
-            }
+        if let Some(result) = validate_source_query_id(
+            proof,
+            local_state.get("current_query_id").and_then(Value::as_str),
+        ) {
+            return result;
         }
         let events = get_seq(proof, "events").unwrap_or(&[]);
         if events.is_empty() {
@@ -96,12 +94,11 @@ pub fn validate_query_case(
         );
     }
     if let Some(proof) = get_map(semantic_input, "object_assertion_proof") {
-        if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
-        {
-            let actual = string_value(proof, "source_query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
-                return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
-            }
+        if let Some(result) = validate_source_query_id(
+            proof,
+            local_state.get("current_query_id").and_then(Value::as_str),
+        ) {
+            return result;
         }
         let Some(object_ref) = get_map(proof, "object_ref") else {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
@@ -138,12 +135,11 @@ pub fn validate_query_case(
         );
     }
     if let Some(proof) = get_map(semantic_input, "aggregate_summary_proof") {
-        if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
-        {
-            let actual = string_value(proof, "source_query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
-                return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
-            }
+        if let Some(result) = validate_source_query_id(
+            proof,
+            local_state.get("current_query_id").and_then(Value::as_str),
+        ) {
+            return result;
         }
         let included = get_seq(proof, "included_responders").unwrap_or(&[]);
         let excluded = get_seq(proof, "excluded_responders").unwrap_or(&[]);
@@ -194,12 +190,11 @@ pub fn validate_query_case(
         );
     }
     if let Some(proof) = get_map(semantic_input, "trust_policy_proof") {
-        if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
-        {
-            let actual = string_value(proof, "source_query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
-                return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
-            }
+        if let Some(result) = validate_source_query_id(
+            proof,
+            local_state.get("current_query_id").and_then(Value::as_str),
+        ) {
+            return result;
         }
         if !proof.contains_key("policy_object") && !proof.contains_key("assignments_object") {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
@@ -226,10 +221,13 @@ pub fn validate_query_case(
         );
     }
     if let Some(fragment) = get_map(semantic_input, "result_fragment") {
+        let actual = string_value(fragment, "query_id", "");
+        if actual.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
         {
-            let actual = string_value(fragment, "query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
+            if actual != expected_query_id {
                 return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
             }
         }
@@ -299,12 +297,11 @@ pub fn validate_query_case(
         );
     }
     if let Some(aggregate) = get_map(semantic_input, "aggregate_descriptor") {
-        if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
-        {
-            let actual = string_value(aggregate, "source_query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
-                return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
-            }
+        if let Some(result) = validate_source_query_id(
+            aggregate,
+            local_state.get("current_query_id").and_then(Value::as_str),
+        ) {
+            return result;
         }
         if get_seq(aggregate, "input_fragments")
             .map(|v| v.is_empty())
@@ -332,12 +329,15 @@ pub fn validate_query_case(
         );
     }
     if let Some(bundle) = get_map(semantic_input, "proof_bundle") {
-        if let Some(expected_query_id) = local_state.get("current_query_id").and_then(Value::as_str)
-        {
-            let actual = string_value(bundle, "source_query_id", "");
-            if !actual.is_empty() && actual != expected_query_id {
-                return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
-            }
+        if let Some(result) = validate_source_query_id(
+            bundle,
+            local_state.get("current_query_id").and_then(Value::as_str),
+        ) {
+            return result;
+        }
+        let payload_type = string_value(bundle, "payload_type", "");
+        if payload_type.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         let Some(payload_object) = get_map(bundle, "payload_object") else {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
@@ -346,7 +346,6 @@ pub fn validate_query_case(
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         let allowed = set_from_list(local_state.get("allowed_proof_payload_types"));
-        let payload_type = string_value(bundle, "payload_type", "");
         if !allowed.is_empty() && !allowed.contains(&payload_type) {
             return reject(ReasonCode::PolicyDenied, empty_map(), empty_map());
         }
@@ -516,4 +515,22 @@ fn event_ref_is_valid(event: &BTreeMap<String, Value>) -> bool {
             || event.contains_key("event_hash_hex")
             || event.contains_key("hash_hex")
             || event.contains_key("hash_fixture"))
+}
+
+fn validate_source_query_id(
+    artifact: &BTreeMap<String, Value>,
+    expected_query_id: Option<&str>,
+) -> Option<ValidationResult> {
+    let actual = string_value(artifact, "source_query_id", "");
+    if actual.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            empty_map(),
+            empty_map(),
+        ));
+    }
+    if expected_query_id.is_some_and(|expected| actual != expected) {
+        return Some(reject(ReasonCode::TargetMismatch, empty_map(), empty_map()));
+    }
+    None
 }
