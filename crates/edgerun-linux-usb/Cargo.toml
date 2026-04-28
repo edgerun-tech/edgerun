@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Linux USB device adapter for Edgerun"
 
 [dependencies]
 edgerun-capabilities = { path = "../edgerun-capabilities" }
