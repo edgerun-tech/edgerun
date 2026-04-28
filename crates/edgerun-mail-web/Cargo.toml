@@ -9,3 +9,6 @@ description = "Webmail frontend for edgerun email server"
 [dependencies]
 edgerun-http = { path = "../edgerun-http", default-features = false, features = ["server", "static-files"] }
 edgerun-log = { path = "../edgerun-log" }
+
+[lints]
+workspace = true

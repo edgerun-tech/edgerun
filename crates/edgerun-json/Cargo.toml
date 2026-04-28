@@ -3,6 +3,7 @@ name = "edgerun-json"
 version.workspace = true
 edition.workspace = true
 license = "MIT OR Apache-2.0"
+publish.workspace = true
 description = "A zero-dependency JSON crate with owned, borrowed, tape, and compiled-schema fast paths"
 readme = "README.md"
 repository = "https://github.com/Sylchi/edgerun-json"
