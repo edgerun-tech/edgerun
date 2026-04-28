@@ -5,16 +5,17 @@ extern crate alloc;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 
-use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
+use crate::sync::Mutex;
+
 pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
     let queue = Arc::new(Queue {
-        data: RefCell::new(VecDeque::new()),
-        waker: RefCell::new(None),
+        data: Mutex::new(VecDeque::new()),
+        waker: Mutex::new(None),
         sender_count: AtomicUsize::new(1),
         closed: AtomicUsize::new(0),
     });
@@ -32,14 +33,11 @@ pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
 }
 
 struct Queue<T> {
-    data: RefCell<VecDeque<T>>,
-    waker: RefCell<Option<Waker>>,
+    data: Mutex<VecDeque<T>>,
+    waker: Mutex<Option<Waker>>,
     sender_count: AtomicUsize,
     closed: AtomicUsize,
 }
-
-unsafe impl<T: core::marker::Send> core::marker::Send for Queue<T> {}
-unsafe impl<T: core::marker::Send> Sync for Queue<T> {}
 
 pub struct Sender<T> {
     queue: Arc<Queue<T>>,
@@ -82,10 +80,13 @@ impl<T> Sender<T> {
         if self.closed() {
             return Err(TrySendError::Closed(value));
         }
-        if self.cap > 0 && self.queue.data.borrow().len() >= self.cap {
-            return Err(TrySendError::Full(value));
+        {
+            let mut data = self.queue.data.lock();
+            if self.cap > 0 && data.len() >= self.cap {
+                return Err(TrySendError::Full(value));
+            }
+            data.push_back(value);
         }
-        self.queue.data.borrow_mut().push_back(value);
         wake_receiver(&self.queue);
         Ok(())
     }
@@ -132,7 +133,7 @@ impl<T: Unpin> Future for Send<T> {
             Err(TrySendError::Closed(value)) => Poll::Ready(Err(SendError(value))),
             Err(TrySendError::Full(value)) => {
                 this.value = Some(value);
-                *this.sender.queue.waker.borrow_mut() = Some(cx.waker().clone());
+                *this.sender.queue.waker.lock() = Some(cx.waker().clone());
                 Poll::Pending
             }
         }
@@ -189,13 +190,14 @@ impl<T> Future for Receiver<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.queue.data.borrow().is_empty() {
-            return Poll::Ready(self.queue.data.borrow_mut().pop_front().unwrap());
+        if let Some(value) = self.queue.data.lock().pop_front() {
+            wake_receiver(&self.queue);
+            return Poll::Ready(value);
         }
         if self.queue.closed.load(Ordering::Acquire) != 0 {
             return Poll::Pending;
         }
-        *self.queue.waker.borrow_mut() = Some(cx.waker().clone());
+        *self.queue.waker.lock() = Some(cx.waker().clone());
         Poll::Pending
     }
 }
@@ -206,7 +208,7 @@ impl<T> Receiver<T> {
     }
 
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
-        if let Some(value) = self.queue.data.borrow_mut().pop_front() {
+        if let Some(value) = self.queue.data.lock().pop_front() {
             wake_receiver(&self.queue);
             Ok(value)
         } else if self.queue.closed.load(Ordering::Acquire) != 0 {
@@ -227,11 +229,11 @@ impl<T> Receiver<T> {
     }
 
     pub fn len(&self) -> usize {
-        self.queue.data.borrow().len()
+        self.queue.data.lock().len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.queue.data.borrow().is_empty()
+        self.queue.data.lock().is_empty()
     }
 
     pub fn close(&self) {
@@ -252,7 +254,7 @@ impl<T> Future for Recv<'_, T> {
             Ok(value) => Poll::Ready(Some(value)),
             Err(TryRecvError::Disconnected) => Poll::Ready(None),
             Err(TryRecvError::Empty) => {
-                *self.receiver.queue.waker.borrow_mut() = Some(cx.waker().clone());
+                *self.receiver.queue.waker.lock() = Some(cx.waker().clone());
                 Poll::Pending
             }
         }
@@ -260,7 +262,7 @@ impl<T> Future for Recv<'_, T> {
 }
 
 fn wake_receiver<T>(queue: &Arc<Queue<T>>) {
-    if let Some(waker) = queue.waker.borrow_mut().take() {
+    if let Some(waker) = queue.waker.lock().take() {
         waker.wake();
     }
 }
