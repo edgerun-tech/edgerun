@@ -1776,7 +1776,7 @@ fn push(
     key: impl Into<String>,
     value: impl Into<edgerun_json::JsonValue>,
 ) {
-    object.push((key.into(), value.into()));
+    object.push_field(key, value);
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
@@ -1785,51 +1785,37 @@ fn push_opt(
     key: &'static str,
     value: Option<edgerun_json::JsonValue>,
 ) {
-    if let Some(value) = value {
-        push(object, key, value);
-    }
+    object.push_opt_field(key, value);
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn push_opt_string(object: &mut edgerun_json::Map, key: &'static str, value: Option<&str>) {
-    if let Some(value) = value {
-        push(object, key, value);
-    }
+    object.push_opt_field(key, value);
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn push_opt_bool(object: &mut edgerun_json::Map, key: &'static str, value: Option<bool>) {
-    if let Some(value) = value {
-        push(object, key, value);
-    }
+    object.push_opt_field(key, value);
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn push_opt_i32(object: &mut edgerun_json::Map, key: &'static str, value: Option<i32>) {
-    if let Some(value) = value {
-        push(object, key, value);
-    }
+    object.push_opt_field(key, value);
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn push_opt_i64(object: &mut edgerun_json::Map, key: &'static str, value: Option<i64>) {
-    if let Some(value) = value {
-        push(object, key, value);
-    }
+    object.push_opt_field(key, value);
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn push_opt_u32(object: &mut edgerun_json::Map, key: &'static str, value: Option<u32>) {
-    if let Some(value) = value {
-        push(object, key, value);
-    }
+    object.push_opt_field(key, value);
 }
 
 #[cfg(all(feature = "json", not(feature = "serde")))]
 fn push_opt_u64(object: &mut edgerun_json::Map, key: &'static str, value: Option<u64>) {
-    if let Some(value) = value {
-        push(object, key, value);
-    }
+    object.push_opt_field(key, value);
 }
 
 #[cfg(all(

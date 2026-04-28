@@ -787,7 +787,7 @@ impl TclAcClient {
         }
     }
 
-    fn build_legacy_provision_payload(
+    pub fn build_legacy_provision_payload(
         &self,
         ssid: &str,
         password: &str,
@@ -806,7 +806,7 @@ impl TclAcClient {
         )
     }
 
-    fn build_legacy_provision_payload_with_hosts(
+    pub fn build_legacy_provision_payload_with_hosts(
         &self,
         ssid: &str,
         password: &str,

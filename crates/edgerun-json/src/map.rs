@@ -191,6 +191,12 @@ impl Map {
         self.0.push((key.into(), value.into()));
     }
 
+    pub fn push_opt_field(&mut self, key: impl Into<String>, value: Option<impl Into<JsonValue>>) {
+        if let Some(value) = value {
+            self.push_field(key, value);
+        }
+    }
+
     #[must_use]
     pub fn into_vec(self) -> Vec<(String, JsonValue)> {
         self.0

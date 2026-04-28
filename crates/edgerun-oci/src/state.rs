@@ -147,22 +147,19 @@ pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
 
 pub fn state_to_json_value(state: &ContainerState) -> JsonValue {
     let mut fields = Map::new();
-    fields.push((
-        "ociVersion".into(),
-        JsonValue::String(state.oci_version.clone()),
-    ));
-    fields.push(("id".into(), JsonValue::String(state.id.clone())));
-    fields.push(("status".into(), JsonValue::String(state.status.clone())));
+    fields.push_field("ociVersion", state.oci_version.clone());
+    fields.push_field("id", state.id.clone());
+    fields.push_field("status", state.status.clone());
     if let Some(pid) = state.pid {
-        fields.push(("pid".into(), JsonValue::from(pid)));
+        fields.push_field("pid", pid);
     }
-    fields.push(("bundle".into(), JsonValue::String(state.bundle.clone())));
+    fields.push_field("bundle", state.bundle.clone());
     if let Some(annotations) = &state.annotations {
         let mut annotation_fields = Map::new();
         for (key, value) in annotations {
-            annotation_fields.push((key.clone(), JsonValue::String(value.clone())));
+            annotation_fields.push_field(key.clone(), value.clone());
         }
-        fields.push(("annotations".into(), JsonValue::Object(annotation_fields)));
+        fields.push_field("annotations", JsonValue::Object(annotation_fields));
     }
     JsonValue::Object(fields)
 }

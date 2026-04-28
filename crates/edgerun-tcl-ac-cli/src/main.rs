@@ -3,8 +3,8 @@ use edgerun_mgmt_bluetooth::{MgmtBluetoothBackend, MgmtDiscoveryTransport};
 use edgerun_tcl_ac::{AcMode, AcState, FanSpeed, TclAcClient};
 use std::env;
 use std::fs;
-use std::io::{self, Write};
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::io::{self, Read, Write};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 use std::path::PathBuf;
 use std::process::{self, Command as ProcessCommand, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -53,6 +53,11 @@ enum Command {
     ProvisionBindFile {
         wifi_path: String,
         bind_path: String,
+    },
+    SoftapProvision {
+        wifi_path: String,
+        bind_path: String,
+        device_ip: String,
     },
     FetchBindCode {
         out_path: String,
@@ -123,6 +128,11 @@ fn main() {
             wifi_path,
             bind_path,
         } => do_provision_bind_file(&wifi_path, &bind_path),
+        Command::SoftapProvision {
+            wifi_path,
+            bind_path,
+            device_ip,
+        } => do_softap_provision(&wifi_path, &bind_path, &device_ip),
         Command::FetchBindCode { out_path } => do_fetch_bind_code(&out_path),
         Command::Login { account, out_path } => do_login(&account, &out_path),
         Command::LoginGoogleCode {
@@ -195,6 +205,17 @@ fn parse_args() -> Command {
                 .cloned()
                 .unwrap_or_else(|| "~/wifi.txt".to_string()),
             bind_path: args.get(2).cloned().unwrap_or_default(),
+        },
+        "softap-provision" => Command::SoftapProvision {
+            wifi_path: args
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| "~/wifi.txt".to_string()),
+            bind_path: args.get(2).cloned().unwrap_or_default(),
+            device_ip: args
+                .get(3)
+                .cloned()
+                .unwrap_or_else(|| "192.168.1.1".to_string()),
         },
         "fetch-bind-code" => Command::FetchBindCode {
             out_path: args
@@ -730,6 +751,140 @@ fn do_provision_bind_file(wifi_path: &str, bind_path: &str) {
             }
         }
     })
+}
+
+fn do_softap_provision(wifi_path: &str, bind_path: &str, device_ip: &str) {
+    if bind_path.is_empty() {
+        eprintln!("Usage: tcl-ac softap-provision <wifi-file> <bind-response-json> [device-ip]");
+        eprintln!(
+            "Default device IP is 192.168.1.1; AWS SoftAP fallback seen in the APK is 160.190.0.1."
+        );
+        process::exit(1);
+    }
+
+    let (ssid, password) = read_wifi_credentials(wifi_path);
+    let commissioning = read_commissioning_data(Some(bind_path));
+    let client = TclAcClient::new();
+    let payload = client.build_legacy_provision_payload_with_hosts(
+        &ssid,
+        &password,
+        &commissioning.bind_code,
+        commissioning.server_host.as_deref(),
+        commissioning.server_host_v2.as_deref(),
+        None,
+        None,
+    );
+
+    println!(
+        "Sending SoftAP provisioning payload to {}:10000 from local UDP port 10000...",
+        device_ip
+    );
+    let udp_mac = softap_udp_provision(device_ip, &payload);
+    if let Some(mac) = udp_mac.as_deref() {
+        println!("SoftAP UDP response MAC: {}", mac);
+    } else {
+        println!("No SoftAP UDP response with params.mac was received.");
+    }
+
+    println!(
+        "Trying SoftAP TCP XML provisioning on {}:10000...",
+        device_ip
+    );
+    let tcp_response = softap_tcp_provision(device_ip, &ssid, &password);
+    if let Some(response) = tcp_response {
+        println!("SoftAP TCP response: {}", response.trim());
+        if let Some(code) = xml_tag_value(&response, "errcode") {
+            println!("SoftAP TCP errcode: {}", code);
+        }
+        if let Some(mac) = xml_tag_value(&response, "mac") {
+            println!("SoftAP TCP MAC: {}", mac);
+        }
+    } else {
+        println!("No SoftAP TCP response was received.");
+    }
+}
+
+fn softap_udp_provision(device_ip: &str, payload: &str) -> Option<String> {
+    let socket = match UdpSocket::bind(("0.0.0.0", 10000)) {
+        Ok(socket) => socket,
+        Err(err) => {
+            eprintln!("Failed to bind UDP 0.0.0.0:10000: {}", err);
+            process::exit(1);
+        }
+    };
+    if let Err(err) = socket.set_read_timeout(Some(Duration::from_secs(2))) {
+        eprintln!("Failed to set UDP timeout: {}", err);
+        process::exit(1);
+    }
+
+    let target = format!("{device_ip}:10000");
+    let mut buf = [0u8; 2048];
+    let mut mac = None;
+    for attempt in 1..=3 {
+        if let Err(err) = socket.send_to(payload.as_bytes(), &target) {
+            eprintln!("SoftAP UDP send attempt {} failed: {}", attempt, err);
+            continue;
+        }
+        match socket.recv_from(&mut buf) {
+            Ok((n, from)) => {
+                let text = String::from_utf8_lossy(&buf[..n]).trim().to_string();
+                println!("SoftAP UDP response from {}: {}", from, text);
+                if let Some(value) = json_string_value(&text, "mac") {
+                    mac = Some(value);
+                    break;
+                }
+            }
+            Err(err)
+                if err.kind() == io::ErrorKind::WouldBlock
+                    || err.kind() == io::ErrorKind::TimedOut => {}
+            Err(err) => {
+                eprintln!("SoftAP UDP receive failed: {}", err);
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    mac
+}
+
+fn softap_tcp_provision(device_ip: &str, ssid: &str, password: &str) -> Option<String> {
+    let target: SocketAddr = match format!("{device_ip}:10000").parse() {
+        Ok(target) => target,
+        Err(err) => {
+            eprintln!("Invalid SoftAP device address `{}`: {}", device_ip, err);
+            process::exit(1);
+        }
+    };
+    let mut stream = match TcpStream::connect_timeout(&target, Duration::from_secs(5)) {
+        Ok(stream) => stream,
+        Err(err) => {
+            eprintln!("SoftAP TCP connect failed: {}", err);
+            return None;
+        }
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let request = format!(
+        "<setReq><ssid>{}</ssid><password>{}</password></setReq>",
+        ssid, password
+    );
+    if let Err(err) = stream.write_all(request.as_bytes()) {
+        eprintln!("SoftAP TCP write failed: {}", err);
+        return None;
+    }
+    let mut response = String::new();
+    match stream.read_to_string(&mut response) {
+        Ok(_) if !response.trim().is_empty() => Some(response),
+        Ok(_) => None,
+        Err(err)
+            if err.kind() == io::ErrorKind::WouldBlock || err.kind() == io::ErrorKind::TimedOut =>
+        {
+            None
+        }
+        Err(err) => {
+            eprintln!("SoftAP TCP read failed: {}", err);
+            None
+        }
+    }
 }
 
 struct CommissioningData {

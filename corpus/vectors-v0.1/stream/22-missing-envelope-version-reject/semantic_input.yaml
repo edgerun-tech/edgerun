@@ -1,5 +1,4 @@
 candidate_event:
-  envelope_version: 1
   event_type: EVENT_TYPE_NODE_GENESIS
   event_version: 1
   seq: 0
@@ -8,7 +7,7 @@ candidate_event:
   signature:
     algorithm: ed25519
     value: '0x304502206d8abf9be6c0ab7eb8d92abd052f890d0f995b1f32ecdf3462300aee6531823502210085af03d205a623446357ef46988a3c61327f35512dd2041bc664935c438a9256'
-  event_hash_hex: '0x1414141414141414141414141414141414141414141414141414141414141414'
+  event_hash_hex: '0x2222222222222222222222222222222222222222222222222222222222222222'
 node_genesis_payload:
   payload_version: 1
   node_id: node_server
@@ -16,3 +15,4 @@ node_genesis_payload:
     identity_id: node_server
   initial_controllers:
   - identity_id: ctrl1
+

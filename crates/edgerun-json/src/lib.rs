@@ -206,10 +206,14 @@ mod tests {
         let mut object = Map::with_capacity(3);
         object.push_field("name", "edge");
         object.push_field("n", 9u32);
+        object.push_opt_field("absent", Option::<bool>::None);
+        object.push_opt_field("present", Some(true));
         object.push_field("items", JsonValue::array_from_iter([1u64, 2, 3]));
         let value = JsonValue::Object(object);
 
         assert_eq!(value.required_str("name").unwrap(), "edge");
+        assert_eq!(value.required_bool("present").unwrap(), true);
+        assert!(value.get("absent").is_none());
         assert_eq!(
             value
                 .required("items")

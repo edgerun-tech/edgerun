@@ -2,7 +2,9 @@ brief:
   candidate_event: node_genesis
   seq: 0
 candidate_event:
+  envelope_version: 1
   event_type: EVENT_TYPE_NODE_GENESIS
+  event_version: 1
   seq: 0
   stream_id: '0x73747265616d2d6e6f64652d736572766572'
   recorded_at: '2030-01-01T00:00:00Z'

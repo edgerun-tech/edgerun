@@ -138,6 +138,60 @@ This gives a second local commissioning route if BLE pairing keeps accepting the
 emits the expected bind/config acknowledgement. It still uses TCL bind/cloud metadata in the JSON
 payload, so it is not yet a cloud-free control path.
 
+## APK AC Control Path
+
+The AC control panel in TCL Home is Flutter-based. The native `libapp.so` contains Flutter/OHS
+modules such as `flutter_iot_sdk`, `local_device_tsl_model`, `local_capability_engine`, and
+`real_thing_engine`, plus Pigeon channels including:
+
+- `dev.flutter.pigeon.flutter_iot_sdk.DeviceApi.loadLocalDeviceInfo`
+- `dev.flutter.pigeon.flutter_iot_sdk.DeviceApi.loadAwsDeviceShadow`
+- `dev.flutter.pigeon.flutter_iot_sdk.DeviceApi.setAwsProperty`
+- `dev.flutter.pigeon.flutter_iot_sdk.DeviceApi.dispatchAwsService`
+- `dev.flutter.pigeon.flutter_iot_sdk.MqttApi.pushMqttMessage4`
+- `dev.flutter.pigeon.flutter_ohs.AcDeviceApi.subscribeMqttTopic`
+
+Despite the "local" names, the Android-side `LocalDeviceInfoApi.loadLocalDeviceInfo()` only returns
+cached metadata: cloud type, device id, product key, app/user ids, access token, regional API host,
+timezone, country code, device name, and online flag. It does not open a LAN socket or talk to the
+AC directly.
+
+`LocalDeviceInfoApi.setAwsProperty(json)` is the actual property-control bridge. It accepts a JSON
+array of property objects, merges them into one object, wraps them as AWS IoT shadow desired state,
+adds the app client token, then calls `TMqttManagerWrapper.sendAwsMessageToTopic(...)`.
+
+For AWS devices, `TMqttManagerWrapper` publishes to:
+
+```text
+$aws/things/<deviceId>/shadow/update
+```
+
+and subscribes to shadow updates on:
+
+```text
+$aws/things/<deviceId>/shadow/update/documents
+```
+
+For EMQ/Pangu devices, the equivalent property-set topic is:
+
+```text
+/sys/<productKey>/<deviceId>/thing/service/property/set
+```
+
+The packaged Flutter/OHS assets under
+`assets/flutter_assets/packages/flutter_ohs/assets/local_data/` are capability and UI maps, not a
+LAN transport implementation. They include `local_tsl.json`, `local_commands.json`,
+`oversea_local_commands.json`, `capability_map.json`, and `function_level.json`. The bundled
+`function_level.json` has AC quick controls such as `powerSwitch`, `workMode`, `windSpeed7Gear`,
+`xLocalFreshAir`, `xLocalSleep`, and `xLocalTimer`, but the observed product key
+`V6VHeDcmZcw78ioZ` is not present in those packaged local-data files.
+
+Conclusion: the normal app panel controls this AC through AWS IoT shadow updates. The app's "local"
+Flutter/OHS path is local metadata and local capability/UI data, not LAN control. A cloud-free
+control path must come from the firmware's local transport (`_mcu_local_`, `protocol_aes`, HTTP,
+UDP, or WebSocket), from SoftAP/provisioning behavior, or from replacing/interposing the module
+firmware.
+
 ## APK OTA Paths
 
 The TCL Home APK has two OTA paths:
@@ -333,6 +387,9 @@ Current extraction status:
   `0x0b0000..0x0c0000`, where most cloud/control strings are visible.
 - `ltchiptool` confirms the target family is supported as Realtek AmebaZ2/RTL8720C, but this TCL
   OTA container needs a custom unpacking step before normal image parsing works.
+- `binwalk` only identified crypto material in the raw blob: an AES S-box at `0x000c0235` and
+  SHA-256 constants at `0x000c129f`. It did not find a mountable filesystem, archive, or standard
+  firmware container.
 
 ## Firmware Cloud, OTA, BLE, and LAN Clues
 
@@ -363,6 +420,20 @@ failure strings, DNS cleanup strings, and command/parameter parsing fragments. T
 local transport that is probably framed and authenticated/encrypted rather than plain unauthenticated
 JSON over UDP.
 
+More detailed offsets from the latest pass:
+
+- `_mcu_local_`: `0x000baf5a`
+- `ws_frame`: `0x000bafcc`
+- `mqtt_pkt_destroy` fragment: `0x000bb019`
+- `protocol_aes`: `0x000bb08d`
+- `HTTP_PC` / HTTP parser region: `0x000bb5ef`
+- `Sec-WebSocket-*` fragments: around `0x000bb7b1`
+- `_WS_FRAME`: `0x000bb96e`
+- `RAW_DATA`: `0x000bba11`
+- `EN_SOCKET_*`: `0x000bbd8a`
+- `HTTP_METHOD_GET`: `0x000bbe49`
+- `HTTP`, `UDP_RAW`, `WEBSOCKET` transport enum-like cluster: `0x000bea7a..0x000bea8b`
+
 The visible firmware strings are not cleanly laid out: many are interleaved with high-bit bytes and
 partial words. That matches the earlier parser result that this is not a raw, linker-layout firmware
 image. We can still use string neighborhoods as signposts, but function-level reversing needs the
@@ -370,9 +441,10 @@ TCL/THOS transform decoded or a physical flash dump.
 
 ## Cloud Shadow Control Model
 
-The live AWS IoT shadow for `DSxvOivgAAE` exposes the AC command/state schema. Desired and reported
-state use the same field names, which means cloud control is a shadow desired-state update and the
-device reports convergence back through AWS IoT.
+The live AWS IoT shadow response for `DSxvOivgAAE` has the useful data under
+`payload.state.desired` and `payload.state.reported`. Desired and reported state use the same field
+names, which means cloud control is a shadow desired-state update and the device reports convergence
+back through AWS IoT.
 
 Core controls:
 
@@ -525,6 +597,20 @@ cargo run -p edgerun-tcl-ac-cli --features std --bin tcl-ac -- diagnose-provisio
 cargo run -p edgerun-tcl-ac-cli --features std --bin tcl-ac -- provision-bind-file ~/wifi.txt /tmp/tcl-bind.json
 ```
 
+If the AC is exposing its temporary SoftAP and the laptop is connected to that AP, mirror the APK's
+`SendRouteInfoAction` path directly:
+
+```bash
+cargo run -p edgerun-tcl-ac-cli --features std --bin tcl-ac -- softap-provision ~/wifi.txt /tmp/tcl-bind.json
+```
+
+The default device IP is `192.168.1.1`. The APK also has an AWS SoftAP fallback IP, which can be
+tested explicitly:
+
+```bash
+cargo run -p edgerun-tcl-ac-cli --features std --bin tcl-ac -- softap-provision ~/wifi.txt /tmp/tcl-bind.json 160.190.0.1
+```
+
 Expected bind response fields:
 
 - `bindCode`
@@ -621,10 +707,11 @@ writes the response file with mode `0600`.
 
 ## Next Steps
 
-1. Analyze `/tmp/tcl-firmware/mqtt-stream/system.bin` as a Realtek AmebaZII/RTL8720 firmware image.
-2. Search the firmware for local-control protocol strings, BLE service handling, LAN discovery, and
-   UART/control framing.
-3. Capture a real `/v1/auth/get_bind_code` response from the TCL app session or device logs.
-4. Re-run `diagnose-provision` with the captured bind response JSON.
-5. If the AC joins Wi-Fi, use UDP discovery to obtain local identity fields and then inspect local
-   control ports.
+1. Build a TCL/THOS unpacker or identify the transform enough to get a clean Realtek image layout.
+2. Cross-reference the `_mcu_local_` / `protocol_aes` / WebSocket string region once the image is in
+   a disassemblable layout.
+3. Add a CLI SoftAP provisioning command that mirrors `SendRouteInfoAction` for direct AP testing.
+4. Capture a real `/v1/auth/get_bind_code` response from the TCL app session or device logs.
+5. Re-run `diagnose-provision` with the captured bind response JSON.
+6. If the AC joins Wi-Fi, use UDP discovery to obtain local identity fields and then inspect local
+   HTTP/UDP/WebSocket ports.
