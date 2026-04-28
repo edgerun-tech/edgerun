@@ -871,10 +871,10 @@ fn softap_tcp_provision(device_ip: &str, ssid: &str, password: &str) -> Option<S
         eprintln!("SoftAP TCP write failed: {}", err);
         return None;
     }
-    let mut response = String::new();
-    match stream.read_to_string(&mut response) {
-        Ok(_) if !response.trim().is_empty() => Some(response),
-        Ok(_) => None,
+    let mut buf = [0u8; 2048];
+    match stream.read(&mut buf) {
+        Ok(0) => None,
+        Ok(n) => Some(String::from_utf8_lossy(&buf[..n]).trim().to_string()),
         Err(err)
             if err.kind() == io::ErrorKind::WouldBlock || err.kind() == io::ErrorKind::TimedOut =>
         {
