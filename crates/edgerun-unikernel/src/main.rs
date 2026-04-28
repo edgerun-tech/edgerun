@@ -165,10 +165,10 @@ fn try_start_esp32s3_wifi_ap() {
     match ap.start() {
         Ok(()) => rt::log::log(1, "ESP32-S3 WiFi AP start queued"),
         Err(_) => match EspressifPromiscRadio::last_start_status() {
-            12289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: channel not initialized"),
-            13289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: filter not initialized"),
-            14289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: callback not initialized"),
-            15289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: promiscuous not initialized"),
+            13289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: channel not initialized"),
+            14289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: filter not initialized"),
+            15289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: callback not initialized"),
+            16289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: promiscuous not initialized"),
             _ => rt::log::log(3, "ESP32-S3 WiFi AP start failed"),
         },
     }

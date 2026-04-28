@@ -331,28 +331,23 @@ impl Http2Pool {
             dns_timeout,
             crate::runtime::spawn_blocking(move || {
                 use crate::runtime::net::ToSocketAddrs;
-                format!("{}:443", host_str).to_socket_addrs()
+                format!("{}:{}", host_str, port).to_socket_addrs()
             }),
         )
         .await
         {
-            let mut ipv4_fallback = None;
-            if let Ok(mut addrs) = addrs {
-                for addr in addrs.by_ref() {
-                    match addr.ip() {
-                        IpAddr::V6(_) => {
-                            return Self::connect_sock_static(connect_timeout, &addr).await
-                        }
-                        IpAddr::V4(_) => {
-                            if ipv4_fallback.is_none() {
-                                ipv4_fallback = Some(addr);
-                            }
-                        }
+            if let Ok(addrs) = addrs {
+                let addr_list: Vec<SocketAddr> = addrs.into_iter().collect();
+                for addr in addr_list.iter() {
+                    if let IpAddr::V4(_) = addr.ip() {
+                        return Self::connect_sock_static(connect_timeout, addr).await;
                     }
                 }
-            }
-            if let Some(addr) = ipv4_fallback {
-                return Self::connect_sock_static(connect_timeout, &addr).await;
+                for addr in addr_list.iter() {
+                    if let IpAddr::V6(_) = addr.ip() {
+                        return Self::connect_sock_static(connect_timeout, addr).await;
+                    }
+                }
             }
         }
 
