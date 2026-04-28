@@ -39,7 +39,6 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
-#[cfg(any(feature = "dns", feature = "dhcp", feature = "tftp", feature = "proxy"))]
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -76,6 +75,16 @@ use connection_interceptor_adapter::ConnectionInterceptorAdapter;
 #[cfg(any(feature = "dns", feature = "dhcp", feature = "tftp", feature = "proxy"))]
 fn other_io_error(error: impl fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{error}"))
+}
+
+#[cfg(not(target_os = "none"))]
+fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, format!("{error}"))
+}
+
+#[cfg(target_os = "none")]
+fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
+    error
 }
 
 // ---------------------------------------------------------------------------
@@ -498,7 +507,12 @@ impl Server {
             if h.http3 {
                 server = server.with_http3();
             }
-            Some(server.bind(h.bind_addr.as_str()).await?)
+            Some(
+                server
+                    .bind(h.bind_addr.as_str())
+                    .await
+                    .map_err(http_io_error)?,
+            )
         } else {
             None
         };
@@ -723,7 +737,7 @@ impl BoundServer {
             let token = shutdown.clone();
             let http = Arc::clone(http);
             tasks.push(edgerun_rt::spawn(async move {
-                http.serve_with_shutdown(token).await
+                http.serve_with_shutdown(token).await.map_err(http_io_error)
             }));
         }
 

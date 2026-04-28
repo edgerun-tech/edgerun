@@ -2,6 +2,9 @@
 name = "edgerun-marketplace-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Command-line tooling for the Edgerun compute marketplace"
 
 [[bin]]
 name = "edgerun-marketplace"
@@ -19,3 +22,6 @@ edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 
 [features]
 std = []
+
+[lints]
+workspace = true

@@ -2,6 +2,8 @@
 name = "edgerun-server"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+publish.workspace = true
 description = "Unified multi-protocol server: HTTP, SMTP, IMAP, LMTP, DNS, DHCP, TFTP, Proxy"
 
 [[bin]]
@@ -32,3 +34,6 @@ tftp = ["dep:edgerun-tftp", "edgerun-tftp/server"]
 proxy = ["dep:edgerun-proxy"]
 tls = ["dep:edgerun-tls", "edgerun-http/tls"]
 http3 = ["tls", "edgerun-http/http3"]
+
+[lints]
+workspace = true
