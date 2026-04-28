@@ -308,11 +308,27 @@ pub fn validate_query_case(
         ) {
             return result;
         }
+        if !aggregate_required_fields_are_present(aggregate) {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         if get_seq(aggregate, "input_fragments")
             .map(|v| v.is_empty())
             .unwrap_or(true)
         {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        if let Some(input_fragments) = get_seq(aggregate, "input_fragments") {
+            for fragment in input_fragments.iter().filter_map(Value::as_map) {
+                if string_value(fragment, "object_id", "").is_empty() {
+                    return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                }
+            }
+            if input_fragments
+                .iter()
+                .any(|fragment| fragment.as_map().is_none())
+            {
+                return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+            }
         }
         let expected = aggregate
             .get("signature_fixture")
@@ -558,6 +574,14 @@ fn query_required_fields_are_present(query: &BTreeMap<String, Value>) -> bool {
         && query
             .get("target_scope")
             .is_some_and(|scope| !matches!(scope, Value::Null))
+}
+
+fn aggregate_required_fields_are_present(aggregate: &BTreeMap<String, Value>) -> bool {
+    !string_value(aggregate, "aggregate_id", "").is_empty()
+        && !string_value(aggregate, "aggregator", "").is_empty()
+        && !string_value(aggregate, "aggregated_at", "").is_empty()
+        && get_map(aggregate, "payload_object")
+            .is_some_and(|payload| !string_value(payload, "object_id", "").is_empty())
 }
 
 fn validate_source_query_id(

@@ -1095,6 +1095,61 @@ fn query_aggregate_descriptor_missing_source_query_id_is_rejected() {
 }
 
 #[test]
+fn query_aggregate_descriptor_missing_payload_object_is_rejected() {
+    let semantic = match mapping([(
+        "aggregate_descriptor",
+        mapping([
+            ("aggregate_id", ystr("agg-1")),
+            ("source_query_id", ystr("q-current")),
+            ("aggregator", ystr("node-a")),
+            ("aggregated_at", ystr("2030-01-01T00:00:00Z")),
+            (
+                "input_fragments",
+                seq([mapping([("object_id", ystr("frag-1"))])]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_aggregate_descriptor_empty_input_fragment_is_rejected() {
+    let semantic = match mapping([(
+        "aggregate_descriptor",
+        mapping([
+            ("aggregate_id", ystr("agg-1")),
+            ("source_query_id", ystr("q-current")),
+            ("aggregator", ystr("node-a")),
+            ("aggregated_at", ystr("2030-01-01T00:00:00Z")),
+            ("input_fragments", seq([mapping([("object_id", ystr(""))])])),
+            (
+                "payload_object",
+                mapping([("object_id", ystr("payload-1"))]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
 fn query_result_fragment_missing_query_id_is_rejected() {
     let semantic = match mapping([(
         "result_fragment",
