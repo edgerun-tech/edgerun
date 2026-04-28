@@ -1306,6 +1306,8 @@ core::arch::global_asm!(
 
     .global _start
 _start:
+    j 3f
+
     l32r a5, .Lsystem_perip_clk_en1_ptr
     l32i a6, a5, 0
     movi a7, 1

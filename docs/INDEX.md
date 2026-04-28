@@ -26,6 +26,8 @@ component notes, generated spec snapshots, or older design documents.
 
 - [Root README](../README.md) - current code-grounded overview and build caveats.
 - [Crate layout](../crates/README.md) - implementation-oriented crate map.
+- [Crate organization map](crate-organization.md) - current workspace inventory
+  grouped by protocol, runtime, mesh, services, hardware, adapters, and tools.
 - [HTTP](http/README.md) - HTTP stack notes.
 - [HTTP conformance report](http/CONFORMANCE_REPORT.md)
 - [h2spec analysis](http/H2SPEC_ANALYSIS.md)
@@ -94,7 +96,7 @@ These files are large upstream/reference snapshots or generated-source inputs.
 | `.proto` files under `proto/edgerun/v0` | 44 |
 | Files under `proto/` including README/generated notes | 47 |
 | First-level directories under `crates/` | 113 |
-| Crate manifests under `crates/` | 110 |
-| `cargo metadata --no-deps` packages/members | 110 |
-| Root `Cargo.toml` textual member entries | 108 |
-| Known inventory quirks | `edgerun-tftp` is duplicated in the textual member list; `edgerun-css`, `edgerun-ecmascript`, and `edgerun-html` are directories without crate manifests |
+| Crate manifests under `crates/` | 109 |
+| `cargo metadata --no-deps` packages/members | 109 |
+| Root `Cargo.toml` textual member entries | 109 |
+| Known inventory quirks | `edgerun-css`, `edgerun-ecmascript`, `edgerun-html`, and `edgerun-net` are directories without crate manifests |
